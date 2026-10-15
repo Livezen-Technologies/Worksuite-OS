@@ -50,7 +50,24 @@ paths:
       tags: [existing]
       summary: User, org, modules and settings at login
       responses:
-        '200': { description: Bootstrap, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '200':
+          description: Bootstrap
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  user: { type: object }
+                  org: { type: object }
+                  modules: { type: array, items: { type: object } }
+                  apps:
+                    description: >-
+                      WorkSuite web apps enabled for the org. The desktop shows these in its launcher and opens
+                      web_url in a dedicated app window (worksuite-app); navigation stays on web_url's origin.
+                    type: array
+                    items: { $ref: '#/components/schemas/WebApp' }
+                  settings: { type: object }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/apps:
@@ -93,7 +110,7 @@ paths:
       summary: Resolve worksuite:// links
       parameters: [ { name: url, in: query, required: true, schema: { type: string } } ]
       responses:
-        '200': { description: Target, content: { application/json: { schema: { type: object, properties: { app_id: { type: string }, route: { type: string } } } } } }
+        '200': { description: Target, content: { application/json: { schema: { type: object, properties: { app_id: { type: string }, route: { type: string }, web_url: { type: string, format: uri, nullable: true, description: 'URL the app window opens; null when the org has no such web app' } } } } } }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/audit:
@@ -369,6 +386,60 @@ paths:
                   domain: { type: string }
                   offline_login_days: { type: integer, default: 7 }
                   group_role_map: { type: object, additionalProperties: { type: string, enum: [administrator, standard, kiosk] } }
+                  escrow_public_key: { type: string, description: PEM RSA public key the break-glass password is encrypted to (RSA-OAEP-256) }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/directory/authenticate:
+    post:
+      tags: [os]
+      summary: Verify a directory password for OS sign-in (WSOS-DIR-002/005/009); device credential required
+      description: Called by the OS PAM helper only. The reply carries no password material; the device derives its own offline verifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, maxLength: 320 }
+                password: { type: string, maxLength: 1024, writeOnly: true }
+      responses:
+        '200':
+          description: Verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username: { type: string }
+                  user_id: { type: integer, description: Stable id; the OS derives the local UID from it (WSOS-DIR-003) }
+                  name: { type: string }
+                  groups: { type: array, items: { type: string } }
+                  offline_login_days: { type: integer }
+        '401': { description: INVALID_CREDENTIALS }
+        '403': { description: ACCOUNT_DISABLED, DEVICE_REQUIRED or DEVICE_REVOKED }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/break-glass/events:
+    post:
+      tags: [os]
+      summary: Audit a break-glass admin use or rotation (WSOS-DIR-010)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, type, username, at]
+              properties:
+                id: { type: string }
+                type: { type: string, enum: [used, rotated] }
+                username: { type: string }
+                at: { type: string, format: date-time }
+      responses:
+        '202': { description: Recorded }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/os/break-glass:
@@ -426,6 +497,13 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
+    WebApp:
+      type: object
+      required: [id, name, web_url]
+      properties:
+        id: { type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$', description: 'Module key; the desktop entry is worksuite-<id>.desktop' }
+        name: { type: string }
+        web_url: { type: string, format: uri, description: 'https URL of the module''s web app (<web base>/<id>/)' }
     Error:
       type: object
       required: [error]
@@ -497,10 +575,12 @@ components:
         update_ring: { $ref: '#/components/schemas/Ring' }
         update_mode: { type: string, enum: [automatic, notify, manual] }
         maintenance_window: { type: string }
-        lock_timeout_max_s: { type: integer }
-        offline_access_days: { type: integer }
-        usb_storage: { type: string, enum: [allow, read_only, block] }
-        bluetooth: { type: boolean }
+        lock_timeout_max_s: { type: integer, minimum: 60, maximum: 86400, description: 'WSOS-LOCK-003 longest idle time before the screen locks; users choose any shorter time, never "never". Device: /etc/worksuite/lock-policy.conf → worksuite-idle' }
+        offline_access_days: { type: integer, minimum: 0, maximum: 365, description: 'WSOS-AUTH-003/DIR-005 days without a check-in after which sessions lock and local sign-in is refused until the device checks in (pam_nologin); absent or 0 = no limit' }
+        usb_storage: { type: string, enum: [allow, read_only, block], description: 'WSOS-INT-004 USB mass storage: block = drivers not loaded and disks hidden from UDisks2; read_only = disks set read-only by udev before mounting' }
+        bluetooth: { type: boolean, description: 'WSOS-INT-003 false = bluetooth.service masked and radios rfkill-blocked; true or absent = allowed' }
+        login_failures_max: { type: integer, minimum: 3, maximum: 20, description: 'WSOS-AUTH-004 pam_faillock deny (default 5)' }
+        login_lockout_s: { type: integer, minimum: 0, maximum: 86400, description: 'WSOS-AUTH-004 pam_faillock unlock_time; 0 = until reset by an administrator (default 600)' }
         app_allowlist: { type: array, items: { type: string } }
         approved_remotes: { type: array, items: { type: string } }
         offline_wipe_days: { type: integer, description: WSOS-WIPE-006 offline kill timer; absent = off }

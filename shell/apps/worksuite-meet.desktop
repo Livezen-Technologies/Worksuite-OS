@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite Meet
+GenericName=Meet
+Comment=Video meetings
+Exec=worksuite-app meet
+TryExec=worksuite-app
+Icon=worksuite-meet
+Terminal=false
+Categories=Network;VideoConference;
+Keywords=worksuite;meet;video;call;conference;
+StartupNotify=true
+StartupWMClass=worksuite-meet

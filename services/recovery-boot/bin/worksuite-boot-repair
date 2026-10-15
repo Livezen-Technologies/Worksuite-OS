@@ -1,0 +1,25 @@
+#!/bin/sh
+# Boot-time package repair (SRS §9.2, WSOS-APT-006). Runs before the greeter (worksuite-boot-repair.service).
+# Repairs when dpkg reports an interrupted run, or when /var/lib/worksuite/repair-on-boot exists (set by the
+# recovery screens or the package service). Fixed commands only; result in /run/worksuite/boot-repair.
+# Exit 0 = nothing to do or repaired; 1 = repair failed (the unit then starts worksuite-recovery.target).
+set -u
+flag=${WORKSUITE_REPAIR_FLAG:-/var/lib/worksuite/repair-on-boot}
+status_dir=${WORKSUITE_RUN_DIR:-/run/worksuite}
+mkdir -p "$status_dir"
+log() { echo "worksuite-boot-repair: $*"; }
+
+audit=$(dpkg --audit 2>/dev/null || true)
+if [ -z "$audit" ] && [ ! -e "$flag" ]; then
+  echo clean > "$status_dir/boot-repair"; exit 0
+fi
+log "repair needed (${audit:+dpkg interrupted}${audit:+ }$( [ -e "$flag" ] && echo requested))"
+export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8
+ok=1
+dpkg --configure -a || ok=0
+apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -f install || ok=0
+[ -z "$(dpkg --audit 2>/dev/null || true)" ] || ok=0
+if [ $ok = 1 ]; then
+  rm -f "$flag"; echo repaired > "$status_dir/boot-repair"; log "repaired"; exit 0
+fi
+echo failed > "$status_dir/boot-repair"; log "repair failed; starting recovery"; exit 1

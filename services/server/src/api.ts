@@ -1,13 +1,13 @@
 // desktop/v1 and desktop/v1/os (api-contracts/openapi.yaml). Tenant scoping comes from the authenticated user or
 // device, never from the request. Idempotency-Key replays within 24 h return the stored response.
-import { createPublicKey, randomUUID } from 'node:crypto';
+import { createPublicKey, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { nextSeq, secret, sha256, tx } from './db.ts';
+import { DEFAULT_WEB_APPS, nextSeq, secret, sha256, tx } from './db.ts';
 import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { userFromBearer, type User } from './oauth.ts';
 import { activeKey, signFlat } from './signing.ts';
 
-export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string }
+export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string; webUrl: string }
 
 interface Device { id: string; org_id: number; revoked: number }
 
@@ -143,6 +143,13 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     send(ctx, 200, { api_base: o.publicUrl, oneauth_issuer: o.issuer, update_host: o.updateHost }));
 
   // ---- user endpoints ----
+  // Web apps enabled for the org, each with the URL the desktop opens in its app window.
+  const webApps = (orgId: number) => {
+    const row = db.prepare('SELECT web_apps FROM orgs WHERE id = ?').get(orgId) as { web_apps: string | null };
+    const keys: string[] | null = row.web_apps ? json(row.web_apps) : null;
+    return DEFAULT_WEB_APPS.filter((a) => !keys || keys.includes(a.id)).map((a) => ({ ...a, web_url: new URL(`${a.id}/`, o.webUrl).toString() }));
+  };
+
   r.on('GET', '/desktop/v1/bootstrap', (ctx) => {
     const { user } = userCtx(db, ctx);
     const org = db.prepare('SELECT id, name, modules FROM orgs WHERE id = ?').get(user.org_id) as { id: number; name: string; modules: string };
@@ -150,6 +157,7 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
       user: { id: String(user.id), name: user.name, email: user.email },
       org: { id: String(org.id), name: org.name },
       modules: json(org.modules),
+      apps: webApps(org.id),
       settings: {},
     });
   });
@@ -162,11 +170,15 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
   });
 
   r.on('GET', '/desktop/v1/links/resolve', (ctx) => {
-    userCtx(db, ctx);
+    const { user } = userCtx(db, ctx);
     let u: URL;
     try { u = new URL(ctx.url.searchParams.get('url') ?? ''); } catch { throw invalid('url'); }
     if (u.protocol !== 'worksuite:' || !MODULE_KEY.test(u.hostname)) throw new HttpError(404, 'NOT_FOUND', 'unknown link');
-    send(ctx, 200, { app_id: u.hostname, route: u.pathname || '/' });
+    const route = u.pathname || '/';
+    const app = webApps(user.org_id).find((a) => a.id === u.hostname);
+    // web_url: where the app window opens this link; null when the org has no such web app.
+    const web_url = app ? new URL(route.replace(/^\/+/, '') + u.search, app.web_url).toString() : null;
+    send(ctx, 200, { app_id: u.hostname, route, web_url });
   });
 
   r.on('POST', '/desktop/v1/audit', async (ctx) => {
@@ -333,6 +345,37 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     const d = deviceFromHeader(db, ctx, true);
     const org = db.prepare('SELECT directory FROM orgs WHERE id = ?').get(d.org_id) as { directory: string };
     send(ctx, 200, json(org.directory));
+  });
+
+  // Directory sign-in for the OS PAM helper (WSOS-DIR-002/005/009). Device-bound: only an enrolled, unrevoked device
+  // of the user's organization may verify a password. The reply carries no secret; the client derives its own
+  // offline verifier. Constant work whether or not the account exists.
+  r.on('POST', '/desktop/v1/os/directory/authenticate', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    const b = obj(await ctx.body());
+    const username = str(b, 'username', 320).trim().toLowerCase();
+    const password = str(b, 'password', 1024);
+    const u = db.prepare('SELECT id, email, name, role, pw_salt, pw_hash, disabled FROM users WHERE email = ? AND org_id = ?').get(username, d.org_id) as
+      { id: number; email: string; name: string; role: string; pw_salt: Uint8Array; pw_hash: Uint8Array; disabled: number } | undefined;
+    const got = scryptSync(password, u ? Buffer.from(u.pw_salt) : Buffer.alloc(16), 32);
+    if (!u || !timingSafeEqual(got, Buffer.from(u.pw_hash))) throw new HttpError(401, 'INVALID_CREDENTIALS', 'wrong username or password');
+    if (u.disabled) throw new HttpError(403, 'ACCOUNT_DISABLED', 'account disabled');
+    const dir = json<{ offline_login_days?: number }>((db.prepare('SELECT directory FROM orgs WHERE id = ?').get(d.org_id) as { directory: string }).directory);
+    send(ctx, 200, { username: u.email, user_id: u.id, name: u.name, groups: [u.role === 'admin' ? 'worksuite-admins' : 'worksuite-users'],
+      offline_login_days: dir.offline_login_days ?? 7 });
+  });
+
+  // Break-glass audit (WSOS-DIR-010): every use and every rotation is recorded against the device.
+  r.on('POST', '/desktop/v1/os/break-glass/events', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    await idempotent(db, ctx, `device:${d.id}`, ctx.header('idempotency-key'), async () => {
+      const b = obj(await ctx.body());
+      const type = str(b, 'type', 32);
+      if (type !== 'used' && type !== 'rotated') throw invalid('type', 'used or rotated');
+      db.prepare('INSERT OR IGNORE INTO audit (id, principal, type, at, data) VALUES (?, ?, ?, ?, ?)')
+        .run(str(b, 'id', 64), `device:${d.id}`, `break_glass.${type}`, str(b, 'at', 64), JSON.stringify({ username: str(b, 'username', 64) }));
+      return { status: 202 };
+    });
   });
 
   r.on('POST', '/desktop/v1/os/break-glass', async (ctx) => {

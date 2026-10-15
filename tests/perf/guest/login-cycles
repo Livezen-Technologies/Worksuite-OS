@@ -1,0 +1,28 @@
+#!/bin/sh
+# Guest side, WSOS-REL-001: N PAM login/logout cycles through logind (systemd-run with PAMName=login, the same
+# PAM/logind path greetd uses), then checks nothing leaked: no lingering sessions, no user manager left running,
+# no new failed units, bounded memory growth.
+#   login-cycles [N]        (root; creates a throwaway user wsperf)
+set -u
+n=${1:-100}
+u=wsperf
+id "$u" >/dev/null 2>&1 || useradd --create-home --shell /bin/sh "$u"
+uid=$(id -u "$u")
+mem() { awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } END { printf "%d", (t - a) / 1024 }' /proc/meminfo; }
+failed0=$(systemctl --failed --no-legend --plain | wc -l)
+m0=$(mem)
+bad=0
+i=0
+while [ $i -lt "$n" ]; do
+  i=$((i + 1))
+  systemd-run --quiet --wait --collect --uid="$uid" -p PAMName=login /bin/sh -c 'test -n "$XDG_SESSION_ID" && test -d "$XDG_RUNTIME_DIR"' || bad=$((bad + 1))
+done
+# logind tears the session down asynchronously; give it a moment.
+j=0; while loginctl list-sessions --no-legend | awk -v u="$u" '$3 == u' | grep -q . && [ $j -lt 30 ]; do sleep 1; j=$((j + 1)); done
+left=$(loginctl list-sessions --no-legend | awk -v u="$u" '$3 == u' | wc -l)
+failed1=$(systemctl --failed --no-legend --plain | wc -l)
+printf 'WORKSUITE_PERF login_cycles %s\n' "$n"
+printf 'WORKSUITE_PERF login_cycles_failed %s\n' "$bad"
+printf 'WORKSUITE_PERF login_sessions_leaked %s\n' "$left"
+printf 'WORKSUITE_PERF login_failed_units_new %s\n' "$((failed1 - failed0))"
+printf 'WORKSUITE_PERF login_mem_growth_mib %s\n' "$(( $(mem) - m0 ))"

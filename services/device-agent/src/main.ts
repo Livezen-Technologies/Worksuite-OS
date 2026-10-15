@@ -35,6 +35,8 @@ async function daemon() {
   host.publishCredential(state.state.enrolled ? state.state.credential ?? null : null);
   host.publishPolicy(state.state.enrolled ? state.state.policy ?? null : null);
   agent.publishStatus();
+  // Policy settings are re-applied at every start, so a local edit or a missed change does not persist.
+  void agent.enforce();
   void agent.refreshFacts().catch(() => {});
 
   let busy: Promise<unknown> = Promise.resolve();

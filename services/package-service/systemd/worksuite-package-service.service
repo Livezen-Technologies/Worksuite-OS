@@ -4,6 +4,8 @@ Documentation=file:///usr/share/doc/worksuite-package-service/README.md
 After=dbus.service
 
 [Service]
+# WSOS-SEC-009: AppArmor (security/apparmor/); "-" keeps the unit working on kernels without AppArmor.
+AppArmorProfile=-worksuite-package-service
 Type=dbus
 BusName=lk.worksuite.PackageService1
 ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/package-service/src/main.ts

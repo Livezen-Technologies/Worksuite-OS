@@ -1,0 +1,22 @@
+#!/bin/sh
+# Guest side, WSOS-REL-002: N suspend/resume cycles (rtcwake; s2idle "freeze" works in QEMU and on hardware), then
+# checks the system came back each time and no unit failed. Lock-on-suspend is checked when a session is active:
+# every active graphical session must report LockedHint=yes after resume.
+#   suspend-cycles [N] [mode]     (root)
+set -u
+n=${1:-50}; mode=${2:-freeze}
+failed0=$(systemctl --failed --no-legend --plain | wc -l)
+ok=0; unlocked=0; i=0
+while [ $i -lt "$n" ]; do
+  i=$((i + 1))
+  rtcwake -m "$mode" -s 5 >/dev/null 2>&1 && ok=$((ok + 1))
+  sleep 2
+  for s in $(loginctl list-sessions --no-legend | awk '{print $1}'); do
+    [ "$(loginctl show-session "$s" -p Type --value)" = wayland ] || continue
+    [ "$(loginctl show-session "$s" -p LockedHint --value)" = yes ] || unlocked=$((unlocked + 1))
+  done
+done
+printf 'WORKSUITE_PERF suspend_cycles %s\n' "$n"
+printf 'WORKSUITE_PERF suspend_cycles_failed %s\n' "$((n - ok))"
+printf 'WORKSUITE_PERF suspend_unlocked_after_resume %s\n' "$unlocked"
+printf 'WORKSUITE_PERF suspend_failed_units_new %s\n' "$(( $(systemctl --failed --no-legend --plain | wc -l) - failed0 ))"

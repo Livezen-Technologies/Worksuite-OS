@@ -5,3 +5,13 @@ services/session/portals/worksuite-portals.conf usr/share/xdg-desktop-portal/
 services/session/systemd/user/* usr/lib/systemd/user/
 services/session/bin/worksuite-cage usr/bin/
 services/session/bin/wlr-env usr/lib/worksuite/
+services/session/bin/worksuite-lock usr/lib/worksuite/
+services/session/bin/worksuite-idle usr/lib/worksuite/
+services/session/bin/worksuite-greeter usr/lib/worksuite/
+services/session/bin/worksuite-polkit-agent usr/lib/worksuite/
+services/session/gtklock/* etc/xdg/worksuite/gtklock/
+services/session/tmpfiles/worksuite-session.conf usr/lib/tmpfiles.d/
+services/session/pam/worksuite-faillock usr/share/pam-configs/
+services/session/pam/worksuite-faillock-preauth usr/share/pam-configs/
+services/session/pam/worksuite-offline-access usr/share/pam-configs/
+services/session/pam/faillock.conf usr/share/worksuite/

@@ -1,0 +1,8 @@
+[Unit]
+Description=WorkSuite Recovery (shell recovery screens instead of the greeter, SRS §9.2)
+Documentation=file:///usr/share/doc/worksuite-recovery-boot/README.md
+Requires=multi-user.target
+Wants=worksuite-recovery-shell.service worksuite-boot-repair.service
+After=multi-user.target
+Conflicts=greetd.service display-manager.service rescue.target
+AllowIsolate=yes

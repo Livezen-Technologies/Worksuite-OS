@@ -1,0 +1,69 @@
+#!/bin/sh
+# WorkSuite screen lock (WSOS-LOCK-001/002/004). Installed as /usr/lib/worksuite/worksuite-lock.
+#   worksuite-lock           lock now; returns once the ext-session-lock locker reports the session locked (or after 5 s)
+#   worksuite-lock --locked  run by gtklock (-L) once it holds the lock; marks the session locked
+#   worksuite-lock --guard   internal: keeps a locker running until a successful PAM unlock
+# gtklock takes the lock through ext-session-lock-v1, so Labwc keeps every output blanked for as long as the lock is
+# held, including while no locker client is connected. If gtklock crashes, the guard starts a new one against the same
+# locked session; it never unlocks (fail closed). Only gtklock's own exit status 0 (PAM success) ends the guard.
+set -u
+RUNDIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+MARK=$RUNDIR/worksuite-locked
+GUARD=$RUNDIR/worksuite-lock.guard
+GTKLOCK=${WORKSUITE_GTKLOCK:-gtklock}
+CONF=${WORKSUITE_GTKLOCK_CONFIG:-/etc/xdg/worksuite/gtklock/config.ini}
+STYLE=${WORKSUITE_GTKLOCK_STYLE:-/etc/xdg/worksuite/gtklock/style.css}
+WAIT_S=${WORKSUITE_LOCK_WAIT_S:-5}
+case "$0" in /*) SELF=$0 ;; *) SELF=$(command -v "$0" 2>/dev/null || echo "$PWD/$0") ;; esac
+
+log() { printf '%s\n' "worksuite-lock: $1" | systemd-cat -t worksuite-lock -p "${2:-info}" 2>/dev/null || true; }
+
+guard() {
+    trap 'rm -rf "$GUARD"' EXIT
+    trap '' HUP INT               # the caller going away must not end the lock
+    echo $$ > "$GUARD/pid"
+    delay=0
+    while :; do
+        "$GTKLOCK" -c "$CONF" -s "$STYLE" -L "$SELF --locked"
+        rc=$?
+        if [ "$rc" -eq 0 ]; then
+            rm -f "$MARK"
+            loginctl unlock-session 2>/dev/null || true
+            log "unlocked"
+            return 0
+        fi
+        # The compositor is gone (logout or Labwc exit): nothing left to lock.
+        if [ -n "${WAYLAND_DISPLAY:-}" ] && [ ! -S "$RUNDIR/$WAYLAND_DISPLAY" ]; then rm -f "$MARK"; return 0; fi
+        # Crash or failure to start: the compositor keeps the session locked. Start another locker.
+        log "locker exited with status $rc; restarting (session remains locked)" warning
+        [ "$delay" -lt 2 ] && delay=$((delay + 1))
+        sleep "$delay"
+    done
+}
+
+wait_locked() {
+    n=0
+    while [ ! -e "$MARK" ]; do
+        n=$((n + 1)); [ "$n" -gt $((WAIT_S * 10)) ] && return 1
+        sleep 0.1
+    done
+}
+
+case "${1:-}" in
+    --locked) : > "$MARK"; exit 0 ;;
+    --guard)  guard; exit $? ;;
+    "") ;;
+    *) echo "usage: worksuite-lock [--locked]" >&2; exit 2 ;;
+esac
+
+# One guard per session. A guard directory whose pid is gone is stale (e.g. the guard was SIGKILLed).
+if ! mkdir "$GUARD" 2>/dev/null; then
+    pid=$(cat "$GUARD/pid" 2>/dev/null || true)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then wait_locked; exit $?; fi
+    rm -rf "$GUARD"
+    mkdir "$GUARD" 2>/dev/null || { wait_locked; exit $?; }
+fi
+rm -f "$MARK"
+setsid "$SELF" --guard </dev/null >/dev/null 2>&1 &
+# swayidle -w waits for this before logind may suspend (WSOS-LOCK-002).
+wait_locked || { log "locker did not report locked within ${WAIT_S}s" warning; exit 1; }

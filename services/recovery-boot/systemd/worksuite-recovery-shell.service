@@ -1,0 +1,23 @@
+[Unit]
+Description=WorkSuite recovery screens (shell in cage on tty1)
+After=systemd-user-sessions.service plymouth-quit-wait.service worksuite-boot-repair.service
+Conflicts=getty@tty1.service greetd.service
+# Started by worksuite-recovery.target only; the shell sees worksuite.recovery=1 on /proc/cmdline.
+ConditionKernelCommandLine=worksuite.recovery=1
+
+[Service]
+# WSOS-SEC-009: AppArmor (security/apparmor/worksuite-shell, complain mode for now).
+AppArmorProfile=-worksuite-shell
+Type=simple
+# Unprivileged user; unlock and repair go through udisks / the package service and ask polkit for an admin.
+User=worksuite-recovery
+PAMName=login
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=journal
+UtmpIdentifier=tty1
+ExecStart=/usr/bin/worksuite-cage -s -- /usr/lib/worksuite/shell/worksuite-shell --recovery
+Restart=always
+RestartSec=2s

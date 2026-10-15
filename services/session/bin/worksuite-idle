@@ -1,0 +1,29 @@
+#!/bin/sh
+# Idle and suspend locking (WSOS-LOCK-002/003). Installed as /usr/lib/worksuite/worksuite-idle; run by
+# worksuite-idle.service. Timeout = the user's choice (Settings > Power: ~/.config/worksuite/lock.conf LOCK_TIMEOUT_S,
+# 0 = never) capped by the organization's maximum (/etc/worksuite/lock-policy.conf LOCK_TIMEOUT_MAX_S, written by the
+# device agent from the signed policy). Under a policy maximum "never" is not allowed and becomes the maximum.
+#   worksuite-idle                  exec swayidle
+#   worksuite-idle --print-timeout  print the effective timeout in seconds (0 = no idle lock)
+set -u
+POLICY=${WORKSUITE_LOCK_POLICY:-/etc/worksuite/lock-policy.conf}
+USERCONF=${WORKSUITE_LOCK_USER:-${XDG_CONFIG_HOME:-$HOME/.config}/worksuite/lock.conf}
+LOCK=${WORKSUITE_LOCK_CMD:-/usr/lib/worksuite/worksuite-lock}
+DEFAULT_S=300
+
+num() { sed -n "s/^$1=\([0-9][0-9]*\)[[:space:]]*\$/\1/p" "$2" 2>/dev/null | tail -n 1; }
+
+max=$(num LOCK_TIMEOUT_MAX_S "$POLICY")
+want=$(num LOCK_TIMEOUT_S "$USERCONF")
+want=${want:-$DEFAULT_S}
+if [ -n "$max" ] && [ "$max" -gt 0 ]; then
+    if [ "$want" -eq 0 ] || [ "$want" -gt "$max" ]; then want=$max; fi
+fi
+
+if [ "${1:-}" = "--print-timeout" ]; then echo "$want"; exit 0; fi
+
+set -- -w
+[ "$want" -gt 0 ] && set -- "$@" timeout "$want" "loginctl lock-session"
+# lock: Super+L, the shell's Lock button and the device agent's RequestLock all go through `loginctl lock-session`.
+# before-sleep: -w holds logind's delay inhibitor until worksuite-lock returns, i.e. until the locker holds the lock.
+exec swayidle "$@" lock "$LOCK" before-sleep "$LOCK"

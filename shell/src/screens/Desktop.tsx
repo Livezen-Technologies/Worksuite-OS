@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DesktopProps } from './types'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
@@ -9,30 +9,12 @@ import { PowerMenu, ShutdownConfirm } from '../components/Power'
 import { RunningApps, TrayItems, UpdateBadge, useLauncherKey } from '../components/PanelItems'
 import A11yPanel from '../components/A11yPanel'
 import { localeTag, useT } from '../i18n'
+import { UpdateOverlays } from './Updates'
+import { DeviceWatcher } from './Hardware'
+import { requestSettingsSection } from '../lib/settingsNav'
+import { buildLauncherApps, filterApps, taskbarApps, type LauncherApp } from '../lib/launcher'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
-
-type Kind = 'WorkSuite' | 'Linux app' | 'System'
-interface App { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean }
-
-const ws = (id: string, name: string, mark: string, bg: string, fg: string, fav = false): App => ({ id, name, mark, bg, fg, kind: 'WorkSuite', fav })
-const lx = (id: string, name: string, mark: string, bg: string, fg: string, fav = false): App => ({ id, name, mark, bg, fg, kind: 'Linux app', fav })
-
-const APPS: App[] = [
-  ws('mail', 'Mail', 'M', '#dbeafe', '#1d4ed8', true),
-  ws('calendar', 'Calendar', 'C', '#e0e7ff', '#4338ca', true),
-  ws('chat', 'Chat', 'Ch', '#dcfce7', '#15803d', true),
-  ws('drive', 'Drive', 'D', '#e0f2fe', '#0369a1', true),
-  ws('tasks', 'Tasks', 'T', '#fef3c7', '#b45309'),
-  ws('projects', 'Projects', 'P', '#fae8ff', '#a21caf'),
-  ws('crm', 'CRM', 'CR', '#ffe4e6', '#be123c'),
-  ws('meet', 'Meet', 'Me', '#ccfbf1', '#0f766e'),
-  ws('office', 'Office', 'O', '#ffedd5', '#c2410c', true),
-  ws('pdf-studio', 'PDF Studio', 'PDF', '#fee2e2', '#b91c1c'),
-  lx('firefox', 'Firefox', 'Fx', '#f1f5f9', '#334155', true),
-  lx('terminal', 'Terminal', '>_', '#0f172a', '#e2e8f0'),
-  { id: 'appcenter', name: 'App Center', mark: 'A', bg: '#2563eb', fg: '#ffffff', kind: 'System' },
-]
 
 const SETTINGS_PAGES = ['Wi-Fi and network', 'Bluetooth', 'Displays', 'Sound', 'Power and battery', 'Appearance', 'Accounts', 'Privacy and security', 'Updates', 'Keyboard shortcuts']
 
@@ -42,8 +24,8 @@ const RECENT = [
   { ext: 'PDF', name: 'Invoice INV-2026-0418.pdf', where: 'This Computer › Downloads', state: 'Local', cls: 'bg-[#f1f5f9] text-[#334155]' },
 ]
 
-// Pinned taskbar apps; running windows come from the Wayland bridge (components/PanelItems.tsx).
-const PINNED = ['mail', 'chat', 'drive', 'office', 'firefox', 'terminal']
+// Taskbar pins (running windows from the Wayland bridge join them, components/PanelItems.tsx); entries the org hasn't enabled or that aren't installed drop out.
+const TASKBAR = ['worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office', 'firefox-esr']
 
 const TABS = [['all', 'All apps'], ['ws', 'WorkSuite'], ['linux', 'Linux apps'], ['fav', 'Favorites']] as const
 type Tab = (typeof TABS)[number][0]
@@ -100,24 +82,35 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
   useEffect(() => { if (launcher) searchRef.current?.focus(); else setQuery('') }, [launcher])
 
+  // Start menu list: the org's WorkSuite apps (fallback list when not signed in/offline) and installed XDG apps.
+  const [allApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
+  const appsLoaded = useRef(false)
+  useEffect(() => {
+    // On start, then again each time the launcher opens (sign-in, installs and org changes show up).
+    if (!launcher && appsLoaded.current) return
+    appsLoaded.current = true
+    let live = true
+    void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null)]).then(([w, i]) => {
+      if (live) setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null))
+    })
+    return () => { live = false }
+  }, [launcher])
   const q = query.trim().toLowerCase()
-  const apps = useMemo(() => APPS.filter((a) => {
-    if (tab === 'ws' && a.kind !== 'WorkSuite') return false
-    if (tab === 'linux' && a.kind !== 'Linux app') return false
-    if (tab === 'fav' && !a.fav) return false
-    // App Center lives in the footer; it joins the grid only as a search hit so Recent stays visible.
-    if (!q) return a.id !== 'appcenter'
-    return a.name.toLowerCase().includes(q)
-  }), [tab, q])
+  const apps = useMemo(() => filterApps(allApps, tab, q), [allApps, tab, q])
   const settingsHits = q ? SETTINGS_PAGES.filter((s) => s.toLowerCase().includes(q)) : []
   const recent = q ? RECENT.filter((r) => r.name.toLowerCase().includes(q)) : RECENT
 
   const launch = (id: string) => {
     setLauncher(false)
-    if (id === 'drive') onOpen('files')
-    else if (id === 'appcenter') onOpen('appcenter')
-    else void os.launchApp(id)
+    const a = allApps.find((x) => x.id === id)
+    if (!a) return
+    if ('screen' in a.launch) onOpen(a.launch.screen)
+    else if ('office' in a.launch) void os.launchOffice(a.launch.office)
+    else void os.launchApp(a.launch.desktop)
   }
+  const taskbar = taskbarApps(allApps, TASKBAR)
+
+  const openSettingsAt = (section: string) => { requestSettingsSection(section); onOpen('settings') }
 
   const quick = [
     { label: t('quick.dnd'), d: P.sleep, on: dnd, run: () => { setDnd((v) => !v); if (!dnd) setToast(null) } },
@@ -145,6 +138,12 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           <button type="button" aria-label={t('notes.dismiss')} onClick={() => setToast(null)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[#8FA3C8] hover:bg-white/10 hover:text-white"><Icon d={P.close} size={14} /></button>
         </div>
       )}
+
+      {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
+      <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">
+        <DeviceWatcher onOpenUpdates={() => openSettingsAt('Updates')} onOpenDrivers={() => openSettingsAt('Drivers')} />
+        <UpdateOverlays quiet={trayOpen || Children.toArray(children).length > 0} onOpenUpdates={() => openSettingsAt('Updates')} />
+      </div>
 
       {trayOpen && (
         <aside id="ws-notifications" aria-label={t('notes.title')} className="absolute top-3 right-3 bottom-[68px] z-40 flex w-[400px] max-w-[calc(100%-24px)] flex-col gap-3.5 rounded-[20px] border border-[rgba(127,178,255,0.18)] bg-[rgba(10,24,56,0.94)] p-[18px] text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[24px]">
@@ -264,7 +263,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       <nav aria-label={t('panel.taskbar')} className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
         <button type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
           className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.45)] ring-2 ring-[#1F6BFF]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
-        <RunningApps pinned={PINNED} info={(id) => APPS.find((a) => a.id === id)} onLaunch={launch} />
+        <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => allApps.find((a) => a.id === id)} onLaunch={launch} />
         <div role="group" aria-label={t('panel.workspaces')} className="ml-4 hidden gap-1 sm:flex">
           {[1, 2, 3].map((n) => (
             <button key={n} type="button" aria-label={t('panel.workspace', { n })} aria-pressed={workspace === n} onClick={() => setWorkspace(n)}
@@ -277,7 +276,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
           <TrayItems />
-          <UpdateBadge onOpen={() => onOpen('settings')} />
+          <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false) }}
             className="flex size-10 cursor-pointer items-center justify-center rounded-[10px] bg-white/[0.12] hover:bg-white/20"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
           <button type="button" aria-label={t('panel.notifications')} aria-expanded={trayOpen} aria-controls="ws-notifications"

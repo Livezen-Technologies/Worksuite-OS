@@ -62,7 +62,8 @@ WsPage {
                     border.width: 1; border.color: selected ? "#1F6BFF" : "#247FB2FF"
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14
-                        Text { Layout.fillWidth: true; text: model.label; color: "#FFFFFF"; font.family: "IBM Plex Sans"; font.pixelSize: 14; elide: Text.ElideRight }
+                        // Explicit left alignment: Qt otherwise right-aligns right-to-left native names (Persian, Hebrew).
+                        Text { Layout.fillWidth: true; text: model.label; horizontalAlignment: Text.AlignLeft; LayoutMirroring.enabled: false; color: "#FFFFFF"; font.family: "IBM Plex Sans"; font.pixelSize: 14; elide: Text.ElideRight }
                         Text { text: model.englishLabel !== model.label ? model.englishLabel : ""; color: "#FFFFFF"; opacity: 0.75; font.family: "IBM Plex Sans"; font.pixelSize: 13; elide: Text.ElideRight; Layout.maximumWidth: 110 }
                     }
                     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: config.localeIndex = index }

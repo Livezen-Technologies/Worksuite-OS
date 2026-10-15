@@ -1,0 +1,59 @@
+# AppArmor profile for the WorkSuite shell (Electron, user session and recovery screens; WSOS-SEC-009).
+# Applied by worksuite-shell.service / worksuite-recovery-shell.service (AppArmorProfile=). Shipped in complain mode:
+# Chromium's zygote, GPU process and per-app renderers vary by driver, so denials are collected from the field
+# (journal: apparmor="ALLOWED" profile="worksuite-shell") before it is switched to enforce. See docs/security/hardening.md.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile worksuite-shell flags=(attach_disconnected, complain) {
+  include <abstractions/base>
+  include <abstractions/fonts>
+  include <abstractions/freedesktop.org>
+  include <abstractions/nameservice>
+  include <abstractions/ssl_certs>
+  include <abstractions/dbus-session-strict>
+  include <abstractions/wayland>
+  include <abstractions/dri-common>
+  include <abstractions/mesa>
+  include <abstractions/audio>
+
+  # Chromium sandbox (user namespaces).
+  userns,
+  capability sys_admin sys_chroot setuid setgid,
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network netlink raw,
+  network unix,
+  dbus (send, receive) bus=session,
+  # Panel: window list/operations and tray from the Wayland bridge; owns lk.worksuite.Shell1 for the Super key.
+  dbus (send) bus=session interface=lk.worksuite.WaylandBridge1 peer=(name=lk.worksuite.WaylandBridge1),
+  dbus (send) bus=session interface=lk.worksuite.Tray1 peer=(name=lk.worksuite.WaylandBridge1),
+  dbus (receive) bus=session interface=lk.worksuite.WaylandBridge1,
+  dbus (receive) bus=session interface=lk.worksuite.Tray1,
+  dbus (bind) bus=session name=lk.worksuite.Shell1,
+  dbus (receive) bus=session path=/lk/worksuite/Shell1 interface=lk.worksuite.Shell1,
+  dbus (send, receive) bus=system,
+
+  /{usr/,}bin/{sh,dash} ix,
+  /usr/lib/worksuite/shell/** mrix,
+  /usr/lib/worksuite/shell/electron/chrome-sandbox Ux,
+  /usr/share/** r,
+  /etc/** r,
+  @{PROC}/** r,
+  owner @{PROC}/@{pid}/{oom_score_adj,setgroups,uid_map,gid_map} rw,
+  /sys/** r,
+  /dev/dri/** rw,
+  /dev/shm/** rwk,
+  /tmp/** rwk,
+  /run/user/@{uid}/** rwk,
+  /run/worksuite-device-agent/** r,
+  owner @{HOME}/** rwlk,
+
+  # Fixed helpers the shell starts (WSOS-LCH-001); apps launched by gtk-launch get their own confinement.
+  /usr/bin/{gtk-launch,xdg-open,loginctl,systemctl,lsblk,findmnt,udisksctl,busctl} Ux,
+
+  deny /etc/shadow r,
+  deny /root/** rwx,
+}
