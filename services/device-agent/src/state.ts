@@ -1,6 +1,7 @@
 // Root-owned persistent state in /var/lib/worksuite-device-agent (StateDirectory, 0700). Atomic JSON writes.
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { ReplayStore } from './commands.ts';
+import type { VpnConfig } from './vpn.ts';
 
 export interface Policy {
   version: string;
@@ -19,6 +20,10 @@ export interface Policy {
   approved_remotes?: string[];
   /** WSOS-WIPE-006 (P2): local WorkSuite data wipe after this many days without a policy check-in. */
   offline_wipe_days?: number;
+  /** WSOS-INT-001: managed VPN must be connected (autoconnect, always-on) even if the VPN config does not say so. */
+  vpn_required?: boolean;
+  /** WSOS-INT-001: block = user-imported VPN profiles are removed and Settings offers no import. */
+  user_vpn?: 'allow' | 'block';
   [k: string]: unknown;
 }
 
@@ -38,6 +43,10 @@ export interface AgentState {
   wiped?: boolean;
   /** Offline access period exceeded: local sign-in refused until the next successful check-in. */
   offline_access_expired?: boolean;
+  /** Last verified managed-VPN config (signed by the server; no private key in it). */
+  vpn?: VpnConfig;
+  /** When the current WireGuard keypair was generated (rotation). The private key itself is in host storage. */
+  vpn_key_created_at?: number;
 }
 
 export const emptyState = (): AgentState => ({ enrolled: false, seen_commands: {}, pending_acks: [] });

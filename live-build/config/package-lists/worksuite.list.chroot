@@ -22,6 +22,10 @@ dialog
 udisks2
 # Settings bridge CLIs (shell/electron/system.ts): nmcli, bluetoothctl, wpctl, upower, lpstat, wlr-randr, udisksctl
 network-manager
+# WireGuard VPN (WSOS-INT-001): NetworkManager's built-in wireguard type (kernel module is in-tree); wg(8) for
+# diagnostics; nft for the managed VPN kill switch (services/device-agent/src/vpn.ts)
+wireguard-tools
+nftables
 bluez
 wireplumber
 upower

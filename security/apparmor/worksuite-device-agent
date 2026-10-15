@@ -61,6 +61,13 @@ profile worksuite-device-agent flags=(attach_disconnected) {
   /dev/{sd,nvme,vd,mmcblk,dm-,loop}* rw,
   /run/cryptsetup/ rw,
   /run/cryptsetup/** rwk,
+  # Managed WireGuard VPN (WSOS-INT-001): NetworkManager keyfile (0600, holds the device's private key), nmcli over
+  # D-Bus, and the nftables kill switch.
+  capability net_admin,
+  /etc/NetworkManager/system-connections/ r,
+  /etc/NetworkManager/system-connections/worksuite-vpn.nmconnection{,.tmp} rw,
+  /usr/bin/nmcli rix,
+  /usr/{s,}bin/nft rix,
 
   deny /root/** rwx,
   deny @{PROC}/sys/kernel/** w,
