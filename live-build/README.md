@@ -9,6 +9,9 @@ Inside Debian trixie (Ubuntu's live-build is too old for these options), with ne
     sudo ARCH=amd64 SNAPSHOT=20261001T000000Z live-build/build.sh  # ISO → live-build/out
     tests/vm/boot-test.sh live-build/out/worksuite-os-1.0.0-dev-amd64.iso   # QEMU + OVMF boot check
 
+For a local dev build, `SNAPSHOT=none` builds from deb.debian.org instead: today's trixie, not reproducible, but
+not subject to snapshot.debian.org's per-client throttling. Release images always pin a snapshot.
+
 `build.sh` installs the locally built .debs (`config/packages.chroot`); the WorkSuite repository is only added with
 `WORKSUITE_REPO=1`, once it exists. The image boots to greetd; `worksuite-boot-marker.service` prints unit status,
 the worksuite-node version and failed units to the serial console, which the boot test checks. The CI workflow
