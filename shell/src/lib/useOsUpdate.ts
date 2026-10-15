@@ -2,6 +2,7 @@
 import { useSyncExternalStore } from 'react'
 import { os, packageErrorText, type OsUpdateStatus } from './os'
 import { START, track, updateJobProgress, type JobProgress, type Tracking } from './updates'
+import { t } from '../i18n'
 
 export interface UpdateState { status: OsUpdateStatus | null; job: JobProgress | null; tracking: Tracking; error: string | null }
 
@@ -28,7 +29,7 @@ export const updates = {
   async defer() {
     const r = await os.updateDefer()
     if (!r.ok) set({ error: packageErrorText(r.error) })
-    else if (!r.value) set({ error: 'This update can’t be postponed any more.' })
+    else if (!r.value) set({ error: t('upd.noDefer') })
     return r
   },
   async installNow() { const r = await os.updateInstallNow(); if (!r.ok) set({ error: packageErrorText(r.error) }); return r },

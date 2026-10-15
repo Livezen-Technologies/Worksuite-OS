@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { motionReduced, setA11y, systemReducedMotion, TEXT_SCALES, useA11y } from '../lib/a11y'
-import { LOCALES, setLocale, useT, getLocale, type Locale } from '../i18n'
+import { LOCALES, REVIEW, setLocale, useT, getLocale, type Locale } from '../i18n'
 
 // Accessibility quick panel (WSOS-ACC-001…006): high contrast, reduced motion, text size and language.
 // Opened from the greeter's and the desktop's Accessibility buttons; Escape closes it and focus returns to the opener.
@@ -49,7 +49,7 @@ export default function A11yPanel({ onClose, className = '' }: { onClose: () => 
       <label className={row}>
         <span>{t('a11y.language')}</span>
         <select value={getLocale()} onChange={(e) => setLocale(e.target.value as Locale)} className="h-9 rounded-lg border border-white/20 bg-[#0A1838] px-2 text-sm text-[#E8EEFA]">
-          {LOCALES.map((l) => <option key={l.id} value={l.id} lang={l.id}>{l.name}</option>)}
+          {LOCALES.map((l) => <option key={l.id} value={l.id} lang={l.id}>{l.id !== 'en' && !REVIEW[l.id].reviewed ? t('a11y.languageDraft', { name: l.name }) : l.name}</option>)}
         </select>
       </label>
     </div>

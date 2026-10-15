@@ -1,5 +1,6 @@
 // Start menu data: the org's WorkSuite web apps, WorkSuite Office when installed, and installed Linux apps.
 import type { InstalledApp } from './os'
+import { t } from '../i18n'
 
 export type Kind = 'WorkSuite' | 'Linux app' | 'System'
 
@@ -52,9 +53,9 @@ export function buildLauncherApps(webApps: { id: string; name: string }[] | null
   if (office) {
     out.push(
       { id: 'office', name: 'Office', mark: 'O', ...OFFICE_STYLE, kind: 'WorkSuite', fav: true, launch: { office: 'start' }, keywords: ['worksuite office', 'documents', 'editor'] },
-      { id: 'office-docs', name: 'Documents', mark: 'Do', bg: '#dbeafe', fg: '#1d4ed8', kind: 'WorkSuite', launch: { office: 'docs' }, keywords: ['office', 'word', 'docx', 'writer', 'new document'] },
-      { id: 'office-sheets', name: 'Spreadsheets', mark: 'Sh', bg: '#dcfce7', fg: '#15803d', kind: 'WorkSuite', launch: { office: 'sheets' }, keywords: ['office', 'excel', 'xlsx', 'calc', 'new spreadsheet'] },
-      { id: 'office-slides', name: 'Presentations', mark: 'Sl', ...OFFICE_STYLE, kind: 'WorkSuite', launch: { office: 'slides' }, keywords: ['office', 'powerpoint', 'pptx', 'slides', 'new presentation'] },
+      { id: 'office-docs', name: t('files.documents'), mark: 'Do', bg: '#dbeafe', fg: '#1d4ed8', kind: 'WorkSuite', launch: { office: 'docs' }, keywords: ['office', 'word', 'docx', 'writer', 'new document'] },
+      { id: 'office-sheets', name: t('setup.app.sheets'), mark: 'Sh', bg: '#dcfce7', fg: '#15803d', kind: 'WorkSuite', launch: { office: 'sheets' }, keywords: ['office', 'excel', 'xlsx', 'calc', 'new spreadsheet'] },
+      { id: 'office-slides', name: t('launcher.presentations'), mark: 'Sl', ...OFFICE_STYLE, kind: 'WorkSuite', launch: { office: 'slides' }, keywords: ['office', 'powerpoint', 'pptx', 'slides', 'new presentation'] },
     )
   }
   for (const e of installed ?? []) {

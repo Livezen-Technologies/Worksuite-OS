@@ -4,6 +4,7 @@ import { os, type RecoveryInfo } from '../../lib/os'
 import { recoveryErrorText } from '../../lib/recovery'
 import { Icon, mono } from '../../components/Ws'
 import { Footer, Header, MonoTag, Page, RP, ring, small } from './Frame'
+import { t as tr } from '../../i18n'
 
 export type MenuTarget = 'repair' | 'snapshots' | 'reset' | 'unlock'
 
@@ -14,13 +15,13 @@ export default function Menu({ info, onOpen }: { info: RecoveryInfo | null; onOp
   const f = info?.features
   const locked = info?.luks.filter((d) => !d.unlocked) ?? []
   const tiles: Tile[] = [
-    { id: 'repair', title: 'Startup repair', desc: 'Automatically find and fix problems that stop WorkSuite OS from starting.', icon: RP.repair, color: '#5FD39A', tint: 'rgba(95,211,154,0.14)', tag: 'RECOMMENDED', recommended: true, off: null },
-    { id: 'snapshots', title: 'Restore a snapshot', desc: 'Go back to how the system was before a recent update. Files stay.', icon: RP.snapshot, color: '#7FB2FF', tint: 'rgba(31,107,255,0.18)', off: null },
-    { id: 'reset', title: 'Reinstall WorkSuite OS', desc: 'Fresh system files. Choose whether to keep your files.', icon: RP.reinstall, color: '#7FB2FF', tint: 'rgba(31,107,255,0.18)', off: null },
-    { id: 'unlock', title: 'Unlock disk with recovery key', desc: 'Use if you forgot your disk passphrase.', icon: RP.lock, color: '#7FB2FF', tint: 'rgba(31,107,255,0.18)',
-      off: !info ? null : !info.luks.length ? 'No encrypted disk was found.' : !locked.length ? 'Your disk is already unlocked.' : !f?.unlock ? 'Disk unlocking isn’t available in this version.' : null },
-    { id: 'usb', title: 'Copy files to USB', desc: 'Back up your files before making changes.', icon: RP.usb, color: '#7FB2FF', tint: 'rgba(31,107,255,0.18)', off: f && !f.copy_usb ? 'Not available in this version yet.' : null },
-    { id: 'terminal', title: 'Terminal', desc: 'Advanced: a root shell for manual repair.', icon: RP.terminal, color: '#8FA3C8', tint: 'rgba(127,178,255,0.1)', off: f && !f.terminal ? 'Not available in this version yet.' : null },
+    { id: 'repair', title: tr('rec.menu.repair'), desc: tr('rec.menu.repairHint'), icon: RP.repair, color: '#5FD39A', tint: 'rgba(95,211,154,0.14)', tag: tr('hw.tag.recommended'), recommended: true, off: null },
+    { id: 'snapshots', title: tr('rec.menu.snapshot'), desc: tr('rec.menu.snapshotHint'), icon: RP.snapshot, color: '#7FB2FF', tint: 'rgba(31,107,255,0.18)', off: null },
+    { id: 'reset', title: tr('rec.menu.reinstall'), desc: tr('rec.menu.reinstallHint'), icon: RP.reinstall, color: '#7FB2FF', tint: 'rgba(31,107,255,0.18)', off: null },
+    { id: 'unlock', title: tr('rec.menu.unlock'), desc: tr('rec.menu.unlockHint'), icon: RP.lock, color: '#7FB2FF', tint: 'rgba(31,107,255,0.18)',
+      off: !info ? null : !info.luks.length ? tr('rec.menu.noLuks') : !locked.length ? tr('rec.menu.unlocked') : !f?.unlock ? tr('rec.menu.noUnlock') : null },
+    { id: 'usb', title: tr('rec.menu.usb'), desc: tr('rec.menu.usbHint'), icon: RP.usb, color: '#7FB2FF', tint: 'rgba(31,107,255,0.18)', off: f && !f.copy_usb ? tr('rec.menu.notYet') : null },
+    { id: 'terminal', title: tr('rec.menu.terminal'), desc: tr('rec.menu.terminalHint'), icon: RP.terminal, color: '#8FA3C8', tint: 'rgba(127,178,255,0.1)', off: f && !f.terminal ? tr('rec.menu.notYet') : null },
   ]
 
   const pick = async (t: Tile) => {
@@ -37,13 +38,13 @@ export default function Menu({ info, onOpen }: { info: RecoveryInfo | null; onOp
   const facts = [info?.os_version, info?.disk, info?.firmware].filter(Boolean).join(' · ')
 
   return (
-    <Page label="Recovery menu">
+    <Page label={tr('rec.menu.label')}>
       <Header logo right={facts ? <span className={`${mono} text-xs text-[#8FA3C8]`}>{facts}</span> : null} />
       <div className="flex flex-col gap-7 px-[120px] pb-24 pt-11 max-[900px]:px-6">
         <div className="flex flex-col gap-2">
-          <h1 className="m-0 text-[32px] font-bold tracking-[-0.02em]">Something went wrong at startup</h1>
+          <h1 className="m-0 text-[32px] font-bold tracking-[-0.02em]">{tr('rec.menu.title')}</h1>
           <p className="m-0 text-[15px] text-[#8FA3C8]">
-            {failures ? `WorkSuite OS didn't start correctly ${failures} time${failures === 1 ? '' : 's'} in a row.` : "WorkSuite OS didn't start correctly."} Choose how you'd like to fix it.
+            {failures ? tr('rec.menu.failures', { count: failures }) : tr('rec.menu.failed')} {tr('rec.menu.choose')}
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3.5 max-[900px]:grid-cols-1">
@@ -65,13 +66,13 @@ export default function Menu({ info, onOpen }: { info: RecoveryInfo | null; onOp
       </div>
       <Footer className="h-16 gap-7 px-10 text-[13px] text-[#8FA3C8]">
         {/* No network bridge exists in recovery yet, so Wi-Fi is shown but can't be used. */}
-        <button type="button" disabled title="Wi-Fi setup isn’t available in recovery yet" className={`flex items-center gap-2 text-[#8FA3C8] ${ring} rounded-sm`}>
-          <Icon d={[RP.wifi]} size={16} stroke="#8FA3C8" />Connect to Wi-Fi
+        <button type="button" disabled title={tr('rec.menu.noWifi')} className={`flex items-center gap-2 text-[#8FA3C8] ${ring} rounded-sm`}>
+          <Icon d={[RP.wifi]} size={16} stroke="#8FA3C8" />{tr('rec.menu.wifi')}
         </button>
         <span lang="en-US">English (US)</span>
         <span className="ml-auto" />
-        <button type="button" onClick={() => void os.power('restart')} className={small}>Restart</button>
-        <button type="button" onClick={() => void os.power('shutdown')} className={small}>Shut down</button>
+        <button type="button" onClick={() => void os.power('restart')} className={small}>{tr('power.restart')}</button>
+        <button type="button" onClick={() => void os.power('shutdown')} className={small}>{tr('power.shutDown')}</button>
       </Footer>
     </Page>
   )

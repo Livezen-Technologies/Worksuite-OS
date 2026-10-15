@@ -128,7 +128,7 @@ export interface Drive { model: string; serial: string; device: string }
 export function formatDuration(s: number | null): string | null {
   if (s === null || s <= 0) return null
   const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60)
-  return h ? `about ${h} h${m ? ` ${m} min` : ''}` : `about ${m} min`
+  return h ? (m ? t('time.aboutHM', { h, m }) : t('time.aboutH', { h })) : t('time.aboutM', { m })
 }
 
 export type RecoveryFeature = 'unlock' | 'repair' | 'snapshots' | 'reinstall' | 'copy_usb' | 'terminal' | 'report_usb'
@@ -188,24 +188,25 @@ export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; p
 export function formatBytes(n: number | null): string {
   if (n == null) return '—'
   const a = Math.abs(n)
-  const s = a >= 1e9 ? `${(a / 1e9).toFixed(1)} GB` : a >= 1e6 ? `${Math.round(a / 1e6)} MB` : `${Math.max(1, Math.round(a / 1e3))} kB`
-  return n < 0 ? `${s} freed` : s
+  const s = a >= 1e9 ? `${formatNumber(Number((a / 1e9).toFixed(1)))} GB` : a >= 1e6 ? `${formatNumber(Math.round(a / 1e6))} MB` : `${formatNumber(Math.max(1, Math.round(a / 1e3)))} kB`
+  return n < 0 ? t('bytes.freed', { size: s }) : s
 }
 
 /** Package service error → text. Its own messages are already written for people. */
 export function packageErrorText(code: string): string {
   switch (code) {
-    case 'not_authorized': return 'An administrator password is needed for this. Nothing was changed.'
+    case 'not_authorized': return t('rec.err.notAuthorized')
     case 'cancelled': return ''
-    case 'service_unavailable': return 'The package service isn’t running. Try again in a moment.'
-    case 'invalid_argument': return 'This app can’t be installed from here.'
-    case 'failed': return 'That didn’t work. Nothing was changed.'
+    case 'service_unavailable': return t('pkg.err.service')
+    case 'invalid_argument': return t('pkg.err.invalid')
+    case 'failed': return t('rec.err.default')
     default: return code.charAt(0).toUpperCase() + code.slice(1) + (/[.!]$/.test(code) ? '' : '.')
   }
 }
 
 import type { SyncStatus } from './syncNotices'
 import type { CheckId, CheckResult, SnapshotInfo } from './recovery'
+import { formatNumber, t } from '../i18n'
 
 export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
@@ -225,29 +226,29 @@ export interface DeviceInfo {
 /** Taskbar chip text: null when the device isn't managed (WSOS-MDM-007). */
 export function managedLabel(info: DeviceInfo | null): string | null {
   if (!info?.managed) return null
-  return info.policies?.update_ring ? `Managed · ${info.policies.update_ring} ring` : 'Managed'
+  return info.policies?.update_ring ? t('mdm.managedRing', { ring: info.policies.update_ring }) : t('mdm.managed')
 }
 
 /** Policy → plain sentences for the management notice. Only what the policy actually sets. */
 export function policyLines(p: DevicePolicies | null): string[] {
   if (!p) return []
   const out: string[] = []
-  if (p.app_allowlist_size > 0) out.push(`Only approved apps can be installed (${p.app_allowlist_size} approved)`)
-  if (p.update_ring || p.update_mode) out.push(`Updates: ${[p.update_ring && `${p.update_ring} ring`, p.update_mode && `${p.update_mode} mode`].filter(Boolean).join(', ')}${p.maintenance_window ? `, restarts ${p.maintenance_window}` : ''}`)
-  if (p.lock_timeout_max_s) out.push(`Screen locks after at most ${Math.round(p.lock_timeout_max_s / 60)} min idle`)
-  if (p.offline_access_days) out.push(`Offline sign-in allowed for ${p.offline_access_days} days`)
-  if (p.usb_storage === 'block') out.push('USB storage is blocked')
-  else if (p.usb_storage === 'read_only') out.push('USB storage is read-only')
-  if (p.bluetooth === false) out.push('Bluetooth is turned off')
+  if (p.app_allowlist_size > 0) out.push(t('mdm.allowlist', { count: p.app_allowlist_size }))
+  if (p.update_ring || p.update_mode) out.push(t('mdm.updates', { list: [p.update_ring && t('mdm.ring', { ring: p.update_ring }), p.update_mode && t('mdm.mode', { mode: p.update_mode }), p.maintenance_window && t('mdm.restarts', { window: p.maintenance_window })].filter(Boolean).join(', ') }))
+  if (p.lock_timeout_max_s) out.push(t('mdm.lock', { min: Math.round(p.lock_timeout_max_s / 60) }))
+  if (p.offline_access_days) out.push(t('mdm.offline', { days: p.offline_access_days }))
+  if (p.usb_storage === 'block') out.push(t('mdm.usbBlocked'))
+  else if (p.usb_storage === 'read_only') out.push(t('mdm.usbRO'))
+  if (p.bluetooth === false) out.push(t('mdm.btOff'))
   return out
 }
 
 export interface LockSettings { timeout_s: number; max_s: number | null; choices: number[] }
 
 export function lockChoiceLabel(s: number): string {
-  if (s === 0) return 'Never'
-  if (s < 3600) return `${Math.round(s / 60)} min`
-  return s === 3600 ? '1 hour' : `${Math.round(s / 360) / 10} hours`
+  if (s === 0) return t('time.never')
+  if (s < 3600) return t('time.min', { n: Math.round(s / 60) })
+  return s === 3600 ? t('time.hour') : t('time.hours', { n: formatNumber(Math.round(s / 360) / 10) })
 }
 export interface InstalledApp { id: string; name: string; generic_name: string | null; comment: string | null; icon: string | null; categories: string[]; keywords: string[] }
 
@@ -535,20 +536,20 @@ let stubManaged = false
 /** Broker error codes → text for the user. */
 export function cloudErrorText(code: string): string {
   switch (code) {
-    case 'discovery_failed': return 'That server didn’t answer as a WorkSuite server. Check the address.'
-    case 'insecure_url': return 'The server must use https.'
-    case 'sign_in_timeout': return 'Sign-in wasn’t finished in the browser. Try again.'
-    case 'access_denied': return 'Sign-in was cancelled.'
-    case 'broker_unavailable': return 'The sign-in service isn’t running. Try again in a moment.'
-    case 'device_not_enrolled': return 'This computer isn’t enrolled with your organization yet. Ask IT to enroll it, then sign in again.'
+    case 'discovery_failed': return t('cloud.err.discovery')
+    case 'insecure_url': return t('cloud.err.insecure')
+    case 'sign_in_timeout': return t('cloud.err.timeout')
+    case 'access_denied': return t('cloud.err.denied')
+    case 'broker_unavailable': return t('cloud.err.broker')
+    case 'device_not_enrolled': return t('cloud.err.notEnrolled')
     case 'bootstrap_failed':
-    case 'bootstrap_invalid': return 'Signed in, but WorkSuite couldn’t load your organization’s settings. Try again.'
-    case 'auth_cancelled': return 'Enrollment needs an administrator password. Nothing was changed.'
-    case 'enrollment_rejected': return 'The server didn’t accept that enrollment code. Check it with your IT admin; codes expire quickly.'
-    case 'invalid_code': return 'Enter the enrollment code exactly as your IT admin gave it.'
-    case 'agent_unavailable': return 'The device agent isn’t running, so this computer can’t be enrolled right now.'
-    case 'export_failed': return 'Couldn’t save the unsent changes. Nothing was signed out.'
-    default: return 'Sign-in didn’t work. Check your connection and try again.'
+    case 'bootstrap_invalid': return t('cloud.err.bootstrap')
+    case 'auth_cancelled': return t('cloud.err.authCancelled')
+    case 'enrollment_rejected': return t('cloud.err.rejected')
+    case 'invalid_code': return t('cloud.err.code')
+    case 'agent_unavailable': return t('cloud.err.agent')
+    case 'export_failed': return t('cloud.err.export')
+    default: return t('cloud.err.default')
   }
 }
 

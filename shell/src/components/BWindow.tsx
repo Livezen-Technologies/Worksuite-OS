@@ -1,4 +1,5 @@
 import BIcon from './BIcon'
+import { t } from '../i18n'
 
 // Window chrome for shell apps rendered inside the desktop work area (above the taskbar).
 export default function BWindow({ title, mark, markClass, label, bodyClass = 'bg-white', titleClass = 'bg-[#f8fafc]', onClose, children }: {
@@ -12,9 +13,9 @@ export default function BWindow({ title, mark, markClass, label, bodyClass = 'bg
         <span className={`flex size-[22px] items-center justify-center rounded-md text-[11px] font-bold ${markClass}`}>{mark}</span>
         <span className="text-[13px] font-semibold">{title}</span>
         <div className="ml-auto flex gap-0.5">
-          <button type="button" aria-label="Minimize" onClick={onClose} className="flex h-8 w-9 items-center justify-center rounded-md text-[#475569] hover:bg-[#e2e8f0]"><BIcon name="minimize" size={14} /></button>
-          <button type="button" aria-label="Maximize" className="flex h-8 w-9 items-center justify-center rounded-md text-[#475569] hover:bg-[#e2e8f0]"><BIcon name="maximize" size={13} /></button>
-          <button type="button" aria-label="Close" onClick={onClose} className="flex h-8 w-9 items-center justify-center rounded-md text-[#475569] hover:bg-[#fee2e2] hover:text-[#b91c1c]"><BIcon name="close" size={14} /></button>
+          <button type="button" aria-label={t('window.minimize')} onClick={onClose} className="flex h-8 w-9 items-center justify-center rounded-md text-[#475569] hover:bg-[#e2e8f0]"><BIcon name="minimize" size={14} /></button>
+          <button type="button" aria-label={t('window.maximize')} className="flex h-8 w-9 items-center justify-center rounded-md text-[#475569] hover:bg-[#e2e8f0]"><BIcon name="maximize" size={13} /></button>
+          <button type="button" aria-label={t('common.close')} onClick={onClose} className="flex h-8 w-9 items-center justify-center rounded-md text-[#475569] hover:bg-[#fee2e2] hover:text-[#b91c1c]"><BIcon name="close" size={14} /></button>
         </div>
       </div>
       <div className="flex min-h-0 grow">{children}</div>

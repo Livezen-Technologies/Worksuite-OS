@@ -8,6 +8,7 @@ import { useOsUpdate, updates } from '../lib/useOsUpdate'
 import { REMIND_KEY, SEEN_KEY, UPDATE_PHASES, fmtWhen, heroView, needsAttention, canDefer, restartOptions, whatsNew, type Action, type RestartChoice, type Tone } from '../lib/updates'
 import { C, Dialog, OptionCard, Progress, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, heroCard, linkBtn, rowLine } from '../components/Dk'
 import { Mark } from '../components/Ws'
+import { formatNumber, messages, t } from '../i18n'
 
 export const ICON = {
   download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
@@ -23,9 +24,9 @@ const TONE: Record<Tone, { icon: string; color: string; bg: string }> = {
   ok: { icon: ICON.check, color: C.green, bg: 'rgba(95,211,154,0.14)' },
   warn: { icon: ICON.alert, color: C.amber, bg: 'rgba(255,159,90,0.14)' },
 }
-const ACTION_LABEL: Record<Action, string> = { check: 'Check for updates', later: 'Later', install: 'Download and install', schedule: 'Schedule…', restart: 'Restart now' }
-const RING: Record<string, string> = { development: 'development', pilot: 'pilot', stable: 'stable' }
-const MODE: Record<string, string> = { automatic: 'Automatic', notify: 'Notify first', manual: 'Manual' }
+const ACTION_LABEL: Record<Action, string> = messages({ check: 'upd.action.check', later: 'upd.action.later', install: 'upd.action.install', schedule: 'upd.action.schedule', restart: 'upd.action.restart' })
+const RING: Record<string, string> = messages({ development: 'upd.ring.development', pilot: 'upd.ring.pilot', stable: 'upd.ring.stable' })
+const MODE: Record<string, string> = messages({ automatic: 'upd.mode.automatic', notify: 'upd.mode.notify', manual: 'upd.mode.manual' })
 
 const ls = { get(k: string) { try { return localStorage.getItem(k) } catch { return null } }, set(k: string, v: string) { try { localStorage.setItem(k, v) } catch { /* ignore */ } } }
 export const snoozed = () => Number(ls.get(REMIND_KEY) ?? 0) > Date.now()
@@ -52,10 +53,10 @@ export function UpdatesPanel() {
   }, [])
 
   if (!st) {
-    return <div className={`${heroCard} p-5 text-sm text-[#8FA3C8]`} role="status">{error ? `Update status is unavailable. ${error}` : 'Loading update status…'}</div>
+    return <div className={`${heroCard} p-5 text-sm text-[#8FA3C8]`} role="status">{error ? t('upd.statusUnavailable', { error }) : t('upd.loading')}</div>
   }
   const v = heroView(st, job)
-  const t = TONE[v.tone]
+  const tone = TONE[v.tone]
   const act = async (a: Action) => { setBusy(true); await run(a, () => setSchedule(true)); setBusy(false) }
   const pct = v.progress && v.progress !== 'indeterminate' ? v.progress.percent : null
   const offered = st.version && st.version !== st.installed ? st.version : null
@@ -63,16 +64,16 @@ export function UpdatesPanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
       <div className={`${heroCard} flex items-center gap-[18px] p-5`} aria-live="polite">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px]" style={{ background: t.bg }}>
-          <span className={v.tone === 'busy' && !pct ? 'ws-spin inline-flex' : 'inline-flex'}><Svg d={v.tone === 'busy' && st.state === 'checking' ? ICON.restart : t.icon} size={28} stroke={t.color} /></span>
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px]" style={{ background: tone.bg }}>
+          <span className={v.tone === 'busy' && !pct ? 'ws-spin inline-flex' : 'inline-flex'}><Svg d={v.tone === 'busy' && st.state === 'checking' ? ICON.restart : tone.icon} size={28} stroke={tone.color} /></span>
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <span className="text-lg font-semibold">{v.title}</span>
           <span className="text-[13px] text-[#8FA3C8]">{v.sub}</span>
           {v.progress && st.state === 'installing' && (
             <div className="mt-1.5 flex flex-col gap-1.5">
-              <Progress value={pct} label="Update progress" shine />
-              <span className="font-mono text-xs text-[#8FA3C8]">{pct == null ? 'Starting…' : `${UPDATE_PHASES[v.progress === 'indeterminate' ? '' : v.progress.phase] ?? ''} · ${pct}%`}</span>
+              <Progress value={pct} label={t('upd.progress')} shine />
+              <span className="font-mono text-xs text-[#8FA3C8]">{pct == null ? t('upd.starting') : `${UPDATE_PHASES[v.progress === 'indeterminate' ? '' : v.progress.phase] ?? ''} · ${formatNumber(pct)}%`}</span>
             </div>
           )}
           {error && <span role="alert" className="text-[13px] text-[#FF8A7A]">{error}</span>}
@@ -85,29 +86,29 @@ export function UpdatesPanel() {
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4">
         <section aria-labelledby="upd-notes" className={`${card} flex flex-col gap-3 px-5 py-[18px]`}>
-          <h2 id="upd-notes" className="m-0 text-[15px] font-semibold">{offered ? `What's in ${offered}` : `WorkSuite OS ${st.installed}`}</h2>
+          <h2 id="upd-notes" className="m-0 text-[15px] font-semibold">{offered ? t('upd.whatsIn', { version: offered }) : `WorkSuite OS ${st.installed}`}</h2>
           <p className="m-0 text-[13px] leading-[1.5] text-[#8FA3C8]">
             {offered
-              ? 'Release notes aren’t part of the signed update information this computer receives, so they can’t be shown here yet.'
-              : 'No update is waiting. Release notes appear here when the update service publishes them.'}
+              ? t('upd.notesMissing')
+              : t('upd.noneWaiting')}
           </p>
-          {st.mandatory && offered && <p className="m-0 text-[13px] text-[#C9D6EE]">Your organization marked this release as required{st.deadline ? `; it installs by ${fmtWhen(st.deadline)}` : ''}.</p>}
+          {st.mandatory && offered && <p className="m-0 text-[13px] text-[#C9D6EE]">{st.deadline ? t('upd.requiredBy', { when: fmtWhen(st.deadline) }) : t('upd.required')}</p>}
         </section>
         <div className="flex flex-col gap-2.5">
           <section aria-labelledby="upd-opts" className={`${card} flex flex-col gap-3 px-[18px] py-4`}>
-            <div className="flex items-center justify-between"><h2 id="upd-opts" className="m-0 text-sm font-semibold">Options</h2>{policy && <span className={chip}>Set by policy</span>}</div>
+            <div className="flex items-center justify-between"><h2 id="upd-opts" className="m-0 text-sm font-semibold">{t('upd.options')}</h2>{policy && <span className={chip}>{t('settings.lock.policy')}</span>}</div>
             {[
-              ['Update mode', MODE[policy?.update_mode ?? 'automatic']],
-              ['Installs', policy?.maintenance_window ? `In the window ${policy.maintenance_window}` : 'When the computer is idle'],
-              ['Metered connections', 'Optional updates wait'],
+              [t('upd.modeLabel'), MODE[policy?.update_mode ?? 'automatic']],
+              [t('upd.installs'), policy?.maintenance_window ? t('upd.inWindow', { window: policy.maintenance_window }) : t('upd.whenIdle')],
+              [t('upd.metered'), t('upd.meteredWait')],
             ].map(([k, val]) => (
               <div key={k} className="flex items-center justify-between gap-3 text-[13px] text-[#C9D6EE]"><span>{k}</span><span className="text-[#E8EEFA]">{val}</span></div>
             ))}
           </section>
           <section aria-labelledby="upd-pc" className={`${card} flex flex-col gap-1.5 px-[18px] py-4 text-[13px]`}>
-            <h2 id="upd-pc" className="m-0 text-sm font-semibold">This computer</h2>
-            <span className="text-[#8FA3C8]">WorkSuite OS {st.installed} · {RING[policy?.update_ring ?? 'stable']} channel</span>
-            <span className="text-[#8FA3C8]">Last checked {st.last_check ? fmtWhen(st.last_check) : 'not yet'}</span>
+            <h2 id="upd-pc" className="m-0 text-sm font-semibold">{t('settings.thisComputer')}</h2>
+            <span className="text-[#8FA3C8]">WorkSuite OS {st.installed} · {t('upd.channel', { ring: RING[policy?.update_ring ?? 'stable'] })}</span>
+            <span className="text-[#8FA3C8]">{t('upd.lastChecked', { when: st.last_check ? fmtWhen(st.last_check) : t('settings.about.notYet') })}</span>
           </section>
           <OfflineBundle />
         </div>
@@ -127,7 +128,7 @@ function OfflineBundle() {
   useEffect(() => os.onPkgJob((e) => {
     if (e.kind !== 'finished' || e.job !== job) return
     setJob(null)
-    setMsg(e.result === 'success' ? { text: 'The offline update is installed. Restart to finish if asked.' } : { text: packageErrorText(e.error ?? 'failed'), error: true })
+    setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: packageErrorText(e.error ?? 'failed'), error: true })
   }), [job])
   const choose = async () => {
     setMsg(null); setInfo(null)
@@ -140,16 +141,16 @@ function OfflineBundle() {
   const install = async () => {
     if (!picked) return
     const r = await os.bundleInstall(picked.handle)
-    if (r.ok) { setJob(r.value); setMsg({ text: 'Installing the offline update…' }) } else setMsg({ text: packageErrorText(r.error), error: true })
+    if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: packageErrorText(r.error), error: true })
   }
   return (
     <section aria-labelledby="upd-usb" className={`${card} flex flex-col gap-2 px-[18px] py-4 text-[13px]`}>
-      <h2 id="upd-usb" className="m-0 text-sm font-semibold">Install from a USB drive</h2>
-      <span className="text-[#8FA3C8]">{info ? `${picked?.name}: WorkSuite OS ${info.version} · ${info.packages} packages · ${formatBytes(info.bytes)} · signature and checksums verified` : 'For computers without internet access: choose a signed .wsupdate file from WorkSuite.'}</span>
+      <h2 id="upd-usb" className="m-0 text-sm font-semibold">{t('upd.usb.title')}</h2>
+      <span className="text-[#8FA3C8]">{info ? t('upd.usb.info', { file: picked?.name ?? '', version: info.version, count: formatNumber(info.packages), size: formatBytes(info.bytes) }) : t('upd.usb.hint')}</span>
       {msg && <span role={msg.error ? 'alert' : 'status'} className={msg.error ? 'text-[#FF8A7A]' : 'text-[#C9D6EE]'}>{msg.text}</span>}
       <div className="flex gap-2">
-        <button type="button" disabled={!!job} onClick={() => void choose()} className={btnGhost}>Choose file…</button>
-        {info && <button type="button" disabled={!!job} onClick={() => void install()} className={btnPrimary}>Install</button>}
+        <button type="button" disabled={!!job} onClick={() => void choose()} className={btnGhost}>{t('upd.usb.choose')}</button>
+        {info && <button type="button" disabled={!!job} onClick={() => void install()} className={btnPrimary}>{t('common.install')}</button>}
       </div>
     </section>
   )
@@ -168,14 +169,14 @@ export function RestartDialog({ onClose }: { onClose: () => void }) {
     <Dialog onClose={onClose}>
       {(tid) => <>
         <div className="flex flex-col gap-1.5 px-6 pt-6 pb-4">
-          <h2 id={tid} className="m-0 text-[19px] font-bold">When should we restart?</h2>
-          <p className="m-0 text-sm text-[#C9D6EE]">Save your work first. Open apps close when the computer restarts.</p>
+          <h2 id={tid} className="m-0 text-[19px] font-bold">{t('upd.restart.title')}</h2>
+          <p className="m-0 text-sm text-[#C9D6EE]">{t('upd.restart.body')}</p>
         </div>
         <div role="radiogroup" aria-labelledby={tid} className="flex flex-col gap-1.5 px-4 pb-4">
           {opts.map((o) => <OptionCard key={o.id} name="when" checked={pick === o.id} disabled={o.disabled} onPick={() => setPick(o.id)} title={o.label} desc={o.desc} />)}
         </div>
         <div className={dialogFooter}>
-          <button type="button" onClick={onClose} className={btnGhost}>Cancel</button>
+          <button type="button" onClick={onClose} className={btnGhost}>{t('common.cancel')}</button>
           <button type="button" data-autofocus onClick={() => void go()} className={btnPrimary}>{cur.cta}</button>
         </div>
       </>}
@@ -192,12 +193,12 @@ export function UpdatingScreen({ from, to, percent, phase }: { from: string; to:
         <span className="absolute top-9 left-9"><Mark size={48} hole="#040A1A" /></span>
       </div>
       <div className="flex flex-col items-center gap-2.5">
-        <h1 id="updating-t" className="m-0 text-[28px] font-medium">Updating WorkSuite OS{percent != null ? ` · ${percent}%` : ''}</h1>
-        <p className="m-0 text-[15px] text-[#8FA3C8]">Don't turn off your computer. It will restart when the update is done.</p>
+        <h1 id="updating-t" className="m-0 text-[28px] font-medium">{t('upd.updating')}{percent != null ? ` · ${formatNumber(percent)}%` : ''}</h1>
+        <p className="m-0 text-[15px] text-[#8FA3C8]">{t('upd.dontTurnOff')}</p>
       </div>
       <div className="flex w-[420px] max-w-full flex-col gap-2.5">
-        <Progress value={percent} label="Update progress" height={4} />
-        <div className="flex justify-between font-mono text-xs text-[#8FA3C8]"><span>{phase ? UPDATE_PHASES[phase] ?? phase : 'Starting'}</span><span>{from}{to ? ` → ${to}` : ''}</span></div>
+        <Progress value={percent} label={t('upd.progress')} height={4} />
+        <div className="flex justify-between font-mono text-xs text-[#8FA3C8]"><span>{phase ? UPDATE_PHASES[phase] ?? phase : t('upd.startingShort')}</span><span>{from}{to ? ` → ${to}` : ''}</span></div>
       </div>
     </div>
   )
@@ -208,25 +209,25 @@ export function UpdateFailed({ installed, version, reason, phase, percent, onRet
   installed: string; version: string | null; reason: string; phase: string | null; percent: number | null; onRetry: () => void; onClose: () => void
 }) {
   const rows: [string, string][] = [
-    ['Current version', installed],
-    ['Failed at', phase ? `${UPDATE_PHASES[phase] ?? phase}${percent != null ? ` · ${percent}%` : ''}` : 'Unknown step'],
-    ['Error', reason],
+    [t('upd.fail.current'), installed],
+    [t('upd.fail.at'), phase ? `${UPDATE_PHASES[phase] ?? phase}${percent != null ? ` · ${formatNumber(percent)}%` : ''}` : t('upd.fail.unknownStep')],
+    [t('upd.fail.error'), reason],
   ]
   return (
     <div role="alertdialog" aria-modal="true" aria-labelledby="upd-fail-t" aria-describedby="upd-fail-d"
       className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-[18px] overflow-auto p-4 font-sans text-[#E8EEFA]"
       style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 35%, #2A1A2E 0%, #071330 60%, #040A1A 100%)' }}>
       <div className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-[rgba(255,159,90,0.14)] shadow-[0_0_0_10px_rgba(255,159,90,0.05)]"><Svg d={ICON.rollback} size={42} stroke={C.amber} /></div>
-      <h1 id="upd-fail-t" className="m-0 mt-2.5 text-[32px] font-bold tracking-[-0.02em]">The update couldn't finish</h1>
+      <h1 id="upd-fail-t" className="m-0 mt-2.5 text-[32px] font-bold tracking-[-0.02em]">{t('upd.fail.title')}</h1>
       <p id="upd-fail-d" className="m-0 max-w-[560px] text-center text-base leading-normal text-[#C9D6EE]">
-        WorkSuite OS {version ?? 'update'} didn't install. Your files weren't touched. If an app or setting misbehaves, open Recovery and choose Repair packages.
+        {t('upd.fail.body', { version: version ?? t('upd.fail.update') })}
       </p>
       <dl className="m-0 mt-2 w-[560px] max-w-full overflow-hidden rounded-[14px] border border-[rgba(127,178,255,0.16)] bg-[rgba(14,32,72,0.7)]">
         {rows.map(([k, v]) => <div key={k} className={`flex justify-between gap-6 px-[18px] py-3 text-[13px] ${rowLine}`}><dt className="text-[#8FA3C8]">{k}</dt><dd className="m-0 text-right font-mono">{v}</dd></div>)}
       </dl>
       <div className="mt-3.5 flex gap-3">
-        <button type="button" onClick={onRetry} className={`${btnGhost} px-[22px] py-3 text-[15px]`}>Try again</button>
-        <button type="button" data-autofocus autoFocus onClick={onClose} className={`${btnPrimary} px-7 py-3 text-[15px] shadow-[0_8px_24px_rgba(31,107,255,0.35)]`}>Continue to desktop</button>
+        <button type="button" onClick={onRetry} className={`${btnGhost} px-[22px] py-3 text-[15px]`}>{t('common.tryAgain')}</button>
+        <button type="button" data-autofocus autoFocus onClick={onClose} className={`${btnPrimary} px-7 py-3 text-[15px] shadow-[0_8px_24px_rgba(31,107,255,0.35)]`}>{t('upd.fail.continue')}</button>
       </div>
     </div>
   )
@@ -239,19 +240,19 @@ export function WhatsNew({ version, onClose }: { version: string; onClose: () =>
       {(tid) => <>
         <div className="flex h-[150px] items-end px-7 py-[22px]" style={{ background: 'radial-gradient(circle at 70% 30%, rgba(24,212,240,0.5), transparent 50%), linear-gradient(135deg, #1F6BFF, #0D2353)' }}>
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-xs tracking-[0.08em] text-[#D6F7FF]">UPDATED TO {version}</span>
-            <h2 id={tid} className="m-0 text-[28px] font-bold text-white">What's new in WorkSuite OS</h2>
+            <span className="font-mono text-xs tracking-[0.08em] text-[#D6F7FF]">{t('upd.new.updatedTo', { version })}</span>
+            <h2 id={tid} className="m-0 text-[28px] font-bold text-white">{t('upd.new.title')}</h2>
           </div>
         </div>
         <div className="flex gap-3 px-7 py-[22px]">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[rgba(31,107,255,0.18)]"><Svg d={ICON.check} size={18} stroke="#7FB2FF" /></span>
           <span className="flex flex-col gap-[3px]">
-            <span className="text-sm font-semibold">WorkSuite OS {version} is installed</span>
-            <span className="text-[13px] leading-[1.4] text-[#8FA3C8]">Release notes for this version aren't available on this computer yet.</span>
+            <span className="text-sm font-semibold">{t('upd.new.installed', { version })}</span>
+            <span className="text-[13px] leading-[1.4] text-[#8FA3C8]">{t('upd.new.noNotes')}</span>
           </span>
         </div>
         <div className={dialogFooter}>
-          <button type="button" data-autofocus onClick={onClose} className={`${btnPrimary} px-[22px]`}>Got it</button>
+          <button type="button" data-autofocus onClick={onClose} className={`${btnPrimary} px-[22px]`}>{t('common.gotIt')}</button>
         </div>
       </>}
     </Dialog>
@@ -264,31 +265,31 @@ export function UpdateToast({ onDetails, onSchedule, onDismiss }: { onDetails: (
   const [busy, setBusy] = useState(false)
   if (!st) return null
   const ready = st.state === 'ready_to_restart'
-  const title = ready ? 'Restart to finish updating' : st.state === 'restart_pending' ? 'A required update will restart this computer' : `WorkSuite OS ${st.version} is ready`
-  const body = ready ? `WorkSuite OS ${st.installed} is installed. Restart when it suits you.`
-    : st.state === 'restart_pending' ? 'Save your work. The update installs and the computer restarts in a few minutes.'
-    : st.mandatory ? `Required by your organization${st.deadline ? ` by ${fmtWhen(st.deadline)}` : ''}. You can keep working while it installs.`
-    : 'You can keep working while it installs; a restart finishes it.'
+  const title = ready ? t('update.restart') : st.state === 'restart_pending' ? t('upd.toast.forced') : t('upd.toast.ready', { version: st.version ?? '' })
+  const body = ready ? t('upd.toast.installed', { version: st.installed })
+    : st.state === 'restart_pending' ? t('upd.toast.save')
+    : st.mandatory ? (st.deadline ? t('upd.toast.requiredBy', { when: fmtWhen(st.deadline) }) : t('upd.toast.required'))
+    : t('upd.toast.keepWorking')
   const act = async (fn: () => Promise<unknown>) => { setBusy(true); await fn(); setBusy(false) }
   return (
-    <div role="status" aria-label="Update" className="pointer-events-auto w-full overflow-hidden rounded-2xl border border-[rgba(127,178,255,0.22)] bg-[rgba(10,24,56,0.96)] text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
+    <div role="status" aria-label={t('upd.toast.label')} className="pointer-events-auto w-full overflow-hidden rounded-2xl border border-[rgba(127,178,255,0.22)] bg-[rgba(10,24,56,0.96)] text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
       <div className="flex gap-3.5 p-[18px]">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(31,107,255,0.2)]"><Svg d={ready ? ICON.restart : ICON.download} size={22} stroke="#7FB2FF" /></span>
         <div className="flex flex-1 flex-col gap-1">
           <div className="flex justify-between gap-2"><span className="text-[15px] font-semibold">{title}</span>
-            <button type="button" aria-label="Dismiss" onClick={onDismiss} className="-mt-1 -mr-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-base leading-none text-[#8FA3C8] hover:bg-white/10 hover:text-white">×</button></div>
+            <button type="button" aria-label={t('common.dismiss')} onClick={onDismiss} className="-mt-1 -mr-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-base leading-none text-[#8FA3C8] hover:bg-white/10 hover:text-white">×</button></div>
           <span className="text-[13px] leading-[1.45] text-[#C9D6EE]">{body}</span>
         </div>
       </div>
       <div className="flex gap-2 pr-[18px] pb-[18px] pl-[76px]">
         {ready || st.state === 'restart_pending' ? <>
-          <button type="button" onClick={() => void os.power('restart')} className="cursor-pointer rounded-[9px] bg-[#1F6BFF] px-3.5 py-[9px] text-[13px] font-semibold text-white hover:bg-[#3A7DFF]">Restart now</button>
-          {ready && <button type="button" onClick={onSchedule} className="cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-3.5 py-[9px] text-[13px] font-medium hover:bg-white/[0.06]">Schedule…</button>}
+          <button type="button" onClick={() => void os.power('restart')} className="cursor-pointer rounded-[9px] bg-[#1F6BFF] px-3.5 py-[9px] text-[13px] font-semibold text-white hover:bg-[#3A7DFF]">{t('upd.action.restart')}</button>
+          {ready && <button type="button" onClick={onSchedule} className="cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-3.5 py-[9px] text-[13px] font-medium hover:bg-white/[0.06]">{t('upd.action.schedule')}</button>}
         </> : <>
-          <button type="button" disabled={busy} onClick={() => void act(updates.installNow)} className="cursor-pointer rounded-[9px] bg-[#1F6BFF] px-3.5 py-[9px] text-[13px] font-semibold text-white hover:bg-[#3A7DFF] disabled:opacity-60">Install now</button>
-          {canDefer(st) && <button type="button" disabled={busy} onClick={() => void act(async () => { await updates.defer(); onDismiss() })} className="cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-3.5 py-[9px] text-[13px] font-medium hover:bg-white/[0.06] disabled:opacity-60">Later</button>}
+          <button type="button" disabled={busy} onClick={() => void act(updates.installNow)} className="cursor-pointer rounded-[9px] bg-[#1F6BFF] px-3.5 py-[9px] text-[13px] font-semibold text-white hover:bg-[#3A7DFF] disabled:opacity-60">{t('upd.installNow')}</button>
+          {canDefer(st) && <button type="button" disabled={busy} onClick={() => void act(async () => { await updates.defer(); onDismiss() })} className="cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-3.5 py-[9px] text-[13px] font-medium hover:bg-white/[0.06] disabled:opacity-60">{t('upd.action.later')}</button>}
         </>}
-        <button type="button" onClick={onDetails} className={`${linkBtn} px-2.5 py-[9px]`}>Details</button>
+        <button type="button" onClick={onDetails} className={`${linkBtn} px-2.5 py-[9px]`}>{t('common.details')}</button>
       </div>
     </div>
   )
@@ -300,7 +301,7 @@ export function TaskbarUpdateButton({ onOpen }: { onOpen: () => void }) {
   if (!needsAttention(status)) return null
   const ready = status!.state === 'ready_to_restart'
   return (
-    <button type="button" onClick={onOpen} aria-label={ready ? 'Update installed: restart to finish' : 'Update available'}
+    <button type="button" onClick={onOpen} aria-label={ready ? t('upd.badgeReady') : t('update.available')}
       className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]">
       <Svg d={ICON.restart} size={18} stroke="#FFFFFF" />
       <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-[#18D4F0]" />

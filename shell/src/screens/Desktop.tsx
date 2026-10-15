@@ -13,10 +13,11 @@ import { UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
 import { buildLauncherApps, filterApps, taskbarApps, type LauncherApp } from '../lib/launcher'
+import type { MessageKey } from '../i18n'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 
-const SETTINGS_PAGES = ['Wi-Fi and network', 'Bluetooth', 'Displays', 'Sound', 'Power and battery', 'Appearance', 'Accounts', 'Privacy and security', 'Updates', 'Keyboard shortcuts']
+const SETTINGS_PAGES: MessageKey[] = ['launcher.page.network', 'settings.nav.Bluetooth', 'launcher.page.displays', 'settings.nav.Sound', 'launcher.page.power', 'settings.nav.Appearance', 'launcher.page.accounts', 'launcher.page.privacy', 'settings.nav.Updates', 'launcher.page.shortcuts']
 
 const RECENT = [
   { ext: 'XLS', name: 'Q4 budget — Livezen.xlsx', where: 'WorkSuite Cloud › Finance', state: 'Synced', cls: 'bg-[#ecfdf5] text-[#047857]' },
@@ -97,7 +98,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   }, [launcher])
   const q = query.trim().toLowerCase()
   const apps = useMemo(() => filterApps(allApps, tab, q), [allApps, tab, q])
-  const settingsHits = q ? SETTINGS_PAGES.filter((s) => s.toLowerCase().includes(q)) : []
+  const settingsHits = q ? SETTINGS_PAGES.map((k) => t(k)).filter((s) => s.toLowerCase().includes(q)) : []
   const recent = q ? RECENT.filter((r) => r.name.toLowerCase().includes(q)) : RECENT
 
   const launch = (id: string) => {
@@ -207,7 +208,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                     <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex flex-col items-center gap-2 rounded-xl px-1 py-3 hover:bg-[#f1f5f9]">
                       <span className="flex size-12 items-center justify-center rounded-xl text-[17px] font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
                       <span className="text-xs text-[#0f172a]">{a.name}</span>
-                      <span className="text-[10.5px] text-[#475569]">{a.kind}</span>
+                      <span className="text-[10.5px] text-[#475569]">{t(`launcher.kind.${a.kind}` as MessageKey)}</span>
                     </button>
                   ))}
                 </div>

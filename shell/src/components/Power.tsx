@@ -76,6 +76,7 @@ export function PowerMenu({ user, onClose, onLock, onSignOut, onShutdown, classN
 }
 
 export function ShutdownConfirm({ onCancel, seconds = SHUTDOWN_SECONDS }: { onCancel: () => void; seconds?: number }) {
+  const t = useT()
   const [secs, setSecs] = useState(seconds)
   const [pending, setPending] = useState(0)
   const [installUpdates, setInstallUpdates] = useState(true)
@@ -134,21 +135,21 @@ export function ShutdownConfirm({ onCancel, seconds = SHUTDOWN_SECONDS }: { onCa
             <span className={`absolute inset-0 flex items-center justify-center text-xl font-medium ${mono}`} aria-hidden="true">{secs}</span>
           </div>
           <div className="flex flex-col gap-1">
-            <h2 id="sd-title" className="m-0 text-[22px] font-bold">Shut down now?</h2>
-            <span id="sd-desc" className="text-sm text-[#8FA3C8]" aria-live={busy ? 'polite' : 'off'}>{busy ?? `Shutting down automatically in ${secs} seconds.`}</span>
+            <h2 id="sd-title" className="m-0 text-[22px] font-bold">{t('power.confirmTitle')}</h2>
+            <span id="sd-desc" className="text-sm text-[#8FA3C8]" aria-live={busy ? 'polite' : 'off'}>{busy ?? t('power.countdown', { secs })}</span>
           </div>
         </div>
         {pending > 0 && (
           <label className="flex cursor-pointer items-center gap-2.5 text-sm text-[#C9D6EE]">
             <input type="checkbox" checked={installUpdates} disabled={!!busy} onChange={(e) => setInstallUpdates(e.target.checked)} className="h-[18px] w-[18px] accent-[#1F6BFF]" />
-            Install {pending} pending update{pending === 1 ? '' : 's'} before shutting down
+            {pending === 1 ? t('power.installOne') : t('power.installMany', { count: pending })}
           </label>
         )}
         <div className="flex justify-end gap-3">
-          <button type="button" disabled={!!busy} onClick={onCancel} data-autofocus className={btn}>Cancel</button>
-          <button type="button" disabled={!!busy} onClick={() => void act('restart')} className={btn}>Restart</button>
+          <button type="button" disabled={!!busy} onClick={onCancel} data-autofocus className={btn}>{t('common.cancel')}</button>
+          <button type="button" disabled={!!busy} onClick={() => void act('restart')} className={btn}>{t('power.restart')}</button>
           <button type="button" disabled={!!busy} onClick={() => void act('shutdown')}
-            className="cursor-pointer rounded-[10px] bg-[#D9452B] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(217,69,43,0.35)] hover:bg-[#E5563C] disabled:cursor-default disabled:opacity-60">Shut down</button>
+            className="cursor-pointer rounded-[10px] bg-[#D9452B] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(217,69,43,0.35)] hover:bg-[#E5563C] disabled:cursor-default disabled:opacity-60">{t('power.shutDown')}</button>
         </div>
       </div>
     </div>

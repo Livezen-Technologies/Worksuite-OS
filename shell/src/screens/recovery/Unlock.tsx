@@ -5,6 +5,7 @@ import { os, type RecoveryInfo } from '../../lib/os'
 import { KEY_GROUP_LEN, KEY_LENGTH, emptyKey, fillKeyGroups, formatGiB, formatKey, keyProblem, recoveryErrorText, type DoneInfo } from '../../lib/recovery'
 import { Icon, mono } from '../../components/Ws'
 import { Header, Page, ghost, link, primary, ring } from './Frame'
+import { t } from '../../i18n'
 
 export default function Unlock({ info, onBack, onDone }: { info: RecoveryInfo | null; onBack: () => void; onDone: (d: DoneInfo) => void }) {
   const disk = info?.luks.find((d) => !d.unlocked) ?? null
@@ -34,14 +35,14 @@ export default function Unlock({ info, onBack, onDone }: { info: RecoveryInfo | 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (!disk || busy) return
-    const problem = usePass ? (pass ? null : 'Enter your disk passphrase.') : keyProblem(groups)
+    const problem = usePass ? (pass ? null : t('rec.unlock.enterPass')) : keyProblem(groups)
     if (problem) { setError(problem); return }
     setBusy(true); setError(null)
     const r = await os.recoveryUnlock(disk.device, usePass ? pass : formatKey(groups))
     setBusy(false)
     if (r.ok) {
       setGroups(emptyKey()); setPass('')
-      onDone({ title: 'Your disk is unlocked', text: 'Your files can be read again. Run startup repair or restart to continue.', ok: true, rows: [{ k: 'Disk unlocked', v: disk.name, state: 'ok' }] })
+      onDone({ title: t('rec.unlock.doneTitle'), text: t('rec.unlock.doneText'), ok: true, rows: [{ k: t('rec.unlock.doneRow'), v: disk.name, state: 'ok' }] })
       return
     }
     setError(recoveryErrorText(r.error))
@@ -49,29 +50,29 @@ export default function Unlock({ info, onBack, onDone }: { info: RecoveryInfo | 
     setTimeout(() => (usePass ? passRef.current : refs.current[0])?.focus(), 0)
   }
 
-  const diskLine = disk && ['Disk: ' + disk.name, [disk.label, disk.version ? `(LUKS${disk.version})` : '(LUKS)'].filter(Boolean).join(' '), formatGiB(disk.size_bytes)].filter(Boolean).join(' · ')
+  const diskLine = disk && [t('rec.unlock.disk', { name: disk.name }), [disk.label, disk.version ? `(LUKS${disk.version})` : '(LUKS)'].filter(Boolean).join(' '), formatGiB(disk.size_bytes)].filter(Boolean).join(' · ')
 
   return (
-    <Page label="Unlock disk">
+    <Page label={t('rec.unlock.label')}>
       <Header onBack={onBack} />
       <form onSubmit={submit} noValidate className="flex flex-col items-center gap-[22px] px-6 pb-10 pt-[70px]">
         <div className="flex h-20 w-20 items-center justify-center rounded-[22px] bg-[rgba(31,107,255,0.18)]">
           <Icon size={38} stroke="#7FB2FF"><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M17 6l3 3" /></Icon>
         </div>
-        <h1 className="m-0 text-[30px] font-bold">Unlock your disk</h1>
+        <h1 className="m-0 text-[30px] font-bold">{t('rec.unlock.title')}</h1>
         <p id="unlock-desc" className="m-0 max-w-[520px] text-center text-[15px] leading-normal text-[#8FA3C8]">
-          {usePass ? 'Enter the passphrase you chose for this disk during installation.' : `Enter the ${KEY_LENGTH}-character recovery key you saved during installation. Dashes are added for you.`}
+          {usePass ? t('rec.unlock.passHint') : t('rec.unlock.keyHint', { length: KEY_LENGTH })}
         </p>
         {usePass ? (
-          <input ref={passRef} type="password" aria-label="Disk passphrase" aria-describedby="unlock-desc" autoComplete="off" value={pass} disabled={busy || !disk}
+          <input ref={passRef} type="password" aria-label={t('rec.unlock.passLabel')} aria-describedby="unlock-desc" autoComplete="off" value={pass} disabled={busy || !disk}
             onChange={(e) => { setPass(e.target.value); setError(null) }} aria-invalid={!!error}
             className={`mt-2 h-12 w-[470px] max-w-full rounded-[10px] border border-[rgba(127,178,255,0.2)] bg-[rgba(4,10,26,0.6)] px-4 text-[17px] text-[#E8EEFA] focus:border-[#1F6BFF] ${ring}`} />
         ) : (
           <fieldset className="m-0 mt-2 border-0 p-0" aria-describedby="unlock-desc">
-            <legend className="sr-only">Recovery key, {groups.length} groups of {KEY_GROUP_LEN}</legend>
+            <legend className="sr-only">{t('rec.unlock.legend', { groups: groups.length, size: KEY_GROUP_LEN })}</legend>
             <div className="grid grid-cols-[repeat(4,110px)] gap-2.5">
               {groups.map((g, i) => (
-                <input key={i} ref={(el) => { refs.current[i] = el }} aria-label={`Recovery key group ${i + 1}`} value={g} maxLength={KEY_GROUP_LEN}
+                <input key={i} ref={(el) => { refs.current[i] = el }} aria-label={t('rec.unlock.group', { n: i + 1 })} value={g} maxLength={KEY_GROUP_LEN}
                   inputMode="text" autoComplete="off" autoCorrect="off" autoCapitalize="characters" spellCheck={false} disabled={busy || !disk} aria-invalid={!!error}
                   onChange={(e) => set(i, e.target.value)} onPaste={(e) => onPaste(i, e)} onKeyDown={(e) => onKey(i, e)}
                   className={`${mono} h-12 rounded-[10px] border border-[rgba(127,178,255,0.2)] bg-[rgba(4,10,26,0.6)] text-center text-[17px] tracking-[0.08em] text-[#E8EEFA] focus:border-[#1F6BFF] disabled:opacity-60 ${ring}`} />
@@ -79,18 +80,18 @@ export default function Unlock({ info, onBack, onDone }: { info: RecoveryInfo | 
             </div>
           </fieldset>
         )}
-        <span className="text-[13px] text-[#8FA3C8]">{diskLine ?? 'No locked encrypted disk was found.'}</span>
+        <span className="text-[13px] text-[#8FA3C8]">{diskLine ?? t('rec.unlock.noDisk')}</span>
         {error && <p role="alert" className="m-0 text-[13px] text-[#FFB4A8]">{error}</p>}
         <div className="mt-2.5 flex gap-3">
           <button type="button" onClick={() => { setUsePass((p) => !p); setError(null); setGroups(emptyKey()); setPass('') }} className={ghost}>
-            {usePass ? 'Use recovery key instead' : 'Use passphrase instead'}
+            {usePass ? t('rec.unlock.useKey') : t('rec.unlock.usePass')}
           </button>
-          <button type="submit" disabled={busy || !disk} className={primary}>{busy ? 'Unlocking…' : 'Unlock'}</button>
+          <button type="submit" disabled={busy || !disk} className={primary}>{busy ? t('rec.unlock.busy') : t('lock.unlock')}</button>
         </div>
-        <button type="button" aria-expanded={help} aria-controls="key-help" onClick={() => setHelp((h) => !h)} className={`mt-1 ${link}`}>Where do I find my recovery key?</button>
+        <button type="button" aria-expanded={help} aria-controls="key-help" onClick={() => setHelp((h) => !h)} className={`mt-1 ${link}`}>{t('rec.unlock.where')}</button>
         {help && (
           <p id="key-help" className="m-0 max-w-[520px] text-center text-[13px] leading-normal text-[#C9D6EE]">
-            The installer showed it once, at the end of installation, as {KEY_LENGTH / KEY_GROUP_LEN} groups of {KEY_GROUP_LEN} letters and numbers. Look for where you saved or printed it. If this computer is managed by your organization, your IT team may have a copy.
+            {t('rec.unlock.help', { groups: KEY_LENGTH / KEY_GROUP_LEN, size: KEY_GROUP_LEN })}
           </p>
         )}
       </form>

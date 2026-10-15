@@ -5,6 +5,7 @@ import { formatBytes, os, type Avail, type DriverOffer, type HwDevice, type Prin
 import { KIND_ICON, deviceStatus, deviceSub, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerVersion } from '../lib/hardware'
 import { C, Dialog, OptionCard, Progress, Spinner, Svg, Tag, btnGhost, btnPrimary, card, dialogFooter, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { ICON } from './Updates'
+import { formatNumber, t } from '../i18n'
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable' }
 
@@ -45,27 +46,27 @@ export function DevicesPanel({ onProblem }: { onProblem?: (d: HwDevice) => void 
   useEffect(() => { void loadPrinters() }, [])
   return (
     <div className="flex flex-col gap-4">
-      <Header title="Devices" action="Refresh" onAction={() => { void reload(); void loadPrinters() }} />
+      <Header title={t('settings.nav.Devices')} action={t('common.refresh')} onAction={() => { void reload(); void loadPrinters() }} />
       {printers?.available && printers.value.length > 0 && (
-        <section aria-label="Printers" className="flex flex-col gap-1.5">
-          <h2 className={`m-0 font-normal ${sectionLabel}`}>Printers</h2>
+        <section aria-label={t('hw.printers')} className="flex flex-col gap-1.5">
+          <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('hw.printers')}</h2>
           <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
             {printers.value.map((p) => {
               const color = p.state === 'disabled' ? C.amber : p.state === 'unknown' ? C.muted : C.green
               return (
                 <li key={p.name} className={`flex items-center gap-3.5 px-4 py-3 ${rowLine}`}>
                   <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[rgba(31,107,255,0.16)]"><Svg d={KIND_ICON.printer} size={18} stroke="#7FB2FF" /></span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="truncate text-sm font-medium">{p.name.replace(/_/g, ' ')}</span><span className="text-xs text-[#8FA3C8]">Printer{p.is_default ? ' · default' : ''}</span></span>
-                  <span className="flex items-center gap-1.5 text-xs" style={{ color }}><span className="h-2 w-2 rounded-full" style={{ background: color }} />{p.state === 'printing' ? 'Printing' : p.state === 'disabled' ? 'Paused' : p.state === 'unknown' ? 'Unknown' : 'Ready'}</span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="truncate text-sm font-medium">{p.name.replace(/_/g, ' ')}</span><span className="text-xs text-[#8FA3C8]">{p.is_default ? t('hw.printerDefault') : t('hw.kind.printer')}</span></span>
+                  <span className="flex items-center gap-1.5 text-xs" style={{ color }}><span className="h-2 w-2 rounded-full" style={{ background: color }} />{p.state === 'printing' ? t('hw.printing') : p.state === 'disabled' ? t('hw.paused') : p.state === 'unknown' ? t('common.unknown') : t('hw.ready')}</span>
                 </li>
               )
             })}
           </ul>
         </section>
       )}
-      {devs.state === 'loading' && <Empty title="Looking for devices…" />}
-      {devs.state === 'unavailable' && <Empty title="Device information isn't available yet">This computer didn't report its hardware to the shell.</Empty>}
-      {devs.state === 'ok' && devs.value.length === 0 && <Empty title="No devices found">Plugged-in and built-in devices appear here.</Empty>}
+      {devs.state === 'loading' && <Empty title={t('hw.looking')} />}
+      {devs.state === 'unavailable' && <Empty title={t('hw.devUnavailable')}>{t('hw.devUnavailableHint')}</Empty>}
+      {devs.state === 'ok' && devs.value.length === 0 && <Empty title={t('hw.noDevices')}>{t('hw.noDevicesHint')}</Empty>}
       {devs.state === 'ok' && groupDevices(devs.value).map((g) => (
         <section key={g.name} aria-label={g.name} className="flex flex-col gap-1.5">
           <h2 className={`m-0 font-normal ${sectionLabel}`}>{g.name}</h2>
@@ -102,23 +103,23 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
   const restarts = picked.filter((o) => o.restart).length
   return (
     <div className="flex flex-col gap-3.5">
-      <Header title="Drivers" action="Check for updates" onAction={() => void reload()} busy={offers.state === 'loading'} />
+      <Header title={t('settings.nav.Drivers')} action={t('upd.action.check')} onAction={() => void reload()} busy={offers.state === 'loading'} />
       {offers.state === 'unavailable' && (
         <div className="flex items-center gap-3.5 rounded-xl border border-[rgba(31,107,255,0.35)] bg-[rgba(31,107,255,0.1)] px-[18px] py-4">
           <Svg d={ICON.download} size={22} stroke="#7FB2FF" />
-          <span className="flex-1 text-sm"><strong>Driver updates come with WorkSuite OS updates.</strong> <span className="text-[#C9D6EE]">There's no separate driver catalog on this computer yet.</span></span>
-          <button type="button" onClick={onOpenUpdates} className={btnPrimary}>Open Updates</button>
+          <span className="flex-1 text-sm"><strong>{t('hw.withOs')}</strong> <span className="text-[#C9D6EE]">{t('hw.noCatalog')}</span></span>
+          <button type="button" onClick={onOpenUpdates} className={btnPrimary}>{t('hw.openUpdates')}</button>
         </div>
       )}
       {offers.state === 'ok' && list.length > 0 && <>
         <div className="flex items-center gap-3.5 rounded-xl border border-[rgba(31,107,255,0.35)] bg-[rgba(31,107,255,0.1)] px-[18px] py-4">
           <Svg d={ICON.download} size={22} stroke="#7FB2FF" />
-          <span className="flex-1 text-sm"><strong>{list.length} driver update{list.length === 1 ? '' : 's'}</strong> available{bytes ? ` · ${formatBytes(bytes)}` : ''}{restarts ? ` · ${restarts} need${restarts === 1 ? 's' : ''} a restart` : ''}</span>
-          <button type="button" disabled={!picked.length} onClick={() => setInstalling(picked)} className={btnPrimary}>Install selected</button>
+          <span className="flex-1 text-sm"><strong>{list.length === 1 ? t('hw.updatesOne') : t('hw.updatesMany', { count: formatNumber(list.length) })}</strong> {t('hw.available')}{bytes ? ` · ${formatBytes(bytes)}` : ''}{restarts ? ` · ${restarts === 1 ? t('hw.restartOne') : t('hw.restartMany', { count: formatNumber(restarts) })}` : ''}</span>
+          <button type="button" disabled={!picked.length} onClick={() => setInstalling(picked)} className={btnPrimary}>{t('hw.installSelected')}</button>
         </div>
         <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
           {list.map((o) => {
-            const t = offerTag(o)
+            const tg = offerTag(o)
             const on = chosen.has(o.id) || offerLocked(o)
             return (
               <li key={o.id} className={rowLine}>
@@ -126,8 +127,8 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
                   <input type="checkbox" checked={on} disabled={offerLocked(o)} aria-label={o.name}
                     onChange={() => { const n = new Set(chosen); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); setSel(n) }} className="h-[18px] w-[18px] accent-[#1F6BFF]" />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="flex items-center gap-2 text-sm font-medium">{o.name}<Tag text={t.tag} bg={t.bg} color={t.color} /></span>
-                    <span className="text-xs text-[#8FA3C8]">{o.summary}{o.restart ? ' · restart required' : ''}</span>
+                    <span className="flex items-center gap-2 text-sm font-medium">{o.name}<Tag text={tg.tag} bg={tg.bg} color={tg.color} /></span>
+                    <span className="text-xs text-[#8FA3C8]">{o.summary}{o.restart ? ` · ${t('hw.restartRequired')}` : ''}</span>
                   </span>
                   <span className="font-mono text-xs text-[#C9D6EE]">{offerVersion(o)}</span>
                 </label>
@@ -136,21 +137,21 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
           })}
         </ul>
       </>}
-      {offers.state === 'ok' && list.length === 0 && <Empty title="Drivers are up to date" />}
-      <section aria-label="Drivers in use" className="flex flex-col gap-1.5">
-        <h2 className={`m-0 font-normal ${sectionLabel}`}>In use</h2>
-        {devs.state === 'unavailable' && <Empty title="Driver information isn't available yet" />}
+      {offers.state === 'ok' && list.length === 0 && <Empty title={t('hw.upToDate')} />}
+      <section aria-label={t('hw.inUseLabel')} className="flex flex-col gap-1.5">
+        <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('hw.inUse')}</h2>
+        {devs.state === 'unavailable' && <Empty title={t('hw.drvUnavailable')} />}
         {devs.state === 'ok' && (
           <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
             {driversInUse(devs.value).map((d) => {
-              const t = d.proprietary ? { tag: 'PROPRIETARY', bg: 'rgba(255,159,90,0.16)', color: C.amber } : d.proprietary === false ? { tag: 'OPEN SOURCE', bg: 'rgba(127,178,255,0.12)', color: C.soft } : null
+              const tg = d.proprietary ? { tag: t('hw.tag.proprietary'), bg: 'rgba(255,159,90,0.16)', color: C.amber } : d.proprietary === false ? { tag: t('hw.tag.open'), bg: 'rgba(127,178,255,0.12)', color: C.soft } : null
               return (
                 <li key={d.driver} className={`flex items-center gap-3.5 px-4 py-[13px] ${rowLine}`}>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="flex items-center gap-2 font-mono text-sm font-medium">{d.driver}{t && <Tag text={t.tag} bg={t.bg} color={t.color} />}</span>
+                    <span className="flex items-center gap-2 font-mono text-sm font-medium">{d.driver}{tg && <Tag text={tg.tag} bg={tg.bg} color={tg.color} />}</span>
                     <span className="truncate text-xs text-[#8FA3C8]">{d.devices.join(', ')}</span>
                   </span>
-                  <span className="font-mono text-xs text-[#C9D6EE]">{d.version ?? 'kernel'}</span>
+                  <span className="font-mono text-xs text-[#C9D6EE]">{d.version ?? t('hw.kernel')}</span>
                 </li>
               )
             })}
@@ -171,9 +172,9 @@ export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]
     const off = os.onPkgJob((e) => {
       if (e.job !== job.current) return
       if (e.kind === 'progress' && e.phase) setPct((p) => ({ ...p, [e.phase!]: e.percent ?? 0 }))
-      if (e.kind === 'finished' && e.result !== 'success') setError(e.error ?? 'The driver install didn’t finish.')
+      if (e.kind === 'finished' && e.result !== 'success') setError(e.error ?? t('hw.installUnfinished'))
     })
-    void os.hwInstallDrivers(offers.map((o) => o.id)).then((r) => { if (r.ok) job.current = r.value; else setError('Drivers can’t be installed here yet.') })
+    void os.hwInstallDrivers(offers.map((o) => o.id)).then((r) => { if (r.ok) job.current = r.value; else setError(t('hw.cantInstall')) })
     return off
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const done = offers.every((o) => (pct[o.id] ?? 0) >= 100)
@@ -183,8 +184,8 @@ export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]
     <Dialog width={500} onClose={onClose}>
       {(tid) => <>
         <div className="flex flex-col gap-1.5 px-6 pt-6 pb-3">
-          <h2 id={tid} className="m-0 text-[19px] font-bold">Installing driver updates</h2>
-          <p className="m-0 text-sm text-[#8FA3C8]">Drivers install through the package service. You can keep working.</p>
+          <h2 id={tid} className="m-0 text-[19px] font-bold">{t('hw.installingTitle')}</h2>
+          <p className="m-0 text-sm text-[#8FA3C8]">{t('hw.installingBody')}</p>
         </div>
         <ul className="m-0 flex list-none flex-col gap-1.5 px-4 pt-2 pb-4" aria-live="polite">
           {offers.map((o) => {
@@ -197,9 +198,9 @@ export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]
                   {st === 'active' && <Spinner size={20} />}
                   {st === 'wait' && <span className="h-5 w-5 rounded-full border-2 border-[rgba(127,178,255,0.3)]" />}
                   <span className="flex-1 text-sm font-medium">{o.name} {o.to_version}</span>
-                  <span className="text-xs text-[#8FA3C8]">{st === 'done' ? 'Installed' : st === 'active' ? `Installing… ${p}%` : `Waiting${o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}`}</span>
+                  <span className="text-xs text-[#8FA3C8]">{st === 'done' ? t('common.installed') : st === 'active' ? t('hw.installingPct', { percent: formatNumber(p) }) : `${t('hw.waiting')}${o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}`}</span>
                 </div>
-                {st === 'active' && <div className="ml-8"><Progress value={p} label={`${o.name} progress`} height={4} /></div>}
+                {st === 'active' && <div className="ml-8"><Progress value={p} label={t('hw.progressOf', { name: o.name })} height={4} /></div>}
               </li>
             )
           })}
@@ -207,12 +208,12 @@ export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]
         {error && <p role="alert" className="mx-4 mb-4 rounded-xl border border-[rgba(255,138,122,0.3)] bg-[rgba(255,138,122,0.08)] px-3.5 py-3 text-[13px] text-[#FFB0A6]">{error}</p>}
         {restart.length > 0 && (
           <div className="mx-4 mb-4 flex gap-2.5 rounded-xl border border-[rgba(255,159,90,0.3)] bg-[rgba(255,159,90,0.08)] px-3.5 py-3 text-[13px] text-[#C9D6EE]">
-            <Svg d={ICON.restart} size={18} stroke={C.amber} /><span>{restart.map((o) => o.name).join(', ')} need{restart.length === 1 ? 's' : ''} a restart to finish.</span>
+            <Svg d={ICON.restart} size={18} stroke={C.amber} /><span>{t('hw.needRestart', { names: restart.map((o) => o.name).join(', ') })}</span>
           </div>
         )}
         <div className={dialogFooter}>
-          <button type="button" onClick={onClose} className={btnGhost}>{done || error ? 'Close' : 'Run in background'}</button>
-          {restart.length > 0 && <button type="button" disabled={!done || !!active} onClick={() => void os.power('restart')} className={btnPrimary}>Restart now</button>}
+          <button type="button" onClick={onClose} className={btnGhost}>{done || error ? t('common.close') : t('hw.background')}</button>
+          {restart.length > 0 && <button type="button" disabled={!done || !!active} onClick={() => void os.power('restart')} className={btnPrimary}>{t('upd.action.restart')}</button>}
         </div>
       </>}
     </Dialog>
@@ -233,24 +234,24 @@ export function DeviceSetupDialog({ device, onClose }: { device: HwDevice; onClo
         <div className="flex items-center gap-[18px] border-b border-[rgba(127,178,255,0.12)] px-7 py-6">
           <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[rgba(31,107,255,0.18)]"><Svg d={KIND_ICON[device.kind]} size={32} stroke="#7FB2FF" width={1.8} /></span>
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-[11px] tracking-[0.08em] text-[#18D4F0]">NEW DEVICE · {device.bus.toUpperCase()}</span>
-            <h2 id={tid} className="m-0 text-[21px] font-bold">Set up {device.name}</h2>
-            <span className="text-[13px] text-[#8FA3C8]">{device.driver ? `It works now with the built-in ${device.driver} driver.` : 'No driver is in use for it yet.'}</span>
+            <span className="font-mono text-[11px] tracking-[0.08em] text-[#18D4F0]">{t('hw.newDevice', { bus: device.bus.toUpperCase() })}</span>
+            <h2 id={tid} className="m-0 text-[21px] font-bold">{t('hw.setUpName', { name: device.name })}</h2>
+            <span className="text-[13px] text-[#8FA3C8]">{device.driver ? t('hw.worksBuiltIn', { driver: device.driver }) : t('hw.noDriverYet')}</span>
           </div>
         </div>
         <div role="radiogroup" aria-labelledby={tid} className="flex flex-col gap-2 px-6 py-5">
           {mine.map((o) => {
-            const t = offerTag(o)
-            return <OptionCard key={o.id} name="drv" checked={pick === o.id} onPick={() => setPick(o.id)} title={o.name} tag={<Tag text={t.tag} bg={t.bg} color={t.color} />} desc={o.summary}
+            const tg = offerTag(o)
+            return <OptionCard key={o.id} name="drv" checked={pick === o.id} onPick={() => setPick(o.id)} title={o.name} tag={<Tag text={tg.tag} bg={tg.bg} color={tg.color} />} desc={o.summary}
               right={<span className="font-mono text-xs text-[#8FA3C8]">{formatBytes(o.size_bytes)}</span>} />
           })}
-          <OptionCard name="drv" checked={pick === 'basic'} onPick={() => setPick('basic')} title={device.driver ? `Keep the built-in driver (${device.driver})` : 'Leave it for now'}
-            desc={device.driver ? 'Already working · nothing to download' : 'You can come back to it in Settings › Devices'} right={<span className="font-mono text-xs text-[#8FA3C8]">—</span>} />
-          {offers.state === 'unavailable' && <p className="m-0 mt-1.5 text-[13px] text-[#8FA3C8]">Other drivers can't be looked up yet: there's no driver catalog on this computer. Driver updates arrive with WorkSuite OS updates.</p>}
+          <OptionCard name="drv" checked={pick === 'basic'} onPick={() => setPick('basic')} title={device.driver ? t('hw.keepBuiltIn', { driver: device.driver }) : t('hw.leave')}
+            desc={device.driver ? t('hw.alreadyWorking') : t('hw.comeBack')} right={<span className="font-mono text-xs text-[#8FA3C8]">—</span>} />
+          {offers.state === 'unavailable' && <p className="m-0 mt-1.5 text-[13px] text-[#8FA3C8]">{t('hw.noLookup')}</p>}
         </div>
         <div className={dialogFooter}>
-          <button type="button" onClick={onClose} className={btnGhost}>Not now</button>
-          <button type="button" data-autofocus onClick={() => (chosen ? setInstalling([chosen]) : onClose())} className={btnPrimary}>{chosen ? 'Install driver' : device.driver ? 'Keep basic' : 'Done'}</button>
+          <button type="button" onClick={onClose} className={btnGhost}>{t('common.notNow')}</button>
+          <button type="button" data-autofocus onClick={() => (chosen ? setInstalling([chosen]) : onClose())} className={btnPrimary}>{chosen ? t('hw.installDriver') : device.driver ? t('hw.keepBasic') : t('common.done')}</button>
         </div>
       </>}
     </Dialog>
@@ -261,9 +262,9 @@ export function DeviceSetupDialog({ device, onClose }: { device: HwDevice; onClo
 export function DeviceProblemDialog({ device, onClose, onOpenUpdates, onOpenDrivers }: { device: HwDevice; onClose: () => void; onOpenUpdates: () => void; onOpenDrivers: () => void }) {
   const [details, setDetails] = useState(false)
   const fixes: { title: string; desc: string; run?: () => void }[] = [
-    { title: 'Check for WorkSuite OS updates', desc: 'Drivers ship with OS updates.', run: () => { onClose(); onOpenUpdates() } },
-    { title: 'Look for a driver', desc: 'See the drivers this computer uses and any driver updates.', run: () => { onClose(); onOpenDrivers() } },
-    { title: 'Unplug it and plug it back in', desc: 'Some devices only start after reconnecting.' },
+    { title: t('hw.fix.updates'), desc: t('hw.fix.updatesHint'), run: () => { onClose(); onOpenUpdates() } },
+    { title: t('hw.fix.driver'), desc: t('hw.fix.driverHint'), run: () => { onClose(); onOpenDrivers() } },
+    { title: t('hw.fix.replug'), desc: t('hw.fix.replugHint') },
   ]
   return (
     <Dialog width={640} onClose={onClose} className="rounded-[20px]">
@@ -274,12 +275,12 @@ export function DeviceProblemDialog({ device, onClose, onOpenUpdates, onOpenDriv
             <span className="absolute -right-1 -bottom-1 flex h-[22px] w-[22px] items-center justify-center rounded-full border-[3px] border-[#0F2350] bg-[#FF8A7A] text-xs font-bold text-[#0F2350]">!</span>
           </span>
           <div className="flex flex-col gap-1">
-            <h2 id={tid} className="m-0 text-[21px] font-bold">{device.name} isn't working yet</h2>
-            <span className="text-[13px] text-[#8FA3C8]">{deviceSub(device)} · no driver is in use for it.</span>
+            <h2 id={tid} className="m-0 text-[21px] font-bold">{t('hw.notWorking', { name: device.name })}</h2>
+            <span className="text-[13px] text-[#8FA3C8]">{deviceSub(device)} · {t('hw.noDriverFor')}</span>
           </div>
         </div>
         <div className="flex flex-col gap-2 px-6 py-5">
-          <span className="mb-1 text-[13px] text-[#C9D6EE]">Try these, most likely fix first:</span>
+          <span className="mb-1 text-[13px] text-[#C9D6EE]">{t('hw.tryThese')}</span>
           {fixes.map((f, i) => {
             const inner = <>
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-xs font-semibold" style={{ background: i === 0 ? C.blue : 'rgba(127,178,255,0.15)' }}>{i + 1}</span>
@@ -292,11 +293,11 @@ export function DeviceProblemDialog({ device, onClose, onOpenUpdates, onOpenDriv
               ? <button key={f.title} type="button" data-autofocus={i === 0 || undefined} onClick={f.run} className={`${cls} cursor-pointer hover:bg-white/[0.04]`} style={style}>{inner}</button>
               : <div key={f.title} className={cls} style={style}>{inner}</div>
           })}
-          {details && <dl className="m-0 mt-1 grid grid-cols-[120px_1fr] gap-y-1 font-mono text-xs text-[#C9D6EE]"><dt className="text-[#8FA3C8]">Bus</dt><dd className="m-0">{device.bus.toUpperCase()} {device.id.replace(/^\w+:/, '')}</dd><dt className="text-[#8FA3C8]">Vendor:product</dt><dd className="m-0">{device.ids}</dd><dt className="text-[#8FA3C8]">Driver</dt><dd className="m-0">none bound</dd></dl>}
+          {details && <dl className="m-0 mt-1 grid grid-cols-[120px_1fr] gap-y-1 font-mono text-xs text-[#C9D6EE]"><dt className="text-[#8FA3C8]">{t('hw.bus')}</dt><dd className="m-0">{device.bus.toUpperCase()} {device.id.replace(/^\w+:/, '')}</dd><dt className="text-[#8FA3C8]">{t('hw.vendorProduct')}</dt><dd className="m-0">{device.ids}</dd><dt className="text-[#8FA3C8]">{t('hw.driver')}</dt><dd className="m-0">{t('hw.noneBound')}</dd></dl>}
         </div>
         <div className={`${dialogFooter} justify-between`}>
-          <button type="button" aria-expanded={details} onClick={() => setDetails((v) => !v)} className={linkBtn}>{details ? 'Hide technical details' : 'Show technical details'}</button>
-          <button type="button" onClick={onClose} className={btnGhost}>Close</button>
+          <button type="button" aria-expanded={details} onClick={() => setDetails((v) => !v)} className={linkBtn}>{details ? t('hw.hideDetails') : t('hw.showDetails')}</button>
+          <button type="button" onClick={onClose} className={btnGhost}>{t('common.close')}</button>
         </div>
       </>}
     </Dialog>
@@ -332,11 +333,11 @@ export function DeviceWatcher({ onOpenUpdates, onOpenDrivers }: { onOpenUpdates:
             <div key={d.id} role="status" className="flex gap-3.5 rounded-2xl border border-[rgba(127,178,255,0.22)] bg-[rgba(10,24,56,0.96)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
               <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px]" style={{ background: ok ? 'rgba(95,211,154,0.16)' : 'rgba(255,159,90,0.14)' }}><Svg d={KIND_ICON[d.kind]} size={22} stroke={ok ? C.green : C.amber} /></span>
               <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                <span className="truncate text-sm font-semibold">{ok ? `${d.name} is ready` : `${d.name} needs a driver`}</span>
-                <span className="text-[13px] text-[#8FA3C8]">{ok ? `Set up automatically · ${d.bus.toUpperCase()} · ${d.driver}` : `Connected · ${d.bus.toUpperCase()} · no driver in use`}</span>
+                <span className="truncate text-sm font-semibold">{ok ? t('hw.toast.ready', { name: d.name }) : t('hw.toast.needs', { name: d.name })}</span>
+                <span className="text-[13px] text-[#8FA3C8]">{ok ? t('hw.toast.auto', { bus: d.bus.toUpperCase(), driver: d.driver ?? '' }) : t('hw.toast.connected', { bus: d.bus.toUpperCase() })}</span>
               </div>
-              <button type="button" onClick={() => { drop(d); if (ok) setSetup(d); else setProblem(d) }} className={`${linkBtn} self-center whitespace-nowrap`}>{ok ? 'Set up…' : 'Fix…'}</button>
-              <button type="button" aria-label="Dismiss" onClick={() => drop(d)} className="flex h-6 w-6 cursor-pointer items-center justify-center self-start rounded-md text-base leading-none text-[#8FA3C8] hover:bg-white/10 hover:text-white">×</button>
+              <button type="button" onClick={() => { drop(d); if (ok) setSetup(d); else setProblem(d) }} className={`${linkBtn} self-center whitespace-nowrap`}>{ok ? t('hw.toast.setUp') : t('hw.toast.fix')}</button>
+              <button type="button" aria-label={t('common.dismiss')} onClick={() => drop(d)} className="flex h-6 w-6 cursor-pointer items-center justify-center self-start rounded-md text-base leading-none text-[#8FA3C8] hover:bg-white/10 hover:text-white">×</button>
             </div>
           )
         })}

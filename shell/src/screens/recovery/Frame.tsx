@@ -1,6 +1,7 @@
 // Shared pieces of the recovery boards (docs/design/boot-install/project/R1–R6).
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { Icon, Mark, mono } from '../../components/Ws'
+import { t } from '../../i18n'
 
 export const BG_TOP = 'radial-gradient(ellipse 70% 50% at 50% 0%, #0E2A55 0%, #061029 60%, #030816 100%)'
 export const BG_CENTER = 'radial-gradient(ellipse 60% 50% at 50% 35%, #0E2A55 0%, #061029 60%, #030816 100%)'
@@ -37,13 +38,13 @@ export function Header({ onBack, right, logo = false }: { onBack?: () => void; r
   return (
     <header className="flex h-16 items-center gap-3 border-b border-[rgba(127,178,255,0.1)] px-10">
       {onBack && (
-        <button type="button" aria-label="Back to recovery menu" onClick={onBack}
+        <button type="button" aria-label={t('rec.backToMenu')} onClick={onBack}
           className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-[9px] border border-[rgba(127,178,255,0.2)] hover:bg-white/5 ${ring}`}>
           <Icon d={[RP.back]} size={16} stroke="#C9D6EE" />
         </button>
       )}
       {logo && <Mark size={26} hole="#061029" />}
-      <span className="text-base font-semibold">WorkSuite Recovery</span>
+      <span className="text-base font-semibold">{t('rec.title')}</span>
       {right != null && <span className="ml-auto">{right}</span>}
     </header>
   )
@@ -85,7 +86,7 @@ export function Confirm({ title, children, onCancel, actions, busy }: { title: s
         <h2 id="rc-title" className="m-0 text-[22px] font-bold">{title}</h2>
         <div id="rc-desc" className="flex flex-col gap-3 text-sm leading-normal text-[#C9D6EE]">{children}</div>
         <div className="flex justify-end gap-3">
-          <button type="button" data-autofocus disabled={busy} onClick={onCancel} className={ghost}>Cancel</button>
+          <button type="button" data-autofocus disabled={busy} onClick={onCancel} className={ghost}>{t('common.cancel')}</button>
           {actions}
         </div>
       </div>

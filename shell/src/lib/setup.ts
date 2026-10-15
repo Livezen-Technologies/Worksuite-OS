@@ -1,6 +1,7 @@
 // First-run setup choices (appearance, privacy, WorkSuite apps) and their persistence.
 // The OS bridge has no settings store yet, so choices live in localStorage; every access is guarded
 // because storage can be missing or throw (private profile, blocked site data).
+import { t } from '../i18n'
 
 export type Theme = 'Light' | 'Dark' | 'Auto'
 export const THEMES: Theme[] = ['Light', 'Dark', 'Auto']
@@ -23,12 +24,12 @@ export const DEFAULT_PRIVACY: Privacy = { location: false, updates: true, crash:
 
 export interface SetupApp { id: string; name: string; desc: string; color: string }
 export const SETUP_APPS: SetupApp[] = [
-  { id: 'docs', name: 'Docs', desc: 'Documents & PDFs', color: '#1F6BFF' },
-  { id: 'sheets', name: 'Sheets', desc: 'Spreadsheets', color: '#2E9E6A' },
-  { id: 'mail', name: 'Mail', desc: 'Email & calendar', color: '#D9572B' },
-  { id: 'chat', name: 'Chat', desc: 'Team messaging', color: '#7A4FE0' },
-  { id: 'drive', name: 'Drive', desc: 'Cloud files', color: '#0E8FA8' },
-  { id: 'notes', name: 'Notes', desc: 'Quick notes', color: '#B7791F' },
+  { id: 'docs', name: 'Docs', get desc() { return t('setup.app.docs') }, color: '#1F6BFF' },
+  { id: 'sheets', name: 'Sheets', get desc() { return t('setup.app.sheets') }, color: '#2E9E6A' },
+  { id: 'mail', name: 'Mail', get desc() { return t('setup.app.mail') }, color: '#D9572B' },
+  { id: 'chat', name: 'Chat', get desc() { return t('setup.app.chat') }, color: '#7A4FE0' },
+  { id: 'drive', name: 'Drive', get desc() { return t('setup.app.drive') }, color: '#0E8FA8' },
+  { id: 'notes', name: 'Notes', get desc() { return t('setup.app.notes') }, color: '#B7791F' },
 ]
 export const DEFAULT_APPS = SETUP_APPS.map((a) => a.id)
 
@@ -71,5 +72,5 @@ export function applyAppearance(a: Appearance, root: HTMLElement | null = typeof
  * app is reported as queued rather than with an invented percentage.
  */
 export function readyRows(chosen: string[]) {
-  return SETUP_APPS.filter((a) => chosen.includes(a.id)).map((a) => ({ ...a, initial: a.name[0], label: 'Queued', percent: 0 }))
+  return SETUP_APPS.filter((a) => chosen.includes(a.id)).map((a) => ({ ...a, desc: a.desc, initial: a.name[0], label: t('setup.queued'), percent: 0 }))
 }

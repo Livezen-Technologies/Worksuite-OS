@@ -12,11 +12,14 @@ import Settings from './screens/Settings'
 import Recovery from './screens/Recovery'
 import Installer from './screens/Installer'
 import { useNotices } from './lib/useNotices'
+import { useT } from './i18n'
 
 // `?mode=installer` boots the live-ISO installer; `?mode=recovery` the recovery launcher.
 const mode = new URLSearchParams(location.search).get('mode')
 
 export default function App() {
+  // Re-render every screen when the language changes (screens read strings through t()).
+  useT()
   const [state, setState] = useState<SessionState>(mode === 'recovery' ? 'recovery' : 'greeter')
   const [user, setUser] = useState('')
   const [firstRun, setFirstRun] = useState(() => localStorageGet('ws.firstRunDone') !== '1')

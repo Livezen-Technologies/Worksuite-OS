@@ -1,5 +1,6 @@
 // Recovery screens (docs/design/boot-install R1–R6): pure helpers for the recovery key, startup repair and
 // snapshots, plus the screen state machine. Nothing here touches the key beyond formatting it in memory.
+import { localeTag, t } from '../i18n'
 
 // --- Recovery key (installer/modules/worksuiterecovery: 8 groups of 5 characters from this alphabet) -----------
 export const KEY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -50,8 +51,8 @@ export function formatKey(groups: readonly string[]): string { return groups.joi
 /** Format check only; whether the key opens the disk is up to cryptsetup. */
 export function keyProblem(groups: readonly string[]): string | null {
   const n = groups.reduce((a, g) => a + g.length, 0)
-  if (n === 0) return 'Enter your recovery key.'
-  if (!keyComplete(groups)) return `The recovery key has ${KEY_LENGTH} characters. ${n} entered so far.`
+  if (n === 0) return t('rec.key.empty')
+  if (!keyComplete(groups)) return t('rec.key.short', { length: KEY_LENGTH, n })
   return null
 }
 
@@ -62,17 +63,17 @@ export type CheckState = 'wait' | 'active' | CheckOutcome
 export interface CheckResult { status: CheckOutcome; note: string; /** Problem the package service can repair. */ fixable?: boolean }
 
 export const CHECKS: { id: CheckId; label: string }[] = [
-  { id: 'boot', label: 'Boot loader' },
-  { id: 'disk', label: 'Disk and file system' },
-  { id: 'crypt', label: 'Encrypted volume' },
-  { id: 'packages', label: 'System packages' },
-  { id: 'drivers', label: 'Drivers' },
-  { id: 'update', label: 'Last update' },
+  { id: 'boot', get label() { return t('rec.check.boot') } },
+  { id: 'disk', get label() { return t('rec.check.disk') } },
+  { id: 'crypt', get label() { return t('rec.check.crypt') } },
+  { id: 'packages', get label() { return t('rec.check.packages') } },
+  { id: 'drivers', get label() { return t('settings.nav.Drivers') } },
+  { id: 'update', get label() { return t('rec.check.update') } },
 ]
 
 export interface CheckRow { id: CheckId; label: string; state: CheckState; note: string }
 
-export function initialChecks(): CheckRow[] { return CHECKS.map((c) => ({ ...c, state: 'wait', note: '' })) }
+export function initialChecks(): CheckRow[] { return CHECKS.map((c) => ({ id: c.id, label: c.label, state: 'wait', note: '' })) }
 
 /** Share of checks that have finished, 0–100. */
 export function repairPercent(rows: readonly CheckRow[]): number {
@@ -85,11 +86,11 @@ export function repairSummary(rows: readonly CheckRow[]): { fixed: number; probl
   const fixed = rows.filter((r) => r.state === 'fixed').length
   const problems = rows.filter((r) => r.state === 'problem').length
   const skipped = rows.filter((r) => r.state === 'unavailable' || r.state === 'wait').length
-  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
-  if (problems > 0) return { fixed, problems, skipped, title: 'Some problems remain',
-    text: `Startup repair ${fixed ? `fixed ${plural(fixed, 'problem')} but ` : ''}couldn't fix ${plural(problems, 'problem')}. Try restoring a snapshot or reinstalling.` }
-  if (fixed > 0) return { fixed, problems, skipped, title: 'Your system is fixed', text: `Startup repair fixed ${plural(fixed, 'problem')}. WorkSuite OS should start normally now.` }
-  return { fixed, problems, skipped, title: 'No problems found', text: 'Startup repair didn’t find anything to fix. WorkSuite OS should start normally now.' }
+  const plural = (n: number) => (n === 1 ? t('rec.sum.one') : t('rec.sum.many', { count: n }))
+  if (problems > 0) return { fixed, problems, skipped, title: t('rec.sum.remainTitle'),
+    text: fixed ? t('rec.sum.partly', { fixed: plural(fixed), problems: plural(problems) }) : t('rec.sum.couldnt', { problems: plural(problems) }) }
+  if (fixed > 0) return { fixed, problems, skipped, title: t('rec.sum.fixedTitle'), text: t('rec.sum.fixed', { fixed: plural(fixed) }) }
+  return { fixed, problems, skipped, title: t('rec.sum.noneTitle'), text: t('rec.sum.none') }
 }
 
 // --- Snapshots ----------------------------------------------------------------------------------------------
@@ -103,16 +104,16 @@ export function snapshotDesc(s: SnapshotInfo, now = new Date()): string {
   const d = new Date(s.created)
   const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
   const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
-  const day = sameDay(d, now) ? 'Today' : sameDay(d, yesterday) ? 'Yesterday'
-    : `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })}`
+  const day = sameDay(d, now) ? t('rec.snap.today') : sameDay(d, yesterday) ? t('rec.snap.yesterday')
+    : `${d.toLocaleDateString(localeTag(), { weekday: 'short' })} ${d.getDate()} ${d.toLocaleDateString(localeTag(), { month: 'short' })}`
   return `${day}, ${time} · ${s.kind}`
 }
 
 /** "02:03 today" / "11 Oct" for the "Apps installed after …" note. */
 export function snapshotWhen(s: SnapshotInfo, now = new Date()): string {
   const d = new Date(s.created)
-  if (sameDay(d, now)) return `${pad(d.getHours())}:${pad(d.getMinutes())} today`
-  return `${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })}`
+  if (sameDay(d, now)) return t('rec.snap.timeToday', { time: `${pad(d.getHours())}:${pad(d.getMinutes())}` })
+  return `${d.getDate()} ${d.toLocaleDateString(localeTag(), { month: 'short' })}`
 }
 
 /** Preselect the last snapshot that booted, else the newest. */
@@ -140,13 +141,13 @@ export function recoveryReducer(s: RecoveryState, a: RecoveryAction): RecoverySt
 /** Bridge error codes → text. */
 export function recoveryErrorText(code: string): string {
   switch (code) {
-    case 'unavailable': return 'This isn’t available in this version of WorkSuite OS.'
-    case 'wrong_key': return 'That key didn’t unlock the disk. Check each group and try again.'
-    case 'not_authorized': return 'An administrator password is needed for this. Nothing was changed.'
-    case 'not_found': return 'That disk isn’t connected any more.'
-    case 'already_unlocked': return 'This disk is already unlocked.'
-    case 'service_unavailable': return 'The package service isn’t running.'
-    default: return 'That didn’t work. Nothing was changed.'
+    case 'unavailable': return t('rec.err.unavailable')
+    case 'wrong_key': return t('rec.err.wrongKey')
+    case 'not_authorized': return t('rec.err.notAuthorized')
+    case 'not_found': return t('rec.err.notFound')
+    case 'already_unlocked': return t('rec.err.alreadyUnlocked')
+    case 'service_unavailable': return t('rec.err.service')
+    default: return t('rec.err.default')
   }
 }
 

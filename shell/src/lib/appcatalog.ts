@@ -1,12 +1,13 @@
 // App Center view model: the server catalog (through the package service) plus the user's imported AppImages.
 // Pure functions so the filters and states are testable without a window.
 import type { AppCatalog, AppImageRecord, CatalogEntry } from './os'
+import { t } from '../i18n'
 
 export type Source = 'WorkSuite' | 'APT' | 'Flatpak' | 'AppImage'
 export const SOURCES: { id: Source; label: string }[] = [
-  { id: 'WorkSuite', label: 'Built in' },
+  { id: 'WorkSuite', get label() { return t('hw.builtIn') } },
   { id: 'APT', label: 'Debian (APT)' },
-  { id: 'Flatpak', label: 'Flatpak (approved remotes)' },
+  { id: 'Flatpak', get label() { return t('appc.src.flatpak') } },
   { id: 'AppImage', label: 'AppImage' },
 ]
 const SOURCE_OF: Record<CatalogEntry['source'], Source> = { apt: 'APT', flatpak: 'Flatpak', appimage: 'AppImage' }
@@ -32,15 +33,15 @@ export interface AppView {
 const mark = (fpr: string) => fpr.replace(/(.{4})/g, '$1 ').trim().slice(-24)
 
 export function appImageTrust(r: AppImageRecord, catalogSha?: Set<string>): string {
-  if (r.signature.status === 'signed') return `Signed · key ${mark(r.signature.fingerprint)}${r.signature.trusted ? ' (trusted by your organization)' : ''}`
-  if (catalogSha?.has(r.sha256)) return 'Matches your organization’s catalog checksum · publisher not verified'
-  return 'Checksum only · publisher not verified'
+  if (r.signature.status === 'signed') return r.signature.trusted ? t('appc.trust.signedTrusted', { key: mark(r.signature.fingerprint) }) : t('appc.trust.signed', { key: mark(r.signature.fingerprint) })
+  if (catalogSha?.has(r.sha256)) return t('appc.trust.catalog')
+  return t('appc.trust.checksum')
 }
 
 /** WorkSuite Office is part of the OS image, so it is a built-in row, shown only when its desktop entry exists. */
 export const OFFICE_ROW: AppView = {
   key: 'builtin:office', catalogId: null, appimageId: null, name: 'WorkSuite Office', publisher: 'Livezen Technologies',
-  summary: 'Built in: documents, spreadsheets and presentations (.docx, .xlsx, .pptx) with WorkSuite Drive.', source: 'WorkSuite',
+  get summary() { return t('appc.officeSummary') }, source: 'WorkSuite',
   category: 'Office', installed: true, blocked: null, trust: null, needsApproval: false, builtin: 'office',
 }
 
@@ -53,11 +54,11 @@ export function buildApps(catalog: AppCatalog | null, appimages: AppImageRecord[
     .map((i) => ({
       key: i.id, catalogId: i.id, appimageId: null, name: i.name, publisher: i.publisher ?? SOURCES.find((s) => s.id === SOURCE_OF[i.source])!.label,
       summary: i.summary ?? '', source: SOURCE_OF[i.source], category: i.category ?? 'Other', installed: i.installed, blocked: i.blocked_reason,
-      trust: i.source === 'appimage' ? 'Import the file you were given; it is checked against the catalog checksum' : null, needsApproval: false, sha256: i.sha256,
+      trust: i.source === 'appimage' ? t('appc.trust.import') : null, needsApproval: false, sha256: i.sha256,
     }))
   const fromImports: AppView[] = appimages.map((r) => ({
     key: `appimage-local:${r.id}`, catalogId: null, appimageId: r.id, name: r.name, publisher: r.origin.replace(/^file:\/\//, ''),
-    summary: r.version ? `Version ${r.version}` : '', source: 'AppImage', category: r.categories[0] ?? 'Other', installed: true, blocked: null,
+    summary: r.version ? t('appc.version', { version: r.version }) : '', source: 'AppImage', category: r.categories[0] ?? 'Other', installed: true, blocked: null,
     trust: appImageTrust(r, catalogSha), needsApproval: !r.approved, sha256: r.sha256,
   }))
   return [...(office ? [OFFICE_ROW] : []), ...fromCatalog, ...fromImports].sort((a, b) => a.name.localeCompare(b.name))
@@ -84,8 +85,8 @@ export function filterApps(apps: AppView[], o: { section: Section; sources: Set<
 /** Empty/error state text, or null when the catalog has something to show. */
 export function catalogNotice(catalog: AppCatalog | null, loadError: string | null): { text: string; retry: boolean } | null {
   if (loadError) return { text: loadError, retry: true }
-  if (!catalog) return { text: 'Loading your organization’s app catalog…', retry: false }
+  if (!catalog) return { text: t('appc.loadingCatalog'), retry: false }
   if (catalog.state !== 'ok') return { text: catalog.error, retry: catalog.state !== 'not_enrolled' }
-  if (!catalog.items.length) return { text: 'Your organization hasn’t approved any apps for this device yet.', retry: true }
+  if (!catalog.items.length) return { text: t('appc.noneApproved'), retry: true }
   return null
 }

@@ -1,6 +1,7 @@
 // Data hooks for Settings → host services. Layout lives in screens/Settings.tsx; this file only loads state.
 import { useCallback, useEffect, useState } from 'react'
 import { os, type Avail } from './os'
+import { t } from '../i18n'
 
 /** null while loading; then the bridge answer (possibly `available: false`). Refreshes every `pollMs` if set. */
 export function useSystem<T>(load: () => Promise<Avail<T>>, pollMs?: number) {
@@ -28,9 +29,9 @@ export const loaders = {
 /** Text for an `available: false` reason. */
 export function unavailableText(reason: string): string {
   switch (reason) {
-    case 'no_adapter': return 'No Bluetooth adapter found'
-    case 'no_battery': return 'No battery (running on mains power)'
-    case 'service_unavailable': return 'The system service isn’t running'
-    default: return reason.endsWith('_missing') ? 'Not available on this system' : 'Not available'
+    case 'no_adapter': return t('sys.noAdapter')
+    case 'no_battery': return t('sys.noBattery')
+    case 'service_unavailable': return t('sys.service')
+    default: return reason.endsWith('_missing') ? t('sys.missing') : t('sys.na')
   }
 }

@@ -12,9 +12,12 @@ import {
   allowedOrigins, linkRequest, loadSession, navDecision, resolveLink, signInTarget, startUrl, wantsToken,
   type AppRequest, type Fetch, type Session, type WebApp,
 } from './webapps'
+import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
 
 const fetchFn: Fetch = (url, init) => fetch(url, { headers: init?.headers, redirect: 'follow' })
 const broker = (m: string, p?: Record<string, unknown>) => brokerCall(m, p ?? {}, m === 'SignIn' ? 6 * 60_000 : 15_000)
+/** The session's language (LANG / LC_MESSAGES via Electron), read once the app is ready. */
+const tr = (key: MessageKey, vars?: Record<string, string | number>) => translate(pickLocale(app.isReady() ? app.getLocale() : process.env.LANG), key, vars)
 const TITLE: Record<string, string> = { mail: 'Mail', calendar: 'Calendar', chat: 'Chat', drive: 'Drive', tasks: 'Tasks', projects: 'Projects', crm: 'CRM', meet: 'Meet', 'pdf-studio': 'PDF Studio' }
 
 /** Must run before app 'ready'. Returns false when another process already shows this module (it gets the request). */
@@ -71,7 +74,7 @@ export function runAppMode(req: AppRequest) {
 
   function statePage(title: string, detail: string, action: string | null) {
     const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+    const html = `<!doctype html><html lang="${esc(tr('appwin.lang'))}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>${esc(title)}</title><style>
 :root{color-scheme:light dark;--bg:#f8fafc;--card:#fff;--fg:#0f172a;--muted:#475569;--accent:#2563eb}
 @media (prefers-color-scheme:dark){:root{--bg:#0f172a;--card:#1e293b;--fg:#f8fafc;--muted:#94a3b8}}
@@ -81,7 +84,7 @@ body{margin:0;height:100vh;display:grid;place-items:center;background:var(--bg);
 h1{font-size:20px;margin:0 0 8px}p{color:var(--muted);margin:0 0 20px}
 button{background:var(--accent);color:#fff;border:0;border-radius:10px;height:40px;padding:0 20px;font:600 14px system-ui;cursor:pointer}
 button:disabled{opacity:.6}</style></head><body><div class="c"><div class="m">W</div><h1>${esc(title)}</h1><p id="d">${esc(detail)}</p>
-${action ? `<button id="b">${esc(action)}</button><script>document.getElementById('b').onclick=function(){this.disabled=true;document.getElementById('d').textContent='Continue in your web browser…';location.hash='signin'}</script>` : ''}
+${action ? `<button id="b">${esc(action)}</button><script>document.getElementById('b').onclick=function(){this.disabled=true;document.getElementById('d').textContent=${JSON.stringify(tr('appwin.continueBrowser'))};location.hash='signin'}</script>` : ''}
 </div></body></html>`
     void win?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
   }
@@ -92,7 +95,7 @@ ${action ? `<button id="b">${esc(action)}</button><script>document.getElementByI
     const t = signInTarget(deviceInfo().server, accounts)
     const r = await broker('SignIn', { server_url: t.server_url, mode: t.mode })
     if (r.ok) await open(req)
-    else statePage('Sign in to WorkSuite', 'Sign-in did not finish. Try again.', 'Sign in')
+    else statePage(tr('appwin.signInTitle'), tr('appwin.unfinished'), tr('greeter.signIn'))
   }
 
   async function open(r: AppRequest) {
@@ -103,19 +106,19 @@ ${action ? `<button id="b">${esc(action)}</button><script>document.getElementByI
     if (!res.ok) {
       current = null
       const msg: Record<string, [string, string, string | null]> = {
-        not_signed_in: ['Sign in to WorkSuite', `Sign in with your WorkSuite account to use ${name}. Sign-in opens in your web browser.`, 'Sign in'],
-        auth_required: ['Sign in to WorkSuite', 'Your WorkSuite session has ended. Sign in again in your web browser.', 'Sign in'],
-        locked: ['WorkSuite is locked', 'Unlock your session to continue.', null],
-        offline: ['You are offline', `${name} needs a connection to your WorkSuite server.`, null],
-        device_required: ['Device not enrolled', 'Your organization requires this device to be enrolled. Open Settings > Accounts to enroll it.', null],
-        server_error: ['WorkSuite is unavailable', 'The WorkSuite server could not be reached. Try again later.', null],
+        not_signed_in: [tr('appwin.signInTitle'), tr('appwin.notSignedIn', { name }), tr('greeter.signIn')],
+        auth_required: [tr('appwin.signInTitle'), tr('appwin.ended'), tr('greeter.signIn')],
+        locked: [tr('appwin.locked'), tr('appwin.lockedBody'), null],
+        offline: [tr('appwin.offline'), tr('appwin.offlineBody', { name }), null],
+        device_required: [tr('appwin.notEnrolled'), tr('appwin.notEnrolledBody'), null],
+        server_error: [tr('appwin.unavailable'), tr('appwin.unavailableBody'), null],
       }
       const [t, d, a] = msg[res.error]
       statePage(t, d, a)
       return
     }
     const target = res.value.apps.find((a) => a.id === r.id)
-    if (!target) { current = null; statePage(`${name} isn't available`, `Your organization hasn't enabled WorkSuite ${name}.`, null); return }
+    if (!target) { current = null; statePage(tr('appwin.appUnavailable', { name }), tr('appwin.notEnabled', { name }), null); return }
     current = { s: res.value, app: target }
     token = { value: res.value.token, at: Date.now() }
     const ses = session.fromPartition(webPrefs(res.value.account.id).partition!)

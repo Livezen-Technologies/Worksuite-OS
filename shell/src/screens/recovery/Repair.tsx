@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { os, packageErrorText, type PackageJobEvent } from '../../lib/os'
 import { initialChecks, repairPercent, repairSummary, type CheckId, type CheckRow, type CheckState, type DoneInfo } from '../../lib/recovery'
 import { Footer, Header, Page, link, small } from './Frame'
+import { localeTag, messages, t } from '../../i18n'
 
 /** Start a package job and wait for its JobFinished event (events that arrive before the job id are kept). */
 async function runJob(start: () => Promise<{ ok: true; value: string } | { ok: false; error: string }>): Promise<{ ok: boolean; error?: string }> {
@@ -29,7 +30,7 @@ function StateIcon({ s }: { s: CheckState }) {
   return <span aria-hidden="true" className="box-border h-5 w-5 rounded-full border-2 border-[rgba(127,178,255,0.3)]" />
 }
 
-const STATE_TEXT: Record<CheckState, string> = { wait: 'Waiting', active: 'Checking', ok: 'Fine', fixed: 'Repaired', problem: 'Problem', unavailable: 'Not checked' }
+const STATE_TEXT: Record<CheckState, string> = messages({ wait: 'hw.waiting', active: 'rec.state.active', ok: 'rec.state.ok', fixed: 'rec.state.fixed', problem: 'rec.state.problem', unavailable: 'rec.state.unavailable' })
 
 export default function Repair({ onBack, onDone }: { onBack: () => void; onDone: (d: DoneInfo) => void }) {
   const [rows, setRows] = useState<CheckRow[]>(initialChecks)
@@ -45,19 +46,19 @@ export default function Repair({ onBack, onDone }: { onBack: () => void; onDone:
       if (!alive) return
       setRows((rs) => rs.map((r) => (r.id === id ? { ...r, state, note } : r)))
     }
-    const say = (line: string) => { if (alive) setLog((l) => [...l, `${new Date().toLocaleTimeString('en-GB')}  ${line}`]) }
+    const say = (line: string) => { if (alive) setLog((l) => [...l, `${new Date().toLocaleTimeString(localeTag())}  ${line}`]) }
     void (async () => {
       const final: CheckRow[] = initialChecks()
       for (const row of final) {
         if (stop.current || !alive) return
-        update(row.id, 'active', 'Checking…')
-        let r = await os.recoveryCheck(row.id).catch(() => ({ status: 'unavailable' as const, note: 'Couldn’t run this check' }))
+        update(row.id, 'active', t('rec.repair.checking'))
+        let r = await os.recoveryCheck(row.id).catch(() => ({ status: 'unavailable' as const, note: t('rec.repair.couldntRun') }))
         say(`${row.label}: ${r.note}`)
         if (r.status === 'problem' && r.fixable && row.id === 'packages' && !stop.current) {
-          update(row.id, 'active', 'Finishing interrupted package changes…')
-          say('Repairing packages (dpkg --configure -a, apt-get -f install)')
+          update(row.id, 'active', t('rec.repair.finishing'))
+          say(t('rec.repair.repairing'))
           const j = await runJob(() => os.pkgRepair())
-          r = j.ok ? { status: 'fixed', note: 'Finished interrupted changes' } : { status: 'problem', note: packageErrorText(j.error ?? 'failed') }
+          r = j.ok ? { status: 'fixed', note: t('rec.repair.finished') } : { status: 'problem', note: packageErrorText(j.error ?? 'failed') }
           say(`${row.label}: ${r.note}`)
         }
         row.state = r.status; row.note = r.note
@@ -72,14 +73,14 @@ export default function Repair({ onBack, onDone }: { onBack: () => void; onDone:
   }, [onDone])
 
   return (
-    <Page label="Startup repair">
-      <Header right={<span className="text-[13px] text-[#8FA3C8]">Startup repair</span>} />
+    <Page label={t('rec.menu.repair')}>
+      <Header right={<span className="text-[13px] text-[#8FA3C8]">{t('rec.menu.repair')}</span>} />
       <div className="flex flex-col gap-6 px-40 pb-28 pt-12 max-[900px]:px-6">
         <div className="flex flex-col gap-2">
-          <h1 className="m-0 text-[30px] font-bold">{stopped ? 'Startup repair stopped' : 'Checking your system'}</h1>
-          <p className="m-0 text-[15px] text-[#8FA3C8]">{stopped ? 'Checks that hadn’t run yet were skipped.' : 'This can take a few minutes. Your files won\'t be changed.'}</p>
+          <h1 className="m-0 text-[30px] font-bold">{stopped ? t('rec.repair.stopped') : t('rec.repair.checkingSystem')}</h1>
+          <p className="m-0 text-[15px] text-[#8FA3C8]">{stopped ? t('rec.repair.skipped') : t('rec.repair.wait')}</p>
         </div>
-        <div role="progressbar" aria-label="Startup repair progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-valuetext={`${pct}% of checks finished`}
+        <div role="progressbar" aria-label={t('rec.repair.progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-valuetext={t('rec.repair.pct', { percent: pct })}
           className="h-2 overflow-hidden rounded bg-[rgba(127,178,255,0.12)]">
           <div className="h-full rounded bg-[linear-gradient(90deg,#1F6BFF,#18D4F0)] transition-[width] duration-500" style={{ width: `${pct}%` }} />
         </div>
@@ -99,16 +100,16 @@ export default function Repair({ onBack, onDone }: { onBack: () => void; onDone:
           })}
         </ol>
         {showLog && (
-          <pre id="repair-log" aria-label="Repair log" tabIndex={0} className="m-0 max-h-36 overflow-auto rounded-[10px] border border-[rgba(127,178,255,0.12)] bg-[rgba(4,10,26,0.6)] p-3 font-['IBM_Plex_Mono',ui-monospace,monospace] text-xs leading-relaxed text-[#C9D6EE]">
-            {log.length ? log.join('\n') : 'No entries yet.'}
+          <pre id="repair-log" aria-label={t('rec.repair.log')} tabIndex={0} className="m-0 max-h-36 overflow-auto rounded-[10px] border border-[rgba(127,178,255,0.12)] bg-[rgba(4,10,26,0.6)] p-3 font-['IBM_Plex_Mono',ui-monospace,monospace] text-xs leading-relaxed text-[#C9D6EE]">
+            {log.length ? log.join('\n') : t('rec.repair.noEntries')}
           </pre>
         )}
       </div>
       <Footer className="h-[72px] justify-between px-40 max-[900px]:px-6">
-        <button type="button" aria-expanded={showLog} aria-controls="repair-log" onClick={() => setShowLog((v) => !v)} className={`${link} text-sm no-underline`}>{showLog ? 'Hide log' : 'Show log'}</button>
+        <button type="button" aria-expanded={showLog} aria-controls="repair-log" onClick={() => setShowLog((v) => !v)} className={`${link} text-sm no-underline`}>{showLog ? t('rec.repair.hideLog') : t('rec.repair.showLog')}</button>
         {stopped
-          ? <button type="button" onClick={onBack} className={`${small} rounded-[10px] px-5 py-[11px] text-sm font-medium`}>Back to recovery menu</button>
-          : <button type="button" onClick={() => { stop.current = true; setStopped(true) }} className={`${small} rounded-[10px] px-5 py-[11px] text-sm font-medium`}>Stop</button>}
+          ? <button type="button" onClick={onBack} className={`${small} rounded-[10px] px-5 py-[11px] text-sm font-medium`}>{t('rec.backToMenu')}</button>
+          : <button type="button" onClick={() => { stop.current = true; setStopped(true) }} className={`${small} rounded-[10px] px-5 py-[11px] text-sm font-medium`}>{t('rec.repair.stop')}</button>}
       </Footer>
     </Page>
   )

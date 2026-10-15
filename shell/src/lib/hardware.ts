@@ -1,12 +1,13 @@
 // Devices and drivers view logic over the bridge's sysfs device list (electron/hardware.ts).
 import type { DriverOffer, HwDevice, HwKind } from './os'
+import { messages, t } from '../i18n'
 
 export const OK = '#5FD39A', WARN = '#FFB98A', OFF = '#8FA3C8'
 
-export const KIND_LABEL: Record<HwKind, string> = {
-  printer: 'Printer', keyboard: 'Keyboard', mouse: 'Mouse', camera: 'Camera', network: 'Network adapter', wireless: 'Wireless adapter',
-  graphics: 'Graphics', audio: 'Audio', storage: 'Storage', bluetooth: 'Bluetooth', input: 'Input device', other: 'Device',
-}
+export const KIND_LABEL: Record<HwKind, string> = messages({
+  printer: 'hw.kind.printer', keyboard: 'hw.kind.keyboard', mouse: 'hw.kind.mouse', camera: 'hw.kind.camera', network: 'hw.kind.network', wireless: 'hw.kind.wireless',
+  graphics: 'hw.kind.graphics', audio: 'hw.kind.audio', storage: 'settings.about.storage', bluetooth: 'settings.nav.Bluetooth', input: 'hw.kind.input', other: 'hw.kind.other',
+})
 // Icon paths from the HwSettings / H1 boards.
 export const KIND_ICON: Record<HwKind, string> = {
   printer: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z',
@@ -24,18 +25,18 @@ export const KIND_ICON: Record<HwKind, string> = {
 }
 
 export function deviceSub(d: HwDevice): string {
-  return [KIND_LABEL[d.kind], d.bus === 'usb' ? 'USB' : 'Built in', d.vendor].filter(Boolean).join(' · ')
+  return [KIND_LABEL[d.kind], d.bus === 'usb' ? 'USB' : t('hw.builtIn'), d.vendor].filter(Boolean).join(' · ')
 }
 export function deviceStatus(d: HwDevice): { label: string; color: string } {
-  return d.driver ? { label: 'Working', color: OK } : { label: 'No driver in use', color: WARN }
+  return d.driver ? { label: t('hw.working'), color: OK } : { label: t('hw.noDriver'), color: WARN }
 }
 
 /** Connected (plugged-in USB) first, then built-in hardware; empty groups are dropped. */
 export function groupDevices(devs: HwDevice[]): { name: string; items: HwDevice[] }[] {
   const by = (a: HwDevice, b: HwDevice) => a.name.localeCompare(b.name)
   return [
-    { name: 'Connected', items: devs.filter((d) => !d.built_in).sort(by) },
-    { name: 'Built in', items: devs.filter((d) => d.built_in).sort(by) },
+    { name: t('common.connected'), items: devs.filter((d) => !d.built_in).sort(by) },
+    { name: t('hw.builtIn'), items: devs.filter((d) => d.built_in).sort(by) },
   ].filter((g) => g.items.length)
 }
 
@@ -58,13 +59,14 @@ export function driversInUse(devs: HwDevice[]): { driver: string; version: strin
   return [...m.values()].sort((a, b) => a.driver.localeCompare(b.driver))
 }
 
+const OFFER_TAG_TEXT = messages({ security: 'hw.tag.security', recommended: 'hw.tag.recommended', proprietary: 'hw.tag.proprietary', open: 'hw.tag.open' })
 export const OFFER_TAG: Record<string, { tag: string; bg: string; color: string }> = {
-  security: { tag: 'SECURITY', bg: 'rgba(255,138,122,0.16)', color: '#FF8A7A' },
-  recommended: { tag: 'RECOMMENDED', bg: 'rgba(95,211,154,0.16)', color: '#5FD39A' },
-  proprietary: { tag: 'PROPRIETARY', bg: 'rgba(255,159,90,0.16)', color: '#FFB98A' },
-  open: { tag: 'OPEN SOURCE', bg: 'rgba(127,178,255,0.12)', color: '#C9D6EE' },
+  security: { get tag() { return OFFER_TAG_TEXT.security }, bg: 'rgba(255,138,122,0.16)', color: '#FF8A7A' },
+  recommended: { get tag() { return OFFER_TAG_TEXT.recommended }, bg: 'rgba(95,211,154,0.16)', color: '#5FD39A' },
+  proprietary: { get tag() { return OFFER_TAG_TEXT.proprietary }, bg: 'rgba(255,159,90,0.16)', color: '#FFB98A' },
+  open: { get tag() { return OFFER_TAG_TEXT.open }, bg: 'rgba(127,178,255,0.12)', color: '#C9D6EE' },
 }
 export const offerTag = (o: DriverOffer) => OFFER_TAG[o.category === 'optional' ? o.license : o.category]
-export const offerVersion = (o: DriverOffer) => (o.from_version ? `${o.from_version} → ${o.to_version}` : `new · ${o.to_version}`)
+export const offerVersion = (o: DriverOffer) => (o.from_version ? `${o.from_version} → ${o.to_version}` : t('hw.newVersion', { version: o.to_version }))
 /** Security fixes can't be unticked (HwSettings board: locked checkbox). */
 export const offerLocked = (o: DriverOffer) => o.category === 'security'
