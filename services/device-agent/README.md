@@ -20,3 +20,10 @@ each result is acked with `devices/commands/{id}/ack` as `received` → `started
 (wipe acks `started` before destroying keys, WSOS-WIPE-005). Full device wipe is refused on unencrypted devices.
 
 `npm test` runs `test/commands.test.ts` (node:test, Node ≥ 22.18, no dependencies).
+
+## Device credential for user services
+
+After `devices/register`, the agent publishes the device credential at `/run/worksuite-device-agent/device-token`
+(`RuntimeDirectory=worksuite-device-agent`, file mode 0644) so the user-level sync service and credentials broker can
+send `X-WS-Device` (WSOS-IDN-005). It identifies the device, not a user; the private key stays in the agent's state
+directory (or TPM). The file is removed on unenrollment, revocation and wipe.

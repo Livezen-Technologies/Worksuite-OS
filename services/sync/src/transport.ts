@@ -29,7 +29,7 @@ export type TransportResponse<T> =
   | { status: 401 | 403 | 409 | 410 | 413 | 422 | 429 | 500 | 502 | 503 | 504; body: { error: { code: string; message: string } } };
 
 export interface SyncTransport {
-  /** POST desktop/v1/sync/mutations — Idempotency-Key header = batch id; X-WS-Device always sent. */
+  /** POST desktop/v1/sync/mutations — Idempotency-Key header = batch id; X-WS-Device sent whenever the device is enrolled. */
   postMutations(req: { batch_id: string; mutations: MutationIn[] }, accessToken: string): Promise<TransportResponse<{ results: MutationResult[] }>>;
   /** GET desktop/v1/sync/changes?stream=&cursor= ; 410 CURSOR_EXPIRED when the cursor is too old. */
   getChanges(req: { stream: string; cursor: string | null; limit: number }, accessToken: string): Promise<TransportResponse<{ changes: Change[]; next_cursor: string; has_more: boolean }>>;
@@ -45,15 +45,16 @@ export interface TokenProvider {
 /** Thrown by transports on network-level failure (no HTTP response). */
 export class NetworkError extends Error {}
 
-export function fetchTransport(baseUrl: string, deviceCredential: () => string, fetchImpl: typeof fetch = fetch): SyncTransport {
+export function fetchTransport(baseUrl: string, deviceCredential: () => string | null, fetchImpl: typeof fetch = fetch): SyncTransport {
   const call = async (method: string, path: string, token: string, body?: unknown, idem?: string) => {
     let res: Response;
+    const device = deviceCredential();
     try {
       res = await fetchImpl(new URL(path, baseUrl), {
         method,
         headers: {
           authorization: `Bearer ${token}`,
-          'x-ws-device': deviceCredential(),
+          ...(device ? { 'x-ws-device': device } : {}),
           'x-request-id': crypto.randomUUID(),
           ...(idem ? { 'idempotency-key': idem } : {}),
           ...(body ? { 'content-type': 'application/json' } : {}),

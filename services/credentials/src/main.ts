@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { Broker, type Account } from './broker.ts';
 import { OidcError } from './oidc.ts';
 import { secretToolStore } from './keyring.ts';
+import { buildSyncConfig, fetchBootstrap, removeSyncConfig, systemctlUser, writeSyncConfig } from './syncconfig.ts';
 
 type Req = { id?: unknown; method?: unknown; params?: Record<string, unknown> };
 
@@ -25,8 +26,9 @@ export async function dispatch(broker: Broker, req: Req) {
       }
       case 'SignIn': {
         const server = str(p.server_url);
-        if (!server) return { id, error: 'invalid_argument' };
-        const a = await broker.signIn(server);
+        const mode = p.mode === 'personal' || p.mode === 'enterprise' ? p.mode : null;
+        if (!server || !mode) return { id, error: 'invalid_argument' };
+        const a = await broker.signIn(server, mode);
         return { id, result: { id: a.id, name: a.name ?? null, server_url: a.server_url } };
       }
       case 'SignOut': {
@@ -73,6 +75,10 @@ async function main() {
   const configDir = join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'worksuite');
   const runtimeDir = join(env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`, 'worksuite');
   const accountsPath = join(configDir, 'accounts.json');
+  const syncConfigPath = join(configDir, 'sync.json');
+  const readDeviceCredential = () => {
+    try { return readFileSync('/run/worksuite-device-agent/device-token', 'utf8').trim() || null; } catch { return null; }
+  };
   mkdirSync(configDir, { recursive: true, mode: 0o700 });
 
   const log = (event: string, f: Record<string, unknown> = {}) =>
@@ -90,6 +96,19 @@ async function main() {
     },
     openBrowser: (url) => new Promise((resolve, reject) => execFile('xdg-open', [url], (e) => (e ? reject(e) : resolve()))),
     onState: (account, state) => log('state', { account, state }),
+    // Sync config from bootstrap, then start sync (it exits quietly while unconfigured).
+    onSignedIn: async (account, { apiBase, accessToken, mode }) => {
+      const device = readDeviceCredential();
+      if (mode === 'enterprise' && !device) log('device_not_enrolled', { account: account.id });
+      const bootstrap = await fetchBootstrap(apiBase, accessToken, device);
+      writeSyncConfig(syncConfigPath, buildSyncConfig(account, apiBase, mode, bootstrap));
+      await systemctlUser('restart');
+      log('sync_configured', { account: account.id });
+    },
+    // The shell has already settled unsent changes (WSOS-SYN-008) and told sync to forget the account.
+    onSignedOut: async (account) => {
+      if (removeSyncConfig(syncConfigPath, account.id)) await systemctlUser('stop');
+    },
   });
   const server = serve(join(runtimeDir, 'credentials.sock'), broker);
   const stop = () => { broker.lock(); server.close(); process.exit(0); };

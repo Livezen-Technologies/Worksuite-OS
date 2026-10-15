@@ -8,7 +8,7 @@ export interface WorkSuiteApi {
   launchApp(appId: string): Promise<void>
   openLink(url: string): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
-  cloudSignIn(serverUrl: string): Promise<CloudResult<CloudAccount>>
+  cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
   /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
   cloudSignOut(accountId: string, choice: SignOutChoice): Promise<CloudResult<{ exported: string | null }>>
   syncUnsent(accountId: string): Promise<CloudResult<number>>
@@ -34,7 +34,7 @@ const stub: WorkSuiteApi = {
   async power() {},
   async launchApp() {},
   async openLink() {},
-  async cloudSignIn(serverUrl) {
+  async cloudSignIn(serverUrl, _mode) {
     stubAccounts = [{ id: 'preview:u-1', name: 'Hasarinda', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
   },
@@ -60,6 +60,9 @@ export function cloudErrorText(code: string): string {
     case 'sign_in_timeout': return 'Sign-in wasn’t finished in the browser. Try again.'
     case 'access_denied': return 'Sign-in was cancelled.'
     case 'broker_unavailable': return 'The sign-in service isn’t running. Try again in a moment.'
+    case 'device_not_enrolled': return 'This computer isn’t enrolled with your organization yet. Ask IT to enroll it, then sign in again.'
+    case 'bootstrap_failed':
+    case 'bootstrap_invalid': return 'Signed in, but WorkSuite couldn’t load your organization’s settings. Try again.'
     case 'export_failed': return 'Couldn’t save the unsent changes. Nothing was signed out.'
     default: return 'Sign-in didn’t work. Check your connection and try again.'
   }

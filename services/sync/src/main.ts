@@ -14,7 +14,8 @@ import type { DataType } from './policy.ts';
 
 export interface SyncConfig {
   account: { id: string; server_url: string; org_id: string; user_id: string; mode: 'personal' | 'enterprise' };
-  device_credential: string;
+  /** Where the device agent publishes the device credential (WSOS-IDN-005). Read on every call so re-enrollment applies. */
+  device_credential_path?: string;
   streams: string[];
   modules: Record<string, DataType>;
   interval_ms?: number;
@@ -26,6 +27,15 @@ const stateDir = join(env.XDG_STATE_HOME || join(home, '.local/state'), 'worksui
 const configPath = join(env.XDG_CONFIG_HOME || join(home, '.config'), 'worksuite/sync.json');
 const runtimeDir = join(env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`, 'worksuite');
 const dbPath = join(stateDir, 'sync.db');
+
+const DEVICE_CREDENTIAL_PATH = '/run/worksuite-device-agent/device-token';
+
+/** The device credential, or null on an unenrolled Personal device. Enterprise servers answer 403 without it. */
+export function deviceCredential(path: string): () => string | null {
+  return () => {
+    try { return readFileSync(path, 'utf8').trim() || null; } catch { return null; }
+  };
+}
 
 const log = (event: string, fields: Record<string, unknown> = {}) =>
   process.stdout.write(JSON.stringify({ ts: new Date().toISOString(), service: 'worksuite-sync', event, ...fields }) + '\n');
@@ -75,7 +85,7 @@ async function main() {
 
   const engine = new SyncEngine({
     db, typeOf,
-    transport: fetchTransport(a.server_url, () => cfg.device_credential),
+    transport: fetchTransport(a.server_url, deviceCredential(cfg.device_credential_path ?? DEVICE_CREDENTIAL_PATH)),
     tokens: brokerTokens(join(runtimeDir, 'credentials.sock'), a.id),
   });
   const svc = new SyncService({ db, engine, store, streams: cfg.streams, intervalMs: cfg.interval_ms, log });

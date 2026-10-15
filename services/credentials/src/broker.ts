@@ -19,6 +19,9 @@ export interface BrokerOptions extends OidcOptions {
   now?: () => number;
   signInTimeoutMs?: number;
   onState?: (account: string, state: BrokerState) => void;
+  /** Called once a sign-in completes, before SignIn returns (writes the sync config). Errors fail the sign-in. */
+  onSignedIn?: (account: Account, ctx: { apiBase: string; accessToken: string; mode: 'personal' | 'enterprise' }) => Promise<void>;
+  onSignedOut?: (account: Account) => Promise<void>;
 }
 
 /** Access tokens are reused until this close to expiry. */
@@ -49,7 +52,7 @@ export class Broker {
    * Authorization code + PKCE through the system browser with a one-shot loopback redirect (RFC 8252).
    * The refresh token goes straight to the keyring; the access token stays in memory.
    */
-  async signIn(serverUrl: string): Promise<Account> {
+  async signIn(serverUrl: string, mode: 'personal' | 'enterprise' = 'enterprise'): Promise<Account> {
     if (this.locked) throw new OidcError('locked');
     const ep = await discover(serverUrl, this.o);
     const { verifier, challenge } = pkcePair();
@@ -62,6 +65,7 @@ export class Broker {
     if (!tokens.refresh_token) throw new OidcError('no_refresh_token');
     const info = await userinfo(ep, tokens.access_token, this.o);
     const account: Account = { id: `${new URL(ep.issuer).host}:${info.sub}`, server_url: serverUrl, issuer: ep.issuer, sub: info.sub, name: info.name };
+    await this.o.onSignedIn?.(account, { apiBase: ep.api_base, accessToken: tokens.access_token, mode });
     await this.o.secrets.set(account.id, tokens.refresh_token);
     this.accounts.set(account.id, account);
     this.endpoints.set(account.id, ep);
@@ -101,6 +105,7 @@ export class Broker {
       }).catch(() => {});
     }
     await this.o.secrets.clear(id);
+    await this.o.onSignedOut?.(account).catch(() => {});
     this.cache.delete(id);
     this.accounts.delete(id);
     this.endpoints.delete(id);

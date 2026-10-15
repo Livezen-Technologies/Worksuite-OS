@@ -42,7 +42,7 @@ export default function FirstRun({ onDone }: FirstRunProps) {
   // OIDC + PKCE happens in the system browser through the credentials broker (WSOS-IDN-001); no password here.
   const signIn = async () => {
     setError(null); setWaiting(true)
-    const r = await os.cloudSignIn(serverUrlFor(mode, server))
+    const r = await os.cloudSignIn(serverUrlFor(mode, server), mode)
     setWaiting(false)
     if (!r.ok) return setError(cloudErrorText(r.error))
     setSignedIn(r.value); setOffline(false)

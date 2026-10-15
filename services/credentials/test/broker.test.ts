@@ -7,6 +7,10 @@ import { Broker, type Account } from '../src/broker.ts';
 import { memoryStore } from '../src/keyring.ts';
 import { checkUrl, OidcError } from '../src/oidc.ts';
 import { dispatch } from '../src/main.ts';
+import { buildSyncConfig, fetchBootstrap, removeSyncConfig, writeSyncConfig } from '../src/syncconfig.ts';
+import { mkdtempSync, readFileSync, rmSync, statSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /** Minimal WorkSuite server + OneAuth: discovery, PKCE-checked code exchange, rotating refresh tokens. */
 async function fakeOneAuth() {
@@ -26,6 +30,11 @@ async function fakeOneAuth() {
         userinfo_endpoint: `${s.base}/oneauth/userinfo`, revocation_endpoint: `${s.base}/oneauth/revoke`,
       });
       case '/oneauth/userinfo': return json(200, { sub: 'u-42', name: 'Hasarinda' });
+      case '/desktop/v1/bootstrap':
+        if (req.headers.authorization !== 'Bearer at-1') return json(401, {});
+        return json(200, { user: { id: 42 }, org: { id: 'livezen' }, modules: [
+          { key: 'tasks' }, { key: 'prefs', data_type: 'preference' }, { key: 'meet', offline: 'online_only' }, { key: 'Bad Key' },
+        ] });
       case '/oneauth/revoke': s.revoked.add(form.get('token')!); return json(200, {});
       case '/oneauth/token': {
         s.tokenCalls++;
@@ -168,8 +177,54 @@ test('socket dispatch validates arguments and maps errors to codes', async () =>
   assert.equal((await dispatch(broker, { method: 'GetAccessToken', params: {} })).error, 'invalid_argument');
   assert.equal((await dispatch(broker, { method: 'GetAccessToken', params: { account_id: 'nobody' } })).error, 'unknown_account');
   assert.equal((await dispatch(broker, { method: 'Nope' })).error, 'unknown_method');
-  const r = await dispatch(broker, { id: 7, method: 'SignIn', params: { server_url: s.base } });
+  assert.equal((await dispatch(broker, { method: 'SignIn', params: { server_url: s.base } })).error, 'invalid_argument', 'mode required');
+  const r = await dispatch(broker, { id: 7, method: 'SignIn', params: { server_url: s.base, mode: 'personal' } });
   const t = await dispatch(broker, { method: 'GetAccessToken', params: { account_id: (r.result as { id: string }).id } });
   assert.equal(t.result, 'at-1');
   s.server.close();
+});
+
+test('sign-in writes the sync config from bootstrap before storing the refresh token', async () => {
+  const s = await fakeOneAuth();
+  const dir = mkdtempSync(join(tmpdir(), 'ws-cred-'));
+  const path = join(dir, 'sync.json');
+  const { broker, secrets } = makeBroker(s, {
+    onSignedIn: async (account, ctx) => {
+      assert.equal(secrets.data.size, 0, 'keyring written only after config succeeds');
+      writeSyncConfig(path, buildSyncConfig(account, ctx.apiBase, ctx.mode, await fetchBootstrap(ctx.apiBase, ctx.accessToken, null, { allowInsecureLoopback: true })));
+    },
+    onSignedOut: async (account) => { removeSyncConfig(path, account.id); },
+  });
+  const a = await broker.signIn(s.base, 'personal');
+  const cfg = JSON.parse(readFileSync(path, 'utf8'));
+  assert.deepEqual(cfg.account, { id: a.id, server_url: s.base + '/', org_id: 'livezen', user_id: '42', mode: 'personal' });
+  assert.deepEqual(cfg.modules, { tasks: 'document', prefs: 'preference' }, 'online-only and malformed modules are left out');
+  assert.deepEqual(cfg.streams, ['tasks', 'prefs']);
+  assert.equal(statSync(path).mode & 0o777, 0o600);
+  assert.ok(!readFileSync(path, 'utf8').includes('rt-1'), 'no secrets in the sync config');
+  await broker.signOut(a.id);
+  assert.ok(!existsSync(path));
+  s.server.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('a failed post-sign-in step fails the sign-in and stores nothing', async () => {
+  const s = await fakeOneAuth();
+  const { broker, secrets, saved } = makeBroker(s, { onSignedIn: async () => { throw new Error('bootstrap_failed'); } });
+  await assert.rejects(broker.signIn(s.base, 'enterprise'));
+  assert.equal(secrets.data.size, 0);
+  assert.deepEqual(saved(), []);
+  assert.deepEqual(broker.list(), []);
+  s.server.close();
+});
+
+test('sync config: bootstrap without user/org is rejected; removal only touches the same account', () => {
+  const acct = { id: 'h:1', server_url: 'https://x', issuer: 'https://x', sub: '1' };
+  assert.throws(() => buildSyncConfig(acct, 'https://x/', 'personal', { modules: [] }), (e: OidcError) => e.code === 'bootstrap_invalid');
+  const dir = mkdtempSync(join(tmpdir(), 'ws-cred-'));
+  const path = join(dir, 'sync.json');
+  writeSyncConfig(path, buildSyncConfig(acct, 'https://x/', 'personal', { user: { id: 1 }, org: { id: 2 } }));
+  assert.equal(removeSyncConfig(path, 'someone-else'), false);
+  assert.equal(removeSyncConfig(path, 'h:1'), true);
+  rmSync(dir, { recursive: true, force: true });
 });

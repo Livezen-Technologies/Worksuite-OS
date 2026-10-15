@@ -1,5 +1,5 @@
 // OneAuth discovery and token endpoint calls: public client, authorization code + PKCE, no client secret.
-export interface Endpoints { issuer: string; authorization_endpoint: string; token_endpoint: string; userinfo_endpoint: string; revocation_endpoint?: string }
+export interface Endpoints { api_base: string; issuer: string; authorization_endpoint: string; token_endpoint: string; userinfo_endpoint: string; revocation_endpoint?: string }
 export interface TokenSet { access_token: string; expires_in?: number; refresh_token?: string }
 
 export class OidcError extends Error {
@@ -29,11 +29,12 @@ export async function discover(serverUrl: string, o: OidcOptions = {}): Promise<
   const d = await getJson(new URL('/.well-known/worksuite-desktop', server), o);
   if (d.status !== 200 || typeof d.body.oneauth_issuer !== 'string') throw new OidcError('discovery_failed');
   const issuer = checkUrl(d.body.oneauth_issuer, o).toString().replace(/\/$/, '');
+  const api_base = checkUrl(typeof d.body.api_base === 'string' ? d.body.api_base : server.toString(), o).toString();
   const meta = await getJson(new URL(`${issuer}/.well-known/openid-configuration`), o);
   const m = meta.body;
   if (meta.status !== 200 || m.issuer?.replace(/\/$/, '') !== issuer) throw new OidcError('discovery_failed', 'issuer mismatch');
   for (const k of ['authorization_endpoint', 'token_endpoint', 'userinfo_endpoint']) checkUrl(m[k], o);
-  return { issuer, authorization_endpoint: m.authorization_endpoint, token_endpoint: m.token_endpoint, userinfo_endpoint: m.userinfo_endpoint, revocation_endpoint: m.revocation_endpoint };
+  return { api_base, issuer, authorization_endpoint: m.authorization_endpoint, token_endpoint: m.token_endpoint, userinfo_endpoint: m.userinfo_endpoint, revocation_endpoint: m.revocation_endpoint };
 }
 
 export function authorizationUrl(ep: Endpoints, p: { clientId: string; redirectUri: string; challenge: string; state: string }) {

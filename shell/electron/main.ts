@@ -63,11 +63,12 @@ app.whenReady().then(() => {
     return shell.openExternal(u.toString())
   })
   // Sign-in waits for the user in the browser; the broker gives up after 5 minutes.
-  handle('ws:cloudSignIn', async (serverUrl) => {
+  handle('ws:cloudSignIn', async (serverUrl, mode) => {
+    if (mode !== 'personal' && mode !== 'enterprise') return { ok: false, error: 'invalid_argument' }
     let https = false
     try { https = new URL(serverUrl).protocol === 'https:' } catch { /* invalid URL */ }
     if (!https) return { ok: false, error: 'insecure_url' }
-    const r = await brokerCall('SignIn', { server_url: serverUrl }, 6 * 60_000)
+    const r = await brokerCall('SignIn', { server_url: serverUrl, mode }, 6 * 60_000)
     return r.ok ? { ok: true, value: publicAccounts([r.value])[0] } : r
   })
   // WSOS-SYN-008: the renderer asks how many changes are unsent, the user chooses, then sign-out runs.

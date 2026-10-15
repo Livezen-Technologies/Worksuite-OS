@@ -10,7 +10,7 @@ memory; `X-WS-Device` added to every desktop API call from the device credential
 
 ## Sync service runtime (`services/sync/src/main.ts`)
 
-- Config: `$XDG_CONFIG_HOME/worksuite/sync.json` (account, device credential, streams, module → data type). Absent = not signed in; the service exits 0.
+- Config: `$XDG_CONFIG_HOME/worksuite/sync.json` (account, streams, module → data type), written by the credentials broker after sign-in from `desktop/v1/bootstrap` and removed on sign-out. Absent = not signed in; the service exits 0. The device credential is read per call from `/run/worksuite-device-agent/device-token` (no header on an unenrolled Personal device).
 - State: `$XDG_STATE_HOME/worksuite/sync.db`. At start a failed `PRAGMA integrity_check` exports pending/failed outbox rows to `outbox-export-<time>.json`, sets the damaged file aside and starts fresh (SRS §9.2).
 - Tokens: requested from the credentials broker at `$XDG_RUNTIME_DIR/worksuite/credentials.sock` (`GetAccessToken`, `force_refresh` on 401).
 - Control: `$XDG_RUNTIME_DIR/worksuite/sync.sock` (0600, line-delimited JSON) with `Status`, `ListFailed`, `RetryFailed`, `SyncNow`, mirroring `lk.worksuite.Sync1`.

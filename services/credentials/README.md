@@ -11,8 +11,12 @@ The session's single token broker (WSOS-IDN-008), shipped in `worksuite-user-ser
   flight per account. `invalid_grant` → `sign_in_required`.
 - **Lock / Unlock**: the shell calls `Lock` on screen lock and logout; cached tokens are dropped and requests refused.
 - **Socket**: `$XDG_RUNTIME_DIR/worksuite/credentials.sock`, mode 0600, one JSON request per line:
-  `GetAccessToken {account_id, force_refresh}`, `SignIn`, `SignOut {account_id}`, `Status`, `Lock`, `Unlock`.
+  `GetAccessToken {account_id, force_refresh}`, `SignIn {server_url, mode}`, `SignOut {account_id}`, `Status`, `Lock`, `Unlock`.
 - **Accounts** (no secrets): `$XDG_CONFIG_HOME/worksuite/accounts.json`.
+- **Sync config**: after sign-in (`SignIn {server_url, mode}`) the broker reads `desktop/v1/bootstrap` (`user.id`,
+  `org.id`, `modules[].key`, optional `modules[].data_type` and `modules[].offline`; `online_only` modules are skipped),
+  writes `$XDG_CONFIG_HOME/worksuite/sync.json` (0600, no secrets) and restarts `worksuite-sync.service`. If that
+  fails, the sign-in fails and nothing is stored. Sign-out removes the file and stops sync.
 
 ```sh
 npm test
