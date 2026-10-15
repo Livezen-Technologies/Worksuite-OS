@@ -53,6 +53,33 @@ if [ "$office_found" = 0 ]; then
   fi
   echo "WorkSuite Office: no .deb found; building without it (dev build)" >&2
 fi
+# WorkSuite Desktop (github.com/Livezen-Technologies/worksuite-desktop CI, package worksuite-desktop) ships the same
+# way: tools/fetch-desktop.sh puts its .deb at config/packages.chroot/worksuite-desktop_*.deb (or pass
+# WORKSUITE_DESKTOP_DEB=path; WORKSUITE_DESKTOP_SHA256 pins it). Release images need it unless
+# WORKSUITE_DESKTOP_OPTIONAL=1 (CI sets that when no desktop source is configured); without it the start menu's
+# WorkSuite tiles open the worksuite-app web windows. On WorkSuite OS the app runs in its OS mode (the marker below).
+desktop_found=0
+[ -z "${WORKSUITE_DESKTOP_DEB:-}" ] || cp "$WORKSUITE_DESKTOP_DEB" config/packages.chroot/worksuite-desktop_local.deb
+for desktop in config/packages.chroot/worksuite-desktop_*.deb; do
+  [ -f "$desktop" ] || continue
+  if [ -n "${WORKSUITE_DESKTOP_SHA256:-}" ]; then
+    echo "$WORKSUITE_DESKTOP_SHA256  $desktop" | sha256sum -c - >/dev/null || { echo "WorkSuite Desktop: checksum mismatch for $desktop" >&2; exit 1; }
+  fi
+  dpkg-deb --info "$desktop" >/dev/null || { echo "WorkSuite Desktop: $desktop is not a valid .deb" >&2; exit 1; }
+  pkg=$(dpkg-deb -f "$desktop" Package); parch=$(dpkg-deb -f "$desktop" Architecture)
+  [ "$pkg" = worksuite-desktop ] || { echo "WorkSuite Desktop: $desktop is $pkg, not worksuite-desktop; skipping" >&2; rm -f "$desktop"; continue; }
+  case "$parch" in "$ARCH"|all) ;; *) echo "WorkSuite Desktop: $desktop is $parch, not $ARCH; skipping" >&2; rm -f "$desktop"; continue ;; esac
+  echo "$pkg" >> config/package-lists/worksuite-desktop.list.chroot
+  desktop_found=1
+  echo "WorkSuite Desktop: installing $pkg $(dpkg-deb -f "$desktop" Version)"
+done
+if [ "$desktop_found" = 0 ]; then
+  if [ "$WORKSUITE_RELEASE" = 1 ] && [ "${WORKSUITE_DESKTOP_OPTIONAL:-0}" != 1 ]; then
+    echo "WorkSuite Desktop: no $ARCH .deb, and release images must include it; run tools/fetch-desktop.sh first" >&2
+    exit 1
+  fi
+  echo "WorkSuite Desktop: no .deb found; building without it (the start menu falls back to web app windows)" >&2
+fi
 if [ -n "${BUILD_HTTPS_PROXY:-}" ]; then
   export https_proxy="$BUILD_HTTPS_PROXY" HTTPS_PROXY="$BUILD_HTTPS_PROXY"
   mkdir -p config/includes.chroot_before_packages/etc/apt/apt.conf.d

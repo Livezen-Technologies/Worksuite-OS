@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { execProgram, findOffice, installedApps, parseDesktopFile, toEntry } from './xdg'
+import { execProgram, findOffice, findWorkSuiteDesktop, installedApps, parseDesktopFile, toEntry } from './xdg'
 
 const entry = (extra = '') => `[Desktop Entry]\nType=Application\nName=Foo\nName[si]=ෆූ\nExec=/usr/bin/foo %U\nCategories=Utility;\n${extra}\n[Desktop Action new]\nName=Other\n`
 
@@ -43,5 +43,16 @@ describe('desktop entries', () => {
     expect(findOffice([mk('libreoffice-writer', 'LibreOffice Writer', 'libreoffice --writer')])).toBeNull()
     expect(execProgram('"/opt/a b/x" %U')).toBe('/opt/a b/x')
     expect(execProgram('env FOO=1 x')).toBeNull()
+  })
+})
+
+describe('findWorkSuiteDesktop', () => {
+  const e = (id: string, exec: string | null) => ({ id, name: id, generic_name: null, comment: null, icon: null, categories: [], keywords: [], exec })
+  it('finds the worksuite-desktop package entry by id or program', () => {
+    expect(findWorkSuiteDesktop([e('foot', 'foot'), e('worksuite', '/opt/WorkSuite/worksuite %U')])?.id).toBe('worksuite')
+    expect(findWorkSuiteDesktop([e('lk.worksuite.desktop', '"/opt/WorkSuite/worksuite" %U')])?.id).toBe('lk.worksuite.desktop')
+  })
+  it('does not take the web app windows or Office for it', () => {
+    expect(findWorkSuiteDesktop([e('worksuite-mail', 'worksuite-app mail'), e('worksuite-url-handler', 'worksuite-app %u'), e('worksuite-office', '/opt/worksuite-office/desktopeditors')])).toBeNull()
   })
 })

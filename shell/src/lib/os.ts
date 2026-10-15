@@ -13,9 +13,11 @@ export interface WorkSuiteApi {
   /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
   webApps(): Promise<CloudResult<{ id: string; name: string }[]>>
   /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
-  installedApps(): Promise<{ apps: InstalledApp[]; office: string | null }>
+  installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null }>
   /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
   launchOffice(kind: 'start' | 'docs' | 'sheets' | 'slides'): Promise<void>
+  /** WorkSuite Desktop with --module=<id> (only when installed; the launcher checks). */
+  launchWorkSuite(module: DesktopModule): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
   /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
@@ -132,6 +134,7 @@ export interface RecoveryInfo {
   luks: RecoveryLuksDevice[]; features: Record<RecoveryFeature, boolean>
 }
 
+import type { DesktopModule } from './launcher'
 import type { HwDevice, HwKind } from '../../electron/hardware'
 import type { LocalUser } from '../../electron/users'
 export type { HwDevice, HwKind, LocalUser }
@@ -271,9 +274,10 @@ const stub: WorkSuiteApi = {
     return { apps: [
       { id: 'firefox-esr', name: 'Firefox ESR', generic_name: 'Web Browser', comment: null, icon: 'firefox-esr', categories: ['Network', 'WebBrowser'], keywords: ['internet', 'web'] },
       { id: 'foot', name: 'Foot', generic_name: 'Terminal', comment: null, icon: 'foot', categories: ['System', 'TerminalEmulator'], keywords: ['shell'] },
-    ], office: null }
+    ], office: null, desktop: null }
   },
   async launchOffice() {},
+  async launchWorkSuite() {},
   async cloudSignIn(serverUrl, _mode) {
     stubAccounts = [{ id: 'preview:u-1', name: 'Hasarinda', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
