@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { cloudErrorText, os, policyLines, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, os, policyLines, serverUrlFor, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
 import type { WindowProps } from './types'
 import CIcon from '../components/CIcon'
 
@@ -242,10 +242,54 @@ function AboutDevice({ compact }: { compact?: boolean }) {
             </div>
           )}
         </div>
+      ) : info.agent ? (
+        <EnrollCard compact={compact} onEnrolled={() => void os.deviceInfo().then(setInfo)} />
       ) : (
-        <div className={`${card} px-5 py-[18px] text-[13px] text-ws-muted`}>
-          {info.agent ? 'This device isn’t managed by an organization.' : 'Management status is unavailable: the WorkSuite device agent isn’t running.'}
-        </div>
+        <div className={`${card} px-5 py-[18px] text-[13px] text-ws-muted`}>Management status is unavailable: the WorkSuite device agent isn’t running.</div>
+      )}
+    </div>
+  )
+}
+
+/** Enroll an unmanaged device with an organization (§9.3); same path as first-run: device agent via pkexec. */
+function EnrollCard({ compact, onEnrolled }: { compact?: boolean; onEnrolled: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [server, setServer] = useState('')
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const field = 'h-10 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm font-normal text-ws-ink outline-none focus:border-ws-accent'
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!server.trim() || !code.trim()) return setError('Enter the server address and the enrollment code from your IT admin.')
+    setBusy(true); setError(null)
+    const r = await os.enrollDevice(serverUrlFor('enterprise', server), code)
+    setBusy(false)
+    if (!r.ok) return setError(cloudErrorText(r.error))
+    onEnrolled()
+  }
+
+  return (
+    <div className={`${card} flex flex-col gap-3 px-5 py-[18px] text-[13px]`}>
+      <span className="text-ws-muted">This device isn’t managed by an organization.</span>
+      {!open ? (
+        !compact && <button type="button" onClick={() => setOpen(true)} className="self-start h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Enroll with an organization…</button>
+      ) : (
+        <form onSubmit={submit} className="flex flex-col gap-3" aria-label="Enroll this device">
+          <p className="m-0 text-ws-muted">Your organization will be able to apply its policies and updates, and lock or wipe this device remotely. An administrator password is needed.</p>
+          <label className="flex flex-col gap-1 font-semibold">Server address
+            <input value={server} onChange={(e) => { setServer(e.target.value); setError(null) }} placeholder="work.example.com" spellCheck={false} className={field} />
+          </label>
+          <label className="flex flex-col gap-1 font-semibold">Enrollment code
+            <input value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null) }} autoComplete="off" spellCheck={false} className={`${field} w-[260px] max-w-full font-mono tracking-[1px]`} />
+          </label>
+          {error && <p role="alert" className="m-0 text-red-700">{error}</p>}
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="h-9 rounded-lg bg-ws-accent px-4 text-sm font-semibold text-white disabled:opacity-60">{busy ? 'Enrolling…' : 'Enroll this device'}</button>
+            <button type="button" disabled={busy} onClick={() => { setOpen(false); setError(null) }} className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Cancel</button>
+          </div>
+        </form>
       )}
     </div>
   )

@@ -79,13 +79,15 @@ const stub: WorkSuiteApi = {
   async syncUnsent() { return { ok: true, value: stubUnsent } },
   async syncNow() { stubUnsent = Math.max(0, stubUnsent - 1); return { ok: true, value: true } },
   async enrollDevice(_url, code) {
-    return code === 'BAD-CODE' ? { ok: false, error: 'enrollment_rejected' } : { ok: true, value: { device_id: 'preview-device', org_name: 'Livezen Technologies' } }
+    if (code === 'BAD-CODE') return { ok: false, error: 'enrollment_rejected' }
+    stubManaged = true
+    return { ok: true, value: { device_id: 'preview-device', org_name: 'Livezen Technologies' } }
   },
   async deviceInfo() {
     return {
-      agent: true, managed: true, org_name: 'Livezen Technologies', server: 'work.livezentech.com', last_check_in: Date.now() - 4 * 60_000,
+      agent: true, managed: stubManaged, org_name: stubManaged ? 'Livezen Technologies' : null, server: stubManaged ? 'work.livezentech.com' : null, last_check_in: stubManaged ? Date.now() - 4 * 60_000 : null,
       device: { hostname: 'LZT-LAP-0142', os_version: 'WorkSuite OS 1.0 (preview)', arch: 'amd64', kernel_version: '6.12', encrypted: true },
-      policies: { version: 'preview', update_ring: 'pilot', update_mode: 'automatic', maintenance_window: '02:00-04:00', lock_timeout_max_s: 300, offline_access_days: 7, usb_storage: 'read_only', bluetooth: null, app_allowlist_size: 42 },
+      policies: !stubManaged ? null : { version: 'preview', update_ring: 'pilot', update_mode: 'automatic', maintenance_window: '02:00-04:00', lock_timeout_max_s: 300, offline_access_days: 7, usb_storage: 'read_only', bluetooth: null, app_allowlist_size: 42 },
     }
   },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
@@ -94,6 +96,8 @@ const stub: WorkSuiteApi = {
 let stubAccounts: CloudAccount[] = []
 // Preview only: pretend three offline edits are waiting so the sign-out prompt can be seen.
 let stubUnsent = 3
+// Preview only: unmanaged until enrolled (first-run or Settings).
+let stubManaged = false
 
 /** Broker error codes → text for the user. */
 export function cloudErrorText(code: string): string {
