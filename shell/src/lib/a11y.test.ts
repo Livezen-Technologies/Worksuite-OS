@@ -8,7 +8,9 @@ describe('accessibility preferences', () => {
     const html = document.documentElement
     expect(html.hasAttribute('data-high-contrast')).toBe(true)
     expect(html.hasAttribute('data-reduced-motion')).toBe(true)
-    expect(html.style.getPropertyValue('zoom')).toBe('2')
+    expect(html.style.getPropertyValue('zoom')).toBe('')
+    expect(html.hasAttribute('data-text-scale')).toBe(true)
+    expect(html.style.getPropertyValue('--ws-text-scale')).toBe('2')
     expect(JSON.parse(localStorage.getItem('ws.a11y')!)).toEqual({ highContrast: true, reducedMotion: true, textScale: 2 })
     setA11y({ highContrast: false, reducedMotion: false, textScale: 1 })
     expect(html.hasAttribute('data-high-contrast')).toBe(false)

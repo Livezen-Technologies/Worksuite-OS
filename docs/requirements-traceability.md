@@ -141,6 +141,15 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | WSOS-SEC-004 per-app session partitions | `shell/electron/appwindows.ts` (`persist:ws-app-<id>`), `ws:openWorkSuiteApp` in `main.ts`/`preload.ts` | `shell/electron/appwindows.test.ts` |
 | WSOS-SEC-009 AppArmor | `security/apparmor/*`, `AppArmorProfile=-…` in units, postinst reload | `tests/security/apparmor.test.sh` (CI) |
 | WSOS-SEC-012 Electron patch policy | `docs/security/hardening.md`, `.github/dependabot.yml` | Process |
+| WSOS-SEC-001 renderer prefs, no navigation | `shell/electron/webSecurity.ts` `shellWebPreferences`, `main.ts`, `appwindows.ts` `navigationDecision` | `shell/electron/webSecurity.test.ts`, `appwindows.test.ts`, `boundary.test.ts` |
+| WSOS-SEC-002 strict CSP in the shipped bundle | `SHELL_CSP` (`webSecurity.ts`), build-only plugin in `shell/vite.config.ts` | `webSecurity.test.ts` |
+| WSOS-SEC-003 default-deny web permissions, per-origin admin grants | `webSecurity.ts` `parseGrants`/`permissionAllowed`, `/etc/worksuite/web-permissions.json`, `appwindows.ts` | `webSecurity.test.ts`, `appwindows.test.ts` |
+| WSOS-SEC-006 URL scheme allow-list | `webSecurity.ts` `externalAllowed` | `webSecurity.test.ts` |
+| WSOS-SEC-013 no isolation claims for unsandboxed apps | `docs/security/hardening.md` | `tests/security/isolation-claims.test.sh` (CI) |
+| WSOS-SEC-014 Secure Boot chain and key strategy | `docs/security/hardening.md`, `live-build/auto/config` | Hardware boot pending |
+| WSOS-REL-004 killing Electron spares apps | `session.ts` app scopes | `tests/perf/guest/electron-kill` + `electron_kill_apps_lost` gate (`tests/perf/gates.tsv`, `gates.test.sh`) |
+| WSOS-PRF-005 launcher first frame | `shell/src/lib/perfProbe.ts`, `screens/Desktop.tsx`, forwarding in `main.ts`, `measure-shell` | `perfProbe.test.ts`; `launcher_first_frame_ms` gate (hw, optional) |
+| WSOS-ACC text size reflow, launcher dialog semantics | `shell/src/index.css` (`data-text-scale`), `lib/a11y.ts`, `screens/Desktop.tsx` | `lib/textScale.test.ts`, `lib/a11y.test.ts`, `a11y.axe.test.tsx` |
 
 ## ARM64 and performance gates
 

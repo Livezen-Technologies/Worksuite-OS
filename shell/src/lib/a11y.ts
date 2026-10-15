@@ -37,8 +37,10 @@ export function applyA11y(p: A11yPrefs, root: HTMLElement | null = typeof docume
   if (!root) return
   root.toggleAttribute('data-high-contrast', p.highContrast)
   root.toggleAttribute('data-reduced-motion', p.reducedMotion)
-  // The shell is laid out in px, so text size scales the whole page (Chromium zoom), like the GTK text scale.
-  root.style.setProperty('zoom', p.textScale === 1 ? '' : String(p.textScale))
+  // Text size scales the text only and the layout reflows (index.css), rather than zooming the page (WCAG 1.4.4/1.4.10).
+  root.style.removeProperty('zoom')
+  root.toggleAttribute('data-text-scale', p.textScale !== 1)
+  root.style.setProperty('--ws-text-scale', String(p.textScale))
 }
 
 export function getA11y(): A11yPrefs { return prefs }

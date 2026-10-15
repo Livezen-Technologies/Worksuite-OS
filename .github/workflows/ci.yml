@@ -56,6 +56,7 @@ jobs:
       # AppArmor profiles parse (WSOS-SEC-009); perf gate evaluator (PRF-*).
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends apparmor apparmor-utils
       - run: tests/security/apparmor.test.sh
+      - run: tests/security/isolation-claims.test.sh
       - run: tests/perf/gates.test.sh
       - uses: actions/setup-node@v4
         with:

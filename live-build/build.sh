@@ -120,7 +120,7 @@ if [ "${WORKSUITE_PERF:-0}" = 1 ]; then
   # Perf/reliability probes (tests/perf/guest) run once after boot and print WORKSUITE_PERF lines on the serial
   # console for tests/vm/boot-test.sh PERF_PROFILE=… (WSOS-PRF-*, REL-001/002, ARM-007). Test images only.
   inc=config/includes.chroot
-  for f in measure-boot measure-shell login-cycles suspend-cycles; do install -D -m 0755 "$here/../tests/perf/guest/$f" $inc/usr/libexec/worksuite/perf/$f; done
+  for f in measure-boot measure-shell login-cycles suspend-cycles electron-kill; do install -D -m 0755 "$here/../tests/perf/guest/$f" $inc/usr/libexec/worksuite/perf/$f; done
   install -D -m 0644 "$here/../tests/perf/guest/worksuite-perf.service" $inc/etc/systemd/system/worksuite-perf.service
   printf '#!/bin/sh\nset -e\nsystemctl enable worksuite-perf.service\n' > config/hooks/normal/9001-worksuite-perf.hook.chroot
   chmod +x config/hooks/normal/9001-worksuite-perf.hook.chroot

@@ -34,11 +34,16 @@ export interface WindowLike {
     setWindowOpenHandler(fn: (d: { url: string }) => { action: 'deny' }): void
   }
 }
-export interface SessionLike { setPermissionRequestHandler(fn: (wc: unknown, perm: string, cb: (ok: boolean) => void) => void): void }
+export interface SessionLike {
+  setPermissionRequestHandler(fn: (wc: unknown, perm: string, cb: (ok: boolean) => void, details?: { requestingUrl?: string }) => void): void
+  setPermissionCheckHandler?(fn: (wc: unknown, perm: string, origin: string) => boolean): void
+}
 export interface AppWindowHost {
   session(partition: string): SessionLike
   window(opts: { partition: string; title: string }): WindowLike
   openExternal(url: string): void
+  /** Per-origin grant decision (WSOS-SEC-003); absent = deny everything. */
+  permission?(perm: string, requestingUrl: string | undefined): boolean
 }
 
 /** Webpreferences every app window gets; exported for tests and for main.ts. */
@@ -56,8 +61,12 @@ export function appWindows(host: AppWindowHost) {
       const existing = open.get(appId)
       if (existing && !existing.isDestroyed()) { existing.focus(); return { ok: true } }
       const partition = partitionFor(appId)
-      // Web permissions (camera, notifications, …) denied in every app partition (WSOS-SEC-003).
-      host.session(partition).setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
+      // Web permissions (camera, notifications, …) denied in every app partition unless an administrator granted that
+      // permission to the requesting HTTPS origin (WSOS-SEC-003).
+      const allowed = (perm: string, reqUrl: string | undefined) => host.permission?.(perm, reqUrl) === true
+      const ses = host.session(partition)
+      ses.setPermissionRequestHandler((_wc, perm, cb, details) => cb(allowed(perm, details?.requestingUrl)))
+      ses.setPermissionCheckHandler?.((_wc, perm, origin) => allowed(perm, origin))
       const w = host.window({ partition, title: appId })
       w.webContents.on('will-navigate', (e, target) => {
         const d = navigationDecision(url, target)
