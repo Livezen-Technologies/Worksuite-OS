@@ -40,7 +40,11 @@ class PhaseTests(unittest.TestCase):
                 conf = yaml.safe_load(open(os.path.join(ROOT, "modules", configs[job.split("@")[1]])))
                 seen.append(conf["phase"])
         self.assertEqual(tuple(seen), main.PHASES)
-        self.assertEqual(execs[0], "worksuitephase@copy")
+        self.assertEqual(execs[0], "worksuitephase@prepare")
+        # "copy" only once the disk is partitioned and mounted: the slideshow must not say "Unpacking" before
+        self.assertLess(execs.index("partition"), execs.index("worksuitephase@copy"))
+        self.assertLess(execs.index("mount"), execs.index("worksuitephase@copy"))
+        self.assertLess(execs.index("worksuitephase@copy"), execs.index("unpackfs"))
         self.assertLess(execs.index("worksuitephase@boot"), execs.index("bootloader"))
         self.assertLess(execs.index("worksuitephase@cleanup"), execs.index("umount"))
 

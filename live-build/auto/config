@@ -36,7 +36,7 @@ lb config noauto \
   --iso-application "WorkSuite OS" \
   --iso-publisher "WorkSuite; https://download.worksuitecloud.com" \
   --iso-volume "WORKSUITE_OS" \
-  --bootappend-live "boot=live components locales=en_US.UTF-8 keyboard-layouts=us quiet splash console=tty0 console=${SERIAL},115200" \
+  --bootappend-live "boot=live components locales=en_US.UTF-8 keyboard-layouts=us quiet splash plymouth.ignore-serial-consoles console=tty0 console=${SERIAL},115200" \
   --debian-installer none \
   "$@"
 

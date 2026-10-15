@@ -1,0 +1,41 @@
+/* gtkgreet fallback (GTK 3), used only when the WorkSuite greeter cannot start: the same dark WorkSuite look,
+   no light window chrome. Installed as /usr/share/worksuite/gtkgreet.css; worksuite-greeter passes it with -s. */
+window {
+  background-color: #061029;
+  background-image: radial-gradient(circle at 78% 22%, rgba(24, 212, 240, 0.22) 0%, transparent 38%),
+    radial-gradient(circle at 20% 85%, rgba(31, 107, 255, 0.28) 0%, transparent 45%);
+  color: #E8EEFA;
+  font-family: "IBM Plex Sans", sans-serif;
+}
+headerbar, .titlebar { min-height: 0; padding: 0; border: none; background: transparent; box-shadow: none; }
+box#body {
+  background-color: rgba(8, 20, 48, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  padding: 32px;
+}
+label { color: #E8EEFA; font-size: 15px; }
+entry, combobox button {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 178, 255, 0.25);
+  background: rgba(4, 10, 26, 0.6);
+  color: #FFFFFF;
+  padding: 0 14px;
+  box-shadow: none;
+}
+entry:focus { border-color: #1F6BFF; }
+button {
+  min-height: 44px;
+  border-radius: 10px;
+  border: none;
+  background: #1F6BFF;
+  background-image: none;
+  color: #FFFFFF;
+  font-weight: 600;
+  padding: 0 20px;
+  box-shadow: none;
+  text-shadow: none;
+}
+button:hover { background: #3A7DFF; }
+button:active { background: #1758D6; }

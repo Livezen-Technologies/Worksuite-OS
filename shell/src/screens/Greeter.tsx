@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { GreeterProps } from './types'
 import { os } from '../lib/os'
 import { useANow, aShortDate, aTime } from '../components/AClock'
@@ -11,10 +11,7 @@ import { motionReduced } from '../lib/a11y'
 
 // Login and LoginUsers boards. No automatic sign-in: the person always submits a password.
 interface AUser { id: string; name: string; role: string }
-const USERS: AUser[] = [
-  { id: 'hasarinda', name: 'Hasarinda', role: 'Administrator' },
-  { id: 'nimali', name: 'Nimali', role: 'Standard user' },
-]
+// Real accounts from /etc/passwd (os.sysUsers); the session user is preselected. No placeholder names.
 const OTHER = '__other__'
 
 const SHAKE: Keyframe[] = [{ transform: 'translateX(0)' }, { transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' }, { transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' }, { transform: 'translateX(0)' }]
@@ -24,7 +21,20 @@ export default function Greeter({ onSignIn }: GreeterProps) {
   const now = useANow()
   const [a11y, setA11y] = useState(false)
   const [view, setView] = useState<'password' | 'users'>('password')
-  const [selected, setSelected] = useState<string>(USERS[0].id)
+  const [USERS, setUsers] = useState<AUser[]>([])
+  const [selected, setSelected] = useState<string>(OTHER)
+  useEffect(() => {
+    let live = true
+    os.sysUsers().then((r) => {
+      if (!live || !r.available) return
+      const list = r.value.users.map((u) => ({ id: u.login, name: u.name || u.login, role: t(u.admin ? 'settings.users.admin' : 'settings.users.standard') }))
+      setUsers(list)
+      const cur = list.find((u) => u.id === r.value.current) ?? list[0]
+      if (cur) setSelected((s) => (s === OTHER && !otherRef.current?.value ? cur.id : s))
+    }).catch(() => { /* fall back to "Other user" */ })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [otherName, setOtherName] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)

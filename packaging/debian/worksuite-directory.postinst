@@ -1,10 +1,31 @@
 #!/bin/sh
 set -e
 if [ "$1" = configure ]; then
-  # Break-glass admin (WSOS-DIR-010): exists locked until a password has been escrowed.
+  # Break-glass admin (WSOS-DIR-010): exists locked until a password has been escrowed. A system account (UID below
+  # 1000, 999 when free) so the first real user, created by the installer or live-config, gets UID 1000 and the
+  # account lists (greeter, Settings) never show it.
+  sysuid() {
+    u=999
+    while [ "$u" -ge 100 ]; do
+      getent passwd "$u" >/dev/null || getent group "$u" >/dev/null || { echo "$u"; return; }
+      u=$((u - 1))
+    done
+  }
   if ! getent passwd wsadmin >/dev/null; then
-    useradd --create-home --shell /bin/bash --comment "WorkSuite break-glass admin" --groups sudo wsadmin
+    uid=$(sysuid)
+    useradd --system ${uid:+--uid "$uid"} --user-group --create-home --home-dir /home/wsadmin --shell /bin/bash \
+      --comment "WorkSuite break-glass admin" --groups sudo wsadmin
     usermod --lock wsadmin
+  elif [ "$(id -u wsadmin)" -ge 1000 ] && ! pgrep -u wsadmin >/dev/null 2>&1; then
+    # Older packages made it a regular user (often UID 1000): move it to a system UID (usermod re-owns its home).
+    uid=$(sysuid)
+    if [ -n "$uid" ]; then
+      usermod --uid "$uid" wsadmin || true
+      if [ "$(getent group wsadmin | cut -d: -f3)" -ge 1000 ] 2>/dev/null && ! getent group "$uid" >/dev/null; then
+        groupmod --gid "$uid" wsadmin || true
+        chgrp -R wsadmin /home/wsadmin 2>/dev/null || true
+      fi
+    fi
   fi
   install -d -m 0700 /var/lib/worksuite-directory
   pam-auth-update --package

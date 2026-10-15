@@ -11,8 +11,8 @@ import calamares.slideshow 1.0
 Presentation {
     id: presentation
 
-    // "copy" until the first configure marker; then the configure task under way.
-    property string phase: "copy"
+    // "prepare" (partitioning), then "copy" (unpacking), then the configure task under way.
+    property string phase: "prepare"
     readonly property var tasks: [
         ["locale", qsTr("Set language, keyboard and time zone")],
         ["unlock", qsTr("Set up disk unlocking")],
@@ -25,12 +25,18 @@ Presentation {
     property real started: 0
     property real phaseStarted: 0
     property int elapsed: 0
-    readonly property bool copying: phase === "copy" || phase === ""
+    readonly property bool copying: phase === "prepare" || phase === "copy" || phase === ""
+    readonly property bool preparing: phase === "prepare" || phase === ""
+    property WsState wsState: WsState {}
     readonly property int current: { for (var i = 0; i < tasks.length; i++) if (tasks[i][0] === phase) return i; return -1 }
-    readonly property bool encrypted: {
+    // Global storage has no change signal: poll() re-reads the real state. worksuiteEncrypted is recorded from the
+    // partition page's Encrypt box and the planned jobs (worksuiteconfirm); "partitions" once the partition job ran.
+    property bool encrypted: false
+    function readEncrypted() {
+        if (Global.value("worksuiteEncrypted") === true || wsState.get("encrypt", false) === true) return true
         var parts = Global.value("partitions")
         if (!parts) return false
-        for (var i = 0; i < parts.length; i++) if (parts[i].luksMapperName) return true
+        for (var i = 0; i < parts.length; i++) if (parts[i].luksMapperName || parts[i].fs === "luks" || parts[i].fs === "luks2") return true
         return false
     }
 
@@ -39,7 +45,8 @@ Presentation {
         var now = Date.now()
         if (!started) { started = now; phaseStarted = now }
         elapsed = Math.floor((now - started) / 1000)
-        var p = Global.value("worksuitePhase") || "copy"
+        encrypted = readEncrypted()
+        var p = Global.value("worksuitePhase") || "prepare"
         if (p === phase) return
         if (current >= 0) {
             var f = Object.assign({}, finishedAt)
@@ -81,7 +88,7 @@ Presentation {
                     id: copyCol
                     anchors.fill: parent; anchors.margins: 24
                     spacing: 14
-                    Text { text: qsTr("Unpacking system image"); color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 15; font.weight: Font.Medium }
+                    Text { text: presentation.preparing ? qsTr("Preparing the disk") : qsTr("Unpacking system image"); color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 15; font.weight: Font.Medium }
                     // Indeterminate: a light sweeping along the track; the real percentage is the bar under this page.
                     Rectangle {
                         Layout.fillWidth: true; height: 10; radius: 5; color: "#1F7FB2FF"; clip: true

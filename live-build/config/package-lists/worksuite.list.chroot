@@ -23,6 +23,9 @@ cryptsetup
 dosfstools
 mtools
 cryptsetup-initramfs
+# update-initramfs hooks: keyboard map for the passphrase prompt, and the zstd compressor (initramfs-tools default)
+console-setup
+zstd
 tpm2-tools
 firmware-linux-free
 plymouth

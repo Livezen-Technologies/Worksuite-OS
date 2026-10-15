@@ -21,4 +21,7 @@ fi
 if [ -z "${WORKSUITE_GREETER_LEGACY:-}" ] && python3 -c 'import gi; gi.require_version("Gtk", "4.0")' >/dev/null 2>&1; then
     PYTHONPATH=/usr/lib/worksuite/greeter${PYTHONPATH:+:$PYTHONPATH} python3 -m worksuite_greeter && exit 0
 fi
+# The fallback gets the WorkSuite look (dark, no light window chrome) from its GTK stylesheet.
+CSS=${WORKSUITE_GTKGREET_CSS:-/usr/share/worksuite/gtkgreet.css}
+if [ -f "$CSS" ]; then exec ${WORKSUITE_GTKGREET:-gtkgreet} -s "$CSS" "$@"; fi
 exec ${WORKSUITE_GTKGREET:-gtkgreet} "$@"

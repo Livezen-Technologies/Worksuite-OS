@@ -8,6 +8,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QDialog>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -21,11 +22,29 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
+#include <QSettings>
+#include <QTimer>
 #include <QVBoxLayout>
 
 CALAMARES_PLUGIN_FACTORY_DEFINITION( WorksuiteConfirmViewStepFactory, registerPlugin< WorksuiteConfirmViewStep >(); )
 
 static const char RECOVERY_KEY[] = "worksuiteRecoveryKey";
+// Read by the slideshow (show.qml) and the sidebar: whether the install encrypts the disk.
+static const char ENCRYPTED_KEY[] = "worksuiteEncrypted";
+// branding/worksuite/WsState.qml: the file the QML pages share their state through.
+static const char WS_STATE[] = "/run/worksuite-installer.conf";
+
+static void
+recordEncryption( bool on )
+{
+    if ( auto* jq = Calamares::JobQueue::instance() )
+    {
+        jq->globalStorage()->insert( QString::fromLatin1( ENCRYPTED_KEY ), on );
+    }
+    QSettings state( QString::fromLatin1( WS_STATE ), QSettings::IniFormat );
+    state.setValue( QStringLiteral( "encrypt" ), on );
+    state.sync();
+}
 
 namespace
 {
@@ -103,6 +122,17 @@ public:
                     m_forwarding = false;
                     return true;
                 }
+            }
+        }
+        // The stock partition page's "Encrypt system" box: report its state to the sidebar and slideshow.
+        if ( o->isWidgetType() && e->type() == QEvent::Show && o->objectName() == QLatin1String( "m_encryptCheckBox" )
+             && !o->property( "wsWatched" ).toBool() )
+        {
+            if ( auto* box = qobject_cast< QCheckBox* >( o ) )
+            {
+                box->setProperty( "wsWatched", true );
+                recordEncryption( box->isChecked() );
+                QObject::connect( box, &QCheckBox::toggled, box, []( bool on ) { recordEncryption( on ); } );
             }
         }
         if ( o->isWidgetType() )
@@ -200,6 +230,36 @@ WorksuiteConfirmViewStep::WorksuiteConfirmViewStep( QObject* parent )
                 qApp->setStyleSheet( qApp->styleSheet() + dialogs );
             }
         }
+        recordEncryption( false );
+        {
+            QSettings state( QString::fromLatin1( WS_STATE ), QSettings::IniFormat );
+            state.setValue( QStringLiteral( "installFailed" ), false );
+        }
+        /* On a failed install Calamares shows an error dialog that quits the whole program when it closes, so the
+           finishedq failure page (what failed, the details, what helps) behind it was never seen. The queue moves on
+           to that page by itself; keep Calamares running when the dialog closes. ViewManager's handler runs first
+           (it connected before any module loaded), so the dialog exists by the time this one runs. */
+        if ( auto* jq = Calamares::JobQueue::instance() )
+        {
+            QObject::connect( jq, &Calamares::JobQueue::failed, qApp, [] {
+                QSettings state( QString::fromLatin1( WS_STATE ), QSettings::IniFormat );
+                state.setValue( QStringLiteral( "installFailed" ), true );   // the footer keeps Quit usable
+                state.sync();
+                QTimer::singleShot( 0, qApp, [] {
+                    for ( auto* w : QApplication::topLevelWidgets() )
+                    {
+                        auto* dlg = qobject_cast< QDialog* >( w );
+                        if ( dlg && dlg->inherits( "Calamares::ErrorDialog" ) && !dlg->property( "wsKept" ).toBool() )
+                        {
+                            dlg->setProperty( "wsKept", true );
+                            QObject::disconnect( dlg, &QDialog::finished, nullptr, nullptr );
+                            QObject::connect( dlg, &QDialog::finished, dlg, &QObject::deleteLater );
+                            cDebug() << "WorkSuite: the error dialog now closes to the failure page instead of quitting.";
+                        }
+                    }
+                } );
+            } );
+        }
     }
 }
 
@@ -249,6 +309,72 @@ WorksuiteConfirmViewStep::confirmationMatches( const QString& typed, const QStri
         t = t.mid( 5 );
     }
     return !disk.isEmpty() && t == disk;
+}
+
+void
+WorksuiteConfirmViewStep::parseLsblk( const QString& out, QString& model, QString& size )
+{
+    static const QRegularExpression pair( QStringLiteral( "(MODEL|SIZE)=\"([^\"]*)\"" ) );
+    model.clear();
+    size.clear();
+    auto it = pair.globalMatch( out );
+    while ( it.hasNext() )
+    {
+        const auto m = it.next();
+        ( m.captured( 1 ) == QLatin1String( "MODEL" ) ? model : size ) = m.captured( 2 ).simplified();
+    }
+}
+
+QString
+WorksuiteConfirmViewStep::diskTitle( const QString& disk, const QString& model, const QString& size )
+{
+    if ( disk.isEmpty() )
+    {
+        return tr( "Unknown disk" );
+    }
+    const QString m = model.trimmed(), s = size.trimmed();
+    if ( m.isEmpty() )
+    {
+        return s.isEmpty() ? disk : QStringLiteral( "%1 · %2" ).arg( disk, s );
+    }
+    return s.isEmpty() ? QStringLiteral( "%1 (%2)" ).arg( m, disk ) : QStringLiteral( "%1 · %2 (%3)" ).arg( m, s, disk );
+}
+
+QString
+WorksuiteConfirmViewStep::opKind( const QString& description )
+{
+    const QString lower = description.toLower();
+    if ( lower.contains( QStringLiteral( "clear mounts" ) ) || lower.contains( QStringLiteral( "clear all temporary mounts" ) ) )
+    {
+        return QString();
+    }
+    if ( lower.contains( QStringLiteral( "format" ) ) )
+    {
+        return QStringLiteral( "FORMAT" );
+    }
+    if ( lower.contains( QStringLiteral( "delete" ) ) || lower.contains( QStringLiteral( "remove" ) ) )
+    {
+        return QStringLiteral( "DELETE" );
+    }
+    if ( lower.contains( QStringLiteral( "create" ) ) )
+    {
+        return QStringLiteral( "CREATE" );
+    }
+    return QStringLiteral( "OTHER" );
+}
+
+bool
+WorksuiteConfirmViewStep::encryptedFromDescriptions( const QStringList& descriptions )
+{
+    for ( const QString& d : descriptions )
+    {
+        const QString lower = d.toLower();
+        if ( lower.contains( QStringLiteral( "luks" ) ) || lower.contains( QStringLiteral( "encrypt" ) ) )
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Layout of the design's "5 · Confirm disk" and "6 · Recovery key" screens; branding/worksuite/stylesheet.qss
@@ -346,14 +472,14 @@ WorksuiteConfirmViewStep::widget()
 
 // One row of the disk card: a tag (DELETE / CREATE / FORMAT) and what the partition step will do.
 static QWidget*
-opRow( const QString& tag, const QString& text )
+opRow( const QString& kind, const QString& tag, const QString& text )
 {
     auto* row = new QWidget;
     auto* l = new QHBoxLayout( row );
     l->setContentsMargins( 0, 6, 0, 6 );
     l->setSpacing( 14 );
     auto* t = label( QStringLiteral( "wsTag" ) );
-    t->setProperty( "kind", tag );
+    t->setProperty( "kind", kind );
     t->setText( tag );
     t->setAlignment( Qt::AlignCenter );
     t->setFixedWidth( 64 );
@@ -390,39 +516,41 @@ WorksuiteConfirmViewStep::onActivate()
             }
         }
         m_disk = diskFromDescriptions( descriptions );
+        recordEncryption( encryptedFromDescriptions( descriptions ) );
         QString model, size;
         if ( !m_disk.isEmpty() )
         {
             QProcess p;
-            p.start( QStringLiteral( "lsblk" ), { QStringLiteral( "-dno" ), QStringLiteral( "MODEL,SIZE" ), QStringLiteral( "/dev/" ) + m_disk } );
+            p.start( QStringLiteral( "lsblk" ), { QStringLiteral( "-dnPo" ), QStringLiteral( "MODEL,SIZE" ), QStringLiteral( "/dev/" ) + m_disk } );
             p.waitForFinished( 5000 );
-            const QString out = QString::fromUtf8( p.readAllStandardOutput() ).simplified();
-            const int cut = out.lastIndexOf( QLatin1Char( ' ' ) );
-            model = cut > 0 ? out.left( cut ) : out;
-            size = cut > 0 ? out.mid( cut + 1 ) : QString();
+            parseLsblk( QString::fromUtf8( p.readAllStandardOutput() ), model, size );
         }
         m_eyebrow->setText( tr( "STEP 5 · CONFIRM DISK" ) );
         m_title->setText( tr( "This will erase your disk" ) );
         m_details->setText( m_disk.isEmpty()
                                 ? tr( "The target disk could not be identified. Go back and choose the disk again." )
                                 : tr( "After you press Install, these changes can't be undone." ) );
-        m_diskName->setText( m_disk.isEmpty() ? tr( "Unknown disk" )
-                             : model.isEmpty()    ? QStringLiteral( "%1 · %2" ).arg( m_disk, size )
-                                                  : QStringLiteral( "%1 · %2 (%3)" ).arg( model, size, m_disk ) );
+        m_diskName->setText( diskTitle( m_disk, model, size ) );
         m_diskNode->setText( m_disk.isEmpty() ? QString() : QStringLiteral( "/dev/" ) + m_disk );
         while ( auto* item = m_ops->takeAt( 0 ) )
         {
             delete item->widget();
             delete item;
         }
-        m_ops->addWidget( opRow( tr( "DELETE" ), tr( "Existing partition table and all data" ) ) );
+        m_ops->addWidget( opRow( QStringLiteral( "DELETE" ), tr( "DELETE" ), tr( "Existing partition table and all data" ) ) );
         for ( const QString& c : changes )
         {
-            const QString lower = c.toLower();
-            const QString tag = lower.contains( QStringLiteral( "format" ) ) ? tr( "FORMAT" )
-                : lower.contains( QStringLiteral( "delete" ) ) || lower.contains( QStringLiteral( "remove" ) ) ? tr( "DELETE" )
-                                                                                                              : tr( "CREATE" );
-            m_ops->addWidget( opRow( tag, QString( c ).remove( QRegularExpression( QStringLiteral( "<[^>]*>" ) ) ) ) );
+            const QString text = QString( c ).remove( QRegularExpression( QStringLiteral( "<[^>]*>" ) ) );
+            const QString kind = opKind( text );
+            if ( kind.isEmpty() )
+            {
+                continue;   // housekeeping (clearing mounts), not a change to the disk
+            }
+            const QString tag = kind == QLatin1String( "FORMAT" ) ? tr( "FORMAT" )
+                : kind == QLatin1String( "DELETE" )                ? tr( "DELETE" )
+                : kind == QLatin1String( "CREATE" )                ? tr( "CREATE" )
+                                                                   : tr( "SET" );
+            m_ops->addWidget( opRow( kind, tag, text ) );
         }
         m_inputLabel->setText( tr( "Type %1 to confirm that all data on it will be permanently deleted" ).arg( m_disk ) );
         m_input->clear();

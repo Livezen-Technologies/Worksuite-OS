@@ -45,6 +45,15 @@ public:
     static bool confirmationMatches( const QString& typed, const QString& disk );
     /// The branding stylesheet's rules for dialogs (QDialog, QMessageBox), plus its QPushButton rules scoped to QDialog.
     static QString dialogStyleSheet( const QString& sheet );
+    /// MODEL and SIZE from `lsblk -dnPo MODEL,SIZE` output (KEY="value" pairs); either may be empty.
+    static void parseLsblk( const QString& out, QString& model, QString& size );
+    /// Disk card header: "Model · Size (node)", or "node · Size" when the model is empty.
+    static QString diskTitle( const QString& disk, const QString& model, const QString& size );
+    /// Tag kind for one planned partition job: "FORMAT", "DELETE", "CREATE", "OTHER" (neutral) or empty (hidden:
+    /// housekeeping such as clearing mounts).
+    static QString opKind( const QString& description );
+    /// True when a planned job sets up encryption (LUKS).
+    static bool encryptedFromDescriptions( const QStringList& descriptions );
 
 private:
     void refresh();

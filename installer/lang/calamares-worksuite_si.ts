@@ -266,6 +266,10 @@
       <translation>ඔබගේ තේරීම් යොදමින්. මෙයට සාමාන්‍යයෙන් මිනිත්තුවකට අඩු කාලයක් ගතවේ.</translation>
     </message>
     <message>
+      <source>Preparing the disk</source>
+      <translation>තැටිය සූදානම් කරමින්</translation>
+    </message>
+    <message>
       <source>Unpacking system image</source>
       <translation>පද්ධති රූපය දිග හරිමින්</translation>
     </message>
@@ -450,6 +454,10 @@
       <translation>ප්‍රතිසාධන යතුර</translation>
     </message>
     <message>
+      <source>Unknown disk</source>
+      <translation>නොදන්නා තැටිය</translation>
+    </message>
+    <message>
       <source>Type the disk name to confirm</source>
       <translation>තහවුරු කිරීමට තැටියේ නම ටයිප් කරන්න</translation>
     </message>
@@ -474,10 +482,6 @@
       <translation>ඔබ ස්ථාපනය ඔබූ පසු, මෙම වෙනස්කම් අහෝසි කළ නොහැක.</translation>
     </message>
     <message>
-      <source>Unknown disk</source>
-      <translation>නොදන්නා තැටිය</translation>
-    </message>
-    <message>
       <source>DELETE</source>
       <translation>මකන්න</translation>
     </message>
@@ -492,6 +496,10 @@
     <message>
       <source>CREATE</source>
       <translation>සාදන්න</translation>
+    </message>
+    <message>
+      <source>SET</source>
+      <translation>සකසන්න</translation>
     </message>
     <message>
       <source>Type %1 to confirm that all data on it will be permanently deleted</source>

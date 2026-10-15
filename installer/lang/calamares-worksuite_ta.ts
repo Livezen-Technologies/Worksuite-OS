@@ -266,6 +266,10 @@
       <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன. இது பொதுவாக ஒரு நிமிடத்திற்குள் முடியும்.</translation>
     </message>
     <message>
+      <source>Preparing the disk</source>
+      <translation>வட்டைத் தயார்படுத்துகிறது</translation>
+    </message>
+    <message>
       <source>Unpacking system image</source>
       <translation>கணினிப் படிமம் விரிக்கப்படுகிறது</translation>
     </message>
@@ -450,6 +454,10 @@
       <translation>மீட்பு விசை</translation>
     </message>
     <message>
+      <source>Unknown disk</source>
+      <translation>தெரியாத வட்டு</translation>
+    </message>
+    <message>
       <source>Type the disk name to confirm</source>
       <translation>உறுதிப்படுத்த வட்டின் பெயரைத் தட்டச்சிடுக</translation>
     </message>
@@ -474,10 +482,6 @@
       <translation>நிறுவு என்பதை அழுத்திய பின், இந்த மாற்றங்களைச் செயல்தவிர்க்க முடியாது.</translation>
     </message>
     <message>
-      <source>Unknown disk</source>
-      <translation>தெரியாத வட்டு</translation>
-    </message>
-    <message>
       <source>DELETE</source>
       <translation>நீக்கு</translation>
     </message>
@@ -492,6 +496,10 @@
     <message>
       <source>CREATE</source>
       <translation>உருவாக்கு</translation>
+    </message>
+    <message>
+      <source>SET</source>
+      <translation>அமை</translation>
     </message>
     <message>
       <source>Type %1 to confirm that all data on it will be permanently deleted</source>

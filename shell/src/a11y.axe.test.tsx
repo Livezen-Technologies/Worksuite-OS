@@ -76,7 +76,7 @@ const screens: [string, () => ReactElement][] = [
   ['App Center', () => <AppCenter onClose={noop} />],
   ['Settings', () => <Settings onClose={noop} />],
   ['Recovery', () => <Recovery onRestartShell={noop} onLogout={noop} />],
-  ['First run', () => <FirstRun onDone={noop} userName="Hasarinda" />],
+  ['First run', () => <FirstRun onDone={noop} userName="Preview" />],
   ['Installer', () => <Installer onDone={noop} />],
   ['Accessibility panel', () => <A11yPanel onClose={noop} />],
 ]

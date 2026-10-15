@@ -108,6 +108,9 @@ stub gtkgreet 'echo "gtkgreet $*" >> "$LOG"'
 WORKSUITE_GREETER_LEGACY=1 sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
 grep -q "zenity --warning" "$LOG" && grep -q "Open applications may have closed" "$LOG" && ok "greeter shows the notice" || bad "greeter shows the notice"
 grep -q "gtkgreet -c /usr/bin/worksuite-session" "$LOG" && ok "greeter then starts gtkgreet" || bad "greeter then starts gtkgreet"
+: > "$LOG"; : > "$T/gtkgreet.css"
+WORKSUITE_GREETER_LEGACY=1 WORKSUITE_GTKGREET_CSS="$T/gtkgreet.css" sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
+grep -q "gtkgreet -s $T/gtkgreet.css -c /usr/bin/worksuite-session" "$LOG" && ok "gtkgreet gets the WorkSuite stylesheet" || bad "gtkgreet gets the WorkSuite stylesheet"
 [ -e "$T/notice/uid-$(id -u)" ] && bad "notice removed after showing" || ok "notice removed after showing"
 : > "$LOG"
 WORKSUITE_GREETER_LEGACY=1 sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session

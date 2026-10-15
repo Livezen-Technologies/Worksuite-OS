@@ -31,6 +31,14 @@ export default function App() {
   const notes = useNotices(inSession)
   const send = useCallback((e: SessionEvent) => setState((s) => nextState(s, e)), [])
 
+  // The lock screen and first-run greeting name the real session user (the login name), never a placeholder, also
+  // when the session started without the shell's own sign-in.
+  useEffect(() => {
+    let live = true
+    os.sysUsers().then((r) => { if (live && r.available && r.value.current) setUser((u) => u || r.value.current) }).catch(() => {})
+    return () => { live = false }
+  }, [])
+
   useEffect(() => {
     if (state === 'starting') send('shellReady')
     if (state === 'loggingOut') { setWin(null); send('loggedOut') }

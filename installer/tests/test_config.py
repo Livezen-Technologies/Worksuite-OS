@@ -126,3 +126,30 @@ class FreshIdentityTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+class BootSplashTest(unittest.TestCase):
+    """The WorkSuite Plymouth theme reaches both the live and the installed initramfs."""
+
+    def test_splash_on_both_command_lines(self):
+        live = (REPO / "live-build/auto/config").read_text()
+        self.assertRegex(live, r"bootappend-live \"[^\"]*\bsplash\b[^\"]*plymouth\.ignore-serial-consoles")
+        grub = (REPO / "branding/grub/worksuite.cfg").read_text()
+        self.assertIn('GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"', grub)
+        self.assertIn("GRUB_GFXPAYLOAD_LINUX=keep", grub)
+        self.assertEqual(load(MODULES / "grubcfg.conf")["kernel_params"], ["quiet"])
+
+    def test_initramfs_has_framebuffer_and_theme(self):
+        self.assertIn("FRAMEBUFFER=y", (REPO / "branding/initramfs/worksuite-splash.conf").read_text())
+        self.assertIn("etc/initramfs-tools/conf.d/worksuite-splash", (REPO / "packaging/debian/rules").read_text())
+        self.assertIn("plymouth-set-default-theme -R worksuite", (REPO / "packaging/debian/worksuite-branding.postinst").read_text())
+        script = " ".join(load(MODULES / "shellprocess-worksuite.conf")["script"])
+        self.assertIn("plymouth-set-default-theme worksuite", script)
+        _, _, execs = sequence()
+        self.assertLess(execs.index("shellprocess@worksuite"), execs.index("initramfs"))
+
+    def test_initramfs_hook_packages(self):
+        pkgs = (REPO / "live-build/config/package-lists/worksuite.list.chroot").read_text().split()
+        for p in ("console-setup", "zstd", "plymouth", "worksuite-branding"):
+            self.assertIn(p, pkgs)

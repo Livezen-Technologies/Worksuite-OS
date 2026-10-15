@@ -72,9 +72,17 @@ def label(text, *classes, **kw):
     return Gtk.Label(label=text, css_classes=list(classes), wrap=True, **kw)
 
 
+def undecorate(win):
+    """The greeter is the whole screen: no title bar or close button (GTK 4 draws its own under cage)."""
+    win.set_decorated(False)
+    win.set_deletable(False)
+    win.fullscreen()
+
+
 class Greeter(Gtk.ApplicationWindow):
     def __init__(self, app, cfg=None, users=None, reachable_probe=None):
         super().__init__(application=app, title="WorkSuite", css_classes=["ws-greeter"])
+        undecorate(self)
         self.cfg = login.load_config() if cfg is None else cfg
         self.users = login.users() if users is None else users
         self.probe = reachable_probe or (lambda: login.directory_reachable(self.cfg))

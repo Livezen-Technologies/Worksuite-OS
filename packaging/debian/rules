@@ -53,6 +53,7 @@ override_dh_auto_install:
 	install -D -m 0644 -t $$g branding/grub/theme.txt branding/grub/theme-failed.txt build-branding/grub/*.png build-branding/grub/*.pf2 && \
 	install -D -m 0644 -t $$g/icons build-branding/grub/icons/*.png && \
 	install -D -m 0644 branding/grub/worksuite.cfg $$d/etc/default/grub.d/worksuite.cfg && \
+	install -D -m 0644 branding/initramfs/worksuite-splash.conf $$d/etc/initramfs-tools/conf.d/worksuite-splash && \
 	install -D -m 0644 -t $$d/usr/share/fonts/truetype/ibm-plex branding/fonts/ibm-plex/*.ttf && \
 	install -D -m 0644 branding/icons/worksuite.svg $$d/usr/share/icons/hicolor/scalable/apps/worksuite.svg && \
 	for s in 16 24 32 48 64 128 256 512; do install -D -m 0644 build-branding/icons/worksuite-$$s.png $$d/usr/share/icons/hicolor/$${s}x$${s}/apps/worksuite.png; done && \

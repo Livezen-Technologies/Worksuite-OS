@@ -4,7 +4,10 @@ if [ "$1" = configure ]; then
   update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth \
     /usr/share/plymouth/themes/worksuite/worksuite.plymouth 150
   update-alternatives --set default.plymouth /usr/share/plymouth/themes/worksuite/worksuite.plymouth
-  if command -v update-initramfs >/dev/null 2>&1; then update-initramfs -u || true; fi
+  # Debian's plymouth reads the theme from /etc/plymouth/plymouthd.conf; -R rebuilds the initramfs with it.
+  if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+    plymouth-set-default-theme -R worksuite || true
+  elif command -v update-initramfs >/dev/null 2>&1; then update-initramfs -u || true; fi
   if command -v update-grub >/dev/null 2>&1 && [ -d /boot/grub ]; then update-grub || true; fi
 fi
 #DEBHELPER#

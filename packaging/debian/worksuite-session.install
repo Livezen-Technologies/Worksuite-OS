@@ -21,5 +21,6 @@ services/session/bin/worksuite-screencast-chooser usr/lib/worksuite/
 services/session/bin/worksuite-screencast-stop usr/lib/worksuite/
 services/session/xdg-desktop-portal-wlr/config etc/xdg/xdg-desktop-portal-wlr/
 services/session/greeter/worksuite_greeter usr/lib/worksuite/greeter/
+services/session/greeter/gtkgreet.css usr/share/worksuite/
 services/session/bin/worksuite-autologin usr/sbin/
 services/session/polkit/worksuite_polkit_agent usr/lib/worksuite/polkit/

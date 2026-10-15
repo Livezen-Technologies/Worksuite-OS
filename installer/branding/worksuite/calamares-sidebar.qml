@@ -28,18 +28,21 @@ Rectangle {
     // Global storage has no change signal for QML and pages live in other engines, so re-read the shared state.
     property bool express: false
     property int pageSub: 0
+    property bool encrypt: false
     Timer {
         interval: 200; running: true; repeat: true; triggeredOnStart: true
         onTriggered: {
             sideBar.express = sideBar.state.get("express", false)
             sideBar.pageSub = sideBar.state.get("subStep", 0)
+            sideBar.encrypt = sideBar.state.get("encrypt", false)   // the partition page's Encrypt box (worksuiteconfirm)
         }
     }
     readonly property int stepIndex: ViewManager.currentStepIndex
     readonly property var position: stepIndex >= 0 && stepIndex < stepOf.length ? stepOf[stepIndex] : [0, 0]
     readonly property int current: position[0]
-    // The account page reports its own sub-step; the partition page is one page for Disk and Encryption.
-    readonly property int currentSub: current === 2 ? pageSub : position[1]
+    // The account page reports its own sub-step; the partition page is one page for Disk and Encryption: once its
+    // Encrypt box is ticked, Disk is done and Encryption is the current sub-step.
+    readonly property int currentSub: current === 2 ? pageSub : current === 1 && encrypt ? 1 : position[1]
 
     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1F7FB2FF" }   // rgba(127,178,255,0.12)
 

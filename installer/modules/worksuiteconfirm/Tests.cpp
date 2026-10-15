@@ -28,6 +28,29 @@ private slots:
         QVERIFY( !S::confirmationMatches( "NVME0N1", "nvme0n1" ) );
         QVERIFY( !S::confirmationMatches( "", "" ) );
     }
+    void diskHeader()
+    {
+        using S = WorksuiteConfirmViewStep;
+        QString model, size;
+        S::parseLsblk( "MODEL=\"\" SIZE=\"40G\"\n", model, size );
+        QCOMPARE( model, QString() );
+        QCOMPARE( size, QStringLiteral( "40G" ) );
+        QCOMPARE( S::diskTitle( "vda", model, size ), QStringLiteral( "vda · 40G" ) );
+        S::parseLsblk( "MODEL=\"Samsung SSD 980 \" SIZE=\"931.5G\"", model, size );
+        QCOMPARE( S::diskTitle( "nvme0n1", model, size ), QStringLiteral( "Samsung SSD 980 · 931.5G (nvme0n1)" ) );
+        QCOMPARE( S::diskTitle( "sda", "", "" ), QStringLiteral( "sda" ) );
+    }
+    void opTags()
+    {
+        using S = WorksuiteConfirmViewStep;
+        QCOMPARE( S::opKind( "Clear mounts for partitioning operations on /dev/vda" ), QString() );
+        QCOMPARE( S::opKind( "Create new GPT partition table on /dev/vda" ), QStringLiteral( "CREATE" ) );
+        QCOMPARE( S::opKind( "Format partition /dev/vda2 with luks2" ), QStringLiteral( "FORMAT" ) );
+        QCOMPARE( S::opKind( "Delete partition /dev/vda1" ), QStringLiteral( "DELETE" ) );
+        QCOMPARE( S::opKind( "Set flags on /dev/vda1 to boot" ), QStringLiteral( "OTHER" ) );
+        QVERIFY( S::encryptedFromDescriptions( { "Create new 40G partition on /dev/vda with file system luks2" } ) );
+        QVERIFY( !S::encryptedFromDescriptions( { "Create new 40G partition on /dev/vda with file system ext4" } ) );
+    }
     void dialogStyle()
     {
         const QString sheet = "/* c { } */ #mainApp { color: red; }\nQPushButton, QToolButton { padding: 8px; }\n"

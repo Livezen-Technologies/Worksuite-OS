@@ -347,7 +347,7 @@ const stub: WorkSuiteApi = {
   async launchOffice() {},
   async launchWorkSuite() {},
   async cloudSignIn(serverUrl, _mode) {
-    stubAccounts = [{ id: 'preview:u-1', name: 'Hasarinda', server_url: serverUrl, state: 'signed_in' }]
+    stubAccounts = [{ id: 'preview:u-1', name: 'Preview User', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
   },
   async cloudSignOut(id, choice) {
@@ -403,7 +403,7 @@ const stub: WorkSuiteApi = {
     if (root === 'drive' && !rel) return { ok: true, value: [f('Tenders 2026', 'folder', null, true, true), f('Finance', 'folder', null, true, true), f('Handbook.pdf', 'synced', 1_200_000)] }
     if (root === 'drive') return { ok: true, value: [
       f('SFCL proposal v3.docx', 'syncing', 6_400_000), f('TSHDA bid — pricing.xlsx', 'synced', 212_000),
-      f('TSHDA bid — pricing (conflict Hasarinda-laptop 2026-10-15).xlsx', 'conflict', 208_000),
+      f('TSHDA bid — pricing (conflict preview-laptop 2026-10-15).xlsx', 'conflict', 208_000),
       f('MBSL digital media tender.pdf', 'online-only', null, false), f('Care Me platform — clarifications.pdf', 'pending', 480_000),
       f('Site walk-through recording.mp4', 'error', 6_200_000_000) ] }
     if (!rel) return { ok: true, value: [f('Documents', 'local', null, true, true), f('Downloads', 'local', null, true, true), f('notes.txt', 'local', 2_000)] }

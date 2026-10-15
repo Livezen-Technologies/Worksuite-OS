@@ -15,12 +15,17 @@ Rectangle {
     property int subCount: 0
     property int subStep: 0
     property bool subNextOk: true
+    property bool installFailed: false
+    // settings.conf sequence: ... confirm-erase (6), install (7), recovery key (8), finished (9).
+    readonly property bool afterInstall: ViewManager.currentStepIndex >= 8
+    readonly property bool atEnd: ViewManager.currentStepIndex >= 9
     Timer {
         interval: 150; running: true; repeat: true; triggeredOnStart: true
         onTriggered: {
             nav.subCount = nav.state.get("subCount", 0)
             nav.subStep = nav.state.get("subStep", 0)
             nav.subNextOk = nav.state.get("subNextOk", true)
+            nav.installFailed = nav.state.get("installFailed", false)
         }
     }
     readonly property bool inSubs: subCount > 1
@@ -75,7 +80,10 @@ Rectangle {
         spacing: 12
         NavButton {
             label: qsTr("Quit installer"); quiet: true
-            visible: ViewManager.quitVisible; enabled: ViewManager.quitEnabled
+            // Nothing to quit once the system is installed (the recovery key must be read; Complete restarts). After a
+            // failure the failure page needs a way out.
+            visible: ViewManager.quitVisible
+            enabled: ViewManager.quitEnabled && (!nav.afterInstall || nav.installFailed)
             onActivated: ViewManager.quit()
         }
         Item { Layout.fillWidth: true }
@@ -87,7 +95,7 @@ Rectangle {
         NavButton {
             label: ViewManager.nextLabel.replace("&", "") === "Next" ? qsTr("Continue") : ViewManager.nextLabel; primary: true
             readonly property bool moreSubs: nav.inSubs && nav.subStep < nav.subCount - 1
-            visible: ViewManager.backAndNextVisible; enabled: moreSubs ? nav.subNextOk : ViewManager.nextEnabled
+            visible: ViewManager.backAndNextVisible && !nav.atEnd; enabled: moreSubs ? nav.subNextOk : ViewManager.nextEnabled
             onActivated: moreSubs ? nav.request("next") : ViewManager.next()
         }
     }
