@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App Center</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<nav aria-label="App Center" style="width: 220px; box-sizing: border-box; padding: 18px 12px; background: #071330; border-right: 1px solid rgba(127,178,255,0.12); display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px"><span style="width: 26px; height: 26px; border-radius: 7px; background: #1F6BFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px">A</span><span style="font-size: 15px; font-weight: 600">App Center</span></div>
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="9">
+<span style="display: flex; align-items: center; padding: 8px 10px; border-radius: 8px; font-size: 13px; background: {{n.bg}}; color: {{n.color}}; font-weight: {{n.weight}}">{{n.t}}<span style="margin-left: auto; font-size: 11px; color: #5E739C">{{n.c}}</span></span>
+</sc-for>
+</nav>
+<main style="flex: 1; min-width: 0; padding: 22px 28px; display: flex; flex-direction: column; gap: 18px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; background: rgba(4,10,26,0.5); border: 1px solid rgba(127,178,255,0.14); font-size: 13px; color: #8FA3C8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8FA3C8" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>Search 2,340 apps</div>
+<div style="height: 150px; border-radius: 16px; padding: 22px 26px; box-sizing: border-box; background: radial-gradient(circle at 85% 30%, rgba(24,212,240,0.4), transparent 50%), linear-gradient(120deg, #1F4FB0, #0D2353); display: flex; align-items: center; gap: 22px">
+<span style="width: 84px; height: 84px; border-radius: 20px; background: #7A4FE0; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700">K</span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 6px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #D6F7FF; letter-spacing: 0.08em">APPROVED BY [COMPANY] IT</span><span style="font-size: 24px; font-weight: 700">Krita</span><span style="font-size: 13px; color: #DCE7FF">Digital painting for designers · Flatpak · sandboxed</span></span>
+<button style="all: unset; padding: 11px 22px; border-radius: 10px; background: #FFFFFF; color: #0A1A3D; font-size: 14px; font-weight: 700; cursor: pointer">Install</button>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Popular at work</span><span style="font-size: 12px; color: #7FB2FF">See all</span></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{apps}}" as="a" hint-placeholder-count="6">
+<div style="display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<span style="width: 46px; height: 46px; border-radius: 12px; background: {{a.c}}; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex: none">{{a.i}}</span>
+<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+<span style="font-size: 14px; font-weight: 600">{{a.n}}</span>
+<span style="display: flex; gap: 6px; align-items: center; font-size: 11px; color: #8FA3C8"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; padding: 1px 5px; border-radius: 4px; background: rgba(127,178,255,0.14); color: #C9D6EE">{{a.fmt}}</span>{{a.cat}}</span>
+<sc-if value="{{a.prog}}" hint-placeholder-val="{{false}}"><span style="height: 4px; border-radius: 2px; background: rgba(127,178,255,0.15); overflow: hidden; margin-top: 3px"><span style="display: block; height: 100%; width: {{a.prog}}; background: linear-gradient(90deg, #1F6BFF, #18D4F0)"></span></span></sc-if>
+</span>
+<button style="all: unset; padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid {{a.bb}}; background: {{a.bg}}; cursor: pointer">{{a.btn}}</button>
+</div>
+</sc-for>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const N = [['Discover','',1],['Work essentials','24'],['Developer tools','118'],['Graphics','64'],['Communication','41'],['Office','37'],['Installed','18'],['Updates','3'],['Install from file…','']];
+    const A = [['Spotify','S','#2E9E6A','Flatpak','Music','Install',''],['VS Code','V','#1F6BFF','.deb','Developer','Open',''],['Slack','S','#7A4FE0','Flatpak','Chat','Installing','62%'],['Obsidian','O','#5E3FB0','AppImage','Notes','Install',''],['GIMP','G','#5E739C','Flatpak','Graphics','Update',''],['Zoom','Z','#0E8FA8','.deb','Meetings','Install','']];
+    return { nav: N.map(n => ({ t: n[0], c: n[1], bg: n[2] ? 'rgba(31,107,255,0.2)' : 'transparent', color: n[2] ? '#FFFFFF' : '#C9D6EE', weight: n[2] ? 600 : 400 })),
+      apps: A.map(a => ({ n: a[0], i: a[1], c: a[2], fmt: a[3], cat: a[4], btn: a[5] === 'Installing' ? 'Cancel' : a[5], prog: a[6],
+        bg: a[5] === 'Install' || a[5] === 'Update' ? '#1F6BFF' : 'transparent', bb: a[5] === 'Install' || a[5] === 'Update' ? '#1F6BFF' : 'rgba(127,178,255,0.25)' })) };
+  }
+}
+</script>
+</body>
+</html>

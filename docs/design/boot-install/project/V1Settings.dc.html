@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – VPN</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="VPN" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 28px 40px; display: flex; flex-direction: column; gap: 16px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="display: flex; align-items: center; justify-content: space-between"><h1 style="margin: 0; font-size: 28px; font-weight: 700">VPN</h1><button style="all: unset; padding: 10px 18px; border-radius: 10px; background: #1F6BFF; font-size: 14px; font-weight: 600; cursor: pointer">+ Add WireGuard tunnel</button></div>
+
+<div style="border-radius: 16px; background: rgba(14,32,72,0.7); border: 1px solid {{cardBorder}}; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 16px; padding: 18px 20px">
+<span style="width: 48px; height: 48px; border-radius: 12px; background: {{iconBg}}; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+<span style="display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600">[Company] VPN<span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(122,79,224,0.2); color: #B9A0FF">MANAGED</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(127,178,255,0.14); color: #C9D6EE">WIREGUARD</span></span>
+<span style="font-size: 13px; color: {{statusColor}}">{{status}}</span>
+</span>
+<button onClick="{{toggle}}" aria-pressed="{{on}}" aria-label="Connect [Company] VPN" style="all: unset; width: 50px; height: 30px; border-radius: 15px; background: {{track}}; position: relative; cursor: pointer"><span style="position: absolute; top: 3px; left: {{knob}}; width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF"></span></button>
+</div>
+<sc-if value="{{on}}" hint-placeholder-val="{{true}}">
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid rgba(127,178,255,0.12)">
+<sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 3px; padding: 14px 20px; border-left: {{s.border}}"><span style="font-size: 11px; color: #8FA3C8; text-transform: uppercase; letter-spacing: 0.06em">{{s.k}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px">{{s.v}}</span></div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px">
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<div style="padding: 12px 16px; font-size: 13px; font-weight: 600; border-bottom: 1px solid rgba(127,178,255,0.1)">Interface · wg0</div>
+<sc-for list="{{iface}}" as="r" hint-placeholder-count="4">
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px; font-size: 12px"><span style="color: #8FA3C8">{{r.k}}</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">{{r.v}}</span></div>
+</sc-for>
+<div style="padding: 8px 16px 12px"><button style="all: unset; font-size: 12px; color: #7FB2FF; cursor: pointer">Copy public key</button></div>
+</div>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<div style="padding: 12px 16px; font-size: 13px; font-weight: 600; border-bottom: 1px solid rgba(127,178,255,0.1)">Peer · vpn.[company].com</div>
+<sc-for list="{{peer}}" as="r" hint-placeholder-count="5">
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px; font-size: 12px"><span style="color: #8FA3C8">{{r.k}}</span><span style="font-family: 'IBM Plex Mono', monospace; text-align: right">{{r.v}}</span></div>
+</sc-for>
+</div>
+</div>
+
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{opts}}" as="o" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-top: {{o.border}}">
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 500">{{o.t}}</span><span style="font-size: 12px; color: #8FA3C8">{{o.d}}</span></span>
+<span style="font-size: 13px; color: #C9D6EE">{{o.v}}</span>
+</div>
+</sc-for>
+</div>
+<div style="font-size: 12px; color: #8FA3C8">Personal tunnels: <a href="#">Home server (wg1)</a> · off</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { on: true }; }
+  renderVals() {
+    const on = this.state.on;
+    const row = (L) => L.map(r => ({ k: r[0], v: r[1] }));
+    return { on, toggle: () => this.setState({ on: !on }),
+      status: on ? 'Connected · all company traffic goes through the tunnel' : 'Off',
+      statusColor: on ? '#5FD39A' : '#8FA3C8', track: on ? '#2E9E6A' : 'rgba(127,178,255,0.25)', knob: on ? '23px' : '3px',
+      iconBg: on ? '#2E9E6A' : 'rgba(127,178,255,0.18)', cardBorder: on ? 'rgba(95,211,154,0.45)' : 'rgba(127,178,255,0.14)',
+      stats: [['Latest handshake','12 s ago'],['Received','148.2 MB'],['Sent','21.7 MB'],['Connected for','2 h 14 m']].map((s, i) => ({ k: s[0], v: s[1], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })),
+      iface: row([['Address','10.20.0.42/32'],['Public key','kP3x…Q9Xs='],['Listen port','auto'],['DNS','10.20.0.1, corp.local']]),
+      peer: row([['Endpoint','203.0.113.10:51820'],['Public key','Hn7a…2fLk='],['Allowed IPs','10.0.0.0/8, 172.16.0.0/12'],['Persistent keepalive','25 s'],['Preshared key','set']]),
+      opts: [['Connect automatically','On untrusted Wi-Fi and when away from office','Set by IT'],['Traffic','Split tunnel: only company networks','Split'],['Block internet if VPN drops','Kill switch','Off']].map((o, i) => ({ t: o[0], d: o[1], v: o[2], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })) };
+  }
+}
+</script>
+</body>
+</html>

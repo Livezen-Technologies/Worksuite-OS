@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Managed</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Managed" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 32px 44px; display: flex; flex-direction: column; gap: 18px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #2A1E5E 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Managed by [Company]</h1>
+<div style="display: flex; gap: 18px; align-items: center; padding: 18px 20px; border-radius: 14px; background: rgba(122,79,224,0.12); border: 1px solid rgba(122,79,224,0.4)">
+<span style="width: 48px; height: 48px; border-radius: 12px; background: #7A4FE0; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h.01M15 10h.01M9 14h.01M15 14h.01"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 600">This device is enrolled in [Company] management</span><span style="font-size: 13px; color: #C9D6EE">Policies last synced 4 min ago · device ID ws-7F3A-91C2</span></span>
+<button style="all: unset; padding: 9px 16px; border-radius: 9px; border: 1px solid rgba(185,160,255,0.4); font-size: 13px; cursor: pointer">Sync now</button>
+</div>
+<span style="font-size: 12px; color: #8FA3C8; text-transform: uppercase; letter-spacing: 0.08em">Active policies</span>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{pol}}" as="p" hint-placeholder-count="7">
+<div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-top: {{p.border}}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B9A0FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{p.icon}}"></path></svg>
+<span style="flex: 1; font-size: 14px">{{p.t}}</span>
+<span style="font-size: 13px; color: #E8EEFA; font-family: 'IBM Plex Mono', monospace">{{p.v}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; gap: 12px; align-items: center; padding: 14px 18px; border-radius: 14px; background: rgba(14,32,72,0.5); border: 1px solid rgba(127,178,255,0.12); font-size: 13px; color: #C9D6EE">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01"></path></svg>
+<span style="flex: 1">IT can lock or erase this device remotely. They can't see your files, messages or browsing.</span>
+<a href="#">What can IT see?</a>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = [['Lock screen after idle','5 min max','M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z'],['USB storage','Read only','M9 3h6v6H9zM6 9h12v12H6z'],['Bluetooth','Audio and input only','M7 7l10 10-5 5V2l5 5L7 17'],['Offline sign-in','7 days','M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0'],['Disk encryption','Required','M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],['App installs','Approved list + IT review','M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'],['Updates','Broad ring · auto at 02:00','M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4']];
+    return { pol: P.map((p, i) => ({ t: p[0], v: p[1], icon: p[2], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })) };
+  }
+}
+</script>
+</body>
+</html>

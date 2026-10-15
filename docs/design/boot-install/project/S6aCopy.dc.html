@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Installer – Copy files</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+@keyframes ws-shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+.ws-shine{animation:ws-shimmer 1.8s ease-in-out infinite}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="Sidebar" step="6" sub="1" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 80% 60% at 70% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="flex: 1; padding: 40px 56px 0; display: flex; flex-direction: column; gap: 26px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: 0.08em">STEP 6 · COPY FILES</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em">Copying WorkSuite OS</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">Keep the computer plugged in. You can't go back from here.</p>
+</div>
+<div style="padding: 24px; border-radius: 16px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.14); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<span style="font-size: 15px; font-weight: 500">Unpacking system image</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 500; color: #FFFFFF">{{pct}}%</span>
+</div>
+<div role="progressbar" aria-label="Copy progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{pct}}" style="position: relative; height: 10px; border-radius: 999px; background: rgba(127,178,255,0.12); overflow: hidden">
+<div style="position: absolute; left: 0; top: 0; bottom: 0; width: {{w}}; border-radius: 999px; background: linear-gradient(90deg, #1F6BFF, #18D4F0); box-shadow: 0 0 16px rgba(24,212,240,0.5); overflow: hidden"><div class="ws-shine" style="position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent)"></div></div>
+</div>
+<div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8"><span>{{done}} GB of 4.2 GB · 182 MB/s</span><span>About {{left}} min left</span></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{stats}}" as="s" hint-placeholder-count="3">
+<div style="padding: 16px; border-radius: 12px; background: rgba(14,32,72,0.45); border: 1px solid rgba(127,178,255,0.1); display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #8FA3C8">{{s.k}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 18px">{{s.v}}</span></div>
+</sc-for>
+</div>
+<details style="border-radius: 12px; background: rgba(4,10,26,0.5); border: 1px solid rgba(127,178,255,0.12)">
+<summary style="padding: 12px 16px; font-size: 13px; color: #C9D6EE; cursor: pointer">Show details</summary>
+<pre style="margin: 0; padding: 0 16px 14px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8; white-space: pre-wrap">/usr/lib/worksuite/core/runtime.img
+/usr/share/fonts/ibm-plex/IBMPlexSans-Medium.otf
+/usr/bin/worksuite-session</pre>
+</details>
+</div>
+<footer style="height: 80px; box-sizing: border-box; padding: 0 56px; border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: flex-end; font-size: 13px; color: #8FA3C8">Do not turn off your computer</footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"percent":{"editor":"range","default":46,"min":0,"max":100,"step":1},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props.percent ?? 46;
+    return { pct: p, w: p + '%', done: (4.2 * p / 100).toFixed(1), left: Math.max(1, Math.round((100 - p) / 20)),
+      stats: [{ k: 'Files copied', v: Math.round(212000 * p / 100).toLocaleString('en-US') }, { k: 'Packages', v: Math.round(1840 * p / 100) + ' / 1,840' }, { k: 'Elapsed', v: '01:52' }] };
+  }
+}
+</script>
+</body>
+</html>

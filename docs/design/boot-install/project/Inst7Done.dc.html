@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Installer – Complete</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; background: radial-gradient(ellipse 70% 55% at 50% 35%, #12306B 0%, #0A1A3D 55%, #060E22 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px">
+<div style="width: 96px; height: 96px; border-radius: 50%; background: rgba(95,211,154,0.14); box-shadow: 0 0 0 10px rgba(95,211,154,0.06); display: flex; align-items: center; justify-content: center">
+<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#5FD39A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+</div>
+<h1 style="margin: 12px 0 0; font-size: 38px; font-weight: 700; letter-spacing: -0.02em">WorkSuite OS is installed</h1>
+<p style="margin: 0; font-size: 16px; color: #8FA3C8; text-align: center; max-width: 520px; line-height: 1.5">Remove the USB drive, then restart. Setup will finish the first time you sign in.</p>
+<div style="margin-top: 8px; padding: 14px 18px; border-radius: 12px; background: rgba(14,32,72,0.72); border: 1px solid rgba(127,178,255,0.16); display: flex; align-items: center; gap: 14px">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="15" r="4"></circle><path d="M11 12l9-9"></path><path d="M17 6l3 3"></path></svg>
+<span style="font-size: 14px; color: #C9D6EE">Disk recovery key</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: #FFFFFF">[RECOVERY-KEY]</span>
+<button style="all: unset; font-size: 13px; color: #7FB2FF; cursor: pointer">Save to USB</button>
+</div>
+<div style="margin-top: 16px; display: flex; gap: 12px">
+<button style="all: unset; padding: 13px 24px; border-radius: 10px; font-size: 15px; font-weight: 500; color: #E8EEFA; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Keep testing</button>
+<button style="all: unset; padding: 13px 32px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Restart now</button>
+</div>
+<div style="font-size: 13px; color: #5E739C">Restarting automatically in 30 seconds</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
