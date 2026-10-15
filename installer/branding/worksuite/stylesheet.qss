@@ -91,3 +91,6 @@ QScrollBar::handle:vertical { background: rgba(127, 178, 255, 0.25); border-radi
 QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page { background: none; height: 0; }
 QScrollArea { border: none; background: transparent; }
 QToolTip { background: #0E2048; color: #E8EEFA; border: 1px solid rgba(127, 178, 255, 0.25); padding: 6px 8px; }
+
+/* The partition page's encryption row is a fixed-height strip: smaller passphrase fields so they aren't clipped. */
+EncryptWidget QLineEdit { min-height: 30px; padding: 0 10px; border-radius: 8px; }

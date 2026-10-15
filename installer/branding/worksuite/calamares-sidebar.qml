@@ -5,6 +5,7 @@ import io.calamares.ui 1.0
 import io.calamares.core 1.0
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import "WsState.js" as State
 
 Rectangle {
     id: sideBar
@@ -20,8 +21,8 @@ Rectangle {
         return i >= 0 && i < groupOf.length ? groupOf[i] : 0
     }
     readonly property bool finished: ViewManager.currentStepIndex >= lastIndex
-    // Express install fills in the time zone; re-read on every step change (Global storage has no change signal).
-    readonly property bool express: ViewManager.currentStepIndex >= 0 && Global.value("worksuiteExpress") === true
+    // Express install fills in the time zone; re-read on every step change.
+    readonly property bool express: ViewManager.currentStepIndex >= 0 && State.get("express", false)
 
     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1A2A55" }
 

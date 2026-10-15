@@ -4,18 +4,16 @@ import io.calamares.core 1.0
 import io.calamares.ui 1.0
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import "WsState.js" as State
 
 WsPage {
     id: page
     step: 1
     title: qsTr("Welcome to WorkSuite OS")
     subtitle: qsTr("Choose your language and how you'd like to install.")
-    property bool expressChosen: true
-    function onActivate() {
-        Global.insert("worksuiteExpress", expressChosen)
-        arrive()
-    }
-    function onLeave() { Global.insert("worksuiteExpress", expressChosen) }
+    property bool expressChosen: State.get("express", true)
+    onExpressChosenChanged: State.set("express", expressChosen)
+    function onActivate() { State.set("express", expressChosen); arrive() }
 
     RowLayout {
         anchors.fill: parent
@@ -55,16 +53,16 @@ WsPage {
             WsChoice {
                 Layout.fillWidth: true
                 title: qsTr("Express install"); badge: qsTr("RECOMMENDED")
-                text: qsTr("Erases the disk you pick and encrypts it. Keyboard and time zone follow your language — you only create your account.")
+                text: qsTr("Erases the disk you pick and encrypts it, with a US keyboard and Sri Lanka time (change both later in Settings). You only create your account.")
                 selected: page.expressChosen
-                onPicked: { page.expressChosen = true; Global.insert("worksuiteExpress", true) }
+                onPicked: page.expressChosen = true
             }
             WsChoice {
                 Layout.fillWidth: true
                 title: qsTr("Custom install")
                 text: qsTr("Choose the keyboard layout and time zone yourself, step by step.")
                 selected: !page.expressChosen
-                onPicked: { page.expressChosen = false; Global.insert("worksuiteExpress", false) }
+                onPicked: page.expressChosen = false
             }
             Item { Layout.fillHeight: true }
             Rectangle {
