@@ -21,6 +21,21 @@ export interface Manifest {
   deadline?: string;
   /** Present only when this release is an allowed downgrade target (WSOS-AUP-003). */
   rollback_directive?: { from_version: string; reason: string } | null;
+  /** WSOS-AUP-012: edition entitlement a feature release needs (e.g. "business"); absent = everyone. */
+  entitlement?: string;
+  signature: string;
+}
+
+/** Signed device licence from desktop/v1/os/licence (CoreLicenseService state for this device's organization). */
+export interface Licence {
+  device_id: string;
+  edition: string;
+  state: 'active' | 'grace' | 'expired';
+  entitlements: string[];
+  grace_until?: string | null;
+  issued_at: string;
+  /** Short-lived so an old "active" licence can't be replayed after it lapses. */
+  valid_until: string;
   signature: string;
 }
 
@@ -42,6 +57,15 @@ export function verifyManifest(m: unknown, keys: (id: string) => KeyObject | und
   if (!key) return false;
   const { signature: _s, ...rest } = m as Record<string, unknown>;
   try { return verify(null, Buffer.from(canonical(rest)), key, Buffer.from(value, 'base64')); } catch { return false; }
+}
+
+/** WSOS-AUP-012: a licence counts only if signed by a release key, for this device, and still within valid_until. */
+export function verifyLicence(l: unknown, keys: (id: string) => KeyObject | undefined, deviceId: string, now: Date): l is Licence {
+  if (!verifyManifest(l, keys)) return false;
+  const x = l as unknown as Licence;
+  if (x.device_id !== deviceId || !['active', 'grace', 'expired'].includes(x.state) || !Array.isArray(x.entitlements)) return false;
+  const until = Date.parse(x.valid_until);
+  return !Number.isNaN(until) && now.getTime() <= until;
 }
 
 /** Numeric-aware version compare for "1.0.2", "1.0.0~dev1", "1.1.0-2". Tilde sorts before anything (Debian style). */
@@ -88,10 +112,12 @@ export interface DecideInput {
   idle: boolean;                        // no user activity / at the lock screen
   metered: boolean;
   deferrals: number;                    // deferrals already used for this release
+  /** Verified licence; null on personal devices or when none could be fetched (WSOS-AUP-012). */
+  licence?: Licence | null;
 }
 
 export type Decision =
-  | { action: 'none'; reason: 'up_to_date' | 'paused' | 'pulled' | 'not_in_rollout' | 'manual_mode' }
+  | { action: 'none'; reason: 'up_to_date' | 'paused' | 'pulled' | 'not_in_rollout' | 'manual_mode' | 'not_entitled' }
   | { action: 'refuse'; reason: 'downgrade' }
   | { action: 'wait'; reason: 'metered' | 'outside_window' | 'waiting_for_user' | 'not_idle' }
   | { action: 'install'; reason: 'automatic' | 'security' | 'deadline' | 'user' }
@@ -112,6 +138,13 @@ export function decide(i: DecideInput): Decision {
   // WSOS-AUP-006: paused or pulled releases stop installing within one check cycle.
   if (m.state === 'pulled') return { action: 'none', reason: 'pulled' };
   if (m.state === 'paused') return { action: 'none', reason: 'paused' };
+  // WSOS-AUP-012: feature releases may need an edition entitlement; security releases keep installing during the
+  // licence grace period. Nothing here ever removes anything: an unentitled device simply stays where it is.
+  if (m.entitlement) {
+    const l = i.licence;
+    const entitled = !!l && l.entitlements.includes(m.entitlement) && (l.state === 'active' || (l.state === 'grace' && !!m.security));
+    if (!entitled) return { action: 'none', reason: 'not_entitled' };
+  }
   if (!urgent(m) && !m.security && rolloutBucket(i.deviceKey, m.release_id) >= (m.rollout_percent ?? 100)) return { action: 'none', reason: 'not_in_rollout' };
 
   const mode: Mode = i.mode === 'manual' && i.managed ? 'notify' : i.mode;   // WSOS-AUP-004: Manual is personal-only

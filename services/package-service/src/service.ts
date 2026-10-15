@@ -1,13 +1,18 @@
 // Package service core: one serialized job queue in front of APT and Flatpak (WSOS-APT-004), policy and
 // critical-set checks, previews before any change (WSOS-APP-002), update preconditions (WSOS-UPD-001), repair.
 import { EventEmitter } from 'node:events';
+import type { KeyObject } from 'node:crypto';
+import { join } from 'node:path';
+import { rmSync } from 'node:fs';
+import { extractBundle, inspectBundle, type BundleManifest } from './bundle.ts';
+import { bundlePath, stageFile, stagedCopy } from './staging.ts';
 import { checkSources, isCritical, parseCatalogId, parseDiskChange, parseSimulation, parseUpgradable, ServiceError, type Plan } from './apt.ts';
 
 export type Source = 'apt' | 'flatpak';
 export interface RunResult { code: number; stdout: string; stderr: string }
 export interface Runner { run(cmd: string, args: string[]): Promise<RunResult> }
 
-export interface DevicePolicy { app_allowlist?: string[]; approved_remotes?: string[] }
+export interface DevicePolicy { app_allowlist?: string[]; approved_remotes?: string[]; allow_local_debs?: boolean; appimages?: 'allow' | 'block' }
 
 export interface Env {
   runner: Runner;
@@ -19,10 +24,26 @@ export interface Env {
   power(): { ac: boolean; battery: number | null };
   freeBytes(): number;
   audit(event: string, fields: Record<string, unknown>): void;
+  /** Root-owned spool for staged local .deb copies and extracted bundles (default /var/lib/worksuite-package-service/spool). */
+  spool?: string;
+  /** Where .wsupdate files may be read from (default: removable media and /home). */
+  bundleRoots?: string[];
+  /** Release keys, device arch and installed OS version for offline bundles (WSOS-AUP-010). */
+  release?: { keys(id: string): KeyObject | undefined; arch: string; installed(): string };
+  /** Backoff between download attempts (tests make it instant). */
+  sleep?(ms: number): Promise<void>;
 }
 
 export interface Preview { source: Source; name: string; plan: Plan; disk_bytes: number | null; permissions: string[]; broad: string[] }
-export type JobKind = 'install' | 'remove' | 'update' | 'repair';
+export type JobKind = 'install' | 'remove' | 'update' | 'repair' | 'permissions' | 'prune';
+
+/** WSOS-APT-005: what the confirmation dialog shows for a local .deb. `token` must be passed back to install. */
+export interface LocalDebPreview {
+  package: string; version: string; architecture: string;
+  /** From the package's own Maintainer field: shown as the publisher, never as a verified identity. */
+  publisher: string; publisher_verified: false; description: string;
+  plan: Plan; disk_bytes: number | null; token: string;
+}
 export interface Job { id: number; kind: JobKind; caller: number; state: 'queued' | 'running' | 'success' | 'failed' | 'cancelled'; phase: string; error?: string }
 
 const APT_ENV_ARGS = ['-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold'];
@@ -130,7 +151,7 @@ export class PackageService extends EventEmitter {
       const need = Math.max(0, parseDiskChange(dry.stdout + dry.stderr) ?? 0);
       if (this.env.freeBytes() < need + 500e6) throw new ServiceError('PreconditionFailed', 'not enough disk space');
       job.phase = 'downloading'; this.progress(job, 20);
-      await this.mustRun('apt-get', ['-y', '-q', '--download-only', 'full-upgrade']);
+      await this.download(['full-upgrade']);
       job.phase = 'applying'; this.progress(job, 50);
       await this.mustRun('apt-get', ['-y', '-q', ...APT_ENV_ARGS, 'full-upgrade']);
       job.phase = 'flatpak'; this.progress(job, 85);
@@ -142,6 +163,145 @@ export class PackageService extends EventEmitter {
       this.rebootRequired = reboot.code === 0;
       this.env.audit('updated', { caller, release_id: releaseId || 'latest', upgraded: plan.upgrade.length, installed: plan.install.length, reboot_required: this.rebootRequired });
     });
+  }
+
+  // ---- local .deb files (WSOS-APT-005) ----
+
+  private spool(...p: string[]) { return join(this.env.spool ?? '/var/lib/worksuite-package-service/spool', ...p); }
+
+  /** Stage the caller's file, read its control fields, and let apt validate dependencies; nothing is installed. */
+  async previewLocalDeb(caller: number, path: string): Promise<LocalDebPreview> {
+    const staged = stageFile(path, caller, this.spool('debs'), '.deb');
+    return this.inspectLocalDeb(staged.path, staged.sha256);
+  }
+
+  private async inspectLocalDeb(path: string, token: string): Promise<LocalDebPreview> {
+    const f = await this.env.runner.run('dpkg-deb', ['--field', path, 'Package', 'Version', 'Architecture', 'Maintainer', 'Description']);
+    if (f.code !== 0) throw new ServiceError('InvalidArgs', 'not a valid Debian package');
+    const field = (k: string) => new RegExp(`^${k}: (.*)$`, 'm').exec(f.stdout)?.[1]?.trim() ?? '';
+    const pkg = field('Package');
+    if (!/^[a-z0-9][a-z0-9+.-]{0,99}$/.test(pkg)) throw new ServiceError('InvalidArgs', 'package name is not valid');
+    if (isCritical(pkg)) throw new ServiceError('Protected', `${pkg} is part of the system and can't be replaced from a file`);
+    const policy = this.env.policy();
+    if (policy && policy.allow_local_debs === false) throw new ServiceError('NotInCatalog', 'your organization does not allow installing package files');
+    const allow = policy?.app_allowlist;
+    if (allow && allow.length && !allow.includes(`apt:${pkg}`)) throw new ServiceError('NotInCatalog', 'not approved by your organization');
+    const arch = field('Architecture');
+    const native = (await this.env.runner.run('dpkg', ['--print-architecture'])).stdout.trim();
+    if (arch !== 'all' && native && arch !== native) throw new ServiceError('ArchMismatch', `built for ${arch}; this device is ${native}`);
+    this.checkSources();
+    // apt resolves dependencies against the configured (signed) sources; a .deb whose dependencies can't be met fails here.
+    const sim = await this.env.runner.run('apt-get', ['-s', '-q', 'install', '--', path]);
+    if (sim.code !== 0) throw new ServiceError('Failed', firstLine(sim.stderr) || 'apt could not resolve this package');
+    const plan = parseSimulation(sim.stdout);
+    this.refuseCritical(plan);
+    const dry = await this.env.runner.run('apt-get', ['--assume-no', '-q', 'install', '--', path]);
+    return { package: pkg, version: field('Version'), architecture: arch, publisher: field('Maintainer') || 'Unknown', publisher_verified: false,
+      description: field('Description'), plan, disk_bytes: parseDiskChange(dry.stdout + dry.stderr), token };
+  }
+
+  /** Install the exact staged copy the user confirmed (`token` = its SHA-256 from the preview). */
+  installLocalDeb(caller: number, token: string): number {
+    if (!/^[0-9a-f]{64}$/.test(token)) throw new ServiceError('InvalidArgs', 'confirm the package first');
+    return this.enqueue('install', caller, async (job) => {
+      const path = stagedCopy(this.spool('debs'), token, '.deb');
+      if (!path) throw new ServiceError('PreconditionFailed', 'the previewed package is gone; preview it again');
+      try {
+        const p = await this.inspectLocalDeb(path, token);   // same checks again, inside the lock
+        job.phase = 'installing'; this.progress(job, 30);
+        await this.mustRun('apt-get', ['-y', '-q', ...APT_ENV_ARGS, 'install', '--', path]);
+        this.env.audit('installed_local_deb', { caller, name: p.package, version: p.version, sha256: token, publisher: p.publisher });
+      } finally { rmSync(path, { force: true }); }
+    });
+  }
+
+  // ---- Flatpak permissions and runtimes (WSOS-FLP-003, WSOS-FLP-004) ----
+
+  /** Read-only: what the app declares and which system-wide overrides an administrator added. */
+  async appPermissions(catalogId: string): Promise<{ app: string; permissions: string[]; overrides: string[]; broad: string[] }> {
+    const app = parseCatalogId('flatpak', catalogId);
+    const info = await this.env.runner.run('flatpak', ['info', '--system', '--show-permissions', app]);
+    if (info.code !== 0) throw new ServiceError('NotInCatalog', 'not installed');
+    const ov = await this.env.runner.run('flatpak', ['override', '--system', '--show', app]);
+    const permissions = contextLines(info.stdout);
+    return { app, permissions, overrides: ov.code === 0 ? contextLines(ov.stdout) : [], broad: permissions.filter((p) => BROAD.some((b) => b.test(p))) };
+  }
+
+  /** Drop system-wide overrides so the app is back to what it declared. Per-user overrides, the portal permission
+   *  store and ~/.var/app data belong to the user and are reset by the shell in the user's session. */
+  resetAppPermissions(caller: number, catalogId: string): number {
+    const app = parseCatalogId('flatpak', catalogId);
+    return this.enqueue('permissions', caller, async (job) => {
+      job.phase = 'resetting'; this.progress(job, 30);
+      await this.mustRun('flatpak', ['override', '--system', '--reset', app]);
+      this.env.audit('flatpak_permissions_reset', { caller, app });
+    });
+  }
+
+  /** WSOS-FLP-004: flatpak's own --unused analysis removes only runtimes and extensions no installed app (system or
+   *  per-user) needs, and keeps pinned ones. Runs in the queue so it never races an install. */
+  pruneRuntimes(caller: number): number {
+    return this.enqueue('prune', caller, async (job) => {
+      job.phase = 'pruning'; this.progress(job, 30);
+      const r = await this.mustRun('flatpak', ['uninstall', '--system', '--unused', '--noninteractive', '-y']);
+      const removed = r.stdout.split('\n').map((l) => /^\s*\d+\.\s+(\S+)\s+(\S+)/.exec(l)).filter((m) => m !== null).map((m) => `${m[1]}//${m[2]}`);
+      this.env.audit('flatpak_runtimes_pruned', { caller, removed });
+    });
+  }
+
+  // ---- offline .wsupdate bundles (WSOS-AUP-010) ----
+
+  private bundleOptions() {
+    const r = this.env.release;
+    if (!r) throw new ServiceError('Failed', 'release keys are not available');
+    return { keys: r.keys, arch: r.arch, installed: r.installed() };
+  }
+
+  /** Read-only check shown in Settings > Updates before installing. */
+  inspectBundle(path: string): { release_id: string; version: string; packages: number; bytes: number; critical: boolean; verified: true } {
+    const { manifest } = inspectBundle(bundlePath(path, this.env.bundleRoots), this.bundleOptions());
+    return { release_id: manifest.release_id, version: manifest.version, packages: manifest.bundle.files.length,
+      bytes: manifest.bundle.files.reduce((n, f) => n + f.size, 0), critical: !!manifest.critical, verified: true };
+  }
+
+  installBundle(caller: number, path: string): number {
+    const real = bundlePath(path, this.env.bundleRoots);
+    return this.enqueue('update', caller, async (job) => {
+      const p = this.env.power();
+      if (!p.ac && (p.battery ?? 0) < 40) throw new ServiceError('PreconditionFailed', 'connect power or charge to 40%');
+      job.phase = 'verifying'; this.progress(job, 5);
+      const dir = this.spool('bundle');
+      let manifest: BundleManifest, debs: string[];
+      try { ({ manifest, debs } = extractBundle(real, dir, this.bundleOptions())); }
+      catch (e) { this.env.audit('bundle_rejected', { caller, error: (e as Error).message }); throw e; }
+      try {
+        // Offline: everything must come from the bundle (--no-download); apt still checks dependencies and conflicts.
+        const sim = await this.env.runner.run('apt-get', ['-s', '-q', '--no-download', 'install', '--', ...debs]);
+        if (sim.code !== 0) throw new ServiceError('Failed', firstLine(sim.stderr) || 'the bundle does not install cleanly on this device');
+        this.refuseCritical(parseSimulation(sim.stdout));
+        job.phase = 'applying'; this.progress(job, 40);
+        await this.mustRun('apt-get', ['-y', '-q', '--no-download', ...APT_ENV_ARGS, 'install', '--', ...debs]);
+        job.phase = 'checking'; this.progress(job, 90);
+        if (await this.detectInterrupted()) throw new ServiceError('Failed', 'packages left unconfigured; repair needed');
+        this.rebootRequired = (await this.env.runner.run('test', ['-e', '/run/reboot-required'])).code === 0;
+        this.env.audit('bundle_installed', { caller, release_id: manifest.release_id, version: manifest.version, packages: debs.length, reboot_required: this.rebootRequired });
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+
+  /** WSOS-AUP-008: download first, retrying with backoff. apt keeps partial files in /var/cache/apt/archives/partial
+   *  and resumes them with HTTP Range requests, so each attempt (and the next check cycle) continues where the last
+   *  stopped. The cache is never cleaned here. */
+  private async download(verb: string[]) {
+    const attempts = 3;
+    for (let i = 1; ; i++) {
+      const r = await this.env.runner.run('apt-get', ['-y', '-q', '-o', 'Acquire::Retries=3', '--download-only', ...verb]);
+      if (r.code === 0) return;
+      if (/NO_PUBKEY|not signed|EXPKEYSIG|BADSIG|Hash Sum mismatch/.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
+      this.env.audit('download_interrupted', { attempt: i, error: firstLine(r.stderr) });
+      if (i >= attempts) throw new ServiceError('Failed', `download interrupted; it resumes from where it stopped next time (${firstLine(r.stderr) || `exit ${r.code}`})`);
+      await (this.env.sleep ?? ((ms) => new Promise((res) => setTimeout(res, ms))))(i * 10_000);
+    }
   }
 
   /** WSOS-APT-006: fixed commands only. */
@@ -228,6 +388,11 @@ export class PackageService extends EventEmitter {
     const hit = plan.remove.find((c) => isCritical(c.name));
     if (hit) throw new ServiceError('Protected', `would remove ${hit.name}`);
   }
+}
+
+/** `flatpak info --show-permissions` / `override --show` print a keyfile; keep the [Context] style key=value lines. */
+function contextLines(text: string): string[] {
+  return text.split('\n').map((l) => l.trim()).filter((l) => /^[a-z-]+=/.test(l));
 }
 
 function firstLine(s: string) { return s.split('\n').find((l) => l.trim())?.trim() ?? ''; }

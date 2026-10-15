@@ -9,6 +9,12 @@
 //   worksuite-server command --db server.db --device ID --name RefreshPolicy [--args '{}'] [--ttl-hours 24]
 //   worksuite-server release-publish --db server.db manifest.json
 //   worksuite-server catalog-put --db server.db item.json | app-put --db server.db app.json
+//   worksuite-server release-pause|release-resume|release-pull --db server.db --ring stable [--arch amd64]
+//   worksuite-server release-promote --db server.db --from pilot --to stable [--arch amd64] [--rollout 10]
+//   worksuite-server release-emergency --db server.db manifest.json [--arch amd64]   (critical, all rings, 100 %)
+//   worksuite-server bundle-build --db server.db manifest.json OUT.wsupdate A.deb [B.deb ...]   (offline update)
+//   worksuite-server grant --db server.db --email a@example.com --permission desktop.releases.manage [--revoke]
+//   worksuite-server licence-set --db server.db --org 1 licence.json   ({edition, state, entitlements, grace_until})
 //   worksuite-server keys-export --db server.db DIR | keys-rotate --db server.db | devices --db server.db | device-revoke --db server.db --device ID
 import { createReadStream, readFileSync, realpathSync, statSync } from 'node:fs';
 import { extname, join, sep } from 'node:path';
@@ -83,6 +89,8 @@ async function main(argv: string[]) {
       org: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, device: { type: 'string' },
       args: { type: 'string' }, hours: { type: 'string' }, uses: { type: 'string' }, 'ttl-hours': { type: 'string' },
       'require-device': { type: 'boolean' }, admin: { type: 'boolean' },
+      ring: { type: 'string' }, arch: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, rollout: { type: 'string' },
+      permission: { type: 'string' }, revoke: { type: 'boolean' },
     },
   });
   if (!v.db) throw new Error('--db PATH required');
@@ -111,6 +119,17 @@ async function main(argv: string[]) {
     case 'policy-set': return out({ version: admin.setPolicy(db, org(), readJson(positionals[0])) });
     case 'command': return out({ command_id: admin.issueCommand(db, v.device ?? '', v.name ?? '', v.args ? JSON.parse(v.args) : {}, v['ttl-hours'] ? Number(v['ttl-hours']) : undefined) });
     case 'release-publish': return out(admin.publishRelease(db, readJson(positionals[0])));
+    case 'release-pause': case 'release-resume': case 'release-pull':
+      return out(admin.setReleaseState(db, v.ring ?? '', v.arch, ({ 'release-pause': 'paused', 'release-resume': 'active', 'release-pull': 'pulled' } as const)[cmd]));
+    case 'release-promote': return out(admin.promoteRelease(db, v.from ?? '', v.to ?? '', v.arch, { rollout_percent: v.rollout ? Number(v.rollout) : undefined }));
+    case 'release-emergency': return out(admin.emergencyRelease(db, readJson(positionals[0]), v.arch));
+    case 'bundle-build': {
+      const [manifest, dest, ...debs] = positionals;
+      if (!dest) throw new Error('usage: bundle-build manifest.json OUT.wsupdate A.deb [B.deb ...]');
+      return out(admin.buildBundle(db, readJson(manifest), debs, dest));
+    }
+    case 'grant': return out(admin.grantPermission(db, v.email ?? '', v.permission ?? '', !v.revoke));
+    case 'licence-set': return out(admin.setLicence(db, org(), readJson(positionals[0])));
     case 'catalog-put': admin.putCatalogItem(db, readJson(positionals[0])); return;
     case 'app-put': admin.putApp(db, readJson(positionals[0])); return;
     case 'keys-export': return out(admin.exportKeys(db, positionals[0] ?? '.'));

@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 export const C = {
-  ink: '#E8EEFA', soft: '#C9D6EE', muted: '#8FA3C8', dim: '#5E739C', blue: '#1F6BFF', link: '#7FB2FF', cyan: '#18D4F0',
+  ink: '#E8EEFA', soft: '#C9D6EE', muted: '#8FA3C8', dim: '#8FA3C8', blue: '#1F6BFF', link: '#7FB2FF', cyan: '#18D4F0',
   green: '#5FD39A', amber: '#FFB98A', red: '#FF8A7A', dialog: '#0F2350',
 }
 export const card = 'rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(14,32,72,0.6)]'

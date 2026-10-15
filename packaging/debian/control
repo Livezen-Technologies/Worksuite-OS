@@ -76,7 +76,7 @@ Description: WorkSuite user services (catalog, files, credentials broker, sync)
 
 Package: worksuite-package-service
 Architecture: amd64 arm64
-Depends: worksuite-shell (= ${binary:Version}), worksuite-archive-keyring, apt, flatpak, polkitd, dbus, ${misc:Depends}
+Depends: worksuite-shell (= ${binary:Version}), worksuite-archive-keyring, apt, flatpak, polkitd, dbus, gpg, squashfs-tools, ${misc:Depends}
 Description: WorkSuite system package service (D-Bus + polkit)
  Root service on the system bus that installs, removes and updates APT and
  Flatpak software for the shell and the device agent, behind polkit, one job

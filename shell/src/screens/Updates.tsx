@@ -3,7 +3,7 @@
 // carries no release notes, download size or update history, so those places say so instead.
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { os, type DeviceInfo } from '../lib/os'
+import { formatBytes, os, packageErrorText, type BundleInfo, type DeviceInfo } from '../lib/os'
 import { useOsUpdate, updates } from '../lib/useOsUpdate'
 import { REMIND_KEY, SEEN_KEY, UPDATE_PHASES, fmtWhen, heroView, needsAttention, canDefer, restartOptions, whatsNew, type Action, type RestartChoice, type Tone } from '../lib/updates'
 import { C, Dialog, OptionCard, Progress, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, heroCard, linkBtn, rowLine } from '../components/Dk'
@@ -109,6 +109,7 @@ export function UpdatesPanel() {
             <span className="text-[#8FA3C8]">WorkSuite OS {st.installed} · {RING[policy?.update_ring ?? 'stable']} channel</span>
             <span className="text-[#8FA3C8]">Last checked {st.last_check ? fmtWhen(st.last_check) : 'not yet'}</span>
           </section>
+          <OfflineBundle />
         </div>
       </div>
       {schedule && <RestartDialog onClose={() => setSchedule(false)} />}
@@ -117,6 +118,43 @@ export function UpdatesPanel() {
 }
 
 /** U4: "When should we restart?" — only choices that really happen. */
+/** WSOS-AUP-010: signed .wsupdate bundle from a USB drive, for sites without internet access. */
+function OfflineBundle() {
+  const [picked, setPicked] = useState<{ handle: string; name: string } | null>(null)
+  const [info, setInfo] = useState<BundleInfo | null>(null)
+  const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null)
+  const [job, setJob] = useState<string | null>(null)
+  useEffect(() => os.onPkgJob((e) => {
+    if (e.kind !== 'finished' || e.job !== job) return
+    setJob(null)
+    setMsg(e.result === 'success' ? { text: 'The offline update is installed. Restart to finish if asked.' } : { text: packageErrorText(e.error ?? 'failed'), error: true })
+  }), [job])
+  const choose = async () => {
+    setMsg(null); setInfo(null)
+    const f = await os.pickFile('wsupdate')
+    if (!f.ok) { if (f.error !== 'cancelled') setMsg({ text: packageErrorText(f.error), error: true }); return }
+    setPicked(f.value)
+    const r = await os.bundleInspect(f.value.handle)
+    if (r.ok) setInfo(r.value); else setMsg({ text: packageErrorText(r.error), error: true })
+  }
+  const install = async () => {
+    if (!picked) return
+    const r = await os.bundleInstall(picked.handle)
+    if (r.ok) { setJob(r.value); setMsg({ text: 'Installing the offline update…' }) } else setMsg({ text: packageErrorText(r.error), error: true })
+  }
+  return (
+    <section aria-labelledby="upd-usb" className={`${card} flex flex-col gap-2 px-[18px] py-4 text-[13px]`}>
+      <h2 id="upd-usb" className="m-0 text-sm font-semibold">Install from a USB drive</h2>
+      <span className="text-[#8FA3C8]">{info ? `${picked?.name}: WorkSuite OS ${info.version} · ${info.packages} packages · ${formatBytes(info.bytes)} · signature and checksums verified` : 'For computers without internet access: choose a signed .wsupdate file from WorkSuite.'}</span>
+      {msg && <span role={msg.error ? 'alert' : 'status'} className={msg.error ? 'text-[#FF8A7A]' : 'text-[#C9D6EE]'}>{msg.text}</span>}
+      <div className="flex gap-2">
+        <button type="button" disabled={!!job} onClick={() => void choose()} className={btnGhost}>Choose file…</button>
+        {info && <button type="button" disabled={!!job} onClick={() => void install()} className={btnPrimary}>Install</button>}
+      </div>
+    </section>
+  )
+}
+
 export function RestartDialog({ onClose }: { onClose: () => void }) {
   const opts = restartOptions()
   const [pick, setPick] = useState<RestartChoice>('now')
@@ -159,7 +197,7 @@ export function UpdatingScreen({ from, to, percent, phase }: { from: string; to:
       </div>
       <div className="flex w-[420px] max-w-full flex-col gap-2.5">
         <Progress value={percent} label="Update progress" height={4} />
-        <div className="flex justify-between font-mono text-xs text-[#5E739C]"><span>{phase ? UPDATE_PHASES[phase] ?? phase : 'Starting'}</span><span>{from}{to ? ` → ${to}` : ''}</span></div>
+        <div className="flex justify-between font-mono text-xs text-[#8FA3C8]"><span>{phase ? UPDATE_PHASES[phase] ?? phase : 'Starting'}</span><span>{from}{to ? ` → ${to}` : ''}</span></div>
       </div>
     </div>
   )

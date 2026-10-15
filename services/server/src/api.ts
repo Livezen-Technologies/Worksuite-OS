@@ -6,6 +6,7 @@ import { DEFAULT_WEB_APPS, nextSeq, secret, sha256, tx } from './db.ts';
 import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { userFromBearer, type User } from './oauth.ts';
 import { activeKey, signFlat } from './signing.ts';
+import { licenceFor } from './admin.ts';
 
 export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string; webUrl: string }
 
@@ -323,6 +324,12 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     const rows = (db.prepare('SELECT id, item FROM catalog WHERE id > ? ORDER BY id').all(ctx.url.searchParams.get('cursor') ?? '') as { id: string; item: string }[])
       .filter((r) => (json<{ arches: string[] }>(r.item).arches ?? []).includes(arch)).slice(0, limit + 1);
     send(ctx, 200, page(rows, limit));
+  });
+
+  // WSOS-AUP-012: the organization's licence state for the update coordinator (signed, device-bound, 7 days).
+  r.on('GET', '/desktop/v1/os/licence', (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    send(ctx, 200, licenceFor(db, d.org_id, d.id), { 'cache-control': 'no-store' });
   });
 
   const deviceReport = (path: string, table: 'inventory' | 'update_results' | 'diagnostics', required: string[]) =>

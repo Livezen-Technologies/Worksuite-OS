@@ -41,6 +41,8 @@ export const WAIT_REASON: Record<string, string> = {
   pulled: 'This release was withdrawn.',
   not_in_rollout: 'Rolling out gradually; this computer isn’t included yet.',
   manual_mode: 'Updates are set to manual.',
+  not_entitled: 'This release needs a WorkSuite edition your organization’s licence doesn’t include. Security updates still install.',
+  download_interrupted: 'The download was interrupted. It continues where it stopped on the next try.',
 }
 
 export const fmtWhen = (ms: number | null | string) => (ms == null ? '—' : new Date(ms).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))

@@ -55,7 +55,12 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 server commit before ack → no duplicate; two offline edits → conflict kept; expired token → pending kept.
 Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | WSOS-APT-001/002/003/004/006, WSOS-APP-002/003, WSOS-FLP-001/002/004, WSOS-UPD-001 (device side) | `services/package-service/src/service.ts`, `src/apt.ts`, `src/dbus.ts` | Impl |
+| WSOS-APP-001/003, WSOS-ARM-005 App Center catalog from `desktop/v1/os/catalog` (no built-in apps; empty/error states) | `services/package-service/src/catalog.ts` (`GetCatalog`), `shell/electron/packages.ts`, `shell/src/lib/appcatalog.ts`, `shell/src/screens/AppCenter.tsx` | Impl; `services/package-service/test/features.test.ts`, `shell/src/lib/appcatalog.test.ts` |
+| WSOS-APT-005 local .deb (staged copy, unverified publisher, policy, apt simulation, token + `install-local` polkit) | `services/package-service/src/service.ts`, `src/staging.ts`, `polkit/lk.worksuite.package.policy`; App Center dialog | Impl; `features.test.ts`, `dbus.test.ts` |
+| WSOS-FLP-003/004 permission review/reset, app data removal, runtime pruning | `service.ts` (`appPermissions`, `resetAppPermissions`, `pruneRuntimes`), `shell/electron/packages.ts` (`flatpakUserClient`) | Impl; `features.test.ts`, `shell/electron/packages.test.ts` |
+| WSOS-AIM-001…004 AppImages (import + metadata, first-run approval, embedded GPG signature, same-key updates) | `services/package-service/src/appimage.ts`, `src/appimage-cli.ts`, `bin/worksuite-appimage` (per user) | Impl; `services/package-service/test/appimage.test.ts` (real squashfs-tools and gpg) |
 | §7.2 Files: This Computer / WorkSuite Cloud, WSOS-DRV-002 sync states | `shell/src/screens/Files.tsx`, `shell/electron/files.ts`, `services/sync/src/service.ts` (`fileStates`, `driveSummary`) | Impl (UI; Drive transfer engine not in this repo) |
+| WSOS-AUP-008 resumable downloads (apt partials kept, retries; interrupted = waiting), WSOS-AUP-010 `.wsupdate` USB bundles, WSOS-AUP-012 entitlement gating with a signed device licence | `services/package-service/src/service.ts` (`download`, `installBundle`), `src/bundle.ts`, `src/updates.ts` (`verifyLicence`, `decide`), `src/coordinator.ts`; Settings › Updates "Install from a USB drive" | Impl; `features.test.ts`, `entitlement.test.ts` |
 | WSOS-AUP-001…009, 011, WSOS-UPD-002/003/005 update coordinator | `services/package-service/src/updates.ts`, `src/coordinator.ts`, `src/dbus.ts`; Settings › Updates: `shell/src/screens/Settings.tsx`, `shell/electron/packages.ts` | Impl |
 | WSOS-INS-003 typed disk-name confirmation, WSOS-INS-004 recovery key shown once | `installer/modules/worksuiteconfirm/` (C++ view module), `installer/modules/worksuiterecovery/` (Python job), `installer/settings.conf` | Impl (Calamares 3.3.5 load-tested; not run against a disk) |
 
@@ -77,6 +82,9 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | Idempotent sync mutations, conflicts, cursor paging, tombstone window and 410 (WSOS-SYN-001, -006, -007) | `src/api.ts` | E2E with the sync transport; API tests |
 | Document locks (WSOS-DRV-003) | `files/{id}/lock` | API tests |
 | Signed release manifests (WSOS-AUP-002) | `/os/manifests/{ring}/{arch}.json` | Verified with the package service's `verifyManifest` |
+| Release pause/resume/pull, ring promotion, emergency release to all rings (WSOS-UPD-004, WSOS-AUP-013), `desktop.releases.manage` | `src/admin.ts`, admin API `/admin/api/releases/*` (`src/console.ts`), CLI `release-*`, `grant` | `test/releases.test.ts` (re-signed manifests verified with the package service) |
+| Device licence for update entitlements (WSOS-AUP-012) | `GET /desktop/v1/os/licence` (`src/api.ts`, `admin.ts` `licenceFor`), CLI `licence-set` | `test/releases.test.ts` with the package service's `verifyLicence` |
+| Offline `.wsupdate` bundles (WSOS-AUP-010) | CLI `bundle-build` (`admin.ts` `buildBundle`) | `test/releases.test.ts` with the package service's `inspectBundle` |
 | Not yet | Federation (AD/LDAP/external OneAuth), resumable diagnostic uploads, admin console, push | — |
 | Admin console (WSOS-MDM-007 admin side, WSOS-WIPE-002 two-person wipe) | `services/server/src/console.ts`, `console-ui.ts` at `/admin` | API tests (auth, CSRF, org isolation, two-person wipe verified with the agent's validator, policy validation); browser run with screenshots in `docs/screenshots/admin/` |
 
