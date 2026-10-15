@@ -21,11 +21,11 @@ Package: worksuite-desktop
 Architecture: all
 Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archive-keyring,
  worksuite-user-services, worksuite-package-service, worksuite-device-agent, worksuite-directory, worksuite-recovery-boot, worksuite-wayland-bridge,
- labwc, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
+ labwc, wlr-randr, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, xdg-desktop-portal-gtk, gnome-keyring,
  pipewire, pipewire-pulse, wireplumber, network-manager, bluez, udisks2, upower, cups, polkitd, pkexec,
  flatpak, fcitx5, apparmor, ${misc:Depends}
-Recommends: fwupd, worksuite-office | worksuite-desktopeditors
+Recommends: fwupd, wl-mirror, worksuite-office | worksuite-desktopeditors
 Conflicts: openssh-server
 Description: WorkSuite OS desktop (metapackage)
  Pulls in the WorkSuite session, shell, system services and the Debian
@@ -85,7 +85,7 @@ Description: WorkSuite system package service (D-Bus + polkit)
 Package: worksuite-device-agent
 Architecture: amd64 arm64
 Depends: worksuite-shell (= ${binary:Version}), worksuite-archive-keyring, cryptsetup, dbus, systemd, ${misc:Depends}
-Recommends: tpm2-tools, network-manager, wireguard-tools, nftables
+Recommends: tpm2-tools, network-manager, wireguard-tools, nftables, network-manager-openvpn
 Description: WorkSuite device agent (enrollment, policy, signed remote commands)
  Root agent for organization-managed devices: enrollment, signed policy,
  heartbeat, signed remote commands and remote wipe.

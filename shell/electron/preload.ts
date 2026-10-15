@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   webApps: () => ipcRenderer.invoke('ws:webApps'),
   installedApps: () => ipcRenderer.invoke('ws:installedApps'),
   launchOffice: (kind: string) => ipcRenderer.invoke('ws:launchOffice', String(kind)),
+  launchWorkSuite: (module: string) => ipcRenderer.invoke('ws:launchWorkSuite', String(module)),
   openLink: (url: string) => ipcRenderer.invoke('ws:openLink', String(url)),
   cloudSignIn: (serverUrl: string, mode: string) => ipcRenderer.invoke('ws:cloudSignIn', String(serverUrl), String(mode)),
   cloudSignOut: (accountId: string, choice: string) => ipcRenderer.invoke('ws:cloudSignOut', String(accountId), String(choice)),
@@ -25,7 +26,10 @@ contextBridge.exposeInMainWorld('worksuite', {
   sysWifiConnect: (ssid: string, password: string) => ipcRenderer.invoke('ws:sysWifiConnect', String(ssid), String(password)),
   sysVpn: () => ipcRenderer.invoke('ws:sysVpn'),
   sysVpnImport: (handle: string) => ipcRenderer.invoke('ws:sysVpnImport', String(handle)),
-  sysVpnConnect: (uuid: string, on: boolean) => ipcRenderer.invoke('ws:sysVpnConnect', String(uuid), on ? 'on' : 'off'),
+  sysVpnImportOpenvpn: (handle: string) => ipcRenderer.invoke('ws:sysVpnImportOpenvpn', String(handle)),
+  sysVpnConnect: (uuid: string, on: boolean, creds?: { username: string; password: string }) => creds
+    ? ipcRenderer.invoke('ws:sysVpnConnect', String(uuid), on ? 'on' : 'off', String(creds.username), String(creds.password))
+    : ipcRenderer.invoke('ws:sysVpnConnect', String(uuid), on ? 'on' : 'off'),
   sysVpnRemove: (uuid: string) => ipcRenderer.invoke('ws:sysVpnRemove', String(uuid)),
   sysBluetooth: () => ipcRenderer.invoke('ws:sysBluetooth'),
   sysSetBluetooth: (on: boolean) => ipcRenderer.invoke('ws:sysSetBluetooth', on ? 'on' : 'off'),
@@ -37,6 +41,16 @@ contextBridge.exposeInMainWorld('worksuite', {
   sysBattery: () => ipcRenderer.invoke('ws:sysBattery'),
   sysPrinters: () => ipcRenderer.invoke('ws:sysPrinters'),
   sysDisplays: () => ipcRenderer.invoke('ws:sysDisplays'),
+  displayState: () => ipcRenderer.invoke('ws:displayState'),
+  displayApply: (layout: unknown, sides: unknown) => ipcRenderer.invoke('ws:displayApply', JSON.stringify({ layout, sides })),
+  displayKeep: () => ipcRenderer.invoke('ws:displayKeep'),
+  displayRevert: () => ipcRenderer.invoke('ws:displayRevert'),
+  displayWallpaper: (output: string, id: string) => ipcRenderer.invoke('ws:displayWallpaper', String(output), String(id)),
+  onDisplaysChanged: (cb: (s: unknown) => void) => {
+    const listener = (_e: unknown, s: unknown) => cb(s)
+    ipcRenderer.on('ws:displaysChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:displaysChanged', listener) }
+  },
   sysDisks: () => ipcRenderer.invoke('ws:sysDisks'),
   enrollDevice: (serverUrl: string, code: string) => ipcRenderer.invoke('ws:enrollDevice', String(serverUrl), String(code)),
   pkgPreview: (catalogId: string, op: string) => ipcRenderer.invoke('ws:pkgPreview', String(catalogId), String(op)),

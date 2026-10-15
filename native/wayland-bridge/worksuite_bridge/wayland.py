@@ -34,7 +34,7 @@ class _Toplevel:
 
 
 class WaylandBackend(Backend):
-    def __init__(self, registry: WindowRegistry, on_outputs_changed: Callable[[], None] = lambda: None, display_name: str | None = None):
+    def __init__(self, registry: WindowRegistry, on_outputs_changed: Callable[[], None] = lambda: None, display_name: str | None = None, panel_height: int = 0):
         from .protocol import wayland as wl  # generated
         from .protocol import wlr_foreign_toplevel_management_unstable_v1 as wlr  # generated
         self._wl, self._wlr = wl, wlr
@@ -43,6 +43,9 @@ class WaylandBackend(Backend):
         self.display = Display(display_name)
         self.manager = None
         self.seat = None
+        self.compositor = self.shm = self.layer_shell = None
+        self.panel_height = panel_height
+        self.reserver: Any = None
         self._outputs: dict[int, tuple[Any, Output]] = {}
         self._tops: dict[int, _Toplevel] = {}
 
@@ -57,11 +60,23 @@ class WaylandBackend(Backend):
         self.display.roundtrip()
         if self.manager is None:
             log.warning("compositor does not offer zwlr_foreign_toplevel_manager_v1; window operations unsupported")
+        if self.panel_height > 0:
+            if None in (self.compositor, self.shm, self.layer_shell):
+                log.warning("compositor does not offer wlr-layer-shell; panel edge not reserved")
+            else:
+                from .layer import PanelReserver
+                self.reserver = PanelReserver(self.compositor, self.shm, self.layer_shell, self.panel_height, self.display.flush)
+                for key, (o, _info) in self._outputs.items():
+                    self.reserver.add(key, o)
+                self.display.roundtrip()
 
     def disconnect(self) -> None:
         """Drops every proxy before the display goes away (pywayland proxies must not outlive it)."""
         import gc
-        self.manager = self.seat = None
+        if self.reserver is not None:
+            self.reserver.clear()
+        self.reserver = None
+        self.manager = self.seat = self.compositor = self.shm = self.layer_shell = None
         self._outputs.clear()
         self._tops.clear()
         self._registry_proxy = None
@@ -87,6 +102,13 @@ class WaylandBackend(Backend):
             self.manager.dispatcher["finished"] = lambda *_: setattr(self, "manager", None)
         elif interface == "wl_seat" and self.seat is None:
             self.seat = reg.bind(name, wl.WlSeat, min(version, 1))
+        elif interface == "wl_compositor" and self.compositor is None:
+            self.compositor = reg.bind(name, wl.WlCompositor, min(version, 4))
+        elif interface == "wl_shm" and self.shm is None:
+            self.shm = reg.bind(name, wl.WlShm, 1)
+        elif interface == "zwlr_layer_shell_v1" and self.layer_shell is None:
+            from .protocol import wlr_layer_shell_unstable_v1 as ls  # generated
+            self.layer_shell = reg.bind(name, ls.ZwlrLayerShellV1, min(version, 3))
         elif interface == "wl_output":
             o = reg.bind(name, wl.WlOutput, min(version, 4))
             info = Output(name=f"output-{name}")
@@ -95,9 +117,10 @@ class WaylandBackend(Backend):
             def geometry(_p: Any, x: int, y: int, *_rest: Any) -> None:
                 info.x, info.y = x, y
 
-            def mode(_p: Any, flags: int, w: int, h: int, _refresh: int) -> None:
+            def mode(_p: Any, flags: int, w: int, h: int, refresh: int) -> None:
                 if flags & 1:  # current mode
                     info.width, info.height = w, h
+                    info.refresh = refresh / 1000.0
 
             o.dispatcher["geometry"] = geometry
             o.dispatcher["mode"] = mode
@@ -105,9 +128,17 @@ class WaylandBackend(Backend):
             o.dispatcher["name"] = lambda _p, n: setattr(info, "name", n)
             o.dispatcher["description"] = lambda _p, d: setattr(info, "description", d)
             o.dispatcher["done"] = lambda _p: self.on_outputs_changed()
+            if self.reserver is not None:  # hotplug: reserve the panel edge on the new monitor (DSK-007)
+                self.reserver.add(name, o)
 
     def _global_remove(self, _reg: Any, name: int) -> None:
-        if self._outputs.pop(name, None) is not None:
+        if self.reserver is not None:
+            self.reserver.remove(name)
+        gone = self._outputs.pop(name, None)
+        if gone is not None:
+            for t in self._tops.values():
+                if gone[0] in t.outputs:  # windows Labwc moved off the unplugged monitor are listed on their new one
+                    t.outputs.remove(gone[0])
             self.on_outputs_changed()  # DSK-007: the shell re-reads outputs and moves its panel/launcher
 
     def _output_name(self, proxy: Any) -> str:
@@ -129,7 +160,7 @@ class WaylandBackend(Backend):
         handle.dispatcher["closed"] = lambda h: self._closed(h, t)
 
     def _done(self, handle: Any, t: _Toplevel) -> None:
-        out = self._output_name(t.outputs[0]) if t.outputs else ""
+        out = next((n for n in map(self._output_name, t.outputs) if n), "")
         if self.registry.has_native(handle):
             self.registry.update(handle, app_id=t.app_id, title=t.title, output=out, flags=t.flags)
         else:
@@ -164,3 +195,4 @@ class WaylandBackend(Backend):
     def set_minimized(self, native: Any, state: bool) -> None:
         native.set_minimized() if state else native.unset_minimized()
         self.display.flush()
+

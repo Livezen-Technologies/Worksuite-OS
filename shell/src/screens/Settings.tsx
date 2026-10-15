@@ -142,6 +142,7 @@ function VpnSection() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ text: string; error: boolean } | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+  const [ask, setAsk] = useState<{ uuid: string; name: string } | null>(null)
   const act = async (key: string, fn: () => Promise<{ available: boolean; reason?: string } | { ok: boolean; error?: string }>, done: string) => {
     setBusy(key); setMsg(null)
     const res = await fn()
@@ -156,17 +157,30 @@ function VpnSection() {
     if (!f.ok) return f
     return os.sysVpnImport(f.value.handle)
   }, t('vpn.added'))
+  const importOvpn = () => act('import', async () => {
+    const f = await os.pickFile('ovpn')
+    if (!f.ok) return f
+    return os.sysVpnImportOpenvpn(f.value.handle)
+  }, t('vpn.addedOpenvpn'))
+  // OpenVPN with a password: asked here each time, sent once to nmcli's stdin, never stored by the shell.
+  const toggle = (c: { uuid: string; name: string; active: boolean; needs_credentials: boolean }) => {
+    if (!c.active && c.needs_credentials) { setAsk({ uuid: c.uuid, name: c.name }); return }
+    void act(c.uuid, () => os.sysVpnConnect(c.uuid, !c.active), c.active ? t('vpn.disconnectedFrom', { name: c.name }) : t('vpn.connectedTo', { name: c.name }))
+  }
   return (
     <section aria-label={t('vpn.title')} className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('vpn.title')}</h2>
         {r.state === 'ok' && r.value.user_vpn_allowed && (
-          <button type="button" disabled={busy !== null} onClick={() => void importFile()} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{busy === 'import' ? t('vpn.adding') : t('vpn.import')}</button>
+          <span className="flex gap-2">
+            <button type="button" disabled={busy !== null} onClick={() => void importFile()} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{busy === 'import' ? t('vpn.adding') : t('vpn.import')}</button>
+            <button type="button" disabled={busy !== null} onClick={() => void importOvpn()} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{t('vpn.importOpenvpn')}</button>
+          </span>
         )}
       </div>
       {r.state === 'loading' ? <Empty title={t('vpn.reading')} /> : r.state !== 'ok' ? <Unavail what={t('vpn.title')} reason={r.reason} /> : (
         <>
-          {r.value.connections.length === 0 ? <Empty title={t('vpn.none')}>{r.value.user_vpn_allowed ? t('vpn.importHint') : t('vpn.blocked')}</Empty> : (
+          {r.value.connections.length === 0 ? <Empty title={t('vpn.none')}>{r.value.user_vpn_allowed ? t('vpn.importHint2') : t('vpn.blocked')}</Empty> : (
             <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
               {r.value.connections.map((c) => {
                 const locked = c.managed && c.active && r.value.vpn_required
@@ -175,10 +189,10 @@ function VpnSection() {
                     <Svg d={LOCK} size={18} stroke={c.active ? C.green : C.soft} />
                     <span className="flex flex-1 flex-col gap-0.5">
                       <span className="text-sm" style={{ fontWeight: c.active ? 600 : 400 }}>{c.name}</span>
-                      <span className="text-xs text-[#8FA3C8]">{[c.active ? t('common.connected') : t('common.notConnected'), c.type === 'wireguard' ? 'WireGuard' : t('vpn.title'), c.managed ? t('vpn.managed') : null].filter(Boolean).join(' · ')}</span>
+                      <span className="text-xs text-[#8FA3C8]">{[c.active ? t('common.connected') : t('common.notConnected'), c.kind === 'wireguard' ? 'WireGuard' : c.kind === 'openvpn' ? 'OpenVPN' : t('vpn.title'), c.managed ? t('vpn.managed') : null].filter(Boolean).join(' · ')}</span>
                     </span>
                     {!locked && (
-                      <button type="button" disabled={busy !== null} onClick={() => void act(c.uuid, () => os.sysVpnConnect(c.uuid, !c.active), c.active ? t('vpn.disconnectedFrom', { name: c.name }) : t('vpn.connectedTo', { name: c.name }))}
+                      <button type="button" disabled={busy !== null} onClick={() => toggle(c)}
                         className={`${c.active ? btnGhost : btnPrimary} px-3 py-1.5 text-[13px]`}>{busy === c.uuid ? (c.active ? t('common.disconnecting') : t('common.connecting')) : c.active ? t('common.disconnect') : t('common.connect')}</button>
                     )}
                     {!c.managed && (
@@ -193,6 +207,7 @@ function VpnSection() {
           <Note>{r.value.vpn_required ? t('vpn.requiredNote') : t('vpn.importedNote')}</Note>
         </>
       )}
+      {ask && <VpnCredentials name={ask.name} onCancel={() => setAsk(null)} onSubmit={(creds) => { const a = ask; setAsk(null); void act(a.uuid, () => os.sysVpnConnect(a.uuid, true, creds), t('vpn.connectedTo', { name: a.name })) }} />}
       {confirmRemove && r.state === 'ok' && (
         <Dialog alert onClose={() => setConfirmRemove(null)}>
           {(tid) => <>
@@ -208,6 +223,27 @@ function VpnSection() {
         </Dialog>
       )}
     </section>
+  )
+}
+
+function VpnCredentials({ name, onCancel, onSubmit }: { name: string; onCancel: () => void; onSubmit: (c: { username: string; password: string }) => void }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  return (
+    <Dialog onClose={onCancel}>
+      {(tid) => <form onSubmit={(e) => { e.preventDefault(); if (username) onSubmit({ username, password }) }}>
+        <div className="flex flex-col gap-3 px-6 pt-6 pb-4">
+          <h2 id={tid} className="m-0 text-[19px] font-bold">{t('vpn.connectTo', { name })}</h2>
+          <label className="flex flex-col gap-1 text-sm">{t('vpn.username')}<input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} className="rounded-md bg-white/10 px-3 py-2" /></label>
+          <label className="flex flex-col gap-1 text-sm">{t('greeter.password')}<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-md bg-white/10 px-3 py-2" /></label>
+          <p className="m-0 text-xs text-[#8FA3C8]">{t('vpn.notSaved')}</p>
+        </div>
+        <div className={dialogFooter}>
+          <button type="button" onClick={onCancel} className={`${btnGhost} px-4 py-2 text-[13px]`}>{t('common.cancel')}</button>
+          <button type="submit" disabled={!username} className={`${btnPrimary} px-4 py-2 text-[13px]`}>{t('common.connect')}</button>
+        </div>
+      </form>}
+    </Dialog>
   )
 }
 
@@ -242,38 +278,8 @@ function BluetoothPanel() {
   </>
 }
 
-function DisplayPanel() {
-  const { r } = useAvail(os.sysDisplays)
-  if (r.state !== 'ok') return <><H1>{t('settings.nav.Display')}</H1>{r.state === 'loading' ? <Empty title={t('settings.disp.reading')} /> : <Unavail what={t('settings.disp.info')} reason={r.reason} />}</>
-  const outs = r.value.filter((d) => d.enabled)
-  const primary = outs[0]
-  return <>
-    <H1>{t('settings.nav.Display')}</H1>
-    <div className="flex h-[200px] items-center justify-center gap-5 rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(4,10,26,0.5)]" aria-label={t('settings.disp.connected')} role="img">
-      {outs.length === 0 && <span className="text-[13px] text-[#8FA3C8]">{t('settings.disp.none')}</span>}
-      {outs.map((o, i) => (
-        <div key={o.name} className={`box-border flex items-end rounded-[10px] p-2.5 text-[13px] ${i === 0 ? 'h-[136px] w-[220px] border-2 border-[#1F6BFF] bg-[linear-gradient(160deg,#1F4FB0,#0A1A3D)] font-semibold' : 'h-[100px] w-[170px] border border-[rgba(127,178,255,0.3)] bg-[rgba(14,32,72,0.8)] text-[#C9D6EE]'}`}>
-          {i + 1} · {o.description || o.name}
-        </div>
-      ))}
-    </div>
-    <div className={`${card} overflow-hidden`}>
-      {[
-        { k: t('settings.disp.resolution'), d: t('settings.disp.currentMode'), v: primary?.width ? `${primary.width} × ${primary.height}` : null },
-        { k: t('settings.disp.scale'), d: t('settings.disp.scaleHint'), v: primary?.scale ? `${formatNumber(Math.round(primary.scale * 100))}%` : null },
-        { k: t('settings.disp.refresh'), d: t('settings.disp.refreshHint'), v: primary?.refresh ? `${formatNumber(Math.round(primary.refresh))} Hz` : null },
-        { k: t('settings.disp.brightness'), d: t('settings.disp.brightnessHint'), v: null },
-        { k: t('settings.disp.night'), d: t('settings.disp.nightHint'), v: null },
-      ].map((row) => (
-        <div key={row.k} className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
-          <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{row.k}</span><span className="text-xs text-[#8FA3C8]">{row.d}</span></span>
-          <Value>{row.v}</Value>
-        </div>
-      ))}
-    </div>
-    <Note>{t('settings.disp.note')}</Note>
-  </>
-}
+// Settings › Display lives in DisplaySettings.tsx (WSOS-DSK-005/006).
+import { DisplayPanel } from './DisplaySettings'
 
 const THEME_ART: Record<string, { bg: string; win: string; bar: string }> = {
   Light: { bg: 'linear-gradient(135deg,#EAF1FF,#C9DAFF)', win: '#FFFFFF', bar: 'rgba(255,255,255,0.8)' },

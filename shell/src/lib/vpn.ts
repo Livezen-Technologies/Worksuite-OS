@@ -5,7 +5,16 @@ import { t } from '../i18n'
 export function vpnErrorText(error: string): string {
   switch (error) {
     case 'blocked_by_policy': return t('vpn.blocked')
-    case 'scripts_not_supported': return t('vpn.err.scripts')
+    case 'scripts_not_supported': return t('vpn.err.scripts2')
+    case 'credentials_in_file': return t('vpn.err.credsInFile')
+    case 'unsupported_directive': return t('vpn.err.directive')
+    case 'invalid_remote': return t('vpn.err.remote')
+    case 'unsafe_path': return t('vpn.err.unsafePath')
+    case 'missing_certificate': return t('vpn.err.cert')
+    case 'openvpn_unavailable': return t('vpn.err.noOpenvpn')
+    case 'credentials_required': return t('vpn.err.credsRequired')
+    case 'bad_credentials': return t('vpn.err.badCreds')
+    case 'connect_failed': return t('vpn.err.connect')
     case 'missing_private_key': return t('vpn.err.key')
     case 'invalid_peer': return t('vpn.err.peer')
     case 'invalid_address': return t('vpn.err.address')
@@ -13,7 +22,7 @@ export function vpnErrorText(error: string): string {
     case 'managed_by_organization': return t('vpn.err.managed')
     case 'required_by_organization': return t('vpn.err.required')
     case 'cancelled': return ''
-    case 'invalid_file': return t('vpn.err.file')
+    case 'invalid_file': return t('vpn.err.file2')
     default: return t('vpn.err.default')
   }
 }

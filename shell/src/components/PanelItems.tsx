@@ -35,9 +35,11 @@ export function rovingKeys(e: KeyboardEvent<HTMLElement>) {
   items[(next + items.length) % items.length]?.focus()
 }
 
-export function RunningApps({ pinned, info, onLaunch }: { pinned: string[]; info: (id: string) => AppInfo | undefined; onLaunch: (id: string) => void }) {
+/** `only` limits the windows to one monitor's (per-monitor taskbars, WSOS-DSK-005). */
+export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]; info: (id: string) => AppInfo | undefined; onLaunch: (id: string) => void; only?: (w: PanelWindow[]) => PanelWindow[] }) {
   const t = useT()
-  const windows = usePanelWindows()
+  const all = usePanelWindows()
+  const windows = useMemo(() => (only ? only(all) : all), [only, all])
   const entries = useMemo(() => taskbarEntries(pinned, windows), [pinned, windows])
   const click = (id: string) => {
     const e = entries.find((x) => x.id === id)!

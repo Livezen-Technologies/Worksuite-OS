@@ -1,0 +1,4 @@
+# WorkSuite OS marker. Its presence tells WorkSuite apps (WorkSuite Desktop's OS mode) that the OS provides sign-in
+# (worksuite-credentials), device enrolment (worksuite-device-agent), updates and the screen lock.
+NAME="WorkSuite OS"
+ID=worksuite-os

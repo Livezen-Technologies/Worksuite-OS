@@ -44,8 +44,8 @@ describe('parseWgConf', () => {
 describe('nmcli VPN parsing and policy', () => {
   it('lists VPN profiles, managed first', () => {
     expect(parseVpnConnections(LIST)).toEqual([
-      { name: 'WorkSuite VPN', uuid: MANAGED_VPN_UUID, type: 'wireguard', active: true, device: 'wsvpn0', managed: true },
-      { name: 'home', uuid: USER_UUID, type: 'wireguard', active: false, device: null, managed: false },
+      { name: 'WorkSuite VPN', uuid: MANAGED_VPN_UUID, type: 'wireguard', kind: 'wireguard', active: true, device: 'wsvpn0', managed: true, needs_credentials: false },
+      { name: 'home', uuid: USER_UUID, type: 'wireguard', kind: 'wireguard', active: false, device: null, managed: false, needs_credentials: false },
     ])
   })
   it('derives an interface name nmcli accepts', () => {
@@ -80,6 +80,8 @@ function bridge(policy: string | null = null) {
   const deps: VpnDeps = {
     readPolicy: () => policy,
     async stage(name, text) { const s = { name, text, cleaned: false }; staged.push(s); return { path: `/tmp/x/${name}`, cleanup: async () => { s.cleaned = true } } },
+    async storeCerts(name, files) { return files.map((f) => `/home/u/.local/share/worksuite/vpn/${name}/${f.name}`) },
+    async removeCerts() {},
   }
   return { b: systemBridge(exec, async () => ({ code: 0, stderr: '' }), deps), calls, staged }
 }

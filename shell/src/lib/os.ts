@@ -13,9 +13,11 @@ export interface WorkSuiteApi {
   /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
   webApps(): Promise<CloudResult<{ id: string; name: string }[]>>
   /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
-  installedApps(): Promise<{ apps: InstalledApp[]; office: string | null }>
+  installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null }>
   /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
   launchOffice(kind: 'start' | 'docs' | 'sheets' | 'slides'): Promise<void>
+  /** WorkSuite Desktop with --module=<id> (only when installed; the launcher checks). */
+  launchWorkSuite(module: DesktopModule): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
   /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
@@ -59,7 +61,7 @@ export interface WorkSuiteApi {
   /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
   pkgCatalog(): Promise<CloudResult<AppCatalog>>
   /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
-  pickFile(kind: 'deb' | 'appimage' | 'wsupdate' | 'wgconf'): Promise<CloudResult<{ handle: string; name: string }>>
+  pickFile(kind: 'deb' | 'appimage' | 'wsupdate' | 'wgconf' | 'ovpn'): Promise<CloudResult<{ handle: string; name: string }>>
   localDebPreview(handle: string): Promise<CloudResult<LocalDebPreview>>
   localDebInstall(token: string): Promise<CloudResult<string>>
   appPermissions(catalogId: string): Promise<CloudResult<AppPermissions>>
@@ -94,7 +96,10 @@ export interface WorkSuiteApi {
   sysVpn(): Promise<Avail<VpnState>>
   /** Imports the WireGuard .conf behind a pickFile('wgconf') handle; the private key never reaches the renderer. */
   sysVpnImport(handle: string): Promise<CloudResult<{ uuid: string | null; name: string }>>
-  sysVpnConnect(uuid: string, on: boolean): Promise<Avail<true>>
+  /** Imports the OpenVPN .ovpn behind a pickFile('ovpn') handle; certificates are copied to a private folder. */
+  sysVpnImportOpenvpn(handle: string): Promise<CloudResult<{ uuid: string | null; name: string; needs_credentials: boolean }>>
+  /** creds: OpenVPN user name/password, passed to nmcli on stdin only; 'credentials_required' when missing. */
+  sysVpnConnect(uuid: string, on: boolean, creds?: { username: string; password: string }): Promise<Avail<true>>
   sysVpnRemove(uuid: string): Promise<Avail<true>>
   sysBluetooth(): Promise<Avail<BluetoothState>>
   sysSetBluetooth(on: boolean): Promise<Avail<true>>
@@ -113,7 +118,7 @@ export type Avail<T> = { available: true; value: T } | { available: false; reaso
 export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean }
 export interface NetDevice { device: string; type: string; state: string; connection: string | null }
 export interface NetworkState { wifi_enabled: boolean; devices: NetDevice[]; networks: WifiNetwork[] }
-export interface VpnConnection { name: string; uuid: string; type: 'wireguard' | 'vpn'; active: boolean; device: string | null; managed: boolean }
+export interface VpnConnection { name: string; uuid: string; type: 'wireguard' | 'vpn'; kind: 'wireguard' | 'openvpn' | 'vpn'; active: boolean; device: string | null; managed: boolean; needs_credentials: boolean }
 export interface VpnState { connections: VpnConnection[]; user_vpn_allowed: boolean; vpn_required: boolean }
 export interface BtDevice { address: string; name: string; connected: boolean }
 export interface BluetoothState { powered: boolean; name: string | null; discoverable: boolean; paired: BtDevice[] }
@@ -140,6 +145,7 @@ export interface RecoveryInfo {
   luks: RecoveryLuksDevice[]; features: Record<RecoveryFeature, boolean>
 }
 
+import type { DesktopModule } from './launcher'
 import type { HwDevice, HwKind } from '../../electron/hardware'
 import type { LocalUser } from '../../electron/users'
 export type { HwDevice, HwKind, LocalUser }
@@ -280,9 +286,10 @@ const stub: WorkSuiteApi = {
     return { apps: [
       { id: 'firefox-esr', name: 'Firefox ESR', generic_name: 'Web Browser', comment: null, icon: 'firefox-esr', categories: ['Network', 'WebBrowser'], keywords: ['internet', 'web'] },
       { id: 'foot', name: 'Foot', generic_name: 'Terminal', comment: null, icon: 'foot', categories: ['System', 'TerminalEmulator'], keywords: ['shell'] },
-    ], office: null }
+    ], office: null, desktop: null }
   },
   async launchOffice() {},
+  async launchWorkSuite() {},
   async cloudSignIn(serverUrl, _mode) {
     stubAccounts = [{ id: 'preview:u-1', name: 'Hasarinda', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
@@ -437,6 +444,7 @@ const stub: WorkSuiteApi = {
   },
   async sysVpn() { return stubAvail({ connections: stubSys.vpn, user_vpn_allowed: true, vpn_required: false }) },
   async sysVpnImport() { return { ok: false, error: 'service_unavailable' } },
+  async sysVpnImportOpenvpn() { return { ok: false, error: 'service_unavailable' } },
   async sysVpnConnect(uuid, on) { stubSys.vpn = stubSys.vpn.map((c) => c.uuid === uuid ? { ...c, active: on } : c); return stubAvail(true as const) },
   async sysVpnRemove(uuid) { stubSys.vpn = stubSys.vpn.filter((c) => c.uuid !== uuid || c.managed); return stubAvail(true as const) },
   async sysBluetooth() { return stubAvail(stubSys.bt) },
@@ -456,7 +464,7 @@ function stubAvail<T>(value: T): Avail<T> {
   return stubSim === 'none' ? { available: false, reason: 'service_unavailable' } : { available: true, value: structuredClone(value) }
 }
 const stubSys: { net: NetworkState; bt: BluetoothState; sound: SoundState; vpn: VpnConnection[] } = {
-  vpn: [{ name: 'WorkSuite VPN', uuid: '6f1d9a52-3c47-4b8e-9a0d-57e2c1b4f0a3', type: 'wireguard', active: true, device: 'wsvpn0', managed: true }],
+  vpn: [{ name: 'WorkSuite VPN', uuid: '6f1d9a52-3c47-4b8e-9a0d-57e2c1b4f0a3', type: 'wireguard', kind: 'wireguard', active: true, device: 'wsvpn0', managed: true, needs_credentials: false }],
   net: { wifi_enabled: true, devices: [{ device: 'wlan0', type: 'wifi', state: 'connected', connection: 'Preview-WiFi' }, { device: 'eth0', type: 'ethernet', state: 'unavailable', connection: null }],
     networks: [{ ssid: 'Preview-WiFi', signal: 82, security: 'WPA2', in_use: true }, { ssid: 'Guest', signal: 54, security: '', in_use: false }] },
   bt: { powered: false, name: 'preview-laptop', discoverable: false, paired: [{ address: 'AA:BB:CC:DD:EE:01', name: 'Preview keyboard', connected: false }] },

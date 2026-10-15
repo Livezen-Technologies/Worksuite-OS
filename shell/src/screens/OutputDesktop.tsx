@@ -1,0 +1,25 @@
+// Desktop of a secondary monitor (WSOS-DSK-005): that monitor's wallpaper and a taskbar listing the windows on it.
+// The main process opens one of these per extra output (electron/outputWindows.ts) and closes it on unplug.
+import { useCallback, useEffect, useState } from 'react'
+import { RunningApps } from '../components/PanelItems'
+import { BG } from '../components/Ws'
+import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
+import type { PanelWindow } from '../lib/panel'
+import { useT } from '../i18n'
+
+export default function OutputDesktop({ output }: { output: string }) {
+  const t = useT()
+  const display = useDisplayState()
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => { const i = setInterval(() => setNow(new Date()), 15000); return () => clearInterval(i) }, [])
+  const only = useCallback((ws: PanelWindow[]) => windowsOnOutput(ws, output, false, []), [output])
+  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return (
+    <div className="relative h-full w-full overflow-hidden font-sans" style={{ background: wallpaperFor(display, output, BG.desktop) }} data-output={output}>
+      <nav aria-label={t('panel.taskbar')} className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
+        <RunningApps pinned={[]} info={() => undefined} onLaunch={() => undefined} only={only} />
+        <time className="ml-auto text-[13px]" dateTime={now.toISOString()}>{time}</time>
+      </nav>
+    </div>
+  )
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 
 from dbus_next.aio import MessageBus
@@ -19,7 +20,8 @@ async def main() -> None:
     registry = WindowRegistry()
     bus = await MessageBus().connect()
     holder: dict[str, Bridge] = {}
-    backend = WaylandBackend(registry, on_outputs_changed=lambda: holder["b"].outputs_changed() if "b" in holder else None)
+    backend = WaylandBackend(registry, on_outputs_changed=lambda: holder["b"].outputs_changed() if "b" in holder else None,
+                             panel_height=int(os.environ.get("WORKSUITE_PANEL_HEIGHT", "56")))  # DSK-005
     backend.connect()
     bridge = Bridge(bus, backend, registry, AccessPolicy())
     holder["b"] = bridge

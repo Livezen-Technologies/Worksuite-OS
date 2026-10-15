@@ -7,6 +7,8 @@ import { ageLabel } from '../lib/power'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
 import { RunningApps, TrayItems, UpdateBadge, VpnBadge, useLauncherKey } from '../components/PanelItems'
+import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
+import type { PanelWindow } from '../lib/panel'
 import A11yPanel from '../components/A11yPanel'
 import { localeTag, useT } from '../i18n'
 import { UpdateOverlays } from './Updates'
@@ -92,7 +94,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
     appsLoaded.current = true
     let live = true
     void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null)]).then(([w, i]) => {
-      if (live) setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null))
+      if (live) setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null))
     })
     return () => { live = false }
   }, [launcher])
@@ -107,9 +109,14 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
     if (!a) return
     if ('screen' in a.launch) onOpen(a.launch.screen)
     else if ('office' in a.launch) void os.launchOffice(a.launch.office)
+    else if ('worksuite' in a.launch) void os.launchWorkSuite(a.launch.worksuite)
     else void os.launchApp(a.launch.desktop)
   }
   const taskbar = taskbarApps(allApps, TASKBAR)
+  // This window is the primary monitor's desktop; other monitors have their own (OutputDesktop, WSOS-DSK-005).
+  const display = useDisplayState()
+  const primaryOut = display?.layout.primary ?? null
+  const onPrimary = useMemo(() => (primaryOut && display ? (ws: PanelWindow[]) => windowsOnOutput(ws, primaryOut, true, display.layout.outputs.filter((o) => o.enabled).map((o) => o.name)) : undefined), [primaryOut, display])
 
   const openSettingsAt = (section: string) => { requestSettingsSection(section); onOpen('settings') }
 
@@ -120,7 +127,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   ]
 
   return (
-    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: BG.desktop }}>
+    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: wallpaperFor(display, primaryOut, BG.desktop) }}>
       <div className="absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
         <div className="text-sm text-[#8FA3C8]">{longDate}</div>
         <div className="text-[44px] font-light tracking-[-1px]">{time}</div>
@@ -264,7 +271,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       <nav aria-label={t('panel.taskbar')} className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
         <button type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
           className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.45)] ring-2 ring-[#1F6BFF]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
-        <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => allApps.find((a) => a.id === id)} onLaunch={launch} />
+        <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => allApps.find((a) => a.id === id)} onLaunch={launch} only={onPrimary} />
         <div role="group" aria-label={t('panel.workspaces')} className="ml-4 hidden gap-1 sm:flex">
           {[1, 2, 3].map((n) => (
             <button key={n} type="button" aria-label={t('panel.workspace', { n })} aria-pressed={workspace === n} onClick={() => setWorkspace(n)}

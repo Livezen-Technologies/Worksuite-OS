@@ -1,11 +1,23 @@
-// Start menu data: the org's WorkSuite web apps, WorkSuite Office when installed, and installed Linux apps.
+// Start menu data: the org's WorkSuite apps (in WorkSuite Desktop when installed, else web app windows), WorkSuite
+// Office when installed, and installed Linux apps.
 import type { InstalledApp } from './os'
 import { t } from '../i18n'
 
 export type Kind = 'WorkSuite' | 'Linux app' | 'System'
 
 /** How a tile starts: a desktop entry via gtk-launch, WorkSuite Office (start centre or new document), or a shell screen. */
-export type Launch = { desktop: string } | { office: 'start' | 'docs' | 'sheets' | 'slides' } | { screen: 'appcenter' | 'files' }
+export type Launch = { desktop: string } | { office: 'start' | 'docs' | 'sheets' | 'slides' } | { worksuite: DesktopModule } | { screen: 'appcenter' | 'files' }
+
+/** Modules WorkSuite Desktop opens with `--module=<id>`. */
+export type DesktopModule = 'home' | 'mail' | 'chat' | 'calendar' | 'tasks' | 'files' | 'crm' | 'hr'
+
+/**
+ * The WorkSuite Desktop module for an org web app id, or null when the desktop has none (Projects, Meet, PDF Studio
+ * and anything else keep their worksuite-app web window). Drive is the desktop's Files.
+ */
+export const DESKTOP_MODULE_FOR: Record<string, DesktopModule> = {
+  mail: 'mail', chat: 'chat', calendar: 'calendar', tasks: 'tasks', drive: 'files', files: 'files', crm: 'crm', hr: 'hr',
+}
 
 export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[] }
 
@@ -40,14 +52,20 @@ function initials(name: string) {
 /**
  * webApps: the org's enabled modules, or null when unknown (fallback list). installed: XDG entries, or null when
  * the bridge isn't available. office: the detected WorkSuite Office desktop id, or null when it isn't installed.
+ * desktop: the WorkSuite Desktop entry id when it is installed: its modules open there (`--module=<id>`), the rest
+ * in worksuite-app web windows.
  */
-export function buildLauncherApps(webApps: { id: string; name: string }[] | null, installed: InstalledApp[] | null, office: string | null): LauncherApp[] {
+export function buildLauncherApps(webApps: { id: string; name: string }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null): LauncherApp[] {
   const out: LauncherApp[] = []
+  if (desktop) {
+    out.push({ id: 'worksuite-desktop', name: 'WorkSuite', mark: 'W', bg: '#2563eb', fg: '#ffffff', kind: 'WorkSuite', fav: true, launch: { worksuite: 'home' }, keywords: ['worksuite', 'home', 'desktop'] })
+  }
   for (const a of webApps ?? FALLBACK_WEB_APPS) {
     const st = WS_STYLE[a.id]
+    const mod = desktop ? DESKTOP_MODULE_FOR[a.id] : undefined
     out.push({
       id: `worksuite-${a.id}`, name: st?.name ?? a.name, mark: st?.mark ?? initials(a.name), bg: st?.bg ?? '#e2e8f0', fg: st?.fg ?? '#1e293b',
-      kind: 'WorkSuite', fav: st?.fav, launch: { desktop: `worksuite-${a.id}` }, keywords: ['worksuite', a.id],
+      kind: 'WorkSuite', fav: st?.fav, launch: mod ? { worksuite: mod } : { desktop: `worksuite-${a.id}` }, keywords: ['worksuite', a.id],
     })
   }
   if (office) {
@@ -59,7 +77,7 @@ export function buildLauncherApps(webApps: { id: string; name: string }[] | null
     )
   }
   for (const e of installed ?? []) {
-    if (e.id === office || e.id.startsWith('worksuite-')) continue
+    if (e.id === office || e.id === desktop || e.id.startsWith('worksuite-')) continue
     const terminal = e.categories.includes('TerminalEmulator')
     out.push({
       id: e.id, name: e.name, mark: terminal ? '>_' : initials(e.name), bg: terminal ? '#0f172a' : '#f1f5f9', fg: terminal ? '#e2e8f0' : '#334155',
