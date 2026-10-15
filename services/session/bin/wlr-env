@@ -7,7 +7,8 @@ if [ -z "${WLR_RENDERER:-}" ]; then
         [ -e "$card/device/driver" ] || continue
         case "$(basename "$(readlink -f "$card/device/driver")")" in
             virtio_gpu|virtio-pci|qxl|bochs|bochs-drm|cirrus|cirrus-qemu|vboxvideo|vmwgfx|simpledrm|simple-framebuffer|efifb|hyperv_drm|mgag200|ast)
-                export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 ;;
+                # No GL either for Qt Quick (installer sidebar, slideshow): use its software backend.
+                export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 QT_QUICK_BACKEND=software ;;
             *) unset WLR_RENDERER; break ;;   # a real GPU (i915, xe, amdgpu, radeon, nouveau, nvidia…)
         esac
     done

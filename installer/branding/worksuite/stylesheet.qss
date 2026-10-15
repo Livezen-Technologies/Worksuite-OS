@@ -10,7 +10,7 @@
 QLabel { background: transparent; color: #E8EEFA; }
 QLabel:disabled { color: #5E739C; }
 /* Page titles some modules set (welcome, summary, finished) */
-QLabel#mainText, QLabel#titleLabel { font-size: 32px; font-weight: 700; }
+QLabel#mainText, QLabel#titleLabel { font-size: 26px; font-weight: 700; }
 
 QLineEdit, QSpinBox, QComboBox, QPlainTextEdit, QTextEdit {
     background-color: rgba(4, 10, 26, 0.5);
