@@ -71,6 +71,8 @@ function loadKeys(dir: string): (id: string) => KeyObject | undefined {
 const busctlGet = (args: string[]) => new Promise<string>((resolve) => execFile('busctl', ['--system', 'get-property', ...args], { timeout: 5000 }, (_e, out) => resolve(String(out ?? '').trim())));
 const pkgVersion = (name: string) => { try { return execFileSync('dpkg-query', ['-W', '-f=${Version}', name], { encoding: 'utf8' }).trim() || 'unknown'; } catch { return 'unknown'; } };
 
+const UPDATE_STATUS_DIR = '/run/worksuite-package-service';
+
 export function coordinatorEnv(): CoordinatorEnv {
   return {
     async fetchJson(url) {
@@ -152,6 +154,14 @@ async function main() {
   await svc.detectInterrupted();          // WSOS-APT-006: surfaced as State=interrupted for the shell
   const bus = dbus.systemBus();
   const coordinator = new Coordinator(coordinatorEnv(), svc);
+  // WSOS-MDM-001: the device agent reports the coordinator's state in its heartbeat and inventory.
+  coordinator.on('status', (st) => {
+    try {
+      mkdirSync(UPDATE_STATUS_DIR, { recursive: true, mode: 0o755 });
+      writeFileSync(UPDATE_STATUS_DIR + '/update-status.json.tmp', JSON.stringify(st), { mode: 0o644 });
+      renameSync(UPDATE_STATUS_DIR + '/update-status.json.tmp', UPDATE_STATUS_DIR + '/update-status.json');
+    } catch { /* status is informational */ }
+  });
   serve(bus, svc, busAuthority(bus), loadIntrospection(XML), coordinator, {
     catalog: () => loadCatalog({ server: enrollment, fetchJson: getJson, arch: ARCH, policy: linuxEnv.policy, runner: linuxEnv.runner, now: Date.now }),
   });

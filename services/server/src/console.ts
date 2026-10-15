@@ -184,13 +184,15 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     device(a, ctx.params.id);
     const d = db.prepare('SELECT id, hostname, arch, tpm_backed, revoked, enrolled_at, last_seen, heartbeat, ownership, wiped_at FROM devices WHERE id = ?').get(ctx.params.id) as Record<string, unknown>;
     const commands = (db.prepare('SELECT id, envelope, state, reason, updated FROM commands WHERE device_id = ? ORDER BY rowid DESC LIMIT 50').all(ctx.params.id) as { id: string; envelope: string; state: string; reason: string | null; updated: number }[])
-      .map((c) => { const e = json<{ command: string; issued_at: string; expires_at: string }>(c.envelope); return { id: c.id, command: e.command, issued_at: e.issued_at, expires_at: e.expires_at, state: c.state, reason: c.reason, updated: c.updated }; });
+      .map((c) => { const e = json<{ command: string; issued_at: string; expires_at: string }>(c.envelope); return { id: c.id, command: e.command, issued_at: e.issued_at, expires_at: e.expires_at, state: c.state, reason: c.reason, updated: c.updated, observed: observedCommand(c.state, e.expires_at, Date.now()) }; });
+    const requestedPolicy = (db.prepare('SELECT version FROM policies WHERE org_id = ?').get(a.org_id) as { version: number } | undefined)?.version ?? null;
     const inv = db.prepare('SELECT body, at FROM inventory WHERE device_id = ?').get(ctx.params.id) as { body: string; at: number } | undefined;
     const invBody = json<{ hardware?: unknown; software?: unknown[] }>(inv?.body ?? null);
     const updates = (db.prepare('SELECT body, at FROM update_results WHERE device_id = ? ORDER BY id DESC LIMIT 20').all(ctx.params.id) as { body: string; at: number }[])
       .map((u) => ({ ...json<Record<string, unknown>>(u.body), at: u.at }));
     send(ctx, 200, {
       ...d, tpm_backed: !!d.tpm_backed, revoked: !!d.revoked, heartbeat: json(d.heartbeat as string | null), commands, updates,
+      policy: observedPolicy(requestedPolicy, json<{ policy_version?: unknown }>(d.heartbeat as string | null)?.policy_version),
       inventory: inv ? { at: inv.at, hardware: invBody?.hardware ?? null, software_count: invBody?.software?.length ?? 0 } : null,
       break_glass_escrowed: !!db.prepare('SELECT 1 FROM break_glass WHERE device_id = ?').get(ctx.params.id),
     });
@@ -463,4 +465,27 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
       WHERE l.org_id = ? ORDER BY l.id DESC LIMIT 200`).all(a.org_id) as { action: string; detail: string; at: number; name: string }[])
       .map((l) => ({ ...l, detail: json(l.detail) })) });
   });
+}
+
+/** WSOS-MDM-005: what the device has reported about a command, kept apart from the request itself. */
+export function observedCommand(state: string, expiresAt: string, now: number): string {
+  const expired = Date.parse(expiresAt) <= now;
+  switch (state) {
+    case 'pending': return expired ? 'expired — never received' : 'not yet received';
+    case 'received': return expired ? 'expired — received, not started' : 'received — not yet started';
+    case 'started': return 'in progress';
+    case 'completed': return 'done';
+    case 'failed': return 'failed';
+    case 'rejected': return 'rejected by the device';
+    default: return state;
+  }
+}
+
+/** WSOS-MDM-005: requested policy version (server) vs the version the device last reported applying. */
+export function observedPolicy(requested: number | null, reported: unknown): { requested_version: number | null; observed_version: number | null; state: 'applied' | 'pending' | 'not_reported' | 'none' } {
+  const observed = reported === undefined || reported === null || reported === '' ? null : Number(reported);
+  const obs = observed !== null && Number.isFinite(observed) ? observed : null;
+  if (requested === null) return { requested_version: null, observed_version: obs, state: 'none' };
+  if (obs === null) return { requested_version: requested, observed_version: null, state: 'not_reported' };
+  return { requested_version: requested, observed_version: obs, state: obs >= requested ? 'applied' : 'pending' };
 }

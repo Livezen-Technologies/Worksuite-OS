@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import * as admin from '../src/admin.ts';
 import { openDb } from '../src/db.ts';
 import { createHandler } from '../src/main.ts';
+import { observedCommand, observedPolicy } from '../src/console.ts';
 import { validateCommand, MemoryReplayStore } from '../../device-agent/src/commands.ts';
 import { loadKeys } from '../../device-agent/src/main.ts';
 
@@ -85,6 +86,27 @@ test('organizations are isolated', async () => {
   assert.equal((await call('GET', `devices/${devA.device_id}`, { cookie: zed })).status, 404);
   assert.equal((await call('POST', `devices/${devA.device_id}/commands`, { cookie: zed, body: { command: 'RequestLock' } })).status, 404);
   assert.ok(!(await call('GET', 'users', { cookie: zed })).body.items.some((u: { email: string }) => u.email.endsWith('@a.test')));
+});
+
+test('requested and observed state are shown separately (WSOS-MDM-005)', async () => {
+  const dev = await enroll(orgA);
+  const alice = await login('alice@a.test', 'alice-password');
+  assert.equal((await call('POST', `devices/${dev.device_id}/commands`, { cookie: alice, body: { command: 'RequestLock' } })).status, 201);
+  const d = (await call('GET', `devices/${dev.device_id}`, { cookie: alice })).body;
+  const lock = d.commands.find((c: { command: string }) => c.command === 'RequestLock');
+  assert.equal(lock.state, 'pending');
+  assert.equal(lock.observed, 'not yet received');
+  assert.ok(['none', 'not_reported'].includes(d.policy.state));
+  assert.equal(d.policy.observed_version, null);
+
+  const future = new Date(Date.now() + 60_000).toISOString(), past = new Date(Date.now() - 1).toISOString();
+  assert.equal(observedCommand('pending', past, Date.now()), 'expired — never received');
+  assert.equal(observedCommand('received', future, Date.now()), 'received — not yet started');
+  assert.equal(observedCommand('completed', past, Date.now()), 'done');
+  assert.deepEqual(observedPolicy(5, '4'), { requested_version: 5, observed_version: 4, state: 'pending' });
+  assert.deepEqual(observedPolicy(5, 5), { requested_version: 5, observed_version: 5, state: 'applied' });
+  assert.deepEqual(observedPolicy(5, undefined), { requested_version: 5, observed_version: null, state: 'not_reported' });
+  assert.deepEqual(observedPolicy(null, undefined), { requested_version: null, observed_version: null, state: 'none' });
 });
 
 test('routine commands are sent; RemoteWipe needs a second administrator and verifies on the device', async () => {
@@ -231,3 +253,4 @@ test('repeated failed sign-ins are throttled', async () => {
   for (let i = 0; i < 11; i++) last = (await call('POST', 'login', { body: { email: 'zed@b.test', password: `nope-${i}` } })).status;
   assert.equal(last, 429);
 });
+
