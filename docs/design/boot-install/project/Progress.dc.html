@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WorkSuite OS install progress</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+@keyframes ws-shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+@keyframes ws-spin{to{transform:rotate(360deg)}}
+.ws-shine{animation:ws-shimmer 1.8s ease-in-out infinite}
+.ws-spin{animation:ws-spin 1s linear infinite;transform-origin:50% 50%}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; background: radial-gradient(ellipse 70% 55% at 50% 30%, #12306B 0%, #0A1A3D 55%, #060E22 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; display: flex; flex-direction: column; align-items: center; position: relative; overflow: hidden">
+
+<div style="margin-top: 96px; display: flex; flex-direction: column; align-items: center; gap: 12px">
+<svg width="56" height="56" viewBox="0 0 60 60" aria-hidden="true">
+<rect x="20" y="0" width="40" height="40" rx="3" fill="#1F6BFF"></rect>
+<rect x="20" y="20" width="20" height="20" fill="#0A1A3D"></rect>
+<rect x="0" y="20" width="20" height="20" rx="3" fill="#18D4F0"></rect>
+<rect x="20" y="40" width="20" height="20" rx="3" fill="#18D4F0"></rect>
+</svg>
+<h1 style="margin: 14px 0 0; font-size: 34px; font-weight: 700; letter-spacing: -0.02em">Installing WorkSuite OS</h1>
+<div style="font-size: 15px; color: #8FA3C8">This takes a few minutes. Keep your computer plugged in.</div>
+</div>
+
+<div style="margin-top: 48px; width: 640px; box-sizing: border-box; padding: 28px 32px; background: rgba(14, 32, 72, 0.72); border: 1px solid rgba(127, 178, 255, 0.16); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 22px">
+
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 500">
+<svg class="ws-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"></path></svg>
+<span>Copying system files</span>
+</div>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 28px; font-weight: 500; color: #FFFFFF">{{percent}}%</div>
+</div>
+
+<div role="progressbar" aria-label="Installation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{percent}}" style="position: relative; height: 10px; border-radius: 999px; background: rgba(127,178,255,0.12); overflow: hidden">
+<div style="position: absolute; left: 0; top: 0; bottom: 0; width: {{barWidth}}; border-radius: 999px; background: linear-gradient(90deg, #1F6BFF, #18D4F0); box-shadow: 0 0 16px rgba(24,212,240,0.5); overflow: hidden">
+<div class="ws-shine" style="position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent)"></div>
+</div>
+</div>
+
+<div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8">
+<span>2.1 GB of 3.4 GB</span>
+<span>About {{remaining}} min left</span>
+</div>
+
+<div style="height: 1px; background: rgba(127,178,255,0.12)"></div>
+
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="height: 3px; border-radius: 2px; background: {{s.bar}}"></div>
+<div style="font-size: 13px; color: {{s.color}}; font-weight: 500">{{s.label}}</div>
+<div style="font-size: 12px; color: #8FA3C8">{{s.state}}</div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="margin-top: 22px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5E739C">/usr/lib/worksuite/core/runtime.img</div>
+
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: 64px; border-top: 1px solid rgba(127,178,255,0.1); background: rgba(4,10,26,0.5); display: flex; align-items: center; justify-content: center; gap: 36px; font-size: 13px; color: #8FA3C8">
+<span style="display: flex; align-items: center; gap: 8px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 2px 7px; border: 1px solid #3D5280; border-radius: 5px; color: #C9D6EE">Tab</span>Show details</span>
+<span>Do not turn off your computer</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"percent":{"editor":"range","default":62,"min":0,"max":100,"step":1},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props.percent ?? 62;
+    const names = ['Prepare disk', 'Copy files', 'Configure', 'Finish'];
+    const cur = p >= 100 ? 4 : p >= 85 ? 2 : p >= 10 ? 1 : 0;
+    const steps = names.map((label, i) => {
+      const done = i < cur, active = i === cur;
+      return {
+        label,
+        state: done ? 'Done' : active ? 'In progress' : 'Waiting',
+        bar: done ? '#5FD39A' : active ? '#18D4F0' : 'rgba(127,178,255,0.15)',
+        color: done || active ? '#E8EEFA' : '#8FA3C8'
+      };
+    });
+    return { percent: p, barWidth: p + '%', remaining: Math.max(1, Math.round((100 - p) / 12)), steps };
+  }
+}
+</script>
+</body>
+</html>

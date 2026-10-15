@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Files sidebar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<nav aria-label="Places" style="width: 220px; height: 800px; box-sizing: border-box; padding: 18px 12px; background: #071330; border-right: 1px solid rgba(127,178,255,0.12); display: flex; flex-direction: column; gap: 16px; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA">
+<div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"></path></svg>
+<span style="font-size: 15px; font-weight: 600">Files</span>
+</div>
+<sc-for list="{{sections}}" as="s" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 1px">
+<span style="padding: 0 10px 6px; font-size: 11px; color: #5E739C; text-transform: uppercase; letter-spacing: 0.08em">{{s.name}}</span>
+<sc-for list="{{s.items}}" as="n" hint-placeholder-count="4">
+<span style="display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13px; background: {{n.bg}}; color: {{n.color}}; font-weight: {{n.weight}}">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{n.stroke}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg>{{n.label}}<span style="margin-left: auto; font-size: 11px; color: #5E739C">{{n.meta}}</span></span>
+</sc-for>
+</div>
+</sc-for>
+<div style="margin-top: auto; padding: 12px 10px; border-radius: 10px; background: rgba(14,32,72,0.6); display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span>vda</span><span style="color: #8FA3C8">12.8 / 39.5 GB</span></div>
+<div style="height: 5px; border-radius: 3px; background: rgba(127,178,255,0.15); overflow: hidden"><div style="height: 100%; width: 32%; background: linear-gradient(90deg, #1F6BFF, #18D4F0)"></div></div>
+</div>
+</nav>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"active":{"editor":"enum","options":["Home","Recent","Starred","Documents","Downloads","Pictures","Music","Videos","Trash","USB drive","WorkSuite Drive"],"default":"Documents"},"$preview":{"width":220,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const a = this.props.active ?? 'Documents';
+    const F = 'M3 6h6l2 2h10v11H3z';
+    const S = [
+      ['Quick access', [['Home','M3 11l9-7 9 7v9H3z'],['Recent','M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2'],['Starred','M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z']]],
+      ['Folders', [['Documents',F],['Downloads','M12 4v11M7 10l5 5 5-5M4 20h16'],['Pictures','M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6'],['Music','M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0M21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0'],['Videos','M3 5h18v14H3zM10 9l5 3-5 3z'],['Trash','M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13']]],
+      ['Devices', [['USB drive','M9 3h6v6H9zM6 9h12v12H6z','⏏'],['WorkSuite Drive','M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z','synced']]]
+    ];
+    return { sections: S.map(s => ({ name: s[0], items: s[1].map(n => { const on = n[0] === a; return { label: n[0], icon: n[1], meta: n[2] || '',
+      bg: on ? 'rgba(31,107,255,0.2)' : 'transparent', color: on ? '#FFFFFF' : '#C9D6EE', weight: on ? 600 : 400, stroke: on ? '#18D4F0' : '#8FA3C8' }; }) })) };
+  }
+}
+</script>
+</body>
+</html>

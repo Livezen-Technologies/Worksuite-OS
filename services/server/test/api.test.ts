@@ -183,3 +183,29 @@ test('bootstrap lists the org\'s web apps with web_url; links resolve to a web_u
   assert.throws(() => admin.setWebApps(db, org, ['nope']));
   admin.setWebApps(db, org, null);
 });
+
+test('search, file search and recent files cover only the caller\'s records', async () => {
+  const put = (token: string, module: string, object_id: string, payload: unknown) => call('POST', '/desktop/v1/sync/mutations', {
+    token, idem: randomUUID(), body: { batch_id: randomUUID(), mutations: [{ mutation_id: randomUUID(), module, object_id, operation: 'create', base_revision: null, payload }] },
+  });
+  await put(ana, 'mail', 'm1', { subject: 'Budget review', from: 'Kamal' });
+  await put(ana, 'contacts', 'c1', { name: 'Budget Office', email: 'b@a.test' });
+  await put(ana, 'files', 'f1', { name: 'Budget 2026.xlsx', folder: 'Finance', size: 2048 });
+  await put(ben, 'mail', 'm9', { subject: 'Budget secret' });
+  const s = await call('GET', '/desktop/v1/search?q=budget', { token: ana });
+  assert.equal(s.status, 200);
+  assert.deepEqual(s.body.results.map((r: { id: string }) => r.id).sort(), ['contacts:c1', 'mail:m1']);
+  const m = s.body.results.find((r: { id: string }) => r.id === 'mail:m1');
+  assert.equal(m.type, 'mail'); assert.equal(m.link, 'worksuite://mail/m1'); assert.equal(m.subtitle, 'Kamal');
+  const typed = await call('GET', '/desktop/v1/search?q=budget&types=contact', { token: ana });
+  assert.deepEqual(typed.body.results.map((r: { type: string }) => r.type), ['contact']);
+  const f = await call('GET', '/desktop/v1/files/search?q=budget', { token: ana });
+  assert.equal(f.body.files.length, 1);
+  assert.equal(f.body.files[0].ext, 'xlsx'); assert.equal(f.body.files[0].folder, 'Finance');
+  const recent = await call('GET', '/desktop/v1/files/recent', { token: ana });
+  assert.deepEqual(recent.body.files.map((x: { id: string }) => x.id), ['files:f1']);
+  const benS = await call('GET', '/desktop/v1/search?q=budget', { token: ben });
+  assert.deepEqual(benS.body.results.map((r: { id: string }) => r.id), ['mail:m9']);
+  assert.equal((await call('GET', '/desktop/v1/search?q=', { token: ana })).status, 400);
+  assert.equal((await call('GET', '/desktop/v1/search?q=x')).status, 401);
+});

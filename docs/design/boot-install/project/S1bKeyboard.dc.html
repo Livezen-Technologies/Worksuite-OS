@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Installer – Keyboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="Sidebar" step="1" sub="2" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 80% 60% at 70% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="flex: 1; padding: 40px 56px 0; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: 0.08em">STEP 1 · KEYBOARD</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em">Keyboard layout</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">Only shown in Custom install. Express uses the layout that matches your language.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="kl" style="font-size: 13px; font-weight: 500; color: #C9D6EE">Layout</label>
+<select id="kl" style="height: 44px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit"><option>English (US)</option><option>English (UK)</option><option>Sinhala</option><option>Tamil</option></select>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="kv" style="font-size: 13px; font-weight: 500; color: #C9D6EE">Variant</label>
+<select id="kv" style="height: 44px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit"><option>Default</option><option>International (dead keys)</option><option>Dvorak</option><option>Colemak</option></select>
+</div>
+</div>
+<div style="padding: 18px; border-radius: 14px; background: rgba(4,10,26,0.45); border: 1px solid rgba(127,178,255,0.14); display: flex; flex-direction: column; gap: 6px; align-items: center" aria-hidden="true">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+<div style="display: flex; gap: 6px; padding-left: {{r.pad}}">
+<sc-for list="{{r.keys}}" as="k" hint-placeholder-count="10">
+<span style="min-width: 44px; width: {{k.w}}; height: 44px; box-sizing: border-box; border-radius: 7px; background: {{k.bg}}; border: 1px solid rgba(127,178,255,0.16); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: {{k.color}}">{{k.label}}</span>
+</sc-for>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; gap: 12px; align-items: flex-end">
+<div style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+<label for="kt" style="font-size: 13px; font-weight: 500; color: #C9D6EE">Test your keyboard</label>
+<input id="kt" placeholder="Type here — keys light up above" style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit">
+</div>
+<button style="all: unset; height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); font-size: 14px; font-weight: 500; display: flex; align-items: center; cursor: pointer">Detect layout</button>
+</div>
+</div>
+<footer style="height: 80px; box-sizing: border-box; padding: 0 56px; border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: space-between">
+<button style="all: unset; padding: 12px 16px; font-size: 15px; color: #8FA3C8; cursor: pointer">Quit installer</button>
+<div style="display: flex; gap: 12px">
+<button style="all: unset; padding: 12px 24px; border-radius: 10px; font-size: 15px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Back</button>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Continue</button>
+</div>
+</footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const R = [['QWERTYUIOP', '0'], ['ASDFGHJKL', '24px'], ['ZXCVBNM', '48px']];
+    const lit = 'WORK';
+    const rows = R.map(r => ({ pad: r[1], keys: r[0].split('').map(c => ({ label: c, w: '44px',
+      bg: lit.includes(c) ? '#1F6BFF' : 'rgba(14,32,72,0.8)', color: lit.includes(c) ? '#FFFFFF' : '#C9D6EE' })) }));
+    rows.push({ pad: '0', keys: [{ label: 'space', w: '320px', bg: 'rgba(14,32,72,0.8)', color: '#8FA3C8' }] });
+    return { rows };
+  }
+}
+</script>
+</body>
+</html>

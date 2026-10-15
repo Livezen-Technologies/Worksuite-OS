@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Global search</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(circle at 78% 22%, rgba(24,212,240,0.3) 0%, transparent 38%), radial-gradient(circle at 18% 80%, rgba(31,107,255,0.45) 0%, transparent 45%), linear-gradient(160deg, #0E2A66 0%, #071330 60%, #040A1A 100%)">
+<div style="position: absolute; inset: 0; background: rgba(2,6,16,0.45); backdrop-filter: blur(6px)"></div>
+<div role="dialog" aria-label="Search" style="position: absolute; left: 50%; top: 90px; transform: translateX(-50%); width: 860px; box-sizing: border-box; border-radius: 20px; background: rgba(10,24,56,0.98); border: 1px solid rgba(127,178,255,0.22); box-shadow: 0 40px 100px rgba(0,0,0,0.6); overflow: hidden">
+<div style="display: flex; align-items: center; gap: 14px; padding: 18px 22px; border-bottom: 1px solid rgba(127,178,255,0.12)">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+<input aria-label="Search apps, files, settings and more" value="{{q}}" onInput="{{setQ}}" placeholder="Search apps, files, settings, people…" style="flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #FFFFFF; font: inherit; font-size: 20px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 3px 7px; border: 1px solid #3D5280; border-radius: 5px; color: #8FA3C8">Esc</span>
+</div>
+<div style="display: flex; gap: 6px; padding: 10px 22px; border-bottom: 1px solid rgba(127,178,255,0.08)">
+<sc-for list="{{cats}}" as="c" hint-placeholder-count="6">
+<button onClick="{{c.pick}}" style="all: unset; padding: 5px 11px; border-radius: 999px; font-size: 12px; background: {{c.bg}}; color: {{c.color}}; cursor: pointer">{{c.t}} <span style="opacity: 0.6">{{c.n}}</span></button>
+</sc-for>
+</div>
+<div style="display: flex; height: 440px">
+<div style="flex: 1; min-width: 0; overflow: hidden; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+<span style="padding: 8px 12px 4px; font-size: 11px; color: #5E739C; text-transform: uppercase; letter-spacing: 0.08em">{{g.name}}</span>
+<sc-for list="{{g.items}}" as="r" hint-placeholder-count="3">
+<button onClick="{{r.pick}}" style="all: unset; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: {{r.bg}}; cursor: pointer">
+<span style="width: 32px; height: 32px; border-radius: 8px; background: {{r.c}}; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex: none">{{r.i}}</span>
+<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px"><span style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.t}}</span><span style="font-size: 11px; color: #8FA3C8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.d}}</span></span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8FA3C8">{{r.hint}}</span>
+</button>
+</sc-for>
+</sc-for>
+<sc-if value="{{empty}}" hint-placeholder-val="{{false}}"><div style="padding: 60px 20px; text-align: center; font-size: 14px; color: #8FA3C8">No results for "{{q}}". Try App Center or the web.</div></sc-if>
+</div>
+<aside aria-label="Preview" style="width: 300px; box-sizing: border-box; padding: 18px; border-left: 1px solid rgba(127,178,255,0.1); background: rgba(4,10,26,0.35); display: flex; flex-direction: column; gap: 12px">
+<div style="height: 140px; border-radius: 12px; background: {{sel.thumb}}; display: flex; align-items: center; justify-content: center"><span style="width: 60px; height: 60px; border-radius: 14px; background: {{sel.c}}; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700">{{sel.i}}</span></div>
+<span style="font-size: 16px; font-weight: 600">{{sel.t}}</span>
+<span style="font-size: 12px; color: #8FA3C8; line-height: 1.5">{{sel.d}}</span>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{sel.actions}}" as="a" hint-placeholder-count="3">
+<span style="display: flex; justify-content: space-between; padding: 8px 10px; border-radius: 8px; background: {{a.bg}}; font-size: 13px"><span>{{a.t}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8FA3C8">{{a.k}}</span></span>
+</sc-for>
+</div>
+</aside>
+</div>
+<div style="display: flex; gap: 20px; padding: 10px 22px; border-top: 1px solid rgba(127,178,255,0.1); font-size: 11px; color: #8FA3C8">
+<span>↑↓ navigate</span><span>Enter open</span><span>Tab switch category</span><span>Ctrl Enter open location</span><span style="margin-left: auto">Searching this device only · indexed 1 min ago</span>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { q: 'bud', cat: 'All', sel: 0 }; }
+  renderVals() {
+    const { q, cat, sel } = this.state;
+    const ALL = [
+      ['Apps','Budget Planner','App Center · not installed','B','#2E9E6A','↓'],
+      ['Files','Budget 2027.xlsx','~/Documents · edited today','X','#2E9E6A',''],
+      ['Files','Marketing budget Q4.xlsx','~/Documents/Projects · 2 Oct','X','#2E9E6A',''],
+      ['Files','Offsite budget estimate.pdf','~/Downloads · 20 Sep','P','#D9452B',''],
+      ['Settings','Battery usage by app','Settings › Power','⚙','#5E739C',''],
+      ['People','Buddhika Silva','Design team · Chat','BS','#7A4FE0',''],
+      ['Mail','Re: Q4 budget sign-off','From Finance · yesterday','M','#D9572B',''],
+      ['Actions','Calculate: budget × 1.2','Type an expression to calculate','=','#0E8FA8','']
+    ];
+    const ql = q.trim().toLowerCase();
+    const hit = ALL.map((r, i) => ({ r, i })).filter(x => !ql || x.r[1].toLowerCase().includes(ql) || x.r[2].toLowerCase().includes(ql));
+    const cats = ['All','Apps','Files','Settings','People','Mail'].map(t => ({ t, n: t === 'All' ? hit.length : hit.filter(x => x.r[0] === t).length,
+      bg: t === cat ? '#1F6BFF' : 'rgba(255,255,255,0.06)', color: t === cat ? '#FFFFFF' : '#C9D6EE', pick: () => this.setState({ cat: t, sel: 0 }) }));
+    const shown = hit.filter(x => cat === 'All' || x.r[0] === cat);
+    const order = [];
+    shown.forEach(x => { if (!order.includes(x.r[0])) order.push(x.r[0]); });
+    let k = 0;
+    const groups = order.map(name => ({ name, items: shown.filter(x => x.r[0] === name).map(x => { const idx = k++; return {
+      t: x.r[1], d: x.r[2], i: x.r[3], c: x.r[4], hint: idx === sel ? 'Enter' : x.r[5],
+      bg: idx === sel ? 'rgba(31,107,255,0.25)' : 'transparent', pick: () => this.setState({ sel: idx }) }; }) }));
+    const cur = shown[sel] ? shown[sel].r : ALL[1];
+    const isApp = cur[0] === 'Apps';
+    return { q, setQ: e => this.setState({ q: e.target.value, sel: 0 }), cats, groups, empty: shown.length === 0,
+      sel: { t: cur[1], d: cur[2], i: cur[3], c: cur[4], thumb: 'rgba(14,32,72,0.8)',
+        actions: (isApp ? [['Install','Enter'],['Open in App Center','Ctrl Enter']] : [['Open','Enter'],['Open location','Ctrl Enter'],['Copy path','Ctrl C']]).map((a, i) => ({ t: a[0], k: a[1], bg: i === 0 ? 'rgba(31,107,255,0.2)' : 'rgba(255,255,255,0.04)' })) } };
+  }
+}
+</script>
+</body>
+</html>

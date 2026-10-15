@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Installer – Time zone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<nav style="width: 288px; box-sizing: border-box; padding: 40px 28px; background: #071330; border-right: 1px solid rgba(127,178,255,0.12); display: flex; flex-direction: column; gap: 36px">
+<div style="display: flex; align-items: center; gap: 12px">
+<svg width="30" height="30" viewBox="0 0 60 60" aria-hidden="true"><rect x="20" y="0" width="40" height="40" rx="3" fill="#1F6BFF"></rect><rect x="20" y="20" width="20" height="20" fill="#071330"></rect><rect x="0" y="20" width="20" height="20" rx="3" fill="#18D4F0"></rect><rect x="20" y="40" width="20" height="20" rx="3" fill="#18D4F0"></rect></svg>
+<span style="font-size: 17px; font-weight: 600">WorkSuite OS Setup</span>
+</div>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px">
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="7">
+<li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; background: {{s.bg}}">
+<span style="width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; background: {{s.dot}}; color: {{s.dotText}}">{{s.mark}}</span>
+<span style="font-size: 14px; color: {{s.color}}; font-weight: {{s.weight}}">{{s.label}}</span>
+</li>
+</sc-for>
+</ol>
+<div style="margin-top: auto; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5E739C">1.0 · amd64</div>
+</nav>
+<main style="flex: 1; display: flex; flex-direction: column; background: radial-gradient(ellipse 80% 60% at 70% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="flex: 1; padding: 56px 72px 0; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: 0.08em">STEP 5 OF 7</div>
+<h1 style="margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -0.02em">Where are you?</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">We detected your time zone from the network. Click the map or search to change it.</p>
+</div>
+<div style="position: relative; height: 300px; border-radius: 14px; overflow: hidden; border: 1px solid rgba(127,178,255,0.16); background-color: #081634; background-image: radial-gradient(rgba(127,178,255,0.22) 1.2px, transparent 1.4px); background-size: 14px 14px">
+<div style="position: absolute; top: 0; bottom: 0; left: 66%; width: 46px; background: rgba(24,212,240,0.14); border-left: 1px solid rgba(24,212,240,0.4); border-right: 1px solid rgba(24,212,240,0.4)"></div>
+<div style="position: absolute; left: calc(66% + 15px); top: 168px; width: 16px; height: 16px; border-radius: 50%; background: #18D4F0; box-shadow: 0 0 0 6px rgba(24,212,240,0.25), 0 0 20px rgba(24,212,240,0.8)"></div>
+<div style="position: absolute; left: calc(66% + 44px); top: 152px; padding: 8px 12px; border-radius: 8px; background: rgba(4,10,26,0.85); border: 1px solid rgba(127,178,255,0.2); display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 600">Colombo</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8">UTC+05:30</span>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="reg" style="font-size: 13px; font-weight: 500; color: #C9D6EE">Region</label>
+<select id="reg" style="box-sizing: border-box; height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.2); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit"><option>Asia</option><option>Europe</option><option>Americas</option></select>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="city" style="font-size: 13px; font-weight: 500; color: #C9D6EE">City</label>
+<select id="city" style="box-sizing: border-box; height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.2); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit"><option>Colombo</option><option>Kolkata</option><option>Dubai</option></select>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; font-weight: 500; color: #C9D6EE">Local time</span>
+<div style="height: 44px; display: flex; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 500">15:56 <span style="font-size: 13px; color: #8FA3C8; margin-left: 10px">Thu 15 Oct</span></div>
+</div>
+</div>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #C9D6EE"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #1F6BFF">Set time automatically from the internet</label>
+</div>
+<footer style="height: 88px; box-sizing: border-box; padding: 0 72px; border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: space-between">
+<button style="all: unset; padding: 12px 20px; border-radius: 10px; font-size: 15px; color: #8FA3C8; cursor: pointer">Quit installer</button>
+<div style="display: flex; gap: 12px">
+<button style="all: unset; padding: 12px 24px; border-radius: 10px; font-size: 15px; font-weight: 500; color: #E8EEFA; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Back</button>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Continue</button>
+</div>
+</footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const cur = 4;
+    const names = ['Language', 'Network', 'Installation type', 'Your account', 'Time zone', 'Review', 'Install'];
+    const steps = names.map((label, i) => ({
+      label, mark: i < cur ? '✓' : String(i + 1),
+      bg: i === cur ? 'rgba(31,107,255,0.18)' : 'transparent',
+      dot: i < cur ? '#5FD39A' : i === cur ? '#1F6BFF' : 'rgba(127,178,255,0.12)',
+      dotText: i <= cur ? '#FFFFFF' : '#8FA3C8',
+      color: i <= cur ? '#E8EEFA' : '#8FA3C8', weight: i === cur ? 600 : 400
+    }));
+    return { steps };
+  }
+}
+</script>
+</body>
+</html>

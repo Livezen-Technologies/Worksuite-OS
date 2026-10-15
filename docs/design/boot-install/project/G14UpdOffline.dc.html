@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Updates – offline, resume, emergency</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Updates" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 32px 44px; display: flex; flex-direction: column; gap: 16px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Updates</h1>
+<div style="display: flex; gap: 14px; align-items: center; padding: 16px 18px; border-radius: 14px; background: rgba(217,69,43,0.14); border: 1px solid rgba(255,138,122,0.55)">
+<span style="width: 40px; height: 40px; border-radius: 10px; background: #D9452B; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM12 8v5M12 16h.01"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 700">Emergency security update 1.1.2</span><span style="font-size: 13px; color: #FFD2CA">Pushed by [Company] IT · will install automatically at 02:00 if not installed</span></span>
+<button style="all: unset; padding: 10px 18px; border-radius: 10px; background: #FFFFFF; color: #8A1F10; font-size: 14px; font-weight: 700; cursor: pointer">Install now</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 14px; font-weight: 600">Downloading 1.1.2 · resumed</span><span style="display: flex; gap: 12px; font-size: 12px"><a href="#">Pause</a></span></div>
+<div style="position: relative; height: 8px; border-radius: 4px; background: rgba(127,178,255,0.14); overflow: hidden"><div style="position: absolute; inset: 0 30% 0 0; background: linear-gradient(90deg, #5E739C 0 55%, #1F6BFF 55%, #18D4F0)"></div></div>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8FA3C8">Picked up at 196 MB after the connection dropped · 252 of 360 MB · 3.1 MB/s</span>
+</div>
+<div style="display: flex; gap: 16px; align-items: center; padding: 18px 20px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<span style="width: 48px; height: 48px; border-radius: 12px; background: rgba(31,107,255,0.18); display: flex; align-items: center; justify-content: center; flex: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6v6H9zM6 9h12v12H6zM10 13v4M14 13v4"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 600">Update from a USB drive</span><span style="font-size: 13px; color: #8FA3C8">For computers without internet. Found <span style="font-family: 'IBM Plex Mono', monospace">worksuite-1.1.2-offline.wsu</span> on "KINGSTON".</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5FD39A"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5FD39A" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Signature verified · newer than installed (1.1.0)</span></span>
+<button style="all: unset; padding: 10px 18px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); font-size: 14px; font-weight: 500; cursor: pointer">Install from USB</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{info}}" as="i" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 12px; background: rgba(14,32,72,0.5); border: 1px solid rgba(127,178,255,0.1)"><span style="font-size: 12px; color: #8FA3C8">{{i.k}}</span><span style="font-size: 14px; font-weight: 500">{{i.v}}</span></div>
+</sc-for>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { info: [['Release ring','Broad · set by IT'],['Paused releases','1.1.1 pulled by IT on 12 Oct'],['Last checked','Today at 23:58']].map(i => ({ k: i[0], v: i[1] })) };
+  }
+}
+</script>
+</body>
+</html>

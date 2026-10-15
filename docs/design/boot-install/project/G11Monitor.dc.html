@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>System monitor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 26px 32px; display: flex; flex-direction: column; gap: 16px; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="display: flex; align-items: center; gap: 12px"><h1 style="margin: 0; font-size: 24px; font-weight: 700">System monitor</h1>
+<div style="margin-left: 20px; display: flex; border-radius: 9px; border: 1px solid rgba(127,178,255,0.2); overflow: hidden; font-size: 13px"><span style="padding: 7px 14px; background: rgba(31,107,255,0.25)">Overview</span><span style="padding: 7px 14px; color: #C9D6EE">Processes</span><span style="padding: 7px 14px; color: #C9D6EE">Startup</span><span style="padding: 7px 14px; color: #C9D6EE">Health</span></div></div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{graphs}}" as="g" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 13px; color: #C9D6EE">{{g.t}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500">{{g.v}}</span></div>
+<svg width="100%" height="56" viewBox="0 0 200 56" preserveAspectRatio="none" role="img" aria-label="{{g.t}} over the last minute"><polyline points="{{g.pts}}" fill="none" stroke="{{g.c}}" stroke-width="2" vector-effect="non-scaling-stroke"></polyline></svg>
+<span style="font-size: 11px; color: #8FA3C8">{{g.d}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; flex: 1; min-height: 0">
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 70px 90px 80px; gap: 10px; padding: 10px 16px; font-size: 12px; color: #8FA3C8; border-bottom: 1px solid rgba(127,178,255,0.1)"><span>Process</span><span>CPU</span><span>Memory</span><span>Energy</span></div>
+<sc-for list="{{procs}}" as="p" hint-placeholder-count="7">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 70px 90px 80px; gap: 10px; padding: 8px 16px; font-size: 13px"><span>{{p.n}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">{{p.c}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">{{p.m}}</span><span style="font-size: 12px; color: {{p.ec}}">{{p.e}}</span></div>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<span style="font-size: 14px; font-weight: 600">Performance targets</span>
+<span style="font-size: 11px; color: #8FA3C8; margin-bottom: 4px">Measured on this device · last 7 days</span>
+<sc-for list="{{targets}}" as="t" hint-placeholder-count="6">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 13px">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: {{t.c}}; flex: none"></span>
+<span style="flex: 1">{{t.n}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">{{t.v}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8FA3C8; width: 64px; text-align: right">{{t.goal}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const line = (seed, base, amp) => Array.from({ length: 30 }, (_, i) => { const y = base + Math.sin(i * 0.6 + seed) * amp + Math.sin(i * 1.7 + seed * 2) * amp * 0.4; return (i * 200 / 29).toFixed(1) + ',' + (56 - Math.max(2, Math.min(54, y))).toFixed(1); }).join(' ');
+    const graphs = [['CPU','18%','12 cores · 2.4 GHz','#18D4F0',line(1,12,6)],['Memory','6.2 GB','of 16 GB · 39%','#7FB2FF',line(2,22,2)],['Disk','4 MB/s','read 3 · write 1','#5FD39A',line(3,8,6)],['Network','1.2 MB/s','↓ 1.1 · ↑ 0.1','#B9A0FF',line(4,10,7)]].map(g => ({ t: g[0], v: g[1], d: g[2], c: g[3], pts: g[4] }));
+    const procs = [['Browser (14 tabs)','6.2%','1.8 GB','High','#FFB98A'],['Slack','3.1%','620 MB','Medium','#C9D6EE'],['WorkSuite shell','1.4%','210 MB','Low','#5FD39A'],['Docs','0.8%','340 MB','Low','#5FD39A'],['Files','0.3%','96 MB','Low','#5FD39A'],['App Center','0.1%','140 MB','Low','#5FD39A'],['System services (48)','4.0%','1.1 GB','Medium','#C9D6EE']].map(p => ({ n: p[0], c: p[1], m: p[2], e: p[3], ec: p[4] }));
+    const T = [['Boot to sign-in','9.8 s','≤ 15 s',1],['Sign-in to desktop','2.1 s','≤ 3 s',1],['App launch (median)','0.9 s','≤ 1.5 s',1],['Idle memory','1.4 GB','≤ 1.5 GB',1],['Resume from sleep','2.6 s','≤ 2 s',0],['Shell crashes','0','0 / week',1]];
+    return { graphs, procs, targets: T.map(t => ({ n: t[0], v: t[1], goal: t[2], c: t[3] ? '#5FD39A' : '#FFB98A' })) };
+  }
+}
+</script>
+</body>
+</html>

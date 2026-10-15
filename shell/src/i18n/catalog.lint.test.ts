@@ -30,6 +30,7 @@ const ALLOW: Record<string, string[]> = {
   '*': ['WorkSuite OS', 'WorkSuite Cloud', 'worksuite', 'OS', 'SHA-256', 'work.example.com'],
   'src/screens/Installer.tsx': ['*'],
   'src/screens/Desktop.tsx': ['Super'],
+  'src/components/GlobalSearch.tsx': ['Esc', 'Enter'],
   'src/screens/recovery/Menu.tsx': ['English (US)'],
 }
 

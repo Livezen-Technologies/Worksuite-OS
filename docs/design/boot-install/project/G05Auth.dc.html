@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin password prompt</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: linear-gradient(160deg, #0E2A66 0%, #071330 60%, #040A1A 100%)">
+<div style="position: absolute; inset: 0; background: rgba(2,6,16,0.6); backdrop-filter: blur(8px)"></div>
+<div role="alertdialog" aria-labelledby="au-t" style="position: relative; width: 460px; box-sizing: border-box; border-radius: 20px; background: #0F2350; border: 1px solid {{border}}; box-shadow: 0 30px 80px rgba(0,0,0,0.6); overflow: hidden">
+<div style="padding: 26px 26px 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+<span style="width: 56px; height: 56px; border-radius: 16px; background: {{iconBg}}; display: flex; align-items: center; justify-content: center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{{iconColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM12 9v4M12 16h.01"></path></svg></span>
+<h2 id="au-t" style="margin: 4px 0 0; font-size: 19px; font-weight: 700">{{title}}</h2>
+<p style="margin: 0; font-size: 14px; color: #C9D6EE; line-height: 1.5">{{body}}</p>
+</div>
+<div style="margin: 0 22px; padding: 12px 14px; border-radius: 12px; background: rgba(4,10,26,0.5); display: flex; align-items: center; gap: 12px">
+<span style="width: 34px; height: 34px; border-radius: 9px; background: #1F6BFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">A</span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 600">App Center</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8FA3C8">org.worksuite.packagekit.install</span></span>
+<a href="#" style="font-size: 12px">Details</a>
+</div>
+<div style="padding: 16px 22px 20px; display: flex; flex-direction: column; gap: 8px">
+<label for="ap" style="font-size: 12px; color: #C9D6EE">Password for Alex Perera (administrator)</label>
+<input id="ap" type="password" disabled="{{locked}}" style="height: 46px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; border: 1px solid {{fieldBorder}}; background: rgba(4,10,26,0.6); color: #FFFFFF; font: inherit; opacity: {{fieldOp}}">
+<span style="font-size: 12px; color: {{msgColor}}">{{msg}}</span>
+</div>
+<div style="padding: 14px 18px; background: rgba(4,10,26,0.35); border-top: 1px solid rgba(127,178,255,0.12); display: flex; justify-content: flex-end; gap: 10px">
+<button style="all: unset; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Cancel</button>
+<button disabled="{{locked}}" style="all: unset; padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; color: {{ctaColor}}; background: {{ctaBg}}; cursor: pointer">Authenticate</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["ask","failed","locked out"],"default":"ask"},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.state ?? 'ask';
+    const base = { title: 'Administrator access needed', body: 'App Center wants to install "Spotify" for all users.', iconBg: 'rgba(31,107,255,0.18)', iconColor: '#7FB2FF', border: 'rgba(127,178,255,0.2)', fieldBorder: 'rgba(255,255,255,0.2)', msg: 'Or touch the fingerprint sensor', msgColor: '#8FA3C8', locked: false, fieldOp: 1, ctaBg: '#1F6BFF', ctaColor: '#FFFFFF' };
+    if (s === 'failed') return Object.assign(base, { fieldBorder: '#FF8A7A', msg: 'Wrong password. 2 tries left before a 5-minute lockout.', msgColor: '#FF8A7A', border: 'rgba(255,138,122,0.4)' });
+    if (s === 'locked out') return Object.assign(base, { title: 'Too many attempts', body: 'Admin sign-in is locked on this device for 4:52 after 5 wrong passwords. [Company] IT has been notified.', iconBg: 'rgba(255,138,122,0.16)', iconColor: '#FF8A7A', border: 'rgba(255,138,122,0.5)', msg: 'Try again at 00:09, or ask IT to unlock it.', msgColor: '#FFB98A', locked: true, fieldOp: 0.4, ctaBg: 'rgba(31,107,255,0.3)', ctaColor: 'rgba(255,255,255,0.5)' });
+    return base;
+  }
+}
+</script>
+</body>
+</html>

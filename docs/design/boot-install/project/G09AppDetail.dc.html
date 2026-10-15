@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App detail – permissions and security</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 28px 40px; display: flex; flex-direction: column; gap: 18px; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="display: flex; align-items: center; gap: 20px">
+<span style="width: 76px; height: 76px; border-radius: 18px; background: #7A4FE0; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700">S</span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 26px; font-weight: 700">Slack</span><span style="font-size: 13px; color: #8FA3C8">Slack Technologies · 4.41.105 · Flatpak (Electron) · 312 MB</span></span>
+<button style="all: unset; padding: 10px 18px; border-radius: 10px; border: 1px solid rgba(255,138,122,0.45); color: #FFB4A8; font-size: 14px; font-weight: 500; cursor: pointer">Remove</button>
+<button style="all: unset; padding: 10px 22px; border-radius: 10px; background: #1F6BFF; font-size: 14px; font-weight: 600; cursor: pointer">Open</button>
+</div>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; flex: 1; min-height: 0">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 15px; font-weight: 600">Permissions</span><button style="all: unset; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(127,178,255,0.25); font-size: 12px; cursor: pointer">Reset to defaults</button></div>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{perms}}" as="p" hint-placeholder-count="6">
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-top: {{p.border}}">
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500">{{p.t}}</span><span style="font-size: 11px; color: {{p.dc}}">{{p.d}}</span></span>
+<span aria-hidden="true" style="width: 40px; height: 24px; border-radius: 12px; background: {{p.track}}; position: relative"><span style="position: absolute; top: 3px; left: {{p.knob}}; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF"></span></span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 15px; font-weight: 600">Security</span>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{sec}}" as="s" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: {{s.border}}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{s.c}}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{s.icon}}"></path></svg>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500">{{s.t}}</span><span style="font-size: 11px; color: #8FA3C8">{{s.d}}</span></span>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 14px; background: rgba(4,10,26,0.5); border: 1px solid rgba(127,178,255,0.12)">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 13px; font-weight: 600">Software bill of materials</span><a href="#" style="font-size: 12px">Download SPDX</a></div>
+<sc-for list="{{sbom}}" as="b" hint-placeholder-count="4"><div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 11px"><span style="color: #C9D6EE">{{b.n}}</span><span style="color: {{b.c}}">{{b.v}}</span></div></sc-for>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = [['Camera','Used 2 h ago',1],['Microphone','Used 2 h ago',1],['Notifications','Allowed',1],['Your Downloads folder','Read and write',1],['Whole home folder','Changed by you, wider than default',1,1],['Run in background','Keeps you signed in',0]];
+    const S = [['Sandboxed','Flatpak sandbox with an AppArmor profile','#5FD39A','M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],['Isolated from other Electron apps','Own runtime and storage; can’t read VS Code or Teams data','#5FD39A','M4 4h7v7H4zM13 13h7v7h-7z'],['Signed and verified','Publisher key matches · approved by [Company] IT','#5FD39A','M5 12.5l4.5 4.5L19 7.5'],['1 known issue in a bundled library','libpng 1.6.39 · low severity · fix in next update','#FFB98A','M12 3l10 18H2zM12 10v5']];
+    const B = [['electron','30.1.2','#5FD39A'],['chromium','124.0.6367','#5FD39A'],['node','20.11.1','#5FD39A'],['libpng','1.6.39 · CVE-2024-…','#FFB98A']];
+    return { perms: P.map((p, i) => ({ t: p[0], d: p[1], dc: p[3] ? '#FFB98A' : '#8FA3C8', track: p[2] ? '#1F6BFF' : 'rgba(127,178,255,0.25)', knob: p[2] ? '19px' : '3px', border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })),
+      sec: S.map((s, i) => ({ t: s[0], d: s[1], c: s[2], icon: s[3], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })),
+      sbom: B.map(b => ({ n: b[0], v: b[1], c: b[2] })) };
+  }
+}
+</script>
+</body>
+</html>

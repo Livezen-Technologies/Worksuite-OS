@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Power</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Power" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 32px 44px; display: flex; flex-direction: column; gap: 18px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Power</h1>
+<div style="display: flex; gap: 20px; align-items: center; padding: 20px; border-radius: 14px; background: rgba(14,32,72,0.7); border: 1px solid rgba(127,178,255,0.14)">
+<div style="width: 88px; height: 44px; box-sizing: border-box; border-radius: 10px; border: 2px solid #C9D6EE; padding: 4px; position: relative"><div style="height: 100%; width: 78%; border-radius: 5px; background: #5FD39A"></div><span style="position: absolute; right: -8px; top: 13px; width: 5px; height: 14px; border-radius: 2px; background: #C9D6EE"></span></div>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 24px; font-weight: 700">78%</span><span style="font-size: 13px; color: #8FA3C8">On battery · about 4 h 10 min left · health 94%</span></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 14px; font-weight: 600">Power mode</span>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{modes}}" as="m" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 12px; border: 1px solid {{m.border}}; background: {{m.bg}}"><span style="font-size: 14px; font-weight: 600">{{m.t}}</span><span style="font-size: 12px; color: #8FA3C8">{{m.d}}</span></div>
+</sc-for>
+</div>
+</div>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 170px 170px; gap: 12px; padding: 10px 18px; font-size: 12px; color: #8FA3C8; border-bottom: 1px solid rgba(127,178,255,0.1)"><span></span><span>On battery</span><span>Plugged in</span></div>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 170px 170px; gap: 12px; align-items: center; padding: 12px 18px; border-top: {{r.border}}; font-size: 14px">
+<span>{{r.k}}</span>
+<span style="padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(127,178,255,0.22); background: rgba(4,10,26,0.5); font-size: 13px">{{r.a}} ▾</span>
+<span style="padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(127,178,255,0.22); background: rgba(4,10,26,0.5); font-size: 13px">{{r.b}} ▾</span>
+</div>
+</sc-for>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const M = [['Power saver','Longest battery life',0],['Balanced','Recommended',1],['Performance','Faster, uses more power',0]];
+    const R = [['Turn off screen after','5 min','15 min'],['Sleep after','15 min','Never'],['When lid is closed','Sleep','Sleep'],['Power button','Show menu','Show menu']];
+    return { modes: M.map(m => ({ t: m[0], d: m[1], border: m[2] ? '#1F6BFF' : 'rgba(127,178,255,0.14)', bg: m[2] ? 'rgba(31,107,255,0.12)' : 'rgba(14,32,72,0.5)' })),
+      rows: R.map((r, i) => ({ k: r[0], a: r[1], b: r[2], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })) };
+  }
+}
+</script>
+</body>
+</html>

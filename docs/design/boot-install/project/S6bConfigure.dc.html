@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Installer – Configure system</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+@keyframes ws-spin{to{transform:rotate(360deg)}}
+.ws-spin{animation:ws-spin 1s linear infinite;transform-origin:50% 50%}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="Sidebar" step="6" sub="2" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 80% 60% at 70% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="flex: 1; padding: 40px 56px 0; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: 0.08em">STEP 6 · CONFIGURE SYSTEM</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em">Setting things up</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">Applying your choices. This usually takes under a minute.</p>
+</div>
+<div style="height: 6px; border-radius: 3px; background: rgba(127,178,255,0.12); overflow: hidden"><div style="height: 100%; width: 72%; border-radius: 3px; background: linear-gradient(90deg, #1F6BFF, #18D4F0)"></div></div>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{tasks}}" as="t" hint-placeholder-count="8">
+<li style="display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 10px; background: {{t.bg}}">
+<sc-if value="{{t.done}}" hint-placeholder-val="{{true}}"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#5FD39A"></circle><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#0A1A3D" stroke-width="2.4" stroke-linecap="round"></path></svg></sc-if>
+<sc-if value="{{t.active}}" hint-placeholder-val="{{false}}"><svg class="ws-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"></path></svg></sc-if>
+<sc-if value="{{t.wait}}" hint-placeholder-val="{{false}}"><span style="width: 20px; height: 20px; box-sizing: border-box; border-radius: 50%; border: 2px solid rgba(127,178,255,0.3)"></span></sc-if>
+<span style="flex: 1; font-size: 15px; color: {{t.color}}; font-weight: {{t.weight}}">{{t.label}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8">{{t.time}}</span>
+</li>
+</sc-for>
+</ol>
+</div>
+<footer style="height: 80px; box-sizing: border-box; padding: 0 56px; border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: flex-end; font-size: 13px; color: #8FA3C8">Do not turn off your computer</footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = ['Create user account','Set computer name and time zone','Configure keyboard and language','Set up disk encryption','Install bootloader','Install drivers','Generate recovery key','Clean up'];
+    const cur = 5;
+    const tasks = T.map((l, i) => ({ label: l, done: i < cur, active: i === cur, wait: i > cur,
+      bg: i === cur ? 'rgba(24,212,240,0.08)' : 'transparent', color: i <= cur ? '#E8EEFA' : '#8FA3C8', weight: i === cur ? 600 : 400,
+      time: i < cur ? ['0:02','0:01','0:01','0:06','0:04'][i] : '' }));
+    return { tasks };
+  }
+}
+</script>
+</body>
+</html>

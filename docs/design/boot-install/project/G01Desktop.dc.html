@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Desktop panel</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(circle at 78% 22%, rgba(24,212,240,0.3) 0%, transparent 38%), radial-gradient(circle at 18% 80%, rgba(31,107,255,0.45) 0%, transparent 45%), linear-gradient(160deg, #0E2A66 0%, #071330 60%, #040A1A 100%)">
+<div style="position: absolute; left: 120px; top: 90px; width: 640px; height: 400px; border-radius: 12px; background: #0C1E46; border: 1px solid rgba(127,178,255,0.18); box-shadow: 0 30px 70px rgba(0,0,0,0.5); overflow: hidden">
+<div style="height: 40px; box-sizing: border-box; padding: 0 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(127,178,255,0.12); font-size: 13px; color: #C9D6EE"><span style="width: 18px; height: 18px; border-radius: 5px; background: #1F6BFF"></span>Docs · Q4 plan draft<span style="margin-left: auto; display: flex; gap: 14px; color: #8FA3C8"><span>–</span><span>□</span><span>×</span></span></div>
+<div style="padding: 28px 40px; display: flex; flex-direction: column; gap: 12px"><div style="height: 16px; width: 60%; border-radius: 4px; background: rgba(255,255,255,0.18)"></div><div style="height: 10px; width: 92%; border-radius: 4px; background: rgba(255,255,255,0.08)"></div><div style="height: 10px; width: 88%; border-radius: 4px; background: rgba(255,255,255,0.08)"></div><div style="height: 10px; width: 70%; border-radius: 4px; background: rgba(255,255,255,0.08)"></div></div>
+</div>
+
+<div role="dialog" aria-label="Quick settings" style="position: absolute; right: 12px; bottom: 64px; width: 360px; box-sizing: border-box; padding: 16px; border-radius: 16px; background: rgba(10,24,56,0.97); border: 1px solid rgba(127,178,255,0.2); box-shadow: 0 24px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 14px">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="4">
+<button style="all: unset; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: {{t.bg}}; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{t.icon}}"></path></svg>
+<span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 600">{{t.t}}</span><span style="font-size: 11px; color: {{t.subColor}}">{{t.s}}</span></span>
+</button>
+</sc-for>
+</div>
+<div style="display: flex; align-items: center; gap: 10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9D6EE" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"></path></svg><input type="range" aria-label="Volume" value="60" style="flex: 1; accent-color: #1F6BFF"></div>
+<div style="display: flex; align-items: center; gap: 10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9D6EE" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2"></path></svg><input type="range" aria-label="Brightness" value="75" style="flex: 1; accent-color: #1F6BFF"></div>
+<div style="display: flex; align-items: center; justify-content: space-between; padding-top: 12px; border-top: 1px solid rgba(127,178,255,0.12); font-size: 12px; color: #C9D6EE">
+<span>Battery 78% · 4 h 10 min left</span>
+<span style="display: flex; gap: 8px">
+<button aria-label="Settings" style="all: unset; width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"></path></svg></button>
+<button aria-label="Lock" style="all: unset; width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z"></path></svg></button>
+<button aria-label="Power" style="all: unset; width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9M6.3 7.3a8 8 0 1 0 11.4 0"></path></svg></button>
+</span>
+</div>
+</div>
+
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: 52px; box-sizing: border-box; padding: 0 10px; background: rgba(6,14,34,0.88); border-top: 1px solid rgba(127,178,255,0.12); backdrop-filter: blur(20px); display: flex; align-items: center; gap: 6px">
+<button aria-label="Start" style="all: unset; width: 40px; height: 40px; border-radius: 10px; background: rgba(31,107,255,0.25); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="22" height="22" viewBox="0 0 60 60" aria-hidden="true"><rect x="20" y="0" width="40" height="40" rx="4" fill="#1F6BFF"></rect><rect x="20" y="20" width="20" height="20" fill="#0A1A3D"></rect><rect x="0" y="20" width="20" height="20" rx="4" fill="#18D4F0"></rect><rect x="20" y="40" width="20" height="20" rx="4" fill="#18D4F0"></rect></svg></button>
+<div style="display: flex; align-items: center; gap: 8px; width: 200px; height: 36px; box-sizing: border-box; padding: 0 12px; border-radius: 9px; background: rgba(255,255,255,0.06); font-size: 13px; color: #8FA3C8"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8FA3C8" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>Search</div>
+<div style="width: 1px; height: 24px; background: rgba(127,178,255,0.15); margin: 0 4px"></div>
+<sc-for list="{{apps}}" as="a" hint-placeholder-count="6">
+<span style="position: relative; width: 40px; height: 40px; border-radius: 10px; background: {{a.bg}}; display: flex; align-items: center; justify-content: center"><span style="width: 26px; height: 26px; border-radius: 7px; background: {{a.c}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">{{a.i}}</span><span style="position: absolute; bottom: 2px; width: {{a.dotW}}; height: 3px; border-radius: 2px; background: {{a.dot}}"></span></span>
+</sc-for>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 10px; background: rgba(31,107,255,0.18)">
+<sc-for list="{{tray}}" as="t" hint-placeholder-count="4">
+<span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="{{t}}"></path></svg></span>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; align-items: flex-end; padding: 0 8px; font-size: 12px; line-height: 1.25"><span>00:00</span><span style="color: #8FA3C8">Fri 16 Oct</span></div>
+<span style="position: relative; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"></path></svg><span style="position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: #18D4F0"></span></span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = [['F','#0E8FA8',1,0],['D','#1F6BFF',1,1],['S','#2E9E6A',1,0],['M','#D9572B',0,0],['C','#7A4FE0',1,0],['B','#B7791F',0,0]];
+    const apps = A.map(a => ({ i: a[0], c: a[1], bg: a[3] ? 'rgba(255,255,255,0.1)' : 'transparent', dot: a[2] ? (a[3] ? '#18D4F0' : '#8FA3C8') : 'transparent', dotW: a[3] ? '16px' : '5px' }));
+    const T = [['Wi-Fi','Office-5G','M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0',1],['Bluetooth','2 devices','M7 7l10 10-5 5V2l5 5L7 17',1],['Do not disturb','Off','M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z',0],['Power mode','Balanced','M13 2L4 14h7l-1 8 9-12h-7z',0]];
+    return { apps, tiles: T.map(t => ({ t: t[0], s: t[1], icon: t[2], bg: t[3] ? '#1F6BFF' : 'rgba(255,255,255,0.07)', subColor: t[3] ? '#DCE7FF' : '#8FA3C8' })),
+      tray: ['M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0','M7 7l10 10-5 5V2l5 5L7 17','M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7','M3 7h15v10H3zM20 10v4'] };
+  }
+}
+</script>
+</body>
+</html>
