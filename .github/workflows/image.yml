@@ -41,7 +41,7 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: ''
       HAS_OFFICE_SOURCE: ${{ secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_OFFICE_URL != '' }}
     steps:
-      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gh live-build debootstrap debhelper dpkg-dev fakeroot dbus-daemon qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools
+      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gh live-build debootstrap debhelper dpkg-dev fakeroot build-essential dbus-daemon qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
