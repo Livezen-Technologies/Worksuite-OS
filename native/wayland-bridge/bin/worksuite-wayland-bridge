@@ -1,0 +1,4 @@
+#!/bin/sh
+# worksuite-wayland-bridge.service: Wayland bridge D-Bus service (lk.worksuite.WaylandBridge1).
+export PYTHONPATH=/usr/lib/worksuite/wayland-bridge${PYTHONPATH:+:$PYTHONPATH}
+exec /usr/bin/python3 -I -m worksuite_bridge "$@"

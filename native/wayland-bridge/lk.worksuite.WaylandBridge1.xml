@@ -10,7 +10,7 @@
   <interface name="lk.worksuite.WaylandBridge1">
     <!-- (handle, app_id, title, output, flags) ; flags: activated|minimized|maximized|fullscreen bits -->
     <method name="ListWindows">
-      <arg name="windows" type="a(sssu)" direction="out"/>
+      <arg name="windows" type="a(ssssu)" direction="out"/>
     </method>
     <!-- activation_token: xdg-activation token; empty token is subject to focus-stealing prevention (WSOS-SHL-002). -->
     <method name="ActivateWindow">
