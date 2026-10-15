@@ -1,0 +1,12 @@
+[Unit]
+Description=Mark this start as successful for the GRUB boot check (G13)
+Documentation=file:///usr/share/doc/worksuite-recovery-boot/README.md
+After=graphical.target multi-user.target
+ConditionPathExists=/boot/grub/grubenv
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/grub-editenv /boot/grub/grubenv set worksuite_boot_ok=1
+
+[Install]
+WantedBy=graphical.target

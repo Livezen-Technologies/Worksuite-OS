@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <!-- Installed-system boot menu artwork (design: "WorkSuite OS Boot & Install" › G13 Boot options).
+       render.sh builds two variants: background.png without the warning banner (normal start, panel at y 142)
+       and background-failed.png with it (the last start did not finish, panel at y 212). Rows come from theme.txt. -->
+  <rect width="1280" height="800" fill="#040A1A"/>
+  <g transform="translate(616 70) scale(0.8)">
+    <rect x="20" y="0" width="40" height="40" rx="3" fill="#1F6BFF"/><rect x="20" y="20" width="20" height="20" fill="#040A1A"/>
+    <rect x="0" y="20" width="20" height="20" rx="3" fill="#18D4F0"/><rect x="20" y="40" width="20" height="20" rx="3" fill="#18D4F0"/>
+  </g>
+  <!--banner-->
+  <rect x="340.5" y="142.5" width="599" height="45" rx="12" fill="#FF9F5A" fill-opacity="0.1" stroke="#FF9F5A" stroke-opacity="0.4"/>
+  <g transform="translate(357 156.5) scale(0.75)" fill="none" stroke="#FFB98A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2zM12 10v5M12 18h.01"/></g>
+  <text x="385" y="170" font-family="IBM Plex Sans" font-size="13" fill="#E8EEFA">The last start didn’t finish, so the previous kernel is selected.</text>
+  <!--/banner-->
+  <rect x="340.5" y="@PY@.5" width="599" height="301" rx="16" fill="#0E2048" fill-opacity="0.7" stroke="#7FB2FF" stroke-opacity="0.16"/>
+  <line x1="0" y1="744.5" x2="1280" y2="744.5" stroke="#7FB2FF" stroke-opacity="0.1"/>
+  <g font-family="IBM Plex Sans" font-size="13" fill="#8FA3C8">
+    <rect x="433.5" y="762.5" width="36" height="21" rx="5" fill="none" stroke="#3D5280"/>
+    <text x="451.5" y="777" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">↑ ↓</text>
+    <text x="477" y="777">Select</text>
+    <rect x="554.5" y="762.5" width="46" height="21" rx="5" fill="none" stroke="#3D5280"/>
+    <text x="577.5" y="777" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">Enter</text>
+    <text x="608" y="777">Start</text>
+    <rect x="678.5" y="762.5" width="30" height="21" rx="5" fill="none" stroke="#3D5280"/>
+    <text x="693.5" y="777" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">Esc</text>
+    <text x="716" y="777">Stop countdown</text>
+  </g>
+</svg>

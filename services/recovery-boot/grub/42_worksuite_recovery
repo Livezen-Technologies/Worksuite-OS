@@ -29,9 +29,9 @@ previous=$(echo "$kernels" | sed -n 2p)
 if [ -n "${GRUB_DEVICE_UUID:-}" ] && [ "${GRUB_DISABLE_LINUX_UUID:-}" != true ]; then root="UUID=${GRUB_DEVICE_UUID}"; else root=${GRUB_DEVICE:-/dev/root}; fi
 args="root=$root ro ${GRUB_CMDLINE_LINUX:-}"
 
-entry() { # title version extra-args id
+entry() { # title version extra-args id icon-class
   rel=$(make_system_path_relative_to_its_root "$boot")
-  echo "menuentry '$1' --class worksuite --class gnu-linux --id '$4' {"
+  echo "menuentry '$1' --class $5 --class worksuite --class gnu-linux --id '$4' {"
   echo "	load_video"
   echo "	insmod gzio"
   [ -n "${GRUB_DEVICE_BOOT:-}" ] && prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | sed 's/^/	/'
@@ -42,6 +42,6 @@ entry() { # title version extra-args id
 }
 
 # worksuite.recovery=1 is what the shell reads (shell/electron/bootmode.ts); the unit does the rest.
-entry "WorkSuite Recovery" "$newest" "systemd.unit=worksuite-recovery.target worksuite.recovery=1 quiet splash" worksuite-recovery
-[ -n "$previous" ] && entry "WorkSuite OS (previous kernel $previous)" "$previous" "${GRUB_CMDLINE_LINUX_DEFAULT:-quiet splash}" "worksuite-previous-$previous"
+entry "WorkSuite Recovery" "$newest" "systemd.unit=worksuite-recovery.target worksuite.recovery=1 quiet splash" worksuite-recovery ws-recovery
+[ -n "$previous" ] && entry "WorkSuite OS (previous kernel $previous)" "$previous" "${GRUB_CMDLINE_LINUX_DEFAULT:-quiet splash}" "worksuite-previous-$previous" ws-previous
 exit 0
