@@ -3,6 +3,17 @@ worksuite-desktop
 # Installer (live only; Calamares removes itself from the installed system)
 calamares
 calamares-settings-worksuite
+# Tools Calamares' modules run (only recommended, and the build installs no recommends): unpackfs needs unsquashfs
+# and rsync, bootloader needs efibootmgr, and the signed GRUB for Secure Boot behind shim.
+squashfs-tools
+rsync
+efibootmgr
+#if ARCHITECTURES amd64
+grub-efi-amd64-signed
+#endif
+#if ARCHITECTURES arm64
+grub-efi-arm64-signed
+#endif
 worksuite-branding
 # Hardware / boot
 grub-efi
