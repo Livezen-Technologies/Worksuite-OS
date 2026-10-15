@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Privacy and security</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Privacy &amp; security" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 32px 44px; display: flex; flex-direction: column; gap: 18px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Privacy &amp; security</h1>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{status}}" as="s" hint-placeholder-count="3">
+<div style="display: flex; gap: 12px; align-items: center; padding: 16px; border-radius: 14px; background: rgba(95,211,154,0.08); border: 1px solid rgba(95,211,154,0.3)">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5FD39A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{s.icon}}"></path></svg>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">{{s.t}}</span><span style="font-size: 12px; color: #8FA3C8">{{s.d}}</span></span>
+</div>
+</sc-for>
+</div>
+<span style="font-size: 12px; color: #8FA3C8; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px">App permissions</span>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{perms}}" as="p" hint-placeholder-count="5">
+<label style="display: flex; align-items: center; gap: 14px; padding: 13px 18px; border-top: {{p.border}}; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{p.icon}}"></path></svg>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 500">{{p.t}}</span><span style="font-size: 12px; color: #8FA3C8">{{p.d}}</span></span>
+<input type="checkbox" checked="{{p.on}}" onChange="{{p.toggle}}" style="position: absolute; opacity: 0; width: 1px; height: 1px">
+<span aria-hidden="true" style="width: 44px; height: 26px; border-radius: 13px; background: {{p.track}}; position: relative; flex: none"><span style="position: absolute; top: 3px; left: {{p.knob}}; width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF"></span></span>
+</label>
+</sc-for>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { on: { cam: true, mic: true, loc: false, files: true, screen: false } }; }
+  renderVals() {
+    const on = this.state.on;
+    const P = [['cam','Camera','3 apps can use the camera','M4 7h11v10H4zM15 10l5-3v10l-5-3'],['mic','Microphone','Chat and Browser','M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM6 11a6 6 0 0 0 12 0'],['loc','Location','Off for all apps','M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z'],['files','Files and folders','Apps ask before opening your folders','M3 6h6l2 2h10v11H3z'],['screen','Screen recording','No apps have asked','M3 4h18v12H3zM8 20h8']];
+    return {
+      status: [['Disk encrypted','LUKS2 · on','M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4'],['Firewall','Blocking incoming','M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],['Up to date','Checked 20:58','M5 12.5l4.5 4.5L19 7.5']].map(s => ({ t: s[0], d: s[1], icon: s[2] })),
+      perms: P.map((p, i) => { const v = !!on[p[0]]; return { t: p[1], d: p[2], icon: p[3], on: v, border: i ? '1px solid rgba(127,178,255,0.1)' : 'none',
+        track: v ? '#1F6BFF' : 'rgba(127,178,255,0.25)', knob: v ? '21px' : '3px', toggle: () => this.setState({ on: Object.assign({}, on, { [p[0]]: !v }) }) }; })
+    };
+  }
+}
+</script>
+</body>
+</html>

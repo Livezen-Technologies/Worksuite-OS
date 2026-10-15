@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Appearance</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Appearance" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 32px 44px; display: flex; flex-direction: column; gap: 22px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Appearance</h1>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 14px; font-weight: 600">Theme</span>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+<sc-for list="{{themes}}" as="t" hint-placeholder-count="3">
+<button onClick="{{t.pick}}" style="all: unset; display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 14px; border: 2px solid {{t.ring}}; background: rgba(14,32,72,0.5); cursor: pointer">
+<div style="height: 110px; border-radius: 9px; background: {{t.bg}}; position: relative; overflow: hidden"><div style="position: absolute; left: 14px; top: 14px; width: 100px; height: 64px; border-radius: 7px; background: {{t.win}}"></div><div style="position: absolute; left: 22px; top: 24px; width: 50px; height: 7px; border-radius: 4px; background: {{accent}}"></div><div style="position: absolute; left: 8px; right: 8px; bottom: 8px; height: 16px; border-radius: 5px; background: {{t.bar}}"></div></div>
+<span style="font-size: 14px; font-weight: 600; padding: 0 4px">{{t.name}}</span>
+</button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 14px; font-weight: 600">Accent color</span>
+<div style="display: flex; gap: 14px">
+<sc-for list="{{accents}}" as="a" hint-placeholder-count="6">
+<button onClick="{{a.pick}}" aria-label="{{a.name}}" style="all: unset; width: 32px; height: 32px; border-radius: 50%; background: {{a.c}}; box-shadow: {{a.ring}}; cursor: pointer"></button>
+</sc-for>
+</div>
+</div>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-top: {{r.border}}">
+<span style="flex: 1; font-size: 14px">{{r.k}}</span>
+<span style="font-size: 13px; color: #C9D6EE">{{r.v}}</span>
+</div>
+</sc-for>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { t: 1, a: 0 }; }
+  renderVals() {
+    const T = [['Light','linear-gradient(135deg,#EAF1FF,#C9DAFF)','#FFFFFF','rgba(255,255,255,0.8)'],['Dark','linear-gradient(135deg,#0E2357,#060E22)','#13264F','rgba(255,255,255,0.08)'],['Auto','linear-gradient(135deg,#EAF1FF 0%,#EAF1FF 50%,#0E2357 50%,#060E22 100%)','#5E739C','rgba(127,178,255,0.25)']];
+    const A = [['Blue','#1F6BFF'],['Cyan','#0EA5C4'],['Green','#2E9E6A'],['Orange','#E07A2F'],['Pink','#D14B8F'],['Purple','#7A4FE0']];
+    const { t, a } = this.state;
+    return { accent: A[a][1],
+      themes: T.map((x, i) => ({ name: x[0], bg: x[1], win: x[2], bar: x[3], ring: i === t ? A[a][1] : 'transparent', pick: () => this.setState({ t: i }) })),
+      accents: A.map((x, i) => ({ name: x[0], c: x[1], ring: i === a ? '0 0 0 3px #0A1A3D, 0 0 0 5px #FFFFFF' : 'none', pick: () => this.setState({ a: i }) })),
+      rows: [['Wallpaper','WorkSuite Blocks'],['Text size','Default'],['Font','IBM Plex Sans'],['Reduce motion','Off']].map((r, i) => ({ k: r[0], v: r[1], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })) };
+  }
+}
+</script>
+</body>
+</html>

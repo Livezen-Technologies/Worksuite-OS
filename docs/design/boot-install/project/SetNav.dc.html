@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings sidebar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<nav aria-label="Settings" style="width: 260px; height: 800px; box-sizing: border-box; padding: 20px 14px; background: #071330; border-right: 1px solid rgba(127,178,255,0.12); display: flex; flex-direction: column; gap: 14px; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA">
+<div style="display: flex; align-items: center; gap: 12px; padding: 8px 8px 4px">
+<span style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #1F6BFF, #18D4F0); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600">AP</span>
+<span style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 14px; font-weight: 600">Alex Perera</span><span style="font-size: 12px; color: #8FA3C8">Administrator</span></span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; height: 38px; box-sizing: border-box; padding: 0 12px; border-radius: 9px; background: rgba(4,10,26,0.5); border: 1px solid rgba(127,178,255,0.14); font-size: 13px; color: #8FA3C8">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8FA3C8" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>Search settings
+</div>
+<div style="display: flex; flex-direction: column; gap: 1px">
+<sc-for list="{{items}}" as="n" hint-placeholder-count="12">
+<sc-if value="{{n.sep}}" hint-placeholder-val="{{false}}"><div style="height: 1px; background: rgba(127,178,255,0.1); margin: 6px 8px"></div></sc-if>
+<span style="display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 8px; font-size: 14px; background: {{n.bg}}; color: {{n.color}}; font-weight: {{n.weight}}">
+<span style="width: 26px; height: 26px; border-radius: 7px; background: {{n.tint}}; display: flex; align-items: center; justify-content: center; flex: none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg></span>
+{{n.label}}
+<sc-if value="{{n.badge}}" hint-placeholder-val="{{false}}"><span style="margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #1F6BFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">{{n.badge}}</span></sc-if>
+</span>
+</sc-for>
+</div>
+</nav>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"active":{"editor":"enum","options":["Network","Bluetooth","Display","Appearance","Sound","Notifications","Privacy & security","Users","Devices","Drivers","Updates","About"],"default":"Network"},"$preview":{"width":260,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const a = this.props.active ?? 'Network';
+    const N = [
+      ['Network','#1F6BFF','M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0',0,0],
+      ['Bluetooth','#1F6BFF','M7 7l10 10-5 5V2l5 5L7 17',0,0],
+      ['Display','#0E8FA8','M3 4h18v12H3zM8 20h8M12 16v4',0,1],
+      ['Appearance','#7A4FE0','M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z',0,0],
+      ['Sound','#D9572B','M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7',0,0],
+      ['Notifications','#D9452B','M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0',0,0],
+      ['Privacy & security','#2E9E6A','M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',0,1],
+      ['Users','#5E739C','M9 8a3.5 3.5 0 1 0 0 .01M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7',0,0],
+      ['Devices','#5E739C','M4 6h16v10H4zM2 20h20',0,1],
+      ['Drivers','#5E739C','M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z','3',0],
+      ['Updates','#1F6BFF','M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4','1',0],
+      ['About','#5E739C','M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01',0,0]
+    ];
+    return { items: N.map(n => { const on = n[0] === a; return { label: n[0], tint: n[1], icon: n[2], badge: n[3] || '', sep: !!n[4],
+      bg: on ? 'rgba(31,107,255,0.2)' : 'transparent', color: on ? '#FFFFFF' : '#C9D6EE', weight: on ? 600 : 400 }; }) };
+  }
+}
+</script>
+</body>
+</html>
