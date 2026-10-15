@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite
+Comment=Opens worksuite:// links in the WorkSuite app they belong to
+Exec=worksuite-app %u
+TryExec=worksuite-app
+Icon=worksuite
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/worksuite;

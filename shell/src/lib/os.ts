@@ -7,6 +7,12 @@ export interface WorkSuiteApi {
   power(action: 'suspend' | 'restart' | 'shutdown'): Promise<void>
   launchApp(appId: string): Promise<void>
   openLink(url: string): Promise<void>
+  /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
+  webApps(): Promise<CloudResult<{ id: string; name: string }[]>>
+  /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
+  installedApps(): Promise<{ apps: InstalledApp[]; office: string | null }>
+  /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
+  launchOffice(kind: 'start' | 'docs' | 'sheets' | 'slides'): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
   /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
@@ -110,6 +116,8 @@ export function policyLines(p: DevicePolicies | null): string[] {
   return out
 }
 
+export interface InstalledApp { id: string; name: string; generic_name: string | null; comment: string | null; icon: string | null; categories: string[]; keywords: string[] }
+
 export type SignOutChoice = 'none' | 'export' | 'discard'
 
 export interface CloudAccount { id: string; name: string | null; server_url: string; state?: string }
@@ -128,6 +136,14 @@ const stub: WorkSuiteApi = {
   async power() {},
   async launchApp() {},
   async openLink() {},
+  async webApps() { return { ok: false, error: 'not_signed_in' } },
+  async installedApps() {
+    return { apps: [
+      { id: 'firefox-esr', name: 'Firefox ESR', generic_name: 'Web Browser', comment: null, icon: 'firefox-esr', categories: ['Network', 'WebBrowser'], keywords: ['internet', 'web'] },
+      { id: 'foot', name: 'Foot', generic_name: 'Terminal', comment: null, icon: 'foot', categories: ['System', 'TerminalEmulator'], keywords: ['shell'] },
+    ], office: null }
+  },
+  async launchOffice() {},
   async cloudSignIn(serverUrl, _mode) {
     stubAccounts = [{ id: 'preview:u-1', name: 'Hasarinda', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
@@ -211,7 +227,7 @@ let stubJobId = 0
 let stubOs: OsUpdateStatus = { state: 'waiting', version: '1.0.3', installed: '1.0.2', release_id: 'os-1.0.3', mandatory: true,
   deadline: new Date(Date.now() + 2 * 86_400_000).toISOString(), deferrals_left: 2, reason: 'waiting_for_user', restart_at: null, last_check: Date.now() - 3_600_000 }
 const stubOsListeners = new Set<(s: OsUpdateStatus) => void>()
-let stubUpdates = { packages: ['firefox-esr', 'libreoffice', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
+let stubUpdates = { packages: ['firefox-esr', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
 function stubJob(_id: string, _kind: string): CloudResult<string> {
   const job = `/lk/worksuite/PackageService1/job/${++stubJobId}`
   setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 50, phase: 'installing' })), 300)

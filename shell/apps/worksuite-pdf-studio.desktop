@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite PDF Studio
+GenericName=PDF Studio
+Comment=Edit, sign and convert PDFs with WorkSuite Drive
+Exec=worksuite-app pdf-studio
+TryExec=worksuite-app
+Icon=worksuite-pdf-studio
+Terminal=false
+Categories=Office;Viewer;
+Keywords=worksuite;pdf;sign;convert;
+StartupNotify=true
+StartupWMClass=worksuite-pdf-studio

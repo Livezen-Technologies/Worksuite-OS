@@ -32,6 +32,9 @@ override_dh_auto_install:
 	install -m 0644 build-installer/libcalamares_viewmodule_worksuiteconfirm.so $$m/worksuiteconfirm/ && \
 	install -D -m 0644 installer/modules/worksuiterecovery/module.desc $$m/worksuiterecovery/module.desc && \
 	install -m 0644 installer/modules/worksuiterecovery/main.py $$m/worksuiterecovery/main.py
+	# worksuite-shell: 256 px PNGs of the WorkSuite app icons (Electron window icons can't be SVG).
+	for f in shell/apps/icons/*.svg; do n=$$(basename $$f .svg); install -d debian/worksuite-shell/usr/share/icons/hicolor/256x256/apps && \
+	  rsvg-convert -w 256 -h 256 $$f -o debian/worksuite-shell/usr/share/icons/hicolor/256x256/apps/$$n.png || exit 1; done
 	# worksuite-branding
 	d=debian/worksuite-branding; p=$$d/usr/share/plymouth/themes/worksuite; g=$$d/usr/share/grub/themes/worksuite; \
 	install -D -m 0644 -t $$p branding/plymouth/worksuite.plymouth branding/plymouth/worksuite.script build-branding/plymouth/*.png && \
