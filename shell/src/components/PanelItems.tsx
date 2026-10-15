@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { clickAction, panel, taskbarEntries, updateBadge, type PanelWindow, type TrayItem } from '../lib/panel'
-import { os, type OsUpdateStatus } from '../lib/os'
+import { os, type OsUpdateStatus, type VpnState } from '../lib/os'
+import { activeVpn } from '../lib/vpn'
 import { useT } from '../i18n'
 
 // Panel contents fed by the Wayland bridge (SRS §5.1): running windows, tray and update badge.
@@ -87,6 +88,28 @@ export function TrayItems() {
 }
 
 const BADGE_TONE = { available: '#1F6BFF', downloading: '#18A0B8', restart: '#2E9E6A', failed: '#D9452B' } as const
+
+/** Taskbar VPN indicator (WSOS-INT-001): shown while a VPN is connected; opens Settings › Network. */
+export function VpnBadge({ onOpen }: { onOpen: () => void }) {
+  const [state, setState] = useState<VpnState | null>(null)
+  useEffect(() => {
+    let live = true
+    const load = () => void os.sysVpn().then((r) => { if (live) setState(r.available ? r.value : null) }).catch(() => undefined)
+    load()
+    const id = setInterval(load, 15_000)
+    return () => { live = false; clearInterval(id) }
+  }, [])
+  const vpn = activeVpn(state)
+  if (!vpn) return null
+  const label = `VPN connected: ${vpn.name}`
+  return (
+    <button type="button" onClick={onOpen} aria-label={label} title={label}
+      className="flex h-10 cursor-pointer items-center gap-1.5 rounded-[10px] bg-white/[0.12] px-2.5 text-xs font-semibold text-[#9BE7B4] hover:bg-white/20">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z" /></svg>
+      VPN
+    </button>
+  )
+}
 
 export function UpdateBadge({ onOpen }: { onOpen: () => void }) {
   const t = useT()

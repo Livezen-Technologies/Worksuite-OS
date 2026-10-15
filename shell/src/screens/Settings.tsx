@@ -9,6 +9,7 @@ import { ACCENTS, DEFAULT_PRIVACY, KEYS, THEMES, accentColor, applyAppearance, l
 import { needsAttention, fmtWhen } from '../lib/updates'
 import { useOsUpdate } from '../lib/useOsUpdate'
 import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
+import { vpnErrorText } from '../lib/vpn'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
 import { UpdatesPanel } from './Updates'
@@ -127,10 +128,85 @@ function NetworkPanel() {
       {[
         { t: 'Ethernet', d: eth.length ? (eth.some((e) => e.state === 'connected') ? `Connected${eth[0].connection ? ` · ${eth[0].connection}` : ''}` : 'Cable unplugged') : 'No Ethernet adapter' },
         { t: 'Adapters', d: n.devices.map((d) => d.device).join(', ') || 'None found' },
-        { t: 'VPN and proxy', d: 'Not configurable here yet' },
       ].map((o) => <div key={o.t} className={`${card} flex flex-col gap-1.5 px-[18px] py-4`}><span className="text-sm font-semibold">{o.t}</span><span className="truncate text-[13px] text-[#8FA3C8]">{o.d}</span></div>)}
     </div>
+    <VpnSection />
   </>
+}
+
+/** VPN (WSOS-INT-001): the organization's managed WireGuard VPN and the user's own imported WireGuard files. */
+function VpnSection() {
+  const { r, reload } = useAvail(os.sysVpn, 10_000)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ text: string; error: boolean } | null>(null)
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+  const act = async (key: string, fn: () => Promise<{ available: boolean; reason?: string } | { ok: boolean; error?: string }>, done: string) => {
+    setBusy(key); setMsg(null)
+    const res = await fn()
+    setBusy(null)
+    const failed = 'available' in res ? !res.available : !res.ok
+    const why = 'available' in res ? res.reason : res.error
+    if (failed) { const t = vpnErrorText(why ?? ''); if (t) setMsg({ text: t, error: true }) } else setMsg({ text: done, error: false })
+    void reload()
+  }
+  const importFile = () => act('import', async () => {
+    const f = await os.pickFile('wgconf')
+    if (!f.ok) return f
+    return os.sysVpnImport(f.value.handle)
+  }, 'VPN added. Connect it when you need it.')
+  return (
+    <section aria-label="VPN" className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <h2 className={`m-0 font-normal ${sectionLabel}`}>VPN</h2>
+        {r.state === 'ok' && r.value.user_vpn_allowed && (
+          <button type="button" disabled={busy !== null} onClick={() => void importFile()} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{busy === 'import' ? 'Adding…' : 'Import WireGuard file…'}</button>
+        )}
+      </div>
+      {r.state === 'loading' ? <Empty title="Reading VPN connections…" /> : r.state !== 'ok' ? <Unavail what="VPN" reason={r.reason} /> : (
+        <>
+          {r.value.connections.length === 0 ? <Empty title="No VPN connections">{r.value.user_vpn_allowed ? 'Import a WireGuard .conf file from your VPN provider or IT team.' : 'Your organization doesn’t allow adding VPNs on this device.'}</Empty> : (
+            <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
+              {r.value.connections.map((c) => {
+                const locked = c.managed && c.active && r.value.vpn_required
+                return (
+                  <li key={c.uuid} className={`flex items-center gap-3.5 px-[18px] py-[11px] ${rowLine}`} style={{ background: c.active ? 'rgba(31,107,255,0.12)' : 'transparent' }}>
+                    <Svg d={LOCK} size={18} stroke={c.active ? C.green : C.soft} />
+                    <span className="flex flex-1 flex-col gap-0.5">
+                      <span className="text-sm" style={{ fontWeight: c.active ? 600 : 400 }}>{c.name}</span>
+                      <span className="text-xs text-[#8FA3C8]">{[c.active ? 'Connected' : 'Not connected', c.type === 'wireguard' ? 'WireGuard' : 'VPN', c.managed ? 'Managed by your organization' : null].filter(Boolean).join(' · ')}</span>
+                    </span>
+                    {!locked && (
+                      <button type="button" disabled={busy !== null} onClick={() => void act(c.uuid, () => os.sysVpnConnect(c.uuid, !c.active), c.active ? `Disconnected from ${c.name}.` : `Connected to ${c.name}.`)}
+                        className={`${c.active ? btnGhost : btnPrimary} px-3 py-1.5 text-[13px]`}>{busy === c.uuid ? (c.active ? 'Disconnecting…' : 'Connecting…') : c.active ? 'Disconnect' : 'Connect'}</button>
+                    )}
+                    {!c.managed && (
+                      <button type="button" disabled={busy !== null} aria-label={`Remove ${c.name}`} onClick={() => setConfirmRemove(c.uuid)} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>Remove</button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {msg && <p role={msg.error ? 'alert' : 'status'} className="m-0 text-[13px]" style={{ color: msg.error ? '#FF8A7A' : C.green }}>{msg.text}</p>}
+          <Note>{r.value.vpn_required ? 'Your organization requires its VPN to stay connected on this device.' : 'Imported VPNs connect only when you choose. Their keys are stored by the system, readable only by administrators.'}</Note>
+        </>
+      )}
+      {confirmRemove && r.state === 'ok' && (
+        <Dialog alert onClose={() => setConfirmRemove(null)}>
+          {(tid) => <>
+            <div className="flex flex-col gap-3 px-6 pt-6 pb-4">
+              <h2 id={tid} className="m-0 text-[19px] font-bold">Remove this VPN?</h2>
+              <p className="m-0 text-sm text-[#C9D6EE]">{r.value.connections.find((c) => c.uuid === confirmRemove)?.name} will be removed from this computer, including its key.</p>
+            </div>
+            <div className={dialogFooter}>
+              <button type="button" onClick={() => setConfirmRemove(null)} className={`${btnGhost} px-4 py-2 text-[13px]`}>Cancel</button>
+              <button type="button" onClick={() => { const id = confirmRemove; setConfirmRemove(null); void act(id, () => os.sysVpnRemove(id), 'VPN removed.') }} className={`${btnPrimary} px-4 py-2 text-[13px]`}>Remove</button>
+            </div>
+          </>}
+        </Dialog>
+      )}
+    </section>
+  )
 }
 
 function BluetoothPanel() {

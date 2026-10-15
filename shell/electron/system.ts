@@ -3,6 +3,10 @@
 // never a shell. When the tool is missing or the service isn't running the answer is
 // `{ available: false, reason }`, never invented values. The Wi-Fi password only goes to nmcli's stdin (--ask).
 import { execFile, spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
 export type Exec = (cmd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string; missing?: boolean }>
@@ -174,6 +178,105 @@ export function parseUdisksStatus(text: string): Drive[] {
   })).filter((d) => d.device)
 }
 
+// ---------- VPN (WSOS-INT-001) ----------
+/** NetworkManager uuid of the device agent's managed connection (services/device-agent/src/vpn.ts). */
+export const MANAGED_VPN_UUID = '6f1d9a52-3c47-4b8e-9a0d-57e2c1b4f0a3'
+export const AGENT_POLICY_PATH = '/run/worksuite-device-agent/policy.json'
+export interface VpnConnection { name: string; uuid: string; type: 'wireguard' | 'vpn'; active: boolean; device: string | null; managed: boolean }
+export interface VpnState { connections: VpnConnection[]; user_vpn_allowed: boolean; vpn_required: boolean }
+/** What Settings shows before importing; the private key is checked but never returned. */
+export interface WgConfSummary { addresses: string[]; dns: string[]; peers: { public_key: string; endpoint: string | null; allowed_ips: string[] }[]; full_tunnel: boolean }
+
+const WG_KEY = /^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw480]=$/
+const CIDR = /^([0-9.]+|[0-9a-f:]+)(\/\d{1,3})?$/i
+const NM_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * wg-quick .conf → summary, or the reason it can't be imported. Rejects PostUp/PreUp/PostDown/PreDown (shell commands
+ * that wg-quick would run as root; NetworkManager ignores them, so a file relying on them would silently misbehave).
+ */
+export function parseWgConf(text: string): { ok: true; value: WgConfSummary } | { ok: false; error: string } {
+  if (text.length > 64 * 1024 || text.includes('\0')) return { ok: false, error: 'invalid_file' }
+  let section: 'interface' | 'peer' | null = null
+  let priv: string | null = null
+  const addresses: string[] = [], dns: string[] = []
+  const peers: WgConfSummary['peers'] = []
+  let interfaces = 0
+  const list = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean)
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, '').trim()
+    if (!line) continue
+    const sec = /^\[(\w+)\]$/.exec(line)
+    if (sec) {
+      const name = sec[1].toLowerCase()
+      if (name === 'interface') { section = 'interface'; interfaces++ } else if (name === 'peer') { section = 'peer'; peers.push({ public_key: '', endpoint: null, allowed_ips: [] }) } else return { ok: false, error: 'invalid_file' }
+      continue
+    }
+    const kv = /^([A-Za-z]+)\s*=\s*(.*)$/.exec(line)
+    if (!kv || !section) return { ok: false, error: 'invalid_file' }
+    const k = kv[1].toLowerCase(), v = kv[2].trim()
+    if (/^(pre|post)(up|down)$/.test(k)) return { ok: false, error: 'scripts_not_supported' }
+    if (section === 'interface') {
+      if (k === 'privatekey') priv = v
+      else if (k === 'address') addresses.push(...list(v))
+      else if (k === 'dns') dns.push(...list(v))
+    } else {
+      const p = peers[peers.length - 1]
+      if (k === 'publickey') p.public_key = v
+      else if (k === 'endpoint') p.endpoint = v
+      else if (k === 'allowedips') p.allowed_ips.push(...list(v))
+    }
+  }
+  if (interfaces !== 1 || !priv || !WG_KEY.test(priv)) return { ok: false, error: 'missing_private_key' }
+  if (!peers.length || peers.some((p) => !WG_KEY.test(p.public_key) || !p.allowed_ips.every((a) => CIDR.test(a)))) return { ok: false, error: 'invalid_peer' }
+  if (!addresses.length || !addresses.every((a) => CIDR.test(a))) return { ok: false, error: 'invalid_address' }
+  return { ok: true, value: { addresses, dns, peers, full_tunnel: peers.some((p) => p.allowed_ips.some((a) => a === '0.0.0.0/0' || a === '::/0')) } }
+}
+
+/** `nmcli -t -f NAME,UUID,TYPE,ACTIVE,DEVICE connection show`; VPN-type profiles only, managed one first. */
+export function parseVpnConnections(text: string): VpnConnection[] {
+  return text.split('\n').filter((l) => l.trim()).map(splitTerse)
+    .filter(([, , type]) => type === 'wireguard' || type === 'vpn')
+    .map(([name, uuid, type, active, device]) => ({
+      name, uuid, type: type as 'wireguard' | 'vpn', active: active === 'yes', device: device && device !== '--' ? device : null, managed: uuid === MANAGED_VPN_UUID,
+    }))
+    .sort((a, b) => Number(b.managed) - Number(a.managed) || a.name.localeCompare(b.name))
+}
+
+/** Interface name NetworkManager derives from the import file name: [A-Za-z0-9_=+.-], at most 15 characters. */
+export function wgInterfaceName(fileName: string): string {
+  const base = fileName.replace(/\.conf$/i, '').replace(/[^A-Za-z0-9_=+.-]/g, '').slice(0, 15)
+  return base && base !== '.' && base !== '..' ? base : 'wg-import'
+}
+
+/** Policy user_vpn=block (signed device policy, published read-only by the device agent). */
+export function userVpnAllowed(policyJson: string | null): boolean {
+  if (!policyJson) return true
+  try { return (JSON.parse(policyJson) as { user_vpn?: string }).user_vpn !== 'block' } catch { return true }
+}
+
+/** Policy vpn_required: the managed VPN stays up; Settings offers no Disconnect for it. */
+export function vpnRequired(policyJson: string | null): boolean {
+  if (!policyJson) return false
+  try { return (JSON.parse(policyJson) as { vpn_required?: boolean }).vpn_required === true } catch { return false }
+}
+
+export interface VpnDeps {
+  readPolicy(): string | null
+  /** Writes the validated text to a private (0700 dir, 0600 file) temp path named for nmcli; cleanup removes both. */
+  stage(fileName: string, text: string): Promise<{ path: string; cleanup(): Promise<void> }>
+}
+
+export const realVpnDeps: VpnDeps = {
+  readPolicy() { try { return readFileSync(AGENT_POLICY_PATH, 'utf8') } catch { return null } },
+  async stage(fileName, text) {
+    const dir = await mkdtemp(join(tmpdir(), 'ws-vpn-'))
+    const path = join(dir, fileName)
+    await writeFile(path, text, { mode: 0o600 })
+    return { path, cleanup: () => rm(dir, { recursive: true, force: true }) }
+  },
+}
+
 // ---------- bridge ----------
 const SSID_MAX = 32
 const BT_ADDR = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i
@@ -182,7 +285,7 @@ function unavailable(r: { missing?: boolean; stderr: string }, tool: string): { 
   return { available: false, reason: r.missing ? `${tool}_missing` : 'service_unavailable' }
 }
 
-export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realWithStdin) {
+export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realWithStdin, vpnDeps: VpnDeps = realVpnDeps) {
   return {
     async network(): Promise<Avail<NetworkState>> {
       const radio = await exec('nmcli', ['-t', '-f', 'WIFI', 'radio'])
@@ -204,6 +307,47 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
       if (r.code === 0) return { ok: true }
       if (r.stderr === 'spawn_failed') return { ok: false, error: 'unavailable' }
       return { ok: false, error: /secrets were required|password|802-1x|psk/i.test(r.stderr) ? 'bad_password' : 'connect_failed' }
+    },
+    // VPN (WSOS-INT-001): the managed "WorkSuite VPN" comes from the device agent; users may import WireGuard .conf
+    // files unless policy user_vpn=block. NetworkManager keeps the private key in its root-only keyfile.
+    async vpn(): Promise<Avail<VpnState>> {
+      const r = await exec('nmcli', ['-t', '-f', 'NAME,UUID,TYPE,ACTIVE,DEVICE', 'connection', 'show'])
+      if (r.code !== 0) return unavailable(r, 'nmcli')
+      const policy = vpnDeps.readPolicy()
+      return { available: true, value: { connections: parseVpnConnections(r.stdout), user_vpn_allowed: userVpnAllowed(policy), vpn_required: vpnRequired(policy) } }
+    },
+    /** Validated .conf text (read by main from the user's file-dialog pick) → `nmcli connection import type wireguard`. */
+    async vpnImport(fileName: string, text: string): Promise<{ ok: true; value: { uuid: string | null; name: string } } | { ok: false; error: string }> {
+      if (!userVpnAllowed(vpnDeps.readPolicy())) return { ok: false, error: 'blocked_by_policy' }
+      const parsed = parseWgConf(text)
+      if (!parsed.ok) return parsed
+      const name = wgInterfaceName(fileName)
+      const staged = await vpnDeps.stage(`${name}.conf`, text)
+      try {
+        const r = await exec('nmcli', ['connection', 'import', 'type', 'wireguard', 'file', staged.path])
+        if (r.code !== 0) return { ok: false, error: r.missing ? 'unavailable' : /exist/i.test(r.stderr) ? 'already_exists' : 'import_failed' }
+        const uuid = /\(([0-9a-f-]{36})\)/i.exec(r.stdout)?.[1] ?? null
+        // Imported profiles do not connect by themselves; the user chooses when.
+        if (uuid) await exec('nmcli', ['connection', 'modify', 'uuid', uuid, 'connection.autoconnect', 'no'])
+        return { ok: true, value: { uuid, name } }
+      } finally {
+        await staged.cleanup()
+      }
+    },
+    async vpnConnect(uuid: string, on: boolean): Promise<Avail<true>> {
+      if (!NM_UUID.test(uuid)) return { available: false, reason: 'invalid_argument' }
+      if (!on && uuid === MANAGED_VPN_UUID && vpnRequired(vpnDeps.readPolicy())) return { available: false, reason: 'required_by_organization' }
+      const r = await exec('nmcli', on ? ['--wait', '30', 'connection', 'up', 'uuid', uuid] : ['connection', 'down', 'uuid', uuid])
+      return r.code === 0 ? { available: true, value: true } : unavailable(r, 'nmcli')
+    },
+    /** The managed connection belongs to the organization; only the device agent removes it. */
+    async vpnRemove(uuid: string): Promise<Avail<true>> {
+      if (!NM_UUID.test(uuid)) return { available: false, reason: 'invalid_argument' }
+      if (uuid === MANAGED_VPN_UUID) return { available: false, reason: 'managed_by_organization' }
+      const list = await exec('nmcli', ['-t', '-f', 'NAME,UUID,TYPE,ACTIVE,DEVICE', 'connection', 'show'])
+      if (!parseVpnConnections(list.stdout).some((c) => c.uuid === uuid)) return { available: false, reason: 'not_a_vpn' }
+      const r = await exec('nmcli', ['connection', 'delete', 'uuid', uuid])
+      return r.code === 0 ? { available: true, value: true } : unavailable(r, 'nmcli')
     },
     async bluetooth(): Promise<Avail<BluetoothState>> {
       const show = await exec('bluetoothctl', ['show'])
