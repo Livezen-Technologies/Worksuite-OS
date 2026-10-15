@@ -8,7 +8,9 @@ import calamares.slideshow 1.0
 Presentation {
     id: presentation
     Slide {
-        Image { anchors.fill: parent; source: "page-bg.svg"; sourceSize.width: 1020; sourceSize.height: 720 }
+        // Rendered at exactly its on-screen size: a scaled image ran Qt's AVX2 image scaler, which crashed the live
+        // session (segfault in libQt6Gui) on the time zone and install pages.
+        Image { anchors.fill: parent; source: "page-bg.svg"; sourceSize: Qt.size(Math.max(1, width), Math.max(1, height)); smooth: false; cache: false }
         ColumnLayout {
             anchors.fill: parent
             anchors.leftMargin: 56; anchors.rightMargin: 56; anchors.topMargin: 40; anchors.bottomMargin: 16

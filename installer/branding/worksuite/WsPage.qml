@@ -89,7 +89,9 @@ Item {
         }
     }
 
-    Image { anchors.fill: parent; source: page.background; sourceSize.width: 1020; sourceSize.height: 720 }
+    // Rendered at exactly its on-screen size: a scaled image ran Qt's AVX2 image scaler, which crashed the live
+    // session (segfault in libQt6Gui) on the time zone and install pages.
+    Image { anchors.fill: parent; source: page.background; sourceSize: Qt.size(Math.max(1, width), Math.max(1, height)); smooth: false; cache: false }
 
     ColumnLayout {
         anchors.fill: parent
