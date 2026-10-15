@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+  # Break-glass admin (WSOS-DIR-010): exists locked until a password has been escrowed.
+  if ! getent passwd wsadmin >/dev/null; then
+    useradd --create-home --shell /bin/bash --comment "WorkSuite break-glass admin" --groups sudo wsadmin
+    usermod --lock wsadmin
+  fi
+  install -d -m 0700 /var/lib/worksuite-directory
+  pam-auth-update --package
+fi
+#DEBHELPER#
+exit 0

@@ -1,6 +1,6 @@
 // desktop/v1 and desktop/v1/os (api-contracts/openapi.yaml). Tenant scoping comes from the authenticated user or
 // device, never from the request. Idempotency-Key replays within 24 h return the stored response.
-import { createPublicKey, randomUUID } from 'node:crypto';
+import { createPublicKey, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { nextSeq, secret, sha256, tx } from './db.ts';
 import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
@@ -333,6 +333,37 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     const d = deviceFromHeader(db, ctx, true);
     const org = db.prepare('SELECT directory FROM orgs WHERE id = ?').get(d.org_id) as { directory: string };
     send(ctx, 200, json(org.directory));
+  });
+
+  // Directory sign-in for the OS PAM helper (WSOS-DIR-002/005/009). Device-bound: only an enrolled, unrevoked device
+  // of the user's organization may verify a password. The reply carries no secret; the client derives its own
+  // offline verifier. Constant work whether or not the account exists.
+  r.on('POST', '/desktop/v1/os/directory/authenticate', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    const b = obj(await ctx.body());
+    const username = str(b, 'username', 320).trim().toLowerCase();
+    const password = str(b, 'password', 1024);
+    const u = db.prepare('SELECT id, email, name, role, pw_salt, pw_hash, disabled FROM users WHERE email = ? AND org_id = ?').get(username, d.org_id) as
+      { id: number; email: string; name: string; role: string; pw_salt: Uint8Array; pw_hash: Uint8Array; disabled: number } | undefined;
+    const got = scryptSync(password, u ? Buffer.from(u.pw_salt) : Buffer.alloc(16), 32);
+    if (!u || !timingSafeEqual(got, Buffer.from(u.pw_hash))) throw new HttpError(401, 'INVALID_CREDENTIALS', 'wrong username or password');
+    if (u.disabled) throw new HttpError(403, 'ACCOUNT_DISABLED', 'account disabled');
+    const dir = json<{ offline_login_days?: number }>((db.prepare('SELECT directory FROM orgs WHERE id = ?').get(d.org_id) as { directory: string }).directory);
+    send(ctx, 200, { username: u.email, user_id: u.id, name: u.name, groups: [u.role === 'admin' ? 'worksuite-admins' : 'worksuite-users'],
+      offline_login_days: dir.offline_login_days ?? 7 });
+  });
+
+  // Break-glass audit (WSOS-DIR-010): every use and every rotation is recorded against the device.
+  r.on('POST', '/desktop/v1/os/break-glass/events', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    await idempotent(db, ctx, `device:${d.id}`, ctx.header('idempotency-key'), async () => {
+      const b = obj(await ctx.body());
+      const type = str(b, 'type', 32);
+      if (type !== 'used' && type !== 'rotated') throw invalid('type', 'used or rotated');
+      db.prepare('INSERT OR IGNORE INTO audit (id, principal, type, at, data) VALUES (?, ?, ?, ?, ?)')
+        .run(str(b, 'id', 64), `device:${d.id}`, `break_glass.${type}`, str(b, 'at', 64), JSON.stringify({ username: str(b, 'username', 64) }));
+      return { status: 202 };
+    });
   });
 
   r.on('POST', '/desktop/v1/os/break-glass', async (ctx) => {

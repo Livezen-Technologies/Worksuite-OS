@@ -133,6 +133,33 @@ test('device reports and escrow are stored; required fields are validated', asyn
   assert.equal(hb.status, 400);
 });
 
+test('directory authenticate is device-bound, refuses disabled accounts; break-glass use is audited', async () => {
+  const d = await enroll();
+  const auth = (username: string, password: string, device = d.credential) =>
+    call('POST', '/desktop/v1/os/directory/authenticate', { device, body: { username, password } });
+  assert.equal((await call('POST', '/desktop/v1/os/directory/authenticate', { body: { username: 'ana@a.test', password: 'password-123' } })).status, 403);
+  const ok = await auth('Ana@A.test', 'password-123');
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.username, 'ana@a.test');
+  assert.deepEqual(ok.body.groups, ['worksuite-users']);
+  assert.equal(ok.body.offline_login_days, 7);
+  assert.equal(JSON.stringify(ok.body).includes('password'), false);
+  assert.equal((await auth('ana@a.test', 'wrong-password')).body.error.code, 'INVALID_CREDENTIALS');
+  assert.equal((await auth('nobody@a.test', 'password-123')).status, 401);
+  // A device of another organization cannot verify this org's users.
+  const strictDev = await enroll(strictOrg);
+  assert.equal((await auth('ana@a.test', 'password-123', strictDev.credential)).status, 401);
+  const gone = admin.addUser(db, org, 'gone@a.test', 'Gone', 'password-123');
+  db.prepare('UPDATE users SET disabled = 1 WHERE id = ?').run(gone);
+  assert.equal((await auth('gone@a.test', 'password-123')).body.error.code, 'ACCOUNT_DISABLED');
+  const ev = (type: string) => call('POST', '/desktop/v1/os/break-glass/events', { device: d.credential, idem: randomUUID(),
+    body: { id: randomUUID(), type, username: 'wsadmin', at: new Date().toISOString() } });
+  assert.equal((await ev('used')).status, 202);
+  assert.equal((await ev('bogus')).status, 400);
+  const rows = db.prepare('SELECT type FROM audit WHERE principal = ?').all(`device:${d.device_id}`) as { type: string }[];
+  assert.deepEqual(rows.map((r) => r.type), ['break_glass.used']);
+});
+
 test('expired commands are not delivered', async () => {
   const d = await enroll();
   const id = admin.issueCommand(db, d.device_id, 'RefreshPolicy');

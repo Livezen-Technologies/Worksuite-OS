@@ -1,0 +1,21 @@
+[Unit]
+Description=Rotate and escrow the WorkSuite break-glass admin password (WSOS-DIR-010)
+Documentation=file:///usr/share/doc/worksuite-directory/README.md
+# Only enrolled devices have an escrow key; elsewhere the account stays locked.
+ConditionPathExists=/var/lib/worksuite-device-agent/state.json
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/worksuite/worksuite-pam-directory rotate
+StateDirectory=worksuite-directory
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077

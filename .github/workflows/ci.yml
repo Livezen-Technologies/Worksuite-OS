@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [sync, device-agent, credentials, package-service, server]
+        package: [sync, device-agent, credentials, package-service, server, directory]
     defaults:
       run:
         working-directory: services/${{ matrix.package }}
