@@ -19,3 +19,4 @@ plymouth
 fonts-noto-core
 # Recovery (§9.2)
 dialog
+udisks2
