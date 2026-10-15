@@ -26,7 +26,7 @@ export default function Done({ done, canSaveReport, onBack }: { done: DoneInfo; 
               <li key={r.k} className="flex items-center gap-3 px-[18px] py-3 text-sm" style={{ borderTop: i ? '1px solid rgba(127,178,255,0.1)' : 'none' }}>
                 {r.state === 'ok' ? <Icon d={[RP.check]} size={16} stroke="#5FD39A" width={2.5} />
                   : r.state === 'problem' ? <Icon d={['M12 7v6', 'M12 16.5v.01']} size={16} stroke="#FF8A7A" width={2.5} />
-                  : <Icon d={['M7 12h10']} size={16} stroke="#5E739C" width={2.5} />}
+                  : <Icon d={['M7 12h10']} size={16} stroke="#8FA3C8" width={2.5} />}
                 <span className={`flex-1 ${r.state === 'skipped' ? 'text-[#8FA3C8]' : ''}`}>{r.k}<span className="sr-only">{r.state === 'ok' ? ': fine' : r.state === 'problem' ? ': needs attention' : ': not checked'}</span></span>
                 <span className="text-xs text-[#8FA3C8]">{r.v}</span>
               </li>
@@ -39,7 +39,7 @@ export default function Done({ done, canSaveReport, onBack }: { done: DoneInfo; 
         </div>
         {done.report && (canSaveReport
           ? <button type="button" onClick={async () => { const r = await os.recoverySaveReport(done.report ?? ''); setSaved(r.ok ? `Saved to ${r.value}` : recoveryErrorText(r.error)) }} className={link}>Save repair report to USB</button>
-          : <span className="text-[13px] text-[#5E739C]">Saving the repair report to USB isn’t available in this version yet.</span>)}
+          : <span className="text-[13px] text-[#8FA3C8]">Saving the repair report to USB isn’t available in this version yet.</span>)}
         {saved && <p role="status" className="m-0 text-[13px] text-[#C9D6EE]">{saved}</p>}
       </div>
     </Page>

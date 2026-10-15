@@ -50,3 +50,21 @@ contextBridge.exposeInMainWorld('worksuite', {
   recoveryTerminal: () => ipcRenderer.invoke('ws:recoveryTerminal'),
   recoverySaveReport: (text: string) => ipcRenderer.invoke('ws:recoverySaveReport', String(text)),
 })
+
+// Panel (taskbar windows, tray, Super key) — see electron/panel.ts.
+const on = (channel: string) => (cb: (payload: unknown) => void) => {
+  const listener = (_e: unknown, payload: unknown) => cb(payload)
+  ipcRenderer.on(channel, listener)
+  return () => { ipcRenderer.removeListener(channel, listener) }
+}
+contextBridge.exposeInMainWorld('worksuitePanel', {
+  windows: () => ipcRenderer.invoke('ws:panelWindows'),
+  activate: (handle: string) => ipcRenderer.invoke('ws:panelActivate', String(handle)),
+  close: (handle: string) => ipcRenderer.invoke('ws:panelClose', String(handle)),
+  minimize: (handle: string, state: boolean) => ipcRenderer.invoke('ws:panelMinimize', String(handle), state ? '1' : '0'),
+  tray: () => ipcRenderer.invoke('ws:panelTray'),
+  trayActivate: (key: string, x: number, y: number) => ipcRenderer.invoke('ws:panelTrayActivate', String(key), String(x), String(y)),
+  onWindows: on('ws:panelWindowsChanged'),
+  onTray: on('ws:panelTrayChanged'),
+  onLauncher: on('ws:launcher'),
+})

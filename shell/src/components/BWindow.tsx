@@ -6,7 +6,8 @@ export default function BWindow({ title, mark, markClass, label, bodyClass = 'bg
   onClose: () => void; children: React.ReactNode
 }) {
   return (
-    <div role="application" aria-label={label} className={`flex h-full w-full flex-col overflow-hidden rounded-xl text-[#0f172a] shadow-[0_16px_48px_rgba(2,6,23,0.45)] ${bodyClass}`}>
+    // A window, not role="application": that role turns off Orca's browse mode for everything inside (WSOS-ACC).
+    <div role="dialog" aria-modal="false" aria-label={label} className={`flex h-full w-full flex-col overflow-hidden rounded-xl text-[#0f172a] shadow-[0_16px_48px_rgba(2,6,23,0.45)] ${bodyClass}`}>
       <div className={`flex h-11 shrink-0 items-center gap-2.5 border-b border-[#e2e8f0] pr-2 pl-4 ${titleClass}`}>
         <span className={`flex size-[22px] items-center justify-center rounded-md text-[11px] font-bold ${markClass}`}>{mark}</span>
         <span className="text-[13px] font-semibold">{title}</span>

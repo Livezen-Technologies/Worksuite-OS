@@ -68,7 +68,7 @@ export default function Reset({ info, onBack, onDone }: { info: RecoveryInfo | n
           <button type="button" disabled={!info?.features.copy_usb} aria-describedby={!info?.features.copy_usb ? 'usb-off' : undefined}
             onClick={async () => { const r = await os.recoveryCopyToUsb(); setUsbNote(r.ok ? 'Copying started.' : recoveryErrorText(r.error)) }} className={`${small} font-medium`}>Copy files to USB</button>
         </div>
-        {!info?.features.copy_usb && <span id="usb-off" className="-mt-4 text-xs text-[#5E739C]">Copying to USB isn’t available in this version yet.</span>}
+        {!info?.features.copy_usb && <span id="usb-off" className="-mt-4 text-xs text-[#8FA3C8]">Copying to USB isn’t available in this version yet.</span>}
         {error && <Note tone="warn" role="alert">{error}</Note>}
       </div>
       <Footer className="h-20 justify-end gap-3 px-40 max-[900px]:px-6">

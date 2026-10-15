@@ -7,6 +7,7 @@ import { deviceInfo, enrollDevice } from './device'
 import { followJobs, packageClient } from './packages'
 import { recoveryHost } from './recovery'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
+import { startPanel } from './panelHost'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
@@ -141,6 +142,8 @@ app.whenReady().then(() => {
   })
   followSessionLock((locked) => void brokerCall(locked ? 'Lock' : 'Unlock'))
   createWindow()
+  // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
+  startPanel(handle, (channel, payload) => win?.webContents.send(channel, payload))
 })
 
 app.on('window-all-closed', () => app.quit())

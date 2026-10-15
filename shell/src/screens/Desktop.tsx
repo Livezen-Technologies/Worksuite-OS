@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DesktopProps } from './types'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
@@ -6,6 +6,9 @@ import type { Notice } from '../lib/syncNotices'
 import { ageLabel } from '../lib/power'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
+import { RunningApps, TrayItems, UpdateBadge, useLauncherKey } from '../components/PanelItems'
+import A11yPanel from '../components/A11yPanel'
+import { localeTag, useT } from '../i18n'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 
@@ -39,14 +42,8 @@ const RECENT = [
   { ext: 'PDF', name: 'Invoice INV-2026-0418.pdf', where: 'This Computer › Downloads', state: 'Local', cls: 'bg-[#f1f5f9] text-[#334155]' },
 ]
 
-const TASKBAR = [
-  { id: 'mail', running: true, active: true },
-  { id: 'chat', running: true },
-  { id: 'drive' },
-  { id: 'office', running: true },
-  { id: 'firefox' },
-  { id: 'terminal' },
-] as { id: string; running?: boolean; active?: boolean }[]
+// Pinned taskbar apps; running windows come from the Wayland bridge (components/PanelItems.tsx).
+const PINNED = ['mail', 'chat', 'drive', 'office', 'firefox', 'terminal']
 
 const TABS = [['all', 'All apps'], ['ws', 'WorkSuite'], ['linux', 'Linux apps'], ['fav', 'Favorites']] as const
 type Tab = (typeof TABS)[number][0]
@@ -58,8 +55,12 @@ function useClock() {
 }
 
 export default function Desktop({ user, onLock, onLogout, onOpen, notes, children }: DesktopProps) {
+  const t = useT()
   const now = useClock()
   const [launcher, setLauncher] = useState(false)
+  const [a11yOpen, setA11yOpen] = useState(false)
+  // Super key from Labwc arrives over lk.worksuite.Shell1 (WSOS-DSK-011).
+  useLauncherKey(useCallback((a: 'toggle' | 'show') => setLauncher((v) => (a === 'show' ? true : !v)), []))
   const [tab, setTab] = useState<Tab>('all')
   const [query, setQuery] = useState('')
   const [powerOpen, setPowerOpen] = useState(false)
@@ -72,9 +73,9 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   const searchRef = useRef<HTMLInputElement>(null)
   const name = displayName(user) || 'Hasarinda'
 
-  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-  const longDate = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
-  const shortDate = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
+  const time = now.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit', hour12: false })
+  const longDate = now.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })
+  const shortDate = now.toLocaleDateString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t) }, [toast, setToast])
 
@@ -117,12 +118,11 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
     else if (id === 'appcenter') onOpen('appcenter')
     else void os.launchApp(id)
   }
-  const byId = (id: string) => APPS.find((a) => a.id === id)!
 
   const quick = [
-    { label: 'Do not disturb', d: P.sleep, on: dnd, run: () => { setDnd((v) => !v); if (!dnd) setToast(null) } },
-    { label: 'Settings', d: P.settings, on: false, run: () => { setTrayOpen(false); onOpen('settings') } },
-    { label: 'Lock', d: P.lock, on: false, run: () => { setTrayOpen(false); onLock() } },
+    { label: t('quick.dnd'), d: P.sleep, on: dnd, run: () => { setDnd((v) => !v); if (!dnd) setToast(null) } },
+    { label: t('quick.settings'), d: P.settings, on: false, run: () => { setTrayOpen(false); onOpen('settings') } },
+    { label: t('quick.lock'), d: P.lock, on: false, run: () => { setTrayOpen(false); onLock() } },
   ]
 
   return (
@@ -139,18 +139,18 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
         <div role="status" className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] font-bold text-white" style={{ background: TONE_BG[toast.tone] }}><BIcon name={toast.tone === 'ok' ? 'check' : 'alert'} /></span>
           <div className="flex flex-1 flex-col gap-[3px]">
-            <div className="flex justify-between gap-2"><span className="text-sm font-semibold">{toast.title}</span><span className="text-xs text-[#8FA3C8]">now</span></div>
+            <div className="flex justify-between gap-2"><span className="text-sm font-semibold">{toast.title}</span><span className="text-xs text-[#8FA3C8]">{t('notes.now')}</span></div>
             <span className="text-[13px] leading-[1.4] text-[#C9D6EE]">{toast.body}</span>
           </div>
-          <button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[#8FA3C8] hover:bg-white/10 hover:text-white"><Icon d={P.close} size={14} /></button>
+          <button type="button" aria-label={t('notes.dismiss')} onClick={() => setToast(null)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[#8FA3C8] hover:bg-white/10 hover:text-white"><Icon d={P.close} size={14} /></button>
         </div>
       )}
 
       {trayOpen && (
-        <aside id="ws-notifications" aria-label="Notifications" className="absolute top-3 right-3 bottom-[68px] z-40 flex w-[400px] max-w-[calc(100%-24px)] flex-col gap-3.5 rounded-[20px] border border-[rgba(127,178,255,0.18)] bg-[rgba(10,24,56,0.94)] p-[18px] text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[24px]">
+        <aside id="ws-notifications" aria-label={t('notes.title')} className="absolute top-3 right-3 bottom-[68px] z-40 flex w-[400px] max-w-[calc(100%-24px)] flex-col gap-3.5 rounded-[20px] border border-[rgba(127,178,255,0.18)] bg-[rgba(10,24,56,0.94)] p-[18px] text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[24px]">
           <div className="grid grid-cols-3 gap-2">
             {quick.map((q) => (
-              <button key={q.label} type="button" aria-pressed={q.label === 'Do not disturb' ? q.on : undefined} onClick={q.run}
+              <button key={q.label} type="button" aria-pressed={q.d === P.sleep ? q.on : undefined} onClick={q.run}
                 className={`flex cursor-pointer flex-col gap-2 rounded-xl p-3 text-left ${q.on ? 'bg-[#1F6BFF] text-white' : 'bg-white/[0.06] text-[#E8EEFA] hover:bg-white/10'}`}>
                 <Icon d={q.d} size={18} stroke={q.on ? '#FFFFFF' : '#C9D6EE'} />
                 <span className="text-xs font-medium">{q.label}</span>
@@ -158,15 +158,15 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
             ))}
           </div>
           <div className="mt-1 flex items-center justify-between">
-            <h2 className="m-0 text-base font-semibold">Notifications</h2>
-            {notices.length > 0 && <button type="button" onClick={() => setNotices([])} className="cursor-pointer rounded text-[13px] text-[#7FB2FF] hover:text-[#B8D4FF]">Clear all</button>}
+            <h2 className="m-0 text-base font-semibold">{t('notes.title')}</h2>
+            {notices.length > 0 && <button type="button" onClick={() => setNotices([])} className="cursor-pointer rounded text-[13px] text-[#7FB2FF] hover:text-[#B8D4FF]">{t('notes.clearAll')}</button>}
           </div>
           <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-2 overflow-auto p-0">
             {notices.length === 0 && (
               <li className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(31,107,255,0.15)]"><Icon d={P.bell} size={22} stroke="#7FB2FF" /></span>
-                <span className="text-sm font-semibold">You're all caught up</span>
-                <span className="max-w-[260px] text-[13px] text-[#8FA3C8]">Sync, update and app notifications show up here.</span>
+                <span className="text-sm font-semibold">{t('notes.empty')}</span>
+                <span className="max-w-[260px] text-[13px] text-[#8FA3C8]">{t('notes.emptyHint')}</span>
               </li>
             )}
             {notices.map((x) => (
@@ -184,24 +184,24 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
       {launcher && (
         <div className="absolute inset-x-0 top-0 bottom-14 z-30 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
-          <div id="ws-launcher" role="dialog" aria-label="Launcher" className="flex h-[650px] max-h-full w-[720px] max-w-full flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_rgba(2,6,23,0.5)]">
+          <div id="ws-launcher" role="dialog" aria-label={t('launcher.title')} className="flex h-[650px] max-h-full w-[720px] max-w-full flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_rgba(2,6,23,0.5)]">
             <div className="flex flex-col gap-3.5 px-5 pt-5 pb-3">
               <label className="flex h-11 items-center gap-2.5 rounded-[10px] border border-[#e2e8f0] bg-[#f1f5f9] px-3.5 text-[#475569]">
                 <BIcon name="search" />
-                <span className="sr-only">Search</span>
-                <input ref={searchRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search apps, files, records and settings" className="grow border-0 bg-transparent text-[15px] text-[#0f172a] outline-none" />
-                <span className="rounded border border-[#cbd5e1] px-1.5 py-0.5 text-[11px] text-[#475569]">Super</span>
+                <span className="sr-only">{t('launcher.search')}</span>
+                <input ref={searchRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('launcher.searchPlaceholder')} className="grow border-0 bg-transparent text-[15px] text-[#0f172a] outline-none" />
+                <span aria-hidden="true" className="rounded border border-[#cbd5e1] px-1.5 py-0.5 text-[11px] text-[#475569]">Super</span>
               </label>
-              <div role="tablist" className="flex gap-1.5">
-                {TABS.map(([id, label]) => (
+              <div role="tablist" aria-label={t('launcher.title')} className="flex gap-1.5">
+                {TABS.map(([id]) => (
                   <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-                    className={`h-8 rounded-full px-3.5 text-[13px] ${tab === id ? 'bg-[#2563eb] font-semibold text-white' : 'border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f8fafc]'}`}>{label}</button>
+                    className={`h-8 rounded-full px-3.5 text-[13px] ${tab === id ? 'bg-[#2563eb] font-semibold text-white' : 'border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f8fafc]'}`}>{t(`launcher.tab.${id}`)}</button>
                 ))}
               </div>
             </div>
 
             <div className="min-h-0 grow overflow-auto">
-              <div className="px-5 py-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">{q ? 'Apps' : tab === 'all' ? 'Pinned' : TABS.find((t) => t[0] === tab)![1]}</div>
+              <div className="px-5 py-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">{q ? t('launcher.apps') : tab === 'all' ? t('launcher.pinned') : t(`launcher.tab.${tab}`)}</div>
               {apps.length ? (
                 <div className="grid grid-cols-6 gap-2 px-5 pt-2 pb-1">
                   {apps.map((a) => (
@@ -212,17 +212,17 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                     </button>
                   ))}
                 </div>
-              ) : <p className="px-5 py-3 text-[13px] text-[#475569]">No apps match.</p>}
+              ) : <p className="px-5 py-3 text-[13px] text-[#475569]">{t('launcher.noApps')}</p>}
 
               {settingsHits.length > 0 && (
                 <>
-                  <div className="px-5 pt-3 pb-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">Settings</div>
+                  <div className="px-5 pt-3 pb-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">{t('launcher.settings')}</div>
                   <div className="flex flex-col px-3 py-1">
                     {settingsHits.map((s) => (
                       <button key={s} type="button" onClick={() => { setLauncher(false); onOpen('settings') }} className="flex h-11 items-center gap-3 rounded-lg px-2 text-left hover:bg-[#f1f5f9]">
                         <span className="flex size-7 items-center justify-center rounded-md bg-[#f1f5f9] text-[#334155]"><BIcon name="settings" size={16} /></span>
                         <span className="grow text-[13px]">{s}</span>
-                        <span className="text-xs text-[#475569]">Settings</span>
+                        <span className="text-xs text-[#475569]">{t('launcher.settings')}</span>
                       </button>
                     ))}
                   </div>
@@ -231,7 +231,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
               {recent.length > 0 && (
                 <>
-                  <div className="px-5 pt-3 pb-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">Recent</div>
+                  <div className="px-5 pt-3 pb-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">{t('launcher.recent')}</div>
                   <div className="flex flex-col px-3 py-1">
                     {recent.map((r) => (
                       <button key={r.name} type="button" onClick={() => { setLauncher(false); onOpen('files') }} className="flex h-11 items-center gap-3 rounded-lg px-2 text-left hover:bg-[#f1f5f9]">
@@ -252,46 +252,41 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                 <span className="text-[13px] font-semibold">{name}</span>
                 <span className="text-xs text-[#475569]">Livezen Technologies · Enterprise · Synced 1 min ago</span>
               </div>
-              <button type="button" aria-label="App Center" onClick={() => launch('appcenter')} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="grid" /></button>
-              <button type="button" aria-label="Settings" onClick={() => { setLauncher(false); onOpen('settings') }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="settings" /></button>
-              <button type="button" aria-label="Lock" onClick={() => { setLauncher(false); onLock() }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="lock" /></button>
-              <button type="button" aria-label="Power menu" aria-haspopup="menu" onClick={() => { setLauncher(false); setPowerOpen(true) }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#b91c1c] hover:bg-[#fef2f2]"><BIcon name="power" /></button>
+              <button type="button" aria-label={t('launcher.appCenter')} onClick={() => launch('appcenter')} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="grid" /></button>
+              <button type="button" aria-label={t('launcher.settings')} onClick={() => { setLauncher(false); onOpen('settings') }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="settings" /></button>
+              <button type="button" aria-label={t('quick.lock')} onClick={() => { setLauncher(false); onLock() }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="lock" /></button>
+              <button type="button" aria-label={t('launcher.powerMenu')} aria-haspopup="menu" onClick={() => { setLauncher(false); setPowerOpen(true) }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#b91c1c] hover:bg-[#fef2f2]"><BIcon name="power" /></button>
             </div>
           </div>
         </div>
       )}
 
-      <nav aria-label="Taskbar" className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
-        <button type="button" aria-label="Open launcher" aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
+      <nav aria-label={t('panel.taskbar')} className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
+        <button type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
           className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.45)] ring-2 ring-[#1F6BFF]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
-        {TASKBAR.map((t) => {
-          const a = byId(t.id)
-          return (
-            <button key={t.id} type="button" aria-label={`${a.name}${t.running ? ', running' : ''}`} onClick={() => launch(t.id)}
-              className={`relative flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${t.active ? 'bg-white/10' : 'hover:bg-white/10'}`}>
-              <span className="flex size-7 items-center justify-center rounded-[7px] text-[11px] font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
-              {t.running && <span className={`absolute bottom-[2px] h-[3px] rounded-sm bg-[#18D4F0] ${t.active ? 'w-3.5' : 'w-1.5'}`} />}
-            </button>
-          )
-        })}
-        <div role="group" aria-label="Workspaces" className="ml-4 hidden gap-1 sm:flex">
+        <RunningApps pinned={PINNED} info={(id) => APPS.find((a) => a.id === id)} onLaunch={launch} />
+        <div role="group" aria-label={t('panel.workspaces')} className="ml-4 hidden gap-1 sm:flex">
           {[1, 2, 3].map((n) => (
-            <button key={n} type="button" aria-label={`Workspace ${n}`} aria-pressed={workspace === n} onClick={() => setWorkspace(n)}
+            <button key={n} type="button" aria-label={t('panel.workspace', { n })} aria-pressed={workspace === n} onClick={() => setWorkspace(n)}
               className={`h-7 min-w-7 cursor-pointer rounded-md text-xs ${workspace === n ? 'bg-white/[0.14] text-white' : 'text-[#8FA3C8] hover:bg-white/10'}`}>{n}</button>
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
           {managed && (
-            <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? `Managed by ${device.org_name}` : undefined}
+            <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? t('panel.managedBy', { org: device.org_name }) : undefined}
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
-          <button type="button" aria-label="Notifications and quick settings" aria-expanded={trayOpen} aria-controls="ws-notifications"
+          <TrayItems />
+          <UpdateBadge onOpen={() => onOpen('settings')} />
+          <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false) }}
+            className="flex size-10 cursor-pointer items-center justify-center rounded-[10px] bg-white/[0.12] hover:bg-white/20"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
+          <button type="button" aria-label={t('panel.notifications')} aria-expanded={trayOpen} aria-controls="ws-notifications"
             onClick={() => { setTrayOpen((v) => !v); setUnread(0); setPowerOpen(false) }}
             className={`flex h-10 cursor-pointer items-center gap-2.5 rounded-[10px] px-3 text-[13px] ${trayOpen ? 'bg-white/20' : 'bg-white/[0.12] hover:bg-white/20'}`}>
             <time dateTime={now.toISOString()} title={shortDate}>{time}</time>
-            {unread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-[10px] bg-[#1F6BFF] px-1.5 text-[11px] font-bold" aria-label={`${unread} new`}>{unread}</span>}
+            {unread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-[10px] bg-[#1F6BFF] px-1.5 text-[11px] font-bold" aria-label={t('panel.newCount', { count: unread })}>{unread}</span>}
           </button>
-          <button type="button" aria-label="Power" aria-haspopup="menu" aria-expanded={powerOpen} data-power-toggle onClick={() => { setPowerOpen((v) => !v); setTrayOpen(false) }}
+          <button type="button" aria-label={t('panel.power')} aria-haspopup="menu" aria-expanded={powerOpen} data-power-toggle onClick={() => { setPowerOpen((v) => !v); setTrayOpen(false) }}
             className="flex size-10 cursor-pointer items-center justify-center rounded-[10px] bg-white/[0.12] shadow-[inset_0_0_0_1px_rgba(127,178,255,0.4)] hover:bg-white/20"><Icon d={P.power} size={18} /></button>
         </div>
       </nav>
@@ -300,6 +295,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           onLock={onLock} onSignOut={onLogout} onShutdown={() => setConfirmShutdown(true)} />
       )}
       {confirmShutdown && <ShutdownConfirm onCancel={() => setConfirmShutdown(false)} />}
+      {a11yOpen && <A11yPanel className="right-4 bottom-[68px]" onClose={() => setA11yOpen(false)} />}
     </div>
   )
 }

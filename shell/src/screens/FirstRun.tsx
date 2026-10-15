@@ -13,7 +13,7 @@ type Mode = 'personal' | 'enterprise'
 const THEME_LOOK: Record<Theme, { bg: string; bar: string; win: string }> = {
   Light: { bg: 'linear-gradient(135deg,#EAF1FF,#C9DAFF)', bar: 'rgba(255,255,255,0.8)', win: '#FFFFFF' },
   Dark: { bg: 'linear-gradient(135deg,#0E2357,#060E22)', bar: 'rgba(255,255,255,0.08)', win: '#13264F' },
-  Auto: { bg: 'linear-gradient(135deg,#EAF1FF 0%,#EAF1FF 50%,#0E2357 50%,#060E22 100%)', bar: 'rgba(127,178,255,0.25)', win: '#5E739C' },
+  Auto: { bg: 'linear-gradient(135deg,#EAF1FF 0%,#EAF1FF 50%,#0E2357 50%,#060E22 100%)', bar: 'rgba(127,178,255,0.25)', win: '#8FA3C8' },
 }
 
 const PRIVACY_ITEMS: [keyof Privacy, string, string, string][] = [
@@ -26,7 +26,7 @@ const PRIVACY_ITEMS: [keyof Privacy, string, string, string][] = [
 const LANGUAGES = ['English (United States)', 'English (United Kingdom)', 'සිංහල', 'தமிழ்']
 const REGIONS = ['Sri Lanka', 'India', 'United Kingdom', 'United States']
 
-const field = 'h-11 w-full rounded-[10px] border border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.5)] px-3.5 text-[15px] text-[#E8EEFA] outline-none placeholder:text-[#5E739C] focus:border-[#1F6BFF] disabled:opacity-60'
+const field = 'h-11 w-full rounded-[10px] border border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.5)] px-3.5 text-[15px] text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8] focus:border-[#1F6BFF] disabled:opacity-60'
 const fieldLabel = 'flex flex-col gap-1.5 text-[13px] font-semibold text-[#C9D6EE]'
 
 export default function FirstRun({ onDone, userName }: FirstRunProps) {

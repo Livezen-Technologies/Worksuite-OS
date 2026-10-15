@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { localeTag } from '../i18n'
 
 /** Live clock: re-renders on each minute boundary (or every `ms`). */
 export function useANow(ms = 1000): Date {
@@ -10,6 +11,6 @@ export function useANow(ms = 1000): Date {
   return now
 }
 
-export const aTime = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-export const aShortDate = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
-export const aLongDate = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+export const aTime = (d: Date) => d.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' })
+export const aShortDate = (d: Date) => d.toLocaleDateString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
+export const aLongDate = (d: Date) => d.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })

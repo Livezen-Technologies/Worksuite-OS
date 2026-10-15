@@ -1,0 +1,112 @@
+// Renderer side of the panel: running windows from the Wayland bridge, tray items and the update badge
+// (SRS §5.1, WSOS-DSK-003, WSOS-INT-008, WSOS-AUP-011). In a plain browser a stub answers instead.
+import type { OsUpdateStatus } from './os'
+
+export interface PanelWindow { handle: string; appId: string; title: string; output: string; flags: number }
+export interface TrayItem { key: string; id: string; title: string; icon: string; status: string }
+export type PanelResult = { ok: true; value: true } | { ok: false; error: string }
+
+export const ACTIVATED = 1
+export const MINIMIZED = 2
+
+export interface PanelApi {
+  windows(): Promise<PanelWindow[]>
+  activate(handle: string): Promise<PanelResult>
+  close(handle: string): Promise<PanelResult>
+  minimize(handle: string, state: boolean): Promise<PanelResult>
+  tray(): Promise<TrayItem[]>
+  trayActivate(key: string, x: number, y: number): Promise<PanelResult>
+  onWindows(cb: (w: PanelWindow[]) => void): () => void
+  onTray(cb: (t: TrayItem[]) => void): () => void
+  /** Super key via lk.worksuite.Shell1. */
+  onLauncher(cb: (action: 'toggle' | 'show') => void): () => void
+}
+
+declare global {
+  interface Window { worksuitePanel?: PanelApi }
+}
+
+/** App ids that belong to a launcher entry (desktop-file id → Wayland app_id values seen in practice). */
+const ALIASES: Record<string, string[]> = {
+  terminal: ['foot', 'org.gnome.Terminal', 'org.gnome.Console', 'xterm'],
+  firefox: ['firefox', 'firefox-esr', 'org.mozilla.firefox'],
+  files: ['org.gnome.Nautilus', 'pcmanfm'],
+}
+/** The shell's own surfaces are not taskbar entries. */
+const OWN = new Set(['worksuite', 'worksuite-shell', 'electron'])
+
+export function matchesApp(appId: string, windowAppId: string): boolean {
+  const w = windowAppId.toLowerCase()
+  return w === appId.toLowerCase() || (ALIASES[appId] ?? []).some((a) => a.toLowerCase() === w) || w === `lk.worksuite.${appId}`
+}
+
+export interface TaskbarEntry { id: string; pinned: boolean; windows: PanelWindow[]; running: boolean; active: boolean; title: string }
+
+/** Pinned apps first (in pin order) with their windows, then other running apps grouped by app_id. */
+export function taskbarEntries(pinned: string[], windows: PanelWindow[]): TaskbarEntry[] {
+  const mine = windows.filter((w) => !OWN.has(w.appId.toLowerCase()))
+  const used = new Set<string>()
+  const entry = (id: string, pin: boolean, ws: PanelWindow[]): TaskbarEntry => ({
+    id, pinned: pin, windows: ws, running: ws.length > 0, active: ws.some((w) => w.flags & ACTIVATED && !(w.flags & MINIMIZED)), title: ws[0]?.title ?? '',
+  })
+  const out = pinned.map((id) => {
+    const ws = mine.filter((w) => matchesApp(id, w.appId))
+    ws.forEach((w) => used.add(w.handle))
+    return entry(id, true, ws)
+  })
+  const rest = new Map<string, PanelWindow[]>()
+  for (const w of mine) if (!used.has(w.handle)) rest.set(w.appId || w.handle, [...(rest.get(w.appId || w.handle) ?? []), w])
+  for (const [id, ws] of rest) out.push(entry(id, false, ws))
+  return out
+}
+
+export type ClickAction = { kind: 'launch' } | { kind: 'activate'; handle: string } | { kind: 'minimize'; handle: string }
+
+/** Click on a taskbar entry: launch if not running, minimize the active window, otherwise raise the next one. */
+export function clickAction(e: TaskbarEntry): ClickAction {
+  if (!e.windows.length) return { kind: 'launch' }
+  const i = e.windows.findIndex((w) => w.flags & ACTIVATED && !(w.flags & MINIMIZED))
+  if (i >= 0 && e.windows.length === 1) return { kind: 'minimize', handle: e.windows[i].handle }
+  return { kind: 'activate', handle: e.windows[(i + 1) % e.windows.length].handle }
+}
+
+export type BadgeState = 'available' | 'downloading' | 'restart' | 'failed'
+
+/** Panel update badge (WSOS-AUP-011): available, downloading, ready-to-restart and failed. */
+export function updateBadge(s: OsUpdateStatus | null, appUpdates = 0): BadgeState | null {
+  switch (s?.state) {
+    case 'available': case 'waiting': return 'available'
+    case 'installing': return 'downloading'
+    case 'ready_to_restart': case 'restart_pending': return 'restart'
+    case 'failed': return 'failed'
+    default: return appUpdates > 0 ? 'available' : null
+  }
+}
+
+// ---- browser stub (dev/design review): two windows, one tray item ----
+let stubWindows: PanelWindow[] = [
+  { handle: 'w1', appId: 'firefox-esr', title: 'WorkSuite Cloud — Firefox', output: 'HDMI-A-1', flags: ACTIVATED },
+  { handle: 'w2', appId: 'foot', title: 'Terminal', output: 'HDMI-A-1', flags: 0 },
+]
+const stubListeners = new Set<(w: PanelWindow[]) => void>()
+const publish = () => stubListeners.forEach((l) => l(stubWindows))
+const setFlags = (handle: string, f: (flags: number) => number): PanelResult => {
+  if (!stubWindows.some((w) => w.handle === handle)) return { ok: false, error: 'not_found' }
+  stubWindows = stubWindows.map((w) => (w.handle === handle ? { ...w, flags: f(w.flags) } : { ...w, flags: f === activateFlags ? w.flags & ~ACTIVATED : w.flags }))
+  publish()
+  return { ok: true, value: true }
+}
+const activateFlags = () => ACTIVATED
+const stub: PanelApi = {
+  async windows() { return stubWindows },
+  async activate(h) { return setFlags(h, activateFlags) },
+  async close(h) { stubWindows = stubWindows.filter((w) => w.handle !== h); publish(); return { ok: true, value: true } },
+  async minimize(h, state) { return setFlags(h, (f) => (state ? (f | MINIMIZED) & ~ACTIVATED : f & ~MINIMIZED)) },
+  async tray() { return [{ key: ':1.9/StatusNotifierItem', id: 'nm-applet', title: 'Network', icon: 'network-wireless', status: 'Active' }] },
+  async trayActivate() { return { ok: true, value: true } },
+  onWindows(cb) { stubListeners.add(cb); return () => { stubListeners.delete(cb) } },
+  onTray() { return () => {} },
+  onLauncher() { return () => {} },
+}
+
+export const panel: PanelApi = (typeof window !== 'undefined' && window.worksuitePanel) || stub

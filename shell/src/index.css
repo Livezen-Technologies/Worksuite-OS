@@ -27,7 +27,8 @@
 @layer base {
   html, body, #root { height: 100%; margin: 0; }
   body { font-family: var(--font-sans); color: var(--color-ws-ink); background: var(--color-ws-night); }
-  :focus-visible { outline: 2px solid #7FB2FF; outline-offset: 2px; }
+  /* Visible focus on every control (WSOS-ACC): blue ring with a dark halo so it shows on light and dark surfaces. */
+  :focus-visible { outline: 2px solid #7FB2FF; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(2, 6, 23, 0.85); }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation: none !important; }
   }
@@ -53,3 +54,30 @@
 /* Wrong-password shake (Login board). */
 @keyframes ws-shake { 0%, 100% { transform: translateX(0) } 20%, 60% { transform: translateX(-8px) } 40%, 80% { transform: translateX(8px) } }
 .ws-shake { animation: ws-shake 0.4s ease; }
+
+/* Accessibility settings (WSOS-ACC-001…006, lib/a11y.ts). The system prefers-reduced-motion rule is in @layer base. */
+[data-reduced-motion] *, [data-reduced-motion] *::before, [data-reduced-motion] *::after {
+  transition: none !important; animation: none !important; scroll-behavior: auto !important;
+}
+
+/* High-contrast theme: black surfaces, white text and borders, yellow selection and a thick focus ring (≥ 7:1 everywhere). */
+[data-high-contrast] {
+  --color-ws-ink: #ffffff; --color-ws-muted: #ffffff; --color-ws-line: #ffffff;
+  --color-ws-surface: #000000; --color-ws-subtle: #000000; --color-ws-accent: #ffd400; --color-ws-accent-strong: #ffd400;
+}
+[data-high-contrast] *, [data-high-contrast] *::before, [data-high-contrast] *::after {
+  color: #ffffff !important; background-color: #000000 !important; background-image: none !important;
+  border-color: #ffffff !important; box-shadow: none !important; text-shadow: none !important; backdrop-filter: none !important; opacity: 1 !important;
+}
+[data-high-contrast] #root > * { background: #000000 !important; }
+[data-high-contrast] :is(button, input, select, textarea, [role="tab"], [role="menuitem"]) { border: 1px solid #ffffff !important; }
+[data-high-contrast] :is([aria-pressed="true"], [aria-selected="true"], [aria-current], [aria-checked="true"], [aria-expanded="true"]) {
+  background-color: #ffd400 !important; color: #000000 !important;
+}
+[data-high-contrast] :is([aria-pressed="true"], [aria-selected="true"], [aria-current], [aria-checked="true"], [aria-expanded="true"]) * {
+  background-color: transparent !important; color: #000000 !important;
+}
+[data-high-contrast] svg [stroke]:not([stroke="none"]) { stroke: currentColor !important; }
+[data-high-contrast] ::placeholder { color: #d4d4d4 !important; }
+[data-high-contrast] :focus-visible { outline: 3px solid #ffd400 !important; outline-offset: 2px !important; }
+[data-high-contrast] :disabled { color: #d4d4d4 !important; border-style: dashed !important; }

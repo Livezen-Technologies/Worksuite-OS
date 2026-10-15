@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as RKeyboardEvent } fro
 import { os } from '../lib/os'
 import { SHUTDOWN_SECONDS, ringDash, uptimeLabel } from '../lib/power'
 import { Avatar, Icon, P, mono } from './Ws'
+import { useT } from '../i18n'
 
 export interface PowerMenuProps {
   /** Shown in the header when signed in; the greeter passes none. */
@@ -16,14 +17,15 @@ export interface PowerMenuProps {
 }
 
 export function PowerMenu({ user, onClose, onLock, onSignOut, onShutdown, className = '' }: PowerMenuProps) {
+  const t = useT()
   const ref = useRef<HTMLDivElement>(null)
   const items: { label: string; d: readonly string[]; key?: string; sep?: boolean; run: () => void }[] = []
-  if (onLock) items.push({ label: 'Lock', d: P.lock, key: 'Super+L', run: onLock })
-  if (onSignOut) items.push({ label: 'Sign out', d: P.signOut, run: onSignOut })
+  if (onLock) items.push({ label: t('power.lock'), d: P.lock, key: 'Super+L', run: onLock })
+  if (onSignOut) items.push({ label: t('power.signOut'), d: P.signOut, run: onSignOut })
   items.push(
-    { label: 'Sleep', d: P.sleep, sep: items.length > 0, run: () => void os.power('suspend') },
-    { label: 'Restart', d: P.restart, run: () => void os.power('restart') },
-    { label: 'Shut down', d: P.power, run: onShutdown },
+    { label: t('power.sleep'), d: P.sleep, sep: items.length > 0, run: () => void os.power('suspend') },
+    { label: t('power.restart'), d: P.restart, run: () => void os.power('restart') },
+    { label: t('power.shutDown'), d: P.power, run: onShutdown },
   )
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export function PowerMenu({ user, onClose, onLock, onSignOut, onShutdown, classN
   }
 
   return (
-    <div ref={ref} role="menu" aria-label="Power options" onKeyDown={onKey}
+    <div ref={ref} role="menu" aria-label={t('power.options')} onKeyDown={onKey}
       className={`absolute z-50 flex w-80 flex-col gap-0.5 rounded-2xl border border-[rgba(127,178,255,0.18)] bg-[rgba(10,24,56,0.94)] p-2 text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[24px] ${className}`}>
       {user && (
         <>

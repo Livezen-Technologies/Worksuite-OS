@@ -38,7 +38,7 @@ export default function Menu({ info, onOpen }: { info: RecoveryInfo | null; onOp
 
   return (
     <Page label="Recovery menu">
-      <Header logo right={facts ? <span className={`${mono} text-xs text-[#5E739C]`}>{facts}</span> : null} />
+      <Header logo right={facts ? <span className={`${mono} text-xs text-[#8FA3C8]`}>{facts}</span> : null} />
       <div className="flex flex-col gap-7 px-[120px] pb-24 pt-11 max-[900px]:px-6">
         <div className="flex flex-col gap-2">
           <h1 className="m-0 text-[32px] font-bold tracking-[-0.02em]">Something went wrong at startup</h1>
@@ -56,7 +56,7 @@ export default function Menu({ info, onOpen }: { info: RecoveryInfo | null; onOp
               <span className="flex flex-1 flex-col gap-1">
                 <span className={`flex items-center gap-2 text-base font-semibold ${t.off ? 'text-[#8FA3C8]' : ''}`}>{t.title}{t.tag && <MonoTag>{t.tag}</MonoTag>}</span>
                 <span className="text-[13px] leading-[1.45] text-[#8FA3C8]">{t.desc}</span>
-                {t.off && <span id={`off-${t.id}`} className="text-xs text-[#5E739C]">{t.off}</span>}
+                {t.off && <span id={`off-${t.id}`} className="text-xs text-[#8FA3C8]">{t.off}</span>}
               </span>
             </button>
           ))}
@@ -65,8 +65,8 @@ export default function Menu({ info, onOpen }: { info: RecoveryInfo | null; onOp
       </div>
       <Footer className="h-16 gap-7 px-10 text-[13px] text-[#8FA3C8]">
         {/* No network bridge exists in recovery yet, so Wi-Fi is shown but can't be used. */}
-        <button type="button" disabled title="Wi-Fi setup isn’t available in recovery yet" className={`flex items-center gap-2 text-[#5E739C] ${ring} rounded-sm`}>
-          <Icon d={[RP.wifi]} size={16} stroke="#5E739C" />Connect to Wi-Fi
+        <button type="button" disabled title="Wi-Fi setup isn’t available in recovery yet" className={`flex items-center gap-2 text-[#8FA3C8] ${ring} rounded-sm`}>
+          <Icon d={[RP.wifi]} size={16} stroke="#8FA3C8" />Connect to Wi-Fi
         </button>
         <span lang="en-US">English (US)</span>
         <span className="ml-auto" />
