@@ -34,7 +34,7 @@ terminal-font: "Unifont Regular 16"
 # Countdown in the footer after "Auto-start in": the bar is footer-coloured, only its text shows ("10s").
 + progress_bar {
         id = "__timeout__"
-        left = 50%+294
+        left = 50%+225
         top = 50%+357
         width = 60
         height = 20
