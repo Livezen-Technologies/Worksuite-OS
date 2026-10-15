@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import type { FirstRunProps } from './types'
-import { validateAccountName } from '../components/AAccount'
-import { AIconCheck, AIconEye, AIconEyeOff, AIconWifi, AIconAlert } from '../components/AIcons'
+import { cloudErrorText, os, serverUrlFor, type CloudAccount } from '../lib/os'
+import { AIconCheck, AIconWifi, AIconAlert } from '../components/AIcons'
 
 const STEPS = ['Language & region', 'Network', 'Connect to WorkSuite', 'Sign in with OneAuth', 'Privacy & updates'] as const
 type Mode = 'personal' | 'enterprise'
@@ -23,9 +23,8 @@ export default function FirstRun({ onDone }: FirstRunProps) {
   const [mode, setMode] = useState<Mode>('enterprise')
   const [server, setServer] = useState('work.livezentech.com')
   const [code, setCode] = useState('LZT-7Q4K-92XM')
-  const [account, setAccount] = useState('')
-  const [pw, setPw] = useState('')
-  const [showPw, setShowPw] = useState(false)
+  const [signedIn, setSignedIn] = useState<CloudAccount | null>(null)
+  const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
   const [privacy, setPrivacy] = useState({ updates: true, diagnostics: false, location: false })
@@ -35,17 +34,21 @@ export default function FirstRun({ onDone }: FirstRunProps) {
 
   const next = () => {
     if (step === 2 && mode === 'enterprise' && !server.trim()) return setError('Enter your organization’s server address.')
-    if (step === 3) {
-      const err = validateAccountName(account)
-      if (err) return setError(err)
-      if (!pw) return setError('Enter your password.')
-      setOffline(false)
-    }
+    if (step === 3 && !signedIn) return void signIn()
     if (step === 4) return onDone()
     go(step + 1)
   }
 
-  const primary = ['Continue', 'Continue', 'Continue to sign-in', 'Sign in', 'Finish setup'][step]
+  // OIDC + PKCE happens in the system browser through the credentials broker (WSOS-IDN-001); no password here.
+  const signIn = async () => {
+    setError(null); setWaiting(true)
+    const r = await os.cloudSignIn(serverUrlFor(mode, server))
+    setWaiting(false)
+    if (!r.ok) return setError(cloudErrorText(r.error))
+    setSignedIn(r.value); setOffline(false)
+  }
+
+  const primary = ['Continue', 'Continue', 'Continue to sign-in', signedIn ? 'Continue' : waiting ? 'Waiting for browser…' : 'Sign in with browser', 'Finish setup'][step]
   const heading: [string, string][] = [
     ['Choose your language', 'Pick the language and region for this computer.'],
     ['Connect to a network', 'A connection lets you sign in to WorkSuite and get updates. You can also continue offline.'],
@@ -127,21 +130,21 @@ export default function FirstRun({ onDone }: FirstRunProps) {
     </>
   )
   else if (step === 3) body = (
-    <div className="flex max-w-[420px] flex-col gap-4">
-      <label className={label}>Account
-        <input type="text" value={account} onChange={(e) => { setAccount(e.target.value); setError(null) }} autoComplete="username" spellCheck={false}
-          placeholder={mode === 'enterprise' ? 'user@livezentech.com or LIVEZEN\\user' : 'you@worksuitecloud.com'} className={input} />
-      </label>
-      <label className={label}>Password
-        <span className="flex h-[46px] items-center rounded-[10px] border border-[#cbd5e1] pl-3.5 pr-1.5 focus-within:border-[#2563eb] focus-within:ring-1 focus-within:ring-[#2563eb]">
-          <input type={showPw ? 'text' : 'password'} value={pw} onChange={(e) => { setPw(e.target.value); setError(null) }} autoComplete="current-password"
-            className="min-w-0 flex-1 border-0 bg-transparent text-[15px] font-normal outline-none" />
-          <button type="button" onClick={() => setShowPw((s) => !s)} aria-label={showPw ? 'Hide password' : 'Show password'} aria-pressed={showPw}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[#475569] hover:bg-[#f1f5f9]">
-            {showPw ? <AIconEyeOff size={18} /> : <AIconEye size={18} />}
-          </button>
-        </span>
-      </label>
+    <div className="flex max-w-[460px] flex-col gap-4" aria-live="polite">
+      {signedIn ? (
+        <p className="m-0 flex items-center gap-2.5 rounded-[10px] bg-[#ecfdf5] px-3.5 py-3 text-[14px] text-[#065f46]">
+          <AIconCheck size={18} /> Signed in{signedIn.name ? ` as ${signedIn.name}` : ''}. This computer now uses your WorkSuite account.
+        </p>
+      ) : (
+        <>
+          <p className="m-0 text-[15px] text-[#334155]">
+            Your browser opens the {mode === 'enterprise' ? 'organization' : 'WorkSuite Cloud'} sign-in page. Your password and any
+            two-step check go to OneAuth only; this setup never sees them.
+          </p>
+          <p className="m-0 text-[13px] text-[#475569]">Server: {serverUrlFor(mode, server)}</p>
+          {waiting && <p className="m-0 text-[13px] text-[#1d4ed8]">Finish signing in in the browser window, then come back here.</p>}
+        </>
+      )}
     </div>
   )
   else body = (
@@ -206,7 +209,7 @@ export default function FirstRun({ onDone }: FirstRunProps) {
             {(step === 2 || step === 3) && (
               <button type="button" onClick={skipOffline} className="h-11 rounded-[10px] px-[18px] text-sm text-[#334155] underline hover:text-[#0f172a]">Skip — use offline</button>
             )}
-            <button type="submit" className="ml-auto h-11 rounded-[10px] bg-[#2563eb] px-[22px] text-sm font-semibold text-white hover:bg-[#1d4ed8]">{primary}</button>
+            <button type="submit" disabled={waiting} className="ml-auto h-11 rounded-[10px] bg-[#2563eb] px-[22px] text-sm font-semibold text-white hover:bg-[#1d4ed8] disabled:opacity-60">{primary}</button>
           </div>
         </form>
       </div>

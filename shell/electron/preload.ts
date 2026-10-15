@@ -8,4 +8,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   power: (action: string) => ipcRenderer.invoke('ws:power', String(action)),
   launchApp: (appId: string) => ipcRenderer.invoke('ws:launchApp', String(appId)),
   openLink: (url: string) => ipcRenderer.invoke('ws:openLink', String(url)),
+  cloudSignIn: (serverUrl: string) => ipcRenderer.invoke('ws:cloudSignIn', String(serverUrl)),
+  cloudSignOut: (accountId: string) => ipcRenderer.invoke('ws:cloudSignOut', String(accountId)),
+  cloudAccounts: () => ipcRenderer.invoke('ws:cloudAccounts'),
 })

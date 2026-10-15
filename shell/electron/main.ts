@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
+import { brokerCall, followSessionLock, publicAccounts } from './broker'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
@@ -49,7 +50,7 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
 
   handle('ws:authenticate', async () => ({ ok: false, message: 'Authentication is handled by the greeter (greetd/PAM).' }))
-  handle('ws:lock', () => run('loginctl', ['lock-session']))
+  handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
   handle('ws:logout', () => run('systemctl', ['--user', 'stop', 'worksuite-session.target']))
   handle('ws:power', (action) => {
     const verbs: Record<string, string> = { suspend: 'suspend', restart: 'reboot', shutdown: 'poweroff' }
@@ -61,6 +62,20 @@ app.whenReady().then(() => {
     if (!ALLOWED_SCHEMES.has(u.protocol)) throw new Error('Scheme not allowed')
     return shell.openExternal(u.toString())
   })
+  // Sign-in waits for the user in the browser; the broker gives up after 5 minutes.
+  handle('ws:cloudSignIn', async (serverUrl) => {
+    let https = false
+    try { https = new URL(serverUrl).protocol === 'https:' } catch { /* invalid URL */ }
+    if (!https) return { ok: false, error: 'insecure_url' }
+    const r = await brokerCall('SignIn', { server_url: serverUrl }, 6 * 60_000)
+    return r.ok ? { ok: true, value: publicAccounts([r.value])[0] } : r
+  })
+  handle('ws:cloudSignOut', (accountId) => brokerCall('SignOut', { account_id: accountId }))
+  handle('ws:cloudAccounts', async () => {
+    const r = await brokerCall('Status')
+    return r.ok ? { ok: true, value: publicAccounts(r.value) } : r
+  })
+  followSessionLock((locked) => void brokerCall(locked ? 'Lock' : 'Unlock'))
   createWindow()
 })
 

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { cloudErrorText, os, type CloudAccount } from '../lib/os'
 import type { WindowProps } from './types'
 import CIcon from '../components/CIcon'
 
@@ -85,7 +86,7 @@ function SimplePanel({ section }: { section: Section }) {
       </div></Panel>
     case 'Accounts':
       return <Panel title="Accounts"><div className={card}>
-        <Row label="Work account" help="Signed in through LIVEZEN.LOCAL (Active Directory)"><span className="text-[13.5px]">Connected</span></Row>
+        <CloudAccounts />
         <Row label="Offline sign-in" help="Allowed for 7 days without network"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span></Row>
       </div></Panel>
     case 'Privacy':
@@ -271,4 +272,25 @@ export default function Settings({ onClose }: WindowProps) {
       </div>
     </div>
   )
+}
+
+/** WorkSuite cloud sign-ins held by the credentials broker. Sign-out drops the keyring entry and revokes it. */
+function CloudAccounts() {
+  const [accounts, setAccounts] = useState<CloudAccount[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const load = () => os.cloudAccounts().then((r) => (r.ok ? setAccounts(r.value) : setError(cloudErrorText(r.error))))
+  useEffect(() => { void load() }, [])
+  const signOut = async (id: string) => {
+    const r = await os.cloudSignOut(id)
+    if (!r.ok) setError(cloudErrorText(r.error))
+    void load()
+  }
+  if (error) return <Row label="WorkSuite account" help={error}><span className="text-[13.5px] text-ws-muted">Unavailable</span></Row>
+  if (!accounts) return <Row label="WorkSuite account"><span className="text-[13.5px] text-ws-muted">Loading…</span></Row>
+  if (!accounts.length) return <Row label="WorkSuite account" help="Not signed in. Sign in from first-run setup or here to sync."><span className="text-[13.5px] text-ws-muted">Signed out</span></Row>
+  return <>{accounts.map((a) => (
+    <Row key={a.id} label={a.name ?? 'WorkSuite account'} help={`${a.server_url}${a.state === 'refresh_failed' ? ' · sign in again to resume sync' : ''}`}>
+      <button type="button" onClick={() => void signOut(a.id)} className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Sign out</button>
+    </Row>
+  ))}</>
 }
