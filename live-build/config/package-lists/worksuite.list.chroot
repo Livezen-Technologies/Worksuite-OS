@@ -3,6 +3,7 @@ worksuite-desktop
 # Installer (live only; Calamares removes itself from the installed system)
 calamares
 calamares-settings-worksuite
+worksuite-branding
 # Hardware / boot
 grub-efi
 shim-signed

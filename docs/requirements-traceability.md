@@ -51,3 +51,12 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | §7.2 Files: This Computer / WorkSuite Cloud, WSOS-DRV-002 sync states | `shell/src/screens/Files.tsx`, `shell/electron/files.ts`, `services/sync/src/service.ts` (`fileStates`, `driveSummary`) | Impl (UI; Drive transfer engine not in this repo) |
 | WSOS-AUP-001…009, 011, WSOS-UPD-002/003/005 update coordinator | `services/package-service/src/updates.ts`, `src/coordinator.ts`, `src/dbus.ts`; Settings › Updates: `shell/src/screens/Settings.tsx`, `shell/electron/packages.ts` | Impl |
 | WSOS-INS-003 typed disk-name confirmation, WSOS-INS-004 recovery key shown once | `installer/modules/worksuiteconfirm/` (C++ view module), `installer/modules/worksuiterecovery/` (Python job), `installer/settings.conf` | Impl (Calamares 3.3.5 load-tested; not run against a disk) |
+
+## Branding (`worksuite-branding`)
+
+| Item | Implementation | Verified |
+|---|---|---|
+| Boot splash with disk-unlock prompt | `branding/plymouth/` script theme, set as `default.plymouth` in postinst | Built and linted; not booted (no Plymouth/KVM in the dev container) |
+| GRUB theme, quiet boot | `branding/grub/theme.txt`, `/etc/default/grub.d/worksuite.cfg` | Built; not booted |
+| App icon (hicolor 16–512 + scalable), wallpaper | `branding/icons/`, `branding/wallpaper.svg`, rendered by `branding/render.sh` | Rendered |
+| Installer logo and slideshow | `installer/branding/worksuite/` (concept A logo, 4 slides) | Not rendered (QtQuick.Window missing in container) |

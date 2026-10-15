@@ -8,3 +8,4 @@ packaging/out/
 live-build/out/
 installer/modules/worksuiteconfirm/build*/
 __pycache__/
+build-branding/

@@ -17,6 +17,8 @@ override_dh_auto_build:
 	# Calamares view module (installer/modules/worksuiteconfirm).
 	cmake -S installer/modules/worksuiteconfirm -B build-installer -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWORKSUITE_TESTS=ON
 	cmake --build build-installer
+	# Branding PNGs from the SVG sources.
+	branding/render.sh build-branding
 	dh_auto_build
 
 override_dh_auto_install:
@@ -30,6 +32,15 @@ override_dh_auto_install:
 	install -m 0644 build-installer/libcalamares_viewmodule_worksuiteconfirm.so $$m/worksuiteconfirm/ && \
 	install -D -m 0644 installer/modules/worksuiterecovery/module.desc $$m/worksuiterecovery/module.desc && \
 	install -m 0644 installer/modules/worksuiterecovery/main.py $$m/worksuiterecovery/main.py
+	# worksuite-branding
+	d=debian/worksuite-branding; p=$$d/usr/share/plymouth/themes/worksuite; g=$$d/usr/share/grub/themes/worksuite; \
+	install -D -m 0644 -t $$p branding/plymouth/worksuite.plymouth branding/plymouth/worksuite.script build-branding/plymouth/*.png && \
+	install -D -m 0644 -t $$g branding/grub/theme.txt build-branding/grub/*.png && \
+	install -D -m 0644 branding/grub/worksuite.cfg $$d/etc/default/grub.d/worksuite.cfg && \
+	install -D -m 0644 branding/icons/worksuite.svg $$d/usr/share/icons/hicolor/scalable/apps/worksuite.svg && \
+	for s in 16 24 32 48 64 128 256 512; do install -D -m 0644 build-branding/icons/worksuite-$$s.png $$d/usr/share/icons/hicolor/$${s}x$${s}/apps/worksuite.png; done && \
+	install -D -m 0644 build-branding/wallpaper.png $$d/usr/share/backgrounds/worksuite/default.png && \
+	install -D -m 0644 branding/wallpaper.svg $$d/usr/share/backgrounds/worksuite/default.svg
 
 override_dh_auto_test:
 	cd build-installer && QT_QPA_PLATFORM=offscreen ctest --output-on-failure
