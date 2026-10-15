@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { packageClient, parseMonitorLine, type Exec } from './packages'
+import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { appimageClient, flatpakUserClient, packageClient, parseMonitorLine, type Exec } from './packages'
 
 function fakeExec(reply: { code?: number; stdout?: string; stderr?: string }) {
   const calls: string[][] = []
@@ -81,5 +84,73 @@ describe('update coordinator calls', () => {
     const g = fakeExec({ stdout: JSON.stringify({ type: 's', data: [JSON.stringify({ state: 'up_to_date', installed: '1.0.2' })] }) })
     expect(await packageClient(g.exec).updateStatus(true)).toEqual({ ok: true, value: { state: 'up_to_date', installed: '1.0.2' } })
     expect(g.calls[0].slice(-1)).toEqual(['CheckForUpdates'])
+  })
+})
+
+describe('catalog, local .deb, Flatpak, bundles', () => {
+  it('GetCatalog / PreviewLocalDeb / InspectBundle return the service JSON', async () => {
+    const cat = { state: 'not_enrolled', arch: 'amd64', items: [], error: 'x' }
+    const f = fakeExec({ stdout: JSON.stringify({ type: 's', data: [JSON.stringify(cat)] }) })
+    expect(await packageClient(f.exec).catalog()).toEqual({ ok: true, value: cat })
+    expect(f.calls[0].slice(-1)).toEqual(['GetCatalog'])
+    await packageClient(f.exec).localDebPreview('/home/u/Downloads/hello.deb')
+    expect(f.calls[1].slice(-3)).toEqual(['PreviewLocalDeb', 's', '/home/u/Downloads/hello.deb'])
+    await packageClient(f.exec).bundleInspect('/media/u/USB/os.wsupdate')
+    expect(f.calls[2].slice(-3)).toEqual(['InspectBundle', 's', '/media/u/USB/os.wsupdate'])
+  })
+
+  it('refuses bad arguments before calling the service', async () => {
+    const f = fakeExec({})
+    const c = packageClient(f.exec)
+    for (const r of await Promise.all([c.localDebPreview('hello.deb'), c.localDebPreview('/x/hello.rpm'), c.localDebInstall('abc'), c.bundleInstall('/x/y.tar'),
+      c.appPermissions('apt:gimp'), c.resetAppPermissions('flatpak:--all'), c.appPermissions('flatpak:../../etc')])) expect(r.ok).toBe(false)
+    expect(f.calls).toEqual([])
+  })
+
+  it('install/reset/prune return job paths through interactive polkit', async () => {
+    const f = fakeExec({ stdout: '{"type":"o","data":["/lk/worksuite/PackageService1/job/9"]}' })
+    const c = packageClient(f.exec)
+    expect(await c.localDebInstall('a'.repeat(64))).toEqual({ ok: true, value: '/lk/worksuite/PackageService1/job/9' })
+    expect(await c.resetAppPermissions('flatpak:org.gimp.GIMP')).toEqual({ ok: true, value: '/lk/worksuite/PackageService1/job/9' })
+    expect(await c.pruneRuntimes()).toEqual({ ok: true, value: '/lk/worksuite/PackageService1/job/9' })
+    expect(await c.bundleInstall('/media/u/USB/os.wsupdate')).toEqual({ ok: true, value: '/lk/worksuite/PackageService1/job/9' })
+    expect(f.calls.map((c) => c[9])).toEqual(['InstallLocalDeb', 'ResetAppPermissions', 'PruneRuntimes', 'InstallBundle'])
+    expect(f.calls.every((c) => c.includes('--allow-interactive-authorization=yes'))).toBe(true)
+  })
+
+  it('user-side Flatpak reset and app data removal stay in the user home and never follow links', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ws-home-'))
+    const f = fakeExec({})
+    const u = flatpakUserClient(f.exec, home)
+    expect(await u.resetUserPermissions('flatpak:org.gimp.GIMP')).toEqual({ ok: true, value: true })
+    expect(f.calls).toEqual([['flatpak', 'permission-reset', 'org.gimp.GIMP'], ['flatpak', 'override', '--user', '--reset', 'org.gimp.GIMP']])
+    mkdirSync(join(home, '.var/app/org.gimp.GIMP/config'), { recursive: true })
+    writeFileSync(join(home, '.var/app/org.gimp.GIMP/config/gimprc'), 'x')
+    expect(u.removeAppData('flatpak:org.gimp.GIMP')).toEqual({ ok: true, value: true })
+    expect(existsSync(join(home, '.var/app/org.gimp.GIMP'))).toBe(false)
+    expect(u.removeAppData('flatpak:org.gimp.GIMP')).toEqual({ ok: true, value: false })
+    const victim = mkdtempSync(join(tmpdir(), 'ws-victim-'))
+    symlinkSync(victim, join(home, '.var/app/org.evil.App'))
+    expect(u.removeAppData('flatpak:org.evil.App').ok).toBe(false)
+    expect(existsSync(victim)).toBe(true)
+    expect(u.removeAppData('flatpak:..').ok).toBe(false)
+  })
+})
+
+describe('AppImage client', () => {
+  it('runs worksuite-appimage with fixed arguments and unwraps its JSON', async () => {
+    const f = fakeExec({ stdout: '{"ok":true,"value":[]}\n' })
+    const a = appimageClient(f.exec, '/usr/bin/worksuite-appimage')
+    expect(await a.list()).toEqual({ ok: true, value: [] })
+    await a.import('/home/u/Downloads/Pinta.AppImage', 'file:///home/u/Downloads/Pinta.AppImage')
+    await a.approve('0123456789abcdef')
+    expect(f.calls).toEqual([
+      ['/usr/bin/worksuite-appimage', 'list'],
+      ['/usr/bin/worksuite-appimage', 'import', '/home/u/Downloads/Pinta.AppImage', '--origin', 'file:///home/u/Downloads/Pinta.AppImage'],
+      ['/usr/bin/worksuite-appimage', 'approve', '0123456789abcdef'],
+    ])
+    const bad = fakeExec({ code: 1, stdout: '{"ok":false,"code":"ArchMismatch","error":"This AppImage is built for ARM64; this device is x86-64"}\n' })
+    expect(await appimageClient(bad.exec).import('/x/a.AppImage')).toEqual({ ok: false, error: 'This AppImage is built for ARM64; this device is x86-64' })
+    for (const r of await Promise.all([a.approve('../x'), a.remove('x'), a.import('/x/a.exe'), a.update('0123456789abcdef', 'rel.AppImage')])) expect(r.ok).toBe(false)
   })
 })

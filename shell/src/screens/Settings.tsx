@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { cloudErrorText, os, packageErrorText, policyLines, serverUrlFor, type OsUpdateStatus, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, formatBytes, os, packageErrorText, type BundleInfo, policyLines, serverUrlFor, type OsUpdateStatus, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
 import type { WindowProps } from './types'
 import CIcon from '../components/CIcon'
 import { AppIcon } from '../components/Logo'
@@ -110,6 +110,8 @@ const WAIT_REASON: Record<string, string> = {
   pulled: 'This release was withdrawn.',
   not_in_rollout: 'Rolling out gradually; this computer isn’t included yet.',
   manual_mode: 'Updates are set to manual.',
+  not_entitled: 'This release needs a WorkSuite edition your organization’s licence doesn’t include. Security updates still install.',
+  download_interrupted: 'The download was interrupted. It continues where it stopped on the next try.',
 }
 const RING: Record<string, string> = { development: 'Development', pilot: 'Pilot', stable: 'Stable' }
 const MODE: Record<string, string> = { automatic: 'Automatic', notify: 'Notify', manual: 'Manual' }
@@ -191,7 +193,48 @@ function Updates() {
           <span className="text-[13.5px] text-ws-muted">Automatic</span>
         </Row>
       </div>
+      <OfflineBundle />
     </Panel>
+  )
+}
+
+/** WSOS-AUP-010: signed .wsupdate bundle from a USB drive, for sites without internet access. */
+function OfflineBundle() {
+  const [picked, setPicked] = useState<{ handle: string; name: string } | null>(null)
+  const [info, setInfo] = useState<BundleInfo | null>(null)
+  const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null)
+  const [job, setJob] = useState<string | null>(null)
+  useEffect(() => os.onPkgJob((e) => {
+    if (e.kind !== 'finished' || e.job !== job) return
+    setJob(null)
+    setMsg(e.result === 'success' ? { text: 'The offline update is installed. Restart to finish if asked.' } : { text: packageErrorText(e.error ?? 'failed'), error: true })
+  }), [job])
+  const choose = async () => {
+    setMsg(null); setInfo(null)
+    const f = await os.pickFile('wsupdate')
+    if (!f.ok) { if (f.error !== 'cancelled') setMsg({ text: packageErrorText(f.error), error: true }); return }
+    setPicked(f.value)
+    const r = await os.bundleInspect(f.value.handle)
+    if (r.ok) setInfo(r.value); else setMsg({ text: packageErrorText(r.error), error: true })
+  }
+  const install = async () => {
+    if (!picked) return
+    const r = await os.bundleInstall(picked.handle)
+    if (r.ok) { setJob(r.value); setMsg({ text: 'Installing the offline update…' }) } else setMsg({ text: packageErrorText(r.error), error: true })
+  }
+  const btn = 'h-[42px] shrink-0 whitespace-nowrap rounded-[10px] px-4 text-sm disabled:opacity-50'
+  return (
+    <div className={`${card} flex flex-col gap-2 p-5`}>
+      <div className="flex items-center gap-4">
+        <div className="flex grow flex-col gap-1">
+          <div className="text-[15px] font-semibold">Install from a USB drive</div>
+          <div className="text-[13px] text-ws-muted">{info ? `${picked?.name}: WorkSuite OS ${info.version} · ${info.packages} packages · ${formatBytes(info.bytes)} · signature and checksums verified` : 'For computers without internet access: choose a signed .wsupdate file from WorkSuite.'}</div>
+          {msg && <div role={msg.error ? 'alert' : 'status'} className={`text-[13px] ${msg.error ? 'text-red-700' : 'text-ws-muted'}`}>{msg.text}</div>}
+        </div>
+        <button type="button" disabled={!!job} onClick={() => void choose()} className={`${btn} border border-slate-300 bg-ws-surface text-slate-700`}>Choose file…</button>
+        {info && <button type="button" disabled={!!job} onClick={() => void install()} className={`${btn} bg-ws-accent px-[18px] font-semibold text-white hover:bg-ws-accent-strong`}>Install</button>}
+      </div>
+    </div>
   )
 }
 

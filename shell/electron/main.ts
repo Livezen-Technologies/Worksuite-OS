@@ -1,10 +1,10 @@
-import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceInfo, enrollDevice } from './device'
-import { followJobs, packageClient } from './packages'
+import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
 import { recoveryHost } from './recovery'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
 
@@ -113,6 +113,45 @@ app.whenReady().then(() => {
   handle('ws:updateDefer', () => pkg.deferUpdate())
   handle('ws:updateInstallNow', () => pkg.installUpdateNow())
   handle('ws:pkgRepair', () => pkg.repair())
+  handle('ws:pkgCatalog', () => pkg.catalog())
+  // Files for local installs come only from the user's own choice in a file dialog: the renderer gets an opaque
+  // handle, never the ability to name a path (WSOS-APT-005, WSOS-AIM-001, WSOS-AUP-010).
+  const picked = new Map<string, string>()
+  const FILTERS: Record<string, { name: string; extensions: string[] }> = {
+    deb: { name: 'Debian package', extensions: ['deb'] }, appimage: { name: 'AppImage', extensions: ['AppImage', 'appimage'] }, wsupdate: { name: 'WorkSuite update bundle', extensions: ['wsupdate'] },
+  }
+  handle('ws:pickFile', async (kind) => {
+    const filter = FILTERS[kind]
+    if (!filter || !win) return { ok: false, error: 'invalid_argument' }
+    const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [filter], defaultPath: kind === 'wsupdate' ? '/media' : app.getPath('downloads') })
+    if (r.canceled || !r.filePaths[0]) return { ok: false, error: 'cancelled' }
+    const handleId = `${kind}:${picked.size + 1}:${Date.now()}`
+    picked.set(handleId, r.filePaths[0])
+    return { ok: true, value: { handle: handleId, name: path.basename(r.filePaths[0]) } }
+  })
+  const pickedPath = (h: string, kind: string) => (h.startsWith(`${kind}:`) ? picked.get(h) ?? null : null)
+  const noFile = { ok: false, error: 'invalid_argument' }
+  handle('ws:localDebPreview', (h) => { const p = pickedPath(h, 'deb'); return p ? pkg.localDebPreview(p) : noFile })
+  handle('ws:localDebInstall', (token) => pkg.localDebInstall(token))
+  const fpUser = flatpakUserClient()
+  handle('ws:appPermissions', (id) => pkg.appPermissions(id))
+  // Reset = system overrides (package service, admin) + this user's overrides and portal grants.
+  handle('ws:appPermissionsReset', async (id) => {
+    const u = await fpUser.resetUserPermissions(id)
+    if (!u.ok) return u
+    return pkg.resetAppPermissions(id)
+  })
+  handle('ws:appDataRemove', (id) => fpUser.removeAppData(id))
+  handle('ws:pruneRuntimes', () => pkg.pruneRuntimes())
+  handle('ws:bundleInspect', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInspect(p) : noFile })
+  handle('ws:bundleInstall', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInstall(p) : noFile })
+  const appimages = appimageClient()
+  handle('ws:appimageList', () => appimages.list())
+  handle('ws:appimageImport', (h) => { const p = pickedPath(h, 'appimage'); return p ? appimages.import(p, `file://${p}`) : noFile })
+  handle('ws:appimageApprove', (id) => appimages.approve(id))
+  handle('ws:appimageRemove', (id) => appimages.remove(id))
+  handle('ws:appimageUpdate', (id, h) => { const p = pickedPath(h, 'appimage'); return p ? appimages.update(id, p) : noFile })
+  handle('ws:appimageLaunch', (id) => appimages.launch(id))
   // Recovery screens (§9.2). The unlock secret goes to udisksctl's stdin only; it is never logged or stored.
   const rec = recoveryHost(pkg)
   handle('ws:recoveryInfo', () => rec.info())

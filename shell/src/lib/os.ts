@@ -39,6 +39,24 @@ export interface WorkSuiteApi {
   onPkgJob(cb: (e: PackageJobEvent) => void): () => void
   /** Package repair (§9.2): finishes interrupted dpkg/apt changes; result arrives through onPkgJob. */
   pkgRepair(): Promise<CloudResult<string>>
+  /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
+  pkgCatalog(): Promise<CloudResult<AppCatalog>>
+  /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
+  pickFile(kind: 'deb' | 'appimage' | 'wsupdate'): Promise<CloudResult<{ handle: string; name: string }>>
+  localDebPreview(handle: string): Promise<CloudResult<LocalDebPreview>>
+  localDebInstall(token: string): Promise<CloudResult<string>>
+  appPermissions(catalogId: string): Promise<CloudResult<AppPermissions>>
+  appPermissionsReset(catalogId: string): Promise<CloudResult<string>>
+  appDataRemove(catalogId: string): Promise<CloudResult<boolean>>
+  pruneRuntimes(): Promise<CloudResult<string>>
+  bundleInspect(handle: string): Promise<CloudResult<BundleInfo>>
+  bundleInstall(handle: string): Promise<CloudResult<string>>
+  appimageList(): Promise<CloudResult<AppImageRecord[]>>
+  appimageImport(handle: string): Promise<CloudResult<AppImageRecord>>
+  appimageApprove(id: string): Promise<CloudResult<AppImageRecord>>
+  appimageRemove(id: string): Promise<CloudResult<{ removed: string }>>
+  appimageUpdate(id: string, handle: string): Promise<CloudResult<AppImageRecord>>
+  appimageLaunch(id: string): Promise<CloudResult<true>>
   // Recovery screens (§9.2). Features that have no service yet answer { ok: false, error: 'unavailable' }.
   recoveryInfo(): Promise<RecoveryInfo>
   recoveryCheck(id: CheckId): Promise<CheckResult>
@@ -72,6 +90,25 @@ export interface OsUpdateStatus {
   version: string | null; installed: string; release_id: string | null; mandatory: boolean; deadline: string | null
   deferrals_left: number | null; reason: string | null; restart_at: number | null; last_check: number | null
 }
+export interface CatalogEntry {
+  id: string; source: 'apt' | 'flatpak' | 'appimage'; name: string; arches: string[]
+  required?: boolean; blocked?: boolean; sha256?: string; category?: string; summary?: string; publisher?: string
+  installed: boolean; available: boolean; blocked_reason: string | null
+}
+export type AppCatalog =
+  | { state: 'ok'; arch: string; items: CatalogEntry[]; fetched_at: number }
+  | { state: 'not_enrolled' | 'unreachable' | 'error'; arch: string; items: []; error: string }
+export interface LocalDebPreview {
+  package: string; version: string; architecture: string; publisher: string; publisher_verified: false; description: string
+  plan: PackagePreview['plan']; disk_bytes: number | null; token: string
+}
+export interface AppPermissions { app: string; permissions: string[]; overrides: string[]; broad: string[] }
+export interface BundleInfo { release_id: string; version: string; packages: number; bytes: number; critical: boolean; verified: true }
+export interface AppImageRecord {
+  id: string; name: string; version: string | null; origin: string; sha256: string; arch: string; size: number
+  signature: { status: 'signed'; fingerprint: string; trusted: boolean } | { status: 'unsigned' } | { status: 'invalid'; reason: string }
+  approved: boolean; imported_at: string; approved_at: string | null; categories: string[]
+}
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
 /** state: Drive sync state (WSOS-DRV-002), "folder", "local" outside Drive, or "unknown" when sync isn't running. */
 export interface FileEntry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean }
@@ -88,6 +125,7 @@ export function formatBytes(n: number | null): string {
 export function packageErrorText(code: string): string {
   switch (code) {
     case 'not_authorized': return 'An administrator password is needed for this. Nothing was changed.'
+    case 'cancelled': return ''
     case 'service_unavailable': return 'The package service isn’t running. Try again in a moment.'
     case 'invalid_argument': return 'This app can’t be installed from here.'
     case 'failed': return 'That didn’t work. Nothing was changed.'
@@ -227,6 +265,23 @@ const stub: WorkSuiteApi = {
   },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
   async pkgRepair() { return stubJob('repair', 'repair') },
+  // Browser preview: there is no package service or server here, so these answer honestly instead of inventing apps.
+  async pkgCatalog() { return { ok: true, value: { state: 'not_enrolled', arch: 'amd64', items: [], error: 'Preview mode: no package service, so there is no app catalog.' } } },
+  async pickFile() { return { ok: false, error: 'service_unavailable' } },
+  async localDebPreview() { return { ok: false, error: 'service_unavailable' } },
+  async localDebInstall() { return { ok: false, error: 'service_unavailable' } },
+  async appPermissions() { return { ok: false, error: 'service_unavailable' } },
+  async appPermissionsReset() { return { ok: false, error: 'service_unavailable' } },
+  async appDataRemove() { return { ok: false, error: 'service_unavailable' } },
+  async pruneRuntimes() { return { ok: false, error: 'service_unavailable' } },
+  async bundleInspect() { return { ok: false, error: 'service_unavailable' } },
+  async bundleInstall() { return { ok: false, error: 'service_unavailable' } },
+  async appimageList() { return { ok: true, value: [] } },
+  async appimageImport() { return { ok: false, error: 'service_unavailable' } },
+  async appimageApprove() { return { ok: false, error: 'service_unavailable' } },
+  async appimageRemove() { return { ok: false, error: 'service_unavailable' } },
+  async appimageUpdate() { return { ok: false, error: 'service_unavailable' } },
+  async appimageLaunch() { return { ok: false, error: 'service_unavailable' } },
   async recoveryInfo() {
     const all = stubSim !== 'none'
     return { os_version: '1.1', disk: 'vda', firmware: 'EFI', failures: all ? 3 : null,
