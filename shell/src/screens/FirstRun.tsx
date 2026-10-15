@@ -21,8 +21,10 @@ export default function FirstRun({ onDone }: FirstRunProps) {
   const [region, setRegion] = useState('Sri Lanka')
   const [network, setNetwork] = useState<string | null>('Livezen-Office')
   const [mode, setMode] = useState<Mode>('enterprise')
-  const [server, setServer] = useState('work.livezentech.com')
-  const [code, setCode] = useState('LZT-7Q4K-92XM')
+  const [server, setServer] = useState('')
+  const [code, setCode] = useState('')
+  const [enrolled, setEnrolled] = useState<{ org_name: string | null } | null>(null)
+  const [enrolling, setEnrolling] = useState(false)
   const [signedIn, setSignedIn] = useState<CloudAccount | null>(null)
   const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,9 +36,19 @@ export default function FirstRun({ onDone }: FirstRunProps) {
 
   const next = () => {
     if (step === 2 && mode === 'enterprise' && !server.trim()) return setError('Enter your organization’s server address.')
+    // Enrollment is optional here (WSOS-INS-006); organizations that require it refuse sign-in until it's done.
+    if (step === 2 && mode === 'enterprise' && code.trim() && !enrolled) return void enroll()
     if (step === 3 && !signedIn) return void signIn()
     if (step === 4) return onDone()
     go(step + 1)
+  }
+
+  const enroll = async () => {
+    setError(null); setEnrolling(true)
+    const r = await os.enrollDevice(serverUrlFor(mode, server), code)
+    setEnrolling(false)
+    if (!r.ok) return setError(cloudErrorText(r.error))
+    setEnrolled({ org_name: r.value.org_name })
   }
 
   // OIDC + PKCE happens in the system browser through the credentials broker (WSOS-IDN-001); no password here.
@@ -48,7 +60,7 @@ export default function FirstRun({ onDone }: FirstRunProps) {
     setSignedIn(r.value); setOffline(false)
   }
 
-  const primary = ['Continue', 'Continue', 'Continue to sign-in', signedIn ? 'Continue' : waiting ? 'Waiting for browser…' : 'Sign in with browser', 'Finish setup'][step]
+  const primary = ['Continue', 'Continue', mode === 'enterprise' && code.trim() && !enrolled ? (enrolling ? 'Enrolling…' : 'Enroll this computer') : 'Continue to sign-in', signedIn ? 'Continue' : waiting ? 'Waiting for browser…' : 'Sign in with browser', 'Finish setup'][step]
   const heading: [string, string][] = [
     ['Choose your language', 'Pick the language and region for this computer.'],
     ['Connect to a network', 'A connection lets you sign in to WorkSuite and get updates. You can also continue offline.'],
@@ -114,17 +126,23 @@ export default function FirstRun({ onDone }: FirstRunProps) {
       {mode === 'enterprise' && (
         <>
           <label className={label}>Server address
-            <input type="text" value={server} onChange={(e) => { setServer(e.target.value); setError(null) }} className={input} spellCheck={false} />
+            <input type="text" value={server} disabled={!!enrolled} placeholder="work.example.com" onChange={(e) => { setServer(e.target.value); setError(null) }} className={`${input} disabled:bg-[#f8fafc]`} spellCheck={false} />
           </label>
-          {server.trim() && network && (
-            <div className="flex items-start gap-2.5 rounded-[10px] bg-[#ecfdf5] px-3.5 py-3 text-[13px] leading-normal text-[#065f46]">
-              <AIconCheck size={18} className="mt-px shrink-0" />
-              <span>WorkSuite server found — Livezen Technologies (WorkSuite Enterprise). This organization requires device enrollment; you’ll sign in with OneAuth next.</span>
-            </div>
-          )}
-          <label className={label}>Enrollment code (from your IT admin)
-            <input type="text" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className={`${input} w-[280px] max-w-full font-mono tracking-[1px]`} spellCheck={false} />
+          <label className={label}>Enrollment code (from your IT admin, optional)
+            <input type="text" value={code} disabled={!!enrolled} onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null) }} autoComplete="off" className={`${input} w-[280px] max-w-full font-mono tracking-[1px] disabled:bg-[#f8fafc]`} spellCheck={false} />
           </label>
+          <div aria-live="polite">
+            {enrolled ? (
+              <div className="flex items-start gap-2.5 rounded-[10px] bg-[#ecfdf5] px-3.5 py-3 text-[13px] leading-normal text-[#065f46]">
+                <AIconCheck size={18} className="mt-px shrink-0" />
+                <span>This computer is now managed by {enrolled.org_name ?? 'your organization'}. You can see what that means in Settings › About this device. Sign in with OneAuth next.</span>
+              </div>
+            ) : code.trim() ? (
+              <p className="m-0 text-[13px] text-[#475569]">Enrolling lets your organization apply its policies, updates and remote lock or wipe to this computer. An administrator password is needed.</p>
+            ) : (
+              <p className="m-0 text-[13px] text-[#475569]">No code? Continue without enrolling. If your organization requires enrollment, sign-in will tell you.</p>
+            )}
+          </div>
         </>
       )}
     </>
@@ -209,7 +227,7 @@ export default function FirstRun({ onDone }: FirstRunProps) {
             {(step === 2 || step === 3) && (
               <button type="button" onClick={skipOffline} className="h-11 rounded-[10px] px-[18px] text-sm text-[#334155] underline hover:text-[#0f172a]">Skip — use offline</button>
             )}
-            <button type="submit" disabled={waiting} className="ml-auto h-11 rounded-[10px] bg-[#2563eb] px-[22px] text-sm font-semibold text-white hover:bg-[#1d4ed8] disabled:opacity-60">{primary}</button>
+            <button type="submit" disabled={waiting || enrolling} className="ml-auto h-11 rounded-[10px] bg-[#2563eb] px-[22px] text-sm font-semibold text-white hover:bg-[#1d4ed8] disabled:opacity-60">{primary}</button>
           </div>
         </form>
       </div>

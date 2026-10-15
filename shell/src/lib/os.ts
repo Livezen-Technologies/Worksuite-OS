@@ -16,6 +16,8 @@ export interface WorkSuiteApi {
   cloudAccounts(): Promise<CloudResult<CloudAccount[]>>
   /** Settings > About this device (WSOS-MDM-007, WSOS-WIPE-007): device agent status, or local facts when it isn't running. */
   deviceInfo(): Promise<DeviceInfo>
+  /** Enterprise enrollment through the device agent; asks for an administrator password (polkit). */
+  enrollDevice(serverUrl: string, code: string): Promise<CloudResult<{ device_id: string; org_name: string | null }>>
 }
 
 export interface DevicePolicies {
@@ -76,6 +78,9 @@ const stub: WorkSuiteApi = {
   },
   async syncUnsent() { return { ok: true, value: stubUnsent } },
   async syncNow() { stubUnsent = Math.max(0, stubUnsent - 1); return { ok: true, value: true } },
+  async enrollDevice(_url, code) {
+    return code === 'BAD-CODE' ? { ok: false, error: 'enrollment_rejected' } : { ok: true, value: { device_id: 'preview-device', org_name: 'Livezen Technologies' } }
+  },
   async deviceInfo() {
     return {
       agent: true, managed: true, org_name: 'Livezen Technologies', server: 'work.livezentech.com', last_check_in: Date.now() - 4 * 60_000,
@@ -101,6 +106,10 @@ export function cloudErrorText(code: string): string {
     case 'device_not_enrolled': return 'This computer isn’t enrolled with your organization yet. Ask IT to enroll it, then sign in again.'
     case 'bootstrap_failed':
     case 'bootstrap_invalid': return 'Signed in, but WorkSuite couldn’t load your organization’s settings. Try again.'
+    case 'auth_cancelled': return 'Enrollment needs an administrator password. Nothing was changed.'
+    case 'enrollment_rejected': return 'The server didn’t accept that enrollment code. Check it with your IT admin; codes expire quickly.'
+    case 'invalid_code': return 'Enter the enrollment code exactly as your IT admin gave it.'
+    case 'agent_unavailable': return 'The device agent isn’t running, so this computer can’t be enrolled right now.'
     case 'export_failed': return 'Couldn’t save the unsent changes. Nothing was signed out.'
     default: return 'Sign-in didn’t work. Check your connection and try again.'
   }
