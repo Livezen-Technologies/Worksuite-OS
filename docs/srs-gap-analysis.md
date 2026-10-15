@@ -65,7 +65,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-DSK-003 | Panel: running windows, minimize/restore, workspaces | Partial | Mock taskbar/workspace buttons in `Desktop.tsx` (local state); native panel (`native/panel/README.md`) not written, no bridge. |
 | WSOS-DSK-004 | Panel: clock, network, volume, battery, BT, notifications, power | Partial | Clock, notification centre and power menu exist (`Desktop.tsx`, `components/Power.tsx`, `lib/power.ts` tested); network/volume/battery/BT are not wired to NetworkManager/PipeWire/UPower/BlueZ. |
 | WSOS-DSK-005 | Per-monitor panel/background, 100–200% scaling | Missing | Native panel not implemented; no multi-output handling. |
-| WSOS-DSK-006 | Display settings persisted per monitor | Missing | Settings › Displays is static text (`shell/src/screens/Settings.tsx` `SimplePanel`). |
+| WSOS-DSK-006 | Display settings persisted per monitor | Partial | Settings › Displays lists real outputs, mode, refresh and scale from `wlr-randr --json` (`shell/electron/system.ts` (`system.test.ts`)); changing and persisting per-monitor settings not done. |
 | WSOS-DSK-007 | Monitor disconnect moves windows/launcher | Missing | No implementation. |
 | WSOS-DSK-008 | Clipboard history off by default, excludes passwords | Missing | No clipboard history. |
 | WSOS-DSK-009 | Default apps / mimeapps.list editable in Settings | Missing | Files open via `shell.openPath` (XDG default); no Settings editor, no mimeapps.list handling. |
@@ -104,12 +104,12 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 
 | ID | Requirement | Status | Evidence / reason |
 |---|---|---|---|
-| WSOS-INT-001 | Networking (NM, VPN, captive portal) | Partial | `network-manager` dependency; Settings › Network is static mock. |
-| WSOS-INT-002 | Audio (PipeWire) | Partial | PipeWire deps; Settings › Sound UI not wired. |
-| WSOS-INT-003 | Bluetooth (BlueZ), policy disable | Partial | `bluez` dep; UI mock; no policy enforcement. |
-| WSOS-INT-004 | Storage (UDisks2), policy block removable | Partial | `udisks2` dep; no UI, no USB policy enforcement. |
-| WSOS-INT-005 | Power (UPower/logind) | Partial | Suspend/restart/shutdown via `systemctl` (`main.ts`), `lib/power.ts` tested; battery/profiles static. |
-| WSOS-INT-006 | Printing (CUPS) | Partial | `cups` dep; Settings › Printers static. |
+| WSOS-INT-001 | Networking (NM, VPN, captive portal) | Partial | Settings › Network shows live Wi-Fi/Ethernet state, scans and joins networks via nmcli; Wi-Fi password goes on nmcli stdin (`--ask`), never argv (`shell/electron/system.ts` (`system.test.ts`)). VPN and captive portal not done. |
+| WSOS-INT-002 | Audio (PipeWire) | Done | Settings › Sound reads/sets volume, mute and default output via `wpctl` (`shell/electron/system.ts` (`system.test.ts`)). |
+| WSOS-INT-003 | Bluetooth (BlueZ), policy disable | Partial | Settings › Bluetooth: real power state, paired devices, connect/disconnect via `bluetoothctl` (`shell/electron/system.ts` (`system.test.ts`)); pairing new devices and policy enforcement not done. |
+| WSOS-INT-004 | Storage (UDisks2), policy block removable | Partial | Drives listed from `udisksctl status` in Settings › About this device (`shell/electron/system.ts` (`system.test.ts`)); no USB policy enforcement. |
+| WSOS-INT-005 | Power (UPower/logind) | Partial | Suspend/restart/shutdown via `systemctl` (`main.ts`), `lib/power.ts` tested; battery state from `upower` (`shell/electron/system.ts` (`system.test.ts`)); power profiles still static. |
+| WSOS-INT-006 | Printing (CUPS) | Partial | Settings › Printers lists real queues, state and default via `lpstat` (`shell/electron/system.ts` (`system.test.ts`)); adding printers not done. |
 | WSOS-INT-007 | Notifications server (org.freedesktop.Notifications) | Partial | In-shell notice centre with DND (`Desktop.tsx`, `lib/useNotices.ts`, `lib/syncNotices.test.ts`); shell does not own `org.freedesktop.Notifications`. |
 | WSOS-INT-008 | Tray (SNI host) P2 | Missing | Only described in `native/panel/README.md`. |
 | WSOS-INT-009 | Secret Service unlock/lock with session | Partial | `gnome-keyring` dep, lock on logout in `worksuite-session`, broker lock follows session lock (`shell/electron/broker.ts`, `broker.test.ts`); PAM unlock-on-login not configured. |
