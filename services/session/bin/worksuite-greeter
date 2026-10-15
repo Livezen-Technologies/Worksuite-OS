@@ -16,4 +16,9 @@ if [ "$show" -eq 1 ]; then
         --text "Your last session ended unexpectedly.\n\nOpen applications may have closed, and unsaved work in them may be lost." \
         >/dev/null 2>&1 || true
 fi
+# WSOS-AUTH-001: the WorkSuite greeter (greetd IPC, PAM conversation, directory domain, password change, codes).
+# gtkgreet stays as the fallback when the greeter cannot start (missing GTK 4 bindings).
+if [ -z "${WORKSUITE_GREETER_LEGACY:-}" ] && python3 -c 'import gi; gi.require_version("Gtk", "4.0")' >/dev/null 2>&1; then
+    PYTHONPATH=/usr/lib/worksuite/greeter${PYTHONPATH:+:$PYTHONPATH} python3 -m worksuite_greeter && exit 0
+fi
 exec ${WORKSUITE_GTKGREET:-gtkgreet} "$@"

@@ -44,3 +44,10 @@ wireplumber
 upower
 cups-client
 wlr-randr
+# WorkSuite greeter (WSOS-AUTH-001; the build installs no recommends)
+python3-gi
+gir1.2-gtk-4.0
+# Smart-card sign-in, off until enabled (WSOS-DIR-011)
+pcscd
+opensc
+libpam-pkcs11

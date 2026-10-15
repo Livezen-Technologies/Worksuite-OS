@@ -1,0 +1,20 @@
+[Unit]
+Description=Fetch the directory domain shown at the WorkSuite greeter (WSOS-DIR-002)
+Documentation=file:///usr/share/doc/worksuite-directory/README.md
+ConditionPathExists=/var/lib/worksuite-device-agent/state.json
+After=network-online.target
+
+[Service]
+AppArmorProfile=-worksuite-directory
+Type=oneshot
+ExecStart=/usr/libexec/worksuite/worksuite-pam-directory greeter-config
+RuntimeDirectory=worksuite-directory
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

@@ -105,13 +105,23 @@ check "session exit status is the compositor's" "$rc" 1
 stub zenity 'echo "zenity $*" >> "$LOG"'
 stub gtkgreet 'echo "gtkgreet $*" >> "$LOG"'
 : > "$LOG"
-sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
+WORKSUITE_GREETER_LEGACY=1 sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
 grep -q "zenity --warning" "$LOG" && grep -q "Open applications may have closed" "$LOG" && ok "greeter shows the notice" || bad "greeter shows the notice"
 grep -q "gtkgreet -c /usr/bin/worksuite-session" "$LOG" && ok "greeter then starts gtkgreet" || bad "greeter then starts gtkgreet"
 [ -e "$T/notice/uid-$(id -u)" ] && bad "notice removed after showing" || ok "notice removed after showing"
 : > "$LOG"
-sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
+WORKSUITE_GREETER_LEGACY=1 sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
 grep -q zenity "$LOG" && bad "no notice after a clean session" || ok "no notice after a clean session"
+# WSOS-AUTH-001: the WorkSuite greeter runs when GTK 4 bindings are present; gtkgreet only as the fallback.
+stub python3 'echo "python3 $*" >> "$LOG"; exit 0'
+: > "$LOG"
+sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
+grep -q "python3 -m worksuite_greeter" "$LOG" && ! grep -q gtkgreet "$LOG" && ok "greeter runs the WorkSuite greeter" || bad "greeter runs the WorkSuite greeter"
+stub python3 'case "$*" in *require_version*) exit 1;; esac; echo "python3 $*" >> "$LOG"'
+: > "$LOG"
+sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
+grep -q gtkgreet "$LOG" && ok "gtkgreet is the fallback without GTK 4" || bad "gtkgreet is the fallback without GTK 4"
+rm -f "$T/stub/python3"
 stub labwc 'exit 0'
 WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"
 [ -e "$T/notice/uid-$(id -u)" ] && bad "clean exit leaves no notice" || ok "clean exit leaves no notice"

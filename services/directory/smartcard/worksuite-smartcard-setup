@@ -1,0 +1,26 @@
+#!/bin/sh
+# worksuite-smartcard-setup enable|disable|status (root): smart-card sign-in on or off (WSOS-DIR-011, P3).
+# Enabling needs at least one trusted CA certificate in /etc/pam_pkcs11/cacerts; pcscd reads the card.
+set -eu
+CONF_DIR=${WORKSUITE_PKCS11_DIR:-/etc/pam_pkcs11}
+SHARE=${WORKSUITE_SMARTCARD_SHARE:-/usr/share/worksuite/smartcard}
+PAM_UPDATE=${WORKSUITE_PAM_AUTH_UPDATE:-pam-auth-update}
+COMMON_AUTH=${WORKSUITE_COMMON_AUTH:-/etc/pam.d/common-auth}
+case "${1:-}" in
+  enable)
+    found=0
+    for c in "$CONF_DIR"/cacerts/*.pem "$CONF_DIR"/cacerts/*.crt; do [ -f "$c" ] && found=1; done
+    if [ "$found" -eq 0 ]; then echo "no CA certificate in $CONF_DIR/cacerts" >&2; exit 2; fi
+    arch=$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || gcc -dumpmachine 2>/dev/null || echo x86_64-linux-gnu)
+    sed "s|/usr/lib/x86_64-linux-gnu/|/usr/lib/$arch/|" "$SHARE/pam_pkcs11.conf" > "$CONF_DIR/pam_pkcs11.conf"
+    chmod 0644 "$CONF_DIR/pam_pkcs11.conf"
+    if command -v pkcs11_make_hash_link >/dev/null; then (cd "$CONF_DIR/cacerts" && pkcs11_make_hash_link) || true; fi
+    $PAM_UPDATE --enable worksuite-smartcard
+    echo enabled ;;
+  disable)
+    $PAM_UPDATE --disable worksuite-smartcard
+    echo disabled ;;
+  status)
+    if grep -qs pam_pkcs11 "$COMMON_AUTH"; then echo enabled; else echo disabled; fi ;;
+  *) echo "usage: worksuite-smartcard-setup enable|disable|status" >&2; exit 2 ;;
+esac

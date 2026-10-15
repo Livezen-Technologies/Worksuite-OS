@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh the directory domain shown at the greeter (WSOS-DIR-002)
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=30min
+
+[Install]
+WantedBy=timers.target

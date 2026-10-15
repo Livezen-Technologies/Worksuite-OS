@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  authenticate, BREAK_GLASS_USER, localGroups, rotate, ServerError, session, UID_BASE,
+  CHANGE_PREFIX, authenticate, BREAK_GLASS_USER, localGroups, rotate, ServerError, session, UID_BASE,
   type Accounts, type AuditEvent, type CacheEntry, type Deps, type DirectoryUser, type Server,
 } from '../src/directory.ts';
 
@@ -20,15 +20,30 @@ function fakes(o: { online?: boolean; disabled?: boolean; escrowKey?: string; fa
   let pending: AuditEvent[] = [];
   const escrowed: { encrypted_secret: string }[] = [];
   const events: AuditEvent[] = [];
-  const state = { online: o.online ?? true, disabled: o.disabled ?? false, failEvents: o.failEvents ?? false, now: Date.UTC(2026, 9, 1) };
+  const state = { pw: PW, mfa: false, expired: false, online: o.online ?? true, disabled: o.disabled ?? false, failEvents: o.failEvents ?? false, now: Date.UTC(2026, 9, 1) };
+  const marks = new Map<string, string>();
+  const handoffs: { uid: number; data: { server_url: string; login_code: string } }[] = [];
   const server: Server = {
     async authenticate(u, p): Promise<DirectoryUser> {
       calls.push(`auth ${u}`);
       if (!state.online) throw new ServerError(0, 'NETWORK');
-      if (p !== PW) throw new ServerError(401, 'INVALID_CREDENTIALS');
+      if (state.mfa) {
+        if (p === PW) throw new ServerError(401, 'MFA_REQUIRED');
+        if (p !== PW + '123456') throw new ServerError(401, 'INVALID_CREDENTIALS');
+      } else if (p !== state.pw) throw new ServerError(401, 'INVALID_CREDENTIALS');
       if (state.disabled) throw new ServerError(403, 'ACCOUNT_DISABLED');
-      return { username: u, user_id: 42, name: 'Ana Silva', groups: ['worksuite-admins'], offline_login_days: 7 };
+      if (state.expired) throw new ServerError(401, 'PASSWORD_EXPIRED');
+      return { username: u, user_id: 42, name: 'Ana Silva', groups: ['worksuite-admins'], offline_login_days: 7, mfa: state.mfa, login_code: 'wsl_code' };
     },
+    async changePassword(u, old, next): Promise<DirectoryUser> {
+      calls.push(`change ${u}`);
+      if (!state.online) throw new ServerError(0, 'NETWORK');
+      if (old !== state.pw) throw new ServerError(401, 'INVALID_CREDENTIALS');
+      if (next.length < 10) throw new ServerError(400, 'VALIDATION');
+      state.pw = next; state.expired = false;
+      return { username: u, user_id: 42, name: 'Ana Silva', groups: [], offline_login_days: 7, login_code: 'wsl_code2' };
+    },
+    serverUrl: () => 'https://ws.example/',
     async directory() { if (!state.online) throw new ServerError(0, 'NETWORK'); return { escrow_public_key: o.escrowKey }; },
     async escrow(b) { if (!state.online) throw new ServerError(0, 'NETWORK'); escrowed.push(b); },
     async event(e) { if (!state.online || state.failEvents) throw new ServerError(0, 'NETWORK'); events.push(e); },
@@ -44,9 +59,10 @@ function fakes(o: { online?: boolean; disabled?: boolean; escrowKey?: string; fa
   };
   const deps: Deps = {
     server, accounts: acc, log: (m) => logs.push(m), now: () => state.now,
-    store: { cache: () => structuredClone(cache), saveCache: (c) => { cache = structuredClone(c); }, pending: () => [...pending], savePending: (p) => { pending = [...p]; } },
+    store: { cache: () => structuredClone(cache), saveCache: (c) => { cache = structuredClone(c); }, pending: () => [...pending], savePending: (p) => { pending = [...p]; },
+      markName: (n, st) => { if (st) marks.set(n, st); else marks.delete(n); }, handoff: (_n, uid, data) => { handoffs.push({ uid, data }); }, saveGreeterConfig: () => {} },
   };
-  return { deps, logs, calls, accounts, state, escrowed, events, getCache: () => cache, getPending: () => pending };
+  return { marks, handoffs, deps, logs, calls, accounts, state, escrowed, events, getCache: () => cache, getPending: () => pending };
 }
 
 test('online sign-in creates the account with a stable uid and admin role, and caches a verifier only', async () => {
@@ -172,4 +188,46 @@ test('HTTP client: password only in the request body, device credential header, 
     writeFileSync(agent, JSON.stringify({ server_url: 'http://ws.test/', credential: 'wsd_abc' }));
     await assert.rejects(httpServer(fake).authenticate('a@b.cd', PW), (e: ServerError) => e.code === 'INSECURE_URL');
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('WSOS-DIR-008: a successful online sign-in hands the one-time login code to the user only', async () => {
+  const f = fakes();
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW), 'ok');
+  assert.deepEqual(f.handoffs, [{ uid: UID_BASE + 42, data: { server_url: 'https://ws.example/', login_code: 'wsl_code', username: 'ana@corp.example' } }]);
+  assert.equal(JSON.stringify(f.getCache()).includes('wsl_code'), false);   // the code is not cached
+  f.state.online = false;
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW), 'ok_offline');
+  assert.equal(f.handoffs.length, 1);   // nothing to hand over offline
+});
+
+test('WSOS-DIR-007: an expired password is flagged for the greeter and changed through the frame', async () => {
+  const f = fakes();
+  f.state.expired = true;
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW), 'password_expired');
+  assert.equal(f.marks.get('ana@corp.example'), 'expired');
+  const NEW = 'An0ther-Passw0rd';
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', `${CHANGE_PREFIX}${PW}\x1fshort`), 'password_expired');   // server refused it
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', `${CHANGE_PREFIX}${PW}\x1f${NEW}`), 'ok');
+  assert.equal(f.marks.has('ana@corp.example'), false);
+  assert.equal(f.handoffs.at(-1)!.data.login_code, 'wsl_code2');
+  for (const l of f.logs) { assert.equal(l.includes(NEW), false); assert.equal(l.includes(PW), false); }
+  assert.equal(JSON.stringify(f.getCache()).includes(NEW), false);
+  // The offline verifier is for the new password.
+  f.state.online = false;
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', NEW), 'ok_offline');
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW), 'denied');
+  // A change needs the server.
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', `${CHANGE_PREFIX}${NEW}\x1fYet-another-pass1`), 'unavailable');
+});
+
+test('WSOS-DIR-009: accounts with a second factor need password + code; offline checks the password part', async () => {
+  const f = fakes();
+  f.state.mfa = true;
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW), 'mfa_required');
+  assert.equal(f.marks.get('ana@corp.example'), 'mfa');
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW + '123456'), 'ok');
+  assert.equal(f.getCache()['ana@corp.example'].mfa, true);
+  f.state.online = false;
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW + '999999'), 'ok_offline');
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', 'wrong-pass' + '123456'), 'denied');
 });

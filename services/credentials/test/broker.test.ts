@@ -6,7 +6,8 @@ import type { AddressInfo } from 'node:net';
 import { Broker, type Account } from '../src/broker.ts';
 import { memoryStore } from '../src/keyring.ts';
 import { checkUrl, OidcError } from '../src/oidc.ts';
-import { dispatch } from '../src/main.ts';
+import { dispatch, importLoginHandoff } from '../src/main.ts';
+import { writeFileSync } from 'node:fs';
 import { buildSyncConfig, fetchBootstrap, removeSyncConfig, writeSyncConfig } from '../src/syncconfig.ts';
 import { mkdtempSync, readFileSync, rmSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -44,6 +45,13 @@ async function fakeOneAuth() {
           const ok = challenge && createHash('sha256').update(form.get('code_verifier') ?? '').digest('base64url') === challenge;
           if (!ok) return json(400, { error: 'invalid_grant' });
           s.codes.delete(form.get('code')!);
+          s.live.add('rt-1');
+          return json(200, { access_token: 'at-1', expires_in: s.expiresIn, refresh_token: 'rt-1' });
+        }
+        if (form.get('grant_type') === 'urn:ietf:params:oauth:grant-type:token-exchange') {
+          const ok = form.get('subject_token_type') === 'urn:worksuite:params:oauth:token-type:os-login-code'
+            && form.get('subject_token') === 'wsl_code' && req.headers['x-ws-device'] === 'dev-cred';
+          if (!ok) return json(400, { error: 'invalid_grant' });
           s.live.add('rt-1');
           return json(200, { access_token: 'at-1', expires_in: s.expiresIn, refresh_token: 'rt-1' });
         }
@@ -227,4 +235,32 @@ test('sync config: bootstrap without user/org is rejected; removal only touches 
   assert.equal(removeSyncConfig(path, 'someone-else'), false);
   assert.equal(removeSyncConfig(path, 'h:1'), true);
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('WSOS-DIR-008: the greeter login code signs the session in without a prompt, once', async () => {
+  const s = await fakeOneAuth();
+  const opened: string[] = [];
+  const { broker, secrets } = makeBroker(s, { openBrowser: async (u) => { opened.push(u); } });
+  const dir = mkdtempSync(join(tmpdir(), 'ws-handoff-'));
+  const path = join(dir, 'login.json');
+  const logs: string[] = [];
+  const log = (e: string) => { logs.push(e); };
+  const write = (o: Record<string, unknown>) => writeFileSync(path, JSON.stringify({ server_url: s.base, login_code: 'wsl_code', issued_at: new Date().toISOString(), ...o }));
+  assert.equal(await importLoginHandoff(broker, { path, deviceCredential: () => 'dev-cred', log }), null);   // nothing there
+  write({ issued_at: new Date(Date.now() - 10 * 60_000).toISOString() });
+  assert.equal(await importLoginHandoff(broker, { path, deviceCredential: () => 'dev-cred', log }), null);
+  assert.ok(logs.includes('login_handoff_stale'));
+  write({});
+  assert.equal(await importLoginHandoff(broker, { path, deviceCredential: () => 'other-device', log }), null);
+  assert.ok(logs.includes('login_handoff_failed'));
+  assert.equal(existsSync(path), false);   // used or not, the code is gone
+  write({});
+  const a = await importLoginHandoff(broker, { path, deviceCredential: () => 'dev-cred', log });
+  assert.ok(a);
+  assert.equal(secrets.data.get(a!.id), 'rt-1');
+  assert.equal((await broker.getAccessToken(a!.id)).token, 'at-1');
+  assert.deepEqual(opened, []);   // no browser, no second prompt
+  assert.equal(existsSync(path), false);
+  rmSync(dir, { recursive: true, force: true });
+  s.server.close();
 });
