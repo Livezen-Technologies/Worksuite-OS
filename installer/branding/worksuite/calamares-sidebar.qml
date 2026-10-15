@@ -63,7 +63,7 @@ Rectangle {
                             Layout.fillWidth: true
                             text: modelData
                             color: done || active ? "#E8EEFA" : "#8FA3C8"
-                            font.family: "IBM Plex Sans"; font.pixelSize: 14
+                            font.family: "IBM Plex Sans"; font.pixelSize: 13
                             font.weight: active ? Font.DemiBold : Font.Normal
                             elide: Text.ElideRight
                         }
@@ -74,6 +74,6 @@ Rectangle {
 
         Item { Layout.fillHeight: true }
 
-        Text { Layout.leftMargin: 8; text: Branding.string(Branding.Version) + " · amd64"; color: "#5E739C"; font.family: "IBM Plex Mono"; font.pixelSize: 12 }
+        Text { Layout.leftMargin: 8; text: Branding.string(Branding.VersionedName).split(" ").pop() + " · amd64"; color: "#5E739C"; font.family: "IBM Plex Mono"; font.pixelSize: 12 }
     }
 }
