@@ -14,6 +14,7 @@ services/session/tmpfiles/worksuite-session.conf usr/lib/tmpfiles.d/
 services/session/pam/worksuite-faillock usr/share/pam-configs/
 services/session/pam/worksuite-faillock-preauth usr/share/pam-configs/
 services/session/pam/worksuite-offline-access usr/share/pam-configs/
+services/session/pam/worksuite-keyring usr/share/pam-configs/
 services/session/pam/faillock.conf usr/share/worksuite/
 services/session/fcitx5/profile etc/xdg/fcitx5/
 services/session/bin/worksuite-screencast-chooser usr/lib/worksuite/
