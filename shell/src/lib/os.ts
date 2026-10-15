@@ -121,6 +121,8 @@ declare global {
 
 const stub: WorkSuiteApi = {
   async authenticate(_user, password) {
+    // Preview: the password "wrong" is rejected so the error state can be reviewed.
+    if (password === 'wrong') return { ok: false, message: 'Incorrect password. Try again.' }
     return password.length > 0 ? { ok: true } : { ok: false, message: 'Enter your password.' }
   },
   async lock() {},
