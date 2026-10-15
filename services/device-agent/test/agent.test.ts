@@ -49,6 +49,8 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
     },
     async inventory() {},
     async diagnostics() { log.push('diagnostics uploaded'); },
+    async vpn() { throw new ApiError(404, 'NOT_FOUND'); },
+    async vpnPeer() { throw new ApiError(404, 'NOT_FOUND'); },
   };
   const host: Host = {
     async generateDeviceKey() { return { publicKeyPem: 'PEM', tpmBacked: false }; },
@@ -68,6 +70,11 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
     async wipeWorkSuiteData() { log.push('wipe data'); },
     async cryptoErase() { log.push('crypto erase'); },
     audit() {},
+    async wgPublicKey() { return 'unused'; },
+    forgetWgKey() {},
+    async applyVpn() {},
+    async vpnConnections() { return []; },
+    async removeConnection() {},
   };
   const path = join(dir, 'state.json');
   const make = () => new Agent({ state: new StateFile(path), api, host, keys: (id) => (id === 'k1' ? server.publicKey : undefined), now: () => NOW });

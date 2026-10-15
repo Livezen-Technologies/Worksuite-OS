@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
 import { bootMode } from './bootmode'
@@ -192,6 +192,7 @@ app.whenReady().then(() => {
   const picked = new Map<string, string>()
   const FILTERS: Record<string, { name: string; extensions: string[] }> = {
     deb: { name: 'Debian package', extensions: ['deb'] }, appimage: { name: 'AppImage', extensions: ['AppImage', 'appimage'] }, wsupdate: { name: 'WorkSuite update bundle', extensions: ['wsupdate'] },
+    wgconf: { name: 'WireGuard configuration', extensions: ['conf'] },
   }
   handle('ws:pickFile', async (kind) => {
     const filter = FILTERS[kind]
@@ -204,6 +205,18 @@ app.whenReady().then(() => {
   })
   const pickedPath = (h: string, kind: string) => (h.startsWith(`${kind}:`) ? picked.get(h) ?? null : null)
   const noFile = { ok: false, error: 'invalid_argument' }
+  // VPN (WSOS-INT-001): list/connect/disconnect/remove, and import of a WireGuard .conf the user picked.
+  handle('ws:sysVpn', () => sys.vpn())
+  handle('ws:sysVpnConnect', (uuid, on) => sys.vpnConnect(uuid, on === 'on'))
+  handle('ws:sysVpnRemove', (uuid) => sys.vpnRemove(uuid))
+  handle('ws:sysVpnImport', (h) => {
+    const p = pickedPath(h, 'wgconf')
+    if (!p) return noFile
+    try {
+      if (statSync(p).size > 64 * 1024) return { ok: false, error: 'invalid_file' }
+      return sys.vpnImport(path.basename(p), readFileSync(p, 'utf8'))
+    } catch { return { ok: false, error: 'invalid_file' } }
+  })
   handle('ws:localDebPreview', (h) => { const p = pickedPath(h, 'deb'); return p ? pkg.localDebPreview(p) : noFile })
   handle('ws:localDebInstall', (token) => pkg.localDebInstall(token))
   const fpUser = flatpakUserClient()

@@ -9,6 +9,7 @@ import { secret, sha256, tx } from './db.ts';
 import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { checkPassword } from './oauth.ts';
 import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
+import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
 const SESSION_TTL = 8 * 3_600_000;
 const COOKIE = 'ws_admin';
@@ -54,6 +55,9 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   appimage_trusted_keys: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && /^[0-9A-Fa-f ]{40,80}$/.test(x)),
   allow_local_debs: (v) => typeof v === 'boolean',
   update_mirror: (v) => typeof v === 'string' && /^https:\/\/[^\s/]+(\/\S*)?$/.test(v),
+  // Managed WireGuard VPN (WSOS-INT-001): connection must be up (always-on); user-imported VPNs allowed or removed.
+  vpn_required: (v) => typeof v === 'boolean',
+  user_vpn: (v) => v === 'allow' || v === 'block',
 };
 
 export function validatePolicy(body: unknown): Record<string, unknown> {
@@ -326,6 +330,32 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     for (const d of ids) issueCommand(db, d.id, 'RefreshPolicy', {}, 24);
     log(a, 'policy_set', { version, devices_notified: ids.length });
     send(ctx, 200, { version, devices_notified: ids.length });
+  });
+
+  // ---- managed VPN (WSOS-INT-001) ----
+  r.on('GET', '/admin/api/vpn', (ctx) => {
+    const a = admin(ctx);
+    const cur = getVpnSettings(db, a.org_id);
+    send(ctx, 200, { version: cur?.version ?? 0, vpn: cur?.settings ?? null, peers: gatewayPeers(db, a.org_id) });
+  });
+  r.on('PUT', '/admin/api/vpn', async (ctx) => {
+    const a = admin(ctx);
+    const b = await body(ctx);
+    const s = b.vpn === null ? null : validateVpnSettings(b.vpn);
+    const version = setVpnSettings(db, a.org_id, s);
+    const ids = db.prepare('SELECT id FROM devices WHERE org_id = ? AND revoked = 0').all(a.org_id) as { id: string }[];
+    for (const d of ids) issueCommand(db, d.id, 'RefreshPolicy', {}, 24);   // the agent refreshes VPN with policy
+    log(a, s ? 'vpn_set' : 'vpn_removed', { version, devices_notified: ids.length });
+    send(ctx, 200, { version, devices_notified: ids.length });
+  });
+  // Rotation: forget the device's key; it generates a new keypair on its next refresh and registers the public half.
+  r.on('POST', '/admin/api/vpn/peers/{id}/rotate', (ctx) => {
+    const a = admin(ctx);
+    const d = device(a, ctx.params.id);
+    removePeer(db, d.id);
+    issueCommand(db, d.id, 'RefreshPolicy', {}, 24);
+    log(a, 'vpn_key_rotate', { device_id: d.id });
+    send(ctx, 204);
   });
 
   // ---- catalog (global in this single-organization MVP) ----

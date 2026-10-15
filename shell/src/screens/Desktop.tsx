@@ -6,7 +6,7 @@ import type { Notice } from '../lib/syncNotices'
 import { ageLabel } from '../lib/power'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
-import { RunningApps, TrayItems, UpdateBadge, useLauncherKey } from '../components/PanelItems'
+import { RunningApps, TrayItems, UpdateBadge, VpnBadge, useLauncherKey } from '../components/PanelItems'
 import A11yPanel from '../components/A11yPanel'
 import { localeTag, useT } from '../i18n'
 import { UpdateOverlays } from './Updates'
@@ -276,6 +276,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
           <TrayItems />
+          <VpnBadge onOpen={() => openSettingsAt('Network')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false) }}
             className="flex size-10 cursor-pointer items-center justify-center rounded-[10px] bg-white/[0.12] hover:bg-white/20"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>

@@ -6,7 +6,9 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { cpus, hostname, release, totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Host } from './agent.ts';
+import { lookup } from 'node:dns/promises';
 import { ENFORCED_PATHS, type Enforcement } from './enforce.ts';
+import { KILLSWITCH_TABLE, parseNmConnections, renderKillSwitch, renderNmConnection, VPN_CONNECTION_UUID, VPN_KEYFILE, wgKeyPair, wgPublicKey } from './vpn.ts';
 import type { Policy } from './state.ts';
 
 export interface HostPaths { stateDir: string; runtimeDir: string; auditLog: string }
@@ -220,6 +222,64 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
       for (const f of readdirSync(paths.stateDir)) if (f.startsWith('luks-header')) rmSync(join(paths.stateDir, f), { force: true });
       audit('full_device_wiped', { devices: devs.length });
       await run('systemctl', ['reboot']);
+    },
+
+    async wgPublicKey(rotate) {
+      // The private key stays in the 0700 state dir and in NetworkManager's root-only keyfile; it is never sent.
+      const p = join(paths.stateDir, 'wireguard.key');
+      if (!rotate && existsSync(p)) return wgPublicKey(readFileSync(p, 'utf8').trim());
+      const k = wgKeyPair();
+      writeFileSync(p + '.tmp', k.privateKey + '\n', { mode: 0o600 });
+      renameSync(p + '.tmp', p);
+      return k.publicKey;
+    },
+
+    forgetWgKey() { rmSync(join(paths.stateDir, 'wireguard.key'), { force: true }); },
+
+    async applyVpn(plan) {
+      if (!plan) {
+        if (existsSync(VPN_KEYFILE)) {
+          await run('nmcli', ['connection', 'delete', 'uuid', VPN_CONNECTION_UUID]).catch(() => {});
+          rmSync(VPN_KEYFILE, { force: true });
+        }
+        await run('nft', ['delete', 'table', 'inet', KILLSWITCH_TABLE]).catch(() => {});   // absent → fine
+        return;
+      }
+      const priv = readFileSync(join(paths.stateDir, 'wireguard.key'), 'utf8').trim();
+      const content = renderNmConnection(plan, priv);
+      let cur: string | null = null;
+      try { cur = readFileSync(VPN_KEYFILE, 'utf8'); } catch { /* absent */ }
+      if (cur !== content) {
+        mkdirSync(dirname(VPN_KEYFILE), { recursive: true, mode: 0o755 });
+        writeFileSync(VPN_KEYFILE + '.tmp', content, { mode: 0o600 });   // NM loads only root-owned 0600 keyfiles
+        renameSync(VPN_KEYFILE + '.tmp', VPN_KEYFILE);
+        await run('nmcli', ['connection', 'load', VPN_KEYFILE]);
+      }
+      // Kill switch before connecting, so traffic never leaves outside the tunnel while it comes up.
+      if (plan.kill_switch) {
+        let ips: string[] = [];
+        try { ips = (await lookup(plan.endpoint.host, { all: true })).map((a) => a.address); } catch { /* DNS blocked or down */ }
+        const rules = join(paths.runtimeDir, 'vpn-killswitch.nft');
+        if (ips.length) { writeFileSync(rules, renderKillSwitch(ips, plan.endpoint.port), { mode: 0o600 }); await run('nft', ['-f', rules]); }
+        else audit('vpn_killswitch_unresolved', { endpoint: plan.endpoint.host });   // rules already loaded stay in force
+      } else {
+        await run('nft', ['delete', 'table', 'inet', KILLSWITCH_TABLE]).catch(() => {});
+      }
+      if (plan.autoconnect) {
+        const active = await run('nmcli', ['-t', '-f', 'UUID', 'connection', 'show', '--active']).catch(() => '');
+        if (!active.split('\n').includes(VPN_CONNECTION_UUID)) {
+          await run('nmcli', ['--wait', '30', 'connection', 'up', 'uuid', VPN_CONNECTION_UUID]).catch((e: Error) => audit('vpn_connect_failed', { error: e.message }));
+        }
+      }
+    },
+
+    async vpnConnections() {
+      return parseNmConnections(await run('nmcli', ['-t', '-f', 'NAME,UUID,TYPE,ACTIVE', 'connection', 'show']));
+    },
+
+    async removeConnection(uuid) {
+      if (!/^[0-9a-f-]{36}$/i.test(uuid)) throw new Error('BAD_UUID');
+      await run('nmcli', ['connection', 'delete', 'uuid', uuid]);
     },
 
     audit,

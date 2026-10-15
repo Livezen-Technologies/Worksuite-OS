@@ -65,6 +65,11 @@ CREATE TABLE IF NOT EXISTS wipe_requests (
   requested_by INTEGER NOT NULL, requested_at INTEGER NOT NULL, approved_by INTEGER, approved_at INTEGER, command_id TEXT, cancelled INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS admin_log (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, user_id INTEGER NOT NULL, action TEXT NOT NULL, detail TEXT, at INTEGER NOT NULL);
+-- Managed WireGuard VPN (src/vpn.ts): org gateway settings and each device's public key + tunnel address.
+CREATE TABLE IF NOT EXISTS vpn_settings (org_id INTEGER PRIMARY KEY, version INTEGER NOT NULL, body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS vpn_peers (
+  device_id TEXT PRIMARY KEY, org_id INTEGER NOT NULL, public_key TEXT NOT NULL UNIQUE, address TEXT, updated INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS signing_keys (key_id TEXT PRIMARY KEY, private_pem TEXT NOT NULL, public_pem TEXT NOT NULL, created INTEGER NOT NULL);
 `;
 

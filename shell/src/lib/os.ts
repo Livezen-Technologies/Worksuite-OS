@@ -59,7 +59,7 @@ export interface WorkSuiteApi {
   /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
   pkgCatalog(): Promise<CloudResult<AppCatalog>>
   /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
-  pickFile(kind: 'deb' | 'appimage' | 'wsupdate'): Promise<CloudResult<{ handle: string; name: string }>>
+  pickFile(kind: 'deb' | 'appimage' | 'wsupdate' | 'wgconf'): Promise<CloudResult<{ handle: string; name: string }>>
   localDebPreview(handle: string): Promise<CloudResult<LocalDebPreview>>
   localDebInstall(token: string): Promise<CloudResult<string>>
   appPermissions(catalogId: string): Promise<CloudResult<AppPermissions>>
@@ -90,6 +90,12 @@ export interface WorkSuiteApi {
   sysSetWifi(on: boolean): Promise<Avail<true>>
   /** The password reaches nmcli on stdin only. */
   sysWifiConnect(ssid: string, password: string): Promise<{ ok: true } | { ok: false; error: string }>
+  /** VPN profiles (managed "WorkSuite VPN" first) and whether policy allows user VPNs (WSOS-INT-001). */
+  sysVpn(): Promise<Avail<VpnState>>
+  /** Imports the WireGuard .conf behind a pickFile('wgconf') handle; the private key never reaches the renderer. */
+  sysVpnImport(handle: string): Promise<CloudResult<{ uuid: string | null; name: string }>>
+  sysVpnConnect(uuid: string, on: boolean): Promise<Avail<true>>
+  sysVpnRemove(uuid: string): Promise<Avail<true>>
   sysBluetooth(): Promise<Avail<BluetoothState>>
   sysSetBluetooth(on: boolean): Promise<Avail<true>>
   sysBtConnect(address: string, on: boolean): Promise<Avail<true>>
@@ -107,6 +113,8 @@ export type Avail<T> = { available: true; value: T } | { available: false; reaso
 export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean }
 export interface NetDevice { device: string; type: string; state: string; connection: string | null }
 export interface NetworkState { wifi_enabled: boolean; devices: NetDevice[]; networks: WifiNetwork[] }
+export interface VpnConnection { name: string; uuid: string; type: 'wireguard' | 'vpn'; active: boolean; device: string | null; managed: boolean }
+export interface VpnState { connections: VpnConnection[]; user_vpn_allowed: boolean; vpn_required: boolean }
 export interface BtDevice { address: string; name: string; connected: boolean }
 export interface BluetoothState { powered: boolean; name: string | null; discoverable: boolean; paired: BtDevice[] }
 export interface AudioDevice { id: number; name: string; is_default: boolean }
@@ -426,6 +434,10 @@ const stub: WorkSuiteApi = {
     stubSys.net.networks = stubSys.net.networks.map((n) => ({ ...n, in_use: n.ssid === ssid }))
     return { ok: true }
   },
+  async sysVpn() { return stubAvail({ connections: stubSys.vpn, user_vpn_allowed: true, vpn_required: false }) },
+  async sysVpnImport() { return { ok: false, error: 'service_unavailable' } },
+  async sysVpnConnect(uuid, on) { stubSys.vpn = stubSys.vpn.map((c) => c.uuid === uuid ? { ...c, active: on } : c); return stubAvail(true as const) },
+  async sysVpnRemove(uuid) { stubSys.vpn = stubSys.vpn.filter((c) => c.uuid !== uuid || c.managed); return stubAvail(true as const) },
   async sysBluetooth() { return stubAvail(stubSys.bt) },
   async sysSetBluetooth(on) { stubSys.bt.powered = on; return stubAvail(true as const) },
   async sysBtConnect(address, on) { stubSys.bt.paired = stubSys.bt.paired.map((d) => d.address === address ? { ...d, connected: on } : d); return stubAvail(true as const) },
@@ -442,7 +454,8 @@ const stub: WorkSuiteApi = {
 function stubAvail<T>(value: T): Avail<T> {
   return stubSim === 'none' ? { available: false, reason: 'service_unavailable' } : { available: true, value: structuredClone(value) }
 }
-const stubSys: { net: NetworkState; bt: BluetoothState; sound: SoundState } = {
+const stubSys: { net: NetworkState; bt: BluetoothState; sound: SoundState; vpn: VpnConnection[] } = {
+  vpn: [{ name: 'WorkSuite VPN', uuid: '6f1d9a52-3c47-4b8e-9a0d-57e2c1b4f0a3', type: 'wireguard', active: true, device: 'wsvpn0', managed: true }],
   net: { wifi_enabled: true, devices: [{ device: 'wlan0', type: 'wifi', state: 'connected', connection: 'Preview-WiFi' }, { device: 'eth0', type: 'ethernet', state: 'unavailable', connection: null }],
     networks: [{ ssid: 'Preview-WiFi', signal: 82, security: 'WPA2', in_use: true }, { ssid: 'Guest', signal: 54, security: '', in_use: false }] },
   bt: { powered: false, name: 'preview-laptop', discoverable: false, paired: [{ address: 'AA:BB:CC:DD:EE:01', name: 'Preview keyboard', connected: false }] },

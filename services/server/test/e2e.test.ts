@@ -18,6 +18,8 @@ import { Agent, type Host } from '../../device-agent/src/agent.ts';
 import { httpApi } from '../../device-agent/src/api.ts';
 import { loadKeys } from '../../device-agent/src/main.ts';
 import { StateFile } from '../../device-agent/src/state.ts';
+import { wgKeyPair, type VpnPlan } from '../../device-agent/src/vpn.ts';
+import { setVpnSettings } from '../src/vpn.ts';
 import { verifyManifest } from '../../package-service/src/updates.ts';
 
 const PUBLIC = 'https://ws.test/';
@@ -155,6 +157,10 @@ test('device agent: enrollment, signed policy, signed commands with acks, revoca
   const token = admin.createEnrollmentToken(db, orgId);
   admin.setPolicy(db, orgId, { update_ring: 'pilot', update_mode: 'notify', app_allowlist: ['flatpak:org.gimp.GIMP'] });
 
+  // Managed WireGuard VPN for the org; the device's keypair is generated here and only the public key is sent.
+  setVpnSettings(db, orgId, { endpoint: 'vpn.livezentech.test:51820', server_public_key: wgKeyPair().publicKey, address_pool: '10.90.0.0/24', allowed_ips: ['10.0.0.0/8'], dns: ['10.90.0.1'], always_on: true });
+  let wg = wgKeyPair();
+  const vpnApplied: (VpnPlan | null)[] = [];
   const log: string[] = [];
   const host: Host = {
     async generateDeviceKey() { return { publicKeyPem: generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' }).toString(), tpmBacked: false }; },
@@ -169,6 +175,10 @@ test('device agent: enrollment, signed policy, signed commands with acks, revoca
     async wipeWorkSuiteData() {}, async cryptoErase() {},
     async applyEnforcement(e) { log.push(`enforce usb=${e.usb_storage}`); }, setOfflineAccessBlock() {},
     audit(e) { log.push(`audit ${e}`); },
+    async wgPublicKey(rotate) { if (rotate) wg = wgKeyPair(); return wg.publicKey; },
+    forgetWgKey() { log.push('wg key forgotten'); },
+    async applyVpn(plan) { vpnApplied.push(plan); },
+    async vpnConnections() { return []; }, async removeConnection() {},
   };
   const state = new StateFile(join(dir, 'agent-state.json'));
   const agent = new Agent({ state, host, api: httpApi(() => state.state, toLocal), keys: loadKeys(keysDir) });
@@ -177,6 +187,11 @@ test('device agent: enrollment, signed policy, signed commands with acks, revoca
   assert.equal(state.state.org_name, 'Livezen Technologies');
   assert.equal(state.state.policy?.update_ring, 'pilot');
   assert.equal(state.state.policy?.version, '1');
+  const plan = vpnApplied.at(-1)!;
+  assert.equal(plan.config.device_public_key, wg.publicKey);
+  assert.deepEqual(plan.config.interface!.address, ['10.90.0.2/32']);
+  assert.equal(plan.autoconnect, true);
+  assert.ok(!JSON.stringify(db.prepare('SELECT * FROM vpn_peers').all()).includes(wg.privateKey));
   // The enrollment token is single-use.
   await assert.rejects(httpApi(() => ({}), toLocal).register(PUBLIC, token, { public_key: (await host.generateDeviceKey()).publicKeyPem, tpm_backed: false, arch: 'amd64', hostname: 'x' }), /TOKEN_EXPIRED/);
 
@@ -201,6 +216,9 @@ test('device agent: enrollment, signed policy, signed commands with acks, revoca
   admin.revokeDevice(db, deviceId);
   await agent.checkIn();
   assert.equal(state.state.enrolled, false);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(vpnApplied.at(-1), null);              // managed connection removed on revocation
+  assert.ok(log.includes('wg key forgotten'));
 });
 
 test('release manifests verify with the package service; catalog filters by arch', async () => {

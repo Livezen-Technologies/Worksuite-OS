@@ -7,6 +7,7 @@ import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { userFromBearer, type User } from './oauth.ts';
 import { activeKey, signFlat } from './signing.ts';
 import { licenceFor } from './admin.ts';
+import { deviceVpnConfig, isWgKey, registerPeer, removePeer } from './vpn.ts';
 
 export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string; webUrl: string }
 
@@ -273,6 +274,8 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
       const arch = str(b, 'arch', 16);
       if (!ARCHES.has(arch)) throw invalid('arch', 'amd64 or arm64');
       const hostname = typeof b.hostname === 'string' ? b.hostname.slice(0, 253) : '';
+      // Optional: the device's WireGuard public key for the managed VPN. Only ever the public half.
+      if (b.wg_public_key !== undefined && !isWgKey(b.wg_public_key)) throw invalid('wg_public_key', 'WireGuard public key (base64, 32 bytes)');
       return tx(db, () => {
         const t = db.prepare('SELECT org_id, expires, uses_left FROM enroll_tokens WHERE hash = ?').get(sha256(token)) as { org_id: number; expires: number; uses_left: number } | undefined;
         if (!t || t.expires < Date.now() || t.uses_left < 1) throw new HttpError(401, 'TOKEN_EXPIRED', 'enrollment token invalid, used or expired');
@@ -280,6 +283,7 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
         const device_id = randomUUID(), credential = secret('wsd');
         db.prepare('INSERT INTO devices (id, org_id, cred_hash, public_key, tpm_backed, arch, hostname, enrolled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
           .run(device_id, t.org_id, sha256(credential), public_key, b.tpm_backed === true ? 1 : 0, arch, hostname, Date.now());
+        if (typeof b.wg_public_key === 'string') registerPeer(db, t.org_id, device_id, b.wg_public_key);
         const org = db.prepare('SELECT name FROM orgs WHERE id = ?').get(t.org_id) as { name: string };
         return { status: 201, body: { device_id, credential, org_name: org.name } };
       });
@@ -305,6 +309,11 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
       const res = db.prepare('UPDATE commands SET state = ?, reason = ?, updated = ? WHERE id = ? AND device_id = ?')
         .run(state, typeof b.reason === 'string' ? b.reason.slice(0, 200) : null, Date.now(), ctx.params.id, d.id);
       if (!res.changes) throw new HttpError(404, 'NOT_FOUND', 'no such command for this device');
+      // A wipe that has started ends the device's VPN access too (its key is on the disk being wiped).
+      if (state === 'started' || state === 'completed') {
+        const c = db.prepare('SELECT envelope FROM commands WHERE id = ?').get(ctx.params.id) as { envelope: string };
+        if (json<{ command: string }>(c.envelope).command === 'RemoteWipe') removePeer(db, d.id);
+      }
       return { status: 204 };
     });
   });
@@ -330,6 +339,21 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
   r.on('GET', '/desktop/v1/os/licence', (ctx) => {
     const d = deviceFromHeader(db, ctx, true);
     send(ctx, 200, licenceFor(db, d.org_id, d.id), { 'cache-control': 'no-store' });
+  });
+
+  // Managed WireGuard VPN (WSOS-INT-001): signed per-device config; the device registers only its public key.
+  r.on('GET', '/desktop/v1/os/vpn', (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    send(ctx, 200, deviceVpnConfig(db, d.org_id, d.id), { 'cache-control': 'no-store' });
+  });
+  r.on('PUT', '/desktop/v1/os/vpn/peer', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    await idempotent(db, ctx, `device:${d.id}`, ctx.header('idempotency-key'), async () => {
+      const b = obj(await ctx.body());
+      if ('private_key' in b) throw invalid('private_key', 'never send the private key');
+      registerPeer(db, d.org_id, d.id, b.public_key as string);
+      return { status: 200, body: deviceVpnConfig(db, d.org_id, d.id) };
+    });
   });
 
   const deviceReport = (path: string, table: 'inventory' | 'update_results' | 'diagnostics', required: string[]) =>
