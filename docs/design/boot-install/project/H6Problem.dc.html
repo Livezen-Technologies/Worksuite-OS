@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Device not working</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(circle at 78% 22%, rgba(24,212,240,0.3) 0%, transparent 38%), radial-gradient(circle at 18% 80%, rgba(31,107,255,0.45) 0%, transparent 45%), linear-gradient(160deg, #0E2A66 0%, #071330 60%, #040A1A 100%)">
+<div role="dialog" aria-labelledby="hp-t" style="width: 640px; box-sizing: border-box; border-radius: 20px; background: #0F2350; border: 1px solid rgba(127,178,255,0.2); box-shadow: 0 30px 80px rgba(0,0,0,0.6); overflow: hidden">
+<div style="padding: 24px 28px; display: flex; gap: 18px; align-items: center; border-bottom: 1px solid rgba(127,178,255,0.12)">
+<span style="position: relative; width: 64px; height: 64px; border-radius: 16px; background: rgba(255,159,90,0.14); display: flex; align-items: center; justify-content: center; flex: none">
+<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFB98A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v12H3zM8 20h8M12 16v4"></path></svg>
+<span style="position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; border-radius: 50%; background: #FF8A7A; border: 3px solid #0F2350; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #0F2350">!</span>
+</span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h2 id="hp-t" style="margin: 0; font-size: 21px; font-weight: 700">Graphics driver stopped responding</h2>
+<span style="font-size: 13px; color: #8FA3C8">NVIDIA GeForce RTX 3050 · switched to the basic display driver so you can keep working.</span>
+</div>
+</div>
+<div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #C9D6EE; margin-bottom: 4px">Try these, most likely fix first:</span>
+<sc-for list="{{fixes}}" as="f" hint-placeholder-count="4">
+<button style="all: unset; display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid {{f.border}}; background: {{f.bg}}; cursor: pointer">
+<span style="width: 28px; height: 28px; border-radius: 50%; background: {{f.numBg}}; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600; flex: none">{{f.n}}</span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">{{f.title}}</span><span style="font-size: 12px; color: #8FA3C8">{{f.desc}}</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8FA3C8" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+</button>
+</sc-for>
+</div>
+<div style="padding: 14px 20px; background: rgba(4,10,26,0.35); border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: space-between">
+<a href="#" style="font-size: 13px">Show technical details</a>
+<button style="all: unset; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Close</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const F = [['Roll back to 545.29','The version that worked until today’s update.'],['Switch to the open-source driver','Stable, slightly lower gaming performance.'],['Reinstall the current driver','Downloads 142 MB and restarts.'],['Send a report','Helps WorkSuite and NVIDIA fix this.']];
+    return { fixes: F.map((f, i) => ({ n: i + 1, title: f[0], desc: f[1],
+      border: i === 0 ? '#1F6BFF' : 'rgba(127,178,255,0.14)', bg: i === 0 ? 'rgba(31,107,255,0.12)' : 'transparent', numBg: i === 0 ? '#1F6BFF' : 'rgba(127,178,255,0.15)' })) };
+  }
+}
+</script>
+</body>
+</html>

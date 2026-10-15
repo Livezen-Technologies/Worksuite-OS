@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Updates</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+@keyframes ws-shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+.ws-shine{animation:ws-shimmer 1.8s ease-in-out infinite}
+</style>
+</helmet>
+<div style="width: 1040px; height: 640px; box-sizing: border-box; border-radius: 16px; overflow: hidden; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0C1E46; border: 1px solid rgba(127,178,255,0.18); box-shadow: 0 30px 80px rgba(0,0,0,0.55)">
+<nav style="width: 220px; box-sizing: border-box; padding: 20px 12px; background: #091838; border-right: 1px solid rgba(127,178,255,0.12); display: flex; flex-direction: column; gap: 2px">
+<div style="padding: 4px 10px 16px; font-size: 16px; font-weight: 600">Settings</div>
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="7">
+<span style="display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; font-size: 14px; background: {{n.bg}}; color: {{n.color}}; font-weight: {{n.weight}}">{{n.label}}<sc-if value="{{n.badge}}" hint-placeholder-val="{{false}}"><span style="margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #18D4F0"></span></sc-if></span>
+</sc-for>
+</nav>
+<section style="flex: 1; min-width: 0; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; overflow: hidden">
+<h1 style="margin: 0; font-size: 24px; font-weight: 700">Updates</h1>
+
+<div style="display: flex; gap: 18px; align-items: center; padding: 20px; border-radius: 14px; background: rgba(14,32,72,0.8); border: 1px solid rgba(127,178,255,0.16)">
+<span style="width: 56px; height: 56px; border-radius: 14px; background: {{iconBg}}; display: flex; align-items: center; justify-content: center; flex: none">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{{iconColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{icon}}"></path></svg>
+</span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 18px; font-weight: 600">{{headline}}</span>
+<span style="font-size: 13px; color: #8FA3C8">{{sub}}</span>
+<sc-if value="{{isDownloading}}" hint-placeholder-val="{{false}}">
+<div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px">
+<div role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="58" style="position: relative; height: 8px; border-radius: 999px; background: rgba(127,178,255,0.14); overflow: hidden"><div style="position: absolute; inset: 0 42% 0 0; border-radius: 999px; background: linear-gradient(90deg, #1F6BFF, #18D4F0); overflow: hidden"><div class="ws-shine" style="position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent)"></div></div></div>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8">412 MB of 712 MB · 8.4 MB/s · about 1 min left</span>
+</div>
+</sc-if>
+</div>
+<div style="display: flex; gap: 10px; flex: none">
+<sc-if value="{{secondary}}" hint-placeholder-val="{{true}}"><button style="all: unset; padding: 11px 18px; border-radius: 10px; font-size: 14px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">{{secondary}}</button></sc-if>
+<button style="all: unset; padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: {{ctaBg}}; cursor: pointer">{{primary}}</button>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; flex: 1; min-height: 0">
+<div style="padding: 18px 20px; border-radius: 14px; background: rgba(14,32,72,0.5); border: 1px solid rgba(127,178,255,0.12); display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; font-weight: 600">What's in 1.1</span><a href="#" style="font-size: 13px">Full release notes</a></div>
+<sc-for list="{{notes}}" as="n" hint-placeholder-count="5">
+<div style="display: flex; gap: 12px; font-size: 13px; line-height: 1.45">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 3px 0; width: 64px; text-align: center; border-radius: 5px; background: {{n.tagBg}}; color: {{n.tagColor}}; flex: none; align-self: flex-start">{{n.tag}}</span>
+<span style="color: #C9D6EE">{{n.text}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="padding: 16px 18px; border-radius: 14px; background: rgba(14,32,72,0.5); border: 1px solid rgba(127,178,255,0.12); display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 14px; font-weight: 600">Options</span>
+<label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #C9D6EE">Download automatically<input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #1F6BFF"></label>
+<label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #C9D6EE">Install overnight (02:00–05:00)<input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #1F6BFF"></label>
+<label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #C9D6EE">Pause on metered connections<input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #1F6BFF"></label>
+</div>
+<div style="padding: 16px 18px; border-radius: 14px; background: rgba(14,32,72,0.5); border: 1px solid rgba(127,178,255,0.12); display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+<span style="font-size: 14px; font-weight: 600">This computer</span>
+<span style="color: #8FA3C8">WorkSuite OS 1.0 · stable channel</span>
+<span style="color: #8FA3C8">Last checked today at 20:58</span>
+<a href="#" style="margin-top: 4px">Update history</a>
+</div>
+</div>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["available","downloading","ready"],"default":"available"},"$preview":{"width":1040,"height":640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.state ?? 'available';
+    const S = {
+      available: ['WorkSuite OS 1.1 is available', '712 MB download · security fixes and new features · released 14 Oct', 'Later', 'Download and install', 'M12 4v11M7 10l5 5 5-5M4 20h16', '#7FB2FF', 'rgba(31,107,255,0.18)', '#1F6BFF'],
+      downloading: ['Downloading WorkSuite OS 1.1', 'You can keep working. We’ll let you know when it’s ready.', 'Pause', 'Cancel', 'M12 4v11M7 10l5 5 5-5M4 20h16', '#18D4F0', 'rgba(24,212,240,0.14)', 'rgba(127,178,255,0.18)'],
+      ready: ['Restart to finish updating', 'Downloaded and verified · takes about 4 minutes · your apps will reopen', 'Schedule…', 'Restart now', 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4', '#5FD39A', 'rgba(95,211,154,0.14)', '#1F6BFF']
+    }[s];
+    const N = [['Network','',false],['Bluetooth','',false],['Display','',false],['Appearance','',false],['Privacy','',false],['Updates','',true],['About','',false]];
+    const nav = N.map(n => ({ label: n[0], badge: n[2] && s !== 'downloading', bg: n[2] ? 'rgba(31,107,255,0.2)' : 'transparent', color: n[2] ? '#FFFFFF' : '#C9D6EE', weight: n[2] ? 600 : 400 }));
+    const T = [['SECURITY','Fixes 14 vulnerabilities, including 2 critical kernel issues.','rgba(255,138,122,0.16)','#FF8A7A'],['NEW','Notification center groups messages by app.','rgba(31,107,255,0.2)','#7FB2FF'],['NEW','Lock screen shows media controls.','rgba(31,107,255,0.2)','#7FB2FF'],['IMPROVED','Up to 20% faster wake from sleep.','rgba(95,211,154,0.16)','#5FD39A'],['FIXED','Wi-Fi reconnects reliably after sleep.','rgba(127,178,255,0.12)','#C9D6EE']];
+    return { nav, headline: S[0], sub: S[1], secondary: S[2], primary: S[3], icon: S[4], iconColor: S[5], iconBg: S[6], ctaBg: S[7],
+      isDownloading: s === 'downloading',
+      notes: T.map(t => ({ tag: t[0], text: t[1], tagBg: t[2], tagColor: t[3] })) };
+  }
+}
+</script>
+</body>
+</html>

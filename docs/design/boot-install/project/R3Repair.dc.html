@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recovery – startup repair</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+@keyframes ws-spin{to{transform:rotate(360deg)}}
+.ws-spin{animation:ws-spin 1s linear infinite;transform-origin:50% 50%}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; position: relative; background: radial-gradient(ellipse 70% 50% at 50% 0%, #0E2A55 0%, #061029 60%, #030816 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA">
+<header style="height: 64px; box-sizing: border-box; padding: 0 40px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(127,178,255,0.1)">
+<span style="font-size: 16px; font-weight: 600">WorkSuite Recovery</span>
+<span style="margin-left: auto; font-size: 13px; color: #8FA3C8">Startup repair</span>
+</header>
+<div style="padding: 48px 160px 0; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h1 style="margin: 0; font-size: 30px; font-weight: 700">Checking your system</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">This can take a few minutes. Your files won't be changed.</p>
+</div>
+<div style="height: 8px; border-radius: 4px; background: rgba(127,178,255,0.12); overflow: hidden"><div style="height: 100%; width: 64%; background: linear-gradient(90deg, #1F6BFF, #18D4F0); border-radius: 4px"></div></div>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{checks}}" as="c" hint-placeholder-count="6">
+<li style="display: flex; align-items: center; gap: 14px; padding: 13px 16px; border-radius: 10px; background: {{c.bg}}; border: 1px solid {{c.border}}">
+<sc-if value="{{c.ok}}" hint-placeholder-val="{{true}}"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#5FD39A"></circle><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#061029" stroke-width="2.4" stroke-linecap="round"></path></svg></sc-if>
+<sc-if value="{{c.fixed}}" hint-placeholder-val="{{false}}"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#FFB98A"></circle><path d="M12 7v6M12 16.5h.01" stroke="#061029" stroke-width="2.4" stroke-linecap="round"></path></svg></sc-if>
+<sc-if value="{{c.active}}" hint-placeholder-val="{{false}}"><svg class="ws-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"></path></svg></sc-if>
+<sc-if value="{{c.wait}}" hint-placeholder-val="{{false}}"><span style="width: 20px; height: 20px; box-sizing: border-box; border-radius: 50%; border: 2px solid rgba(127,178,255,0.3)"></span></sc-if>
+<span style="flex: 1; font-size: 15px; color: {{c.color}}">{{c.label}}</span>
+<span style="font-size: 13px; color: {{c.noteColor}}">{{c.note}}</span>
+</li>
+</sc-for>
+</ol>
+</div>
+<footer style="position: absolute; left: 0; right: 0; bottom: 0; height: 72px; box-sizing: border-box; padding: 0 160px; border-top: 1px solid rgba(127,178,255,0.1); display: flex; align-items: center; justify-content: space-between">
+<button style="all: unset; font-size: 14px; color: #7FB2FF; cursor: pointer">Show log</button>
+<button style="all: unset; padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Stop</button>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = [['Boot loader','ok','Fine'],['Disk and file system','fixed','Repaired 2 errors'],['Encrypted volume','ok','Unlocked'],['System files','active','Verifying 18,240 files…'],['Drivers','wait',''],['Last update','wait','']];
+    return { checks: C.map(c => ({ label: c[0], note: c[2], ok: c[1] === 'ok', fixed: c[1] === 'fixed', active: c[1] === 'active', wait: c[1] === 'wait',
+      bg: c[1] === 'active' ? 'rgba(24,212,240,0.08)' : 'rgba(14,32,72,0.45)', border: c[1] === 'active' ? 'rgba(24,212,240,0.3)' : 'rgba(127,178,255,0.08)',
+      color: c[1] === 'wait' ? '#8FA3C8' : '#E8EEFA', noteColor: c[1] === 'fixed' ? '#FFB98A' : '#8FA3C8' })) };
+  }
+}
+</script>
+</body>
+</html>
