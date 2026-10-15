@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite Tasks
+GenericName=Tasks
+Comment=To-dos and task lists
+Exec=worksuite-app tasks
+TryExec=worksuite-app
+Icon=worksuite-tasks
+Terminal=false
+Categories=Office;ProjectManagement;
+Keywords=worksuite;todo;tasks;
+StartupNotify=true
+StartupWMClass=worksuite-tasks

@@ -6,6 +6,9 @@ import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broke
 import { deviceInfo, enrollDevice } from './device'
 import { followJobs, packageClient } from './packages'
 import { recoveryHost } from './recovery'
+import { prepareAppMode, runAppMode } from './appwindow'
+import { loadSession, parseAppArgs } from './webapps'
+import { execProgram, findOffice, installedApps, OFFICE_NEW } from './xdg'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
@@ -52,6 +55,14 @@ function createWindow() {
   void win.loadFile(path.join(__dirname, '../dist/index.html'), mode ? { query: { mode } } : undefined)
 }
 
+// `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
+const appRequest = parseAppArgs(process.argv)
+if (appRequest) {
+  if (prepareAppMode(appRequest)) runAppMode(appRequest)
+  else app.quit()
+} else startShell()
+
+function startShell() {
 app.whenReady().then(() => {
   // Web permissions denied by default (WSOS-SEC-003).
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
@@ -64,6 +75,24 @@ app.whenReady().then(() => {
     return verbs[action] ? run('systemctl', [verbs[action]]) : undefined
   })
   handle('ws:launchApp', (id) => (APP_ID.test(id) ? run('gtk-launch', [id]) : undefined))
+  // Launcher data: the org's WorkSuite web apps (no token leaves the main process) and installed XDG apps.
+  handle('ws:webApps', async () => {
+    const r = await loadSession((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }))
+    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name }) => ({ id, name })) } : r
+  })
+  handle('ws:installedApps', () => {
+    const all = installedApps()
+    const office = findOffice(all)
+    // worksuite-* entries are the web app windows, listed from the org's data instead.
+    return { apps: all.filter((e) => !e.id.startsWith('worksuite-') || e === office).map(({ exec: _e, ...e }) => e), office: office?.id ?? null }
+  })
+  // WorkSuite Office "new document" entries: the detected editor's program with its --new switch (no shell).
+  handle('ws:launchOffice', (kind) => {
+    const office = findOffice(installedApps())
+    if (!office) return undefined
+    const prog = execProgram(office.exec)
+    return kind in OFFICE_NEW && prog ? run(prog, [OFFICE_NEW[kind]]) : run('gtk-launch', [office.id])
+  })
   handle('ws:openLink', (url) => {
     const u = new URL(url)
     if (!ALLOWED_SCHEMES.has(u.protocol)) throw new Error('Scheme not allowed')
@@ -144,4 +173,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => app.quit())
+}
 
