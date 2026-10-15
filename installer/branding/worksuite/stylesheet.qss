@@ -147,3 +147,8 @@ QDialogButtonBox { background: transparent; }
 #wsKeyPlain { color: #5E739C; font-family: "IBM Plex Mono"; font-size: 12px; }
 #wsAck { background: rgba(14, 32, 72, 0.6); border: 1px solid rgba(127, 178, 255, 0.2); border-radius: 12px; padding: 14px 16px; font-size: 15px; }
 #wsAck:checked { border-color: #1F6BFF; }
+
+/* Calamares' error and confirmation dialogs (design: Message boxes): dark raised card, details on navy. */
+QDialog { background: #0F2350; color: #E8EEFA; }
+QDialog QLabel { color: #C9D6EE; }
+QDialog QAbstractScrollArea, QDialog QAbstractScrollArea > QWidget { background: #081634; color: #C9D6EE; border: 1px solid rgba(127, 178, 255, 0.16); border-radius: 10px; }
