@@ -6,8 +6,8 @@ After=dbus.service
 [Service]
 Type=dbus
 BusName=lk.worksuite.PackageService1
-ExecStart=/usr/libexec/worksuite/worksuite-package-service
-# Bus-activated; exits when idle. Must not be killed mid-dpkg.
+ExecStart=/usr/bin/node --no-warnings /usr/lib/worksuite/package-service/src/main.ts
+# Bus-activated. Must not be killed mid-dpkg.
 KillMode=mixed
 TimeoutStopSec=30min
 # Hardening (WSOS-SEC-007). dpkg needs to write / so ProtectSystem=strict is not possible;

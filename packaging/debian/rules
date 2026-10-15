@@ -3,3 +3,8 @@
 # from the same tag (WSOS-ARM-001).
 %:
 	dh $@
+
+# The package service's one runtime dependency (dbus-next) is vendored from its lockfile at build time.
+override_dh_auto_build:
+	cd services/package-service && npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+	dh_auto_build

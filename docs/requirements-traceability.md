@@ -47,3 +47,4 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 §13.1 adversarial cases covered by `services/sync/test/sync.test.ts`: duplicate mutation → one effect; crash after
 server commit before ack → no duplicate; two offline edits → conflict kept; expired token → pending kept.
 Command replay is covered by `services/device-agent/test/commands.test.ts`.
+| WSOS-APT-001/002/003/004/006, WSOS-APP-002/003, WSOS-FLP-001/002/004, WSOS-UPD-001 (device side) | `services/package-service/src/service.ts`, `src/apt.ts`, `src/dbus.ts` | Impl |

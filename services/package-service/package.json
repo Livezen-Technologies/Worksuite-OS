@@ -1,0 +1,14 @@
+{
+  "name": "@worksuite-os/package-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "lk.worksuite.PackageService1: APT/Flatpak install, remove, update and repair behind polkit (SRS §6, §9.1–9.2)",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "test": "node --no-warnings --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": { "dbus-next": "0.10.2" },
+  "devDependencies": { "typescript": "^5.9.0", "@types/node": "^22.18.0" }
+}

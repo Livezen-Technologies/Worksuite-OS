@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [sync, device-agent, credentials]
+        package: [sync, device-agent, credentials, package-service]
     defaults:
       run:
         working-directory: services/${{ matrix.package }}
@@ -40,4 +40,9 @@ jobs:
         with:
           node-version: 22
       # Node 22 runs the TypeScript tests directly; node:sqlite is built in.
+      - if: hashFiles(format('services/{0}/package-lock.json', matrix.package)) != ''
+        run: npm ci --no-audit --no-fund
+      # package-service tests start a private dbus-daemon.
+      - if: matrix.package == 'package-service'
+        run: sudo apt-get install -y --no-install-recommends dbus-daemon
       - run: npm test

@@ -53,7 +53,7 @@ Description: WorkSuite user services (catalog, files, credentials broker, sync)
 
 Package: worksuite-package-service
 Architecture: amd64 arm64
-Depends: apt, dpkg, flatpak, polkitd | policykit-1, dbus, ${misc:Depends}
+Depends: nodejs (>= 22.18), apt, dpkg, flatpak, polkitd | policykit-1, dbus, ${misc:Depends}
 Description: WorkSuite system package service (D-Bus + polkit)
 
 Package: worksuite-device-agent

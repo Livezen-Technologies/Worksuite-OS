@@ -3,3 +3,6 @@ services/package-service/dbus/lk.worksuite.PackageService1.service usr/share/dbu
 services/package-service/dbus/lk.worksuite.PackageService1.xml usr/share/dbus-1/interfaces/
 services/package-service/polkit/lk.worksuite.package.policy usr/share/polkit-1/actions/
 services/package-service/systemd/worksuite-package-service.service usr/lib/systemd/system/
+services/package-service/src usr/lib/worksuite/package-service/
+services/package-service/package.json usr/lib/worksuite/package-service/
+services/package-service/node_modules usr/lib/worksuite/package-service/
