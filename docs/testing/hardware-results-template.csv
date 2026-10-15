@@ -1,0 +1,2 @@
+run_id,date,tester,wsos_id,check,device_profile,device_model,arch,image_version,metric,measured,limit,unit,result,evidence,notes
+example-001,2026-10-15,initials,WSOS-PRF-001,Greeter boot time,hw-amd64,vendor model,amd64,1.0.0-rc1,greeter_s,21.4,30,s,pass,systemd-analyze.txt,median of 5 cold boots
