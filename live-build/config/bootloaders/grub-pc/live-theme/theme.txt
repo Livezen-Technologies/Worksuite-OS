@@ -31,17 +31,17 @@ terminal-font: "Unifont Regular 16"
         scrollbar = false
 }
 
-# Countdown in the footer after "Auto-start in": the bar is footer-coloured, only its text shows ("10s").
+# Countdown at the end of the footer: the bar is footer-coloured, only its text shows ("Auto-start in 10s").
 + progress_bar {
         id = "__timeout__"
-        left = 50%+225
+        left = 50%+173
         top = 50%+357
-        width = 60
+        width = 140
         height = 20
         font = "IBM Plex Mono Regular 13"
         text_color = "#C9D6EE"
         fg_color = "#050C22"
         bg_color = "#050C22"
         border_color = "#050C22"
-        text = "@TIMEOUT_NOTIFICATION_SHORT@"
+        text = "Auto-start in %ds"
 }

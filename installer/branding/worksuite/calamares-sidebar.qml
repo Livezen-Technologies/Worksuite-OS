@@ -1,5 +1,6 @@
 /* WorkSuite installer sidebar (design: "WorkSuite OS Boot & Install" › Installer). The design's steps are fixed;
-   each Calamares step (settings.conf sequence, exec counts as one) maps to one of them. */
+   each Calamares step (settings.conf sequence, exec counts as one) maps to one of them. Calamares 3.3 caps a QML
+   sidebar at 190 px (CalamaresWindow.cpp), so this is the design's 288 px sidebar fitted to that width. */
 import io.calamares.ui 1.0
 import io.calamares.core 1.0
 import QtQuick 2.15
@@ -8,7 +9,6 @@ import QtQuick.Layouts 1.15
 Rectangle {
     id: sideBar
     anchors.fill: parent
-    implicitWidth: 288
     color: "#071330"
 
     // Calamares step index → design step: welcome, keyboard | partition | users | locale | summary, confirm-erase | install, recovery key, finished
@@ -25,13 +25,14 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: 28; anchors.rightMargin: 28; anchors.topMargin: 40; anchors.bottomMargin: 40
-        spacing: 36
+        anchors.leftMargin: 14; anchors.rightMargin: 14; anchors.topMargin: 32; anchors.bottomMargin: 28
+        spacing: 28
 
         RowLayout {
-            spacing: 12
+            Layout.leftMargin: 8
+            spacing: 10
             Image { source: "file:/" + Branding.imagePath(Branding.ProductLogo); sourceSize.width: 24; sourceSize.height: 30; fillMode: Image.PreserveAspectFit }
-            Text { text: qsTr("WorkSuite OS Setup"); color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 17; font.weight: Font.DemiBold }
+            Text { text: qsTr("WorkSuite OS\nSetup"); color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 15; font.weight: Font.DemiBold; lineHeight: 1.1 }
         }
 
         ColumnLayout {
@@ -46,8 +47,8 @@ Rectangle {
                     radius: 8
                     color: active ? "#2E1F6BFF" : "transparent"   // rgba(31,107,255,0.18)
                     RowLayout {
-                        anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
-                        spacing: 12
+                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 6
+                        spacing: 10
                         Rectangle {
                             width: 24; height: 24; radius: 12
                             color: done ? "#5FD39A" : active ? "#1F6BFF" : "#1A2A55"
@@ -64,6 +65,7 @@ Rectangle {
                             color: done || active ? "#E8EEFA" : "#8FA3C8"
                             font.family: "IBM Plex Sans"; font.pixelSize: 14
                             font.weight: active ? Font.DemiBold : Font.Normal
+                            elide: Text.ElideRight
                         }
                     }
                 }
@@ -72,6 +74,6 @@ Rectangle {
 
         Item { Layout.fillHeight: true }
 
-        Text { text: Branding.string(Branding.Version) + " · amd64"; color: "#5E739C"; font.family: "IBM Plex Mono"; font.pixelSize: 12 }
+        Text { Layout.leftMargin: 8; text: Branding.string(Branding.Version) + " · amd64"; color: "#5E739C"; font.family: "IBM Plex Mono"; font.pixelSize: 12 }
     }
 }

@@ -27,6 +27,5 @@
     <rect x="444.5" y="757.5" width="46" height="21" rx="5" fill="none" stroke="#3D5280"/><text x="467.5" y="772" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">Enter</text><text x="498" y="772">Start</text>
     <rect x="570.5" y="757.5" width="22" height="21" rx="5" fill="none" stroke="#3D5280"/><text x="581.5" y="772" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">E</text><text x="600" y="772">Edit entry</text>
     <rect x="698.5" y="757.5" width="22" height="21" rx="5" fill="none" stroke="#3D5280"/><text x="709.5" y="772" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">C</text><text x="728" y="772">Command line</text>
-    <text x="850" y="772" fill="#C9D6EE">Auto-start in</text>
   </g>
 </svg>
