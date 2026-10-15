@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Installer – Computer name</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="Sidebar" step="3" sub="2" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 80% 60% at 70% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="flex: 1; padding: 40px 56px 0; display: flex; flex-direction: column; gap: 26px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: 0.08em">STEP 3 · COMPUTER NAME</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em">Name this computer</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">Other devices on your network will see it by this name.</p>
+</div>
+<div style="display: flex; gap: 40px; align-items: center">
+<div style="width: 300px; height: 200px; border-radius: 16px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.14); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px">
+<svg width="96" height="72" viewBox="0 0 96 72" aria-hidden="true"><rect x="12" y="4" width="72" height="48" rx="5" fill="#0D2353" stroke="#7FB2FF" stroke-width="2"></rect><rect x="40" y="18" width="16" height="16" rx="2" fill="#1F6BFF"></rect><path d="M2 62h92l-6 6H8z" fill="#7FB2FF"></path></svg>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: #FFFFFF">{{host}}</span>
+</div>
+<div style="flex: 1; max-width: 460px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="hn" style="font-size: 13px; font-weight: 500; color: #C9D6EE">Computer name</label>
+<input id="hn" value="{{host}}" onInput="{{setHost}}" style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px solid {{border}}; background: rgba(4,10,26,0.5); color: #E8EEFA; font-family: 'IBM Plex Mono', monospace; font-size: 14px">
+<span style="font-size: 12px; color: {{hintColor}}">{{hint}}</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #8FA3C8">Suggestions</span>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<sc-for list="{{sugs}}" as="s" hint-placeholder-count="3">
+<button onClick="{{s.pick}}" style="all: unset; padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(127,178,255,0.25); font-family: 'IBM Plex Mono', monospace; font-size: 13px; cursor: pointer">{{s.name}}</button>
+</sc-for>
+</div>
+</div>
+</div>
+</div>
+</div>
+<footer style="height: 80px; box-sizing: border-box; padding: 0 56px; border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: space-between">
+<button style="all: unset; padding: 12px 16px; font-size: 15px; color: #8FA3C8; cursor: pointer">Quit installer</button>
+<div style="display: flex; gap: 12px">
+<button style="all: unset; padding: 12px 24px; border-radius: 10px; font-size: 15px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Back</button>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Continue</button>
+</div>
+</footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { host: 'alex-laptop' }; }
+  renderVals() {
+    const h = this.state.host;
+    const ok = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(h);
+    const sugs = ['alex-laptop', 'alex-worksuite', 'alex-desktop'].map(n => ({ name: n, pick: () => this.setState({ host: n }) }));
+    return { host: h, sugs, border: ok ? 'rgba(127,178,255,0.25)' : '#FF8A7A',
+      hint: ok ? 'Lowercase letters, numbers and hyphens' : 'Use only lowercase letters, numbers and hyphens (not at the start or end)',
+      hintColor: ok ? '#8FA3C8' : '#FF8A7A', setHost: e => this.setState({ host: e.target.value }) };
+  }
+}
+</script>
+</body>
+</html>

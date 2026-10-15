@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Files – right-click menu</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA">
+<dc-import name="FM1Grid" hint-size="1280px,800px"></dc-import>
+<div role="menu" aria-label="Budget 2027" style="position: absolute; left: 520px; top: 380px; width: 260px; box-sizing: border-box; padding: 6px; border-radius: 12px; background: rgba(12,28,66,0.98); border: 1px solid rgba(127,178,255,0.22); box-shadow: 0 20px 50px rgba(0,0,0,0.55); display: flex; flex-direction: column">
+<sc-for list="{{items}}" as="i" hint-placeholder-count="12">
+<sc-if value="{{i.sep}}" hint-placeholder-val="{{false}}"><div style="height: 1px; background: rgba(127,178,255,0.12); margin: 4px 6px"></div></sc-if>
+<sc-if value="{{i.label}}" hint-placeholder-val="{{true}}">
+<button role="menuitem" style="all: unset; display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 7px; font-size: 13px; color: {{i.color}}; background: {{i.bg}}; cursor: pointer">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{{i.color}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{i.icon}}"></path></svg>
+<span style="flex: 1">{{i.label}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E739C">{{i.key}}</span>
+</button>
+</sc-if>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const I = [
+      ['Open','M5 5h14v14H5zM9 9h6v6','Enter'],['Open with…','M9 6l6 6-6 6',''],['','','',1],
+      ['Cut','M6 9a3 3 0 1 0 0-.01M6 15a3 3 0 1 0 0 .01M8.5 10.5L20 4M8.5 13.5L20 20','Ctrl X'],['Copy','M8 8h12v12H8zM4 16V4h12','Ctrl C'],['Duplicate','M8 8h12v12H8zM14 11v6M11 14h6',''],['','','',1],
+      ['Rename','M4 20h4L19 9l-4-4L4 16zM13 7l4 4','F2'],['Star','M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z',''],['Share…','M4 12v8h16v-8M12 3v13M7 8l5-5 5 5',''],['Compress','M8 3h8v18H8zM12 6v2M12 10v2M12 14v2',''],['','','',1],
+      ['Properties','M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01','Alt Enter'],['Move to Trash','M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13','Del']
+    ];
+    return { items: I.map((i, k) => ({ label: i[0], icon: i[1], key: i[2], sep: !!i[3],
+      color: i[0] === 'Move to Trash' ? '#FF8A7A' : '#E8EEFA', bg: k === 4 ? 'rgba(31,107,255,0.25)' : 'transparent' })) };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Installer – Name and password</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="Sidebar" step="3" sub="1" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 80% 60% at 70% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="flex: 1; padding: 40px 56px 0; display: flex; flex-direction: column; gap: 26px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: 0.08em">STEP 3 · NAME AND PASSWORD</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em">Who will use this computer?</h1>
+</div>
+<div style="display: flex; gap: 44px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+<div style="width: 112px; height: 112px; border-radius: 50%; background: linear-gradient(135deg, #1F6BFF, #18D4F0); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 600">{{initials}}</div>
+<button style="all: unset; font-size: 13px; color: #7FB2FF; cursor: pointer">Change picture</button>
+</div>
+<div style="flex: 1; max-width: 560px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px">
+<div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px">
+<label for="fn" style="font-size: 13px; font-weight: 500; color: #C9D6EE">Your full name</label>
+<input id="fn" value="{{name}}" onInput="{{setName}}" style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit">
+</div>
+<div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px">
+<label for="un" style="font-size: 13px; font-weight: 500; color: #C9D6EE">Username for signing in</label>
+<input id="un" value="{{user}}" style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font-family: 'IBM Plex Mono', monospace; font-size: 14px">
+<span style="font-size: 12px; color: #8FA3C8">Lowercase letters, numbers, - and _. Filled in from your name.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="pw" style="font-size: 13px; font-weight: 500; color: #C9D6EE">Password</label>
+<input id="pw" type="password" style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="pw2" style="font-size: 13px; font-weight: 500; color: #C9D6EE">Confirm password</label>
+<input id="pw2" type="password" style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit">
+</div>
+<label style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; font-size: 14px; color: #C9D6EE"><input type="checkbox" checked style="width: 18px; height: 18px; accent-color: #1F6BFF">Use this password for the administrator account</label>
+<label style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; font-size: 14px; color: #C9D6EE"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #1F6BFF">Sign in automatically</label>
+</div>
+</div>
+</div>
+<footer style="height: 80px; box-sizing: border-box; padding: 0 56px; border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: space-between">
+<button style="all: unset; padding: 12px 16px; font-size: 15px; color: #8FA3C8; cursor: pointer">Quit installer</button>
+<div style="display: flex; gap: 12px">
+<button style="all: unset; padding: 12px 24px; border-radius: 10px; font-size: 15px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Back</button>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Continue</button>
+</div>
+</footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { name: 'Alex Perera' }; }
+  renderVals() {
+    const n = this.state.name;
+    const parts = n.trim().split(/\s+/).filter(Boolean);
+    const initials = (parts.map(p => p[0]).join('').slice(0, 2) || '?').toUpperCase();
+    const user = (parts[0] || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    return { name: n, initials, user, setName: e => this.setState({ name: e.target.value }) };
+  }
+}
+</script>
+</body>
+</html>

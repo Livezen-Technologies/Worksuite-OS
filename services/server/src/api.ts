@@ -187,6 +187,63 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     send(ctx, 200, { app_id: u.hostname, route, web_url });
   });
 
+  /*
+   * Search and recent files over the caller's own synced records (desktop/v1/search, files/search, files/recent).
+   * The real platform answers these from GET api/search/global, GET api/files/search and
+   * GET api/drive/list?view=recent (worksuite: app/Modules/Search/Config/Routes.php, app/Modules/Files/Config/Routes.php);
+   * this stub searches the `records` table, which is scoped by user_id, so one account never sees another's.
+   */
+  const SEARCH_TYPES: Record<string, string> = { mail: 'mail', files: 'file', drive: 'file', contacts: 'contact', crm: 'crm', tasks: 'task', chat: 'chat', calendar: 'event', notes: 'note', projects: 'project', docs: 'document' };
+  type Rec = { module: string; object_id: string; data: string | null; updated: number };
+  const textOf = (d: Record<string, unknown>, ...k: string[]) => { for (const x of k) if (typeof d[x] === 'string' && d[x]) return d[x] as string; return ''; };
+  const hit = (r: Rec, q: string) => {
+    const d = (r.data ? JSON.parse(r.data) : {}) as Record<string, unknown>;
+    const title = textOf(d, 'title', 'subject', 'name') || r.object_id;
+    const subtitle = textOf(d, 'subtitle', 'from', 'email', 'snippet', 'body').slice(0, 90);
+    const hay = [title, subtitle, textOf(d, 'body')].join(' ').toLowerCase();
+    if (q && !hay.includes(q)) return null;
+    const t = title.toLowerCase();
+    const score = !q ? 0 : t === q ? 1 : t.startsWith(q) ? 0.8 : t.includes(q) ? 0.6 : 0.3;
+    return { id: `${r.module}:${r.object_id}`, type: SEARCH_TYPES[r.module], title, subtitle: subtitle || null, link: `worksuite://${r.module}/${encodeURIComponent(r.object_id)}`, at: new Date(r.updated).toISOString(), score, d };
+  };
+  const records = (userId: number, modules: string[]) => modules.length === 0 ? [] : db.prepare(
+    `SELECT module, object_id, data, updated FROM records WHERE user_id = ? AND deleted = 0 AND module IN (${modules.map(() => '?').join(',')}) ORDER BY updated DESC LIMIT 2000`,
+  ).all(userId, ...modules) as Rec[];
+  const fileOut = (h: NonNullable<ReturnType<typeof hit>>) => ({
+    id: h.id, name: h.title, ext: (h.title.split('.').pop() ?? '').toLowerCase(), folder: textOf(h.d, 'folder', 'folder_name') || null,
+    size: typeof h.d.size === 'number' ? h.d.size : null, modified: h.at, link: h.link, score: h.score,
+  });
+  const queryOf = (ctx: Ctx) => {
+    const q = (ctx.url.searchParams.get('q') ?? '').trim().toLowerCase();
+    if (q.length < 1 || q.length > 200) throw invalid('q', '1 to 200 characters');
+    return q;
+  };
+
+  r.on('GET', '/desktop/v1/search', (ctx) => {
+    const { user } = userCtx(db, ctx);
+    const q = queryOf(ctx);
+    const want = (ctx.url.searchParams.get('types') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const modules = Object.keys(SEARCH_TYPES).filter((m) => SEARCH_TYPES[m] !== 'file' && (!want.length || want.includes(SEARCH_TYPES[m])));
+    const limit = Math.min(50, limitOf(ctx));
+    const results = records(user.id, modules).map((r) => hit(r, q)).filter((h) => h !== null)
+      .sort((a, b) => b.score - a.score).slice(0, limit).map(({ d: _d, ...h }) => h);
+    send(ctx, 200, { query: q, results, state: 'ready' });
+  });
+
+  r.on('GET', '/desktop/v1/files/search', (ctx) => {
+    const { user } = userCtx(db, ctx);
+    const q = queryOf(ctx);
+    const files = records(user.id, ['files', 'drive']).map((r) => hit(r, q)).filter((h) => h !== null)
+      .sort((a, b) => b.score - a.score).slice(0, Math.min(50, limitOf(ctx))).map(fileOut);
+    send(ctx, 200, { query: q, files });
+  });
+
+  r.on('GET', '/desktop/v1/files/recent', (ctx) => {
+    const { user } = userCtx(db, ctx);
+    const files = records(user.id, ['files', 'drive']).slice(0, Math.min(50, limitOf(ctx))).map((r) => fileOut(hit(r, '')!));
+    send(ctx, 200, { files });
+  });
+
   r.on('POST', '/desktop/v1/audit', async (ctx) => {
     const { user } = userCtx(db, ctx);
     await idempotent(db, ctx, `user:${user.id}`, ctx.header('idempotency-key'), async () => {

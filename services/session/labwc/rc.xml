@@ -14,6 +14,7 @@
     <followMouse>no</followMouse>
     <raiseOnFocus>no</raiseOnFocus>
   </focus>
+  <desktops number="4"/>
   <keyboard>
     <!-- Super opens the WorkSuite launcher via the shell's D-Bus API. -->
     <keybind key="Super_L" onRelease="yes">
@@ -24,6 +25,20 @@
       <action name="Execute" command="loginctl lock-session"/>
     </keybind>
     <keybind key="A-F4"><action name="Close"/></keybind>
+    <!-- Workspaces (WSOS-DSK-011): Super+1…4 switch, Super+Shift+1…4 move the window, Ctrl+Alt+Left/Right step. -->
+    <keybind key="W-1"><action name="GoToDesktop" to="1"/></keybind>
+    <keybind key="W-2"><action name="GoToDesktop" to="2"/></keybind>
+    <keybind key="W-3"><action name="GoToDesktop" to="3"/></keybind>
+    <keybind key="W-4"><action name="GoToDesktop" to="4"/></keybind>
+    <keybind key="W-S-1"><action name="SendToDesktop" to="1" follow="no"/></keybind>
+    <keybind key="W-S-2"><action name="SendToDesktop" to="2" follow="no"/></keybind>
+    <keybind key="W-S-3"><action name="SendToDesktop" to="3" follow="no"/></keybind>
+    <keybind key="W-S-4"><action name="SendToDesktop" to="4" follow="no"/></keybind>
+    <keybind key="C-A-Left"><action name="GoToDesktop" to="left" wrap="yes"/></keybind>
+    <keybind key="C-A-Right"><action name="GoToDesktop" to="right" wrap="yes"/></keybind>
+    <!-- Screenshot through xdg-desktop-portal (shell/electron/screenshot.ts): Print = whole screen, Shift+Print = choose. -->
+    <keybind key="Print"><action name="Execute" command="worksuite-screenshot"/></keybind>
+    <keybind key="S-Print"><action name="Execute" command="worksuite-screenshot --interactive"/></keybind>
   </keyboard>
   <windowRules>
     <!-- The shell's own windows are normal toplevels; never fullscreen-as-desktop (§5.1 decision gate). -->

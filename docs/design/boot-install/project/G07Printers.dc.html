@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Printers</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Printers" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 32px 44px; display: flex; flex-direction: column; gap: 18px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="display: flex; align-items: center; justify-content: space-between"><h1 style="margin: 0; font-size: 28px; font-weight: 700">Printers</h1><button style="all: unset; padding: 10px 18px; border-radius: 10px; background: #1F6BFF; font-size: 14px; font-weight: 600; cursor: pointer">Add printer</button></div>
+<sc-for list="{{printers}}" as="p" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid {{p.border}}">
+<div style="display: flex; align-items: center; gap: 16px">
+<span style="width: 48px; height: 48px; border-radius: 12px; background: rgba(31,107,255,0.16); display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600">{{p.n}}<sc-if value="{{p.def}}" hint-placeholder-val="{{false}}"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(95,211,154,0.16); color: #5FD39A">DEFAULT</span></sc-if></span><span style="font-size: 12px; color: #8FA3C8">{{p.d}}</span></span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: {{p.sc}}"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{p.sc}}"></span>{{p.s}}</span>
+</div>
+<div style="display: flex; gap: 18px; align-items: center">
+<sc-for list="{{p.inks}}" as="k" hint-placeholder-count="4"><span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8FA3C8"><span style="width: 36px; height: 6px; border-radius: 3px; background: rgba(127,178,255,0.15); overflow: hidden; display: inline-block"><span style="display: block; height: 100%; width: {{k.w}}; background: {{k.c}}"></span></span>{{k.w}}</span></sc-for>
+<span style="margin-left: auto; display: flex; gap: 8px"><button style="all: unset; padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(127,178,255,0.25); font-size: 12px; cursor: pointer">Print queue ({{p.q}})</button><button style="all: unset; padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(127,178,255,0.25); font-size: 12px; cursor: pointer">Test page</button></span>
+</div>
+</div>
+</sc-for>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = [['HP LaserJet M110w','USB · driverless (IPP)',1,'Ready','#5FD39A',[['82%','#C9D6EE']],0],['Office Color MFP','Network · 10.0.4.21 · 3rd floor',0,'Low on yellow','#FFB98A',[['64%','#18D4F0'],['48%','#E0559B'],['9%','#FFD24A'],['71%','#C9D6EE']],2]];
+    return { printers: P.map(p => ({ n: p[0], d: p[1], def: !!p[2], s: p[3], sc: p[4], inks: p[5].map(k => ({ w: k[0], c: k[1] })), q: p[6], border: p[2] ? 'rgba(31,107,255,0.5)' : 'rgba(127,178,255,0.12)' })) };
+  }
+}
+</script>
+</body>
+</html>

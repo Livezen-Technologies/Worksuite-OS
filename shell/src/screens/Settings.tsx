@@ -23,6 +23,7 @@ const NAV = [
   { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
   { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
   { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
+  { id: 'Default apps', tint: '#0E8FA8', icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 16.5h7M16.5 13v7' },
   { id: 'Privacy & security', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', sep: true },
   { id: 'Users', tint: '#8FA3C8', icon: 'M9 8a3.5 3.5 0 1 0 0 .01M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7' },
   { id: 'Devices', tint: '#8FA3C8', icon: 'M4 6h16v10H4zM2 20h20', sep: true },
@@ -280,6 +281,8 @@ function BluetoothPanel() {
 
 // Settings › Display lives in DisplaySettings.tsx (WSOS-DSK-005/006).
 import { DisplayPanel } from './DisplaySettings'
+// Settings › Default apps and clipboard history live in DesktopSettings.tsx (WSOS-DSK-008/009).
+import { ClipboardSection, DefaultAppsPanel } from './DesktopSettings'
 
 const THEME_ART: Record<string, { bg: string; win: string; bar: string }> = {
   Light: { bg: 'linear-gradient(135deg,#EAF1FF,#C9DAFF)', win: '#FFFFFF', bar: 'rgba(255,255,255,0.8)' },
@@ -377,17 +380,24 @@ function PrivacyPanel() {
   const { status } = useOsUpdate()
   useEffect(() => { void os.deviceInfo().then(setInfo).catch(() => {}) }, [])
   const set = (k: keyof Privacy) => (v: boolean) => { const n = { ...p, [k]: v }; setP(n); writeJson(KEYS.privacy, n) }
+  const [lock, setLock] = useState<LockSettings | null>(null)
+  useEffect(() => { void os.lockSettings().then(setLock).catch(() => {}) }, [])
   const enc = info?.device?.encrypted
-  const good = { bg: 'rgba(95,211,154,0.08)', bd: 'rgba(95,211,154,0.3)', c: C.green }
-  const warn = { bg: 'rgba(255,159,90,0.08)', bd: 'rgba(255,159,90,0.3)', c: C.amber }
-  const unk = { bg: 'rgba(14,32,72,0.6)', bd: 'rgba(127,178,255,0.12)', c: C.muted }
-  const cards = [
-    { t: enc ? t('settings.priv.encrypted') : enc === false ? t('settings.priv.notEncrypted') : t('settings.priv.encryption'), d: enc ? t('settings.priv.luksOn') : enc === false ? t('settings.priv.readable') : t('settings.priv.statusUnavailable'), tone: enc ? good : enc === false ? warn : unk, icon: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4' },
-    { t: t('settings.priv.firewall'), d: t('settings.priv.statusUnavailable'), tone: unk, icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z' },
+  type Tile = { t: string; d: string; ok: boolean | null; icon: string }
+  const tiles: Tile[] = [
+    { t: enc === false ? t('settings.priv.notEncrypted') : t('settings.priv.encryption'), d: enc ? t('settings.priv.luksOn') : enc === false ? t('settings.priv.readable') : t('settings.priv.statusUnavailable'), ok: enc ?? null, icon: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4' },
+    { t: t('settings.priv.firewall'), d: t('settings.priv.statusUnavailable'), ok: null, icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z' },
     status?.state === 'up_to_date'
-      ? { t: t('settings.priv.upToDate'), d: t('settings.priv.checked', { when: status.last_check ? fmtWhen(status.last_check) : '—' }), tone: good, icon: 'M5 12.5l4.5 4.5L19 7.5' }
-      : { t: needsAttention(status) ? t('settings.priv.updateWaiting') : t('settings.nav.Updates'), d: needsAttention(status) ? t('settings.priv.openUpdates') : status ? t('settings.priv.seeUpdates') : t('settings.priv.statusUnavailable'), tone: needsAttention(status) ? warn : unk, icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
+      ? { t: t('settings.priv.upToDate'), d: t('settings.priv.checked', { when: status.last_check ? fmtWhen(status.last_check) : '—' }), ok: true, icon: 'M5 12.5l4.5 4.5L19 7.5' }
+      : { t: needsAttention(status) ? t('settings.priv.updateWaiting') : t('settings.nav.Updates'), d: needsAttention(status) ? t('settings.priv.openUpdates') : status ? t('settings.priv.seeUpdates') : t('settings.priv.statusUnavailable'), ok: needsAttention(status) ? false : null, icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
+    { t: t('settings.priv.screenLock'), d: !lock ? t('settings.priv.statusUnavailable') : lock.timeout_s ? t('settings.priv.lockAfter', { time: lockChoiceLabel(lock.timeout_s) }) : t('settings.priv.lockOff'), ok: lock ? lock.timeout_s > 0 : null, icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' },
   ]
+  const known = tiles.filter((x) => x.ok !== null)
+  const passed = known.filter((x) => x.ok).length
+  const failing = tiles.find((x) => x.ok === false)
+  const allGood = known.length > 0 && passed === known.length
+  const ring = 2 * Math.PI * 30
+  const tone = (ok: boolean | null) => ok === true ? C.green : ok === false ? C.amber : C.muted
   const perms: { k: keyof Privacy; t: string; d: string; icon: string }[] = [
     { k: 'location', t: t('settings.priv.location'), d: t('settings.priv.locationHint'), icon: 'M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z' },
     { k: 'updates', t: t('settings.priv.autoUpdates'), d: t('settings.priv.autoUpdatesHint'), icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z' },
@@ -396,25 +406,48 @@ function PrivacyPanel() {
   ]
   return <>
     <H1>{navLabel('Privacy & security')}</H1>
-    <div className="grid grid-cols-3 gap-3">
-      {cards.map((c) => (
-        <div key={c.t} className="flex items-center gap-3 rounded-[14px] border p-4" style={{ background: c.tone.bg, borderColor: c.tone.bd }}>
-          <Svg d={c.icon} size={22} stroke={c.tone.c} />
-          <span className="flex flex-col gap-0.5"><span className="text-sm font-semibold">{c.t}</span><span className="text-xs text-[#8FA3C8]">{c.d}</span></span>
+    <section aria-label={t('settings.priv.summary')} className="flex items-center gap-[22px] rounded-2xl border px-[22px] py-[18px]"
+      style={allGood ? { background: 'linear-gradient(120deg, rgba(46,158,106,0.22), rgba(14,32,72,0.7))', borderColor: 'rgba(95,211,154,0.35)' } : { background: 'linear-gradient(120deg, rgba(255,159,90,0.14), rgba(14,32,72,0.7))', borderColor: 'rgba(255,159,90,0.3)' }}>
+      <div className="relative h-[72px] w-[72px] shrink-0">
+        <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">
+          <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(127,178,255,0.18)" strokeWidth="7" />
+          {known.length > 0 && <circle cx="36" cy="36" r="30" fill="none" stroke={allGood ? C.green : C.amber} strokeWidth="7" strokeLinecap="round" strokeDasharray={`${(passed / tiles.length) * ring} ${ring}`} transform="rotate(-90 36 36)" />}
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">{passed}/{tiles.length}</span>
+      </div>
+      <span className="flex flex-1 flex-col gap-1">
+        <span className="text-[17px] font-bold">{allGood ? t('settings.priv.wellProtected') : t('settings.priv.checksPassed', { n: String(passed), total: String(tiles.length) })}</span>
+        <span className="text-[13px] text-[#C9D6EE]">{failing ? t('settings.priv.suggestion', { what: `${failing.t} · ${failing.d}` }) : known.length < tiles.length ? t('settings.priv.someUnknown') : t('settings.priv.noSuggestions')}</span>
+      </span>
+    </section>
+    <div className="grid grid-cols-4 gap-2.5">
+      {tiles.map((c) => (
+        <div key={c.t} className={`${card} flex flex-col gap-1.5 px-3.5 py-[13px]`}>
+          <Svg d={c.icon} size={20} stroke={tone(c.ok)} />
+          <span className="text-[13px] font-semibold">{c.t}</span>
+          <span className="text-[11px]" style={{ color: tone(c.ok) }}>{c.d}</span>
         </div>
       ))}
     </div>
-    <h2 className={`m-0 mt-1 font-normal ${sectionLabel}`}>{t('settings.priv.choices')}</h2>
-    <div className={`${card} overflow-hidden`}>
-      {perms.map((x) => (
-        <div key={x.k} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
-          <Svg d={x.icon} size={20} stroke="#7FB2FF" />
-          <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{x.t}</span><span className="text-xs text-[#8FA3C8]">{x.d}</span></span>
-          <Switch small label={x.t} checked={p[x.k]} onChange={set(x.k)} />
+    <div className="grid min-h-0 gap-3" style={{ gridTemplateColumns: 'minmax(0,1.25fr) minmax(0,1fr)' }}>
+      <section aria-labelledby="priv-choices" className="flex flex-col gap-2">
+        <h2 id="priv-choices" className="m-0 text-sm font-semibold">{t('settings.priv.choices')}</h2>
+        <div className={`${card} overflow-hidden`}>
+          {perms.map((x) => (
+            <div key={x.k} className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
+              <Svg d={x.icon} size={18} stroke="#7FB2FF" />
+              <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">{x.t}</span><span className="text-[11px] text-[#8FA3C8]">{x.d}</span></span>
+              <Switch small label={x.t} checked={p[x.k]} onChange={set(x.k)} />
+            </div>
+          ))}
         </div>
-      ))}
+      </section>
+      <section aria-labelledby="priv-it" className="flex flex-col gap-2">
+        <h2 id="priv-it" className="m-0 text-sm font-semibold">{t('settings.priv.itSees')}</h2>
+        <div className={`${card} px-4 py-3 text-xs leading-relaxed text-[#C9D6EE]`}>{t('settings.priv.note')}</div>
+      </section>
     </div>
-    <Note>{t('settings.priv.note')}</Note>
+    <ClipboardSection />
   </>
 }
 
@@ -448,40 +481,52 @@ function UsersPanel() {
     <H1>{t('settings.nav.Users')}</H1>
     {r.state === 'unavailable' && <Unavail what={t('settings.users.list')} />}
     {r.state === 'ok' && (
-      <div className={`${heroCard} flex items-center gap-5 rounded-2xl p-[22px]`}>
-        <Avatar name={me?.name ?? r.value.current} size={80} font={28} />
-        <span className="flex flex-1 flex-col gap-1">
-          <span className="text-xl font-bold">{me?.name ?? r.value.current}</span>
-          <span className="text-[13px] text-[#8FA3C8]">{r.value.current}{me ? ` · ${me.admin ? t('settings.users.admin') : t('settings.users.standard')}` : ''} · {t('settings.users.you')}</span>
+      <div className="flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.18)] px-6 py-[22px]" style={{ background: 'radial-gradient(circle at 90% 10%, rgba(24,212,240,0.25), transparent 45%), rgba(14,32,72,0.75)' }}>
+        <Avatar name={me?.name ?? r.value.current} size={96} font={34} />
+        <span className="flex flex-1 flex-col gap-1.5">
+          <span className="text-[22px] font-bold">{me?.name ?? r.value.current}</span>
+          <span className="font-mono text-xs text-[#8FA3C8]">{r.value.current}</span>
+          <span className="mt-0.5 flex gap-1.5">
+            {me && <span className="rounded-full px-2 py-[3px] text-[11px] font-semibold bg-[rgba(31,107,255,0.22)] text-[#B8D4FF]">{me.admin ? t('settings.users.admin') : t('settings.users.standard')}</span>}
+            <span className="rounded-full px-2 py-[3px] text-[11px] font-semibold bg-[rgba(95,211,154,0.18)] text-[#5FD39A]">{t('settings.signedIn')}</span>
+          </span>
         </span>
       </div>
     )}
-    <div className={`${card} overflow-hidden`}>
-      <div className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}><span className="flex-1 text-sm">{t('settings.users.method')}</span><span className="text-[13px] text-[#C9D6EE]">{t('greeter.password')}</span></div>
-      <div className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
-        <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm">{t('settings.users.auto')}</span><span className="text-xs text-[#8FA3C8]">{t('settings.users.autoHint')}</span></span>
-        <span className={chip}>{t('settings.users.notAllowed')}</span>
-        <Switch small label={t('settings.users.auto')} checked={false} disabled />
-      </div>
-      <LockAfterRow />
-    </div>
-    <section aria-labelledby="ws-acct" className="flex flex-col gap-2">
-      <h2 id="ws-acct" className={`m-0 font-normal ${sectionLabel}`}>{t('settings.acct.title')}</h2>
-      <div className={`${card} overflow-hidden`}><CloudAccounts /></div>
-    </section>
-    {others.length > 0 && (
+    <div className="grid grid-cols-2 items-start gap-3">
+      <section aria-labelledby="signin" className="flex flex-col gap-2">
+        <h2 id="signin" className="m-0 text-sm font-semibold">{t('settings.users.signin')}</h2>
+        <div className={`${card} overflow-hidden`}>
+          <div className={`flex items-center gap-3 px-4 py-3 ${rowLine}`}>
+            <Svg d="M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z" size={18} stroke="#7FB2FF" />
+            <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">{t('greeter.password')}</span><span className="text-[11px] text-[#8FA3C8]">{t('settings.users.method')}</span></span>
+          </div>
+          <div className={`flex items-center gap-3 px-4 py-3 ${rowLine}`}>
+            <Svg d="M13 3h6v18h-6M10 8l4 4-4 4M14 12H3" size={18} stroke="#7FB2FF" />
+            <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">{t('settings.users.auto')}</span><span className="text-[11px] text-[#8FA3C8]">{t('settings.users.autoHint')}</span></span>
+            <span className={chip}>{t('settings.users.notAllowed')}</span>
+          </div>
+          <LockAfterRow />
+        </div>
+      </section>
       <section aria-labelledby="other-users" className="flex flex-col gap-2">
-        <h2 id="other-users" className={`m-0 font-normal ${sectionLabel}`}>{t('settings.users.others')}</h2>
-        <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
+        <h2 id="other-users" className="m-0 text-sm font-semibold">{t('settings.users.othersHere')}</h2>
+        {r.state === 'ok' && !others.length && <div className={`${card} px-4 py-3 text-[13px] text-[#8FA3C8]`}>{t('settings.users.noOthers')}</div>}
+        {others.length > 0 && <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
           {others.map((u: LocalUser, i) => (
-            <li key={u.login} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
-              <Avatar name={u.name} size={38} font={14} bg={AVATAR_GRADIENTS[(i + 1) % AVATAR_GRADIENTS.length]} />
-              <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{u.name}</span><span className="text-xs text-[#8FA3C8]">{u.login} · {u.admin ? t('settings.users.admin') : t('settings.users.standard')}</span></span>
+            <li key={u.login} className={`flex items-center gap-3 px-4 py-3 ${rowLine}`}>
+              <Avatar name={u.name} size={38} font={13} bg={AVATAR_GRADIENTS[(i + 1) % AVATAR_GRADIENTS.length]} />
+              <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">{u.name}</span><span className="text-[11px] text-[#8FA3C8]">{u.login}</span></span>
+              <span className="rounded-[5px] bg-[rgba(127,178,255,0.12)] px-[7px] py-0.5 text-[11px] text-[#C9D6EE]">{u.admin ? t('settings.users.adminShort') : t('settings.users.standardShort')}</span>
             </li>
           ))}
-        </ul>
+        </ul>}
       </section>
-    )}
+    </div>
+    <section aria-labelledby="ws-acct" className="flex flex-col gap-2">
+      <h2 id="ws-acct" className="m-0 text-sm font-semibold">{t('settings.acct.title')}</h2>
+      <div className={`${card} overflow-hidden`}><CloudAccounts /></div>
+    </section>
     <Note>{t('settings.users.note')}</Note>
   </>
 }
@@ -696,7 +741,7 @@ function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (
             <li key={n.id}>
               {'sep' in n && n.sep && !q && <div className="mx-2 my-1.5 h-px bg-[rgba(127,178,255,0.1)]" aria-hidden="true" />}
               <button type="button" aria-current={on ? 'page' : undefined} onClick={() => onPick(n.id)}
-                className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm ${on ? 'bg-[rgba(31,107,255,0.2)] font-semibold text-white' : 'text-[#C9D6EE] hover:bg-white/[0.05]'}`}>
+                className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-[5px] text-left text-sm ${on ? 'bg-[rgba(31,107,255,0.2)] font-semibold text-white' : 'text-[#C9D6EE] hover:bg-white/[0.05]'}`}>
                 <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px]" style={{ background: n.tint }}><Svg d={n.icon} size={15} stroke="#FFFFFF" width={2.2} /></span>
                 {navLabel(n.id)}
                 {badge && <span className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-[9px] bg-[#1F6BFF] px-[5px] text-[11px] font-bold text-white" aria-label={t('settings.pending', { count: badge })}>{badge}</span>}
@@ -746,6 +791,7 @@ export default function Settings({ onClose }: WindowProps) {
         {section === 'Appearance' && <AppearancePanel />}
         {section === 'Sound' && <SoundPanel />}
         {section === 'Notifications' && <NotificationsPanel />}
+        {section === 'Default apps' && <DefaultAppsPanel />}
         {section === 'Privacy & security' && <PrivacyPanel />}
         {section === 'Users' && <UsersPanel />}
         {section === 'Devices' && <DevicesPanel onProblem={setProblem} />}

@@ -51,3 +51,8 @@ gir1.2-gtk-4.0
 pcscd
 opensc
 libpam-pkcs11
+# Web browser and media player (WorkSuite defaults: shell/apps/worksuite-mimeapps.list)
+firefox-esr
+celluloid
+gstreamer1.0-plugins-good
+gstreamer1.0-libav

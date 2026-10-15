@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Files – copy and conflict</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA">
+<dc-import name="FM1Grid" hint-size="1280px,800px"></dc-import>
+<div style="position: absolute; right: 16px; bottom: 44px; width: 340px; box-sizing: border-box; padding: 14px 16px; border-radius: 14px; background: rgba(12,28,66,0.98); border: 1px solid rgba(127,178,255,0.22); box-shadow: 0 16px 40px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="font-weight: 600">Copying 24 files to USB drive</span><span style="color: #8FA3C8">Paused</span></div>
+<div style="height: 5px; border-radius: 3px; background: rgba(127,178,255,0.15); overflow: hidden"><div style="height: 100%; width: 38%; background: #FFB98A"></div></div>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8FA3C8">9 of 24 · 148 MB of 390 MB · waiting for you</span>
+</div>
+<div style="position: absolute; inset: 0; background: rgba(2,6,16,0.5); display: flex; align-items: center; justify-content: center">
+<div role="dialog" aria-labelledby="cf-t" style="width: 560px; box-sizing: border-box; border-radius: 18px; background: #0F2350; border: 1px solid rgba(127,178,255,0.2); box-shadow: 0 30px 80px rgba(0,0,0,0.6); overflow: hidden">
+<div style="padding: 22px 24px 8px; display: flex; flex-direction: column; gap: 6px">
+<h2 id="cf-t" style="margin: 0; font-size: 19px; font-weight: 700">"Budget 2027.xlsx" already exists</h2>
+<p style="margin: 0; font-size: 14px; color: #8FA3C8">The USB drive has a file with the same name.</p>
+</div>
+<div style="padding: 12px 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{cmp}}" as="c" hint-placeholder-count="2">
+<div style="display: flex; gap: 12px; padding: 14px; border-radius: 12px; background: rgba(4,10,26,0.45); border: 1px solid {{c.border}}">
+<span style="width: 40px; height: 48px; border-radius: 6px; background: #2E9E6A; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; flex: none">XLSX</span>
+<span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px"><span style="font-size: 11px; color: {{c.tagColor}}; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600">{{c.tag}}</span><span>{{c.when}}</span><span style="color: #8FA3C8">{{c.size}}</span></span>
+</div>
+</sc-for>
+</div>
+<label style="display: flex; align-items: center; gap: 10px; padding: 4px 24px 18px; font-size: 13px; color: #C9D6EE"><input type="checkbox" style="width: 16px; height: 16px; accent-color: #1F6BFF">Do this for the other 3 conflicts</label>
+<div style="padding: 14px 18px; background: rgba(4,10,26,0.35); border-top: 1px solid rgba(127,178,255,0.12); display: flex; justify-content: space-between; gap: 10px">
+<button style="all: unset; padding: 10px 14px; border-radius: 10px; font-size: 14px; color: #8FA3C8; cursor: pointer">Cancel copy</button>
+<div style="display: flex; gap: 8px">
+<button style="all: unset; padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Skip</button>
+<button style="all: unset; padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Keep both</button>
+<button style="all: unset; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; background: #1F6BFF; cursor: pointer">Replace</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cmp: [
+      { tag: 'Copying · newer', when: 'Today, 23:41', size: '2.4 MB', border: '#1F6BFF', tagColor: '#7FB2FF' },
+      { tag: 'On USB drive', when: '3 Oct, 09:12', size: '2.1 MB', border: 'rgba(127,178,255,0.14)', tagColor: '#8FA3C8' }
+    ] };
+  }
+}
+</script>
+</body>
+</html>

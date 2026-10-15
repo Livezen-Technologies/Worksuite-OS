@@ -14,5 +14,7 @@ describe('boot mode', () => {
     expect(bootMode(['electron', '.', '--installer'], 'worksuite.recovery=1')).toBe('recovery')
     expect(bootMode(['electron', '.', '--installer'], 'quiet')).toBe('installer')
     expect(bootMode(['electron', '.', '--mode=recovery'], 'quiet')).toBe(null)
+    expect(bootMode(['electron', '.', '--safe'], 'quiet')).toBe('safe')
+    expect(bootMode(['electron', '.', '--safe'], 'worksuite.recovery=1')).toBe('recovery')
   })
 })

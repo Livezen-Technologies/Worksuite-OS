@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Files – search</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="FMSide" active="Home" hint-size="220px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+<header style="height: 60px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(127,178,255,0.12); background: #0C1E46">
+<div style="flex: 1; display: flex; align-items: center; gap: 10px; height: 38px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; background: rgba(4,10,26,0.6); border: 1px solid #1F6BFF; font-size: 14px">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+<span>budget</span><span style="width: 1px; height: 18px; background: #FFFFFF"></span>
+<span style="margin-left: auto; font-size: 12px; color: #8FA3C8">in Home and subfolders</span>
+</div>
+<button style="all: unset; font-size: 13px; color: #7FB2FF; cursor: pointer; padding: 0 6px">Cancel</button>
+</header>
+<div style="padding: 14px 24px; display: flex; gap: 8px; border-bottom: 1px solid rgba(127,178,255,0.1)">
+<sc-for list="{{chips}}" as="c" hint-placeholder-count="5">
+<button style="all: unset; padding: 6px 12px; border-radius: 999px; font-size: 12px; border: 1px solid {{c.border}}; background: {{c.bg}}; cursor: pointer">{{c.t}}</button>
+</sc-for>
+</div>
+<div style="flex: 1; padding: 16px 24px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; color: #8FA3C8; margin-bottom: 4px">6 results · 0.08 s</span>
+<sc-for list="{{res}}" as="r" hint-placeholder-count="6">
+<div style="display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 10px; background: {{r.bg}}">
+<span style="width: 34px; height: 34px; border-radius: 8px; background: {{r.c}}; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; flex: none">{{r.ext}}</span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 14px">{{r.pre}}<mark style="background: rgba(24,212,240,0.25); color: #FFFFFF; border-radius: 3px; padding: 0 2px">{{r.hit}}</mark>{{r.post}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8FA3C8">{{r.path}}</span>
+</span>
+<span style="font-size: 12px; color: #8FA3C8">{{r.d}}</span>
+</div>
+</sc-for>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const chips = ['Any type','Documents','Spreadsheets','Last 30 days','Include file contents'].map((t, i) => ({ t, border: i === 0 ? '#1F6BFF' : 'rgba(127,178,255,0.2)', bg: i === 0 ? 'rgba(31,107,255,0.2)' : 'transparent' }));
+    const R = [['','Budget',' 2027','XLSX','#2E9E6A','~/Documents','Today'],['Marketing ','budget',' Q4','XLSX','#2E9E6A','~/Documents/Projects','2 Oct'],['','Budget',' review notes','MD','#5E739C','~/Documents','28 Sep'],['Offsite ','budget',' estimate','PDF','#D9452B','~/Downloads','20 Sep'],['','Budget','s','DIR','#1F6BFF','~/Documents/Archive','Jan'],['Team ','budget',' 2026','XLSX','#2E9E6A','WorkSuite Drive/Shared','2025']];
+    return { chips, res: R.map((r, i) => ({ pre: r[0], hit: r[1], post: r[2], ext: r[3] === 'DIR' ? '▣' : r[3], c: r[4], path: r[5], d: r[6], bg: i === 0 ? 'rgba(31,107,255,0.18)' : 'transparent' })) };
+  }
+}
+</script>
+</body>
+</html>

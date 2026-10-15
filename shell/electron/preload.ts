@@ -14,7 +14,10 @@ contextBridge.exposeInMainWorld('worksuite', {
   installedApps: () => ipcRenderer.invoke('ws:installedApps'),
   launchOffice: (kind: string) => ipcRenderer.invoke('ws:launchOffice', String(kind)),
   launchWorkSuite: (module: string) => ipcRenderer.invoke('ws:launchWorkSuite', String(module)),
-  openLink: (url: string) => ipcRenderer.invoke('ws:openLink', String(url)),
+  search: (q: string, types?: string[]) => ipcRenderer.invoke('ws:search', String(q), (types ?? []).map(String).join(',')),
+  recentFiles: () => ipcRenderer.invoke('ws:recentFiles'),
+  openSearchResult: (link: string, where?: string) => ipcRenderer.invoke('ws:openSearchResult', String(link), where === 'location' ? 'location' : 'open'),
+  openLink: (url: string) =>ipcRenderer.invoke('ws:openLink', String(url)),
   cloudSignIn: (serverUrl: string, mode: string) => ipcRenderer.invoke('ws:cloudSignIn', String(serverUrl), String(mode)),
   cloudSignOut: (accountId: string, choice: string) => ipcRenderer.invoke('ws:cloudSignOut', String(accountId), String(choice)),
   syncUnsent: (accountId: string) => ipcRenderer.invoke('ws:syncUnsent', String(accountId)),
@@ -125,4 +128,17 @@ contextBridge.exposeInMainWorld('worksuitePanel', {
   onWindows: on('ws:panelWindowsChanged'),
   onTray: on('ws:panelTrayChanged'),
   onLauncher: on('ws:launcher'),
+})
+
+// Default apps, clipboard history, problem report — see electron/desktopHost.ts.
+contextBridge.exposeInMainWorld('worksuiteDesktop', {
+  defaultApps: () => ipcRenderer.invoke('ws:defaultApps'),
+  setDefaultApp: (category: string, id: string) => ipcRenderer.invoke('ws:setDefaultApp', String(category), String(id)),
+  clipboardState: () => ipcRenderer.invoke('ws:clipboardState'),
+  clipboardSetEnabled: (on: boolean) => ipcRenderer.invoke('ws:clipboardSetEnabled', on ? 'on' : 'off'),
+  clipboardClear: () => ipcRenderer.invoke('ws:clipboardClear'),
+  clipboardRemove: (id: number) => ipcRenderer.invoke('ws:clipboardRemove', String(Number(id))),
+  clipboardCopy: (id: number) => ipcRenderer.invoke('ws:clipboardCopy', String(Number(id))),
+  onClipboard: on('ws:clipboardChanged'),
+  problemReport: () => ipcRenderer.invoke('ws:problemReport'),
 })

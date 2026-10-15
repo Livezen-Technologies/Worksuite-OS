@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VPN panel toggle</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(circle at 78% 22%, rgba(24,212,240,0.3) 0%, transparent 38%), radial-gradient(circle at 18% 80%, rgba(31,107,255,0.45) 0%, transparent 45%), linear-gradient(160deg, #0E2A66 0%, #071330 60%, #040A1A 100%)">
+<div role="status" style="position: absolute; right: 12px; top: 16px; width: 340px; box-sizing: border-box; padding: 14px 16px; border-radius: 14px; background: rgba(10,24,56,0.97); border: 1px solid rgba(95,211,154,0.4); box-shadow: 0 16px 40px rgba(0,0,0,0.5); display: flex; gap: 12px; align-items: center">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: #2E9E6A; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"></path></svg></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">Connected to [Company] VPN</span><span style="font-size: 12px; color: #8FA3C8">Auto-connected on untrusted Wi-Fi "Café-Wifi"</span></span>
+</div>
+<div role="dialog" aria-label="Quick settings" style="position: absolute; right: 12px; bottom: 64px; width: 360px; box-sizing: border-box; padding: 16px; border-radius: 16px; background: rgba(10,24,56,0.97); border: 1px solid rgba(127,178,255,0.2); box-shadow: 0 24px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 12px">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<span style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #1F6BFF"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"></path></svg><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 600">Wi-Fi</span><span style="font-size: 11px; color: #DCE7FF">Café-Wifi</span></span></span>
+<span style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #2E9E6A"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"></path></svg><span style="display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 600">VPN</span><span style="font-size: 11px; color: #DCFCE8">[Company] VPN</span></span></span>
+</div>
+<div style="border-radius: 12px; background: rgba(4,10,26,0.5); overflow: hidden">
+<div style="padding: 10px 12px; font-size: 11px; color: #8FA3C8; text-transform: uppercase; letter-spacing: 0.06em">WireGuard tunnels</div>
+<sc-for list="{{tunnels}}" as="t" hint-placeholder-count="2">
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid rgba(127,178,255,0.08)">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: {{t.dot}}"></span>
+<span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 13px; font-weight: 500">{{t.n}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8FA3C8">{{t.d}}</span></span>
+<span aria-hidden="true" style="width: 36px; height: 22px; border-radius: 11px; background: {{t.track}}; position: relative"><span style="position: absolute; top: 3px; left: {{t.knob}}; width: 16px; height: 16px; border-radius: 50%; background: #FFFFFF"></span></span>
+</div>
+</sc-for>
+</div>
+<span style="font-size: 12px; color: #7FB2FF">VPN settings ›</span>
+</div>
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: 52px; box-sizing: border-box; padding: 0 10px; background: rgba(6,14,34,0.88); border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; gap: 6px">
+<span style="width: 40px; height: 40px; border-radius: 10px; background: rgba(31,107,255,0.25); display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 60 60" aria-hidden="true"><rect x="20" y="0" width="40" height="40" rx="4" fill="#1F6BFF"></rect><rect x="20" y="20" width="20" height="20" fill="#0A1A3D"></rect><rect x="0" y="20" width="20" height="20" rx="4" fill="#18D4F0"></rect><rect x="20" y="40" width="20" height="20" rx="4" fill="#18D4F0"></rect></svg></span>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 10px; background: rgba(31,107,255,0.25)">
+<span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"></path></svg></span>
+<span title="VPN connected" style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5FD39A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"></path></svg></span>
+<span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"></path></svg></span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: flex-end; padding: 0 8px; font-size: 12px; line-height: 1.25"><span>00:29</span><span style="color: #8FA3C8">Fri 16 Oct</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { tunnels: [['[Company] VPN','wg0 · handshake 12 s ago',1],['Home server','wg1 · off',0]].map(t => ({ n: t[0], d: t[1], dot: t[2] ? '#5FD39A' : '#5E739C', track: t[2] ? '#2E9E6A' : 'rgba(127,178,255,0.25)', knob: t[2] ? '17px' : '3px' })) };
+  }
+}
+</script>
+</body>
+</html>

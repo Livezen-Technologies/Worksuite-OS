@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Boot options</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; position: relative; background: #040A1A; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; display: flex; flex-direction: column; align-items: center; padding-top: 70px; gap: 24px">
+<svg width="48" height="48" viewBox="0 0 60 60" aria-hidden="true"><rect x="20" y="0" width="40" height="40" rx="3" fill="#1F6BFF"></rect><rect x="20" y="20" width="20" height="20" fill="#040A1A"></rect><rect x="0" y="20" width="20" height="20" rx="3" fill="#18D4F0"></rect><rect x="20" y="40" width="20" height="20" rx="3" fill="#18D4F0"></rect></svg>
+<div style="display: flex; gap: 12px; align-items: center; width: 600px; box-sizing: border-box; padding: 12px 16px; border-radius: 12px; background: rgba(255,159,90,0.1); border: 1px solid rgba(255,159,90,0.4); font-size: 13px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFB98A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2zM12 10v5M12 18h.01"></path></svg>
+<span>The last start with kernel 6.11.4 failed. Starting the previous kernel in <strong style="font-family: 'IBM Plex Mono', monospace">8 s</strong>.</span>
+</div>
+<div style="width: 600px; box-sizing: border-box; padding: 8px; border-radius: 16px; background: rgba(14,32,72,0.7); border: 1px solid rgba(127,178,255,0.16); display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{items}}" as="i" hint-placeholder-count="6">
+<sc-if value="{{i.sep}}" hint-placeholder-val="{{false}}"><div style="height: 1px; background: rgba(127,178,255,0.12); margin: 4px 10px"></div></sc-if>
+<sc-if value="{{i.t}}" hint-placeholder-val="{{true}}">
+<button style="all: unset; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 10px; background: {{i.bg}}; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{i.ic}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{i.icon}}"></path></svg>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: {{i.w}}; color: {{i.tc}}">{{i.t}}</span><span style="font-size: 12px; color: {{i.dc}}">{{i.d}}</span></span>
+<sc-if value="{{i.tag}}" hint-placeholder-val="{{false}}"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 5px; background: {{i.tagBg}}; color: {{i.tagC}}">{{i.tag}}</span></sc-if>
+</button>
+</sc-if>
+</sc-for>
+</div>
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: 56px; border-top: 1px solid rgba(127,178,255,0.1); display: flex; align-items: center; justify-content: center; gap: 32px; font-size: 13px; color: #8FA3C8">
+<span><span style="font-family: 'IBM Plex Mono', monospace; padding: 2px 7px; border: 1px solid #3D5280; border-radius: 5px; color: #C9D6EE">↑ ↓</span> Select</span>
+<span><span style="font-family: 'IBM Plex Mono', monospace; padding: 2px 7px; border: 1px solid #3D5280; border-radius: 5px; color: #C9D6EE">Enter</span> Start</span>
+<span><span style="font-family: 'IBM Plex Mono', monospace; padding: 2px 7px; border: 1px solid #3D5280; border-radius: 5px; color: #C9D6EE">Esc</span> Stop countdown</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const I = [
+      ['WorkSuite OS 1.1','Kernel 6.11.4 · failed last time','M12 3v9M6.3 7.3a8 8 0 1 0 11.4 0','FAILED','rgba(255,138,122,0.16)','#FF8A7A',0],
+      ['WorkSuite OS 1.1 (previous kernel)','Kernel 6.10.9 · last worked yesterday','M3 12a9 9 0 1 0 2.6-6.4M3 4v5h5','AUTO','rgba(95,211,154,0.16)','#5FD39A',1],
+      ['','','','','','',0,1],
+      ['Recovery','Startup repair, snapshots, unlock disk, terminal','M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z','','','',0],
+      ['Reinstall, keep my files','Fresh system from the recovery partition','M12 4v11M7 10l5 5 5-5M4 20h16','','','',0],
+      ['Firmware settings','Restart into UEFI setup','M4 4h16v16H4zM9 9h6v6H9z','','','',0]
+    ];
+    return { items: I.map(i => ({ t: i[0], d: i[1], icon: i[2], tag: i[3], tagBg: i[4], tagC: i[5], sep: !!i[7],
+      bg: i[6] ? '#1F6BFF' : 'transparent', tc: '#FFFFFF', dc: i[6] ? '#DCE7FF' : '#8FA3C8', ic: i[6] ? '#FFFFFF' : '#8FA3C8', w: i[6] ? 600 : 500 })) };
+  }
+}
+</script>
+</body>
+</html>
