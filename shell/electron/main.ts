@@ -24,6 +24,8 @@ import { arrange, displayManager, outputRects, type DisplayState } from './displ
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { startDesktopHost } from './desktopHost'
+import { markShellReady, startMonitorHost } from './monitorHost'
+import { flatpakPermsClient } from './flatpakPerms'
 import { fileHead, isWindowsProgram } from './winexe'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
@@ -81,6 +83,7 @@ function createWindow() {
   shellContents.add(win.webContents)
   // Perf probe (tests/perf/guest/measure-shell, WSOS-PRF-002/006): process start → first window ready.
   if (process.env.WORKSUITE_PERF === '1') win.once('ready-to-show', () => process.stdout.write(`WORKSUITE_PERF shell_ready_ms ${Math.round(process.uptime() * 1000)}\n`))
+  win.once('ready-to-show', () => markShellReady(Math.round(process.uptime() * 1000)))
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (ALLOWED_SCHEMES.has(new URL(url).protocol)) void shell.openExternal(url)
@@ -321,6 +324,14 @@ app.whenReady().then(() => {
     return pkg.resetAppPermissions(id)
   })
   handle('ws:appDataRemove', (id) => fpUser.removeAppData(id))
+  // App detail (G09): this user's switches for single declared permissions (flatpak override --user).
+  const fpPerms = flatpakPermsClient(realExec)
+  handle('ws:appPermsUserOff', (id) => fpPerms.userOff(id))
+  handle('ws:appPermSet', async (id, perm, on) => {
+    const d = await pkg.appPermissions(id)
+    if (!d.ok) return d
+    return fpPerms.set(id, perm, on === 'on', (d.value as { permissions?: string[] }).permissions ?? [])
+  })
   handle('ws:pruneRuntimes', () => pkg.pruneRuntimes())
   handle('ws:bundleInspect', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInspect(p) : noFile })
   handle('ws:bundleInstall', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInstall(p) : noFile })
@@ -398,6 +409,8 @@ app.whenReady().then(() => {
   startPanel(handle, broadcast, () => void displays.applySaved())
   // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
   startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
+  // System monitor (G11) and quick settings brightness / power mode (G01).
+  startMonitorHost(handle)
 })
 
 app.on('window-all-closed', () => app.quit())

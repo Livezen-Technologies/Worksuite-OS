@@ -8,6 +8,7 @@ import FirstRun from './screens/FirstRun'
 import Desktop from './screens/Desktop'
 import Files from './screens/Files'
 import AppCenter from './screens/AppCenter'
+import Monitor from './screens/Monitor'
 import Settings from './screens/Settings'
 import Recovery from './screens/Recovery'
 import Installer from './screens/Installer'
@@ -67,6 +68,7 @@ export default function App() {
           {win === 'files' && <Files onClose={() => setWin(null)} />}
           {win === 'appcenter' && <AppCenter onClose={() => setWin(null)} />}
           {win === 'settings' && <Settings onClose={() => setWin(null)} />}
+          {win === 'monitor' && <Monitor onClose={() => setWin(null)} />}
         </Desktop>
       )
   }
