@@ -68,6 +68,7 @@ class Output:
     width: int = 0
     height: int = 0
     scale: float = 1.0
+    refresh: float = 0.0
 
     def row(self) -> tuple[str, str, int, int, int, int, float]:
         return (self.name, self.description, self.x, self.y, self.width, self.height, float(self.scale))

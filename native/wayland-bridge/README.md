@@ -9,8 +9,8 @@ architecture-independent, so the same package serves amd64 and arm64 (WSOS-ARM-0
 |---|---|
 | `lk.worksuite.WaylandBridge1.xml` | window list, activate, close, minimize, outputs, signals |
 | `lk.worksuite.Tray1.xml` | tray items for the panel (the bridge is also `org.kde.StatusNotifierWatcher` and the host) |
-| `protocols/` | vendored `wlr-foreign-toplevel-management-unstable-v1.xml` |
-| `worksuite_bridge/` | `model.py` handles/flags/errors, `access.py` caller check, `service.py` D-Bus, `wayland.py` Labwc |
+| `protocols/` | vendored `wlr-foreign-toplevel-management-unstable-v1.xml`, `wlr-layer-shell-unstable-v1.xml` (v4) and `xdg-shell.xml` (test client) |
+| `worksuite_bridge/` | `model.py` handles/flags/errors, `access.py` caller check, `service.py` D-Bus, `wayland.py` Labwc, `layer.py` panel edge reservation |
 | `bin/worksuite-wayland-bridge` | entry point, installed to `/usr/libexec/worksuite/` |
 | `tests/` | unit, D-Bus contract (private bus), headless Labwc + foot, and the shell's panel client against the bridge |
 
@@ -26,5 +26,14 @@ architecture-independent, so the same package serves amd64 and arm64 (WSOS-ARM-0
   `/proc/<pid>/exe` the installed shell (`/usr/lib/worksuite/shell/electron/electron`); otherwise `AccessDenied`.
   Window signals are unicast to subscribed, verified callers only. `WORKSUITE_BRIDGE_ALLOWED_EXES` (unit
   environment) adds binaries, e.g. a future native panel.
+- WSOS-DSK-005/007: for every output the bridge maps a transparent, input-less `zwlr_layer_surface_v1` on the
+  bottom layer, anchored to the bottom edge with an exclusive zone of `WORKSUITE_PANEL_HEIGHT` logical pixels
+  (default 56, the taskbar's height; 0 disables). Labwc then keeps maximised windows above the taskbar on each
+  monitor, at any scale. Hot-plugged outputs get a reservation, unplugged ones drop theirs; Labwc moves windows
+  off a removed output and the bridge relists them on their new output, then emits `OutputsChanged`. Chosen
+  over rc.xml `<margin>`, which is static and cannot follow hotplug. The headless Labwc test runs two outputs
+  (`WLR_HEADLESS_OUTPUTS=2`), checks each usable area with a probe layer surface, rescales and unplugs one with
+  `wlr-randr`, and places a fullscreen window per output with `xdg_toplevel.set_fullscreen(output)` (what
+  Chromium sends for the shell's per-monitor windows).
 - `ListWindows` returns `a(ssssu)` — handle, app_id, title, output, flags (activated 1, minimized 2, maximized 4,
   fullscreen 8). The earlier draft declared `a(sssu)`, one field short of the documented five.

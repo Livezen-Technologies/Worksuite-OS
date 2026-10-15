@@ -6,7 +6,7 @@ all: protocols
 
 protocols:
 	rm -rf worksuite_bridge/protocol
-	$(SCANNER) -i $(WAYLAND_XML) protocols/wlr-foreign-toplevel-management-unstable-v1.xml -o worksuite_bridge/protocol
+	$(SCANNER) -i $(WAYLAND_XML) protocols/xdg-shell.xml protocols/wlr-foreign-toplevel-management-unstable-v1.xml protocols/wlr-layer-shell-unstable-v1.xml -o worksuite_bridge/protocol
 	touch worksuite_bridge/protocol/__init__.py
 
 test: protocols
