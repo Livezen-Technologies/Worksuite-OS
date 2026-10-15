@@ -28,8 +28,8 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: 64; anchors.rightMargin: 64; anchors.topMargin: 48; anchors.bottomMargin: 24
-        spacing: 26
+        anchors.leftMargin: 72; anchors.rightMargin: 72; anchors.topMargin: 56; anchors.bottomMargin: 24
+        spacing: 28
         ColumnLayout {
             spacing: 8
             visible: page.title !== ""

@@ -8,7 +8,7 @@ Rectangle {
     id: nav
     implicitHeight: 88
     color: "#0A1A3D"
-    Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: "#1A2A55" }
+    Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: "#1F7FB2FF" }   // rgba(127,178,255,0.12)
 
     component NavButton: Rectangle {
         id: b
@@ -17,10 +17,10 @@ Rectangle {
         property bool quiet: false
         signal activated()
         implicitHeight: 46
-        implicitWidth: t.implicitWidth + (quiet ? 40 : 52)
+        implicitWidth: t.implicitWidth + (quiet ? 40 : primary ? 56 : 48)
         radius: 10
         opacity: enabled ? 1 : 0.4
-        color: primary ? (ma.pressed ? "#1758D6" : "#1F6BFF") : (ma.containsMouse && enabled ? "#14FFFFFF" : "transparent")
+        color: primary ? (ma.pressed ? "#1758D6" : ma.containsMouse ? "#3A7DFF" : "#1F6BFF") : (ma.containsMouse && enabled ? "#14FFFFFF" : "transparent")
         border.width: primary || quiet ? 0 : 1
         border.color: "#407FB2FF"
         activeFocusOnTab: enabled
@@ -28,6 +28,15 @@ Rectangle {
         Accessible.name: label
         Keys.onReturnPressed: if (enabled) activated()
         Keys.onSpacePressed: if (enabled) activated()
+        // The design's glow under the primary button (0 8px 24px rgba(31,107,255,0.35)), as soft stacked layers.
+        Repeater {
+            model: b.primary && b.enabled ? 6 : 0
+            Rectangle {
+                z: -1
+                x: -index * 2; y: 8 - index * 2 + 2; width: b.width + index * 4; height: b.height + index * 4 - 4
+                radius: b.radius + index * 2; color: "#1F6BFF"; opacity: 0.09 - index * 0.012
+            }
+        }
         Rectangle { anchors.fill: parent; anchors.margins: -3; radius: 13; color: "transparent"; border.width: 2; border.color: "#7FB2FF"; visible: b.activeFocus }
         Text {
             id: t

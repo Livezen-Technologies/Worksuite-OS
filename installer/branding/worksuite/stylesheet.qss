@@ -94,3 +94,7 @@ QToolTip { background: #0E2048; color: #E8EEFA; border: 1px solid rgba(127, 178,
 
 /* The partition page's encryption row is a fixed-height strip: smaller passphrase fields so they aren't clipped. */
 EncryptWidget QLineEdit { min-height: 30px; padding: 0 10px; border-radius: 8px; }
+
+/* Calamares fixes the QML sidebar at 190 px (CalamaresWindow.cpp); the design's sidebar is 288 px. The sidebar is
+   the only QQuickWidget at that maximum width, so this leaves the footer and the pages alone. */
+QQuickWidget[maximumWidth="190"] { min-width: 288px; max-width: 288px; }
