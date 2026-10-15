@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Setup – Ready</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; background: radial-gradient(ellipse 70% 60% at 50% 20%, #163B82 0%, #0A1A3D 60%, #060E22 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px">
+<div style="width: 96px; height: 96px; border-radius: 50%; background: rgba(95,211,154,0.14); box-shadow: 0 0 0 10px rgba(95,211,154,0.06); display: flex; align-items: center; justify-content: center">
+<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#5FD39A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+</div>
+<h1 style="margin: 16px 0 0; font-size: 44px; font-weight: 700; letter-spacing: -0.02em">You're all set</h1>
+<p style="margin: 0; font-size: 16px; color: #8FA3C8">Your apps are finishing installing in the background.</p>
+<div style="margin-top: 12px; width: 460px; display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{apps}}" as="a" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 12px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.14)">
+<span style="width: 32px; height: 32px; border-radius: 8px; background: {{a.color}}; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #FFFFFF">{{a.initial}}</span>
+<span style="width: 70px; font-size: 14px; font-weight: 500">{{a.name}}</span>
+<div style="flex: 1; height: 6px; border-radius: 3px; background: rgba(127,178,255,0.15); overflow: hidden"><div style="height: 100%; width: {{a.w}}; background: linear-gradient(90deg, #1F6BFF, #18D4F0); border-radius: 3px"></div></div>
+<span style="width: 52px; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: {{a.tc}}">{{a.label}}</span>
+</div>
+</sc-for>
+</div>
+<button style="all: unset; margin-top: 24px; padding: 15px 40px; border-radius: 12px; font-size: 16px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 10px 30px rgba(31,107,255,0.4); cursor: pointer">Go to desktop</button>
+<button style="all: unset; font-size: 14px; color: #7FB2FF; cursor: pointer; padding: 8px">Take the 1-minute tour</button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = [['Docs','#1F6BFF',100],['Sheets','#2E9E6A',100],['Mail','#D9572B',72],['Chat','#7A4FE0',35],['Drive','#0E8FA8',0]];
+    const apps = A.map(a => ({ name: a[0], color: a[1], initial: a[0][0], w: a[2] + '%',
+      label: a[2] === 100 ? 'Ready' : a[2] === 0 ? 'Queued' : a[2] + '%', tc: a[2] === 100 ? '#5FD39A' : '#8FA3C8' }));
+    return { apps };
+  }
+}
+</script>
+</body>
+</html>

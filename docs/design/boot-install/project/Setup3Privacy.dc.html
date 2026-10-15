@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Setup – Privacy</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 64px 0 48px; background: radial-gradient(ellipse 70% 60% at 50% 0%, #163B82 0%, #0A1A3D 60%, #060E22 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; display: flex; flex-direction: column; align-items: center; gap: 32px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: 0.08em">3 OF 5</div>
+<h1 style="margin: 0; font-size: 36px; font-weight: 700; letter-spacing: -0.02em">Your privacy</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">Everything here is off unless you turn it on.</p>
+</div>
+<div style="width: 720px; border: 1px solid rgba(127,178,255,0.16); border-radius: 16px; background: rgba(14,32,72,0.6); overflow: hidden">
+<sc-for list="{{items}}" as="it" hint-placeholder-count="4">
+<label style="display: flex; align-items: center; gap: 18px; padding: 18px 22px; border-top: {{it.border}}; cursor: pointer">
+<span style="width: 40px; height: 40px; border-radius: 10px; background: rgba(31,107,255,0.15); display: flex; align-items: center; justify-content: center; flex: none">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{it.icon}}"></path></svg>
+</span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+<span style="font-size: 15px; font-weight: 600">{{it.title}}</span>
+<span style="font-size: 13px; color: #8FA3C8">{{it.desc}}</span>
+</span>
+<input type="checkbox" checked="{{it.on}}" onChange="{{it.toggle}}" style="position: absolute; opacity: 0; width: 1px; height: 1px">
+<span aria-hidden="true" style="width: 44px; height: 26px; border-radius: 13px; background: {{it.track}}; position: relative; flex: none">
+<span style="position: absolute; top: 3px; left: {{it.knob}}; width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF"></span>
+</span>
+</label>
+</sc-for>
+</div>
+<a href="#" style="font-size: 14px">Read the WorkSuite OS privacy statement</a>
+<div style="margin-top: auto; width: 900px; display: flex; justify-content: space-between; align-items: center">
+<button style="all: unset; padding: 12px 24px; border-radius: 10px; font-size: 15px; font-weight: 500; color: #E8EEFA; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Back</button>
+<div style="display: flex; gap: 8px" aria-hidden="true">
+<span style="width: 6px; height: 6px; border-radius: 3px; background: #5FD39A"></span>
+<span style="width: 6px; height: 6px; border-radius: 3px; background: #5FD39A"></span>
+<span style="width: 24px; height: 6px; border-radius: 3px; background: #18D4F0"></span>
+<span style="width: 6px; height: 6px; border-radius: 3px; background: rgba(127,178,255,0.3)"></span>
+<span style="width: 6px; height: 6px; border-radius: 3px; background: rgba(127,178,255,0.3)"></span>
+</div>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Next</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { on: { loc: true, upd: true } }; }
+  renderVals() {
+    const on = this.state.on;
+    const I = [
+      ['loc','Location services','Lets apps like Weather and Maps know where you are.','M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z'],
+      ['upd','Automatic security updates','Install security fixes in the background.','M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],
+      ['crash','Send crash reports','Anonymous reports help us fix bugs faster.','M4 4h16v12H5.5L4 18z'],
+      ['usage','Share usage statistics','Which features you use, never your files or messages.','M4 20V10M10 20V4M16 20v-7M22 20H2']
+    ];
+    const items = I.map((it, i) => {
+      const v = !!on[it[0]];
+      return { title: it[1], desc: it[2], icon: it[3], on: v, border: i ? '1px solid rgba(127,178,255,0.1)' : 'none',
+        track: v ? '#1F6BFF' : 'rgba(127,178,255,0.25)', knob: v ? '21px' : '3px',
+        toggle: () => this.setState({ on: Object.assign({}, on, { [it[0]]: !v }) }) };
+    });
+    return { items };
+  }
+}
+</script>
+</body>
+</html>

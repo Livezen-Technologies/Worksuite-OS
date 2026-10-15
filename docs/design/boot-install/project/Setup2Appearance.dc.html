@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Setup – Appearance</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 64px 0 48px; background: radial-gradient(ellipse 70% 60% at 50% 0%, #163B82 0%, #0A1A3D 60%, #060E22 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; display: flex; flex-direction: column; align-items: center; gap: 36px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: 0.08em">2 OF 5</div>
+<h1 style="margin: 0; font-size: 36px; font-weight: 700; letter-spacing: -0.02em">Pick your look</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">You can change this anytime in Settings › Appearance.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; width: 900px">
+<sc-for list="{{themes}}" as="t" hint-placeholder-count="3">
+<button style="all: unset; display: flex; flex-direction: column; gap: 12px; padding: 12px; border-radius: 16px; border: 2px solid {{t.ring}}; background: rgba(14,32,72,0.5); cursor: pointer">
+<div style="height: 170px; border-radius: 10px; background: {{t.bg}}; position: relative; overflow: hidden">
+<div style="position: absolute; left: 12px; right: 12px; bottom: 10px; height: 26px; border-radius: 8px; background: {{t.bar}}"></div>
+<div style="position: absolute; left: 20px; top: 20px; width: 120px; height: 84px; border-radius: 8px; background: {{t.win}}; box-shadow: 0 6px 16px rgba(0,0,0,0.25)"></div>
+<div style="position: absolute; left: 28px; top: 30px; width: 60px; height: 8px; border-radius: 4px; background: #1F6BFF"></div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 0 4px">
+<span style="font-size: 15px; font-weight: 600">{{t.name}}</span>
+<sc-if value="{{t.on}}" hint-placeholder-val="{{false}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="#1F6BFF" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"></path></svg></sc-if>
+</div>
+</button>
+</sc-for>
+</div>
+<div style="display: flex; align-items: center; gap: 18px">
+<span style="font-size: 14px; color: #C9D6EE">Accent color</span>
+<sc-for list="{{accents}}" as="a" hint-placeholder-count="6">
+<button aria-label="{{a.name}}" style="all: unset; width: 28px; height: 28px; border-radius: 50%; background: {{a.c}}; box-shadow: {{a.ring}}; cursor: pointer"></button>
+</sc-for>
+</div>
+<div style="margin-top: auto; width: 900px; display: flex; justify-content: space-between; align-items: center">
+<button style="all: unset; padding: 12px 24px; border-radius: 10px; font-size: 15px; font-weight: 500; color: #E8EEFA; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Back</button>
+<div style="display: flex; gap: 8px" aria-hidden="true">
+<span style="width: 6px; height: 6px; border-radius: 3px; background: #5FD39A"></span>
+<span style="width: 24px; height: 6px; border-radius: 3px; background: #18D4F0"></span>
+<span style="width: 6px; height: 6px; border-radius: 3px; background: rgba(127,178,255,0.3)"></span>
+<span style="width: 6px; height: 6px; border-radius: 3px; background: rgba(127,178,255,0.3)"></span>
+<span style="width: 6px; height: 6px; border-radius: 3px; background: rgba(127,178,255,0.3)"></span>
+</div>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Next</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const sel = (this.state && this.state.t) || 'Dark';
+    const T = [['Light','linear-gradient(135deg,#EAF1FF,#C9DAFF)','rgba(255,255,255,0.8)','#FFFFFF'],['Dark','linear-gradient(135deg,#0E2357,#060E22)','rgba(255,255,255,0.08)','#13264F'],['Auto','linear-gradient(135deg,#EAF1FF 0%,#EAF1FF 50%,#0E2357 50%,#060E22 100%)','rgba(127,178,255,0.25)','#5E739C']];
+    const themes = T.map(t => ({ name: t[0], bg: t[1], bar: t[2], win: t[3], on: t[0] === sel, ring: t[0] === sel ? '#1F6BFF' : 'transparent' }));
+    const A = [['Blue','#1F6BFF'],['Cyan','#18D4F0'],['Green','#3DBE7F'],['Orange','#F08A3C'],['Pink','#E0559B'],['Purple','#8B5CF6']];
+    const accents = A.map((a, i) => ({ name: a[0], c: a[1], ring: i === 0 ? '0 0 0 3px #0A1A3D, 0 0 0 5px #FFFFFF' : 'none' }));
+    return { themes, accents };
+  }
+}
+</script>
+</body>
+</html>
