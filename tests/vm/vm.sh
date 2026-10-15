@@ -25,7 +25,13 @@ case "$cmd" in
 start) mkdir -p "$dir"; [ -f "$dir/disk.qcow2" ] || qemu-img create -f qcow2 "$dir/disk.qcow2" "${4:-40G}" >/dev/null
        run -cdrom "${3:?iso}" -boot order=dc ;;
 boot-disk) run ;;
-shot) mon "screendump $dir/${3:?name}.ppm"; sleep 1; convert "$dir/$3.ppm" "$dir/$3.png" 2>/dev/null || pnmtopng "$dir/$3.ppm" > "$dir/$3.png"; rm -f "$dir/$3.ppm"; echo "$dir/$3.png" ;;
+shot) p="$dir/${3:?name}.ppm"; rm -f "$p"; mon "screendump $p"
+      # QEMU writes the PPM asynchronously: wait until it exists and its size stops changing.
+      n=0; last=-1; while [ $n -lt 50 ]; do s=$(stat -c %s "$p" 2>/dev/null || echo 0)
+        [ "$s" -gt 0 ] && [ "$s" = "$last" ] && break; last=$s; n=$((n+1)); sleep 0.2; done
+      convert "$p" "$dir/$3.png" 2>/dev/null || pnmtopng "$p" > "$dir/$3.png" 2>/dev/null \
+        || python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2])' "$p" "$dir/$3.png"
+      rm -f "$p"; echo "$dir/$3.png" ;;
 click) mon "mouse_move ${3:?x} ${4:?y}"; sleep 0.3; mon 'mouse_button 1'; sleep 0.15; mon 'mouse_button 0' ;;
 keys) shift 2; for k in "$@"; do mon "sendkey $k"; sleep 0.3; done ;;
 type) t=${3:?text}; i=0

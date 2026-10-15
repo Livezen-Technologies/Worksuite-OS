@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Network</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Network" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 32px 44px; display: flex; flex-direction: column; gap: 20px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Network</h1>
+<div style="display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 14px; background: rgba(14,32,72,0.7); border: 1px solid rgba(127,178,255,0.14)">
+<span style="width: 48px; height: 48px; border-radius: 12px; background: #1F6BFF; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 16px; font-weight: 600">Wi-Fi</span><span style="font-size: 13px; color: #5FD39A">Connected to Office-5G · 480 Mb/s</span></span>
+<span aria-hidden="true" style="width: 46px; height: 28px; border-radius: 14px; background: #1F6BFF; position: relative"><span style="position: absolute; top: 3px; left: 21px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF"></span></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; color: #8FA3C8; text-transform: uppercase; letter-spacing: 0.08em">Available networks</span>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{nets}}" as="n" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 14px; padding: 13px 18px; border-top: {{n.border}}; background: {{n.bg}}">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{n.color}}" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="{{n.bars}}"></path></svg>
+<span style="flex: 1; font-size: 14px; font-weight: {{n.weight}}">{{n.name}}</span>
+<span style="font-size: 12px; color: #8FA3C8">{{n.note}}</span>
+<sc-if value="{{n.lock}}" hint-placeholder-val="{{true}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8FA3C8" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z"></path></svg></sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{others}}" as="o" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<span style="font-size: 14px; font-weight: 600">{{o.t}}</span>
+<span style="font-size: 13px; color: #8FA3C8">{{o.d}}</span>
+</div>
+</sc-for>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const full = 'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0', mid = 'M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0', low = 'M9 16a5 5 0 0 1 6 0';
+    const N = [['Office-5G','Connected',full,true,true],['Office-Guest','Open · sign-in page',full,false,false],['Home-Fiber','Saved',mid,true,false],['Printer-Direct','',low,true,false],['Café-Wifi','Open',low,false,false]];
+    const nets = N.map((n, i) => ({ name: n[0], note: n[1], bars: n[2], lock: n[3], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none',
+      bg: n[4] ? 'rgba(31,107,255,0.12)' : 'transparent', weight: n[4] ? 600 : 400, color: n[4] ? '#18D4F0' : '#C9D6EE' }));
+    return { nets, others: [{ t: 'Ethernet', d: 'Cable unplugged' }, { t: 'VPN', d: 'Off · 1 saved' }, { t: 'Proxy', d: 'Automatic' }] };
+  }
+}
+</script>
+</body>
+</html>

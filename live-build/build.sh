@@ -25,6 +25,22 @@ cp "$debs"/*_all.deb "$debs"/*_"$ARCH".deb config/packages.chroot/
 find config/packages.chroot -name '*-dbgsym_*' -delete
 # Boot menu artwork, row images, selection pill and fonts (IBM Plex, bundled) for the live GRUB theme.
 "$here/../branding/grub/live/render.sh" config/bootloaders/grub-pc/live-theme
+# WorkSuite Office (native editors, built by github.com/Livezen-Technologies/worksuite-office CI) is optional: drop its
+# .deb at live-build/config/packages.chroot/worksuite-office*.deb (or pass WORKSUITE_OFFICE_DEB=path) and it is
+# installed; otherwise the image builds without it. Nothing is downloaded here. WORKSUITE_OFFICE_SHA256 (optional)
+# pins the file; the package's architecture must match ARCH.
+[ -z "${WORKSUITE_OFFICE_DEB:-}" ] || cp "$WORKSUITE_OFFICE_DEB" config/packages.chroot/
+for office in config/packages.chroot/worksuite-office*.deb; do
+  [ -f "$office" ] || continue
+  if [ -n "${WORKSUITE_OFFICE_SHA256:-}" ]; then
+    echo "$WORKSUITE_OFFICE_SHA256  $office" | sha256sum -c - >/dev/null || { echo "WorkSuite Office: checksum mismatch for $office" >&2; exit 1; }
+  fi
+  dpkg-deb --info "$office" >/dev/null || { echo "WorkSuite Office: $office is not a valid .deb" >&2; exit 1; }
+  pkg=$(dpkg-deb -f "$office" Package); parch=$(dpkg-deb -f "$office" Architecture)
+  case "$parch" in "$ARCH"|all) ;; *) echo "WorkSuite Office: $office is $parch, not $ARCH; skipping" >&2; rm -f "$office"; continue ;; esac
+  echo "$pkg" >> config/package-lists/worksuite-office.list.chroot
+  echo "WorkSuite Office: installing $pkg $(dpkg-deb -f "$office" Version)"
+done
 if [ -n "${BUILD_HTTPS_PROXY:-}" ]; then
   export https_proxy="$BUILD_HTTPS_PROXY" HTTPS_PROXY="$BUILD_HTTPS_PROXY"
   mkdir -p config/includes.chroot_before_packages/etc/apt/apt.conf.d

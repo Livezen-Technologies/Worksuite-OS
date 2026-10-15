@@ -140,3 +140,19 @@ test('expired commands are not delivered', async () => {
   const hb = await call('POST', '/desktop/v1/devices/heartbeat', { device: d.credential, body: { os_version: '1', shell_version: '1', kernel_version: '6', policy_version: '0' } });
   assert.deepEqual(hb.body, { commands: [] });
 });
+
+test('bootstrap lists the org\'s web apps with web_url; links resolve to a web_url', async () => {
+  const b = await call('GET', '/desktop/v1/bootstrap', { token: ana });
+  const mail = b.body.apps.find((a: { id: string }) => a.id === 'mail');
+  assert.deepEqual(mail, { id: 'mail', name: 'Mail', web_url: 'https://ws.test/apps/mail/' });
+  assert.equal(b.body.apps.length, 9);
+  const l = await call('GET', '/desktop/v1/links/resolve?url=' + encodeURIComponent('worksuite://drive/files/42?v=1'), { token: ana });
+  assert.deepEqual(l.body, { app_id: 'drive', route: '/files/42', web_url: 'https://ws.test/apps/drive/files/42?v=1' });
+  admin.setWebApps(db, org, ['mail', 'chat']);
+  const b2 = await call('GET', '/desktop/v1/bootstrap', { token: ana });
+  assert.deepEqual(b2.body.apps.map((a: { id: string }) => a.id), ['mail', 'chat']);
+  const l2 = await call('GET', '/desktop/v1/links/resolve?url=' + encodeURIComponent('worksuite://drive/x'), { token: ana });
+  assert.equal(l2.body.web_url, null);
+  assert.throws(() => admin.setWebApps(db, org, ['nope']));
+  admin.setWebApps(db, org, null);
+});

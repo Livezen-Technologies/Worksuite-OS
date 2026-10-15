@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite Chat
+GenericName=Chat
+Comment=Team messaging and channels
+Exec=worksuite-app chat
+TryExec=worksuite-app
+Icon=worksuite-chat
+Terminal=false
+Categories=Network;InstantMessaging;
+Keywords=worksuite;chat;messages;team;
+StartupNotify=true
+StartupWMClass=worksuite-chat

@@ -9,30 +9,9 @@ import { PowerMenu, ShutdownConfirm } from '../components/Power'
 import { TaskbarUpdateButton, UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
+import { buildLauncherApps, filterApps, taskbarApps, type LauncherApp } from '../lib/launcher'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
-
-type Kind = 'WorkSuite' | 'Linux app' | 'System'
-interface App { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean }
-
-const ws = (id: string, name: string, mark: string, bg: string, fg: string, fav = false): App => ({ id, name, mark, bg, fg, kind: 'WorkSuite', fav })
-const lx = (id: string, name: string, mark: string, bg: string, fg: string, fav = false): App => ({ id, name, mark, bg, fg, kind: 'Linux app', fav })
-
-const APPS: App[] = [
-  ws('mail', 'Mail', 'M', '#dbeafe', '#1d4ed8', true),
-  ws('calendar', 'Calendar', 'C', '#e0e7ff', '#4338ca', true),
-  ws('chat', 'Chat', 'Ch', '#dcfce7', '#15803d', true),
-  ws('drive', 'Drive', 'D', '#e0f2fe', '#0369a1', true),
-  ws('tasks', 'Tasks', 'T', '#fef3c7', '#b45309'),
-  ws('projects', 'Projects', 'P', '#fae8ff', '#a21caf'),
-  ws('crm', 'CRM', 'CR', '#ffe4e6', '#be123c'),
-  ws('meet', 'Meet', 'Me', '#ccfbf1', '#0f766e'),
-  ws('office', 'Office', 'O', '#ffedd5', '#c2410c', true),
-  ws('pdf-studio', 'PDF Studio', 'PDF', '#fee2e2', '#b91c1c'),
-  lx('firefox', 'Firefox', 'Fx', '#f1f5f9', '#334155', true),
-  lx('terminal', 'Terminal', '>_', '#0f172a', '#e2e8f0'),
-  { id: 'appcenter', name: 'App Center', mark: 'A', bg: '#2563eb', fg: '#ffffff', kind: 'System' },
-]
 
 const SETTINGS_PAGES = ['Wi-Fi and network', 'Bluetooth', 'Displays', 'Sound', 'Power and battery', 'Appearance', 'Accounts', 'Privacy and security', 'Updates', 'Keyboard shortcuts']
 
@@ -42,14 +21,8 @@ const RECENT = [
   { ext: 'PDF', name: 'Invoice INV-2026-0418.pdf', where: 'This Computer › Downloads', state: 'Local', cls: 'bg-[#f1f5f9] text-[#334155]' },
 ]
 
-const TASKBAR = [
-  { id: 'mail', running: true, active: true },
-  { id: 'chat', running: true },
-  { id: 'drive' },
-  { id: 'office', running: true },
-  { id: 'firefox' },
-  { id: 'terminal' },
-] as { id: string; running?: boolean; active?: boolean }[]
+// Taskbar pins; entries the org hasn't enabled or that aren't installed drop out.
+const TASKBAR = ['worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office', 'firefox-esr']
 
 const TABS = [['all', 'All apps'], ['ws', 'WorkSuite'], ['linux', 'Linux apps'], ['fav', 'Favorites']] as const
 type Tab = (typeof TABS)[number][0]
@@ -102,25 +75,33 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
   useEffect(() => { if (launcher) searchRef.current?.focus(); else setQuery('') }, [launcher])
 
+  // Start menu list: the org's WorkSuite apps (fallback list when not signed in/offline) and installed XDG apps.
+  const [allApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
+  const appsLoaded = useRef(false)
+  useEffect(() => {
+    // On start, then again each time the launcher opens (sign-in, installs and org changes show up).
+    if (!launcher && appsLoaded.current) return
+    appsLoaded.current = true
+    let live = true
+    void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null)]).then(([w, i]) => {
+      if (live) setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null))
+    })
+    return () => { live = false }
+  }, [launcher])
   const q = query.trim().toLowerCase()
-  const apps = useMemo(() => APPS.filter((a) => {
-    if (tab === 'ws' && a.kind !== 'WorkSuite') return false
-    if (tab === 'linux' && a.kind !== 'Linux app') return false
-    if (tab === 'fav' && !a.fav) return false
-    // App Center lives in the footer; it joins the grid only as a search hit so Recent stays visible.
-    if (!q) return a.id !== 'appcenter'
-    return a.name.toLowerCase().includes(q)
-  }), [tab, q])
+  const apps = useMemo(() => filterApps(allApps, tab, q), [allApps, tab, q])
   const settingsHits = q ? SETTINGS_PAGES.filter((s) => s.toLowerCase().includes(q)) : []
   const recent = q ? RECENT.filter((r) => r.name.toLowerCase().includes(q)) : RECENT
 
   const launch = (id: string) => {
     setLauncher(false)
-    if (id === 'drive') onOpen('files')
-    else if (id === 'appcenter') onOpen('appcenter')
-    else void os.launchApp(id)
+    const a = allApps.find((x) => x.id === id)
+    if (!a) return
+    if ('screen' in a.launch) onOpen(a.launch.screen)
+    else if ('office' in a.launch) void os.launchOffice(a.launch.office)
+    else void os.launchApp(a.launch.desktop)
   }
-  const byId = (id: string) => APPS.find((a) => a.id === id)!
+  const taskbar = taskbarApps(allApps, TASKBAR)
 
   const openSettingsAt = (section: string) => { requestSettingsSection(section); onOpen('settings') }
 
@@ -275,16 +256,12 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       <nav aria-label="Taskbar" className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
         <button type="button" aria-label="Open launcher" aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
           className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.45)] ring-2 ring-[#1F6BFF]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
-        {TASKBAR.map((t) => {
-          const a = byId(t.id)
-          return (
-            <button key={t.id} type="button" aria-label={`${a.name}${t.running ? ', running' : ''}`} onClick={() => launch(t.id)}
-              className={`relative flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${t.active ? 'bg-white/10' : 'hover:bg-white/10'}`}>
-              <span className="flex size-7 items-center justify-center rounded-[7px] text-[11px] font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
-              {t.running && <span className={`absolute bottom-[2px] h-[3px] rounded-sm bg-[#18D4F0] ${t.active ? 'w-3.5' : 'w-1.5'}`} />}
-            </button>
-          )
-        })}
+        {taskbar.map((a) => (
+          <button key={a.id} type="button" aria-label={a.name} onClick={() => launch(a.id)}
+            className="relative flex size-10 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10">
+            <span className="flex size-7 items-center justify-center rounded-[7px] text-[11px] font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
+          </button>
+        ))}
         <div role="group" aria-label="Workspaces" className="ml-4 hidden gap-1 sm:flex">
           {[1, 2, 3].map((n) => (
             <button key={n} type="button" aria-label={`Workspace ${n}`} aria-pressed={workspace === n} onClick={() => setWorkspace(n)}

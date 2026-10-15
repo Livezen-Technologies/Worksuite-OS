@@ -1,7 +1,7 @@
 // Devices and drivers (boards H1–H6, HwSettings). Devices are read from sysfs by the bridge; there is no driver
 // catalog or driver installer service yet, so driver choices and driver updates show an honest empty state.
 import { useEffect, useRef, useState } from 'react'
-import { formatBytes, os, type DriverOffer, type HwDevice } from '../lib/os'
+import { formatBytes, os, type Avail, type DriverOffer, type HwDevice, type Printer } from '../lib/os'
 import { KIND_ICON, deviceStatus, deviceSub, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerVersion } from '../lib/hardware'
 import { C, Dialog, OptionCard, Progress, Spinner, Svg, Tag, btnGhost, btnPrimary, card, dialogFooter, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { ICON } from './Updates'
@@ -40,9 +40,29 @@ export function Empty({ title, children }: { title: string; children?: React.Rea
 /** Settings › Devices (HwSettings page=devices). */
 export function DevicesPanel({ onProblem }: { onProblem?: (d: HwDevice) => void }) {
   const [devs, reload] = useResource(os.hwDevices)
+  const [printers, setPrinters] = useState<Avail<Printer[]> | null>(null)
+  const loadPrinters = () => os.sysPrinters().then(setPrinters, () => setPrinters({ available: false, reason: 'service_unavailable' }))
+  useEffect(() => { void loadPrinters() }, [])
   return (
     <div className="flex flex-col gap-4">
-      <Header title="Devices" action="Refresh" onAction={() => void reload()} />
+      <Header title="Devices" action="Refresh" onAction={() => { void reload(); void loadPrinters() }} />
+      {printers?.available && printers.value.length > 0 && (
+        <section aria-label="Printers" className="flex flex-col gap-1.5">
+          <h2 className={`m-0 font-normal ${sectionLabel}`}>Printers</h2>
+          <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
+            {printers.value.map((p) => {
+              const color = p.state === 'disabled' ? C.amber : p.state === 'unknown' ? C.muted : C.green
+              return (
+                <li key={p.name} className={`flex items-center gap-3.5 px-4 py-3 ${rowLine}`}>
+                  <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[rgba(31,107,255,0.16)]"><Svg d={KIND_ICON.printer} size={18} stroke="#7FB2FF" /></span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="truncate text-sm font-medium">{p.name.replace(/_/g, ' ')}</span><span className="text-xs text-[#8FA3C8]">Printer{p.is_default ? ' · default' : ''}</span></span>
+                  <span className="flex items-center gap-1.5 text-xs" style={{ color }}><span className="h-2 w-2 rounded-full" style={{ background: color }} />{p.state === 'printing' ? 'Printing' : p.state === 'disabled' ? 'Paused' : p.state === 'unknown' ? 'Unknown' : 'Ready'}</span>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
       {devs.state === 'loading' && <Empty title="Looking for devices…" />}
       {devs.state === 'unavailable' && <Empty title="Device information isn't available yet">This computer didn't report its hardware to the shell.</Empty>}
       {devs.state === 'ok' && devs.value.length === 0 && <Empty title="No devices found">Plugged-in and built-in devices appear here.</Empty>}

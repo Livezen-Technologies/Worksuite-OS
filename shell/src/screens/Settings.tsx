@@ -2,7 +2,8 @@
 // UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
 // can't tell, the section says so instead of showing sample values.
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { cloudErrorText, os, policyLines, serverUrlFor, type BluetoothInfo, type CloudAccount, type CloudResult, type DeviceInfo, type DisplayInfo, type HwDevice, type LocalUser, type NetworkInfo, type SignOutChoice, type SoundInfo } from '../lib/os'
+import { cloudErrorText, formatDuration, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type SignOutChoice } from '../lib/os'
+import { unavailableText, useSystem } from '../lib/useSystem'
 import type { WindowProps } from './types'
 import { ACCENTS, DEFAULT_PRIVACY, KEYS, THEMES, accentColor, applyAppearance, loadAppearance, readJson, writeJson, type Appearance, type Privacy } from '../lib/setup'
 import { needsAttention, fmtWhen } from '../lib/updates'
@@ -32,11 +33,12 @@ const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s
 // Older names (launcher search, earlier builds) still land somewhere sensible.
 const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Printers: 'Devices' }
 
-type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable' }
-function useBridge<T>(load: () => Promise<CloudResult<T>>): Res<T> {
-  const [r, setR] = useState<Res<T>>({ state: 'loading' })
-  useEffect(() => { void load().then((x) => setR(x.ok ? { state: 'ok', value: x.value } : { state: 'unavailable' })).catch(() => setR({ state: 'unavailable' })) }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  return r
+type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
+/** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
+function useAvail<T>(load: () => Promise<Avail<T>>, pollMs?: number): { r: Res<T>; reload: () => Promise<void> } {
+  const { state, reload } = useSystem(load, pollMs)
+  const r: Res<T> = !state ? { state: 'loading' } : state.available ? { state: 'ok', value: state.value } : { state: 'unavailable', reason: state.reason }
+  return { r, reload: async () => { await reload() } }
 }
 
 const H1 = ({ children, action }: { children: ReactNode; action?: ReactNode }) => (
@@ -60,125 +62,138 @@ const Value = ({ children, min = 180 }: { children: ReactNode; min?: number }) =
     {children ?? <span className="text-[#8FA3C8]">Unavailable</span>}
   </span>
 )
-const Unavail = ({ what }: { what: string }) => <Empty title={`${what} isn't available`}>The shell couldn't read this from the system.</Empty>
+const Unavail = ({ what, reason }: { what: string; reason?: string }) => <Empty title={`${what} isn't available`}>{reason ? `${unavailableText(reason)}.` : 'The shell couldn’t read this from the system.'}</Empty>
 const Note = ({ children }: { children: ReactNode }) => <p className="m-0 text-xs leading-[1.5] text-[#8FA3C8]">{children}</p>
 
 const WIFI_BARS = (s: number) => (s >= 67 ? 'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' : s >= 34 ? 'M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' : 'M9 16a5 5 0 0 1 6 0')
 const LOCK = 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z'
 
 function NetworkPanel() {
-  const r = useBridge<NetworkInfo>(os.sysNetwork)
-  if (r.state !== 'ok') return <><H1>Network</H1>{r.state === 'loading' ? <Empty title="Reading network status…" /> : <Unavail what="Network information" />}</>
+  const { r, reload } = useAvail(os.sysNetwork, 15_000)
+  const [join, setJoin] = useState<{ ssid: string; secure: boolean; password: string; error: string | null; busy: boolean } | null>(null)
+  if (r.state !== 'ok') return <><H1>Network</H1>{r.state === 'loading' ? <Empty title="Reading network status…" /> : <Unavail what="Network information" reason={r.reason} />}</>
   const n = r.value
-  const active = n.wifi?.find((w) => w.active)
-  const wifiIf = n.interfaces.find((i) => i.type === 'wifi')
-  const eth = n.interfaces.filter((i) => i.type === 'ethernet')
+  const wifi = n.devices.find((d) => d.type === 'wifi')
+  const eth = n.devices.filter((d) => d.type === 'ethernet')
+  const active = n.networks.find((w) => w.in_use)
+  const connect = async () => {
+    if (!join) return
+    setJoin({ ...join, busy: true, error: null })
+    const res = await os.sysWifiConnect(join.ssid, join.password)
+    if (res.ok) { setJoin(null); void reload() } else setJoin({ ...join, busy: false, password: '', error: res.error === 'bad_password' ? 'Wrong password. Try again.' : 'Couldn’t connect to that network.' })
+  }
   return <>
     <H1>Network</H1>
     <div className={`${heroCard} flex items-center gap-4 px-5 py-[18px]`}>
       <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#1F6BFF]"><Svg d={WIFI_BARS(100)} size={24} stroke="#FFFFFF" /></span>
       <span className="flex flex-1 flex-col gap-0.5">
         <span className="text-base font-semibold">Wi-Fi</span>
-        <span className="text-[13px]" style={{ color: active ? C.green : C.muted }}>
-          {!wifiIf ? 'No Wi-Fi adapter' : n.wifi_enabled === false ? 'Off' : active ? `Connected to ${active.ssid}` : n.wifi_enabled == null ? 'Status unavailable' : 'Not connected'}
+        <span className="text-[13px]" style={{ color: n.wifi_enabled && (active || wifi?.connection) ? C.green : C.muted }}>
+          {!wifi ? 'No Wi-Fi adapter' : !n.wifi_enabled ? 'Off' : active || wifi.connection ? `Connected to ${active?.ssid ?? wifi.connection}` : 'Not connected'}
         </span>
       </span>
-      {n.wifi_enabled != null && <Switch label="Wi-Fi" checked={n.wifi_enabled} />}
+      {wifi && <Switch label="Wi-Fi" checked={n.wifi_enabled} onChange={(v) => void os.sysSetWifi(v).then(reload)} />}
     </div>
-    <section aria-label="Available networks" className="flex flex-col gap-2">
-      <h2 className={`m-0 font-normal ${sectionLabel}`}>Available networks</h2>
-      {n.wifi === null ? <Empty title="Network list unavailable">NetworkManager didn't answer, so nearby networks can't be listed.</Empty>
-        : n.wifi.length === 0 ? <Empty title="No networks found" />
-        : (
+    {n.wifi_enabled && (
+      <section aria-label="Available networks" className="flex flex-col gap-2">
+        <h2 className={`m-0 font-normal ${sectionLabel}`}>Available networks</h2>
+        {n.networks.length === 0 ? <Empty title="No networks found" /> : (
           <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
-            {n.wifi.map((w) => (
-              <li key={w.ssid} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`} style={{ background: w.active ? 'rgba(31,107,255,0.12)' : 'transparent' }}>
-                <Svg d={WIFI_BARS(w.signal)} size={20} stroke={w.active ? C.cyan : C.soft} />
-                <span className="flex-1 text-sm" style={{ fontWeight: w.active ? 600 : 400 }}>{w.ssid}</span>
-                <span className="text-xs text-[#8FA3C8]">{w.active ? 'Connected' : w.secure ? '' : 'Open'}</span>
-                {w.secure && <Svg d={LOCK} size={14} stroke={C.muted} />}
-                <span className="sr-only">{w.secure ? 'Secured' : 'Open'}, signal {w.signal}%</span>
+            {n.networks.map((w) => (
+              <li key={w.ssid} className={rowLine} style={{ background: w.in_use ? 'rgba(31,107,255,0.12)' : 'transparent' }}>
+                <div className="flex items-center gap-3.5 px-[18px] py-[11px]">
+                  <Svg d={WIFI_BARS(w.signal)} size={20} stroke={w.in_use ? C.cyan : C.soft} />
+                  <span className="flex-1 text-sm" style={{ fontWeight: w.in_use ? 600 : 400 }}>{w.ssid}</span>
+                  <span className="text-xs text-[#8FA3C8]">{w.in_use ? 'Connected' : w.security ? '' : 'Open'}</span>
+                  {w.security && <Svg d={LOCK} size={14} stroke={C.muted} />}
+                  <span className="sr-only">{w.security || 'Open'}, signal {w.signal}%</span>
+                  {!w.in_use && join?.ssid !== w.ssid && <button type="button" onClick={() => setJoin({ ssid: w.ssid, secure: !!w.security, password: '', error: null, busy: false })} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>Connect…</button>}
+                </div>
+                {join?.ssid === w.ssid && (
+                  <form className="flex flex-wrap items-center gap-2 px-[18px] pb-3 pl-[52px]" onSubmit={(e) => { e.preventDefault(); void connect() }}>
+                    {join.secure && <input type="password" aria-label={`Password for ${w.ssid}`} autoFocus value={join.password} onChange={(e) => setJoin({ ...join, password: e.target.value })} placeholder="Password" className={`${field} w-56`} />}
+                    <button type="submit" disabled={join.busy} className={`${btnPrimary} px-4 py-2 text-[13px]`}>{join.busy ? 'Connecting…' : 'Connect'}</button>
+                    <button type="button" disabled={join.busy} onClick={() => setJoin(null)} className={`${btnGhost} px-3 py-2 text-[13px]`}>Cancel</button>
+                    {join.error && <span role="alert" className="text-[13px] text-[#FF8A7A]">{join.error}</span>}
+                  </form>
+                )}
               </li>
             ))}
           </ul>
         )}
-    </section>
+      </section>
+    )}
     <div className="grid grid-cols-3 gap-3">
       {[
-        { t: 'Ethernet', d: eth.length ? (eth.some((e) => e.up) ? 'Connected' : 'Cable unplugged') : 'No Ethernet adapter' },
-        { t: 'Adapters', d: n.interfaces.map((i) => i.name).join(', ') || 'None found' },
+        { t: 'Ethernet', d: eth.length ? (eth.some((e) => e.state === 'connected') ? `Connected${eth[0].connection ? ` · ${eth[0].connection}` : ''}` : 'Cable unplugged') : 'No Ethernet adapter' },
+        { t: 'Adapters', d: n.devices.map((d) => d.device).join(', ') || 'None found' },
         { t: 'VPN and proxy', d: 'Not configurable here yet' },
       ].map((o) => <div key={o.t} className={`${card} flex flex-col gap-1.5 px-[18px] py-4`}><span className="text-sm font-semibold">{o.t}</span><span className="truncate text-[13px] text-[#8FA3C8]">{o.d}</span></div>)}
     </div>
-    <Note>Connecting to networks and turning Wi-Fi on or off isn't available from Settings yet.</Note>
   </>
 }
 
 function BluetoothPanel() {
-  const r = useBridge<BluetoothInfo>(os.sysBluetooth)
-  if (r.state !== 'ok') return <><H1>Bluetooth</H1>{r.state === 'loading' ? <Empty title="Reading Bluetooth status…" /> : <Unavail what="Bluetooth information" />}</>
+  const { r, reload } = useAvail(os.sysBluetooth, 15_000)
+  if (r.state !== 'ok') return <><H1>Bluetooth</H1>{r.state === 'loading' ? <Empty title="Reading Bluetooth status…" /> : <Unavail what="Bluetooth" reason={r.reason} />}</>
   const b = r.value
   return <>
     <H1>Bluetooth</H1>
     <div className={`${heroCard} flex items-center gap-4 px-5 py-[18px]`}>
       <span className="flex flex-1 flex-col gap-0.5">
         <span className="text-base font-semibold">Bluetooth</span>
-        <span className="text-[13px] text-[#8FA3C8]">{!b.adapter ? 'This computer has no Bluetooth adapter' : b.powered == null ? 'Status unavailable' : b.powered ? `On${b.name ? ` · this computer appears as "${b.name}"` : ''}` : 'Off'}</span>
+        <span className="text-[13px] text-[#8FA3C8]">{!b.powered ? 'Off' : b.discoverable && b.name ? `Visible to nearby devices as "${b.name}"` : b.name ? `On · this computer is "${b.name}"` : 'On'}</span>
       </span>
-      {b.powered != null && <Switch label="Bluetooth" checked={b.powered} />}
+      <Switch label="Bluetooth" checked={b.powered} onChange={(v) => void os.sysSetBluetooth(v).then(reload)} />
     </div>
-    {b.adapter && (
-      <section aria-label="My devices" className="flex flex-col gap-2">
-        <h2 className={`m-0 font-normal ${sectionLabel}`}>My devices</h2>
-        {b.paired === null ? <Empty title="Paired devices unavailable">The Bluetooth service didn't answer.</Empty>
-          : b.paired.length === 0 ? <Empty title="No paired devices" />
-          : (
-            <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
-              {b.paired.map((d) => (
-                <li key={d.address} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
-                  <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(31,107,255,0.16)]"><Svg d="M7 7l10 10-5 5V2l5 5L7 17" size={18} stroke="#7FB2FF" /></span>
-                  <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{d.name}</span><span className="text-xs text-[#8FA3C8]">Paired</span></span>
-                </li>
-              ))}
-            </ul>
-          )}
-      </section>
-    )}
-    <Note>Pairing, connecting and scanning for nearby devices aren't available from Settings yet.</Note>
+    <section aria-label="My devices" className="flex flex-col gap-2">
+      <h2 className={`m-0 font-normal ${sectionLabel}`}>My devices</h2>
+      {b.paired.length === 0 ? <Empty title="No paired devices" /> : (
+        <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
+          {b.paired.map((d) => (
+            <li key={d.address} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
+              <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(31,107,255,0.16)]"><Svg d="M7 7l10 10-5 5V2l5 5L7 17" size={18} stroke="#7FB2FF" /></span>
+              <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{d.name}</span><span className="text-xs" style={{ color: d.connected ? C.green : C.muted }}>{d.connected ? 'Connected' : 'Not connected'}</span></span>
+              <button type="button" disabled={!b.powered} onClick={() => void os.sysBtConnect(d.address, !d.connected).then(reload)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{d.connected ? 'Disconnect' : 'Connect'}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+    <Note>Pairing new devices and scanning for nearby devices aren't available from Settings yet.</Note>
   </>
 }
 
 function DisplayPanel() {
-  const r = useBridge<DisplayInfo>(os.sysDisplays)
-  if (r.state !== 'ok') return <><H1>Display</H1>{r.state === 'loading' ? <Empty title="Reading displays…" /> : <Unavail what="Display information" />}</>
-  const d = r.value
-  const primary = d.outputs.find((o) => o.built_in) ?? d.outputs[0]
-  const res = primary?.mode?.replace('x', ' × ') ?? null
+  const { r } = useAvail(os.sysDisplays)
+  if (r.state !== 'ok') return <><H1>Display</H1>{r.state === 'loading' ? <Empty title="Reading displays…" /> : <Unavail what="Display information" reason={r.reason} />}</>
+  const outs = r.value.filter((d) => d.enabled)
+  const primary = outs[0]
   return <>
     <H1>Display</H1>
     <div className="flex h-[200px] items-center justify-center gap-5 rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(4,10,26,0.5)]" aria-label="Connected displays" role="img">
-      {d.outputs.length === 0 && <span className="text-[13px] text-[#8FA3C8]">No connected displays reported</span>}
-      {d.outputs.map((o, i) => (
-        <div key={o.name} className={`box-border flex items-end rounded-[10px] p-2.5 text-[13px] ${o === primary ? 'h-[136px] w-[220px] border-2 border-[#1F6BFF] bg-[linear-gradient(160deg,#1F4FB0,#0A1A3D)] font-semibold' : 'h-[100px] w-[170px] border border-[rgba(127,178,255,0.3)] bg-[rgba(14,32,72,0.8)] text-[#C9D6EE]'}`}>
-          {i + 1} · {o.built_in ? 'Built-in' : o.name}
+      {outs.length === 0 && <span className="text-[13px] text-[#8FA3C8]">No connected displays reported</span>}
+      {outs.map((o, i) => (
+        <div key={o.name} className={`box-border flex items-end rounded-[10px] p-2.5 text-[13px] ${i === 0 ? 'h-[136px] w-[220px] border-2 border-[#1F6BFF] bg-[linear-gradient(160deg,#1F4FB0,#0A1A3D)] font-semibold' : 'h-[100px] w-[170px] border border-[rgba(127,178,255,0.3)] bg-[rgba(14,32,72,0.8)] text-[#C9D6EE]'}`}>
+          {i + 1} · {o.description || o.name}
         </div>
       ))}
     </div>
     <div className={`${card} overflow-hidden`}>
       {[
-        { k: 'Resolution', d: 'Preferred mode of this screen', v: <Value>{res}</Value> },
-        { k: 'Scale', d: 'Make text and apps larger', v: <Value>{null}</Value> },
-        { k: 'Refresh rate', d: 'Smoother motion', v: <Value>{null}</Value> },
-        { k: 'Brightness', d: d.brightness == null ? 'No adjustable backlight found' : 'Current backlight level', v: d.brightness == null ? <Value>{null}</Value> : <span className="flex items-center gap-3"><input type="range" aria-label="Brightness" disabled value={d.brightness} readOnly className="w-[220px] accent-[#1F6BFF]" /><span className="w-10 text-right font-mono text-[13px]">{d.brightness}%</span></span> },
-        { k: 'Night light', d: 'Warmer colors at night', v: <Value>{null}</Value> },
+        { k: 'Resolution', d: 'Current mode', v: primary?.width ? `${primary.width} × ${primary.height}` : null },
+        { k: 'Scale', d: 'Make text and apps larger', v: primary?.scale ? `${Math.round(primary.scale * 100)}%` : null },
+        { k: 'Refresh rate', d: 'Smoother motion', v: primary?.refresh ? `${Math.round(primary.refresh)} Hz` : null },
+        { k: 'Brightness', d: 'Adjust the screen backlight', v: null },
+        { k: 'Night light', d: 'Warmer colors at night', v: null },
       ].map((row) => (
         <div key={row.k} className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
           <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{row.k}</span><span className="text-xs text-[#8FA3C8]">{row.d}</span></span>
-          {row.v}
+          <Value>{row.v}</Value>
         </div>
       ))}
     </div>
-    <Note>Display settings are shown as the system reports them; changing them from here isn't available yet.</Note>
+    <Note>Displays are shown as the compositor reports them; changing resolution, scale, brightness or night light from here isn't available yet.</Note>
   </>
 }
 
@@ -228,27 +243,34 @@ function AppearancePanel() {
 }
 
 function SoundPanel() {
-  const r = useBridge<SoundInfo>(os.sysSound)
-  if (r.state !== 'ok') return <><H1>Sound</H1>{r.state === 'loading' ? <Empty title="Reading sound devices…" /> : <Unavail what="Sound information" />}</>
-  const blocks = [
-    { title: 'Output', dev: r.value.output, icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
-    { title: 'Input', dev: r.value.input, icon: 'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM6 11a6 6 0 0 0 12 0M12 17v4' },
-  ]
+  const { r, reload } = useAvail(os.sysSound)
+  const [vol, setVol] = useState<number | null>(null)
+  if (r.state !== 'ok') return <><H1>Sound</H1>{r.state === 'loading' ? <Empty title="Reading sound devices…" /> : <Unavail what="Sound" reason={r.reason} />}</>
+  const s = r.value
+  const out = s.outputs.find((o) => o.is_default)
+  const input = s.inputs.find((o) => o.is_default)
+  const select = 'box-border min-w-[260px] rounded-[9px] border border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.5)] px-3 py-[9px] text-[13px] text-[#E8EEFA]'
+  const v = vol ?? s.volume
   return <>
     <H1>Sound</H1>
-    {blocks.map((b) => (
-      <section key={b.title} aria-label={b.title} className={`${card} flex flex-col gap-2.5 px-5 py-[18px]`}>
-        <div className="flex items-center justify-between"><h2 className="m-0 text-[15px] font-semibold">{b.title}</h2><Value min={260}>{b.dev ? (b.dev.name ?? 'Default device') : null}</Value></div>
-        {b.dev ? (
-          <div className="flex items-center gap-3.5">
-            <Svg d={b.icon} size={20} stroke={C.soft} />
-            <input type="range" aria-label={`${b.title} volume`} disabled readOnly value={b.dev.volume} className="flex-1 accent-[#1F6BFF]" />
-            <span className="w-[72px] text-right font-mono text-[13px]">{b.dev.muted ? 'Muted' : `${b.dev.volume}%`}</span>
-          </div>
-        ) : <span className="text-[13px] text-[#8FA3C8]">No {b.title.toLowerCase()} device</span>}
-      </section>
-    ))}
-    <Note>Volumes are shown as the sound server reports them. Changing them here and per-app volume aren't available yet.</Note>
+    <section aria-label="Output" className={`${card} flex flex-col gap-2.5 px-5 py-[18px]`}>
+      <div className="flex items-center justify-between gap-3"><h2 className="m-0 text-[15px] font-semibold">Output</h2>
+        {s.outputs.length > 1
+          ? <select aria-label="Output device" value={out?.id ?? ''} onChange={(e) => void os.sysSetDefaultAudio(+e.target.value).then(reload)} className={select}>{s.outputs.map((o) => <option key={o.id} value={o.id} className="bg-[#0F2350]">{o.name}</option>)}</select>
+          : <Value min={260}>{out?.name ?? null}</Value>}
+      </div>
+      <div className="flex items-center gap-3.5">
+        <button type="button" aria-pressed={s.muted} aria-label="Mute" onClick={() => void os.sysSetMute(!s.muted).then(reload)} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg hover:bg-white/10">
+          <Svg d={s.muted ? 'M4 9v6h4l5 4V5L8 9zM17 9l4 6M21 9l-4 6' : 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7'} size={20} stroke={C.soft} />
+        </button>
+        <input type="range" aria-label="Output volume" min={0} max={100} value={v} onChange={(e) => { setVol(+e.target.value); void os.sysSetVolume(+e.target.value) }} onPointerUp={() => void reload().then(() => setVol(null))} onKeyUp={() => void reload().then(() => setVol(null))} className="flex-1 accent-[#1F6BFF]" />
+        <span className="w-[56px] text-right font-mono text-[13px]">{s.muted ? 'Muted' : `${v}%`}</span>
+      </div>
+    </section>
+    <section aria-label="Input" className={`${card} flex items-center justify-between gap-3 px-5 py-[18px]`}>
+      <h2 className="m-0 text-[15px] font-semibold">Input</h2><Value min={260}>{input?.name ?? null}</Value>
+    </section>
+    <Note>Input level, level meters and per-app volume aren't available yet.</Note>
   </>
 }
 
@@ -313,7 +335,7 @@ function PrivacyPanel() {
 }
 
 function UsersPanel() {
-  const r = useBridge(os.sysUsers)
+  const { r } = useAvail(os.sysUsers)
   const [info, setInfo] = useState<DeviceInfo | null>(null)
   useEffect(() => { void os.deviceInfo().then(setInfo).catch(() => {}) }, [])
   const me = r.state === 'ok' ? r.value.users.find((u) => u.login === r.value.current) ?? null : null
@@ -361,7 +383,15 @@ function UsersPanel() {
   </>
 }
 
+function batteryText(b: BatteryState): string {
+  const eta = b.state === 'charging' ? formatDuration(b.time_to_full_s) : b.on_battery ? formatDuration(b.time_to_empty_s) : null
+  const what = b.state === 'charging' ? 'charging' : b.on_battery ? 'on battery' : b.state === 'fully-charged' ? 'fully charged' : 'plugged in'
+  return `${b.percentage == null ? '—' : `${b.percentage}%`} · ${what}${eta ? ` · ${eta} ${b.state === 'charging' ? 'to full' : 'left'}` : ''}`
+}
+
 function AboutPanel() {
+  const { r: disks } = useAvail(os.sysDisks)
+  const { r: battery } = useAvail(os.sysBattery, 60_000)
   const [showWipe, setShowWipe] = useState(false)
   const [info, setInfo] = useState<DeviceInfo | null>(null)
   useEffect(() => { void os.deviceInfo().then(setInfo).catch(() => {}) }, [])
@@ -380,6 +410,8 @@ function AboutPanel() {
       { k: 'Architecture', v: d?.arch === 'arm64' ? 'ARM64 (arm64)' : d?.arch === 'amd64' ? 'x86-64 (amd64)' : 'Unknown' },
       { k: 'Kernel', v: d?.kernel_version ?? 'Unknown' },
       { k: 'Disk encryption', v: d?.encrypted == null ? 'Unknown' : d.encrypted ? 'Encrypted (LUKS2)' : 'Not encrypted' },
+      { k: 'Storage', v: disks.state === 'ok' ? disks.value.map((x) => x.model || x.device).join(', ') || 'None found' : disks.state === 'loading' ? '…' : 'Unknown' },
+      { k: 'Battery', v: battery.state === 'ok' ? batteryText(battery.value) : battery.state === 'loading' ? '…' : 'No battery' },
     ]} />
     {/* WSOS-MDM-007: management disclosure, from the device agent */}
     {info.managed ? (
@@ -588,7 +620,7 @@ export default function Settings({ onClose }: WindowProps) {
   useEffect(() => {
     void os.hwDriverUpdates().then((r) => setDriverCount(r.ok ? r.value.length : 0)).catch(() => {})
     void os.sysUsers().then((r) => {
-      if (!r.ok) return
+      if (!r.available) return
       const me = r.value.users.find((u) => u.login === r.value.current)
       setUser({ name: me?.name ?? r.value.current, role: me ? (me.admin ? 'Administrator' : 'Standard user') : 'Signed in' })
     }).catch(() => {})

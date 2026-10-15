@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Display</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Display" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 32px 44px; display: flex; flex-direction: column; gap: 18px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Display</h1>
+<div style="height: 200px; border-radius: 14px; background: rgba(4,10,26,0.5); border: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: center; gap: 20px">
+<div style="width: 220px; height: 136px; box-sizing: border-box; border-radius: 10px; border: 2px solid #1F6BFF; background: linear-gradient(160deg, #1F4FB0, #0A1A3D); display: flex; align-items: flex-end; padding: 10px; font-size: 13px; font-weight: 600">1 · Built-in</div>
+<div style="width: 170px; height: 100px; box-sizing: border-box; border-radius: 10px; border: 1px solid rgba(127,178,255,0.3); background: rgba(14,32,72,0.8); display: flex; align-items: flex-end; padding: 10px; font-size: 13px; color: #C9D6EE">2 · Dell U2422H</div>
+</div>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-top: {{r.border}}">
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 500">{{r.k}}</span><span style="font-size: 12px; color: #8FA3C8">{{r.d}}</span></span>
+<sc-if value="{{r.slider}}" hint-placeholder-val="{{false}}"><input type="range" aria-label="{{r.k}}" value="{{r.v}}" style="width: 220px; accent-color: #1F6BFF"></sc-if>
+<sc-if value="{{r.select}}" hint-placeholder-val="{{true}}"><span style="min-width: 180px; box-sizing: border-box; padding: 9px 12px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); font-size: 13px; display: flex; justify-content: space-between">{{r.v}}<span style="color: #8FA3C8">▾</span></span></sc-if>
+</div>
+</sc-for>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const R = [['Resolution','Recommended for this screen','select','2560 × 1600'],['Scale','Make text and apps larger','select','150%'],['Refresh rate','Smoother motion','select','120 Hz'],['Brightness','Adjust automatically in bright light','slider','70'],['Night light','Warmer colors · sunset to sunrise','select','Scheduled']];
+    return { rows: R.map((r, i) => ({ k: r[0], d: r[1], slider: r[2] === 'slider', select: r[2] === 'select', v: r[3], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })) };
+  }
+}
+</script>
+</body>
+</html>

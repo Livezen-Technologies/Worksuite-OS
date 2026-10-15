@@ -1,6 +1,7 @@
 {"v":3,"createdOnFiles":{"v":1,"at":"2026-10-15T10:25:00Z"},"title":"WorkSuite OS Boot & Install","launch":{"view":"canvas"},"pages":[],"boards":{
 "Main.dc.html":{"x":0,"y":0,"w":1280,"h":800,"title":"Boot menu"},
 "Progress.dc.html":{"x":1360,"y":0,"w":1280,"h":800,"title":"Install progress"},
+"BootSplash.dc.html":{"x":2720,"y":0,"w":1280,"h":800,"title":"Boot splash · starting / shutting down"},
 "Inst1Language.dc.html":{"x":0,"y":1200,"w":1280,"h":800,"title":"1 · Language & keyboard"},
 "Inst2Network.dc.html":{"x":1360,"y":1200,"w":1280,"h":800,"title":"2 · Network"},
 "Inst3Disk.dc.html":{"x":2720,"y":1200,"w":1280,"h":800,"title":"3 · Installation type"},
@@ -57,10 +58,26 @@
 "H4Drivers.dc.html":{"x":4080,"y":13800,"w":1280,"h":800,"title":"Drivers · updates available"},
 "H5Installing.dc.html":{"x":5440,"y":13800,"w":1280,"h":800,"title":"Drivers · installing"},
 "H6Problem.dc.html":{"x":6800,"y":13800,"w":1280,"h":800,"title":"Hardware · device not working"},
-"HwSettings.dc.html":{"x":8160,"y":13800,"w":1040,"h":640,"title":"Devices/Drivers panel component"}
-},"order":["Main.dc.html","Progress.dc.html","Inst1Language.dc.html","Inst2Network.dc.html","Inst3Disk.dc.html","Inst4Account.dc.html","Inst5Timezone.dc.html","Inst6Review.dc.html","Inst7Done.dc.html","Setup1Welcome.dc.html","Setup2Appearance.dc.html","Setup3Privacy.dc.html","Setup4Worksuite.dc.html","Setup5Ready.dc.html","Lock.dc.html","Login.dc.html","LoginUsers.dc.html","PowerMenu.dc.html","ShutdownConfirm.dc.html","Notifications.dc.html","InstPartition.dc.html","Sidebar.dc.html","S1aLanguage.dc.html","S1bKeyboard.dc.html","S2aDisk.dc.html","S2bEncryption.dc.html","S3aUser.dc.html","S3bComputer.dc.html","S4aRegion.dc.html","S5aSummary.dc.html","S5bConfirm.dc.html","S6aCopy.dc.html","S6bConfigure.dc.html","S6cRecovery.dc.html","S6dComplete.dc.html","DialogCancel.dc.html","DialogKit.dc.html","InstFailed.dc.html","UpdSettings.dc.html","U1Notify.dc.html","U2Available.dc.html","U3Downloading.dc.html","U4Ready.dc.html","U5Installing.dc.html","U6WhatsNew.dc.html","U7Failed.dc.html","R1Menu.dc.html","R2Unlock.dc.html","R3Repair.dc.html","R4Snapshots.dc.html","R5Reset.dc.html","R6Done.dc.html","HwSettings.dc.html","H1Detected.dc.html","H2Setup.dc.html","H3Devices.dc.html","H4Drivers.dc.html","H5Installing.dc.html","H6Problem.dc.html"],
+"HwSettings.dc.html":{"x":8160,"y":13800,"w":1040,"h":640,"title":"Devices/Drivers panel component"},
+"SetNav.dc.html":{"x":-400,"y":15120,"w":260,"h":800,"title":"Settings sidebar component"},
+"SetNetwork.dc.html":{"x":0,"y":15120,"w":1280,"h":800,"title":"Settings · Network"},
+"SetBluetooth.dc.html":{"x":1360,"y":15120,"w":1280,"h":800,"title":"Settings · Bluetooth"},
+"SetDisplay.dc.html":{"x":2720,"y":15120,"w":1280,"h":800,"title":"Settings · Display"},
+"SetAppearance.dc.html":{"x":4080,"y":15120,"w":1280,"h":800,"title":"Settings · Appearance","is_interactive":true},
+"SetSound.dc.html":{"x":5440,"y":15120,"w":1280,"h":800,"title":"Settings · Sound"},
+"SetPrivacy.dc.html":{"x":6800,"y":15120,"w":1280,"h":800,"title":"Settings · Privacy & security","is_interactive":true},
+"SetUsers.dc.html":{"x":8160,"y":15120,"w":1280,"h":800,"title":"Settings · Users"},
+"SetAbout.dc.html":{"x":9520,"y":15120,"w":1280,"h":800,"title":"Settings · About"},
+"FMSide.dc.html":{"x":-360,"y":16440,"w":220,"h":800,"title":"File Manager sidebar component"},
+"FM1Grid.dc.html":{"x":0,"y":16440,"w":1280,"h":800,"title":"Files · grid view"},
+"FM2List.dc.html":{"x":1360,"y":16440,"w":1280,"h":800,"title":"Files · list + preview","is_interactive":true},
+"FM3Menu.dc.html":{"x":2720,"y":16440,"w":1280,"h":800,"title":"Files · right-click menu"},
+"FM4Copy.dc.html":{"x":4080,"y":16440,"w":1280,"h":800,"title":"Files · copy + conflict"},
+"FM5Search.dc.html":{"x":5440,"y":16440,"w":1280,"h":800,"title":"Files · search"},
+"FM6Trash.dc.html":{"x":6800,"y":16440,"w":1280,"h":800,"title":"Files · trash"}
+},"order":["Main.dc.html","Progress.dc.html","BootSplash.dc.html","Inst1Language.dc.html","Inst2Network.dc.html","Inst3Disk.dc.html","Inst4Account.dc.html","Inst5Timezone.dc.html","Inst6Review.dc.html","Inst7Done.dc.html","Setup1Welcome.dc.html","Setup2Appearance.dc.html","Setup3Privacy.dc.html","Setup4Worksuite.dc.html","Setup5Ready.dc.html","Lock.dc.html","Login.dc.html","LoginUsers.dc.html","PowerMenu.dc.html","ShutdownConfirm.dc.html","Notifications.dc.html","InstPartition.dc.html","Sidebar.dc.html","S1aLanguage.dc.html","S1bKeyboard.dc.html","S2aDisk.dc.html","S2bEncryption.dc.html","S3aUser.dc.html","S3bComputer.dc.html","S4aRegion.dc.html","S5aSummary.dc.html","S5bConfirm.dc.html","S6aCopy.dc.html","S6bConfigure.dc.html","S6cRecovery.dc.html","S6dComplete.dc.html","DialogCancel.dc.html","DialogKit.dc.html","InstFailed.dc.html","UpdSettings.dc.html","U1Notify.dc.html","U2Available.dc.html","U3Downloading.dc.html","U4Ready.dc.html","U5Installing.dc.html","U6WhatsNew.dc.html","U7Failed.dc.html","R1Menu.dc.html","R2Unlock.dc.html","R3Repair.dc.html","R4Snapshots.dc.html","R5Reset.dc.html","R6Done.dc.html","HwSettings.dc.html","H1Detected.dc.html","H2Setup.dc.html","H3Devices.dc.html","H4Drivers.dc.html","H5Installing.dc.html","H6Problem.dc.html","SetNav.dc.html","SetNetwork.dc.html","SetBluetooth.dc.html","SetDisplay.dc.html","SetAppearance.dc.html","SetSound.dc.html","SetPrivacy.dc.html","SetUsers.dc.html","SetAbout.dc.html","FMSide.dc.html","FM1Grid.dc.html","FM2List.dc.html","FM3Menu.dc.html","FM4Copy.dc.html","FM5Search.dc.html","FM6Trash.dc.html"],
 "notes":{
-"t1":{"x":0,"y":-280,"text":"Boot","kind":"title1","maxW":2640},
+"t1":{"x":0,"y":-280,"text":"Boot","kind":"title1","maxW":4000},
 "t2":{"x":0,"y":920,"text":"Installer","kind":"title1","maxW":9440},
 "t3":{"x":0,"y":2120,"text":"First-boot setup wizard","kind":"title1","maxW":6720},
 "t4":{"x":0,"y":3320,"text":"Lock & login","kind":"title1","maxW":4000},
@@ -71,5 +88,7 @@
 "t9":{"x":0,"y":9560,"text":"Message boxes","kind":"title1","maxW":4000},
 "t10":{"x":0,"y":10880,"text":"OS update workflow","kind":"title1","maxW":10560},
 "t11":{"x":0,"y":12200,"text":"OS recovery workflow","kind":"title1","maxW":8080},
-"t12":{"x":0,"y":13520,"text":"Hardware & drivers","kind":"title1","maxW":9200}
+"t12":{"x":0,"y":13520,"text":"Hardware & drivers","kind":"title1","maxW":9200},
+"t13":{"x":0,"y":14840,"text":"Settings app","kind":"title1","maxW":10800},
+"t14":{"x":0,"y":16160,"text":"File Manager","kind":"title1","maxW":8080}
 },"designSystems":[]}

@@ -7,6 +7,12 @@ export interface WorkSuiteApi {
   power(action: 'suspend' | 'restart' | 'shutdown'): Promise<void>
   launchApp(appId: string): Promise<void>
   openLink(url: string): Promise<void>
+  /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
+  webApps(): Promise<CloudResult<{ id: string; name: string }[]>>
+  /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
+  installedApps(): Promise<{ apps: InstalledApp[]; office: string | null }>
+  /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
+  launchOffice(kind: 'start' | 'docs' | 'sheets' | 'slides'): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
   /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
@@ -43,17 +49,71 @@ export interface WorkSuiteApi {
   hwDriverUpdates(): Promise<CloudResult<DriverOffer[]>>
   /** Install driver offers; progress arrives through onPkgJob with phase = offer id. Electron: 'unavailable'. */
   hwInstallDrivers(ids: string[]): Promise<CloudResult<string>>
-  // Settings facts, read-only (electron/system.ts).
-  sysUsers(): Promise<CloudResult<{ current: string; users: LocalUser[] }>>
-  sysNetwork(): Promise<CloudResult<NetworkInfo>>
-  sysBluetooth(): Promise<CloudResult<BluetoothInfo>>
-  sysDisplays(): Promise<CloudResult<DisplayInfo>>
-  sysSound(): Promise<CloudResult<SoundInfo>>
+  /** Settings › Users: accounts on this computer (electron/users.ts). */
+  sysUsers(): Promise<Avail<{ current: string; users: LocalUser[] }>>
+  /** Package repair (§9.2): finishes interrupted dpkg/apt changes; result arrives through onPkgJob. */
+  pkgRepair(): Promise<CloudResult<string>>
+  // Recovery screens (§9.2). Features that have no service yet answer { ok: false, error: 'unavailable' }.
+  recoveryInfo(): Promise<RecoveryInfo>
+  recoveryCheck(id: CheckId): Promise<CheckResult>
+  /** secret: the formatted recovery key or the passphrase. Sent to udisks over stdin only; never stored. */
+  recoveryUnlock(device: string, secret: string): Promise<CloudResult<true>>
+  recoverySnapshots(): Promise<CloudResult<SnapshotInfo[]>>
+  recoveryRestore(snapshotId: string): Promise<CloudResult<true>>
+  recoveryReinstall(mode: 'keep' | 'erase'): Promise<CloudResult<true>>
+  recoveryCopyToUsb(): Promise<CloudResult<true>>
+  recoveryTerminal(): Promise<CloudResult<true>>
+  recoverySaveReport(text: string): Promise<CloudResult<string>>
+  // Settings → host services (WSOS-INT-001…006, DSK-006). `available: false` means the tool/service isn't there.
+  sysNetwork(): Promise<Avail<NetworkState>>
+  sysSetWifi(on: boolean): Promise<Avail<true>>
+  /** The password reaches nmcli on stdin only. */
+  sysWifiConnect(ssid: string, password: string): Promise<{ ok: true } | { ok: false; error: string }>
+  sysBluetooth(): Promise<Avail<BluetoothState>>
+  sysSetBluetooth(on: boolean): Promise<Avail<true>>
+  sysBtConnect(address: string, on: boolean): Promise<Avail<true>>
+  sysSound(): Promise<Avail<SoundState>>
+  sysSetVolume(percent: number): Promise<Avail<true>>
+  sysSetMute(muted: boolean): Promise<Avail<true>>
+  sysSetDefaultAudio(id: number): Promise<Avail<true>>
+  sysBattery(): Promise<Avail<BatteryState>>
+  sysPrinters(): Promise<Avail<Printer[]>>
+  sysDisplays(): Promise<Avail<Display[]>>
+  sysDisks(): Promise<Avail<Drive[]>>
+}
+
+export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
+export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean }
+export interface NetDevice { device: string; type: string; state: string; connection: string | null }
+export interface NetworkState { wifi_enabled: boolean; devices: NetDevice[]; networks: WifiNetwork[] }
+export interface BtDevice { address: string; name: string; connected: boolean }
+export interface BluetoothState { powered: boolean; name: string | null; discoverable: boolean; paired: BtDevice[] }
+export interface AudioDevice { id: number; name: string; is_default: boolean }
+export interface SoundState { volume: number; muted: boolean; outputs: AudioDevice[]; inputs: AudioDevice[] }
+export interface BatteryState { present: boolean; percentage: number | null; state: string; time_to_full_s: number | null; time_to_empty_s: number | null; on_battery: boolean }
+export interface Printer { name: string; state: 'idle' | 'printing' | 'disabled' | 'unknown'; is_default: boolean }
+export interface Display { name: string; description: string; enabled: boolean; width: number | null; height: number | null; refresh: number | null; scale: number | null }
+export interface Drive { model: string; serial: string; device: string }
+
+/** "about 1 h 20 min" from seconds. */
+export function formatDuration(s: number | null): string | null {
+  if (s === null || s <= 0) return null
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60)
+  return h ? `about ${h} h${m ? ` ${m} min` : ''}` : `about ${m} min`
+}
+
+export type RecoveryFeature = 'unlock' | 'repair' | 'snapshots' | 'reinstall' | 'copy_usb' | 'terminal' | 'report_usb'
+export interface RecoveryLuksDevice { device: string; name: string; label: string | null; version: string | null; size_bytes: number | null; unlocked: boolean }
+export interface RecoveryInfo {
+  os_version: string | null; disk: string | null; firmware: 'EFI' | 'BIOS'
+  /** Shell restarts counted by systemd before recovery opened; null when unknown. */
+  failures: number | null
+  luks: RecoveryLuksDevice[]; features: Record<RecoveryFeature, boolean>
 }
 
 import type { HwDevice, HwKind } from '../../electron/hardware'
-import type { BluetoothInfo, DisplayInfo, LocalUser, NetworkInfo, SoundInfo } from '../../electron/system'
-export type { HwDevice, HwKind, BluetoothInfo, DisplayInfo, LocalUser, NetworkInfo, SoundInfo }
+import type { LocalUser } from '../../electron/users'
+export type { HwDevice, HwKind, LocalUser }
 export interface DriverOffer {
   id: string; device_id: string | null; name: string; summary: string
   from_version: string | null; to_version: string
@@ -96,6 +156,7 @@ export function packageErrorText(code: string): string {
 }
 
 import type { SyncStatus } from './syncNotices'
+import type { CheckId, CheckResult, SnapshotInfo } from './recovery'
 
 export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
@@ -132,6 +193,8 @@ export function policyLines(p: DevicePolicies | null): string[] {
   return out
 }
 
+export interface InstalledApp { id: string; name: string; generic_name: string | null; comment: string | null; icon: string | null; categories: string[]; keywords: string[] }
+
 export type SignOutChoice = 'none' | 'export' | 'discard'
 
 export interface CloudAccount { id: string; name: string | null; server_url: string; state?: string }
@@ -152,6 +215,14 @@ const stub: WorkSuiteApi = {
   async power() {},
   async launchApp() {},
   async openLink() {},
+  async webApps() { return { ok: false, error: 'not_signed_in' } },
+  async installedApps() {
+    return { apps: [
+      { id: 'firefox-esr', name: 'Firefox ESR', generic_name: 'Web Browser', comment: null, icon: 'firefox-esr', categories: ['Network', 'WebBrowser'], keywords: ['internet', 'web'] },
+      { id: 'foot', name: 'Foot', generic_name: 'Terminal', comment: null, icon: 'foot', categories: ['System', 'TerminalEmulator'], keywords: ['shell'] },
+    ], office: null }
+  },
+  async launchOffice() {},
   async cloudSignIn(serverUrl, _mode) {
     stubAccounts = [{ id: 'preview:u-1', name: 'Hasarinda', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
@@ -226,7 +297,7 @@ const stub: WorkSuiteApi = {
   },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
   async hwDevices() {
-    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
+    if (stubSim === 'none') return { ok: false, error: 'unavailable' }
     const extra = PV.get('hw') === 'new' && Date.now() - stubStart > 3000 ? [STUB_NEW] : PV.get('hw') === 'problem' && Date.now() - stubStart > 3000 ? [{ ...STUB_NEW, driver: null, driver_version: null }] : []
     return { ok: true, value: [...STUB_DEVICES, ...extra] }
   },
@@ -240,31 +311,82 @@ const stub: WorkSuiteApi = {
     })
     return { ok: true, value: job }
   },
-  async sysUsers() {
-    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
-    return { ok: true, value: { current: 'preview', users: [{ login: 'preview', name: 'Preview User', uid: 1000, admin: true }, { login: 'second', name: 'Second User', uid: 1001, admin: false }] } }
+  async sysUsers() { return stubAvail({ current: 'preview', users: [{ login: 'preview', name: 'Preview User', uid: 1000, admin: true }, { login: 'second', name: 'Second User', uid: 1001, admin: false }] }) },
+  async pkgRepair() { return stubJob('repair', 'repair') },
+  async recoveryInfo() {
+    const all = stubSim !== 'none'
+    return { os_version: '1.1', disk: 'vda', firmware: 'EFI', failures: all ? 3 : null,
+      luks: stubSim === 'none' ? [] : [{ device: '/dev/vda2', name: 'vda2', label: 'WorkSuite', version: '2', size_bytes: 42_412_802_048, unlocked: false }],
+      features: { unlock: all, repair: true, snapshots: all, reinstall: all, copy_usb: false, terminal: false, report_usb: false } }
   },
-  async sysNetwork() {
-    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
-    return { ok: true, value: { wifi_enabled: true, interfaces: [{ name: 'wlp0s20f3', type: 'wifi', up: true }, { name: 'enp0s31f6', type: 'ethernet', up: false }],
-      wifi: [{ ssid: 'Preview-Net', signal: 82, secure: true, active: true }, { ssid: 'Preview-Guest', signal: 64, secure: false, active: false }, { ssid: 'Preview-Lab', signal: 38, secure: true, active: false }] } }
+  async recoveryCheck(id) {
+    await stubWait(id === 'packages' ? 1500 : 700)
+    const preview: Record<CheckId, CheckResult> = {
+      boot: { status: 'ok', note: 'Fine' }, disk: { status: 'ok', note: 'Fine' }, crypt: { status: 'ok', note: 'Unlocked' },
+      packages: stubSim === 'none' ? { status: 'unavailable', note: 'Package service isn’t running' } : { status: 'problem', note: 'Interrupted package changes', fixable: true },
+      drivers: { status: 'unavailable', note: 'Not checked in this version' },
+      update: stubSim === 'none' ? { status: 'unavailable', note: 'Update service isn’t running' } : { status: 'ok', note: 'Version 1.1' },
+    }
+    return preview[id]
   },
-  async sysBluetooth() {
-    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
-    return { ok: true, value: { adapter: true, powered: true, name: 'preview-laptop', paired: [{ address: '00:00:00:00:00:01', name: 'Preview Keyboard', connected: null }] } }
+  async recoveryUnlock(_device, secret) {
+    await stubWait(600)
+    // Preview: a key starting 00000 (or the passphrase "wrong") is refused so the error state can be reviewed.
+    return secret.startsWith('00000') || secret === 'wrong' ? { ok: false, error: 'wrong_key' } : { ok: true, value: true }
   },
-  async sysDisplays() {
-    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
-    return { ok: true, value: { outputs: [{ name: 'eDP-1', built_in: true, mode: '1920x1200' }, { name: 'HDMI-A-1', built_in: false, mode: '2560x1440' }], brightness: 70 } }
+  async recoverySnapshots() {
+    if (stubSim === 'none') return { ok: false, error: 'unavailable' }
+    const at = (d: number, h: number, m: number) => { const t = new Date(); t.setDate(t.getDate() - d); t.setHours(h, m, 0, 0); return t.getTime() }
+    return { ok: true, value: [
+      { id: 'snap-4', title: 'Before update to 1.1', created: at(0, 2, 3), kind: 'automatic', os_version: '1.0', last_working: true },
+      { id: 'snap-3', title: 'Weekly snapshot', created: at(4, 3, 0), kind: 'automatic', os_version: '1.0', last_working: false },
+      { id: 'snap-2', title: 'Before installing Docs', created: at(7, 14, 22), kind: 'app install', os_version: '1.0', last_working: false },
+      { id: 'snap-1', title: 'After first setup', created: at(14, 18, 40), kind: 'install', os_version: '1.0', last_working: false },
+    ] }
   },
-  async sysSound() {
-    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
-    return { ok: true, value: { output: { name: 'Built-in Audio Analog Stereo', volume: 64, muted: false }, input: { name: 'Built-in Audio Microphone', volume: 80, muted: false } } }
+  async recoveryRestore() { await stubWait(800); return stubSim === 'none' ? { ok: false, error: 'unavailable' } : { ok: true, value: true } },
+  async recoveryReinstall() { await stubWait(800); return stubSim === 'none' ? { ok: false, error: 'unavailable' } : { ok: true, value: true } },
+  async recoveryCopyToUsb() { return { ok: false, error: 'unavailable' } },
+  async recoveryTerminal() { return { ok: false, error: 'unavailable' } },
+  async recoverySaveReport() { return { ok: false, error: 'unavailable' } },
+  // Preview only: simulated host state; `?sim=none` shows every area as unavailable.
+  async sysNetwork() { return stubAvail({ ...stubSys.net, networks: stubSys.net.wifi_enabled ? stubSys.net.networks : [] }) },
+  async sysSetWifi(on) { stubSys.net.wifi_enabled = on; return stubAvail(true as const) },
+  async sysWifiConnect(ssid, password) {
+    await stubWait(700)
+    if (password === 'wrong') return { ok: false, error: 'bad_password' }
+    stubSys.net.networks = stubSys.net.networks.map((n) => ({ ...n, in_use: n.ssid === ssid }))
+    return { ok: true }
   },
+  async sysBluetooth() { return stubAvail(stubSys.bt) },
+  async sysSetBluetooth(on) { stubSys.bt.powered = on; return stubAvail(true as const) },
+  async sysBtConnect(address, on) { stubSys.bt.paired = stubSys.bt.paired.map((d) => d.address === address ? { ...d, connected: on } : d); return stubAvail(true as const) },
+  async sysSound() { return stubAvail(stubSys.sound) },
+  async sysSetVolume(p) { stubSys.sound.volume = Math.max(0, Math.min(100, Math.round(p))); return stubAvail(true as const) },
+  async sysSetMute(m) { stubSys.sound.muted = m; return stubAvail(true as const) },
+  async sysSetDefaultAudio(id) { stubSys.sound.outputs = stubSys.sound.outputs.map((o) => ({ ...o, is_default: o.id === id })); return stubAvail(true as const) },
+  async sysBattery() { return stubAvail({ present: true, percentage: 74, state: 'charging', time_to_full_s: 4800, time_to_empty_s: null, on_battery: false }) },
+  async sysPrinters() { return stubAvail([{ name: 'HP_LaserJet_M507_Floor3', state: 'idle', is_default: true }] as Printer[]) },
+  async sysDisplays() { return stubAvail([{ name: 'eDP-1', description: 'Built-in display', enabled: true, width: 1920, height: 1200, refresh: 60, scale: 1 }]) },
+  async sysDisks() { return stubAvail([{ model: 'Preview NVMe SSD', serial: 'PREVIEW0001', device: 'nvme0n1' }]) },
 }
 
+function stubAvail<T>(value: T): Avail<T> {
+  return stubSim === 'none' ? { available: false, reason: 'service_unavailable' } : { available: true, value: structuredClone(value) }
+}
+const stubSys: { net: NetworkState; bt: BluetoothState; sound: SoundState } = {
+  net: { wifi_enabled: true, devices: [{ device: 'wlan0', type: 'wifi', state: 'connected', connection: 'Preview-WiFi' }, { device: 'eth0', type: 'ethernet', state: 'unavailable', connection: null }],
+    networks: [{ ssid: 'Preview-WiFi', signal: 82, security: 'WPA2', in_use: true }, { ssid: 'Guest', signal: 54, security: '', in_use: false }] },
+  bt: { powered: false, name: 'preview-laptop', discoverable: false, paired: [{ address: 'AA:BB:CC:DD:EE:01', name: 'Preview keyboard', connected: false }] },
+  sound: { volume: 60, muted: false, outputs: [{ id: 46, name: 'Built-in speakers', is_default: true }, { id: 51, name: 'HDMI output', is_default: false }], inputs: [{ id: 47, name: 'Built-in microphone', is_default: true }] },
+}
+
+// Preview only: `?sim=none` shows the recovery screens as on a host where none of the optional services exist.
+const stubSim = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('sim') ?? 'preview' : 'preview'
+const stubWait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 // Browser preview only (never in Electron): ?upd=available|downloading|ready|forced|failed|whatsnew|uptodate,
-// ?hw=catalog|new|problem, ?sys=empty drive the stub into each board's state.
+// ?hw=catalog|new|problem, ?sim=none drive the stub into each board's state.
 const PV = new URLSearchParams(typeof location === 'undefined' ? '' : location.search)
 const stubStart = Date.now()
 const dev = (id: string, name: string, vendor: string | null, kind: HwKind, bus: 'usb' | 'pci', driver: string | null, extra: Partial<HwDevice> = {}): HwDevice =>
@@ -315,7 +437,7 @@ if (typeof window !== 'undefined') {
   if (k === 'failed') { setTimeout(() => emitJob(50, 'applying'), 400); setTimeout(() => setOs({ state: 'failed', reason: 'dpkg: error processing package linux-image-6.12 (--configure)' }), 700) }
 }
 const stubOsListeners = new Set<(s: OsUpdateStatus) => void>()
-let stubUpdates = { packages: ['firefox-esr', 'libreoffice', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
+let stubUpdates = { packages: ['firefox-esr', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
 function stubJob(_id: string, _kind: string): CloudResult<string> {
   const job = `/lk/worksuite/PackageService1/job/${++stubJobId}`
   setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 50, phase: 'installing' })), 300)
