@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS orgs (
   id INTEGER PRIMARY KEY, name TEXT NOT NULL,
   require_device INTEGER NOT NULL DEFAULT 0,
   modules TEXT NOT NULL,            -- JSON [{key, offline?, data_type?}]
-  directory TEXT NOT NULL DEFAULT '{"type":"oneauth","offline_login_days":7}'
+  directory TEXT NOT NULL DEFAULT '{"type":"oneauth","offline_login_days":7}',
+  web_apps TEXT                     -- JSON [key] of enabled WorkSuite web apps; NULL = all of DEFAULT_WEB_APPS
 );
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL REFERENCES orgs(id),
@@ -70,9 +71,20 @@ export const DEFAULT_MODULES = [
   { key: 'billing', offline: 'online_only', data_type: 'authoritative' },
 ];
 
+/** WorkSuite web apps the desktop can open in an app window; each is served at <web base>/<id>/. */
+export const DEFAULT_WEB_APPS: { id: string; name: string }[] = [
+  { id: 'mail', name: 'Mail' }, { id: 'calendar', name: 'Calendar' }, { id: 'chat', name: 'Chat' },
+  { id: 'drive', name: 'Drive' }, { id: 'tasks', name: 'Tasks' }, { id: 'projects', name: 'Projects' },
+  { id: 'crm', name: 'CRM' }, { id: 'meet', name: 'Meet' },
+  { id: 'pdf-studio', name: 'PDF Studio' },
+];
+
 export function openDb(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec(SCHEMA);
+  // Databases created before web_apps existed.
+  const cols = db.prepare('PRAGMA table_info(orgs)').all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'web_apps')) db.exec('ALTER TABLE orgs ADD COLUMN web_apps TEXT');
   return db;
 }
 
