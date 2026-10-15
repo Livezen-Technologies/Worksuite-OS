@@ -3,8 +3,11 @@
 #   cmake -S installer/modules/worksuiteconfirm -B build && cmake --build build
 cmake_minimum_required(VERSION 3.16)
 project(worksuiteconfirm LANGUAGES CXX)
-# Calamares 3.3 (Qt5 builds) export KF5::CoreAddons in their link interface.
-find_package(KF5CoreAddons QUIET)
+# Calamares 3.3 exports KF5/KF6::CoreAddons in its link interface without finding it.
+find_package(KF6CoreAddons QUIET)
+if(NOT KF6CoreAddons_FOUND)
+    find_package(KF5CoreAddons QUIET)
+endif()
 find_package(Calamares REQUIRED)
 calamares_add_plugin(worksuiteconfirm
     TYPE viewmodule
