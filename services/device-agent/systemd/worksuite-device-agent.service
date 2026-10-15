@@ -2,22 +2,25 @@
 Description=WorkSuite device agent (enrollment, policy, heartbeat, signed remote commands)
 Documentation=file:///usr/share/doc/worksuite-device-agent/README.md
 Wants=network-online.target
-After=network-online.target dbus.service
+After=network-online.target
 
 [Service]
-Type=dbus
-BusName=lk.worksuite.DeviceAgent1
-ExecStart=/usr/libexec/worksuite/worksuite-device-agent
+Type=simple
+ExecStart=/usr/bin/node --no-warnings /usr/lib/worksuite/device-agent/src/main.ts
 Restart=on-failure
 RestartSec=5s
 StateDirectory=worksuite-device-agent
 StateDirectoryMode=0700
+# device-token, policy.json, status.json for user services and Settings (0644); control.sock is root-only.
+RuntimeDirectory=worksuite-device-agent
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=no
 LogsDirectory=worksuite
 # Hardening (WSOS-SEC-007). Root is needed for inventory, LUKS key-slot wipe and per-user data wipe;
 # package changes go through lk.worksuite.PackageService1, not here.
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths=/var/lib/worksuite-device-agent /var/log/worksuite /home
+ReadWritePaths=/var/lib/worksuite-device-agent /run/worksuite-device-agent /var/log/worksuite /home
 ProtectHome=no
 PrivateTmp=yes
 ProtectKernelTunables=yes

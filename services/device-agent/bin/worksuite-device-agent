@@ -1,0 +1,3 @@
+#!/bin/sh
+# CLI wrapper (pkexec target, see lk.worksuite.device.policy). The daemon itself runs from the systemd unit.
+exec /usr/bin/node --no-warnings /usr/lib/worksuite/device-agent/src/main.ts "$@"

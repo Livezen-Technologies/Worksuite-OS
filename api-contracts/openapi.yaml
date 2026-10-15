@@ -489,7 +489,8 @@ components:
         bluetooth: { type: boolean }
         app_allowlist: { type: array, items: { type: string } }
         approved_remotes: { type: array, items: { type: string } }
-        signature: { type: string }
+        offline_wipe_days: { type: integer, description: WSOS-WIPE-006 offline kill timer; absent = off }
+        signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the policy without this field' }
 
     CatalogItem:
       type: object

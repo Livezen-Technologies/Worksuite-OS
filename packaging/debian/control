@@ -58,7 +58,8 @@ Description: WorkSuite system package service (D-Bus + polkit)
 
 Package: worksuite-device-agent
 Architecture: amd64 arm64
-Depends: nodejs (>= 22), cryptsetup, tpm2-tools, dbus, ${misc:Depends}
+Depends: nodejs (>= 22.18), cryptsetup, dbus, util-linux, systemd, ${misc:Depends}
+Recommends: tpm2-tools
 Description: WorkSuite device agent (enrollment, policy, signed remote commands)
 
 Package: worksuite-office
