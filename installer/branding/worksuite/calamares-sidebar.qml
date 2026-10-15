@@ -54,12 +54,12 @@ Rectangle {
                 ColumnLayout {
                     id: group
                     readonly property int groupIndex: index
-                    Layout.fillWidth: true
-                    spacing: 2
-                Rectangle {
                     readonly property bool auto: sideBar.express && index === 3 && sideBar.current < 3
                     readonly property bool done: index < sideBar.current || sideBar.finished || auto
                     readonly property bool active: index === sideBar.current && !sideBar.finished
+                    Layout.fillWidth: true
+                    spacing: 2
+                Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 44
                     radius: 8
