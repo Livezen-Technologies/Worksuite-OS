@@ -20,6 +20,8 @@ Rectangle {
         return i >= 0 && i < groupOf.length ? groupOf[i] : 0
     }
     readonly property bool finished: ViewManager.currentStepIndex >= lastIndex
+    // Express install fills in the time zone; re-read on every step change (Global storage has no change signal).
+    readonly property bool express: ViewManager.currentStepIndex >= 0 && Global.value("worksuiteExpress") === true
 
     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1A2A55" }
 
@@ -40,7 +42,8 @@ Rectangle {
             Repeater {
                 model: sideBar.labels
                 Rectangle {
-                    readonly property bool done: index < sideBar.current || sideBar.finished
+                    readonly property bool auto: sideBar.express && index === 3 && sideBar.current < 3
+                    readonly property bool done: index < sideBar.current || sideBar.finished || auto
                     readonly property bool active: index === sideBar.current && !sideBar.finished
                     Layout.fillWidth: true
                     implicitHeight: 44
@@ -55,13 +58,14 @@ Rectangle {
                             Text {
                                 anchors.centerIn: parent
                                 text: done ? "✓" : String(index + 1)
+                            opacity: auto ? 0.7 : 1
                                 color: done || active ? "#FFFFFF" : "#8FA3C8"
                                 font.family: "IBM Plex Mono"; font.pixelSize: 12; font.weight: Font.DemiBold
                             }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: modelData
+                            text: auto ? modelData + qsTr(" · auto") : modelData
                             color: done || active ? "#E8EEFA" : "#8FA3C8"
                             font.family: "IBM Plex Sans"; font.pixelSize: 13
                             font.weight: active ? Font.DemiBold : Font.Normal

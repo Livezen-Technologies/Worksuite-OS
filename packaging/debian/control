@@ -74,7 +74,7 @@ Package: calamares-settings-worksuite
 Architecture: amd64 arm64
 Depends: calamares (>= 3.3), cryptsetup, python3,
 # QML sidebar, footer and slideshow (images install without Recommends, so these must be explicit).
- qml6-module-qtquick, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtqml-workerscript, qt6-svg-plugins,
+ qml6-module-qtquick, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qt6-svg-plugins,
  ${shlibs:Depends}, ${misc:Depends}
 Description: WorkSuite OS installer configuration for Calamares
  Calamares settings, branding and two WorkSuite modules for the live ISO:

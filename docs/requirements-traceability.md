@@ -4,7 +4,7 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 
 | Requirement | Files | Status |
 |---|---|---|
-| WSOS-AUTH-001/002 greetd default session, no autologin | `live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot`, `installer/modules/users.conf` | Cfg |
+| WSOS-AUTH-001/002 greetd default session, no autologin | `live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot`, `installer/modules/usersq.conf`, `installer/branding/worksuite/usersq.qml` | Cfg |
 | WSOS-SES-001 env import before portals | `services/session/bin/worksuite-session` (`--ready`), `services/session/labwc/autostart` | Cfg |
 | WSOS-SES-002 user units bound to `worksuite-session.target` | `services/session/systemd/user/*` | Cfg |
 | WSOS-SES-003 clean logout | `services/session/bin/worksuite-session` (`cleanup`) | Cfg |
