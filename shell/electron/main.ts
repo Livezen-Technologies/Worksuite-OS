@@ -44,6 +44,8 @@ function createWindow() {
       webSecurity: true,
     },
   })
+  // Perf probe (tests/perf/guest/measure-shell, WSOS-PRF-002/006): process start → first window ready.
+  if (process.env.WORKSUITE_PERF === '1') win.once('ready-to-show', () => process.stdout.write(`WORKSUITE_PERF shell_ready_ms ${Math.round(process.uptime() * 1000)}\n`))
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (ALLOWED_SCHEMES.has(new URL(url).protocol)) void shell.openExternal(url)

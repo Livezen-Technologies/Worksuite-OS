@@ -1,41 +1,72 @@
 name: Image
 
-# Builds the .debs and the amd64 live ISO inside Debian trixie, then boots it in QEMU (UEFI) and checks the
-# boot marker. Slow (no KVM on hosted runners), so it runs on demand and for release tags.
+# Builds the .debs and the live ISO for amd64 and arm64 from the same commit (WSOS-ARM-001), inside Debian trixie,
+# then boots each ISO in QEMU (UEFI: OVMF / AAVMF, WSOS-ARM-008) and checks the boot marker. A second, test-only
+# "-perf" image runs the perf/reliability probes and must pass the CI gates in tests/perf/gates.tsv
+# (WSOS-PRF-001…005, REL-001/002, ARM-007). Each ISO ships with an SPDX SBOM (WSOS-SEC-011).
+# arm64 builds natively on GitHub's arm64 runners (no cross live-build, no qemu-user chroot). Hosted runners have
+# no KVM, so QEMU runs in TCG: slow, run on demand and for release tags.
 on:
   workflow_dispatch:
     inputs:
       snapshot:
         description: snapshot.debian.org timestamp to build from
         default: '20261001T000000Z'
+      perf:
+        description: also build the -perf image and apply the perf gates
+        type: boolean
+        default: true
   push:
     tags: ['v*']
 
 jobs:
-  amd64:
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
+  image:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            qemu: qemu-system-x86 ovmf
+            boot_timeout: 2400
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            qemu: qemu-system-arm qemu-efi-aarch64
+            boot_timeout: 4800
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
     container:
       image: debian:trixie
       options: --privileged
     env:
       SNAPSHOT: ${{ inputs.snapshot || '20261001T000000Z' }}
+      ARCH: ${{ matrix.arch }}
       ELECTRON_SKIP_BINARY_DOWNLOAD: ''
     steps:
-      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates live-build debootstrap debhelper dpkg-dev fakeroot dbus-daemon qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools
+      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates live-build debootstrap debhelper dpkg-dev fakeroot dbus-daemon ${{ matrix.qemu }} xorriso squashfs-tools mtools dosfstools
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      # -d: Node 22 comes from setup-node, not a dpkg package.
+      # -d: Node 22 comes from setup-node, not a dpkg package. Builds this runner's arch (amd64 or arm64) + all.
       - run: packaging/build-debs.sh -d
-      - run: ARCH=amd64 live-build/build.sh
-      - run: tests/vm/boot-test.sh live-build/out/worksuite-os-1.0.0-dev-amd64.iso 2400
-      - uses: actions/upload-artifact@v4
+      - run: live-build/build.sh
+      - run: tools/sbom/generate.sh ${{ matrix.arch }}
+      - run: tests/vm/boot-test.sh live-build/out/worksuite-os-1.0.0-dev-${{ matrix.arch }}.iso ${{ matrix.boot_timeout }}
+      # Perf/reliability gates on a separate test image (probes stop the greeter and create a test user).
+      - if: inputs.perf != false
+        run: WORKSUITE_PERF=1 live-build/build.sh
+      - if: inputs.perf != false
+        run: PERF_PROFILE=ci-${{ matrix.arch }}-tcg BOOT_LOG=live-build/out/perf-serial.log tests/vm/boot-test.sh live-build/out/worksuite-os-1.0.0-dev-${{ matrix.arch }}-perf.iso ${{ matrix.boot_timeout }}
+      - if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: worksuite-os-amd64
+          name: worksuite-os-${{ matrix.arch }}
           path: |
             live-build/out/*.iso
             live-build/out/*.sha256
+            live-build/out/*.spdx.json
+            live-build/out/*.packages
+            live-build/out/perf-serial.log
             packaging/out/*.deb
