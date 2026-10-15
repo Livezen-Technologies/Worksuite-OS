@@ -39,4 +39,14 @@ contextBridge.exposeInMainWorld('worksuite', {
     return () => { ipcRenderer.removeListener('ws:pkgJob', listener) }
   },
   cloudAccounts: () => ipcRenderer.invoke('ws:cloudAccounts'),
+  pkgRepair: () => ipcRenderer.invoke('ws:pkgRepair'),
+  recoveryInfo: () => ipcRenderer.invoke('ws:recoveryInfo'),
+  recoveryCheck: (id: string) => ipcRenderer.invoke('ws:recoveryCheck', String(id)),
+  recoveryUnlock: (device: string, secret: string) => ipcRenderer.invoke('ws:recoveryUnlock', String(device), String(secret)),
+  recoverySnapshots: () => ipcRenderer.invoke('ws:recoverySnapshots'),
+  recoveryRestore: (id: string) => ipcRenderer.invoke('ws:recoveryRestore', String(id)),
+  recoveryReinstall: (mode: string) => ipcRenderer.invoke('ws:recoveryReinstall', String(mode)),
+  recoveryCopyToUsb: () => ipcRenderer.invoke('ws:recoveryCopyToUsb'),
+  recoveryTerminal: () => ipcRenderer.invoke('ws:recoveryTerminal'),
+  recoverySaveReport: (text: string) => ipcRenderer.invoke('ws:recoverySaveReport', String(text)),
 })
