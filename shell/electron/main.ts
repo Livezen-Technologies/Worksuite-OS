@@ -345,7 +345,8 @@ app.whenReady().then(() => {
   handle('ws:recoveryInfo', () => rec.info())
   handle('ws:recoveryCheck', (id) => rec.check(id))
   handle('ws:recoveryUnlock', (device, secret) => rec.unlock(device, secret))
-  for (const ch of ['ws:recoverySnapshots', 'ws:recoveryRestore', 'ws:recoveryReinstall', 'ws:recoveryCopyToUsb', 'ws:recoveryTerminal', 'ws:recoverySaveReport']) handle(ch, () => rec.unavailable())
+  handle('ws:recoveryReinstall', (mode, confirm) => rec.reinstall(mode, confirm ?? ''))
+  for (const ch of ['ws:recoverySnapshots', 'ws:recoveryRestore', 'ws:recoveryCopyToUsb', 'ws:recoveryTerminal', 'ws:recoverySaveReport']) handle(ch, () => rec.unavailable())
   // Files: real folders plus Drive sync states from the sync service.
   const files = defaultEnv(async (dir) => { const r = await syncCall('FileStates', { dir }); return r.ok && Array.isArray(r.value) ? r.value as { name: string; state: string }[] : null })
   handle('ws:filesRoots', () => ({ roots: roots(files).map(({ id, label }) => ({ id, label })), drive_exists: existsSync(driveDir(files.home)) }))

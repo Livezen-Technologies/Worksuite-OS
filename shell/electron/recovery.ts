@@ -1,12 +1,12 @@
 // Recovery screens → host. Read-only probes with fixed arguments (lsblk, findmnt, systemctl), the package
 // service for package repair and update state, and udisks for unlocking a LUKS volume (polkit asks for rights).
-// Snapshots, reinstall, copy-to-USB, a root terminal and saving reports have no service yet: they answer
+// Reinstall runs worksuite-reinstall through pkexec (SRS §9.2-R6). Snapshots, copy-to-USB, a root terminal and saving reports have no service yet: they answer
 // `unavailable` so the screens can say so. The recovery key/passphrase is only ever written to udisksctl's stdin.
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 
 type Reply<T> = { ok: true; value: T } | { ok: false; error: string }
-export type Exec = (cmd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>
+export type Exec = (cmd: string, args: string[], timeoutMs?: number) => Promise<{ code: number; stdout: string; stderr: string }>
 
 export interface Host {
   exec: Exec
@@ -17,8 +17,9 @@ export interface Host {
 }
 
 const realHost: Host = {
-  exec: (cmd, args) => new Promise((resolve) => {
-    execFile(cmd, args, { timeout: 20_000 }, (err, stdout, stderr) => resolve({ code: err ? 1 : 0, stdout, stderr }))
+  exec: (cmd, args, timeoutMs = 20_000) => new Promise((resolve) => {
+    execFile(cmd, args, { timeout: timeoutMs }, (err, stdout, stderr) =>
+      resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout, stderr }))
   }),
   exists: (p) => existsSync(p),
   read: (p) => { try { return readFileSync(p, 'utf8') } catch { return null } },
@@ -73,8 +74,18 @@ export function osVersion(osRelease: string | null): string | null {
   return m ? m[1] : null
 }
 
+/** Booted from the recovery image nothing of the installed system is mounted: the first internal disk with partitions. */
+export function installedDisk(nodes: BlkNode[]): string | null {
+  const d = nodes.find((n) => n.type === 'disk' && (n.children ?? []).length > 0 && !(n.children ?? []).some((c) => c.mountpoint === '/run/live/medium'))
+  return d?.name ?? null
+}
+
 const LSBLK = ['-J', '-b', '-o', 'PATH,NAME,TYPE,FSTYPE,FSVER,LABEL,SIZE,MOUNTPOINT']
 const UDISKSCTL = '/usr/bin/udisksctl'
+export const REINSTALL = '/usr/libexec/worksuite/worksuite-reinstall'
+/** Recovery images worksuite-reinstall reads; reinstalling is offered only when booted from one (live ISO or recovery). */
+export const RECOVERY_IMAGES = ['/run/live/medium/live/filesystem.squashfs', '/usr/share/worksuite/recovery/filesystem.squashfs']
+const REINSTALL_ERRORS: Record<number, string> = { 2: 'invalid_argument', 3: 'confirm_mismatch', 4: 'no_image', 5: 'no_system', 7: 'running_system', 126: 'not_authorized', 127: 'not_authorized' }
 
 export interface PackageProbe {
   checkUpdates(): Promise<Reply<{ state: string }>>
@@ -95,7 +106,7 @@ export function recoveryHost(pkg: PackageProbe, host: Host = realHost) {
         firmware: host.exists('/sys/firmware/efi') ? 'EFI' : 'BIOS',
         failures: Number.isFinite(restarts) && restarts > 0 ? restarts : null,
         luks: luksDevices(nodes),
-        features: { unlock: host.exists(UDISKSCTL), repair: true, snapshots: false, reinstall: false, copy_usb: false, terminal: false, report_usb: false },
+        features: { unlock: host.exists(UDISKSCTL), repair: true, snapshots: false, reinstall: host.exists(REINSTALL) && RECOVERY_IMAGES.some((p) => host.exists(p)), copy_usb: false, terminal: false, report_usb: false },
       }
     },
 
@@ -146,6 +157,19 @@ export function recoveryHost(pkg: PackageProbe, host: Host = realHost) {
       if (/NotAuthorized|not authorized|dismissed/i.test(r.stderr)) return { ok: false, error: 'not_authorized' }
       if (/No key available|Operation not permitted|Failed to activate|passphrase/i.test(r.stderr)) return { ok: false, error: 'wrong_key' }
       return { ok: false, error: 'failed' }
+    },
+
+    /** keep: reimage the system, /home untouched. erase: only with the disk name typed again (`confirm`). */
+    async reinstall(mode: string, confirm: string): Promise<Reply<true>> {
+      if (mode !== 'keep' && mode !== 'erase') return { ok: false, error: 'invalid_argument' }
+      if (!host.exists(REINSTALL)) return { ok: false, error: 'unavailable' }
+      const disk = rootDisk(await blk()) ?? installedDisk(await blk())
+      if (!disk) return { ok: false, error: 'not_found' }
+      if (mode === 'erase' && confirm.trim() !== disk) return { ok: false, error: 'confirm_mismatch' }
+      const args = [REINSTALL, '--mode', mode, '--disk', disk, ...(mode === 'erase' ? ['--confirm', confirm.trim()] : [])]
+      const r = await host.exec('pkexec', args, 2 * 60 * 60_000)   // reimaging takes minutes
+      if (r.code === 0) return { ok: true, value: true }
+      return { ok: false, error: REINSTALL_ERRORS[r.code] ?? 'failed' }
     },
 
     unavailable: async (): Promise<Reply<never>> => ({ ok: false, error: 'unavailable' }),

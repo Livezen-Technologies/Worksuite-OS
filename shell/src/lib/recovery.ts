@@ -147,6 +147,10 @@ export function recoveryErrorText(code: string): string {
     case 'not_found': return t('rec.err.notFound')
     case 'already_unlocked': return t('rec.err.alreadyUnlocked')
     case 'service_unavailable': return t('rec.err.service')
+    case 'confirm_mismatch': return t('rec.err.confirm')
+    case 'no_image': return t('rec.err.noImage')
+    case 'no_system': return t('rec.err.noSystem')
+    case 'running_system': return t('rec.err.runningSystem')
     default: return t('rec.err.default')
   }
 }

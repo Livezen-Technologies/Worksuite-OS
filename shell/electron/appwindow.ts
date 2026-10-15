@@ -3,13 +3,13 @@
 // partition per account, navigation kept on the module's origin, and the broker's access token attached as a Bearer
 // header to that origin only. No Node, sandboxed, context-isolated, no preload in the web content. Sign-in never
 // happens in this window: the "Sign in to WorkSuite" state asks the broker, which uses the system browser (PKCE).
-import { app, BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, desktopCapturer, session, shell } from 'electron'
 import os from 'node:os'
 import path from 'node:path'
 import { brokerCall } from './broker'
 import { deviceInfo } from './device'
 import {
-  allowedOrigins, linkRequest, loadSession, navDecision, resolveLink, signInTarget, startUrl, wantsToken,
+  allowedOrigins, linkRequest, loadSession, navDecision, resolveLink, screenShareAllowed, signInTarget, startUrl, wantsToken,
   type AppRequest, type Fetch, type Session, type WebApp,
 } from './webapps'
 import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
@@ -26,6 +26,8 @@ export function prepareAppMode(req: AppRequest): boolean {
   // Linux-only (undocumented in the typings): the Wayland app_id, matching the .desktop file.
   ;(app as unknown as { setDesktopName?: (n: string) => void }).setDesktopName?.(`worksuite-${req.id}.desktop`)
   app.commandLine.appendSwitch('class', `worksuite-${req.id}`)
+  // Screen capture on Wayland goes through the xdg-desktop-portal ScreenCast path (PipeWire), SRS §7.1.
+  app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer')
   app.setPath('userData', path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 'worksuite/apps', req.id))
   return app.requestSingleInstanceLock(req)
 }
@@ -132,6 +134,14 @@ ${action ? `<button id="b">${esc(action)}</button><script>document.getElementByI
     const OK = new Set(['media', 'notifications', 'clipboard-sanitized-write', 'fullscreen'])
     ses.setPermissionRequestHandler((wc, perm, cb) => cb(OK.has(perm) && navDecision(wc.getURL(), allowedOrigins(target)) === 'allow'))
     ses.setPermissionCheckHandler((_wc, perm, origin) => OK.has(perm) && allowedOrigins(target).has(origin))
+    // Meet screen sharing (SRS §7.1): getSources goes to the ScreenCast portal, whose chooser asks the user every time;
+    // cancelling there denies. The panel shows "Sharing screen" with Stop, and Super+Shift+Esc stops it anywhere.
+    ses.setDisplayMediaRequestHandler((request, cb) => {
+      if (!screenShareAllowed(r.id, request.frame?.url ?? '', allowedOrigins(target))) { cb({}); return }
+      desktopCapturer.getSources({ types: ['screen'] })
+        .then((sources) => { if (sources[0]) { cb({ video: sources[0] }) } else { cb({}) } })
+        .catch(() => cb({}))
+    })
     if (win.webContents.session !== ses) {
       // The partition is fixed per window; recreate the window for this account.
       const old = win

@@ -1,4 +1,6 @@
-// R5 Reinstall WorkSuite OS. "Keep my files" is the default; erasing needs the disk name typed in the confirmation.
+// R5 Reinstall WorkSuite OS (SRS §9.2-R6). "Keep my files" is the default: worksuite-reinstall reimages the system from the
+// recovery image and never touches /home or its LUKS volume. Erasing needs the disk name typed in the confirmation,
+// checked here, in the main process and again by the script.
 import { useState } from 'react'
 import { os, type RecoveryInfo } from '../../lib/os'
 import { recoveryErrorText, type DoneInfo } from '../../lib/recovery'
@@ -21,7 +23,7 @@ export default function Reset({ info, onBack, onDone }: { info: RecoveryInfo | n
 
   const run = async () => {
     setBusy(true); setError(null)
-    const r = await os.recoveryReinstall(mode)
+    const r = await os.recoveryReinstall(mode, erase ? typed : '')
     setBusy(false); setConfirm(false); setTyped('')
     if (!r.ok) { setError(recoveryErrorText(r.error)); return }
     onDone(erase

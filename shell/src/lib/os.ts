@@ -111,7 +111,7 @@ export interface WorkSuiteApi {
   recoveryUnlock(device: string, secret: string): Promise<CloudResult<true>>
   recoverySnapshots(): Promise<CloudResult<SnapshotInfo[]>>
   recoveryRestore(snapshotId: string): Promise<CloudResult<true>>
-  recoveryReinstall(mode: 'keep' | 'erase'): Promise<CloudResult<true>>
+  recoveryReinstall(mode: 'keep' | 'erase', confirm?: string): Promise<CloudResult<true>>
   recoveryCopyToUsb(): Promise<CloudResult<true>>
   recoveryTerminal(): Promise<CloudResult<true>>
   recoverySaveReport(text: string): Promise<CloudResult<string>>

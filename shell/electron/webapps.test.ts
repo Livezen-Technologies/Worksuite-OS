@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allowedOrigins, linkRequest, loadSession, navDecision, parseAppArgs, resolveLink, safeUrl, signInTarget, startUrl, wantsToken, webAppsFrom, type Fetch } from './webapps'
+import { allowedOrigins, linkRequest, loadSession, navDecision, parseAppArgs, resolveLink, safeUrl, screenShareAllowed, signInTarget, startUrl, wantsToken, webAppsFrom, type Fetch } from './webapps'
 
 const mail = { id: 'mail', name: 'Mail', web_url: 'https://apps.example.com/mail/' }
 
@@ -89,5 +89,15 @@ describe('session', () => {
     const ok = async (m: string) => (m === 'Status' ? signedIn : { ok: true as const, value: 't' })
     expect(await loadSession(ok, async (u) => (u.includes('bootstrap') ? res(403, { error: { code: 'DEVICE_REQUIRED' } }) : res(404, {})))).toEqual({ ok: false, error: 'device_required' })
     expect(await loadSession(ok, async () => { throw new Error('net') })).toEqual({ ok: false, error: 'offline' })
+  })
+})
+
+describe('screen sharing (SRS §7.1)', () => {
+  const origins = new Set(['https://meet.example.lk'])
+  it('only Meet, only from its own origin', () => {
+    expect(screenShareAllowed('meet', 'https://meet.example.lk/room/1', origins)).toBe(true)
+    expect(screenShareAllowed('meet', 'https://evil.example/room', origins)).toBe(false)
+    expect(screenShareAllowed('chat', 'https://meet.example.lk/room/1', origins)).toBe(false)
+    expect(screenShareAllowed('meet', '', origins)).toBe(false)
   })
 })

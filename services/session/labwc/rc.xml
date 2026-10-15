@@ -39,6 +39,8 @@
     <!-- Screenshot through xdg-desktop-portal (shell/electron/screenshot.ts): Print = whole screen, Shift+Print = choose. -->
     <keybind key="Print"><action name="Execute" command="worksuite-screenshot"/></keybind>
     <keybind key="S-Print"><action name="Execute" command="worksuite-screenshot --interactive"/></keybind>
+    <!-- Screen-sharing emergency stop (SRS §7.1): ends every ScreenCast session, also while the screen is locked. -->
+    <keybind key="W-S-Escape" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-screencast-stop"/></keybind>
   </keyboard>
   <windowRules>
     <!-- The shell's own windows are normal toplevels; never fullscreen-as-desktop (§5.1 decision gate). -->

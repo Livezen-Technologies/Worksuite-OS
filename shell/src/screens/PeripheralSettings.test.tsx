@@ -35,6 +35,7 @@ const fake: PeripheralsApi = {
   async printQueue() { return ok({ jobs: [{ id: 'Office-3', printer: 'Office', user: 'u', size: '10' }], issues: [{ name: 'Office', reason: 'Paper jam' }] }) },
   async cancelJob(id) { calls.push(`cancel ${id}`); return ok(true as const) },
   async screenCapture() { return ok(capturing) },
+  async stopScreenCapture() { calls.push('stop capture'); const n = capturing; capturing = 0; return ok(n) },
   async inputMethods() { return ok({ enabled, available: ['keyboard-us', 'm17n_si_wijesekara', 'm17n_ta_tamil99'] }) },
   async setInputMethods(ids) { calls.push(`ims ${ids.join(',')}`); enabled = ids; return ok(true as const) },
   async syncFailed() { return { ok: true, value: [{ mutation_id: 'm-1', module: 'crm', object_id: 'lead-7', last_error: '403 forbidden' }] } },
@@ -145,6 +146,16 @@ describe('screen capture indicator (WSOS-INT-013)', () => {
     expect(h.textContent).toContain('Sharing screen')
     capturing = 0
     await act(async () => { await new Promise((r) => setTimeout(r, 40)) })
+    expect(h.textContent).toBe('')
+  })
+  it('Stop sharing ends every screencast in one click (SRS §7.1)', async () => {
+    const { CaptureBadge } = await import('../components/CaptureBadge')
+    capturing = 2
+    const h = await render(<CaptureBadge pollMs={10_000} />)
+    const btn = [...h.querySelectorAll('button')].find((b) => b.textContent === 'Stop sharing')!
+    expect(btn).toBeTruthy()
+    await act(async () => { btn.click(); await new Promise((r) => setTimeout(r, 10)) })
+    expect(calls).toContain('stop capture')
     expect(h.textContent).toBe('')
   })
 })

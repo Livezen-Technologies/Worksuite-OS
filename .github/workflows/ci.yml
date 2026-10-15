@@ -53,6 +53,9 @@ jobs:
       - uses: actions/checkout@v4
       # GRUB recovery/previous-kernel entries, kernel retention, boot-time repair (WSOS-BOOT-003, SRS §9.2).
       - run: tests/boot/recovery-boot.test.sh
+      # Reinstall keeping /home (SRS §9.2-R6): directory run, then a loop-device disk with /home in LUKS2.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends squashfs-tools cryptsetup-bin fdisk
+      - run: sudo sh tests/boot/reinstall-keep-home.test.sh
       # AppArmor profiles parse (WSOS-SEC-009); perf gate evaluator (PRF-*).
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends apparmor apparmor-utils
       - run: tests/security/apparmor.test.sh
@@ -81,6 +84,15 @@ jobs:
       - run: python3 -m unittest discover -s installer/tests
       - run: python3 -m unittest discover -s tests/hw
       - run: cd services/session/greeter && python3 -m unittest discover -s tests -t .
+
+  portals:
+    # Portal acceptance (SRS §7.1): each portal interface WorkSuite uses, against xdg-desktop-portal with the -wlr and
+    # -gtk backends in a headless Labwc, with WorkSuite's portals.conf, xdpw config and screen-sharing consent chooser.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends dbus-daemon dbus-x11 labwc xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk grim pipewire wireplumber python3-dbus-next gsettings-desktop-schemas dconf-service libglib2.0-bin
+      - run: timeout 300 sh tests/portals/run.sh
 
   apt-repo:
     runs-on: ubuntu-latest

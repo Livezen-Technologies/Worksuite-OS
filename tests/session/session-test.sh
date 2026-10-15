@@ -178,5 +178,32 @@ printf 'eDP-1\n' | ZENITY_PICK=evil sh "$CH" >/dev/null; check "unknown answer d
 : > "$LOG"; printf '' | ZENITY_PICK=eDP-1 sh "$CH" >/dev/null; check "no outputs: denied without asking" "$?:$(cat "$LOG")" "1:"
 grep -q '^chooser_cmd=/usr/lib/worksuite/worksuite-screencast-chooser$' "$ROOT/services/session/xdg-desktop-portal-wlr/config" && ok "xdpw runs the consent chooser" || bad "xdpw runs the consent chooser"
 
+
+# ---- screen-sharing emergency stop (SRS §7.1) ----
+ST=$BIN/worksuite-screencast-stop
+stub pw-cli 'echo "pw-cli $*" >> "$LOG"; [ "$1" = ls ] || exit 0; cat <<EOF
+	id 31, type PipeWire:Interface:Node/3
+ 		object.serial = "31"
+ 		node.name = "alsa_output.pci"
+	id 52, type PipeWire:Interface:Node/3
+ 		object.serial = "52"
+ 		node.name = "xdpw_stream"
+	id 57, type PipeWire:Interface:Node/3
+ 		node.name = "xdpw_stream_1"
+EOF'
+: > "$LOG"
+check "stop reports every stream it ended" "$(sh "$ST")" "2"
+grep -q 'pw-cli destroy 52' "$LOG" && grep -q 'pw-cli destroy 57' "$LOG" && ok "stop destroys each xdpw stream node" || bad "stop destroys each xdpw stream node"
+grep -q 'pw-cli destroy 31' "$LOG" && bad "stop leaves other nodes alone" || ok "stop leaves other nodes alone"
+grep -q 'systemctl --user restart xdg-desktop-portal-wlr.service' "$LOG" && ok "stop restarts xdpw so every portal session closes" || bad "stop restarts xdpw so every portal session closes"
+stub pw-cli 'exit 1'
+check "stop with nothing shared still succeeds" "$(sh "$ST"; echo ":$?")" "0
+:0"
+grep -q '<keybind key="W-S-Escape" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-screencast-stop"/>' "$ROOT/services/session/labwc/rc.xml" \
+  && ok "Super+Shift+Esc stops sharing, also on the lock screen" || bad "Super+Shift+Esc stops sharing, also on the lock screen"
+P=$ROOT/services/session/portals/worksuite-portals.conf
+grep -qx 'org.freedesktop.impl.portal.ScreenCast=wlr' "$P" && grep -qx 'org.freedesktop.impl.portal.Screenshot=wlr' "$P" && grep -qx 'default=gtk' "$P" \
+  && ok "portals.conf: ScreenCast/Screenshot on wlr, the rest on gtk" || bad "portals.conf: ScreenCast/Screenshot on wlr, the rest on gtk"
+
 echo "1..$n"
 exit $fail

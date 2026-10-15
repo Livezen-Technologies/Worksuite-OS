@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   btError, cupsError, mountedAt, newDevices, parseFcitxProfile, parseInhibitors, parseJobs, parseLpinfo, parseLsblk,
-  parsePowerProfiles, parsePrinterIssues, activeCaptures, peripheralsBridge, printerUri, queueName, renderFcitxProfile, udisksError, type FsDeps,
+  parsePowerProfiles, parsePrinterIssues, activeCaptures, peripheralsBridge, SCREENCAST_STOP, printerUri, queueName, renderFcitxProfile, udisksError, type FsDeps,
 } from './peripherals'
 import type { Exec, WithStdin } from './system'
 
@@ -151,5 +151,12 @@ describe('screen capture indicator (WSOS-INT-013)', () => {
     const node = (name: string, state: string, cls = 'Video/Source') => ({ type: 'PipeWire:Interface:Node', info: { state, props: { 'node.name': name, 'media.class': cls } } })
     expect(activeCaptures(JSON.stringify([node('xdpw_stream', 'running'), node('xdpw_stream', 'suspended'), node('alsa_output', 'running', 'Audio/Sink'), { type: 'PipeWire:Interface:Link' }]))).toBe(1)
     expect(activeCaptures('garbage')).toBe(0)
+  })
+  it('emergency stop runs worksuite-screencast-stop and reports the streams ended (SRS §7.1)', async () => {
+    const f = fakeExec({ [SCREENCAST_STOP]: { stdout: '2\n' } })
+    expect(await peripheralsBridge('/h', f.exec, withStdin, memFs()).stopScreenCapture()).toEqual({ available: true, value: 2 })
+    expect(f.calls).toEqual([[SCREENCAST_STOP]])
+    const gone = fakeExec({ [SCREENCAST_STOP]: { code: 1, missing: true } })
+    expect(await peripheralsBridge('/h', gone.exec, withStdin, memFs()).stopScreenCapture()).toEqual({ available: false, reason: 'worksuite-screencast-stop_missing' })
   })
 })

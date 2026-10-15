@@ -192,6 +192,8 @@ export interface InputState { enabled: string[]; available: InputMethodId[] }
 
 // ---------- screen capture indicator (WSOS-INT-013) ----------
 /** `pw-dump` → running screen-capture streams from xdg-desktop-portal-wlr (node.name xdpw_stream…). */
+export const SCREENCAST_STOP = '/usr/lib/worksuite/worksuite-screencast-stop'
+
 export function activeCaptures(json: string): number {
   try {
     const objs = JSON.parse(json) as { type?: string; info?: { state?: string; props?: Record<string, unknown> } }[]
@@ -327,6 +329,13 @@ export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin
       const r = await exec('pw-dump', [])
       return r.code === 0 ? ok(activeCaptures(r.stdout)) : tool(r, 'pw-dump', 'service_unavailable')
     },
+    /** Emergency stop (SRS §7.1): destroys every xdpw stream and restarts xdpw, closing all ScreenCast sessions. */
+    async stopScreenCapture(): Promise<Avail<number>> {
+      const r = await exec(SCREENCAST_STOP, [])
+      if (r.code !== 0) return tool(r, 'worksuite-screencast-stop', 'failed')
+      const n = Number.parseInt(r.stdout.trim(), 10)
+      return ok(Number.isFinite(n) ? n : 0)
+    },
 
     // Input methods (WSOS-INT-011)
     async inputMethods(): Promise<Avail<InputState>> {
@@ -363,6 +372,7 @@ export function startPeripheralsHost(handle: Handle, home: string, b: Peripheral
   handle('ws:printQueue', () => b.printQueue())
   handle('ws:cancelJob', (id) => b.cancelJob(id))
   handle('ws:screenCapture', () => b.screenCapture())
+  handle('ws:stopScreenCapture', () => b.stopScreenCapture())
   handle('ws:inputMethods', () => b.inputMethods())
   handle('ws:setInputMethods', (...ids) => b.setInputMethods(ids))
 }

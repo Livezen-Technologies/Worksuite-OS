@@ -81,6 +81,14 @@ export function allowedOrigins(app: WebApp): Set<string> {
 export type NavDecision = 'allow' | 'external' | 'deny'
 
 /** In-window for the allowed origins; https/mailto/tel elsewhere goes to the default browser; everything else is blocked. */
+/** Modules that may ask to share the screen (Meet ENH-01, SRS §7.1). */
+export const SCREEN_SHARE_MODULES = new Set(['meet'])
+/** getDisplayMedia from a module page: only Meet, only from its own origin. The portal then asks the user
+ * (worksuite-screencast-chooser) on every request; nothing is granted here. */
+export function screenShareAllowed(moduleId: string, frameUrl: string, origins: Set<string>): boolean {
+  return SCREEN_SHARE_MODULES.has(moduleId) && navDecision(frameUrl, origins) === 'allow'
+}
+
 export function navDecision(url: string, origins: Set<string>): NavDecision {
   let u: URL
   try { u = new URL(url) } catch { return 'deny' }
