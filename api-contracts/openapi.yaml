@@ -386,6 +386,60 @@ paths:
                   domain: { type: string }
                   offline_login_days: { type: integer, default: 7 }
                   group_role_map: { type: object, additionalProperties: { type: string, enum: [administrator, standard, kiosk] } }
+                  escrow_public_key: { type: string, description: PEM RSA public key the break-glass password is encrypted to (RSA-OAEP-256) }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/directory/authenticate:
+    post:
+      tags: [os]
+      summary: Verify a directory password for OS sign-in (WSOS-DIR-002/005/009); device credential required
+      description: Called by the OS PAM helper only. The reply carries no password material; the device derives its own offline verifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, maxLength: 320 }
+                password: { type: string, maxLength: 1024, writeOnly: true }
+      responses:
+        '200':
+          description: Verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username: { type: string }
+                  user_id: { type: integer, description: Stable id; the OS derives the local UID from it (WSOS-DIR-003) }
+                  name: { type: string }
+                  groups: { type: array, items: { type: string } }
+                  offline_login_days: { type: integer }
+        '401': { description: INVALID_CREDENTIALS }
+        '403': { description: ACCOUNT_DISABLED, DEVICE_REQUIRED or DEVICE_REVOKED }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/break-glass/events:
+    post:
+      tags: [os]
+      summary: Audit a break-glass admin use or rotation (WSOS-DIR-010)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, type, username, at]
+              properties:
+                id: { type: string }
+                type: { type: string, enum: [used, rotated] }
+                username: { type: string }
+                at: { type: string, format: date-time }
+      responses:
+        '202': { description: Recorded }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/os/break-glass:

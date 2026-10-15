@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   logout: () => ipcRenderer.invoke('ws:logout'),
   power: (action: string) => ipcRenderer.invoke('ws:power', String(action)),
   launchApp: (appId: string) => ipcRenderer.invoke('ws:launchApp', String(appId)),
+  openWorkSuiteApp: (appId: string, url: string) => ipcRenderer.invoke('ws:openWorkSuiteApp', String(appId), String(url)),
   lockSettings: () => ipcRenderer.invoke('ws:lockSettings'),
   setLockTimeout: (seconds: number) => ipcRenderer.invoke('ws:setLockTimeout', String(seconds)),
   webApps: () => ipcRenderer.invoke('ws:webApps'),

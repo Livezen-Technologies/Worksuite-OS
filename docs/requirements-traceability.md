@@ -86,3 +86,39 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 |---|---|---|
 | Signed APT repository per ring (WSOS-AUP-002) | `tools/repo/keygen.sh`, `publish.sh`; served by `worksuite-server --apt-dir` | `tests/repo/apt-e2e.sh` (real apt: verify, upgrade, tampered and foreign-signed refused, no path traversal); CI job `apt-repo` |
 | Public keys on devices (WSOS-SEC-011) | `worksuite-archive-keyring` from `packaging/keyring/` (public keys only; empty = fail closed) | Package builds and lints; install paths checked |
+| No private keys in the tree, HSM/offline key process (WSOS-SEC-011) | `docs/security/hardening.md` | CI `os-scripts` fails on any `PRIVATE KEY` block |
+| SBOM per release (WSOS-SEC-011) | `tools/sbom/spdx.mjs`, `tools/sbom/generate.sh` (SPDX 2.3: image package list, WorkSuite .debs with SHA-256, npm runtime deps incl. Electron; syft when present) | `tools/sbom/spdx.test.mjs` in CI; generated and uploaded per arch in `image.yml` |
+
+## Directory sign-in (`worksuite-directory`)
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-DIR-002/009 directory password check at the greeter | `services/directory/pam/worksuite-directory` (pam-auth-update, `pam_exec expose_authtok`, `[success=end default=ignore]`), `src/main.ts` (HTTPS + device credential) → `POST desktop/v1/os/directory/authenticate` (`services/server/src/api.ts`, `api-contracts/openapi.yaml`) | `services/directory/test/directory.test.ts`; server `api.test.ts` (device-bound, org-scoped, disabled) |
+| WSOS-DIR-003 stable UID, home | UID 200000 + user id, `useradd` with locked password, `pam_mkhomedir` | `directory.test.ts` (uid, conflicts) |
+| WSOS-DIR-004/005 offline cache with policy expiry; disabled refused | `src/directory.ts` (`authenticate`): scrypt verifier, `offline_login_days`, cache purge + lock on `ACCOUNT_DISABLED` | `directory.test.ts` |
+| WSOS-DIR-006 group → role | `localGroups()` with `group_role_map` | `directory.test.ts` |
+| WSOS-DIR-010 break-glass admin | `rotate()`/`session()`, `worksuite-breakglass-rotate.{service,timer}`, `wsadmin` (postinst), server `POST desktop/v1/os/break-glass` + `/events` | `directory.test.ts` (escrow decrypts to the set password, one-time lock, audit queue), `api.test.ts` |
+| Passwords never logged | stdin/HTTPS body only | `directory.test.ts` checks logs, cache and request URL |
+
+## Recovery boot (`worksuite-recovery-boot`)
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-BOOT-003, §9.2-R4 previous kernel kept and bootable | `services/recovery-boot/kernel/zz-worksuite-kernel-retention`, `grub/42_worksuite_recovery` | `tests/boot/recovery-boot.test.sh` (CI `os-scripts`) |
+| §9.2-R3 "WorkSuite Recovery" boot entry → recovery screens | `grub/42_worksuite_recovery`, `systemd/worksuite-recovery.target`, `worksuite-recovery-shell.service`, `shell/electron/bootmode.ts` (`worksuite.recovery=1`) | `recovery-boot.test.sh`, `shell/electron/bootmode.test.ts`; not booted in a VM |
+| §9.2-R1 boot-time package repair | `bin/worksuite-boot-repair`, `worksuite-boot-repair.service` (`OnFailure=` → recovery target) | `recovery-boot.test.sh` (stub dpkg/apt) |
+
+## Hardening
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-SEC-004 per-app session partitions | `shell/electron/appwindows.ts` (`persist:ws-app-<id>`), `ws:openWorkSuiteApp` in `main.ts`/`preload.ts` | `shell/electron/appwindows.test.ts` |
+| WSOS-SEC-009 AppArmor | `security/apparmor/*`, `AppArmorProfile=-…` in units, postinst reload | `tests/security/apparmor.test.sh` (CI) |
+| WSOS-SEC-012 Electron patch policy | `docs/security/hardening.md`, `.github/dependabot.yml` | Process |
+
+## ARM64 and performance gates
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-ARM-001/004/008 arm64 build + QEMU UEFI boot | `.github/workflows/image.yml` matrix (native `ubuntu-24.04-arm`), `tests/vm/qemu-arch.sh`, arch-aware `boot-test.sh`/`server-e2e.sh`, serial console per arch in `live-build/auto/config` | Workflow defined; not yet run green |
+| WSOS-PRF-001…005, REL-001/002, ARM-007 | `tests/perf/guest/*` (probes on `WORKSUITE_PERF=1` images), `tests/perf/gates.tsv` (hw-* = SRS limits, ci-*-tcg = regression bounds, separate ARM rows), `tests/perf/gates.sh`, `boot-test.sh PERF_PROFILE=…` | `tests/perf/gates.test.sh` (CI); VM gates in `image.yml`, not yet run green |

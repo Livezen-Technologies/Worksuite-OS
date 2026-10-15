@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [sync, device-agent, credentials, package-service, server]
+        package: [sync, device-agent, credentials, package-service, server, directory]
     defaults:
       run:
         working-directory: services/${{ matrix.package }}
@@ -46,6 +46,23 @@ jobs:
       - if: matrix.package == 'package-service'
         run: sudo apt-get install -y --no-install-recommends dbus-daemon
       - run: npm test
+
+  os-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # GRUB recovery/previous-kernel entries, kernel retention, boot-time repair (WSOS-BOOT-003, SRS §9.2).
+      - run: tests/boot/recovery-boot.test.sh
+      # AppArmor profiles parse (WSOS-SEC-009); perf gate evaluator (PRF-*).
+      - run: sudo apt-get install -y --no-install-recommends apparmor apparmor-utils
+      - run: tests/security/apparmor.test.sh
+      - run: tests/perf/gates.test.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tools/sbom/spdx.test.mjs
+      # No private key material in the tree (WSOS-SEC-011).
+      - run: "! git grep -I -l -e 'BEGIN [A-Z ]*PRIVATE KEY' -- . ':!docs/**'"
 
   apt-repo:
     runs-on: ubuntu-latest

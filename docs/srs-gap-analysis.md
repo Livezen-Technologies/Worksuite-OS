@@ -10,16 +10,16 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | Section | Items | Done | Partial | Missing | Score |
 |---|---|---|---|---|---|
 | 3 Architecture | 4 | 0 | 4 | 0 | 50% |
-| 4 Boot, login, session, lock | 17 | 10 | 6 | 1 | 76% |
+| 4 Boot, login, session, lock | 17 | 11 | 6 | 0 | 82% |
 | 5 Shell | 18 | 1 | 9 | 8 | 31% |
 | 6 Applications | 20 | 6 | 7 | 7 | 48% |
 | 7 Integration and Drive | 19 | 4 | 14 | 1 | 58% |
 | 8 Identity and sync | 18 | 12 | 6 | 0 | 83% |
 | 9 Updates, MDM, installer | 22 | 11 | 11 | 0 | 75% |
-| 11 Non-functional | 25 | 2 | 16 | 7 | 40% |
-| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 15 | 10 | 15 | 50% |
-| Unnumbered requirements (no WSOS ID) | 15 | 3 | 7 | 5 | 43% |
-| **Overall** | **198** | | | | **55.1%** |
+| 11 Non-functional | 25 | 5 | 20 | 0 | 60% |
+| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 20 | 13 | 7 | 66% |
+| Unnumbered requirements (no WSOS ID) | 15 | 5 | 7 | 3 | 57% |
+| **Overall** | **198** | | | | **62.4%** |
 
 ## 3 Architecture
 
@@ -36,7 +36,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 |---|---|---|---|
 | WSOS-BOOT-001 | UEFI boot | Done | `live-build/auto/config` (`--bootloaders grub-efi`); UEFI QEMU boot test `tests/vm/boot-test.sh` runs in `.github/workflows/image.yml`. Certified hardware not covered. |
 | WSOS-BOOT-002 | LUKS2 passphrase in initramfs + recovery key | Partial | `installer/modules/partition.conf` (`luksGeneration: luks2`), `cryptsetup-initramfs` in package list, recovery key `installer/modules/worksuiterecovery/main.py` (unit tested). Encrypted install/boot never run end to end. |
-| WSOS-BOOT-003 | Previous kernel kept selectable | Missing | No GRUB/kernel retention config found (no `grub.d` submenu or apt autoremove kernel settings). |
+| WSOS-BOOT-003 | Previous kernel kept selectable | Done | `services/recovery-boot/kernel/zz-worksuite-kernel-retention` (kernel postinst/postrm hook → `APT::NeverAutoRemove` for newest two + running kernel) and `grub/42_worksuite_recovery` ("WorkSuite OS (previous kernel X)" top-level entry), package `worksuite-recovery-boot`; tested by `tests/boot/recovery-boot.test.sh` (CI `os-scripts`). Not yet booted in a VM. |
 | WSOS-AUTH-001 | greetd + PAM greeter, WorkSuite default session | Partial | `live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot` (gtkgreet under cage), `services/session/wayland-sessions/worksuite.desktop`. VM test only checks greetd is active, not a login. |
 | WSOS-AUTH-002 | No autologin by default | Partial | greetd config has no `initial_session`; `installer/modules/usersq.conf`. No kiosk/personal opt-in mechanism; no test. |
 | WSOS-AUTH-003 | Offline login for provisioned local users within policy period | Done | Policy `offline_access_days`: after N days without a check-in the device agent locks all sessions and writes `/etc/worksuite/offline-access-expired`, which pam_nologin (`services/session/pam/worksuite-offline-access`) uses to refuse sign-in until the next successful check-in (`services/device-agent/src/agent.ts` `offlineAccessCheck`, `src/enforce.ts`; tested in `test/agent.test.ts`, incl. restart and restore). Within the period local PAM accounts sign in offline. |
@@ -87,7 +87,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-APT-003 | Critical set removal blocked | Done | `apt.ts` `CRITICAL`/`isCritical`, enforced in `service.ts`; tested. |
 | WSOS-APT-004 | One package lock shared with updates | Done | Single job queue in `service.ts`, coordinator uses it (`coordinator.ts`); tested in `service.test.ts`/`coordinator.test.ts`. |
 | WSOS-APT-005 | Local .deb installs: admin auth, publisher, policy | Missing | No local .deb install path in package service or shell. |
-| WSOS-APT-006 | Interrupted dpkg detected, audited Repair action | Partial | `dpkg --audit` detection + `Repair` (`service.ts`), tested; detection runs at service start rather than a boot-time unit, and no shell UI surfaces Repair. |
+| WSOS-APT-006 | Interrupted dpkg detected, audited Repair action | Partial | `dpkg --audit` detection + `Repair` (`service.ts`), tested; boot-time detection and repair in `worksuite-boot-repair.service` (`tests/boot/recovery-boot.test.sh`); no shell UI outside the recovery screens surfaces Repair. |
 | WSOS-FLP-001 | Curated remotes; adding a remote needs admin + policy | Partial | Approved remotes from policy (`service.ts` `remoteFor`); no add-remote operation exists (so nothing to guard); only first approved remote ever used. |
 | WSOS-FLP-002 | Install dialogs highlight broad Flatpak permissions | Done | Metadata parsed from `flatpak remote-info` (`service.ts`), shown in `AppCenter.tsx` (`describePermission`); tested in `service.test.ts`. |
 | WSOS-FLP-003 | Review/reset app permissions, remove app data | Missing | App Center "permissions" section is display-only; no reset/data removal operation. |
@@ -178,28 +178,28 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 
 | ID | Requirement | Status | Evidence / reason |
 |---|---|---|---|
-| WSOS-PRF-001 | Greeter ≤30 s | Missing | No measurement scripts. |
-| WSOS-PRF-002 | Login → desktop ≤5 s | Missing | No measurement. |
-| WSOS-PRF-003 | Idle memory ≤1.5 GiB | Missing | No measurement. |
-| WSOS-PRF-004 | Idle CPU <2% | Missing | No measurement. |
-| WSOS-PRF-005 | Launcher first frame ≤200 ms | Missing | No measurement. |
+| WSOS-PRF-001 | Greeter ≤30 s | Partial | `tests/perf/guest/measure-boot` (systemd-analyze + greetd ActiveEnter) on the `-perf` test image; gate in `tests/perf/gates.tsv` applied by `tests/vm/boot-test.sh PERF_PROFILE=…` in `image.yml`. CI (TCG) bound is a regression limit (600 s), the 30 s limit applies to `hw-*` profiles only; no reference-hardware run yet. |
+| WSOS-PRF-002 | Login → desktop ≤5 s | Partial | Shell start measured (`WORKSUITE_PERF=1` → `shell_ready_ms` from `shell/electron/main.ts`, driven by `tests/perf/guest/measure-shell`); gated ≤5 s on `hw-*`, optional regression bound in CI. Greeter→desktop through greetd itself not measured. |
+| WSOS-PRF-003 | Idle memory ≤1.5 GiB | Partial | `idle_mem_mib` (MemTotal − MemAvailable after 60 s idle) gated ≤1536 MiB in `ci-*-tcg` and `hw-*` (`tests/perf/gates.tsv`); measured on the live `-perf` image, not an installed system with a session. |
+| WSOS-PRF-004 | Idle CPU <2% | Partial | `idle_cpu_pct` from /proc/stat over 30 s; <2% gate on `hw-*`, wide regression bound under TCG. |
+| WSOS-PRF-005 | Launcher first frame ≤200 ms | Partial | `app_launch_ms` (gtk-launch → toplevel via `lswt`) in `measure-shell`, optional gate; launcher first-frame inside the shell not instrumented. |
 | WSOS-PRF-006 | Shell restart ≤3 s | Partial | RestartSec=1s configured; not measured. |
-| WSOS-REL-001 | 100 login/logout cycles clean | Missing | No test. |
-| WSOS-REL-002 | 50 suspend/resume cycles, lock intact | Partial | Lock before suspend wired (swayidle -w before-sleep → worksuite-lock, see LOCK-002); no 50-cycle suspend/resume test. |
+| WSOS-REL-001 | 100 login/logout cycles clean | Partial | `tests/perf/guest/login-cycles` runs N PAM/logind login-logout cycles (systemd-run PAMName=login) and gates failures, leaked sessions, new failed units and memory growth (`gates.tsv`). CI runs 20 cycles on the `-perf` image; not 100 graphical greetd logins. |
+| WSOS-REL-002 | 50 suspend/resume cycles, lock intact | Partial | Lock before suspend wired (swayidle -w before-sleep → worksuite-lock, see LOCK-002). `tests/perf/guest/suspend-cycles` runs N rtcwake s2idle cycles and checks every graphical session reports LockedHint=yes after resume, gated in `tests/perf/gates.tsv` (required on `hw-*`, optional under TCG); the CI probe has no logged-in session, so the lock check only bites on hardware runs, and CI runs 5 cycles, not 50. |
 | WSOS-REL-003 | No lost ack'd write / duplicate effect | Done | `services/sync/test/sync.test.ts` adversarial cases, `services/server/test/e2e.test.ts`. |
 | WSOS-REL-004 | Killing Electron spares apps | Partial | Apps run in their own `app-worksuite-*.scope` (`shell/electron/session.ts`, unit-tested); no test that kills Electron in a running session. |
 | WSOS-SEC-001 | Sandbox, context isolation, no Node, restricted navigation | Partial | `shell/electron/main.ts` webPreferences, will-navigate blocked; no navigation allow-list for server origins, no test. |
 | WSOS-SEC-002 | Local bundle + restrictive CSP | Partial | CSP meta in `shell/index.html`; `style-src 'unsafe-inline'`; untested. |
 | WSOS-SEC-003 | Web permissions denied by default, per origin grants | Partial | `setPermissionRequestHandler` denies all (`main.ts`); no per-origin grant mechanism. |
-| WSOS-SEC-004 | Per-app session partitions | Missing | No WorkSuite business app windows/partitions. |
+| WSOS-SEC-004 | Per-app session partitions | Done | `shell/electron/appwindows.ts`: `ws:openWorkSuiteApp` opens each WorkSuite app in its own window with `persist:ws-app-<id>` partition, sandboxed, permissions denied, origin-locked navigation; `shell/electron/appwindows.test.ts`. |
 | WSOS-SEC-005 | Untrusted documents parsed outside privileged processes | Partial | Flatpak metadata parsed in root package service (`service.ts`); no explicit policy/test. |
 | WSOS-SEC-006 | URL scheme allow-list | Partial | `ALLOWED_SCHEMES` in `main.ts`; untested. |
 | WSOS-SEC-007 | Caller validation + systemd hardening | Partial | Caller UID/polkit in `dbus.ts` (tested); hardening in `services/*/systemd/*.service`; device agent caller checks untested. |
 | WSOS-SEC-008 | Privileged changes audited locally and to server | Partial | Local audit (`service.ts`, `agent.ts` `audit`), server admin_log (`console.ts`); package changes not reported to server. |
-| WSOS-SEC-009 | LUKS2 at install + AppArmor profiles for services | Partial | LUKS2 done (installer); `apparmor` is a dependency but no profiles ship. |
+| WSOS-SEC-009 | LUKS2 at install + AppArmor profiles for services | Done | LUKS2 (installer). AppArmor profiles in `security/apparmor/` for the device agent, package service and break-glass rotation (enforce) and the shell (complain, documented in `docs/security/hardening.md`), attached via `AppArmorProfile=-…` in the units, installed to /etc/apparmor.d and loaded by postinst; `tests/security/apparmor.test.sh` compiles every profile in CI. |
 | WSOS-SEC-010 | No SSH server | Done | `Conflicts: openssh-server` (`packaging/debian/control`), build-time check in the live-build hook; image is built in CI. |
-| WSOS-SEC-011 | Offline/HSM keys; SBOM per release | Partial | Public keyring only (`packaging/keyring/`, `tools/repo/keygen.sh`); no SBOM generation, HSM process undocumented. |
-| WSOS-SEC-012 | Electron supported, patched in 14 days | Partial | Electron pinned in `shell/package.json`; no update policy/automation. |
+| WSOS-SEC-011 | Offline/HSM keys; SBOM per release | Done | Public keyring only; CI fails on any private key in the tree (`ci.yml`). HSM/offline key process in `docs/security/hardening.md`. SPDX 2.3 SBOM per ISO (`tools/sbom/generate.sh`, `spdx.mjs`, tested by `spdx.test.mjs`), generated and uploaded in `image.yml`. |
+| WSOS-SEC-012 | Electron supported, patched in 14 days | Partial | Electron patch policy (supported major, 14-day window, 72 h for exploited) in `docs/security/hardening.md`; Dependabot watches `shell/package.json` (`.github/dependabot.yml`). Meeting the window is a process, not verifiable in CI. |
 | WSOS-SEC-013 | Docs don't claim isolation of unsandboxed apps | Partial | No contrary claim found; no explicit statement or review. |
 | WSOS-SEC-014 | Secure Boot full chain + key strategy (P2) | Partial | `shim-signed`, `--uefi-secure-boot auto`; no documented key strategy or module signing. |
 | WSOS-ACC-001…006 | Accessibility: keyboard, focus, Orca, high contrast, 200% text, reduced motion | Partial | ARIA labels and keyboard handling in shell screens (`Desktop.tsx`); no high-contrast theme, reduced-motion handling or Orca qualification. |
@@ -221,14 +221,14 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-AUP-011 | Settings › Updates + panel badge; results reported | Partial | Settings › Updates (`Settings.tsx`, `shell/electron/packages.ts`, tested) and result reporting done; no panel badge (native panel missing). |
 | WSOS-AUP-012 | Edition entitlement gating; security during grace | Missing | No licence/entitlement handling. |
 | WSOS-AUP-013 | Update Center admin: publish, promote, pause, pull | Partial | Signed publish in `services/server/src/admin.ts`; no promote/pause/pull or `desktop.releases.manage` permission. |
-| WSOS-ARM-001 | arm64 packages and ISO from same tag | Partial | `live-build/auto/config` accepts arm64, `packaging/debian/control` arch lists; CI builds amd64 only (`.github/workflows/image.yml`). |
-| WSOS-ARM-002 | ARM via UEFI only | Partial | grub-efi for arm64 configured; never booted. |
+| WSOS-ARM-001 | arm64 packages and ISO from same tag | Partial | `.github/workflows/image.yml` matrix builds .debs, ISO and SBOM for amd64 and arm64 (native `ubuntu-24.04-arm` runner) from the same ref; not yet run green. |
+| WSOS-ARM-002 | ARM via UEFI only | Partial | grub-efi for arm64; QEMU `virt` + AAVMF boot in `tests/vm/qemu-arch.sh`/`boot-test.sh`, serial console `ttyAMA0` (`live-build/auto/config`); not yet booted. |
 | WSOS-ARM-003 | Certified ARM list with hardware gates | Missing | No list. |
-| WSOS-ARM-004 | Native arm64 builds of Electron, panel, bridge, services, Office | Partial | Package architectures declared; panel/bridge/Office absent; no arm64 build. |
+| WSOS-ARM-004 | Native arm64 builds of Electron, panel, bridge, services, Office | Partial | Shell/Electron and services are built natively on the arm64 runner in `image.yml`; panel/bridge/Office absent. |
 | WSOS-ARM-005 | App Center arch filtering, AppImage arch check | Missing | Not implemented. |
 | WSOS-ARM-006 | No x86 emulation (scope) | Done | None shipped. |
-| WSOS-ARM-007 | Separate ARM performance gates | Missing | No performance gates at all. |
-| WSOS-ARM-008 | CI arm64 QEMU UEFI tests | Missing | `tests/vm/boot-test.sh` is x86_64 only. |
+| WSOS-ARM-007 | Separate ARM performance gates | Partial | Separate `hw-arm64` and `ci-arm64-tcg` profiles in `tests/perf/gates.tsv`, applied to the arm64 `-perf` image in `image.yml`; no ARM reference hardware run. |
+| WSOS-ARM-008 | CI arm64 QEMU UEFI tests | Partial | `tests/vm/boot-test.sh` and `server-e2e.sh` are arch-aware (`tests/vm/qemu-arch.sh`: qemu-system-aarch64, virt, AAVMF UEFI); `image.yml` boots the arm64 ISO. `tests/vm/vm.sh` (manual driver) is still x86_64-only. Not yet run green. |
 | WSOS-WIPE-001 | Permission, re-auth, typed name, second approver | Partial | Two-person rule plus admin re-authentication (password) and typed device-name confirmation on both request and approval (`services/server/src/console.ts` `reauth`, console UI keeps the button disabled until both are entered; failures audited and throttled); tested in `services/server/test/console.test.ts`. No separate `desktop.devices.wipe` permission (any admin) and no CoreApprovalEngine. |
 | WSOS-WIPE-002 | Data wipe removes tokens, DB, Drive, caches for all users | Done | `services/device-agent/src/host.ts` (`wipeWorkSuiteData`), `agent.ts`; `agent.test.ts` (with fake host). |
 | WSOS-WIPE-003 | Full wipe destroys LUKS slots, refused on unencrypted | Done | `host.ts` (`cryptoErase`), `agent.ts` NOT_ENCRYPTED; `agent.test.ts`. Not exercised on a real LUKS device. |
@@ -237,26 +237,26 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-WIPE-006 | Offline kill timer | Done | `agent.ts` (`offlineKillTimer`); `agent.test.ts`. |
 | WSOS-WIPE-007 | User sees wipe capability in About this device | Done | `Settings.tsx` (`AboutDevice`); `shell/electron/device.test.ts`. |
 | WSOS-WIPE-008 | Server audits; wiped devices marked and need re-enrolment | Partial | Requests/approvals audited (`console.ts` admin_log); device-side "wiped" state, but server-side "Wiped" device marking not evident. |
-| WSOS-DIR-001 | Directory join (installer, Settings, policy) | Missing | No directory join code. |
-| WSOS-DIR-002 | Greeter "Other user" with domain formats | Partial | `shell/src/screens/Greeter.tsx` has "Other user" UI and account-name validation (`components/AAccount.ts`); not the shipped greeter, no domain backend. |
-| WSOS-DIR-003 | Home dirs with stable UID/GID | Missing | No sssd/pam_mkhomedir/idmap config. |
-| WSOS-DIR-004 | Cached offline directory login | Missing | Not implemented. |
-| WSOS-DIR-005 | Disabled accounts refused; cache expiry | Partial | Offline period expiry ends local sign-in (pam_nologin file from the device agent, see AUTH-003); no directory accounts, so "disabled account refused at next online login" is not implemented. |
-| WSOS-DIR-006 | Group → local role mapping | Missing | Not implemented. |
+| WSOS-DIR-001 | Directory join (installer, Settings, policy) | Partial | Directory settings come with device enrollment (`GET desktop/v1/os/directory`); `worksuite-directory` enables sign-in on enrolled devices. No installer/Settings join flow or AD/LDAP join. |
+| WSOS-DIR-002 | Greeter "Other user" with domain formats | Partial | The shipped greeter (gtkgreet/greetd) accepts any name; `user@domain` names authenticate through `worksuite-pam-directory` (`services/directory`). `DOMAIN\\user` and UPN suffix choice not supported. |
+| WSOS-DIR-003 | Home dirs with stable UID/GID | Done | UID = 200000 + server user id (stable on every device), local account created by the helper, `pam_mkhomedir` in the `pam-auth-update` profile (`services/directory/pam/worksuite-directory`); uid logic and conflicts tested in `services/directory/test/directory.test.ts`. |
+| WSOS-DIR-004 | Cached offline directory login | Done | Salted scrypt verifier in `/var/lib/worksuite-directory/cache.json`, used only when the server is unreachable and only for `offline_login_days`; `directory.test.ts`. |
+| WSOS-DIR-005 | Disabled accounts refused; cache expiry | Done | Server returns `ACCOUNT_DISABLED` (`POST desktop/v1/os/directory/authenticate`, `services/server/test/api.test.ts`); the helper removes the cache entry and locks the account; cache expiry enforced (`directory.test.ts`). Local sign-in also ends after the device offline period (pam_nologin from the device agent, AUTH-003). |
+| WSOS-DIR-006 | Group → local role mapping | Done | `localGroups()` maps directory groups via `group_role_map` (default: worksuite-admins → administrator → sudo); `directory.test.ts`. |
 | WSOS-DIR-007 | Password expiry at greeter | Missing | Not implemented. |
 | WSOS-DIR-008 | SSO token after directory login | Missing | Not implemented. |
-| WSOS-DIR-009 | pam_worksuite with TLS/device binding/MFA | Missing | No pam_worksuite module. |
-| WSOS-DIR-010 | Escrowed rotating break-glass admin | Missing | Not implemented. |
+| WSOS-DIR-009 | pam_worksuite with TLS/device binding/MFA | Partial | pam_exec + tested helper (`services/directory`) over HTTPS only, bound to the enrolled device credential (server checks org and revocation); password never in argv/logs/disk (tested). Not a native `pam_worksuite.so`; no MFA. |
+| WSOS-DIR-010 | Escrowed rotating break-glass admin | Done | `wsadmin` created locked; `worksuite-breakglass-rotate.timer` escrows an RSA-OAEP-encrypted random password (`POST desktop/v1/os/break-glass`) before setting it; a session as `wsadmin` locks the password, audits (`POST desktop/v1/os/break-glass/events`, journal) and rotates (one-time use). Tested in `directory.test.ts` and server `api.test.ts`. |
 | WSOS-DIR-011 | Smart-card login (P3) | Missing | Not implemented. |
 
 ## Unnumbered requirements (no WSOS ID)
 
 | ID | Requirement | Status | Evidence / reason |
 |---|---|---|---|
-| §9.2-R1 | Interrupted package op: boot-time detection + audited Repair | Partial | Same as WSOS-APT-006: `service.ts` (tested), no boot-time unit or UI. |
+| §9.2-R1 | Interrupted package op: boot-time detection + audited Repair | Done | `services/recovery-boot/bin/worksuite-boot-repair` + `worksuite-boot-repair.service` (before the greeter): `dpkg --audit` or a requested flag → `dpkg --configure -a`, `apt-get -f install`; failure isolates `worksuite-recovery.target`. Package-service Repair audited (`service.ts`). Tested by `tests/boot/recovery-boot.test.sh`. |
 | §9.2-R2 | Broken shell → recovery launcher | Partial | See WSOS-SES-005. |
-| §9.2-R3 | Boot menu "WorkSuite Recovery" text-UI target | Missing | `dialog` in package list; no GRUB entry or recovery target. (Recovery designs only in `docs/design/boot-install/`.) |
-| §9.2-R4 | Previous kernel entry for failed kernel/graphics update | Missing | See WSOS-BOOT-003. |
+| §9.2-R3 | Boot menu "WorkSuite Recovery" text-UI target | Partial | GRUB "WorkSuite Recovery" entry (`grub/42_worksuite_recovery`, tested) boots `worksuite-recovery.target` with `worksuite.recovery=1`; the target runs the shell recovery screens in cage (`worksuite-recovery-shell.service`), and the shell reads the flag (`shell/electron/bootmode.ts`, tested). Graphical, not a text UI; not yet booted in a VM. |
+| §9.2-R4 | Previous kernel entry for failed kernel/graphics update | Done | See WSOS-BOOT-003. |
 | §9.2-R5 | Local DB corruption: integrity check, export outbox, rebuild | Done | `services/sync/src/main.ts` (`checkIntegrity`); covered in `services/sync/test/service.test.ts`. |
 | §9.2-R6 | Reinstall keeping /home (P2) | Missing | Installer is erase-only. |
 | §9.3 enrolment flow | Short-lived token, device key pair (TPM when available), signed policy, heartbeat | Done | `services/device-agent/src/agent.ts` (`enroll`, `refreshPolicy`), server `api.ts`; `agent.test.ts`, `services/server/test/e2e.test.ts`. |

@@ -1,12 +1,18 @@
 name: Image
 
-# Builds the .debs and the amd64 live ISO inside Debian trixie with WorkSuite Office, boots it in QEMU (UEFI),
-# checks the boot marker and uploads the ISO and its SHA256. Tags v* also attach them to a GitHub release.
+# Builds the .debs and the live ISO for amd64 and arm64 from the same commit (WSOS-ARM-001) inside Debian trixie,
+# with WorkSuite Office, boots each ISO in QEMU (UEFI: OVMF / AAVMF, WSOS-ARM-008), checks the boot marker and
+# uploads the ISO, its SHA256 and an SPDX SBOM (WSOS-SEC-011). Tags v* also attach them to a GitHub release.
+# A second, test-only "-perf" image runs the perf/reliability probes and must pass the CI gates in
+# tests/perf/gates.tsv (WSOS-PRF-001…005, REL-001/002, ARM-007).
+# arm64 builds natively on GitHub's arm64 runners (no cross live-build). Hosted runners have no KVM, so QEMU runs
+# in TCG (slow).
 #
 # Secret WORKSUITE_OFFICE_TOKEN: a token with actions:read on Livezen-Technologies/worksuite-office, used to download
-# the "linux-packages-amd64" artifact of its build.yml (tools/fetch-office.sh). Optional variables
+# the "linux-packages-$ARCH" artifact of its build.yml (tools/fetch-office.sh). Optional variables
 # WORKSUITE_OFFICE_URL + WORKSUITE_OFFICE_SHA256 fetch a published deb instead. Pull requests from forks get no
-# secrets, so they build a dev image without Office.
+# secrets, so they build a dev image without Office. arm64: when no arm64 Office deb exists yet, the build warns
+# and continues without Office instead of failing release mode.
 on:
   workflow_dispatch:
     inputs:
@@ -16,6 +22,10 @@ on:
       office_run:
         description: worksuite-office build.yml run ID to take the Office deb from (empty for the latest)
         default: ''
+      perf:
+        description: also build the -perf image and apply the perf gates
+        type: boolean
+        default: true
   push:
     branches: [main]
     tags: ['v*']
@@ -30,18 +40,31 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  amd64:
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
+  image:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            qemu: qemu-system-x86 ovmf
+            boot_timeout: 2400
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            qemu: qemu-system-arm qemu-efi-aarch64
+            boot_timeout: 4800
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
     container:
       image: debian:trixie
       options: --privileged
     env:
       SNAPSHOT: ${{ inputs.snapshot || '20261001T000000Z' }}
+      ARCH: ${{ matrix.arch }}
       ELECTRON_SKIP_BINARY_DOWNLOAD: ''
       HAS_OFFICE_SOURCE: ${{ secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_OFFICE_URL != '' }}
     steps:
-      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gh live-build debootstrap debhelper dpkg-dev fakeroot build-essential dbus-daemon qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools
+      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gh live-build debootstrap debhelper dpkg-dev fakeroot build-essential dbus-daemon ${{ matrix.qemu }} xorriso squashfs-tools mtools dosfstools
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -51,53 +74,72 @@ jobs:
       - run: |
           deps=$(sed -n '/^Build-Depends:/,/^[A-Z][A-Za-z-]*:/p' packaging/debian/control | grep -v '^#' | sed '$d' | sed 's/^Build-Depends://' | tr '\n' ' ' | tr ',' '\n' | grep -vE 'nodejs|npm' | sed 's/^ *//;s/ *$//' | grep . | paste -sd, -)
           apt-get satisfy -y --no-install-recommends "$deps"
-      # -d: Node 22 comes from setup-node, not a dpkg package.
+      # -d: Node 22 comes from setup-node, not a dpkg package. Builds this runner's arch (amd64 or arm64) + all.
       - run: packaging/build-debs.sh -d
       - name: Fetch WorkSuite Office
+        id: office
         if: env.HAS_OFFICE_SOURCE == 'true'
+        continue-on-error: ${{ matrix.arch == 'arm64' }}
         env:
           GH_TOKEN: ${{ secrets.WORKSUITE_OFFICE_TOKEN }}
           WORKSUITE_OFFICE_URL: ${{ vars.WORKSUITE_OFFICE_URL }}
           WORKSUITE_OFFICE_SHA256: ${{ vars.WORKSUITE_OFFICE_SHA256 }}
           WORKSUITE_OFFICE_RUN: ${{ inputs.office_run }}
-        run: ARCH=amd64 tools/fetch-office.sh
-      # Release mode (Office required) everywhere but fork pull requests, which have no secrets.
+        run: tools/fetch-office.sh
+      # Release mode (Office required) everywhere but fork pull requests, which have no secrets. arm64 without an
+      # Office deb (none published for arm64 yet) warns and builds without it.
       - name: Build the ISO
-        env:
-          WORKSUITE_RELEASE: ${{ (github.event_name != 'pull_request' || env.HAS_OFFICE_SOURCE == 'true') && '1' || '0' }}
-        run: ARCH=amd64 live-build/build.sh
+        run: |
+          release=0
+          if [ "${{ github.event_name }}" != pull_request ] || [ "$HAS_OFFICE_SOURCE" = true ]; then release=1; fi
+          if [ "$ARCH" = arm64 ] && ! ls live-build/config/packages.chroot/worksuite-office*_arm64.deb live-build/config/packages.chroot/worksuite-office*_all.deb >/dev/null 2>&1; then
+            [ $release = 1 ] && echo "::warning::No arm64 WorkSuite Office deb (linux-packages-arm64); the arm64 image ships without Office"
+            release=0
+          fi
+          WORKSUITE_RELEASE=$release live-build/build.sh
       - name: Name the ISO
         id: iso
         run: |
-          iso=$(ls live-build/out/*-amd64.iso | head -n1)
+          iso=$(ls live-build/out/*-$ARCH.iso | head -n1)
           [ -f "$iso.sha256" ] || (cd "$(dirname "$iso")" && sha256sum "$(basename "$iso")" > "$(basename "$iso").sha256")
           echo "path=$iso" >> "$GITHUB_OUTPUT"
-      - run: tests/vm/boot-test.sh "${{ steps.iso.outputs.path }}" 2400
-      - uses: actions/upload-artifact@v4
+      - run: tools/sbom/generate.sh $ARCH
+      - run: tests/vm/boot-test.sh "${{ steps.iso.outputs.path }}" ${{ matrix.boot_timeout }}
+      # Perf/reliability gates on a separate test image (probes stop the greeter and create a test user).
+      - if: inputs.perf != false
+        run: WORKSUITE_PERF=1 live-build/build.sh
+      - if: inputs.perf != false
+        run: PERF_PROFILE=ci-$ARCH-tcg BOOT_LOG=live-build/out/perf-serial.log tests/vm/boot-test.sh "$(ls live-build/out/*-$ARCH-perf.iso | head -n1)" ${{ matrix.boot_timeout }}
+      - if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: worksuite-os-amd64
+          name: worksuite-os-${{ matrix.arch }}
           path: |
             live-build/out/*.iso
             live-build/out/*.sha256
+            live-build/out/*.spdx.json
+            live-build/out/*.packages
+            live-build/out/perf-serial.log
             packaging/out/*.deb
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: amd64
+    needs: image
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: worksuite-os-amd64
+          pattern: worksuite-os-*
           path: dist
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          files=$(find dist -name '*.iso' -o -name '*.sha256')
+          # Release images only: the -perf test images stay in the workflow artifacts.
+          files=$(find dist \( -name '*.iso' -o -name '*.sha256' -o -name '*.spdx.json' \) ! -name '*-perf*')
           gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
             gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "WorkSuite OS $TAG" --generate-notes
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber $files

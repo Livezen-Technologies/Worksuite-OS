@@ -16,7 +16,7 @@ Rules-Requires-Root: no
 Package: worksuite-desktop
 Architecture: all
 Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archive-keyring,
- worksuite-user-services, worksuite-package-service, worksuite-device-agent,
+ worksuite-user-services, worksuite-package-service, worksuite-device-agent, worksuite-directory, worksuite-recovery-boot,
  labwc, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, xdg-desktop-portal-gtk, gnome-keyring,
  pipewire, pipewire-pulse, wireplumber, network-manager, bluez, udisks2, upower, cups, polkitd, pkexec,
@@ -76,6 +76,25 @@ Recommends: tpm2-tools
 Description: WorkSuite device agent (enrollment, policy, signed remote commands)
  Root agent for organization-managed devices: enrollment, signed policy,
  heartbeat, signed remote commands and remote wipe.
+
+Package: worksuite-directory
+Architecture: amd64 arm64
+Depends: worksuite-shell (= ${binary:Version}), libpam-runtime, libpam-modules, passwd, bsdutils, systemd, ${misc:Depends}
+Recommends: worksuite-device-agent
+Description: WorkSuite directory sign-in and break-glass admin
+ Signs organization users in at the greeter through pam_exec and the
+ WorkSuite directory endpoint, with a policy-limited offline cache, stable
+ UIDs and role-to-group mapping, plus a locally escrowed, one-time-use
+ break-glass administrator.
+
+Package: worksuite-recovery-boot
+Architecture: all
+Depends: worksuite-shell, worksuite-session, cage, grub-common, dpkg, apt, systemd, passwd, ${misc:Depends}
+Description: WorkSuite Recovery boot entry, previous-kernel retention and boot-time repair
+ Adds the "WorkSuite Recovery" and "previous kernel" GRUB entries, keeps the
+ previous kernel from apt autoremove, boots worksuite-recovery.target into
+ the shell recovery screens, and repairs interrupted package operations
+ before the greeter starts.
 
 Package: calamares-settings-worksuite
 Architecture: amd64 arm64

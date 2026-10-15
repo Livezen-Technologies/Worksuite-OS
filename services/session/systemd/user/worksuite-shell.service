@@ -8,6 +8,8 @@ StartLimitBurst=3
 OnFailure=worksuite-recovery-launcher.service
 
 [Service]
+# WSOS-SEC-009: AppArmor (security/apparmor/worksuite-shell, complain mode for now).
+AppArmorProfile=-worksuite-shell
 Type=simple
 ExecStart=/usr/lib/worksuite/shell/worksuite-shell
 # WSOS-SES-004: restart within 3 s. Apps are not in this cgroup: the shell launches each one into
