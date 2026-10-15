@@ -8,6 +8,8 @@ import calamares.slideshow 1.0
 Presentation {
     id: presentation
     Slide {
+        // Calamares' Slide sits at 90% x 70% of the view, leaving the view's white clear colour around it: fill it.
+        anchors.fill: parent
         // Rendered at its on-screen size, so the background is never scaled.
         Image { anchors.fill: parent; source: "page-bg.svg"; sourceSize: Qt.size(Math.max(1, width), Math.max(1, height)); smooth: false; cache: false }
         ColumnLayout {
