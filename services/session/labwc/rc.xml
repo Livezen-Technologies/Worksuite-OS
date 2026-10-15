@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- WorkSuite defaults for Labwc. Labwc owns windows; panel/launcher/notifications are WorkSuite. -->
+<labwc_config>
+  <core>
+    <decoration>server</decoration>
+    <gap>0</gap>
+  </core>
+  <theme>
+    <name>WorkSuite</name>
+    <cornerRadius>8</cornerRadius>
+    <font place="ActiveWindow"><name>sans</name><size>10</size></font>
+  </theme>
+  <focus>
+    <followMouse>no</followMouse>
+    <raiseOnFocus>no</raiseOnFocus>
+  </focus>
+  <keyboard>
+    <!-- Super opens the WorkSuite launcher via the shell's D-Bus API. -->
+    <keybind key="Super_L" onRelease="yes">
+      <action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 ToggleLauncher"/>
+    </keybind>
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="W-l">
+      <action name="Execute" command="loginctl lock-session"/>
+    </keybind>
+    <keybind key="A-F4"><action name="Close"/></keybind>
+  </keyboard>
+  <windowRules>
+    <!-- The shell's own windows are normal toplevels; never fullscreen-as-desktop (§5.1 decision gate). -->
+    <windowRule identifier="worksuite-shell" serverDecoration="yes"/>
+  </windowRules>
+</labwc_config>

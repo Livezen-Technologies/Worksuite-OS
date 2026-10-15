@@ -1,0 +1,43 @@
+[Unit]
+Description=WorkSuite device agent (enrollment, policy, heartbeat, signed remote commands)
+Documentation=file:///usr/share/doc/worksuite-device-agent/README.md
+Wants=network-online.target
+After=network-online.target dbus.service
+
+[Service]
+Type=dbus
+BusName=lk.worksuite.DeviceAgent1
+ExecStart=/usr/libexec/worksuite/worksuite-device-agent
+Restart=on-failure
+RestartSec=5s
+StateDirectory=worksuite-device-agent
+StateDirectoryMode=0700
+LogsDirectory=worksuite
+# Hardening (WSOS-SEC-007). Root is needed for inventory, LUKS key-slot wipe and per-user data wipe;
+# package changes go through lk.worksuite.PackageService1, not here.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/worksuite-device-agent /var/log/worksuite /home
+ProtectHome=no
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_CHOWN CAP_SYS_ADMIN CAP_SYS_BOOT
+DeviceAllow=block-* rw
+DevicePolicy=closed
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

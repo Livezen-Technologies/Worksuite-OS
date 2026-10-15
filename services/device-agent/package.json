@@ -1,0 +1,14 @@
+{
+  "name": "@worksuite-os/device-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remote command envelope validation for worksuite-device-agent (WSOS-MDM-003/004, WSOS-WIPE-004)",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "exports": { ".": "./src/commands.ts" },
+  "scripts": {
+    "test": "node --no-warnings --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": { "typescript": "^5.9.0", "@types/node": "^22.18.0" }
+}

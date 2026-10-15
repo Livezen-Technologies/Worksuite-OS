@@ -2,12 +2,20 @@
   "name": "@worksuite-os/sync",
   "version": "0.1.0",
   "private": true,
-  "description": "Offline-first local store and sync core (SRS §8.2–8.4)",
+  "description": "Offline-first local store and sync core (SRS \u00a78.2\u20138.4)",
   "type": "module",
-  "engines": { "node": ">=22.18" },
-  "exports": { ".": "./src/index.ts" },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "test": "node --no-warnings --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/node": "^22.18.0"
   }
 }

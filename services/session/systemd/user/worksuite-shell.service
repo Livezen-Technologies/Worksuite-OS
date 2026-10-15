@@ -1,0 +1,22 @@
+[Unit]
+Description=WorkSuite shell (launcher, dashboard, Settings, App Center)
+PartOf=worksuite-session.target
+After=worksuite-wayland-bridge.service
+# WSOS-SES-005: 3 crashes inside 60 s exhaust the start limit → recovery launcher.
+StartLimitIntervalSec=60
+StartLimitBurst=3
+OnFailure=worksuite-recovery-launcher.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/worksuite/shell/worksuite-shell
+# WSOS-SES-004: restart within 3 s; app windows are not in this cgroup (apps are launched
+# into their own transient app-*.scope via systemd-run --user --scope), so a crash or restart
+# never kills them (WSOS-REL-004).
+Restart=always
+RestartSec=1s
+KillMode=control-group
+Slice=session.slice
+
+[Install]
+WantedBy=worksuite-session.target

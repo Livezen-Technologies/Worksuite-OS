@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- System bus: lk.worksuite.PackageService1 at /lk/worksuite/PackageService1 -->
+<node name="/lk/worksuite/PackageService1">
+  <interface name="lk.worksuite.PackageService1">
+    <!-- polkit: lk.worksuite.package.install. source: "apt" | "flatpak". catalog_id must be in the
+         policy-approved catalog (desktop/v1/os/catalog); no free-form package names or URLs. -->
+    <method name="Install">
+      <arg name="source" type="s" direction="in"/>
+      <arg name="catalog_id" type="s" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+    <method name="Remove">
+      <arg name="source" type="s" direction="in"/>
+      <arg name="catalog_id" type="s" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+    <!-- No authorization required: read-only. -->
+    <method name="CheckUpdates">
+      <arg name="summary" type="a{sv}" direction="out"/>
+    </method>
+    <!-- polkit: lk.worksuite.update.apply. release_id from the signed manifest. -->
+    <method name="ApplyUpdate">
+      <arg name="release_id" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+    <!-- polkit: lk.worksuite.repair. Runs fixed "dpkg --configure -a" then "apt-get -f install". -->
+    <method name="Repair">
+      <arg name="job" type="o" direction="out"/>
+    </method>
+    <method name="CancelJob">
+      <arg name="job" type="o" direction="in"/>
+    </method>
+    <property name="State" type="s" access="read"/>           <!-- idle | busy | interrupted -->
+    <property name="RebootRequired" type="b" access="read"/>
+    <signal name="JobProgress">
+      <arg name="job" type="o"/>
+      <arg name="percent" type="u"/>
+      <arg name="phase" type="s"/>
+    </signal>
+    <signal name="JobFinished">
+      <arg name="job" type="o"/>
+      <arg name="result" type="s"/>       <!-- success | failed | cancelled -->
+      <arg name="details" type="a{sv}"/>
+    </signal>
+  </interface>
+</node>

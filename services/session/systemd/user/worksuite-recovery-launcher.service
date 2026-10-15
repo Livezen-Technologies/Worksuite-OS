@@ -1,0 +1,10 @@
+[Unit]
+Description=WorkSuite recovery launcher (minimal app list, Settings, Log out, Report problem)
+PartOf=worksuite-session.target
+Conflicts=worksuite-shell.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/worksuite/shell/worksuite-shell --recovery
+Restart=on-failure
+RestartSec=1s

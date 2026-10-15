@@ -1,0 +1,13 @@
+[Unit]
+Description=WorkSuite background (wallpaper layer per output)
+PartOf=worksuite-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/worksuite/worksuite-background
+Restart=always
+RestartSec=2s
+Slice=background.slice
+
+[Install]
+WantedBy=worksuite-session.target

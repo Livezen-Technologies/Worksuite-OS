@@ -1,0 +1,32 @@
+[Unit]
+Description=WorkSuite package service (APT/Flatpak via D-Bus + polkit)
+Documentation=file:///usr/share/doc/worksuite-package-service/README.md
+After=dbus.service
+
+[Service]
+Type=dbus
+BusName=lk.worksuite.PackageService1
+ExecStart=/usr/libexec/worksuite/worksuite-package-service
+# Bus-activated; exits when idle. Must not be killed mid-dpkg.
+KillMode=mixed
+TimeoutStopSec=30min
+# Hardening (WSOS-SEC-007). dpkg needs to write / so ProtectSystem=strict is not possible;
+# writes are confined to package-manager paths via ReadWritePaths with ProtectSystem=full.
+NoNewPrivileges=no
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=no
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=no
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=no
+SystemCallArchitectures=native
+UMask=0022
+ReadWritePaths=/var/lib/dpkg /var/lib/apt /var/cache/apt /var/lib/flatpak /var/log/worksuite /boot /usr /etc /opt
+LogsDirectory=worksuite

@@ -1,0 +1,18 @@
+[Unit]
+Description=WorkSuite sync service (local store, outbox, Drive)
+PartOf=worksuite-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /usr/lib/worksuite/sync/main.js
+Restart=on-failure
+RestartSec=5s
+# Let an in-flight batch finish and SQLite close cleanly on logout (WSOS-SES-003).
+TimeoutStopSec=20s
+KillSignal=SIGTERM
+Slice=background.slice
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=worksuite-session.target

@@ -1,0 +1,6 @@
+services/device-agent/dbus/lk.worksuite.DeviceAgent1.conf usr/share/dbus-1/system.d/
+services/device-agent/dbus/lk.worksuite.DeviceAgent1.service usr/share/dbus-1/system-services/
+services/device-agent/dbus/lk.worksuite.DeviceAgent1.xml usr/share/dbus-1/interfaces/
+services/device-agent/polkit/lk.worksuite.device.policy usr/share/polkit-1/actions/
+services/device-agent/systemd/worksuite-device-agent.service usr/lib/systemd/system/
+services/device-agent/src usr/lib/worksuite/device-agent/
