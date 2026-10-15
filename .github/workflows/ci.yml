@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shell
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: shell/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx vite build
+      - run: node scripts/build-electron.mjs
+
+  services:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [sync, device-agent]
+    defaults:
+      run:
+        working-directory: services/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Node 22 runs the TypeScript tests directly; node:sqlite is built in.
+      - run: npm test
