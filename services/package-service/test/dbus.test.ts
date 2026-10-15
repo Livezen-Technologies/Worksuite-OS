@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import dbus from 'dbus-next';
 import { NAME, PATH, serve } from '../src/dbus.ts';
 import { PackageService } from '../src/service.ts';
+import { Coordinator } from '../src/coordinator.ts';
 
 const { Message } = dbus;
 let daemon: ChildProcess, address = '';
@@ -26,7 +27,11 @@ async function setup(allowed: boolean) {
     policy: () => null, sources: () => [], power: () => ({ ac: true, battery: null }), freeBytes: () => 1e12, audit() {},
   });
   const checked: string[] = [];
-  serve(server, svc, { uid: async () => 1000, check: async (_s, action) => { checked.push(action); return allowed; } }, xml);
+  const coordinator = new Coordinator({
+    fetchJson: async () => ({}), keys: () => undefined, policy: () => null, arch: 'amd64', installedVersion: () => '1.0.1', deviceKey: () => 'k',
+    idle: async () => false, metered: async () => false, setSuite() {}, load: () => ({ deferrals: {} }), save() {}, report: async () => {}, reboot: async () => {}, now: () => 0, audit() {},
+  }, svc);
+  serve(server, svc, { uid: async () => 1000, check: async (_s, action) => { checked.push(action); return allowed; } }, xml, coordinator);
   await server.requestName(NAME, 0);
   const call = (member: string, signature = '', body: unknown[] = [], iface = NAME) =>
     client.call(new Message({ destination: NAME, path: PATH, interface: iface, member, signature, body }));
@@ -67,5 +72,16 @@ test('bad arguments map to typed errors; read-only calls need no polkit', async 
   assert.equal(props?.body[0].State.value, 'idle');
   const intro = await w.call('Introspect', '', [], 'org.freedesktop.DBus.Introspectable');
   assert.match(String(intro?.body[0]), /lk\.worksuite\.PackageService1/);
+  w.close();
+});
+
+test('update methods: status is read-only; deferring needs the update action', async () => {
+  const w = await setup(false);
+  const st = await w.call('GetUpdateStatus');
+  assert.equal(JSON.parse(String(st?.body[0])).installed, '1.0.1');
+  const checked = await w.call('CheckForUpdates');
+  assert.equal(JSON.parse(String(checked?.body[0])).state, 'failed', 'unsigned manifest refused');
+  await assert.rejects(w.call('DeferUpdate'), (e: { type?: string }) => e.type === 'lk.worksuite.Error.NotAuthorized');
+  assert.deepEqual(w.checked, ['lk.worksuite.update.apply']);
   w.close();
 });

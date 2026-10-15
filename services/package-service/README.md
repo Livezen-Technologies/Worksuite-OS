@@ -29,9 +29,28 @@ Errors (`lk.worksuite.Error.*`): `NotAuthorized`, `NotInCatalog`, `InvalidArgs`,
 
 `npm test` runs the core tests and a D-Bus test against a private `dbus-daemon` (needs `dbus-daemon` installed).
 
-Not yet: local `.deb` installs (WSOS-APT-005), AppImages, arch checks against the catalog (WSOS-ARM-005), reporting
-to `desktop/v1/os/update-results` (the device agent's heartbeat reports update status meanwhile), and the signed
-OS release manifest checks of WSOS-AUP-002/003 beyond APT's own InRelease verification.
+## Update coordinator (`src/updates.ts`, `src/coordinator.ts`)
+
+Checks 15 min after boot and every 6 h (WSOS-AUP-001) at `https://download.worksuitecloud.com/os/manifests/<ring>/<arch>.json`
+(or the policy's `update_mirror`), verifies the manifest's Ed25519 signature against
+`/usr/share/worksuite/keys/release/<key_id>.pem` and rejects one for another ring or arch (WSOS-AUP-002), points the
+WorkSuite APT source at the ring's suite (`trixie-dev|pilot|stable`), then decides:
+
+- same version → up to date; older version → refused unless the manifest carries a signed rollback directive for the
+  installed version (WSOS-AUP-003);
+- paused/pulled → nothing; staged rollout by a stable per-device bucket (SHA-256 of machine-id and release id), so a
+  widening rollout keeps earlier devices (WSOS-AUP-006);
+- mode from policy: Automatic installs at idle (logind `IdleHint`) or in the maintenance window, Notify waits for the
+  user, Manual only on unmanaged devices (WSOS-AUP-004); security releases install in Automatic and Notify (AUP-005);
+- metered connections (NetworkManager) wait unless critical (AUP-008);
+- mandatory/critical: three deferrals and the deadline, then a 15-minute restart warning, install and reboot
+  (AUP-007); a device below `min_version` treats the release as mandatory.
+
+Installs run through the same job queue (`ApplyUpdate`), and results go to `desktop/v1/os/update-results` with the
+device credential on managed devices (WSOS-UPD-005). D-Bus: `GetUpdateStatus`, `CheckForUpdates`, `DeferUpdate` and
+`InstallUpdateNow` (the last two need `lk.worksuite.update.apply`), and the `UpdateStatusChanged` signal.
+
+Not yet: local `.deb` installs (WSOS-APT-005), AppImages, arch checks against the catalog (WSOS-ARM-005), offline `.wsupdate` bundles (WSOS-AUP-010) and download resume beyond APT's own (AUP-008).
 
 Rules (SRS §10.3, WSOS-SEC-007/008): caller UID taken from D-Bus credentials, never from arguments; polkit is
 checked per call with the caller's subject; only fixed executables are spawned with argument vectors (no shell);

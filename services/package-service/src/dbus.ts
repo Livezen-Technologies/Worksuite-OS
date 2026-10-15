@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import dbus from 'dbus-next';
 import { ServiceError } from './apt.ts';
 import type { Job, PackageService, Source } from './service.ts';
+import type { Coordinator } from './coordinator.ts';
 
 const { Message, Variant } = dbus;
 type Msg = InstanceType<typeof Message>;
@@ -24,6 +25,11 @@ export const ACTIONS: Record<string, string | null> = {
   ApplyUpdate: 'lk.worksuite.update.apply',
   Repair: 'lk.worksuite.repair',
   CancelJob: null,          // ownership check instead
+  // Update coordinator (WSOS-AUP-011): status and checks are read-only; installing and deferring need the update action.
+  GetUpdateStatus: null,
+  CheckForUpdates: null,
+  DeferUpdate: 'lk.worksuite.update.apply',
+  InstallUpdateNow: 'lk.worksuite.update.apply',
 };
 
 export interface Authority {
@@ -52,7 +58,7 @@ const v = (sig: string, x: unknown) => new Variant(sig, x);
 // dbus-next's types declare newError(msg: string, …) but the implementation takes the method-call Message.
 const errorReply = (msg: Msg, name: string, text: string) => Message.newError(msg as unknown as string, name, text);
 
-export function serve(bus: Bus, svc: PackageService, auth: Authority, introspectionXml: string) {
+export function serve(bus: Bus, svc: PackageService, auth: Authority, introspectionXml: string, coordinator?: Coordinator) {
   const sources = new Set<Source>(['apt', 'flatpak']);
 
   svc.on('progress', (job: Job, percent: number) => bus.send(Message.newSignal(PATH, IFACE, 'JobProgress', 'ous', [jobPath(job.id), percent, job.phase])));
@@ -62,6 +68,8 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
     if (job.error) details.error = v('s', job.error);
     bus.send(Message.newSignal(PATH, IFACE, 'JobFinished', 'osa{sv}', [jobPath(job.id), result, details]));
   });
+
+  coordinator?.on('status', (st: unknown) => bus.send(Message.newSignal(PATH, IFACE, 'UpdateStatusChanged', 's', [JSON.stringify(st)])));
 
   const props = () => ({ State: v('s', svc.state()), RebootRequired: v('b', svc.rebootRequired) });
 
@@ -90,6 +98,21 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
         return Message.newMethodReturn(msg, 'o', [jobPath(svc.applyUpdate(uid, String(b[0] ?? ''), { allow_battery: opts.allow_battery?.value === true }))]);
       }
       case 'Repair': return Message.newMethodReturn(msg, 'o', [jobPath(svc.repair(uid))]);
+      case 'GetUpdateStatus':
+      case 'CheckForUpdates': {
+        if (!coordinator) throw new ServiceError('Failed', 'update coordinator not running');
+        if (member === 'CheckForUpdates') await coordinator.check();
+        return Message.newMethodReturn(msg, 's', [JSON.stringify(coordinator.status)]);
+      }
+      case 'DeferUpdate': {
+        if (!coordinator) throw new ServiceError('Failed', 'update coordinator not running');
+        return Message.newMethodReturn(msg, 'b', [coordinator.defer()]);
+      }
+      case 'InstallUpdateNow': {
+        if (!coordinator) throw new ServiceError('Failed', 'update coordinator not running');
+        void coordinator.installNow();
+        return Message.newMethodReturn(msg, '', []);
+      }
       case 'CancelJob': {
         const m = /\/job\/(\d+)$/.exec(String(b[0]));
         if (!m) throw new ServiceError('NoSuchJob');

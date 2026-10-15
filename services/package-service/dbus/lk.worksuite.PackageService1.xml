@@ -44,6 +44,16 @@
     <method name="CancelJob">
       <arg name="job" type="o" direction="in"/>
     </method>
+    <!-- Update coordinator (SRS §14.1, WSOS-AUP-011). Status JSON: state (up_to_date | checking | available | waiting |
+         installing | ready_to_restart | restart_pending | failed), version, installed, release_id, mandatory,
+         deadline, deferrals_left, reason, restart_at, last_check. -->
+    <method name="GetUpdateStatus"><arg name="status_json" type="s" direction="out"/></method>
+    <method name="CheckForUpdates"><arg name="status_json" type="s" direction="out"/></method>
+    <!-- polkit: lk.worksuite.update.apply. false when no more deferrals are allowed (WSOS-AUP-007). -->
+    <method name="DeferUpdate"><arg name="deferred" type="b" direction="out"/></method>
+    <!-- polkit: lk.worksuite.update.apply. -->
+    <method name="InstallUpdateNow"/>
+    <signal name="UpdateStatusChanged"><arg name="status_json" type="s"/></signal>
     <property name="State" type="s" access="read"/>           <!-- idle | busy | interrupted -->
     <property name="RebootRequired" type="b" access="read"/>
     <signal name="JobProgress">

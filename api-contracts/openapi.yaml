@@ -463,17 +463,31 @@ components:
         update_host: { type: string, default: download.worksuitecloud.com }
 
     ReleaseManifest:
+      description: >
+        Signed OS release manifest per ring and arch, served at
+        https://download.worksuitecloud.com/os/manifests/{ring}/{arch}.json (or the policy's update_mirror).
+        Devices check 15 min after boot and every 6 h (WSOS-AUP-001).
       type: object
-      required: [version, min_version, signature]
+      required: [release_id, version, min_version, ring, arch, signature]
       properties:
+        release_id: { type: string }
         version: { type: string }
-        min_version: { type: string }
+        min_version: { type: string, description: Oldest supported version; devices below it treat the release as mandatory }
+        ring: { $ref: '#/components/schemas/Ring' }
+        arch: { $ref: '#/components/schemas/Arch' }
         mandatory: { type: boolean }
-        critical: { type: boolean }
+        critical: { type: boolean, description: Installs on metered connections and on battery }
+        security: { type: boolean, description: Installs in Automatic and Notify modes (WSOS-AUP-005) }
+        deadline: { type: string, format: date-time, description: For mandatory/critical releases (WSOS-AUP-007) }
         rollout_percent: { type: integer, minimum: 0, maximum: 100 }
         state: { type: string, enum: [active, paused, pulled] }
-        rollback_directive: { type: [object, 'null'] }
-        signature: { type: string }
+        rollback_directive:
+          type: [object, 'null']
+          description: Allows this (older) release to replace from_version (WSOS-AUP-003)
+          properties:
+            from_version: { type: string }
+            reason: { type: string }
+        signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the manifest without this field' }
 
     Policy:
       type: object
@@ -490,6 +504,7 @@ components:
         app_allowlist: { type: array, items: { type: string } }
         approved_remotes: { type: array, items: { type: string } }
         offline_wipe_days: { type: integer, description: WSOS-WIPE-006 offline kill timer; absent = off }
+        update_mirror: { type: string, description: 'WSOS-AUP-009 enterprise mirror (https) for manifests; WorkSuite signatures still required' }
         signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the policy without this field' }
 
     CatalogItem:

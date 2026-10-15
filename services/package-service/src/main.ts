@@ -1,10 +1,13 @@
 // worksuite-package-service: root daemon owning lk.worksuite.PackageService1 on the system bus.
-import { execFile } from 'node:child_process';
-import { appendFileSync, existsSync, readdirSync, readFileSync, statfsSync } from 'node:fs';
+import { execFile, execFileSync } from 'node:child_process';
+import { createPublicKey, randomUUID, type KeyObject } from 'node:crypto';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statfsSync, writeFileSync } from 'node:fs';
+import { release } from 'node:os';
 import { join } from 'node:path';
 import dbus from 'dbus-next';
 import { busAuthority, loadIntrospection, NAME, serve } from './dbus.ts';
 import { PackageService, type DevicePolicy, type Env, type RunResult } from './service.ts';
+import { Coordinator, type CoordinatorEnv } from './coordinator.ts';
 
 const POLICY = '/run/worksuite-device-agent/policy.json';
 const AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';
@@ -53,11 +56,70 @@ export const linuxEnv: Env = {
   },
 };
 
+const RELEASE_KEYS = '/usr/share/worksuite/keys/release';        // worksuite-archive-keyring
+const STATE = '/var/lib/worksuite-package-service/updates.json';
+const AGENT_STATUS = '/run/worksuite-device-agent/status.json';
+const DEVICE_TOKEN = '/run/worksuite-device-agent/device-token';
+const WORKSUITE_SOURCES = '/etc/apt/sources.list.d/worksuite.sources';
+
+function loadKeys(dir: string): (id: string) => KeyObject | undefined {
+  const m = new Map<string, KeyObject>();
+  if (existsSync(dir)) for (const f of readdirSync(dir)) if (f.endsWith('.pem')) m.set(f.slice(0, -4), createPublicKey(readFileSync(join(dir, f))));
+  return (id) => m.get(id);
+}
+const busctlGet = (args: string[]) => new Promise<string>((resolve) => execFile('busctl', ['--system', 'get-property', ...args], { timeout: 5000 }, (_e, out) => resolve(String(out ?? '').trim())));
+const pkgVersion = (name: string) => { try { return execFileSync('dpkg-query', ['-W', '-f=${Version}', name], { encoding: 'utf8' }).trim() || 'unknown'; } catch { return 'unknown'; } };
+
+export function coordinatorEnv(): CoordinatorEnv {
+  return {
+    async fetchJson(url) {
+      const r = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(30_000) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    keys: loadKeys(RELEASE_KEYS),
+    policy: () => linuxEnv.policy() as ReturnType<CoordinatorEnv['policy']>,
+    arch: process.arch === 'arm64' ? 'arm64' : 'amd64',
+    installedVersion: () => pkgVersion('worksuite-desktop'),
+    deviceKey: () => readOr('/etc/machine-id') || 'unknown',
+    // logind's IdleHint: true when every session is idle or locked.
+    idle: async () => (await busctlGet(['org.freedesktop.login1', '/org/freedesktop/login1', 'org.freedesktop.login1.Manager', 'IdleHint'])) === 'b true',
+    // NetworkManager Metered: 1 = yes, 3 = guess-yes.
+    metered: async () => /^u [13]$/.test(await busctlGet(['org.freedesktop.NetworkManager', '/org/freedesktop/NetworkManager', 'org.freedesktop.NetworkManager', 'Metered'])),
+    setSuite(suite) {
+      if (!existsSync(WORKSUITE_SOURCES)) return;
+      const text = readFileSync(WORKSUITE_SOURCES, 'utf8');
+      const next = text.replace(/^Suites:.*$/m, `Suites: ${suite}`);
+      if (next !== text) { writeFileSync(WORKSUITE_SOURCES + '.tmp', next, { mode: 0o644 }); renameSync(WORKSUITE_SOURCES + '.tmp', WORKSUITE_SOURCES); }
+    },
+    load: () => { try { return JSON.parse(readFileSync(STATE, 'utf8')); } catch { return { deferrals: {} }; } },
+    save: (s) => { mkdirSync('/var/lib/worksuite-package-service', { recursive: true }); writeFileSync(STATE + '.tmp', JSON.stringify(s), { mode: 0o600 }); renameSync(STATE + '.tmp', STATE); },
+    // WSOS-UPD-005: only managed devices report (they have a server and a device credential).
+    async report(r) {
+      let server = ''; try { server = JSON.parse(readFileSync(AGENT_STATUS, 'utf8')).server ?? ''; } catch { /* unmanaged */ }
+      const token = readOr(DEVICE_TOKEN);
+      if (!server || !token) return;
+      const body = { ...r, os_version: pkgVersion('worksuite-desktop'), shell_version: pkgVersion('worksuite-shell'), kernel_version: release() };
+      const res = await fetch(new URL('/desktop/v1/os/update-results', `https://${server}`), {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000),
+        headers: { 'content-type': 'application/json', 'x-ws-device': token, 'idempotency-key': randomUUID(), 'x-request-id': randomUUID() },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    },
+    reboot: () => new Promise((resolve) => execFile('systemctl', ['reboot'], () => resolve())),
+    now: () => Date.now(),
+    audit: linuxEnv.audit,
+  };
+}
+
 async function main() {
   const svc = new PackageService(linuxEnv);
   await svc.detectInterrupted();          // WSOS-APT-006: surfaced as State=interrupted for the shell
   const bus = dbus.systemBus();
-  serve(bus, svc, busAuthority(bus), loadIntrospection(XML));
+  const coordinator = new Coordinator(coordinatorEnv(), svc);
+  serve(bus, svc, busAuthority(bus), loadIntrospection(XML), coordinator);
+  coordinator.start();
   await bus.requestName(NAME, dbus.NameFlag.DO_NOT_QUEUE);
   linuxEnv.audit('started', { state: svc.state() });
 }
