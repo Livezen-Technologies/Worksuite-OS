@@ -21,8 +21,7 @@ Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archi
  xdg-desktop-portal, xdg-desktop-portal-wlr, xdg-desktop-portal-gtk, gnome-keyring,
  pipewire, pipewire-pulse, wireplumber, network-manager, bluez, udisks2, upower, cups, polkitd, pkexec,
  flatpak, fcitx5, apparmor, ${misc:Depends}
-Recommends: fwupd
-Suggests: worksuite-office
+Recommends: fwupd, worksuite-office | worksuite-desktopeditors
 Conflicts: openssh-server
 Description: WorkSuite OS desktop (metapackage)
  Pulls in the WorkSuite session, shell, system services and the Debian

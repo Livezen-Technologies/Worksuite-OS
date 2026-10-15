@@ -25,13 +25,17 @@ cp "$debs"/*_all.deb "$debs"/*_"$ARCH".deb config/packages.chroot/
 find config/packages.chroot -name '*-dbgsym_*' -delete
 # Boot menu artwork, row images, selection pill and fonts (IBM Plex, bundled) for the live GRUB theme.
 "$here/../branding/grub/live/render.sh" config/bootloaders/grub-pc/live-theme
-# WorkSuite Office (native editors, built by github.com/Livezen-Technologies/worksuite-office CI) is optional: drop its
-# .deb at live-build/config/packages.chroot/worksuite-office*.deb (or pass WORKSUITE_OFFICE_DEB=path) and it is
-# installed; otherwise the image builds without it. Nothing is downloaded here. WORKSUITE_OFFICE_SHA256 (optional)
-# pins the file; the package's architecture must match ARCH.
-[ -z "${WORKSUITE_OFFICE_DEB:-}" ] || cp "$WORKSUITE_OFFICE_DEB" config/packages.chroot/
+# WorkSuite Office (native editors, built by github.com/Livezen-Technologies/worksuite-office CI) ships in release
+# images: tools/fetch-office.sh puts its .deb at live-build/config/packages.chroot/worksuite-office*.deb (or pass
+# WORKSUITE_OFFICE_DEB=path). WORKSUITE_RELEASE=1 (set by CI) fails the build when it is missing; local dev builds
+# without it leave Office out. Nothing is downloaded here. WORKSUITE_OFFICE_SHA256 (optional) pins the file; the
+# package's architecture must match ARCH.
+: "${WORKSUITE_RELEASE:=0}"
+office_found=0
+[ -z "${WORKSUITE_OFFICE_DEB:-}" ] || cp "$WORKSUITE_OFFICE_DEB" config/packages.chroot/worksuite-office_local.deb
 for office in config/packages.chroot/worksuite-office*.deb; do
   [ -f "$office" ] || continue
+  office_found=1
   if [ -n "${WORKSUITE_OFFICE_SHA256:-}" ]; then
     echo "$WORKSUITE_OFFICE_SHA256  $office" | sha256sum -c - >/dev/null || { echo "WorkSuite Office: checksum mismatch for $office" >&2; exit 1; }
   fi
@@ -41,6 +45,14 @@ for office in config/packages.chroot/worksuite-office*.deb; do
   echo "$pkg" >> config/package-lists/worksuite-office.list.chroot
   echo "WorkSuite Office: installing $pkg $(dpkg-deb -f "$office" Version)"
 done
+[ -s config/package-lists/worksuite-office.list.chroot ] || office_found=0
+if [ "$office_found" = 0 ]; then
+  if [ "$WORKSUITE_RELEASE" = 1 ]; then
+    echo "WorkSuite Office: no $ARCH .deb, and release images must include it; run tools/fetch-office.sh first" >&2
+    exit 1
+  fi
+  echo "WorkSuite Office: no .deb found; building without it (dev build)" >&2
+fi
 if [ -n "${BUILD_HTTPS_PROXY:-}" ]; then
   export https_proxy="$BUILD_HTTPS_PROXY" HTTPS_PROXY="$BUILD_HTTPS_PROXY"
   mkdir -p config/includes.chroot_before_packages/etc/apt/apt.conf.d
