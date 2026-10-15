@@ -15,7 +15,7 @@ run() {
   code=/usr/share/OVMF/OVMF_CODE_4M.fd; [ -f "$code" ] || code=/usr/share/OVMF/OVMF_CODE.fd
   [ -f "$dir/vars.fd" ] || cp "$(dirname "$code")/$(basename "$code" | sed 's/CODE/VARS/')" "$dir/vars.fd"
   accel=tcg; [ -w /dev/kvm ] && accel=kvm
-  qemu-system-x86_64 -machine q35,accel=$accel -m 4096 -smp 4 -cpu max \
+  qemu-system-x86_64 -machine q35,accel=$accel -m 4096 -smp 4 -cpu max,avx2=off,avx512f=off \
     -drive if=pflash,format=raw,readonly=on,file="$code" -drive if=pflash,format=raw,file="$dir/vars.fd" \
     -drive if=virtio,format=qcow2,file="$dir/disk.qcow2" "$@" \
     -vga virtio -display none -monitor "unix:$dir/monitor.sock,server,nowait" -chardev "socket,id=s0,path=$dir/serial.sock,server=on,wait=off,logfile=$dir/serial.log" -serial chardev:s0 \

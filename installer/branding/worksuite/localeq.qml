@@ -43,7 +43,7 @@ WsPage {
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 260
             radius: 14; clip: true; color: "#081634"; border.width: 1; border.color: "#297FB2FF"
-            // Tiled dots (a Canvas here crashed Qt's software renderer in the live session).
+            // The design's dotted map background, tiled.
             Image { anchors.fill: parent; source: "dots.svg"; fillMode: Image.Tile; sourceSize.width: 14; sourceSize.height: 14 }
             Rectangle { id: band; x: parent.width * 0.66; width: 40; height: parent.height; color: "#2418D4F0"; border.width: 1; border.color: "#6618D4F0" }
             Rectangle {
