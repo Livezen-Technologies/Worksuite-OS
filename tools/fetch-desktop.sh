@@ -3,7 +3,7 @@
 #
 # The deb is built by the "Build" workflow (build.yml) of github.com/Livezen-Technologies/worksuite-desktop, job
 # "package" (ubuntu-latest, electron-builder --linux), artifact "worksuite-Linux": release/<version>/*.AppImage, *.deb
-# (WorkSuite-<version>-amd64.deb, WorkSuite-<version>-arm64.deb) and *.rpm. The package is "worksuite-desktop"; it
+# (WorkSuite-<version>-amd64.deb, WorkSuite-<version>-arm64.deb) and *.rpm. The package is "worksuite" (named apart from WorkSuite OS's own worksuite-desktop metapackage); it
 # installs /opt/WorkSuite, /usr/bin/worksuite and /usr/share/applications/worksuite.desktop. Two sources, as for
 # Office (tools/fetch-office.sh):
 #
@@ -14,7 +14,7 @@
 #       that token also covers worksuite-desktop). WORKSUITE_DESKTOP_RUN=<id> picks a run; the default is the latest
 #       successful build.yml run on main.
 #
-# ARCH (default amd64) selects the package. Saved as worksuite-desktop_<version>_<arch>.deb. In WorkSuite OS the
+# ARCH (default amd64) selects the package. Saved as worksuite-app_<version>_<arch>.deb. In WorkSuite OS the
 # package manager updates it; the app's own updater is off there (its OS mode, docs/WORKSUITE_OS.md in that repo).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -52,12 +52,12 @@ pick=
 for d in $candidates; do
   pkg=$(dpkg-deb -f "$d" Package)
   parch=$(dpkg-deb -f "$d" Architecture)
-  [ "$pkg" = worksuite-desktop ] || continue
+  [ "$pkg" = worksuite ] || continue
   case "$parch" in "$ARCH" | all) pick=$d; break ;; esac
 done
-[ -n "$pick" ] || { echo "fetch-desktop: no $ARCH worksuite-desktop .deb among: $candidates" >&2; exit 1; }
+[ -n "$pick" ] || { echo "fetch-desktop: no $ARCH worksuite .deb among: $candidates" >&2; exit 1; }
 ver=$(dpkg-deb -f "$pick" Version)
-rm -f "$dest"/worksuite-desktop_*.deb
-out="$dest/worksuite-desktop_${ver}_$ARCH.deb"
+rm -f "$dest"/worksuite-app_*.deb
+out="$dest/worksuite-app_${ver}_$ARCH.deb"
 cp "$pick" "$out"
-echo "fetch-desktop: worksuite-desktop $ver -> $out ($(sha256sum "$out" | cut -d' ' -f1))"
+echo "fetch-desktop: worksuite $ver -> $out ($(sha256sum "$out" | cut -d' ' -f1))"

@@ -114,7 +114,7 @@ export function execProgram(exec: string | null): string | null {
 export const OFFICE_NEW: Record<string, string> = { docs: '--new:word', sheets: '--new:cell', slides: '--new:slide' }
 
 /**
- * WorkSuite Desktop (the native client, package worksuite-desktop from github.com/Livezen-Technologies/worksuite-desktop)
+ * WorkSuite Desktop (the native client, package worksuite from github.com/Livezen-Technologies/worksuite-desktop)
  * installs /usr/share/applications/worksuite.desktop with Exec=/opt/WorkSuite/worksuite %U. Found by that id, or by
  * an Exec whose program is .../WorkSuite/worksuite or worksuite.
  */
