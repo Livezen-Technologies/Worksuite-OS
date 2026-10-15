@@ -98,3 +98,12 @@ EncryptWidget QLineEdit { min-height: 30px; padding: 0 10px; border-radius: 8px;
 /* Calamares fixes the QML sidebar at 190 px (CalamaresWindow.cpp); the design's sidebar is 288 px. The sidebar is
    the only QQuickWidget at that maximum width, so this leaves the footer and the pages alone. */
 QQuickWidget[maximumWidth="190"] { min-width: 288px; max-width: 288px; }
+
+/* Partition page (design: Installation type · erase disk). Stock Calamares widgets, styled toward the design. */
+#ChoicePage QScrollArea, #ChoicePage #scrollAreaWidgetContents { background: transparent; border: none; }
+#ChoicePage #m_drivesLabel, #ChoicePage #m_previewBeforeLabel { color: #8FA3C8; font-size: 13px; }
+#ChoicePage #m_previewAfterLabel { color: #E8EEFA; font-size: 13px; font-weight: 600; }
+#ChoicePage #m_messageLabel { color: #8FA3C8; font-size: 13px; }
+#ChoicePage #hLine { color: rgba(127, 178, 255, 0.12); max-height: 1px; }
+#m_encryptCheckBox { font-size: 15px; font-weight: 600; }
+#partitionLabel { color: #C9D6EE; font-size: 12px; }
