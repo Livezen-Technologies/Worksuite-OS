@@ -69,7 +69,8 @@ WsPage {
             }
             Text {
                 Layout.columnSpan: 2; Layout.fillWidth: true
-                readonly property string problem: pw.text.length === 0 ? "" : pw2.text.length && !page.matches ? qsTr("Passwords do not match") : config.userPasswordMessage
+                readonly property string problem: pw.text.length === 0 ? "" : pw2.text.length && !page.matches ? qsTr("Passwords do not match")
+                    : config.userPasswordValidity === 2 ? config.userPasswordMessage : ""   // PasswordValidity::Invalid; "OK!" otherwise
                 text: problem !== "" ? problem : page.matches ? qsTr("Passwords match") : qsTr("At least 8 characters")
                 color: problem !== "" ? "#FF8A7A" : page.matches ? "#5FD39A" : "#8FA3C8"
                 font.family: "IBM Plex Sans"; font.pixelSize: 13; wrapMode: Text.WordWrap
