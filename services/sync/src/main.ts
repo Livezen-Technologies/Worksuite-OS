@@ -11,6 +11,7 @@ import { SyncService } from './service.ts';
 import { brokerTokens, serveControl } from './control.ts';
 import { fetchTransport } from './transport.ts';
 import type { DataType } from './policy.ts';
+import { checkStorage, readCrypttab } from './storage.ts';
 
 export interface SyncConfig {
   account: { id: string; server_url: string; org_id: string; user_id: string; mode: 'personal' | 'enterprise' };
@@ -71,6 +72,13 @@ async function main() {
     process.exit(0);
   }
   const cfg = JSON.parse(readFileSync(configPath, 'utf8')) as SyncConfig;
+
+  // WSOS-SYN-010: with LUKS enabled, refuse to keep WorkSuite data outside the encrypted volume.
+  const storage = checkStorage(stateDir, readCrypttab());
+  if (!storage.ok) {
+    log('storage_unencrypted', { dir: stateDir });
+    process.exit(0);
+  }
 
   const exported = checkIntegrity(dbPath, stateDir);
   if (exported) log('database_rebuilt', { outbox_export: exported });

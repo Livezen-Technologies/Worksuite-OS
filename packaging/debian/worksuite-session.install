@@ -15,3 +15,4 @@ services/session/pam/worksuite-faillock usr/share/pam-configs/
 services/session/pam/worksuite-faillock-preauth usr/share/pam-configs/
 services/session/pam/worksuite-offline-access usr/share/pam-configs/
 services/session/pam/faillock.conf usr/share/worksuite/
+services/session/fcitx5/profile etc/xdg/fcitx5/
