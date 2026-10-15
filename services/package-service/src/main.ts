@@ -8,6 +8,7 @@ import dbus from 'dbus-next';
 import { busAuthority, loadIntrospection, NAME, serve } from './dbus.ts';
 import { PackageService, type DevicePolicy, type Env, type RunResult } from './service.ts';
 import { Coordinator, type CoordinatorEnv } from './coordinator.ts';
+import { loadCatalog } from './catalog.ts';
 
 const POLICY = '/run/worksuite-device-agent/policy.json';
 const AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';
@@ -109,16 +110,41 @@ export function coordinatorEnv(): CoordinatorEnv {
     },
     reboot: () => new Promise((resolve) => execFile('systemctl', ['reboot'], () => resolve())),
     now: () => Date.now(),
+    // WSOS-AUP-012: signed licence for this device (managed devices only).
+    async licence() {
+      const e = enrollment();
+      return e ? getJson(new URL('/desktop/v1/os/licence', `https://${e.host}`).toString(), { 'x-ws-device': e.token }) : null;
+    },
+    deviceId: () => enrollment()?.deviceId ?? null,
     audit: linuxEnv.audit,
   };
 }
 
+const ARCH = process.arch === 'arm64' ? 'arm64' : 'amd64';
+
+/** Enrolled server and device credential from the device agent; null when unmanaged. */
+function enrollment(): { host: string; token: string; deviceId: string | null } | null {
+  let st: { server?: string; device_id?: string } = {};
+  try { st = JSON.parse(readFileSync(AGENT_STATUS, 'utf8')); } catch { return null; }
+  const token = readOr(DEVICE_TOKEN);
+  return st.server && token ? { host: st.server, token, deviceId: st.device_id ?? null } : null;
+}
+
+async function getJson(url: string, headers: Record<string, string> = {}) {
+  const r = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(30_000), headers: { ...headers, 'x-request-id': randomUUID() } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
 async function main() {
-  const svc = new PackageService(linuxEnv);
+  const releaseKeys = loadKeys(RELEASE_KEYS);
+  const svc = new PackageService({ ...linuxEnv, release: { keys: releaseKeys, arch: ARCH, installed: () => pkgVersion('worksuite-desktop') } });
   await svc.detectInterrupted();          // WSOS-APT-006: surfaced as State=interrupted for the shell
   const bus = dbus.systemBus();
   const coordinator = new Coordinator(coordinatorEnv(), svc);
-  serve(bus, svc, busAuthority(bus), loadIntrospection(XML), coordinator);
+  serve(bus, svc, busAuthority(bus), loadIntrospection(XML), coordinator, {
+    catalog: () => loadCatalog({ server: enrollment, fetchJson: getJson, arch: ARCH, policy: linuxEnv.policy, runner: linuxEnv.runner, now: Date.now }),
+  });
   coordinator.start();
   await bus.requestName(NAME, dbus.NameFlag.DO_NOT_QUEUE);
   linuxEnv.audit('started', { state: svc.state() });

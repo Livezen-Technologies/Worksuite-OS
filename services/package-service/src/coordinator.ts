@@ -3,7 +3,7 @@
 // package service's job queue. Results go to desktop/v1/os/update-results.
 import { EventEmitter } from 'node:events';
 import type { KeyObject } from 'node:crypto';
-import { canDefer, decide, verifyManifest, type Decision, type Manifest, type Mode, type Ring } from './updates.ts';
+import { canDefer, decide, verifyLicence, verifyManifest, type Decision, type Licence, type Manifest, type Mode, type Ring } from './updates.ts';
 import type { Job, PackageService } from './service.ts';
 
 export const DEFAULT_HOST = 'https://download.worksuitecloud.com';
@@ -42,6 +42,9 @@ export interface CoordinatorEnv {
   report(result: Record<string, unknown>): Promise<void>;
   reboot(): Promise<void>;
   now(): number;
+  /** WSOS-AUP-012: raw signed licence from desktop/v1/os/licence and the enrolled device id; absent/null when unmanaged. */
+  licence?(): Promise<unknown>;
+  deviceId?(): string | null;
   audit(event: string, fields: Record<string, unknown>): void;
 }
 
@@ -103,7 +106,8 @@ export class Coordinator extends EventEmitter {
     }
     this.manifest = raw;
     const used = this.deferrals(raw.release_id);
-    const d = decide({
+    const licence = await this.licence();
+    const d = decide({ licence,
       manifest: raw, installed: this.env.installedVersion(), managed: !!policy, mode: policy?.update_mode ?? 'automatic',
       window: policy?.maintenance_window, deviceKey: this.env.deviceKey(), now: new Date(this.env.now()),
       idle: await this.env.idle(), metered: await this.env.metered(), deferrals: used,
@@ -120,6 +124,18 @@ export class Coordinator extends EventEmitter {
       case 'warn_restart': this.warnThenInstall(offer); break;
     }
     return d;
+  }
+
+  /** A licence that fails verification is treated as no licence: feature releases wait, nothing is removed. */
+  private async licence(): Promise<Licence | null> {
+    const id = this.env.deviceId?.();
+    if (!this.env.licence || !id) return null;
+    let raw: unknown;
+    try { raw = await this.env.licence(); } catch { return null; }
+    if (raw == null) return null;
+    if (verifyLicence(raw, this.env.keys, id, new Date(this.env.now()))) return raw;
+    this.env.audit('licence_rejected', {});
+    return null;
   }
 
   /** User "Install now" (polkit lk.worksuite.update.apply in the D-Bus layer). */
@@ -166,6 +182,12 @@ export class Coordinator extends EventEmitter {
 
   private async finish(m: Manifest, job: Job, rebootAfter: boolean) {
     const ok = job.state === 'success';
+    // WSOS-AUP-008: an interrupted download is not a failed update. apt keeps the partial files and resumes them
+    // (HTTP Range) on the next attempt, which the next check cycle or "Install now" starts.
+    if (!ok && /^download interrupted/.test(job.error ?? '')) {
+      this.set({ state: 'waiting', reason: 'download_interrupted', restart_at: null });
+      return;
+    }
     await this.reportSafe({
       release_id: m.release_id, result: ok ? 'success' : 'failed', reboot_required: this.svc.rebootRequired,
       health_check: ok ? 'pass' : 'fail', ...(ok ? {} : { error: job.error ?? 'failed' }),

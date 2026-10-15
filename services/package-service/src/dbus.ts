@@ -5,6 +5,7 @@ import dbus from 'dbus-next';
 import { ServiceError } from './apt.ts';
 import type { Job, PackageService, Source } from './service.ts';
 import type { Coordinator } from './coordinator.ts';
+import type { CatalogResult } from './catalog.ts';
 
 const { Message, Variant } = dbus;
 type Msg = InstanceType<typeof Message>;
@@ -30,6 +31,19 @@ export const ACTIONS: Record<string, string | null> = {
   CheckForUpdates: null,
   DeferUpdate: 'lk.worksuite.update.apply',
   InstallUpdateNow: 'lk.worksuite.update.apply',
+  // App Center catalog from the server (WSOS-APP-001): read-only.
+  GetCatalog: null,
+  // Local .deb (WSOS-APT-005): the preview stages a copy and runs apt's simulation; installing always asks for an
+  // administrator password (auth_admin, no keep) after the user has seen the publisher and plan.
+  PreviewLocalDeb: null,
+  InstallLocalDeb: 'lk.worksuite.package.install-local',
+  // Flatpak (WSOS-FLP-003/004).
+  GetAppPermissions: null,
+  ResetAppPermissions: 'lk.worksuite.package.install',
+  PruneRuntimes: 'lk.worksuite.package.install',
+  // Offline bundles (WSOS-AUP-010).
+  InspectBundle: null,
+  InstallBundle: 'lk.worksuite.update.apply',
 };
 
 export interface Authority {
@@ -58,7 +72,7 @@ const v = (sig: string, x: unknown) => new Variant(sig, x);
 // dbus-next's types declare newError(msg: string, …) but the implementation takes the method-call Message.
 const errorReply = (msg: Msg, name: string, text: string) => Message.newError(msg as unknown as string, name, text);
 
-export function serve(bus: Bus, svc: PackageService, auth: Authority, introspectionXml: string, coordinator?: Coordinator) {
+export function serve(bus: Bus, svc: PackageService, auth: Authority, introspectionXml: string, coordinator?: Coordinator, extra: { catalog?: () => Promise<CatalogResult> } = {}) {
   const sources = new Set<Source>(['apt', 'flatpak']);
 
   svc.on('progress', (job: Job, percent: number) => bus.send(Message.newSignal(PATH, IFACE, 'JobProgress', 'ous', [jobPath(job.id), percent, job.phase])));
@@ -113,6 +127,17 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
         void coordinator.installNow();
         return Message.newMethodReturn(msg, '', []);
       }
+      case 'GetCatalog': {
+        if (!extra.catalog) throw new ServiceError('Failed', 'catalog not available');
+        return Message.newMethodReturn(msg, 's', [JSON.stringify(await extra.catalog())]);
+      }
+      case 'PreviewLocalDeb': return Message.newMethodReturn(msg, 's', [JSON.stringify(await svc.previewLocalDeb(uid, String(b[0])))]);
+      case 'InstallLocalDeb': return Message.newMethodReturn(msg, 'o', [jobPath(svc.installLocalDeb(uid, String(b[0])))]);
+      case 'GetAppPermissions': return Message.newMethodReturn(msg, 's', [JSON.stringify(await svc.appPermissions(String(b[0])))]);
+      case 'ResetAppPermissions': return Message.newMethodReturn(msg, 'o', [jobPath(svc.resetAppPermissions(uid, String(b[0])))]);
+      case 'PruneRuntimes': return Message.newMethodReturn(msg, 'o', [jobPath(svc.pruneRuntimes(uid))]);
+      case 'InspectBundle': return Message.newMethodReturn(msg, 's', [JSON.stringify(svc.inspectBundle(String(b[0])))]);
+      case 'InstallBundle': return Message.newMethodReturn(msg, 'o', [jobPath(svc.installBundle(uid, String(b[0])))]);
       case 'CancelJob': {
         const m = /\/job\/(\d+)$/.exec(String(b[0]));
         if (!m) throw new ServiceError('NoSuchJob');
