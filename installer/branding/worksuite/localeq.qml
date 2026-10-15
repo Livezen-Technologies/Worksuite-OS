@@ -43,13 +43,8 @@ WsPage {
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 260
             radius: 14; clip: true; color: "#081634"; border.width: 1; border.color: "#297FB2FF"
-            Canvas {
-                anchors.fill: parent
-                onPaint: {
-                    var c = getContext("2d"); c.fillStyle = "rgba(127,178,255,0.22)"
-                    for (var x = 7; x < width; x += 14) for (var y = 7; y < height; y += 14) { c.beginPath(); c.arc(x, y, 1.2, 0, 2 * Math.PI); c.fill() }
-                }
-            }
+            // Tiled dots (a Canvas here crashed Qt's software renderer in the live session).
+            Image { anchors.fill: parent; source: "dots.svg"; fillMode: Image.Tile; sourceSize.width: 14; sourceSize.height: 14 }
             Rectangle { id: band; x: parent.width * 0.66; width: 40; height: parent.height; color: "#2418D4F0"; border.width: 1; border.color: "#6618D4F0" }
             Rectangle {
                 id: dot

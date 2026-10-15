@@ -31,7 +31,7 @@ keys) shift 2; for k in "$@"; do mon "sendkey $k"; sleep 0.3; done ;;
 type) t=${3:?text}; i=0
       while [ $i -lt ${#t} ]; do c=$(printf %s "$t" | cut -c$((i+1))); i=$((i+1))
         case "$c" in
-          [a-z0-9]) k=$c ;; [A-Z]) k="shift-$(printf %s "$c" | tr A-Z a-z)" ;; ' ') k=spc ;; .) k=dot ;; @) k=shift-2 ;; _) k=shift-minus ;; -) k=minus ;; =) k=equal ;; /) k=slash ;;
+          [a-z0-9]) k=$c ;; [A-Z]) k="shift-$(printf %s "$c" | tr A-Z a-z)" ;; ' ') k=spc ;; .) k=dot ;; @) k=shift-2 ;; _) k=shift-minus ;; -) k=minus ;; =) k=equal ;; /) k=slash ;; ,) k=comma ;; ';') k=semicolon ;; '|') k=shift-backslash ;; '>') k=shift-dot ;; '<') k=shift-comma ;;
           *) echo "cannot type '$c'" >&2; exit 2 ;;
         esac; mon "sendkey $k"; sleep 0.15; done ;;
 console) printf '%s\r' "${3:?line}" | socat -t 2 - "UNIX-CONNECT:$dir/serial.sock" >/dev/null ;;
