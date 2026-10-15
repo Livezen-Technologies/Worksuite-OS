@@ -12,7 +12,7 @@ export type Source = 'apt' | 'flatpak';
 export interface RunResult { code: number; stdout: string; stderr: string }
 export interface Runner { run(cmd: string, args: string[]): Promise<RunResult> }
 
-export interface DevicePolicy { app_allowlist?: string[]; approved_remotes?: string[]; allow_local_debs?: boolean; appimages?: 'allow' | 'block' }
+export interface DevicePolicy { app_allowlist?: string[]; approved_remotes?: string[]; /** WSOS-FLP-001: remotes an administrator may add, name → https .flatpakrepo URL. */ flatpak_remotes?: Record<string, string>; allow_local_debs?: boolean; appimages?: 'allow' | 'block' }
 
 export interface Env {
   runner: Runner;
@@ -35,7 +35,7 @@ export interface Env {
 }
 
 export interface Preview { source: Source; name: string; plan: Plan; disk_bytes: number | null; permissions: string[]; broad: string[] }
-export type JobKind = 'install' | 'remove' | 'update' | 'repair' | 'permissions' | 'prune';
+export type JobKind = 'install' | 'remove' | 'update' | 'repair' | 'permissions' | 'prune' | 'remote';
 
 /** WSOS-APT-005: what the confirmation dialog shows for a local .deb. `token` must be passed back to install. */
 export interface LocalDebPreview {
@@ -246,6 +246,27 @@ export class PackageService extends EventEmitter {
       const r = await this.mustRun('flatpak', ['uninstall', '--system', '--unused', '--noninteractive', '-y']);
       const removed = r.stdout.split('\n').map((l) => /^\s*\d+\.\s+(\S+)\s+(\S+)/.exec(l)).filter((m) => m !== null).map((m) => `${m[1]}//${m[2]}`);
       this.env.audit('flatpak_runtimes_pruned', { caller, removed });
+    });
+  }
+
+  /** WSOS-FLP-001: add a Flatpak remote. The D-Bus layer requires an administrator (lk.worksuite.package.add-remote,
+   *  auth_admin); here the remote must also be permitted by device policy: on a managed device its name must be in
+   *  approved_remotes and its URL must equal the policy's flatpak_remotes entry. Unmanaged (personal) devices have no
+   *  policy to grant the permission, so only the default remote is available there. */
+  addRemote(caller: number, name: string, url: string): number {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) throw new ServiceError('InvalidArgs', 'remote name');
+    let u: URL;
+    try { u = new URL(url); } catch { throw new ServiceError('InvalidArgs', 'remote url'); }
+    if (u.protocol !== 'https:' || !u.pathname.endsWith('.flatpakrepo') || u.username || u.password) throw new ServiceError('InvalidArgs', 'remote url must be an https .flatpakrepo file');
+    const policy = this.env.policy();
+    if (!policy?.approved_remotes?.includes(name) || policy.flatpak_remotes?.[name] !== url) {
+      this.env.audit('flatpak_remote_refused', { caller, name, url });
+      throw new ServiceError('NotAuthorized', 'device policy does not permit this remote');
+    }
+    return this.enqueue('remote', caller, async (job) => {
+      job.phase = 'adding'; this.progress(job, 30);
+      await this.mustRun('flatpak', ['remote-add', '--system', '--if-not-exists', '--from', name, url]);
+      this.env.audit('flatpak_remote_added', { caller, name, url });
     });
   }
 

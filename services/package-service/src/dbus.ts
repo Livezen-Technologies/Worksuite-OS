@@ -41,6 +41,8 @@ export const ACTIONS: Record<string, string | null> = {
   GetAppPermissions: null,
   ResetAppPermissions: 'lk.worksuite.package.install',
   PruneRuntimes: 'lk.worksuite.package.install',
+  // WSOS-FLP-001: administrator only, and device policy must permit the remote.
+  AddRemote: 'lk.worksuite.package.add-remote',
   // Offline bundles (WSOS-AUP-010).
   InspectBundle: null,
   InstallBundle: 'lk.worksuite.update.apply',
@@ -136,6 +138,7 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
       case 'GetAppPermissions': return Message.newMethodReturn(msg, 's', [JSON.stringify(await svc.appPermissions(String(b[0])))]);
       case 'ResetAppPermissions': return Message.newMethodReturn(msg, 'o', [jobPath(svc.resetAppPermissions(uid, String(b[0])))]);
       case 'PruneRuntimes': return Message.newMethodReturn(msg, 'o', [jobPath(svc.pruneRuntimes(uid))]);
+      case 'AddRemote': return Message.newMethodReturn(msg, 'o', [jobPath(svc.addRemote(uid, String(b[0]), String(b[1])))]);
       case 'InspectBundle': return Message.newMethodReturn(msg, 's', [JSON.stringify(svc.inspectBundle(String(b[0])))]);
       case 'InstallBundle': return Message.newMethodReturn(msg, 'o', [jobPath(svc.installBundle(uid, String(b[0])))]);
       case 'CancelJob': {

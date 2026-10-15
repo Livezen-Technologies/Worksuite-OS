@@ -93,6 +93,16 @@ export function coordinatorEnv(): CoordinatorEnv {
       const next = text.replace(/^Suites:.*$/m, `Suites: ${suite}`);
       if (next !== text) { writeFileSync(WORKSUITE_SOURCES + '.tmp', next, { mode: 0o644 }); renameSync(WORKSUITE_SOURCES + '.tmp', WORKSUITE_SOURCES); }
     },
+    // WSOS-UPD-001: the WorkSuite system units must still be active after an update.
+    async healthCheck() {
+      const units = ['worksuite-package-service.service', 'worksuite-device-agent.service', 'greetd.service'];
+      const failed: string[] = [];
+      for (const u of units) {
+        const r = await linuxEnv.runner.run('systemctl', ['is-failed', '--quiet', u]);
+        if (r.code === 0) failed.push(`unit_failed:${u}`);
+      }
+      return failed;
+    },
     load: () => { try { return JSON.parse(readFileSync(STATE, 'utf8')); } catch { return { deferrals: {} }; } },
     save: (s) => { mkdirSync('/var/lib/worksuite-package-service', { recursive: true }); writeFileSync(STATE + '.tmp', JSON.stringify(s), { mode: 0o600 }); renameSync(STATE + '.tmp', STATE); },
     // WSOS-UPD-005: only managed devices report (they have a server and a device credential).
