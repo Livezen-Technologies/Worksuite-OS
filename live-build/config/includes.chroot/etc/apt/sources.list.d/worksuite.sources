@@ -1,0 +1,5 @@
+Types: deb
+URIs: https://download.worksuitecloud.com/os/apt
+Suites: trixie-stable
+Components: main
+Signed-By: /usr/share/keyrings/worksuite-archive-keyring.gpg

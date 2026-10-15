@@ -1,0 +1,16 @@
+# WorkSuite desktop (pulls labwc, greetd, portals, PipeWire, NetworkManager, ...)
+worksuite-desktop
+worksuite-archive-keyring
+# Installer (live only; removed by Calamares on install)
+calamares
+calamares-settings-worksuite
+# Hardware / boot
+grub-efi
+shim-signed
+cryptsetup
+cryptsetup-initramfs
+tpm2-tools
+firmware-linux-free
+plymouth
+# Recovery (§9.2)
+dialog

@@ -1,0 +1,19 @@
+#!/bin/sh
+# Image defaults. Runs inside the chroot at build time.
+set -eu
+# WSOS-SEC-010: no SSH server.
+if dpkg -s openssh-server >/dev/null 2>&1; then echo "openssh-server must not be installed" >&2; exit 1; fi
+# WSOS-AUTH-001/002: greetd with the WorkSuite session as default; no autologin.
+mkdir -p /etc/greetd
+cat > /etc/greetd/config.toml <<'CONF'
+[terminal]
+vt = 7
+[default_session]
+command = "cage -s -- gtkgreet -c /usr/bin/worksuite-session"
+user = "_greetd"
+CONF
+systemctl enable greetd.service worksuite-device-agent.service
+systemctl set-default graphical.target
+# WSOS-INS-007: no machine-id baked into the image.
+: > /etc/machine-id
+rm -f /var/lib/dbus/machine-id

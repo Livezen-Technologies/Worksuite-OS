@@ -26,7 +26,7 @@
       <arg name="options" type="a{sv}" direction="in"/>
       <arg name="job" type="o" direction="out"/>
     </method>
-    <!-- polkit: lk.worksuite.repair. Runs fixed "dpkg --configure -a" then "apt-get -f install". -->
+    <!-- polkit: lk.worksuite.repair. Runs fixed commands: dpkg configure-all, then apt-get fix-broken. -->
     <method name="Repair">
       <arg name="job" type="o" direction="out"/>
     </method>

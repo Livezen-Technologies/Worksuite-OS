@@ -1,0 +1,35 @@
+---
+componentName: worksuite
+welcomeStyleCalamares: false
+welcomeExpandingLogo: true
+windowExpanding: normal
+windowSize: 900px,620px
+windowPlacement: center
+sidebar: widget
+navigation: widget
+
+strings:
+  productName: WorkSuite OS
+  shortProductName: WorkSuite
+  version: 1.0
+  shortVersion: 1.0
+  versionedName: WorkSuite OS 1.0
+  shortVersionedName: WorkSuite 1.0
+  bootloaderEntryName: WorkSuite
+  productUrl: https://download.worksuitecloud.com
+  supportUrl: https://download.worksuitecloud.com/support
+  releaseNotesUrl: https://download.worksuitecloud.com/os/release-notes
+
+images:
+  productLogo: "logo.svg"
+  productIcon: "logo.svg"
+  productWelcome: "welcome.svg"
+
+slideshow: "show.qml"
+slideshowAPI: 2
+
+style:
+  SidebarBackground: "#0f172a"
+  SidebarText: "#f8fafc"
+  SidebarTextCurrent: "#ffffff"
+  SidebarBackgroundCurrent: "#2563eb"
