@@ -148,3 +148,22 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 |---|---|---|
 | WSOS-ARM-001/004/008 arm64 build + QEMU UEFI boot | `.github/workflows/image.yml` matrix (native `ubuntu-24.04-arm`), `tests/vm/qemu-arch.sh`, arch-aware `boot-test.sh`/`server-e2e.sh`, serial console per arch in `live-build/auto/config` | Workflow defined; not yet run green |
 | WSOS-PRF-001…005, REL-001/002, ARM-007 | `tests/perf/guest/*` (probes on `WORKSUITE_PERF=1` images), `tests/perf/gates.tsv` (hw-* = SRS limits, ci-*-tcg = regression bounds, separate ARM rows), `tests/perf/gates.sh`, `boot-test.sh PERF_PROFILE=…` | `tests/perf/gates.test.sh` (CI); VM gates in `image.yml`, not yet run green |
+
+## Architecture boundary, installer, updates and MDM
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-ARC-001 Electron main as user, no root command runner | `shell/electron/main.ts` (one `ipcMain.handle` behind `validSender`, `execFile` arrays), sandboxed windows, user unit `worksuite-shell.service`; the only elevation is `pkexec /usr/bin/worksuite-device-agent enroll` | `shell/electron/boundary.test.ts` |
+| WSOS-ARC-003 native apps are compositor windows | `gtk-launch` in its own scope (`xdg.ts`, `session.ts`), labwc; no BrowserView/WebContentsView/webview/reparenting | `shell/electron/boundary.test.ts` |
+| WSOS-ARC-004 desktop with remote services unreachable | shell loads `dist/index.html` from disk, CSP `'self'` only; CI boot test runs with `-nic none` | `boundary.test.ts`, `tests/vm/boot-test.sh` |
+| WSOS-UPD-001 post-update health check | `services/package-service/src/coordinator.ts` (`health`: `dpkg --audit`, installed version = manifest, `healthCheck` env: failed WorkSuite units in `main.ts`); failure skips reboot, runs repair, reports `health_failures` for a signed rollback directive | `test/coordinator.test.ts` |
+| WSOS-UPD-006 updates never delete user data/outbox/licences | update path runs only apt/flatpak/dpkg; no rm/autoremove/purge or user paths | `test/coordinator.test.ts` |
+| WSOS-FLP-001 adding a remote: admin + policy | `AddRemote` (polkit `lk.worksuite.package.add-remote`, auth_admin) + policy `approved_remotes` and `flatpak_remotes` (exact https `.flatpakrepo` URL) | `test/features.test.ts`, `test/dbus.test.ts` |
+| WSOS-MDM-001 hardware, software, versions, update status | `services/device-agent/src/inventory.ts` (sysfs DMI/disks/NICs/GPUs/batteries, firmware), `host.ts` inventory + `versions` + `update`; package service publishes `/run/worksuite-package-service/update-status.json` | `services/device-agent/test/inventory.test.ts` |
+| WSOS-MDM-005 requested vs observed | `services/server/src/console.ts` (`observedCommand`, `observedPolicy`), `console-ui.ts` (Requested / Observed columns, policy requested vs observed) | `services/server/test/console.test.ts` |
+| WSOS-INS-002 language, keyboard, timezone, first admin | `installer/settings.conf`, `modules/usersq.conf` (sudo group, root locked) | `installer/tests/test_config.py` |
+| WSOS-INS-005 offline install | `packages.conf` remove-only, no internet requirement, unpack from ISO squashfs, bootloader packages in image | `installer/tests/test_config.py` (config); no install run in CI |
+| WSOS-INS-007 fresh identity, no live credentials | `machineid.conf`, image hook empties machine-id, no `networkcfg` (live Wi-Fi secrets), `shellprocess-worksuite.conf` clears agent/enrollment/SSH host keys/NM connections | `installer/tests/test_config.py` |
+| WSOS-INS-009 first-boot assistant | `shell/src/screens/FirstRun.tsx` + `FirstRunNetwork.tsx` (NetworkManager list/join, password on nmcli stdin), mode, sign-in, skip | `FirstRun.test.tsx` |
+| WSOS-ARM-003 certified list, same gates as x86 | `tests/hw/gates.tsv`, `tests/hw/certified.tsv`, `tests/hw/probe.sh` | `tests/hw/test_hw.py` (no ARM machine qualified yet) |
+| WSOS-ARM-008 arm64 VM tests | `tests/vm/vm.sh` now arch-aware via `qemu-arch.sh` | not yet run green |

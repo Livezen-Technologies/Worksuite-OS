@@ -9,30 +9,32 @@ Updated again for per-monitor panels, display settings and hotplug (DSK-005/006/
 Updated for sign-in and wipe governance: WorkSuite greeter on greetd, opt-in autologin, required enrollment, directory domain formats, password expiry/change, TOTP, SSO handoff to the token broker, smart-card wiring, desktop.devices.wipe + CoreApprovalEngine and Wiped marking (AUTH-001/002, IDN-004/007, DIR-001/002/007/008, WIPE-001/008 → Done).
 Updated for clipboard history, default apps, Windows-program handling, workspace and screenshot shortcuts, launch rules, session environment/units and the minimal recovery launcher (DSK-008/009/010/011, LCH-001/003, SES-001/002/005 → Done).
 
+Updated for the renderer/system boundary tests, post-update health check, policy-gated Flatpak remotes, agent hardware inventory, console requested-vs-observed state, installer config tests, the first-boot network step and the shared hardware gates (ARC-001/003, FLP-001, UPD-001/006, MDM-001/005, INS-002/007/009 → Done; ARM-003 → Partial).
+
 ## Summary
 
 | Section | Items | Done | Partial | Missing | Score |
 |---|---|---|---|---|---|
-| 3 Architecture | 4 | 0 | 4 | 0 | 50% |
+| 3 Architecture | 4 | 2 | 2 | 0 | 75% |
 | 4 Boot, login, session, lock | 17 | 16 | 1 | 0 | 97% |
 | 5 Shell | 18 | 11 | 7 | 0 | 81% |
-| 6 Applications | 20 | 17 | 3 | 0 | 92% |
+| 6 Applications | 20 | 18 | 2 | 0 | 95% |
 | 7 Integration and Drive | 19 | 6 | 13 | 0 | 66% |
 | 8 Identity and sync | 18 | 14 | 4 | 0 | 89% |
-| 9 Updates, MDM, installer | 22 | 12 | 10 | 0 | 77% |
+| 9 Updates, MDM, installer | 22 | 19 | 3 | 0 | 93% |
 | 11 Non-functional | 25 | 5 | 20 | 0 | 60% |
-| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 32 | 7 | 1 | 89% |
+| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 32 | 8 | 0 | 90% |
 | Unnumbered requirements (no WSOS ID) | 15 | 6 | 6 | 3 | 60% |
-| **Overall** | **198** | 119 | 75 | 4 | **79.0%** |
+| **Overall** | **198** | 129 | 66 | 3 | **81.8%** |
 
 ## 3 Architecture
 
 | ID | Requirement | Status | Evidence / reason |
 |---|---|---|---|
-| WSOS-ARC-001 | Electron main runs as user, not a root command runner | Partial | `shell/electron/main.ts` uses fixed execFile arrays and sender-checked IPC; privileged ops go to package-service D-Bus. No test of the renderer→system boundary (§13.1 Security layer). |
-| WSOS-ARC-002 | Privileged ops are named D-Bus methods behind polkit | Partial | `services/package-service/src/dbus.ts` + `polkit/lk.worksuite.package.policy`, tested in `services/package-service/test/dbus.test.ts`. Window operations are named methods on `lk.worksuite.WaylandBridge1` with a caller check (`native/wayland-bridge/`, tested). Device agent D-Bus (`services/device-agent/dbus/*.xml`, `polkit/`) has no dispatch tests. |
-| WSOS-ARC-003 | Native apps stay independent compositor windows | Partial | Apps launched with `gtk-launch` (`shell/electron/main.ts`), Labwc owns windows (`services/session/labwc/rc.xml`). No embedding, but no test. |
-| WSOS-ARC-004 | Desktop usable with all remote services unreachable | Partial | Shell bundled locally, sync offline-first (`services/sync/src/service.ts`); the panel and bridge are local-only (`native/wayland-bridge/`). No offline E2E test. |
+| WSOS-ARC-001 | Electron main runs as user, not a root command runner | Done | `shell/electron/main.ts`: one `ipcMain.handle` behind `validSender` (shell webContents + file:// frame), fixed `execFile` arrays, sandboxed/context-isolated windows, systemd user unit; the only elevation is the named `pkexec /usr/bin/worksuite-device-agent enroll` (polkit `lk.worksuite.device.enroll`). Static boundary test over every main-process source: `shell/electron/boundary.test.ts`. |
+| WSOS-ARC-002 | Privileged ops are named D-Bus methods behind polkit | Partial | Package service: named D-Bus methods each mapped to a polkit action (`services/package-service/src/dbus.ts` `ACTIONS`, incl. new `AddRemote`), tested in `test/dbus.test.ts`. Window operations on `lk.worksuite.WaylandBridge1` with a caller check (tested). Device agent: enrollment is a polkit-guarded pkexec helper talking to a root-only socket; `dbus/lk.worksuite.DeviceAgent1.xml` is documented but not served, so not every privileged op is a D-Bus method yet. |
+| WSOS-ARC-003 | Native apps stay independent compositor windows | Done | Native apps start via `gtk-launch` in their own scope (`shell/electron/xdg.ts`, `session.ts`), labwc owns windows (`services/session/labwc/rc.xml`). `shell/electron/boundary.test.ts` asserts no BrowserView/WebContentsView/webview tag/reparenting/xembed anywhere in the main process. |
+| WSOS-ARC-004 | Desktop usable with all remote services unreachable | Partial | Shell UI loaded from disk (`loadFile(dist/index.html)`), CSP allows only `'self'`, sync offline-first, panel/bridge local (`boundary.test.ts`). CI boot test now boots with `-nic none` (`tests/vm/boot-test.sh`) and checks greeter + no failed units, but it does not log in and exercise the desktop session offline. |
 
 ## 4 Boot, login, session, lock
 
@@ -92,7 +94,7 @@ Updated for clipboard history, default apps, Windows-program handling, workspace
 | WSOS-APT-004 | One package lock shared with updates | Done | Single job queue in `service.ts`, coordinator uses it (`coordinator.ts`); tested in `service.test.ts`/`coordinator.test.ts`. |
 | WSOS-APT-005 | Local .deb installs: admin auth, publisher, policy | Done | `service.ts` `previewLocalDeb`/`installLocalDeb`, `src/staging.ts` (O_NOFOLLOW, caller must own the file, root-owned copy named by SHA-256): control fields, Maintainer shown as unverified publisher, arch, `allow_local_debs`/allowlist, critical set, apt simulation; install takes the preview token and polkit `lk.worksuite.package.install-local` (auth_admin every time). Shell dialog in `AppCenter.tsx`; files only via native dialog handles. Tests `features.test.ts`, `dbus.test.ts`. |
 | WSOS-APT-006 | Interrupted dpkg detected, audited Repair action | Partial | `dpkg --audit` detection + `Repair` (`service.ts`), tested; boot-time detection and repair in `worksuite-boot-repair.service` (`tests/boot/recovery-boot.test.sh`); no shell UI outside the recovery screens surfaces Repair. |
-| WSOS-FLP-001 | Curated remotes; adding a remote needs admin + policy | Partial | Approved remotes from policy (`service.ts` `remoteFor`); no add-remote operation exists (so nothing to guard); only first approved remote ever used. |
+| WSOS-FLP-001 | Curated remotes; adding a remote needs admin + policy | Done | Default/approved remotes from policy (`service.ts` `remoteFor`). New `AddRemote` D-Bus method behind polkit `lk.worksuite.package.add-remote` (auth_admin) that also requires policy permission: name in `approved_remotes` and the exact https `.flatpakrepo` URL in `flatpak_remotes`; unmanaged devices have no such permission; refusals audited (`test/features.test.ts`, `test/dbus.test.ts`). |
 | WSOS-FLP-002 | Install dialogs highlight broad Flatpak permissions | Done | Metadata parsed from `flatpak remote-info` (`service.ts`), shown in `AppCenter.tsx` (`describePermission`); tested in `service.test.ts`. |
 | WSOS-FLP-003 | Review/reset app permissions, remove app data | Done | `service.ts` `appPermissions`/`resetAppPermissions` (system overrides), `shell/electron/packages.ts` `flatpakUserClient` (portal permission store, user overrides, `~/.var/app/<id>` removal without following links); App Center Permissions section. Tests `features.test.ts`, `packages.test.ts`. |
 | WSOS-FLP-004 | Prune unused runtimes only when unused | Done | `service.ts` `pruneRuntimes` (job queue) and after Flatpak removal: only `flatpak uninstall --unused`, which keeps every runtime/extension an installed app needs and pinned runtimes; never names runtimes itself. Tested in `features.test.ts`. |
@@ -155,28 +157,28 @@ Updated for clipboard history, default apps, Windows-program handling, workspace
 
 | ID | Requirement | Status | Evidence / reason |
 |---|---|---|---|
-| WSOS-UPD-001 | Coordinator: metadata, disk, AC/battery ≥40%, locks, download, apply, reboot, health | Partial | `services/package-service/src/coordinator.ts`, `service.ts` preconditions; tested. No post-update health check / rollback step found. |
+| WSOS-UPD-001 | Coordinator: metadata, disk, AC/battery ≥40%, locks, download, apply, reboot, health | Done | `services/package-service/src/coordinator.ts` + `service.ts` preconditions (metadata, disk, AC/battery, locks, download, apply, reboot need). Post-update health check: `dpkg --audit` clean, installed version equals the manifest, failed WorkSuite units (`main.ts` `healthCheck`); a failure fails the update, skips the reboot, runs `dpkg --configure -a` when needed and reports `health_failures` so the server can issue a signed rollback directive (WSOS-AUP-003). Tested in `test/coordinator.test.ts`. |
 | WSOS-UPD-002 | Rings dev/pilot/stable from policy | Done | `coordinator.ts` ring from policy, server policy validation (`console.ts`); tested in `coordinator.test.ts`, `console.test.ts`. |
 | WSOS-UPD-003 | Maintenance windows, deferral limits, mandatory updates | Done | `services/package-service/src/updates.ts` (`decide`, `canDefer`); `updates.test.ts`. |
 | WSOS-UPD-004 | Release managers pause rollout / emergency release | Done | Device honours `paused/pulled` (`updates.ts`); server `services/server/src/admin.ts` `setReleaseState`, `emergencyRelease` (critical + mandatory, 100 %, all rings), each re-signed; CLI `release-pause/resume/pull/emergency`, admin API `/admin/api/releases/*`. Tests `services/server/test/releases.test.ts` (verified with the package service's `verifyManifest`). |
 | WSOS-UPD-005 | Report results with OS/shell/kernel versions | Done | `coordinator.ts` → `desktop/v1/os/update-results` (`services/server/src/api.ts`); tested. |
-| WSOS-UPD-006 | Never delete user data/outbox/licences | Partial | Package ops never touch user data by design; no explicit test. |
-| WSOS-MDM-001 | Agent reports hardware, software, versions, update status | Partial | `services/device-agent/src/host.ts` (`facts`, `inventory`); tested with fakes in `agent.test.ts`. Hardware inventory limited. |
+| WSOS-UPD-006 | Never delete user data/outbox/licences | Done | The update path only runs apt/flatpak/dpkg and never `autoremove`/`--purge`/`rm` or user paths (`/home`, sync outbox, licences); asserted over every command of an update run in `test/coordinator.test.ts`. |
+| WSOS-MDM-001 | Agent reports hardware, software, versions, update status | Done | Inventory now carries hardware from sysfs (DMI vendor/model/serial/BIOS/board, firmware type, disks, network adapters with drivers, GPUs, batteries with health), CPU/memory/TPM/encryption, installed apt + Flatpak software, OS/shell/kernel versions and the update coordinator status (published by the package service to `/run/worksuite-package-service/update-status.json`) (`services/device-agent/src/inventory.ts`, `host.ts`; `test/inventory.test.ts`). |
 | WSOS-MDM-002 | Policy covers allowlist, repos, ring, window, lock timeout, offline period, USB, Bluetooth | Done | All fields in the signed policy schema (`api-contracts/openapi.yaml`, `services/server/src/console.ts`, console form): allowlist, remotes, ring, window, `lock_timeout_max_s`, `offline_access_days`, `usb_storage`, `bluetooth`, plus `login_failures_max`/`login_lockout_s`. Device enforcement in `services/device-agent/src/enforce.ts` + `host.ts` `applyEnforcement` (lock-policy file, faillock.conf, modprobe/udev rules for USB block/read-only, bluetooth.service mask + rfkill), re-applied at start and lifted on unenroll; tested in `services/device-agent/test/agent.test.ts` and `services/server/test/console.test.ts`. Host effects (udevadm/rfkill) not run in CI. |
 | WSOS-MDM-003 | Remote command allow-list | Done | `services/device-agent/src/commands.ts`; `commands.test.ts`. |
 | WSOS-MDM-004 | Unique ID, expiry, signature, replay protection, ack | Done | `commands.ts`, `agent.ts`; `commands.test.ts`, `services/server/test/e2e.test.ts`. |
-| WSOS-MDM-005 | Console shows requested vs observed state | Partial | `services/server/src/console.ts`/`console-ui.ts` show command ack states; requested-vs-observed policy state not separated. |
+| WSOS-MDM-005 | Console shows requested vs observed state | Done | Device page shows each command as "<command> requested" next to what the device reported ("not yet received", "received — not yet started", "in progress", "done", "failed", "expired — never received"), and the requested policy version next to the version the device reports applying (`services/server/src/console.ts` `observedCommand`/`observedPolicy`, `console-ui.ts`; `test/console.test.ts`). |
 | WSOS-MDM-006 | No remote shell | Done | No such command in `commands.ts`; allow-list test rejects others. |
 | WSOS-MDM-007 | About this device: managed, by whom, policies | Done | `agent.ts` (`status`) → `Settings.tsx` (`AboutDevice`); `shell/electron/device.test.ts`. |
 | WSOS-INS-001 | Live desktop + Calamares installer | Partial | Live ISO boots in CI (`tests/vm/boot-test.sh`); installer config in `installer/`; installation never run in CI. |
-| WSOS-INS-002 | Language, keyboard, timezone, first admin | Partial | `installer/settings.conf` (welcomeq/keyboardq/localeq/usersq); not tested. |
+| WSOS-INS-002 | Language, keyboard, timezone, first admin | Done | `installer/settings.conf` shows welcomeq (language), keyboardq, localeq (timezone, default Asia/Colombo) and usersq (first user in `sudo`, root locked, min 8 chars, no weak passwords) and runs the matching jobs; asserted in `installer/tests/test_config.py`. |
 | WSOS-INS-003 | Disk model/size + typed confirmation | Done | `installer/modules/worksuiteconfirm/` with `Tests.cpp`; not run against a real disk. |
 | WSOS-INS-004 | LUKS2 with recovery key shown once, plus unencrypted | Done | `partition.conf`, `installer/modules/worksuiterecovery/main.py` + `tests/test_main.py`, `worksuiteconfirm-recovery.conf`. |
-| WSOS-INS-005 | Fully offline install | Partial | `packages.conf` only removes packages, `welcomeq.conf` no internet check; untested. |
+| WSOS-INS-005 | Fully offline install | Partial | Config verified offline-safe in `installer/tests/test_config.py`: `packages.conf` only removes live tools (`update_db: false`), no internet requirement, system unpacked from the ISO squashfs, no job downloads, bootloader/cryptsetup packages present in the image. A real offline installation has not been run in CI. |
 | WSOS-INS-006 | Enroll with token or QR (MAY) | Partial | Enrollment code in first-run (`FirstRun.tsx`, `shell/electron/device.ts`, tested), not in the installer; no QR. |
-| WSOS-INS-007 | Fresh machine-id, no live credentials copied | Partial | Hook empties `/etc/machine-id`; `installer/modules/machineid.conf`; untested. |
+| WSOS-INS-007 | Fresh machine-id, no live credentials copied | Done | Fresh machine-id (`machineid.conf` systemd uuid after unpackfs; image hook empties `/etc/machine-id`), system unpacked from the read-only squashfs (not the live overlay with the live user), `networkcfg` dropped so live Wi-Fi/VPN secrets are not copied, post-install script clears device-agent state, enrollment files, SSH host keys and NM connections; live tools removed. `installer/tests/test_config.py`. |
 | WSOS-INS-008 | No dual boot/BIOS (scope) | Done | `partition.conf` erase-only, `allowManualPartitioning: false`, EFI only. |
-| WSOS-INS-009 | First-boot assistant: network, mode, sign-in (skippable) | Partial | `shell/src/screens/FirstRun.tsx` (mode, sign-in, skip; `lib/setup.test.ts`); network step not wired to NetworkManager; not wired to first boot. |
+| WSOS-INS-009 | First-boot assistant: network, mode, sign-in (skippable) | Done | `shell/src/screens/FirstRun.tsx` runs on the first desktop session (`App.tsx`): network step (`FirstRunNetwork.tsx`, live NetworkManager list and join through `sysNetwork`/`sysWifiConnect`, password on nmcli stdin, honest "not available" state), Personal/Enterprise mode, WorkSuite sign-in, all skippable unless policy requires enrollment (`FirstRun.test.tsx`). Removed the post-install call to a non-existent `worksuite-first-boot.service`. |
 
 ## 11 Non-functional
 
@@ -227,12 +229,12 @@ Updated for clipboard history, default apps, Windows-program handling, workspace
 | WSOS-AUP-013 | Update Center admin: publish, promote, pause, pull | Done | `admin.ts` publish/`promoteRelease` (one ring at a time, active only)/`setReleaseState`; admin API `/admin/api/releases/{publish,promote,emergency,<ring>/<pause|resume|pull>}` requires the `desktop.releases.manage` permission (`users.permissions`, CLI `grant`), logged to the admin log and `release_log`. APT pool promotion between suites stays with `tools/repo/publish.sh`. Tests `releases.test.ts`. No console UI buttons yet (API + CLI). |
 | WSOS-ARM-001 | arm64 packages and ISO from same tag | Partial | `.github/workflows/image.yml` matrix builds .debs, ISO and SBOM for amd64 and arm64 (native `ubuntu-24.04-arm` runner) from the same ref; not yet run green. |
 | WSOS-ARM-002 | ARM via UEFI only | Partial | grub-efi for arm64; QEMU `virt` + AAVMF boot in `tests/vm/qemu-arch.sh`/`boot-test.sh`, serial console `ttyAMA0` (`live-build/auto/config`); not yet booted. |
-| WSOS-ARM-003 | Certified ARM list with hardware gates | Missing | No list. |
+| WSOS-ARM-003 | Certified ARM list with hardware gates | Partial | Gates shared by x86 and ARM in `tests/hw/gates.tsv` (UEFI, GPU with a hardware DRM driver, Wi-Fi scan, 3× suspend/resume, audio, storage), `tests/hw/probe.sh` runs them on a machine, `tests/hw/certified.tsv` only allows `certified` with every gate passing plus evidence (`tests/hw/test_hw.py`). No ARM machine has been qualified on real hardware yet, so the list has no certified ARM entry. |
 | WSOS-ARM-004 | Native arm64 builds of Electron, panel, bridge, services, Office | Partial | Shell/Electron and services are built natively on the arm64 runner in `image.yml`; the bridge is `Architecture: all` (Python) and the panel is the shell; Office absent. |
 | WSOS-ARM-005 | App Center arch filtering, AppImage arch check | Done | Catalog items without a build for the device arch are listed as "Not available for ARM64/x86-64" (`catalog.ts`); AppImage ELF machine checked at import and before every run (`appimage.ts`); local .deb arch checked (`service.ts`). Tests `features.test.ts`, `appimage.test.ts`. |
 | WSOS-ARM-006 | No x86 emulation (scope) | Done | None shipped. |
 | WSOS-ARM-007 | Separate ARM performance gates | Partial | Separate `hw-arm64` and `ci-arm64-tcg` profiles in `tests/perf/gates.tsv`, applied to the arm64 `-perf` image in `image.yml`; no ARM reference hardware run. |
-| WSOS-ARM-008 | CI arm64 QEMU UEFI tests | Partial | `tests/vm/boot-test.sh` and `server-e2e.sh` are arch-aware (`tests/vm/qemu-arch.sh`: qemu-system-aarch64, virt, AAVMF UEFI); `image.yml` boots the arm64 ISO. `tests/vm/vm.sh` (manual driver) is still x86_64-only. Not yet run green. |
+| WSOS-ARM-008 | CI arm64 QEMU UEFI tests | Partial | `tests/vm/boot-test.sh` and `server-e2e.sh` are arch-aware (`tests/vm/qemu-arch.sh`: qemu-system-aarch64, virt, AAVMF UEFI); `image.yml` boots the arm64 ISO; `tests/vm/vm.sh` (manual/installer driver) now also runs arm64. Not yet run green. |
 | WSOS-WIPE-001 | Permission, re-auth, typed name, second approver | Done | Separate `desktop.devices.wipe` permission (`worksuite-server grant --permission desktop.devices.wipe`) and a CoreApprovalEngine (`services/server/src/approvals.ts`: permission per action, distinct approver count, policy waiver `wipe_personal_single_approval` for devices marked Personal via `PUT /admin/api/devices/{id}/ownership`), plus admin re-authentication and typed device name on request and approval (`console.ts`). Tests: `services/server/test/console.test.ts` (no permission → 403 for request and approval, requester cannot approve, waiver only for personal devices). |
 | WSOS-WIPE-002 | Data wipe removes tokens, DB, Drive, caches for all users | Done | `services/device-agent/src/host.ts` (`wipeWorkSuiteData`), `agent.ts`; `agent.test.ts` (with fake host). |
 | WSOS-WIPE-003 | Full wipe destroys LUKS slots, refused on unencrypted | Done | `host.ts` (`cryptoErase`), `agent.ts` NOT_ENCRYPTED; `agent.test.ts`. Not exercised on a real LUKS device. |
