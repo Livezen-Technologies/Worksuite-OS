@@ -63,7 +63,7 @@ export class SyncEngine {
       ...(this.o.typeOf(r.module) === 'preference' ? { force: true } : {}),
     }));
 
-    let res: Awaited<ReturnType<SyncEngine['authed']>>;
+    let res: TransportResponse<{ results: MutationResult[] }> | null;
     try {
       res = await this.authed((t) => this.o.transport.postMutations({ batch_id: randomUUID(), mutations }, t));
     } catch (e) {
@@ -110,7 +110,8 @@ export class SyncEngine {
     }
     if (r.status === 'rejected') { this.fail(row.mutation_id, r.error); return 'rejected'; }
 
-    const action = resolveConflict(this.o.typeOf(row.module), row.operation, !!r.server_deleted);
+    const c = r as Extract<MutationResult, { status: 'conflict' }>;
+    const action = resolveConflict(this.o.typeOf(row.module), row.operation, !!c.server_deleted);
     if (action.kind === 'force') {
       // LWW type got a conflict anyway (server lacked force support): rebase and resend.
       this.db.prepare('UPDATE outbox SET base_revision=? WHERE mutation_id=?').run(r.revision, row.mutation_id);
@@ -118,19 +119,19 @@ export class SyncEngine {
     }
     if (action.kind === 'keep_both') {
       this.db.prepare(`INSERT INTO conflicts(account_id, module, object_id, mutation_id, local_version, server_version, server_revision, reason, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?)`).run(...key, row.mutation_id, row.payload, JSON.stringify(r.server_version ?? null), r.revision, action.reason, this.o.now());
+        VALUES (?,?,?,?,?,?,?,?,?)`).run(...key, row.mutation_id, row.payload, JSON.stringify(c.server_version ?? null), r.revision, action.reason, this.o.now());
     }
     del.run(row.mutation_id);
     // Drop any later local edits to the same object into the conflict record too — never silently.
     const later = this.db.prepare('SELECT mutation_id, payload FROM outbox WHERE account_id=? AND module=? AND object_id=?').all(...key) as any[];
     for (const l of later) {
       this.db.prepare(`INSERT INTO conflicts(account_id, module, object_id, mutation_id, local_version, server_version, server_revision, reason, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?)`).run(...key, l.mutation_id, l.payload, JSON.stringify(r.server_version ?? null), r.revision, 'superseded_by_conflict', this.o.now());
+        VALUES (?,?,?,?,?,?,?,?,?)`).run(...key, l.mutation_id, l.payload, JSON.stringify(c.server_version ?? null), r.revision, 'superseded_by_conflict', this.o.now());
       del.run(l.mutation_id);
     }
     this.db.prepare(`INSERT INTO objects(account_id, module, object_id, data, server_revision, deleted, updated_at) VALUES (?,?,?,?,?,?,?)
       ON CONFLICT(account_id, module, object_id) DO UPDATE SET data=excluded.data, server_revision=excluded.server_revision, deleted=excluded.deleted, updated_at=excluded.updated_at`)
-      .run(...key, r.server_deleted ? null : JSON.stringify(r.server_version ?? null), r.revision, r.server_deleted ? 1 : 0, this.o.now());
+      .run(...key, c.server_deleted ? null : JSON.stringify(c.server_version ?? null), r.revision, c.server_deleted ? 1 : 0, this.o.now());
     return 'conflict';
   }
 
