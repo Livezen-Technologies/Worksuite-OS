@@ -10,7 +10,7 @@ Build-Depends: debhelper-compat (= 13), nodejs (>= 22.18), npm,
 # Branding: SVG sources rendered to PNG for Plymouth, GRUB and icons.
  librsvg2-bin, grub-common, fonts-dejavu-core,
 # Wayland bridge: protocol bindings generated with pywayland-scanner from wayland.xml; D-Bus tests on a private bus.
- python3, python3-pywayland, python3-cffi-backend, python3-dbus-next, libwayland-dev, pkgconf, dbus-daemon,
+ python3, python3-pywayland, python3-cffi-backend, python3-dbus-next, python3-yaml, libwayland-dev, pkgconf, dbus-daemon,
 # Installer translations (.ts → .qm).
  qt6-l10n-tools | qttools5-dev-tools
 Standards-Version: 4.7.0
