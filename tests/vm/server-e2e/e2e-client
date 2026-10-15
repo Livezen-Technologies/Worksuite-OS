@@ -1,0 +1,32 @@
+#!/bin/sh
+# Test images only (built with WORKSUITE_TEST_SERVER): enroll against the test server with the token QEMU passes
+# through fw_cfg, let the agent check in and run commands, then ask the package service for updates.
+# Markers go to the serial console for tests/vm/server-e2e.sh.
+set -u
+fw=/sys/firmware/qemu_fw_cfg/by_name/opt/worksuite
+modprobe qemu_fw_cfg 2>/dev/null || true
+[ -r "$fw/token/raw" ] || { echo "WORKSUITE_E2E skipped (no token)"; exit 0; }
+server=$(cat "$fw/server/raw")
+grep -q " ws.test$" /etc/hosts || echo "10.0.2.2 ws.test" >> /etc/hosts   # live-config may rewrite /etc/hosts at boot
+json() { /usr/bin/worksuite-node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log($1)})"; }
+
+# The agent's socket appears once the daemon is up.
+for i in $(seq 1 60); do [ -S /run/worksuite-device-agent/control.sock ] && break; sleep 2; done
+if out=$(worksuite-device-agent enroll --server "$server" < "$fw/token/raw" 2>&1); then
+  echo "WORKSUITE_E2E_ENROLLED $(cat /run/worksuite-device-agent/status.json | json 'j.org_name')"
+else
+  echo "WORKSUITE_E2E_ENROLL_FAILED $out"; exit 1
+fi
+[ -s /run/worksuite-device-agent/policy.json ] && echo "WORKSUITE_E2E_POLICY $(json 'j.version + " " + j.update_mode' < /run/worksuite-device-agent/policy.json)"
+
+# The host queues a command once it sees the device; check in until the command has run.
+for i in $(seq 1 30); do
+  worksuite-device-agent refresh >/dev/null 2>&1
+  if journalctl -u worksuite-device-agent -o cat 2>/dev/null | grep -q command_accepted; then echo "WORKSUITE_E2E_COMMAND_RUN"; break; fi
+  sleep 5
+done
+
+busctl call lk.worksuite.PackageService1 /lk/worksuite/PackageService1 lk.worksuite.PackageService1 CheckForUpdates >/dev/null 2>&1
+st=$(busctl --json=short call lk.worksuite.PackageService1 /lk/worksuite/PackageService1 lk.worksuite.PackageService1 GetUpdateStatus 2>&1)
+echo "WORKSUITE_E2E_UPDATE $(echo "$st" | json 'JSON.parse(j.data[0]).state + " " + JSON.parse(j.data[0]).version + " " + (JSON.parse(j.data[0]).reason ?? "")')"
+echo "WORKSUITE_E2E_DONE"
