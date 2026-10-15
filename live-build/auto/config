@@ -1,12 +1,19 @@
 #!/bin/sh
 # WorkSuite OS ISO: Debian trixie (stable) only — never testing/unstable/sid.
-# Usage: ARCH=amd64|arm64 [SNAPSHOT=20261001T000000Z] lb config
+# Usage: ARCH=amd64|arm64 SNAPSHOT=20261001T000000Z|none lb config
 set -eu
 ARCH="${ARCH:-amd64}"
 case "$ARCH" in amd64|arm64) ;; *) echo "unsupported ARCH=$ARCH" >&2; exit 2 ;; esac
-SNAPSHOT="${SNAPSHOT:?pin a snapshot.debian.org timestamp for reproducible builds}"
-MIRROR="https://snapshot.debian.org/archive/debian/${SNAPSHOT}/"
-SECMIRROR="https://snapshot.debian.org/archive/debian-security/${SNAPSHOT}/"
+SNAPSHOT="${SNAPSHOT:?pin a snapshot.debian.org timestamp for reproducible builds (or none for a local dev build)}"
+if [ "$SNAPSHOT" = none ]; then
+  # Local dev builds only: today's trixie from deb.debian.org, not reproducible. snapshot.debian.org can throttle a
+  # single client to ~15 kB/s, which makes a full desktop chroot take most of a day.
+  MIRROR="https://deb.debian.org/debian/"
+  SECMIRROR="https://security.debian.org/debian-security/"
+else
+  MIRROR="https://snapshot.debian.org/archive/debian/${SNAPSHOT}/"
+  SECMIRROR="https://snapshot.debian.org/archive/debian-security/${SNAPSHOT}/"
+fi
 
 if [ "$ARCH" = amd64 ]; then KFLAVOUR=amd64; else KFLAVOUR=arm64; fi
 

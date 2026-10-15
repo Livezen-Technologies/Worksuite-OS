@@ -2,6 +2,7 @@
 # Build the WorkSuite OS ISO inside Debian trixie (live-build >= 1:20230502; Ubuntu's older live-build lacks
 # options used here). Needs root, network access to snapshot.debian.org, and the .debs from packaging/build-debs.sh.
 #   sudo ARCH=amd64 SNAPSHOT=20261001T000000Z live-build/build.sh
+# SNAPSHOT=none builds a local dev ISO from deb.debian.org (not reproducible; see auto/config).
 # Behind a TLS-intercepting proxy: BUILD_HTTPS_PROXY=http://host:port BUILD_CA_CERT=/path/ca.crt (build time only;
 # a last hook removes both from the image).
 # WORKSUITE_TEST_SERVER=DIR (from tests/vm/server-e2e.sh prepare) builds a separate *-test ISO that trusts that test
@@ -15,7 +16,9 @@ ls "$debs"/*.deb >/dev/null 2>&1 || { echo "build the packages first: packaging/
 v=$(dpkg-query -W -f='${Version}' live-build 2>/dev/null | sed 's/^1://')
 case "$v" in 2023*|2024*|2025*|2026*|2027*) ;; *) echo "live-build $v is too old; build inside Debian trixie" >&2; exit 1 ;; esac
 
-work=$(mktemp -d)
+# Not /tmp: on a stock Debian 13 host it is a nodev tmpfs capped at half the RAM, so the chroot's /dev/null can't be
+# opened and every postinst fails ("cannot create /dev/null: Permission denied").
+work=$(mktemp -d -p /var/tmp worksuite-lb.XXXXXX)
 # A full lb build leaves several GB; --one-file-system never follows a leftover bind mount.
 trap 'cd /; rm -rf --one-file-system "$work"' EXIT
 cp -a "$here/." "$work/"
