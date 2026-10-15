@@ -57,6 +57,12 @@ jobs:
       - run: sudo apt-get install -y --no-install-recommends apparmor apparmor-utils
       - run: tests/security/apparmor.test.sh
       - run: tests/perf/gates.test.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tools/sbom/spdx.test.mjs
+      # No private key material in the tree (WSOS-SEC-011).
+      - run: "! git grep -I -l -e 'BEGIN [A-Z ]*PRIVATE KEY' -- . ':!docs/**'"
 
   apt-repo:
     runs-on: ubuntu-latest

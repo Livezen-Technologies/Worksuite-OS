@@ -8,6 +8,9 @@ if [ "$1" = configure ]; then
   fi
   install -d -m 0700 /var/lib/worksuite-directory
   pam-auth-update --package
+  if command -v apparmor_parser >/dev/null && aa-enabled --quiet 2>/dev/null; then
+    apparmor_parser -r -T -W /etc/apparmor.d/worksuite-directory || true
+  fi
 fi
 #DEBHELPER#
 exit 0

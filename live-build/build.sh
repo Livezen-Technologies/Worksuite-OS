@@ -71,4 +71,7 @@ out="$here/out"; mkdir -p "$out"
 name="worksuite-os-1.0.0-dev-$ARCH${suffix:-}.iso"
 mv "$iso" "$out/$name"
 (cd "$out" && sha256sum "$name" > "$name.sha256")
+# Image package list for the SBOM (tools/sbom/generate.sh, WSOS-SEC-011).
+pk=$(ls ./*.packages 2>/dev/null | head -n1)
+[ -n "$pk" ] && cp "$pk" "$out/${name%.iso}.packages"
 echo "built $out/$name"

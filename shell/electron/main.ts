@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } 
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { appWebPreferences, appWindows } from './appwindows'
 import { bootMode } from './bootmode'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceInfo, enrollDevice } from './device'
@@ -67,6 +68,13 @@ app.whenReady().then(() => {
     return verbs[action] ? run('systemctl', [verbs[action]]) : undefined
   })
   handle('ws:launchApp', (id) => (APP_ID.test(id) ? run('gtk-launch', [id]) : undefined))
+  // WorkSuite web apps: one window and one persistent session partition per app (WSOS-SEC-004).
+  const apps = appWindows({
+    session: (p) => session.fromPartition(p),
+    window: ({ partition, title }) => new BrowserWindow({ title, backgroundColor: '#0f172a', webPreferences: appWebPreferences(partition) }),
+    openExternal: (u) => { if (ALLOWED_SCHEMES.has(new URL(u).protocol)) void shell.openExternal(u) },
+  })
+  handle('ws:openWorkSuiteApp', (id, url) => apps.open(id, url))
   handle('ws:openLink', (url) => {
     const u = new URL(url)
     if (!ALLOWED_SCHEMES.has(u.protocol)) throw new Error('Scheme not allowed')

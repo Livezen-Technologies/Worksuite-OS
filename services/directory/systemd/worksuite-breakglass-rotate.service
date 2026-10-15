@@ -7,6 +7,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
+AppArmorProfile=-worksuite-directory
 Type=oneshot
 ExecStart=/usr/libexec/worksuite/worksuite-pam-directory rotate
 StateDirectory=worksuite-directory

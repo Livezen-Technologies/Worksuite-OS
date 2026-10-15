@@ -5,3 +5,4 @@ services/directory/pam/worksuite-directory usr/share/pam-configs/
 services/directory/systemd/worksuite-breakglass-rotate.service usr/lib/systemd/system/
 services/directory/systemd/worksuite-breakglass-rotate.timer usr/lib/systemd/system/
 services/directory/README.md usr/share/doc/worksuite-directory/
+security/apparmor/worksuite-directory etc/apparmor.d/

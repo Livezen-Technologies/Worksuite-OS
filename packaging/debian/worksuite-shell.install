@@ -4,3 +4,4 @@ shell/package.json usr/lib/worksuite/shell/
 shell/node_modules/electron/dist/* usr/lib/worksuite/shell/electron/
 shell/bin/worksuite-shell usr/lib/worksuite/shell/
 shell/bin/worksuite-node usr/bin/
+security/apparmor/worksuite-shell etc/apparmor.d/

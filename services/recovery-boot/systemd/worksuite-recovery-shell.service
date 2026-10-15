@@ -6,6 +6,8 @@ Conflicts=getty@tty1.service greetd.service
 ConditionKernelCommandLine=worksuite.recovery=1
 
 [Service]
+# WSOS-SEC-009: AppArmor (security/apparmor/worksuite-shell, complain mode for now).
+AppArmorProfile=-worksuite-shell
 Type=simple
 # Unprivileged user; unlock and repair go through udisks / the package service and ask polkit for an admin.
 User=worksuite-recovery

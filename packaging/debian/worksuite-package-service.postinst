@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+# WSOS-SEC-009: (re)load the AppArmor profile now; apparmor.service loads it on every boot.
+if [ "$1" = configure ] && command -v apparmor_parser >/dev/null && aa-enabled --quiet 2>/dev/null; then
+  apparmor_parser -r -T -W /etc/apparmor.d/worksuite-package-service || true
+fi
+#DEBHELPER#
+exit 0
