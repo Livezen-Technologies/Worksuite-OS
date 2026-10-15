@@ -1,6 +1,7 @@
 # Run: python3 -m unittest discover -s installer/modules/worksuiterecovery/tests
 import os
 import sys
+import tempfile
 import types
 import unittest
 
@@ -27,9 +28,14 @@ class RecoveryKeyTests(unittest.TestCase):
         self.code = 0
         self.orig = main.add_key.__defaults__
         main.add_key.__defaults__ = (fake_run,)
+        # /run is root-only outside the installer (package builds run as a normal user).
+        self.orig_dir = main.SECRET_DIR
+        if not os.access(main.SECRET_DIR, os.W_OK):
+            main.SECRET_DIR = tempfile.gettempdir()
 
     def tearDown(self):
         main.add_key.__defaults__ = self.orig
+        main.SECRET_DIR = self.orig_dir
 
     def test_key_format(self):
         k = main.make_key()

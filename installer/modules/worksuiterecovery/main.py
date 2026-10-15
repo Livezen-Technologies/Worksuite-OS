@@ -12,6 +12,8 @@ import libcalamares
 GS_KEY = "worksuiteRecoveryKey"
 # Crockford base32 without I, L, O, U: easy to read back and type at the unlock prompt.
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+# tmpfs, so the passphrase and key files never reach a disk. Tests running as a normal user point this elsewhere.
+SECRET_DIR = "/run"
 
 
 def pretty_name():
@@ -35,7 +37,7 @@ def encrypted_partitions(partitions):
 
 def add_key(device, passphrase, key, run=subprocess.run):
     """cryptsetup luksAddKey with both secrets in 0600 files on tmpfs (never on the command line)."""
-    with tempfile.TemporaryDirectory(dir="/run" if os.path.isdir("/run") else None) as d:
+    with tempfile.TemporaryDirectory(dir=SECRET_DIR if os.path.isdir(SECRET_DIR) else None) as d:
         old, new = os.path.join(d, "old"), os.path.join(d, "new")
         for path, value in ((old, passphrase), (new, key)):
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
