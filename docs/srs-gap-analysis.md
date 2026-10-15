@@ -12,14 +12,14 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | 3 Architecture | 4 | 0 | 4 | 0 | 50% |
 | 4 Boot, login, session, lock | 17 | 1 | 11 | 5 | 38% |
 | 5 Shell | 18 | 1 | 8 | 9 | 28% |
-| 6 Applications | 20 | 6 | 7 | 7 | 48% |
+| 6 Applications | 20 | 15 | 4 | 1 | 85% |
 | 7 Integration and Drive | 19 | 3 | 14 | 2 | 53% |
 | 8 Identity and sync | 18 | 12 | 6 | 0 | 83% |
-| 9 Updates, MDM, installer | 22 | 10 | 12 | 0 | 73% |
+| 9 Updates, MDM, installer | 22 | 11 | 11 | 0 | 75% |
 | 11 Non-functional | 25 | 2 | 15 | 8 | 38% |
-| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 15 | 9 | 16 | 49% |
+| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 20 | 7 | 13 | 59% |
 | Unnumbered requirements (no WSOS ID) | 15 | 3 | 7 | 5 | 43% |
-| **Overall** | **198** | | | | **50.3%** |
+| **Overall** | **198** | | | | **56.3%** |
 
 ## 3 Architecture
 
@@ -79,23 +79,23 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 
 | ID | Requirement | Status | Evidence / reason |
 |---|---|---|---|
-| WSOS-APP-001 | App Center one catalog with source/category/installed/updates filters | Partial | Filters work in `shell/src/screens/AppCenter.tsx`, but the catalog is a hard-coded `APPS` array, not read from APT/Flatpak/WorkSuite catalog. |
+| WSOS-APP-001 | App Center one catalog with source/category/installed/updates filters | Done | `services/package-service/src/catalog.ts` (`GetCatalog`: server `desktop/v1/os/catalog` with the device credential, paging, installed state) → `shell/electron/packages.ts` → `shell/src/lib/appcatalog.ts` + `AppCenter.tsx`; no built-in apps, explicit loading/not-enrolled/unreachable/empty states. Tests `services/package-service/test/features.test.ts`, `shell/src/lib/appcatalog.test.ts`, `shell/electron/packages.test.ts`. |
 | WSOS-APP-002 | Preview of dependency changes and disk space before confirm | Done | `services/package-service/src/service.ts` (`preview`), `shell/electron/packages.ts`; tests `services/package-service/test/service.test.ts`, `shell/electron/packages.test.ts`. |
-| WSOS-APP-003 | Policy allowlist and approved repos; blocked items say why | Partial | Allowlist enforced in `service.ts` (tested); App Center "blocked" reasons come from hard-coded catalog data, not policy. |
+| WSOS-APP-003 | Policy allowlist and approved repos; blocked items say why | Done | Allowlist enforced in `service.ts`; catalog `blocked_reason` computed on the device from policy (`app_allowlist`, `appimages`), server `blocked` flag and arch (`catalog.ts`), shown on each card. Tests `features.test.ts`, `appcatalog.test.ts`. |
 | WSOS-APT-001 | Debian trixie + signed WorkSuite repo, Signed-By | Done | `live-build/config/includes.chroot/etc/apt/sources.list.d/*.sources`, validation in `services/package-service/src/apt.ts`; `tests/repo/apt-e2e.sh` (CI job `apt-repo`). |
 | WSOS-APT-002 | Refuse testing/unstable sources | Done | `apt.ts` `BAD_SUITES`, `live-build/auto/config` guard; tested in `services/package-service/test/service.test.ts`. |
 | WSOS-APT-003 | Critical set removal blocked | Done | `apt.ts` `CRITICAL`/`isCritical`, enforced in `service.ts`; tested. |
 | WSOS-APT-004 | One package lock shared with updates | Done | Single job queue in `service.ts`, coordinator uses it (`coordinator.ts`); tested in `service.test.ts`/`coordinator.test.ts`. |
-| WSOS-APT-005 | Local .deb installs: admin auth, publisher, policy | Missing | No local .deb install path in package service or shell. |
+| WSOS-APT-005 | Local .deb installs: admin auth, publisher, policy | Done | `service.ts` `previewLocalDeb`/`installLocalDeb`, `src/staging.ts` (O_NOFOLLOW, caller must own the file, root-owned copy named by SHA-256): control fields, Maintainer shown as unverified publisher, arch, `allow_local_debs`/allowlist, critical set, apt simulation; install takes the preview token and polkit `lk.worksuite.package.install-local` (auth_admin every time). Shell dialog in `AppCenter.tsx`; files only via native dialog handles. Tests `features.test.ts`, `dbus.test.ts`. |
 | WSOS-APT-006 | Interrupted dpkg detected, audited Repair action | Partial | `dpkg --audit` detection + `Repair` (`service.ts`), tested; detection runs at service start rather than a boot-time unit, and no shell UI surfaces Repair. |
 | WSOS-FLP-001 | Curated remotes; adding a remote needs admin + policy | Partial | Approved remotes from policy (`service.ts` `remoteFor`); no add-remote operation exists (so nothing to guard); only first approved remote ever used. |
 | WSOS-FLP-002 | Install dialogs highlight broad Flatpak permissions | Done | Metadata parsed from `flatpak remote-info` (`service.ts`), shown in `AppCenter.tsx` (`describePermission`); tested in `service.test.ts`. |
-| WSOS-FLP-003 | Review/reset app permissions, remove app data | Missing | App Center "permissions" section is display-only; no reset/data removal operation. |
-| WSOS-FLP-004 | Prune unused runtimes only when unused | Partial | Traceability claims it; no explicit `flatpak uninstall --unused` handling found in `service.ts`. |
-| WSOS-AIM-001 | AppImage import to ~/.local/share/worksuite/appimages with metadata | Missing | Only mock entries in `AppCenter.tsx`. |
-| WSOS-AIM-002 | First run approval; policy may forbid | Missing | Not implemented (policy field exists server-side only). |
-| WSOS-AIM-003 | Verify embedded signatures; no fake verification | Missing | Not implemented. |
-| WSOS-AIM-004 | AppImage updates only if authentic | Missing | Not implemented. |
+| WSOS-FLP-003 | Review/reset app permissions, remove app data | Done | `service.ts` `appPermissions`/`resetAppPermissions` (system overrides), `shell/electron/packages.ts` `flatpakUserClient` (portal permission store, user overrides, `~/.var/app/<id>` removal without following links); App Center Permissions section. Tests `features.test.ts`, `packages.test.ts`. |
+| WSOS-FLP-004 | Prune unused runtimes only when unused | Done | `service.ts` `pruneRuntimes` (job queue) and after Flatpak removal: only `flatpak uninstall --unused`, which keeps every runtime/extension an installed app needs and pinned runtimes; never names runtimes itself. Tested in `features.test.ts`. |
+| WSOS-AIM-001 | AppImage import to ~/.local/share/worksuite/appimages with metadata | Done | `services/package-service/src/appimage.ts` + `worksuite-appimage` CLI (per user): copy to `~/.local/share/worksuite/appimages/<id>/`, `metadata.json` with origin, SHA-256, version, arch, signature; desktop entry and icon read from the SquashFS with `unsquashfs` (nothing executed). Tests `services/package-service/test/appimage.test.ts` (real mksquashfs/unsquashfs). |
+| WSOS-AIM-002 | First run approval; policy may forbid | Done | Stored non-executable until `approve`; the desktop entry runs `worksuite-appimage run <id>`, which refuses unapproved, tampered, wrong-arch or policy-blocked (`appimages: block`, server policy field) files. Tested in `appimage.test.ts`. |
+| WSOS-AIM-003 | Verify embedded signatures; no fake verification | Done | Type 2 embedded `.sha256_sig`/`.sig_key` verified with gpg in a throwaway keyring over the digest with those sections zeroed; invalid signatures refuse import; unsigned files are labelled "checksum only · publisher not verified" (`appcatalog.ts`, desktop entry). Tested with real gpg keys in `appimage.test.ts`. Limitation: digest layout follows appimagetool's documented scheme but was not cross-checked against an appimagetool-signed file. |
+| WSOS-AIM-004 | AppImage updates only if authentic | Done | `AppImages.update`: only a candidate signed by the installed version's key, same arch, is accepted; otherwise "Manual update required". The only adapter is a local file (no zsync/update-information adapter). Tested in `appimage.test.ts`. |
 | WSOS-LCH-001 | Launch via desktop-entry libraries / fixed argv | Partial | `gtk-launch` with validated id via `execFile` (`shell/electron/main.ts`); no test. |
 | WSOS-LCH-002 | X11 apps via on-demand XWayland | Partial | Labwc default XWayland; `DISPLAY` imported in `worksuite-session`; no test. |
 | WSOS-LCH-003 | Windows EXE shows explanation | Missing | No handler for .exe / application/x-ms-dos-executable. |
@@ -154,7 +154,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-UPD-001 | Coordinator: metadata, disk, AC/battery ≥40%, locks, download, apply, reboot, health | Partial | `services/package-service/src/coordinator.ts`, `service.ts` preconditions; tested. No post-update health check / rollback step found. |
 | WSOS-UPD-002 | Rings dev/pilot/stable from policy | Done | `coordinator.ts` ring from policy, server policy validation (`console.ts`); tested in `coordinator.test.ts`, `console.test.ts`. |
 | WSOS-UPD-003 | Maintenance windows, deferral limits, mandatory updates | Done | `services/package-service/src/updates.ts` (`decide`, `canDefer`); `updates.test.ts`. |
-| WSOS-UPD-004 | Release managers pause rollout / emergency release | Partial | Manifest `state: paused/pulled` honoured on device (`updates.ts`, tested); server has publish only (`services/server/src/admin.ts`), no pause/emergency workflow. |
+| WSOS-UPD-004 | Release managers pause rollout / emergency release | Done | Device honours `paused/pulled` (`updates.ts`); server `services/server/src/admin.ts` `setReleaseState`, `emergencyRelease` (critical + mandatory, 100 %, all rings), each re-signed; CLI `release-pause/resume/pull/emergency`, admin API `/admin/api/releases/*`. Tests `services/server/test/releases.test.ts` (verified with the package service's `verifyManifest`). |
 | WSOS-UPD-005 | Report results with OS/shell/kernel versions | Done | `coordinator.ts` → `desktop/v1/os/update-results` (`services/server/src/api.ts`); tested. |
 | WSOS-UPD-006 | Never delete user data/outbox/licences | Partial | Package ops never touch user data by design; no explicit test. |
 | WSOS-MDM-001 | Agent reports hardware, software, versions, update status | Partial | `services/device-agent/src/host.ts` (`facts`, `inventory`); tested with fakes in `agent.test.ts`. Hardware inventory limited. |
@@ -215,17 +215,17 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-AUP-005 | Security updates install except in Manual | Done | `updates.ts`; `updates.test.ts`. |
 | WSOS-AUP-006 | Staged rollout bucket; pause/pull stops | Done | `updates.ts` (`rolloutBucket`); `updates.test.ts`. |
 | WSOS-AUP-007 | ≤3 deferrals, deadline, 15-min warning | Done | `updates.ts` (`MAX_DEFERRALS`, `warn_restart`), `coordinator.ts`; tested. |
-| WSOS-AUP-008 | Resumable downloads; pause on metered unless critical | Partial | Metered handling tested (`updates.ts`); no resumable download logic (apt handles partials implicitly, untested). |
+| WSOS-AUP-008 | Resumable downloads; pause on metered unless critical | Done | `service.ts` `download`: `apt-get --download-only` with `Acquire::Retries`, up to 3 attempts with backoff, partial files in `/var/cache/apt/archives/partial` kept (never cleaned) and resumed by apt's HTTP Range support; an interrupted download leaves the coordinator `waiting: download_interrupted`, not failed. Metered handling in `updates.ts`. Tests `features.test.ts`, `entitlement.test.ts`. The Range resume itself is apt's behaviour, not exercised against a live server here. |
 | WSOS-AUP-009 | Policy mirror, signatures still verified | Done | `coordinator.ts` (`update_mirror`); tested in `coordinator.test.ts`. |
-| WSOS-AUP-010 | Signed .wsupdate bundles from USB | Missing | Only mentioned in `services/package-service/README.md`. |
+| WSOS-AUP-010 | Signed .wsupdate bundles from USB | Done | `services/package-service/src/bundle.ts`: `.wsupdate` = ustar with a release-key-signed manifest listing every `pool/*.deb` (size + SHA-256); verified on `InspectBundle` and again after copying to a root-owned directory; installed with `apt-get --no-download`; arch, downgrade and pulled checks. Read only from `/media`, `/run/media`, `/mnt`, `/home`. Built by `worksuite-server bundle-build`. Settings › Updates "Install from a USB drive". Tests `features.test.ts`, `services/server/test/releases.test.ts`. |
 | WSOS-AUP-011 | Settings › Updates + panel badge; results reported | Partial | Settings › Updates (`Settings.tsx`, `shell/electron/packages.ts`, tested) and result reporting done; no panel badge (native panel missing). |
-| WSOS-AUP-012 | Edition entitlement gating; security during grace | Missing | No licence/entitlement handling. |
-| WSOS-AUP-013 | Update Center admin: publish, promote, pause, pull | Partial | Signed publish in `services/server/src/admin.ts`; no promote/pause/pull or `desktop.releases.manage` permission. |
+| WSOS-AUP-012 | Edition entitlement gating; security during grace | Done | Manifest `entitlement`; `updates.ts` `decide` → `not_entitled` unless the licence is active with that entitlement, or in grace for a security release; licence from `desktop/v1/os/licence` is release-key-signed, device-bound and valid 7 days (`verifyLicence`); a forged licence counts as none. Nothing is removed. Server `licence-set` CLI, `licenceFor`. Tests `entitlement.test.ts`, `releases.test.ts`. No CoreLicenseService integration: licence state is set per org on this server. |
+| WSOS-AUP-013 | Update Center admin: publish, promote, pause, pull | Done | `admin.ts` publish/`promoteRelease` (one ring at a time, active only)/`setReleaseState`; admin API `/admin/api/releases/{publish,promote,emergency,<ring>/<pause|resume|pull>}` requires the `desktop.releases.manage` permission (`users.permissions`, CLI `grant`), logged to the admin log and `release_log`. APT pool promotion between suites stays with `tools/repo/publish.sh`. Tests `releases.test.ts`. No console UI buttons yet (API + CLI). |
 | WSOS-ARM-001 | arm64 packages and ISO from same tag | Partial | `live-build/auto/config` accepts arm64, `packaging/debian/control` arch lists; CI builds amd64 only (`.github/workflows/image.yml`). |
 | WSOS-ARM-002 | ARM via UEFI only | Partial | grub-efi for arm64 configured; never booted. |
 | WSOS-ARM-003 | Certified ARM list with hardware gates | Missing | No list. |
 | WSOS-ARM-004 | Native arm64 builds of Electron, panel, bridge, services, Office | Partial | Package architectures declared; panel/bridge/Office absent; no arm64 build. |
-| WSOS-ARM-005 | App Center arch filtering, AppImage arch check | Missing | Not implemented. |
+| WSOS-ARM-005 | App Center arch filtering, AppImage arch check | Done | Catalog items without a build for the device arch are listed as "Not available for ARM64/x86-64" (`catalog.ts`); AppImage ELF machine checked at import and before every run (`appimage.ts`); local .deb arch checked (`service.ts`). Tests `features.test.ts`, `appimage.test.ts`. |
 | WSOS-ARM-006 | No x86 emulation (scope) | Done | None shipped. |
 | WSOS-ARM-007 | Separate ARM performance gates | Missing | No performance gates at all. |
 | WSOS-ARM-008 | CI arm64 QEMU UEFI tests | Missing | `tests/vm/boot-test.sh` is x86_64 only. |
