@@ -29,7 +29,7 @@ function files(dir: string, ext: RegExp): string[] {
 const ALLOW: Record<string, string[]> = {
   '*': ['WorkSuite OS', 'WorkSuite Cloud', 'worksuite', 'OS', 'SHA-256', 'work.example.com'],
   'src/screens/Installer.tsx': ['*'],
-  'src/screens/Desktop.tsx': ['Super', 'Livezen Technologies · Enterprise · Synced 1 min ago'],
+  'src/screens/Desktop.tsx': ['Super'],
   'src/screens/recovery/Menu.tsx': ['English (US)'],
 }
 

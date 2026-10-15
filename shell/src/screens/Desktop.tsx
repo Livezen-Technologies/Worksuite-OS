@@ -21,11 +21,8 @@ const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F'
 
 const SETTINGS_PAGES: MessageKey[] = ['launcher.page.network', 'settings.nav.Bluetooth', 'launcher.page.displays', 'settings.nav.Sound', 'launcher.page.power', 'settings.nav.Appearance', 'launcher.page.accounts', 'launcher.page.privacy', 'settings.nav.Updates', 'launcher.page.shortcuts']
 
-const RECENT = [
-  { ext: 'XLS', name: 'Q4 budget — Livezen.xlsx', where: 'WorkSuite Cloud › Finance', state: 'Synced', cls: 'bg-[#ecfdf5] text-[#047857]' },
-  { ext: 'DOC', name: 'SFCL proposal v3.docx', where: 'WorkSuite Cloud › Tenders', state: 'Uploading', cls: 'bg-[#eff6ff] text-[#1d4ed8]' },
-  { ext: 'PDF', name: 'Invoice INV-2026-0418.pdf', where: 'This Computer › Downloads', state: 'Local', cls: 'bg-[#f1f5f9] text-[#334155]' },
-]
+// No recent-files source exists yet, so the launcher shows none rather than sample files.
+const RECENT: { ext: string; name: string; where: string; state: string; cls: string }[] = []
 
 // Taskbar pins (running windows from the Wayland bridge join them, components/PanelItems.tsx); entries the org hasn't enabled or that aren't installed drop out.
 const TASKBAR = ['worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office', 'firefox-esr']
@@ -56,7 +53,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   // Do not disturb holds toasts back; notices still collect in the notification center.
   const [dnd, setDnd] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
-  const name = displayName(user) || 'Hasarinda'
+  const name = displayName(user) || user
 
   const time = now.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit', hour12: false })
   const longDate = now.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })
@@ -257,7 +254,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
               <span className="flex size-9 items-center justify-center rounded-full bg-[#1e3a8a] text-sm font-semibold text-white">{name[0]?.toUpperCase()}</span>
               <div className="flex grow flex-col gap-px">
                 <span className="text-[13px] font-semibold">{name}</span>
-                <span className="text-xs text-[#475569]">Livezen Technologies · Enterprise · Synced 1 min ago</span>
+                <span className="text-xs text-[#475569]">{user}</span>
               </div>
               <button type="button" aria-label={t('launcher.appCenter')} onClick={() => launch('appcenter')} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="grid" /></button>
               <button type="button" aria-label={t('launcher.settings')} onClick={() => { setLauncher(false); onOpen('settings') }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="settings" /></button>
