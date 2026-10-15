@@ -243,6 +243,7 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
           rmSync(VPN_KEYFILE, { force: true });
         }
         await run('nft', ['delete', 'table', 'inet', KILLSWITCH_TABLE]).catch(() => {});   // absent → fine
+        rmSync(join(paths.runtimeDir, 'vpn-killswitch.nft'), { force: true });   // the shell reads its presence (captive portal)
         return;
       }
       const priv = readFileSync(join(paths.stateDir, 'wireguard.key'), 'utf8').trim();
@@ -264,6 +265,7 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
         else audit('vpn_killswitch_unresolved', { endpoint: plan.endpoint.host });   // rules already loaded stay in force
       } else {
         await run('nft', ['delete', 'table', 'inet', KILLSWITCH_TABLE]).catch(() => {});
+        rmSync(join(paths.runtimeDir, 'vpn-killswitch.nft'), { force: true });
       }
       if (plan.autoconnect) {
         const active = await run('nmcli', ['-t', '-f', 'UUID', 'connection', 'show', '--active']).catch(() => '');

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   webApps: () => ipcRenderer.invoke('ws:webApps'),
   installedApps: () => ipcRenderer.invoke('ws:installedApps'),
   launchOffice: (kind: string) => ipcRenderer.invoke('ws:launchOffice', String(kind)),
+  launchWorkSuite: (module: string) => ipcRenderer.invoke('ws:launchWorkSuite', String(module)),
   openLink: (url: string) => ipcRenderer.invoke('ws:openLink', String(url)),
   cloudSignIn: (serverUrl: string, mode: string) => ipcRenderer.invoke('ws:cloudSignIn', String(serverUrl), String(mode)),
   cloudSignOut: (accountId: string, choice: string) => ipcRenderer.invoke('ws:cloudSignOut', String(accountId), String(choice)),
@@ -25,7 +26,10 @@ contextBridge.exposeInMainWorld('worksuite', {
   sysWifiConnect: (ssid: string, password: string) => ipcRenderer.invoke('ws:sysWifiConnect', String(ssid), String(password)),
   sysVpn: () => ipcRenderer.invoke('ws:sysVpn'),
   sysVpnImport: (handle: string) => ipcRenderer.invoke('ws:sysVpnImport', String(handle)),
-  sysVpnConnect: (uuid: string, on: boolean) => ipcRenderer.invoke('ws:sysVpnConnect', String(uuid), on ? 'on' : 'off'),
+  sysVpnImportOpenvpn: (handle: string) => ipcRenderer.invoke('ws:sysVpnImportOpenvpn', String(handle)),
+  sysVpnConnect: (uuid: string, on: boolean, creds?: { username: string; password: string }) => creds
+    ? ipcRenderer.invoke('ws:sysVpnConnect', String(uuid), on ? 'on' : 'off', String(creds.username), String(creds.password))
+    : ipcRenderer.invoke('ws:sysVpnConnect', String(uuid), on ? 'on' : 'off'),
   sysVpnRemove: (uuid: string) => ipcRenderer.invoke('ws:sysVpnRemove', String(uuid)),
   sysBluetooth: () => ipcRenderer.invoke('ws:sysBluetooth'),
   sysSetBluetooth: (on: boolean) => ipcRenderer.invoke('ws:sysSetBluetooth', on ? 'on' : 'off'),

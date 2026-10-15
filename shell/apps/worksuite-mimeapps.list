@@ -1,4 +1,6 @@
 # WorkSuite OS defaults: /usr/share/applications/worksuite-mimeapps.list (XDG_CURRENT_DESKTOP=WorkSuite)
 # and /etc/xdg/mimeapps.list. Office document types are claimed by WorkSuite Office's own package when installed.
 [Default Applications]
-x-scheme-handler/worksuite=worksuite-url-handler.desktop
+# worksuite:// goes to WorkSuite Desktop (worksuite.desktop, package worksuite-desktop) when it is installed, else to
+# the web app windows (worksuite-url-handler.desktop): XDG takes the first installed entry of the list.
+x-scheme-handler/worksuite=worksuite.desktop;worksuite-url-handler.desktop;
