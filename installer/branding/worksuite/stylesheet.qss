@@ -95,12 +95,12 @@ QToolTip { background: #0E2048; color: #E8EEFA; border: 1px solid rgba(127, 178,
 /* The partition page's encryption row is a fixed-height strip: smaller passphrase fields so they aren't clipped. */
 EncryptWidget QLineEdit { min-height: 30px; padding: 0 10px; border-radius: 8px; }
 
-/* Calamares fixes the QML sidebar's width (12 lines of text, at most 190 px) and caps the QML footer at 64 px
-   (CalamaresWindow.cpp). Of the two panels directly in the window, the sidebar is the one without a fixed height. */
-#mainApp > QQuickWidget[maximumHeight="16777215"] { min-width: 260px; max-width: 260px; }
-/* Qt also styles each panel as it is created, before Calamares fixes the footer's height, so the footer first
-   takes the sidebar's width; give it back here. */
-#mainApp > QQuickWidget[maximumHeight="64"] { min-height: 80px; max-height: 80px; min-width: 0; max-width: 16777215px; }
+/* Calamares fixes the QML sidebar's width (12 lines of text, at most 190 px) and the QML footer's height (at most
+   64 px; CalamaresWindow.cpp). A minimum above a fixed size wins, so only minimums are set: Qt styles each panel
+   as it is created, before those sizes are fixed, and a maximum set then would stick to the wrong panel.
+   Checked by running Calamares offscreen: sidebar 260 px wide, footer 80 px high. */
+#mainApp > QQuickWidget[maximumHeight="16777215"] { min-width: 260px; }
+#mainApp > QQuickWidget { min-height: 80px; }
 
 /* Partition page (design: Installation type · erase disk). Stock Calamares widgets, styled toward the design. */
 #ChoicePage QScrollArea, #ChoicePage #scrollAreaWidgetContents { background: transparent; border: none; }

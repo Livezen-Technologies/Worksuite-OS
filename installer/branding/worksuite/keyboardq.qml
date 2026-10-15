@@ -6,12 +6,11 @@ import QtQuick.Layouts 1.15
 
 WsPage {
     id: page
+    stepIndex: 1
     eyebrow: qsTr("Step 1 · Keyboard")
     title: qsTr("Keyboard layout")
     subtitle: qsTr("Pick your layout, then type in the box below: the keys you press light up.")
     skipInExpress: true
-    function onActivate() { arrive() }
-    function onLeave() { leave() }
 
     readonly property var rows: ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"]
     readonly property string typed: test.text.toUpperCase()

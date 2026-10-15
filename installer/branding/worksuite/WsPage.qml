@@ -23,8 +23,23 @@ Item {
     default property alias content: body.data
     property WsState state: WsState {}
 
-    // Called from each page's onActivate() / onLeave().
+    // This page's position in settings.conf's sequence (as in calamares-sidebar.qml). Calamares' keyboardq and
+    // summaryq never pass onActivate to their QML, and usersq, keyboardq and localeq never pass onLeave, so pages
+    // follow the current step themselves.
+    property int stepIndex: -1
+    signal activated()
+    Connections {
+        target: ViewManager
+        function onCurrentStepChanged() { page.follow() }
+    }
+    Component.onCompleted: { lastRequest = state.get("subRequest", ""); follow() }
+    function follow() {
+        if (ViewManager.currentStepIndex === stepIndex) arrive()
+        else if (active) leave()
+    }
+
     function arrive() {
+        if (active) return
         active = true
         var i = ViewManager.currentStepIndex
         var last = state.get("lastStep", -1)
@@ -32,6 +47,7 @@ Item {
         if (i < last) subStep = subCount - 1
         state.set("lastStep", i)
         report()
+        activated()
         if (skipInExpress && state.get("express", false)) {
             skipTimer.forward = i > last
             skipTimer.start()
@@ -72,7 +88,6 @@ Item {
             page.report()
         }
     }
-    Component.onCompleted: lastRequest = state.get("subRequest", "")
 
     Image { anchors.fill: parent; source: page.background; sourceSize.width: 1020; sourceSize.height: 720 }
 

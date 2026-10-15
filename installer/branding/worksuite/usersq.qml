@@ -7,12 +7,12 @@ import QtQuick.Layouts 1.15
 
 WsPage {
     id: page
+    stepIndex: 3
     subCount: 2
     eyebrow: subStep === 0 ? qsTr("Step 3 · Name and password") : qsTr("Step 3 · Computer name")
     title: subStep === 0 ? qsTr("Who will use this computer?") : qsTr("Name this computer")
     subtitle: subStep === 0 ? "" : qsTr("Other devices on your network will see it by this name.")
-    function onActivate() { config.setAutoLogin(false); arrive() }
-    function onLeave() { leave() }
+    onActivated: config.setAutoLogin(false)
 
     readonly property string initials: {
         var p = config.fullName.trim().split(/\s+/).filter(function (s) { return s.length })

@@ -7,12 +7,12 @@ import QtQuick.Layouts 1.15
 
 WsPage {
     id: page
+    stepIndex: 4
     eyebrow: qsTr("Step 4 · Region and city")
     title: qsTr("Where are you?")
     skipInExpress: true
     property string region: config.currentLocation ? config.currentLocation.region : ""
-    function onActivate() { config.regionalZonesModel.region = region; arrive() }
-    function onLeave() { leave() }
+    onActivated: config.regionalZonesModel.region = region
 
     function indexOfKey(m, key) {
         for (var i = 0; i < m.rowCount(); i++)

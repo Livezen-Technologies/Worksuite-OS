@@ -7,13 +7,13 @@ import QtQuick.Layouts 1.15
 
 WsPage {
     id: page
+    stepIndex: 0
     eyebrow: qsTr("Step 1 · Language")
     title: qsTr("Choose your language")
     subtitle: qsTr("Used for the installer and your new system.")
     property bool expressChosen: page.state.get("express", true)
     onExpressChosenChanged: page.state.set("express", expressChosen)
-    function onActivate() { page.state.set("express", expressChosen); arrive() }
-    function onLeave() { leave() }
+    onActivated: page.state.set("express", expressChosen)
     readonly property real cardHeight: Math.max(expressCard.implicitHeight, customCard.implicitHeight)
 
     ColumnLayout {
