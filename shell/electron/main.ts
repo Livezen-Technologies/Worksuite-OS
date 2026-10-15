@@ -18,6 +18,7 @@ import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, install
 import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
+import { compress, eject, jobs as fileJobs, mkdirIn, places, recent, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel } from './panelHost'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import { outputWindows } from './outputWindows'
@@ -353,6 +354,23 @@ app.whenReady().then(() => {
     const drive = root === 'drive' ? await syncCall('DriveSummary') : null
     return { free_bytes: r ? freeBytes(r.path) : null, drive: drive?.ok ? drive.value : null }
   })
+  const strs = (json: string): string[] => { try { const v = JSON.parse(json); return Array.isArray(v) ? v.map(String) : [] } catch { return [] } }
+  const fjobs = fileJobs(files, (e) => broadcast('ws:filesJob', e))
+  handle('ws:filesPlaces', () => places(files))
+  handle('ws:filesStarred', () => ({ keys: starred(files), hits: starredHits(files) }))
+  handle('ws:filesStar', (root, rel, on) => setStar(files, root, rel, on === '1'))
+  handle('ws:filesRecent', () => recent(files))
+  handle('ws:filesSearch', (root, rel, q, kind, days) => search(files, root, rel, q, kind, Number(days) || 0))
+  handle('ws:filesMkdir', (root, rel, name) => mkdirIn(files, root, rel, name))
+  handle('ws:filesRename', (root, rel, name) => renameIn(files, root, rel, name))
+  handle('ws:filesTrash', (root, rels) => trash(files, root, strs(rels)))
+  handle('ws:filesTrashList', () => trashList(files))
+  handle('ws:filesTrashRestore', (ids) => trashRestore(files, strs(ids)))
+  handle('ws:filesTrashDelete', (ids) => trashDelete(files, ids === 'all' ? 'all' : strs(ids)))
+  handle('ws:filesPaste', (op, srcRoot, rels, dstRoot, dstRel) => fjobs.start(op, srcRoot, strs(rels), dstRoot, dstRel))
+  handle('ws:filesResolve', (id, r, all) => fjobs.resolve(id, r, all === '1'))
+  handle('ws:filesCompress', (root, rels) => compress(files, root, strs(rels)))
+  handle('ws:filesEject', (id) => eject(files, id))
   followJobs((e) => broadcast(e.kind === 'update_status' ? 'ws:updateStatusChanged' : 'ws:pkgJob', e.kind === 'update_status' ? e.status : e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')
