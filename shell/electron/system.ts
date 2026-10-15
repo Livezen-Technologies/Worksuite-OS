@@ -4,9 +4,11 @@
 // `{ available: false, reason }`, never invented values. The Wi-Fi password only goes to nmcli's stdin (--ask).
 import { execFile, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { certFileName, openvpnNeedsCredentials, ovpnConnectionName, parseOvpn, parseVpnData, renderOvpnForImport, safeRelativeRef } from './openvpn'
+import { parseConnectivity, type Connectivity } from './connectivity'
 
 export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
 export type Exec = (cmd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string; missing?: boolean }>
@@ -182,7 +184,9 @@ export function parseUdisksStatus(text: string): Drive[] {
 /** NetworkManager uuid of the device agent's managed connection (services/device-agent/src/vpn.ts). */
 export const MANAGED_VPN_UUID = '6f1d9a52-3c47-4b8e-9a0d-57e2c1b4f0a3'
 export const AGENT_POLICY_PATH = '/run/worksuite-device-agent/policy.json'
-export interface VpnConnection { name: string; uuid: string; type: 'wireguard' | 'vpn'; active: boolean; device: string | null; managed: boolean }
+/** kind: 'openvpn' for network-manager-openvpn profiles, 'vpn' for other NM VPN plugins. */
+export interface VpnConnection { name: string; uuid: string; type: 'wireguard' | 'vpn'; kind: 'wireguard' | 'openvpn' | 'vpn'; active: boolean; device: string | null; managed: boolean; needs_credentials: boolean }
+export const OPENVPN_SERVICE = 'org.freedesktop.NetworkManager.openvpn'
 export interface VpnState { connections: VpnConnection[]; user_vpn_allowed: boolean; vpn_required: boolean }
 /** What Settings shows before importing; the private key is checked but never returned. */
 export interface WgConfSummary { addresses: string[]; dns: string[]; peers: { public_key: string; endpoint: string | null; allowed_ips: string[] }[]; full_tunnel: boolean }
@@ -238,7 +242,7 @@ export function parseVpnConnections(text: string): VpnConnection[] {
   return text.split('\n').filter((l) => l.trim()).map(splitTerse)
     .filter(([, , type]) => type === 'wireguard' || type === 'vpn')
     .map(([name, uuid, type, active, device]) => ({
-      name, uuid, type: type as 'wireguard' | 'vpn', active: active === 'yes', device: device && device !== '--' ? device : null, managed: uuid === MANAGED_VPN_UUID,
+      name, uuid, type: type as 'wireguard' | 'vpn', kind: type as 'wireguard' | 'vpn', active: active === 'yes', device: device && device !== '--' ? device : null, managed: uuid === MANAGED_VPN_UUID, needs_credentials: false,
     }))
     .sort((a, b) => Number(b.managed) - Number(a.managed) || a.name.localeCompare(b.name))
 }
@@ -265,7 +269,17 @@ export interface VpnDeps {
   readPolicy(): string | null
   /** Writes the validated text to a private (0700 dir, 0600 file) temp path named for nmcli; cleanup removes both. */
   stage(fileName: string, text: string): Promise<{ path: string; cleanup(): Promise<void> }>
+  /** OpenVPN certificates/keys -> the user's private folder (0700 dir, 0600 files), replacing any earlier copy. */
+  storeCerts(connName: string, files: { name: string; data: string | Buffer }[]): Promise<string[]>
+  removeCerts(connName: string): Promise<void>
 }
+
+/** ~/.local/share/worksuite/vpn/<connection name>/: readable by the user and root (NetworkManager) only. */
+export function certDirFor(home: string, connName: string): string {
+  return join(home, '.local', 'share', 'worksuite', 'vpn', connName.replace(/[^A-Za-z0-9 _.()-]/g, '_').replace(/^\.+/, '_'))
+}
+
+export interface OvpnImportFiles { readRef(relPath: string): Buffer | null }
 
 export const realVpnDeps: VpnDeps = {
   readPolicy() { try { return readFileSync(AGENT_POLICY_PATH, 'utf8') } catch { return null } },
@@ -275,6 +289,16 @@ export const realVpnDeps: VpnDeps = {
     await writeFile(path, text, { mode: 0o600 })
     return { path, cleanup: () => rm(dir, { recursive: true, force: true }) }
   },
+  async storeCerts(connName, files) {
+    const dir = certDirFor(homedir(), connName)
+    await rm(dir, { recursive: true, force: true })
+    await mkdir(dir, { recursive: true, mode: 0o700 })
+    await chmod(dir, 0o700)
+    const out: string[] = []
+    for (const f of files) { const p = join(dir, f.name); await writeFile(p, f.data, { mode: 0o600 }); out.push(p) }
+    return out
+  },
+  async removeCerts(connName) { await rm(certDirFor(homedir(), connName), { recursive: true, force: true }) },
 }
 
 // ---------- bridge ----------
@@ -286,6 +310,13 @@ function unavailable(r: { missing?: boolean; stderr: string }, tool: string): { 
 }
 
 export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realWithStdin, vpnDeps: VpnDeps = realVpnDeps) {
+  async function vpnDetails(uuid: string): Promise<{ kind: VpnConnection['kind']; needs_credentials: boolean }> {
+    const svc = await exec('nmcli', ['-g', 'vpn.service-type', 'connection', 'show', 'uuid', uuid])
+    if (svc.code !== 0 || svc.stdout.trim() !== OPENVPN_SERVICE) return { kind: 'vpn', needs_credentials: false }
+    const data = await exec('nmcli', ['-g', 'vpn.data', 'connection', 'show', 'uuid', uuid])
+    return { kind: 'openvpn', needs_credentials: openvpnNeedsCredentials(parseVpnData(data.stdout)) }
+  }
+  const enrich = async (c: VpnConnection): Promise<VpnConnection> => (c.type === 'vpn' ? { ...c, ...(await vpnDetails(c.uuid)) } : c)
   return {
     async network(): Promise<Avail<NetworkState>> {
       const radio = await exec('nmcli', ['-t', '-f', 'WIFI', 'radio'])
@@ -314,7 +345,43 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
       const r = await exec('nmcli', ['-t', '-f', 'NAME,UUID,TYPE,ACTIVE,DEVICE', 'connection', 'show'])
       if (r.code !== 0) return unavailable(r, 'nmcli')
       const policy = vpnDeps.readPolicy()
-      return { available: true, value: { connections: parseVpnConnections(r.stdout), user_vpn_allowed: userVpnAllowed(policy), vpn_required: vpnRequired(policy) } }
+      const connections = await Promise.all(parseVpnConnections(r.stdout).map(enrich))
+      return { available: true, value: { connections, user_vpn_allowed: userVpnAllowed(policy), vpn_required: vpnRequired(policy) } }
+    },
+    /** .ovpn text + its sibling files -> private certificate copies -> `nmcli connection import type openvpn`. */
+    async vpnImportOpenvpn(fileName: string, text: string, refs: OvpnImportFiles): Promise<{ ok: true; value: { uuid: string | null; name: string; needs_credentials: boolean } } | { ok: false; error: string }> {
+      if (!userVpnAllowed(vpnDeps.readPolicy())) return { ok: false, error: 'blocked_by_policy' }
+      const parsed = parseOvpn(text)
+      if (!parsed.ok) return parsed
+      const files: { name: string; data: string | Buffer }[] = []
+      for (const [i, f] of parsed.value.files.entries()) {
+        if (f.inline !== null) { files.push({ name: certFileName(f, i), data: f.inline }); continue }
+        if (!safeRelativeRef(f.path!)) return { ok: false, error: 'unsafe_path' }
+        const data = refs.readRef(f.path!)
+        if (!data) return { ok: false, error: 'missing_certificate' }
+        files.push({ name: certFileName(f, i), data })
+      }
+      const name = ovpnConnectionName(fileName)
+      const list = await exec('nmcli', ['-t', '-f', 'NAME,UUID,TYPE,ACTIVE,DEVICE', 'connection', 'show'])
+      if (list.code === 0 && list.stdout.split('\n').some((l) => splitTerse(l)[0] === name)) return { ok: false, error: 'already_exists' }
+      const certPaths = await vpnDeps.storeCerts(name, files)
+      const staged = await vpnDeps.stage(`${name}.ovpn`, renderOvpnForImport(parsed.lines, parsed.value.files, certPaths))
+      let ok = false
+      try {
+        const r = await exec('nmcli', ['connection', 'import', 'type', 'openvpn', 'file', staged.path])
+        if (r.code !== 0) return { ok: false, error: r.missing ? 'unavailable' : /exist/i.test(r.stderr) ? 'already_exists' : /plugin|unknown.*type|openvpn/i.test(r.stderr) ? 'openvpn_unavailable' : 'import_failed' }
+        ok = true
+        const uuid = /\(([0-9a-f-]{36})\)/i.exec(r.stdout)?.[1] ?? null
+        if (uuid) {
+          // Same name as the file; never autoconnect; password asked at every connect and never stored (flag 2).
+          await exec('nmcli', ['connection', 'modify', 'uuid', uuid, 'connection.id', name, 'connection.autoconnect', 'no',
+            ...(parsed.value.needs_credentials ? ['+vpn.data', 'password-flags=2'] : [])])
+        }
+        return { ok: true, value: { uuid, name, needs_credentials: parsed.value.needs_credentials } }
+      } finally {
+        await staged.cleanup()
+        if (!ok) await vpnDeps.removeCerts(name)
+      }
     },
     /** Validated .conf text (read by main from the user's file-dialog pick) → `nmcli connection import type wireguard`. */
     async vpnImport(fileName: string, text: string): Promise<{ ok: true; value: { uuid: string | null; name: string } } | { ok: false; error: string }> {
@@ -334,9 +401,27 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
         await staged.cleanup()
       }
     },
-    async vpnConnect(uuid: string, on: boolean): Promise<Avail<true>> {
+    /**
+     * OpenVPN profiles that use a password: the user name goes in through nmcli's editor on stdin and the password
+     * through `nmcli --ask` on stdin; neither ever appears on a command line, and the password is not stored.
+     */
+    async vpnConnect(uuid: string, on: boolean, creds?: { username: string; password: string }): Promise<Avail<true>> {
       if (!NM_UUID.test(uuid)) return { available: false, reason: 'invalid_argument' }
       if (!on && uuid === MANAGED_VPN_UUID && vpnRequired(vpnDeps.readPolicy())) return { available: false, reason: 'required_by_organization' }
+      if (on && uuid !== MANAGED_VPN_UUID) {
+        const d = await vpnDetails(uuid)
+        if (d.kind === 'openvpn' && !userVpnAllowed(vpnDeps.readPolicy())) return { available: false, reason: 'blocked_by_policy' }
+        if (d.kind === 'openvpn' && d.needs_credentials) {
+          if (!creds) return { available: false, reason: 'credentials_required' }
+          const bad = (v: unknown) => typeof v !== 'string' || /[\0\r\n]/.test(v) || v.length > 512
+          if (!creds.username || bad(creds.username) || bad(creds.password)) return { available: false, reason: 'invalid_argument' }
+          const ed = await withStdin('nmcli', ['connection', 'edit', 'uuid', uuid], `set vpn.user-name ${creds.username}\nsave persistent\nquit\n`)
+          if (ed.code !== 0) return { available: false, reason: ed.stderr === 'spawn_failed' ? 'nmcli_missing' : 'service_unavailable' }
+          const up = await withStdin('nmcli', ['--ask', '--wait', '30', 'connection', 'up', 'uuid', uuid], `${creds.password}\n`)
+          if (up.code === 0) return { available: true, value: true }
+          return { available: false, reason: /secret|auth|password/i.test(up.stderr) ? 'bad_credentials' : 'connect_failed' }
+        }
+      }
       const r = await exec('nmcli', on ? ['--wait', '30', 'connection', 'up', 'uuid', uuid] : ['connection', 'down', 'uuid', uuid])
       return r.code === 0 ? { available: true, value: true } : unavailable(r, 'nmcli')
     },
@@ -345,9 +430,17 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
       if (!NM_UUID.test(uuid)) return { available: false, reason: 'invalid_argument' }
       if (uuid === MANAGED_VPN_UUID) return { available: false, reason: 'managed_by_organization' }
       const list = await exec('nmcli', ['-t', '-f', 'NAME,UUID,TYPE,ACTIVE,DEVICE', 'connection', 'show'])
-      if (!parseVpnConnections(list.stdout).some((c) => c.uuid === uuid)) return { available: false, reason: 'not_a_vpn' }
+      const conn = parseVpnConnections(list.stdout).find((c) => c.uuid === uuid)
+      if (!conn) return { available: false, reason: 'not_a_vpn' }
+      const kind = (await vpnDetails(uuid)).kind
       const r = await exec('nmcli', ['connection', 'delete', 'uuid', uuid])
+      if (r.code === 0 && kind === 'openvpn') await vpnDeps.removeCerts(conn.name)
       return r.code === 0 ? { available: true, value: true } : unavailable(r, 'nmcli')
+    },
+    /** NetworkManager's connectivity state (portal = captive portal). */
+    async connectivity(): Promise<Avail<Connectivity>> {
+      const r = await exec('nmcli', ['-t', 'networking', 'connectivity'])
+      return r.code === 0 ? { available: true, value: parseConnectivity(r.stdout) } : unavailable(r, 'nmcli')
     },
     async bluetooth(): Promise<Avail<BluetoothState>> {
       const show = await exec('bluetoothctl', ['show'])

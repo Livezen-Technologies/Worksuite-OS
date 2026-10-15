@@ -140,6 +140,7 @@ function VpnSection() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ text: string; error: boolean } | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+  const [ask, setAsk] = useState<{ uuid: string; name: string } | null>(null)
   const act = async (key: string, fn: () => Promise<{ available: boolean; reason?: string } | { ok: boolean; error?: string }>, done: string) => {
     setBusy(key); setMsg(null)
     const res = await fn()
@@ -154,17 +155,30 @@ function VpnSection() {
     if (!f.ok) return f
     return os.sysVpnImport(f.value.handle)
   }, 'VPN added. Connect it when you need it.')
+  const importOvpn = () => act('import', async () => {
+    const f = await os.pickFile('ovpn')
+    if (!f.ok) return f
+    return os.sysVpnImportOpenvpn(f.value.handle)
+  }, 'OpenVPN added. Connect it when you need it.')
+  // OpenVPN with a password: asked here each time, sent once to nmcli's stdin, never stored by the shell.
+  const toggle = (c: { uuid: string; name: string; active: boolean; needs_credentials: boolean }) => {
+    if (!c.active && c.needs_credentials) { setAsk({ uuid: c.uuid, name: c.name }); return }
+    void act(c.uuid, () => os.sysVpnConnect(c.uuid, !c.active), c.active ? `Disconnected from ${c.name}.` : `Connected to ${c.name}.`)
+  }
   return (
     <section aria-label="VPN" className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <h2 className={`m-0 font-normal ${sectionLabel}`}>VPN</h2>
         {r.state === 'ok' && r.value.user_vpn_allowed && (
-          <button type="button" disabled={busy !== null} onClick={() => void importFile()} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{busy === 'import' ? 'Adding…' : 'Import WireGuard file…'}</button>
+          <span className="flex gap-2">
+            <button type="button" disabled={busy !== null} onClick={() => void importFile()} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{busy === 'import' ? 'Adding…' : 'Import WireGuard file…'}</button>
+            <button type="button" disabled={busy !== null} onClick={() => void importOvpn()} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>Import OpenVPN file…</button>
+          </span>
         )}
       </div>
       {r.state === 'loading' ? <Empty title="Reading VPN connections…" /> : r.state !== 'ok' ? <Unavail what="VPN" reason={r.reason} /> : (
         <>
-          {r.value.connections.length === 0 ? <Empty title="No VPN connections">{r.value.user_vpn_allowed ? 'Import a WireGuard .conf file from your VPN provider or IT team.' : 'Your organization doesn’t allow adding VPNs on this device.'}</Empty> : (
+          {r.value.connections.length === 0 ? <Empty title="No VPN connections">{r.value.user_vpn_allowed ? 'Import a WireGuard .conf or OpenVPN .ovpn file from your VPN provider or IT team.' : 'Your organization doesn’t allow adding VPNs on this device.'}</Empty> : (
             <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
               {r.value.connections.map((c) => {
                 const locked = c.managed && c.active && r.value.vpn_required
@@ -173,10 +187,10 @@ function VpnSection() {
                     <Svg d={LOCK} size={18} stroke={c.active ? C.green : C.soft} />
                     <span className="flex flex-1 flex-col gap-0.5">
                       <span className="text-sm" style={{ fontWeight: c.active ? 600 : 400 }}>{c.name}</span>
-                      <span className="text-xs text-[#8FA3C8]">{[c.active ? 'Connected' : 'Not connected', c.type === 'wireguard' ? 'WireGuard' : 'VPN', c.managed ? 'Managed by your organization' : null].filter(Boolean).join(' · ')}</span>
+                      <span className="text-xs text-[#8FA3C8]">{[c.active ? 'Connected' : 'Not connected', c.kind === 'wireguard' ? 'WireGuard' : c.kind === 'openvpn' ? 'OpenVPN' : 'VPN', c.managed ? 'Managed by your organization' : null].filter(Boolean).join(' · ')}</span>
                     </span>
                     {!locked && (
-                      <button type="button" disabled={busy !== null} onClick={() => void act(c.uuid, () => os.sysVpnConnect(c.uuid, !c.active), c.active ? `Disconnected from ${c.name}.` : `Connected to ${c.name}.`)}
+                      <button type="button" disabled={busy !== null} onClick={() => toggle(c)}
                         className={`${c.active ? btnGhost : btnPrimary} px-3 py-1.5 text-[13px]`}>{busy === c.uuid ? (c.active ? 'Disconnecting…' : 'Connecting…') : c.active ? 'Disconnect' : 'Connect'}</button>
                     )}
                     {!c.managed && (
@@ -191,6 +205,7 @@ function VpnSection() {
           <Note>{r.value.vpn_required ? 'Your organization requires its VPN to stay connected on this device.' : 'Imported VPNs connect only when you choose. Their keys are stored by the system, readable only by administrators.'}</Note>
         </>
       )}
+      {ask && <VpnCredentials name={ask.name} onCancel={() => setAsk(null)} onSubmit={(creds) => { const a = ask; setAsk(null); void act(a.uuid, () => os.sysVpnConnect(a.uuid, true, creds), `Connected to ${a.name}.`) }} />}
       {confirmRemove && r.state === 'ok' && (
         <Dialog alert onClose={() => setConfirmRemove(null)}>
           {(tid) => <>
@@ -206,6 +221,27 @@ function VpnSection() {
         </Dialog>
       )}
     </section>
+  )
+}
+
+function VpnCredentials({ name, onCancel, onSubmit }: { name: string; onCancel: () => void; onSubmit: (c: { username: string; password: string }) => void }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  return (
+    <Dialog onClose={onCancel}>
+      {(tid) => <form onSubmit={(e) => { e.preventDefault(); if (username) onSubmit({ username, password }) }}>
+        <div className="flex flex-col gap-3 px-6 pt-6 pb-4">
+          <h2 id={tid} className="m-0 text-[19px] font-bold">Connect to {name}</h2>
+          <label className="flex flex-col gap-1 text-sm">User name<input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} className="rounded-md bg-white/10 px-3 py-2" /></label>
+          <label className="flex flex-col gap-1 text-sm">Password<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-md bg-white/10 px-3 py-2" /></label>
+          <p className="m-0 text-xs text-[#8FA3C8]">Asked each time you connect; the password isn’t saved.</p>
+        </div>
+        <div className={dialogFooter}>
+          <button type="button" onClick={onCancel} className={`${btnGhost} px-4 py-2 text-[13px]`}>Cancel</button>
+          <button type="submit" disabled={!username} className={`${btnPrimary} px-4 py-2 text-[13px]`}>Connect</button>
+        </div>
+      </form>}
+    </Dialog>
   )
 }
 

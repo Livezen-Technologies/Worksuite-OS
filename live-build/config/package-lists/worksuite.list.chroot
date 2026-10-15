@@ -37,6 +37,8 @@ network-manager
 # diagnostics; nft for the managed VPN kill switch (services/device-agent/src/vpn.ts)
 wireguard-tools
 nftables
+# OpenVPN profiles imported in Settings › Network › VPN (shell/electron/openvpn.ts)
+network-manager-openvpn
 bluez
 wireplumber
 upower

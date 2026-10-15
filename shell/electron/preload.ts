@@ -25,7 +25,10 @@ contextBridge.exposeInMainWorld('worksuite', {
   sysWifiConnect: (ssid: string, password: string) => ipcRenderer.invoke('ws:sysWifiConnect', String(ssid), String(password)),
   sysVpn: () => ipcRenderer.invoke('ws:sysVpn'),
   sysVpnImport: (handle: string) => ipcRenderer.invoke('ws:sysVpnImport', String(handle)),
-  sysVpnConnect: (uuid: string, on: boolean) => ipcRenderer.invoke('ws:sysVpnConnect', String(uuid), on ? 'on' : 'off'),
+  sysVpnImportOpenvpn: (handle: string) => ipcRenderer.invoke('ws:sysVpnImportOpenvpn', String(handle)),
+  sysVpnConnect: (uuid: string, on: boolean, creds?: { username: string; password: string }) => creds
+    ? ipcRenderer.invoke('ws:sysVpnConnect', String(uuid), on ? 'on' : 'off', String(creds.username), String(creds.password))
+    : ipcRenderer.invoke('ws:sysVpnConnect', String(uuid), on ? 'on' : 'off'),
   sysVpnRemove: (uuid: string) => ipcRenderer.invoke('ws:sysVpnRemove', String(uuid)),
   sysBluetooth: () => ipcRenderer.invoke('ws:sysBluetooth'),
   sysSetBluetooth: (on: boolean) => ipcRenderer.invoke('ws:sysSetBluetooth', on ? 'on' : 'off'),
