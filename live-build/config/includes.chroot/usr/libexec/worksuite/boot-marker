@@ -1,0 +1,9 @@
+#!/bin/sh
+# One line per check, then a summary the VM test greps for. No secrets; status only.
+for u in greetd worksuite-device-agent dbus polkit; do
+  printf 'WORKSUITE_UNIT %s %s\n' "$u" "$(systemctl is-active "$u.service" 2>/dev/null || true)"
+done
+printf 'WORKSUITE_NODE %s\n' "$(/usr/bin/worksuite-node -p 'process.versions.node' 2>&1 | head -n1)"
+failed=$(systemctl --failed --no-legend --plain | awk '{print $1}' | tr '\n' ' ')
+printf 'WORKSUITE_FAILED %s\n' "${failed:-none}"
+printf 'WORKSUITE_BOOT_OK %s\n' "$(cat /etc/os-release | sed -n 's/^PRETTY_NAME=//p')"

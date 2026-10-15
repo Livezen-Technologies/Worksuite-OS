@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* WorkSuite UI tokens (WSOS-DSK-014): light and dark themes. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-ws-ink: #0f172a;
+  --color-ws-muted: #475569;
+  --color-ws-line: #e2e8f0;
+  --color-ws-surface: #ffffff;
+  --color-ws-subtle: #f8fafc;
+  --color-ws-desk: #172033;
+  --color-ws-night: #0f172a;
+  --color-ws-accent: #2563eb;
+  --color-ws-accent-strong: #1d4ed8;
+  --color-ws-danger: #b91c1c;
+}
+
+@layer base {
+  html, body, #root { height: 100%; margin: 0; }
+  body { font-family: var(--font-sans); color: var(--color-ws-ink); background: var(--color-ws-night); }
+  :focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-ws-ink: #e2e8f0;
+    --color-ws-muted: #94a3b8;
+    --color-ws-line: #334155;
+    --color-ws-surface: #1e293b;
+    --color-ws-subtle: #0f172a;
+  }
+}
+:root[data-theme="dark"] {
+  --color-ws-ink: #e2e8f0;
+  --color-ws-muted: #94a3b8;
+  --color-ws-line: #334155;
+  --color-ws-surface: #1e293b;
+  --color-ws-subtle: #0f172a;
+}

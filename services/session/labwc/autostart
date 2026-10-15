@@ -1,0 +1,2 @@
+# Labwc runs this once the Wayland socket exists.
+/usr/bin/worksuite-session --ready

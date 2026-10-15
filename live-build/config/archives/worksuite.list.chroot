@@ -1,0 +1,2 @@
+# WorkSuite APT repository. Suite per ring: trixie-dev | trixie-pilot | trixie-stable. Images ship stable.
+deb [signed-by=/usr/share/keyrings/worksuite-archive-keyring.gpg] https://download.worksuitecloud.com/os/apt trixie-stable main

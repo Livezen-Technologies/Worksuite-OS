@@ -1,0 +1,63 @@
+#!/bin/sh
+# WorkSuite session launcher. Installed as /usr/bin/worksuite-session.
+#   worksuite-session          run Labwc for the session, clean up when it exits (greetd/wayland-sessions entry)
+#   worksuite-session --ready  called from Labwc autostart once Wayland is up: import env, start worksuite-session.target
+#   worksuite-session --logout stop session cleanly (also used by the shell's Log out)
+set -u
+
+VARS="WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP LABWC_PID"
+
+log() { printf '%s\n' "worksuite-session: $*" | systemd-cat -t worksuite-session -p info 2>/dev/null || true; }
+
+ready() {
+    # WSOS-SES-001: import display environment into the systemd user manager and D-Bus activation
+    # environment BEFORE anything (incl. xdg-desktop-portal) is started.
+    export XDG_CURRENT_DESKTOP=WorkSuite:wlroots
+    export XDG_SESSION_DESKTOP=WorkSuite
+    export XDG_SESSION_TYPE=wayland
+    import="WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP"
+    [ -n "${DISPLAY:-}" ] && import="$import DISPLAY"   # only when XWayland runs
+    [ -n "${LABWC_PID:-}" ] && import="$import LABWC_PID"
+    # shellcheck disable=SC2086
+    systemctl --user import-environment $import
+    # shellcheck disable=SC2086
+    dbus-update-activation-environment --systemd $import
+    # Portals read XDG_CURRENT_DESKTOP at start; restart any instance started too early.
+    systemctl --user try-restart xdg-desktop-portal.service xdg-desktop-portal-wlr.service 2>/dev/null
+    systemctl --user --no-block start worksuite-session.target
+    log "session target started (WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset})"
+}
+
+cleanup() {
+    # WSOS-SES-003: does not rely on the user manager exiting.
+    systemctl --user stop worksuite-sync.service 2>/dev/null          # flushes in-flight batch, closes SQLite
+    systemctl --user stop worksuite-credentials.service 2>/dev/null   # drops in-memory access tokens
+    dbus-send --session --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets \
+        org.freedesktop.Secret.Service.Lock array:objpath:/org/freedesktop/secrets/collection/login >/dev/null 2>&1
+    systemctl --user stop worksuite-session.target 2>/dev/null
+    systemctl --user stop graphical-session.target 2>/dev/null
+    # shellcheck disable=SC2086
+    systemctl --user unset-environment $VARS
+    log "session cleaned up"
+}
+
+case "${1:-}" in
+    --ready)  ready ;;
+    --logout) cleanup; [ -n "${LABWC_PID:-}" ] && kill -TERM "$LABWC_PID" ;;
+    "")
+        # Clear stale variables from a previous session before starting.
+        # shellcheck disable=SC2086
+        systemctl --user unset-environment $VARS 2>/dev/null
+        export XDG_CURRENT_DESKTOP=WorkSuite:wlroots XDG_SESSION_TYPE=wayland
+        labwc -C /etc/xdg/worksuite/labwc
+        rc=$?
+        cleanup
+        # WSOS-SES-006: unexpected compositor exit → greeter shows a notice on next display.
+        if [ "$rc" -ne 0 ]; then
+            mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/worksuite"
+            echo "compositor-exit $rc $(date -u +%FT%TZ)" > "${XDG_STATE_HOME:-$HOME/.local/state}/worksuite/last-session-abnormal"
+        fi
+        exit "$rc"
+        ;;
+    *) echo "usage: worksuite-session [--ready|--logout]" >&2; exit 2 ;;
+esac

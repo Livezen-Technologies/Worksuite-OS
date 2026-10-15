@@ -1,0 +1,14 @@
+{
+  "name": "@worksuite-os/device-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WorkSuite device agent: enrollment, signed policy, heartbeat, signed remote commands, remote wipe (SRS §9.3, §14.3)",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "exports": { ".": "./src/agent.ts" },
+  "scripts": {
+    "test": "node --no-warnings --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": { "typescript": "^5.9.0", "@types/node": "^22.18.0" }
+}

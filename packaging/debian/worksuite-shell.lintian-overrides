@@ -1,0 +1,4 @@
+# Electron is shipped as upstream's prebuilt runtime; it carries its own copies of these libraries.
+worksuite-shell: embedded-library *
+worksuite-shell: unstripped-binary-or-object *
+worksuite-shell: shared-library-lacks-prerequisites *

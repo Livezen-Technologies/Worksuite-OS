@@ -1,0 +1,14 @@
+[Unit]
+Description=WorkSuite panel (layer-shell taskbar)
+PartOf=worksuite-session.target
+After=worksuite-wayland-bridge.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/worksuite/worksuite-panel
+Restart=always
+RestartSec=1s
+Slice=session.slice
+
+[Install]
+WantedBy=worksuite-session.target

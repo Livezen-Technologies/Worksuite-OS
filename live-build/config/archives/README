@@ -1,0 +1,2 @@
+Place the release-signing public key as worksuite.key.chroot / worksuite.key.binary (exported from the offline/HSM
+key, WSOS-SEC-011). The same key ships in worksuite-archive-keyring at /usr/share/keyrings/worksuite-archive-keyring.gpg.

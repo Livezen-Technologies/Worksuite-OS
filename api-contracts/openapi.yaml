@@ -1,0 +1,568 @@
+openapi: 3.1.0
+info:
+  title: WorkSuite Desktop API (desktop/v1 + desktop/v1/os)
+  version: 1.0.0-draft
+  description: |
+    Endpoints used by WorkSuite OS (SRS §10.2, §14.5). Existing desktop/v1 endpoints are described as the OS
+    uses them; the desktop/v1/os group and sync/mutations are new.
+    Every call: `Authorization: Bearer` (OneAuth access token), `X-WS-Device` (device credential, WSOS-IDN-005),
+    optional `X-Request-Id` (echoed; matches server logs). All endpoints sit behind the auth and desktopdevice
+    filters; tenant ownership is enforced server-side — a client-supplied organization ID is never proof of access.
+    Rate limits: 429 with `Retry-After`. Max JSON body 1 MiB unless stated (413 PAYLOAD_TOO_LARGE).
+    Versioning: path-versioned (`v1`); additive changes only within v1; unknown fields are ignored by clients.
+servers:
+  - url: https://{host}/
+    variables:
+      host: { default: worksuite.example.com }
+security:
+  - bearer: []
+    device: []
+tags:
+  - { name: existing }
+  - { name: os, description: New desktop/v1/os group }
+  - { name: sync }
+  - { name: devices }
+
+paths:
+  /.well-known/worksuite-desktop:
+    get:
+      tags: [existing]
+      summary: Enterprise server discovery
+      security: []
+      responses:
+        '200': { description: Discovery document, content: { application/json: { schema: { $ref: '#/components/schemas/Discovery' } } } }
+
+  /desktop/v1/releases/manifest:
+    get:
+      tags: [existing]
+      summary: Signed release manifest (extended with os platform, arch, ring — §14.5)
+      parameters:
+        - { name: platform, in: query, required: true, schema: { type: string, enum: [desktop, os] } }
+        - { name: arch, in: query, required: true, schema: { $ref: '#/components/schemas/Arch' } }
+        - { name: ring, in: query, required: true, schema: { $ref: '#/components/schemas/Ring' } }
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200': { description: Manifest, content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseManifest' } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/bootstrap:
+    get:
+      tags: [existing]
+      summary: User, org, modules and settings at login
+      responses:
+        '200': { description: Bootstrap, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/apps:
+    get:
+      tags: [existing]
+      summary: WorkSuite app catalog (incl. offline level, WSOS-SYN-009)
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200':
+          description: Apps
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, name, offline_level]
+                          properties:
+                            id: { type: string }
+                            name: { type: string }
+                            offline_level: { type: string, enum: [full_offline, cached_read, online_only] }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/policies:
+    get:
+      tags: [existing]
+      summary: Effective signed user/device policy
+      responses:
+        '200': { description: Policy, content: { application/json: { schema: { $ref: '#/components/schemas/Policy' } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/links/resolve:
+    get:
+      tags: [existing]
+      summary: Resolve worksuite:// links
+      parameters: [ { name: url, in: query, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: Target, content: { application/json: { schema: { type: object, properties: { app_id: { type: string }, route: { type: string } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/audit:
+    post:
+      tags: [existing]
+      summary: Client audit events (no secrets, WSOS-SEC-008)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  maxItems: 500
+                  items: { type: object, required: [id, type, at], properties: { id: { type: string, format: uuid }, type: { type: string }, at: { type: string, format: date-time }, data: { type: object } } }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/devices/register:
+    post:
+      tags: [existing, devices]
+      summary: Device enrollment with short-lived enrollment token
+      security: [ { bearer: [] } ]
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enrollment_token, public_key, arch]
+              properties:
+                enrollment_token: { type: string }
+                public_key: { type: string, description: PEM; TPM-backed when available }
+                tpm_backed: { type: boolean }
+                arch: { $ref: '#/components/schemas/Arch' }
+                hostname: { type: string }
+      responses:
+        '201': { description: Device credential, content: { application/json: { schema: { type: object, required: [device_id, credential], properties: { device_id: { type: string }, credential: { type: string } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/devices/heartbeat:
+    post:
+      tags: [existing, devices]
+      summary: Health, versions and observed state; returns pending signed commands
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [os_version, shell_version, kernel_version, policy_version]
+              properties:
+                os_version: { type: string }
+                shell_version: { type: string }
+                kernel_version: { type: string }
+                policy_version: { type: string }
+                update_status: { type: string }
+                observed: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Pending commands
+          content:
+            application/json:
+              schema: { type: object, properties: { commands: { type: array, items: { $ref: '#/components/schemas/CommandEnvelope' } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/devices/commands/{id}/ack:
+    post:
+      tags: [existing, devices]
+      summary: Command result (received → started → completed|failed|rejected)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state: { type: string, enum: [received, started, completed, failed, rejected] }
+                reason: { type: string, description: e.g. REPLAY, EXPIRED, WRONG_DEVICE, NOT_ENCRYPTED }
+      responses:
+        '204': { description: Recorded }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/sync/changes:
+    get:
+      tags: [existing, sync]
+      summary: Record change stream for one stream since a cursor
+      parameters:
+        - { name: stream, in: query, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Changes (tombstones included for the server window, default 30 days — WSOS-SYN-007)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [changes, next_cursor, has_more]
+                properties:
+                  changes: { type: array, items: { $ref: '#/components/schemas/Change' } }
+                  next_cursor: { type: string }
+                  has_more: { type: boolean }
+        '410': { description: CURSOR_EXPIRED — client performs bounded full resync (WSOS-SYN-006), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/sync/events:
+    post:
+      tags: [existing, sync]
+      summary: Client sync telemetry events
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/sync/mutations:
+    post:
+      tags: [sync]
+      summary: Idempotent mutation batch (new)
+      description: |
+        Deduplicated by (account, mutation_id): a repeated mutation returns `duplicate` with the original revision
+        and causes no second business effect (WSOS-SYN-001). Per-record results; one bad record does not fail the batch.
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batch_id, mutations]
+              properties:
+                batch_id: { type: string, format: uuid }
+                mutations: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/Mutation' } }
+      responses:
+        '200':
+          description: Per-mutation results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties: { results: { type: array, items: { $ref: '#/components/schemas/MutationResult' } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/files/{id}/lock:
+    parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+    post:
+      tags: [existing]
+      summary: Take document lock (WSOS-DRV-003)
+      responses:
+        '200': { description: Lock, content: { application/json: { schema: { type: object, properties: { lock_id: { type: string }, expires_at: { type: string, format: date-time } } } } } }
+        '409': { description: LOCKED by another user, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [existing]
+      summary: Release document lock
+      responses:
+        '204': { description: Released }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/catalog:
+    get:
+      tags: [os]
+      summary: Approved Linux apps with policy flags
+      parameters:
+        - { name: arch, in: query, required: true, schema: { $ref: '#/components/schemas/Arch' } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Catalog page
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties: { items: { type: array, items: { $ref: '#/components/schemas/CatalogItem' } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/inventory:
+    post:
+      tags: [os]
+      summary: Hardware + installed-software inventory (WSOS-MDM-001)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [collected_at, hardware, software]
+              properties:
+                collected_at: { type: string, format: date-time }
+                hardware: { type: object, additionalProperties: true }
+                software:
+                  type: array
+                  maxItems: 20000
+                  items: { type: object, required: [source, name, version], properties: { source: { type: string, enum: [apt, flatpak, appimage] }, name: { type: string }, version: { type: string } } }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/update-results:
+    post:
+      tags: [os]
+      summary: Per-update outcome (WSOS-UPD-005, WSOS-AUP-011)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [release_id, result, os_version, shell_version, kernel_version]
+              properties:
+                release_id: { type: string }
+                ring: { $ref: '#/components/schemas/Ring' }
+                arch: { $ref: '#/components/schemas/Arch' }
+                result: { type: string, enum: [success, failed, rolled_back, refused_signature, refused_downgrade] }
+                reboot_required: { type: boolean }
+                health_check: { type: string, enum: [pass, fail, skipped] }
+                os_version: { type: string }
+                shell_version: { type: string }
+                kernel_version: { type: string }
+                error: { type: string }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/diagnostics:
+    post:
+      tags: [os]
+      summary: Approved diagnostic bundle upload (resumable)
+      description: |
+        Resumable: first request with `Upload-Length` creates the upload (201 + Location); subsequent PATCH-style
+        chunks are sent here with `Upload-Offset`. Integrity: `Digest: sha-256=<base64>` of the full bundle, verified
+        on completion (422 DIGEST_MISMATCH). Max bundle 200 MiB.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - { name: Upload-Length, in: header, schema: { type: integer, maximum: 209715200 } }
+        - { name: Upload-Offset, in: header, schema: { type: integer } }
+        - { name: Digest, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, contentMediaType: application/octet-stream } } } }
+      responses:
+        '201': { description: Upload created, headers: { Location: { schema: { type: string } } } }
+        '204': { description: Chunk accepted, headers: { Upload-Offset: { schema: { type: integer } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/directory:
+    get:
+      tags: [os]
+      summary: Directory join settings for this device (§14.4)
+      responses:
+        '200':
+          description: Join settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type: { type: string, enum: [ad, ldap, oneauth, none] }
+                  domain: { type: string }
+                  offline_login_days: { type: integer, default: 7 }
+                  group_role_map: { type: object, additionalProperties: { type: string, enum: [administrator, standard, kiosk] } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/break-glass:
+    post:
+      tags: [os]
+      summary: Escrow the rotated local break-glass admin password (WSOS-DIR-010)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, encrypted_secret, rotated_at]
+              properties:
+                username: { type: string }
+                encrypted_secret: { type: string, description: Encrypted to the org escrow key; server never sees plaintext }
+                rotated_at: { type: string, format: date-time }
+      responses:
+        '204': { description: Stored }
+        default: { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, description: OneAuth access token (≤ 15 min) }
+    device: { type: apiKey, in: header, name: X-WS-Device, description: Device credential from devices/register }
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated UUID; replays within 24 h return the original response.
+      schema: { type: string, format: uuid }
+    RequestId:
+      name: X-Request-Id
+      in: header
+      schema: { type: string, maxLength: 128 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+
+  responses:
+    Error:
+      description: Structured error
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              description: Stable machine code
+              examples: [VALIDATION, PERMISSION_DENIED, TOKEN_EXPIRED, DEVICE_REVOKED, CURSOR_EXPIRED, REVISION_CONFLICT, PAYLOAD_TOO_LARGE, RATE_LIMITED, LOCKED, NOT_FOUND]
+            message: { type: string }
+            request_id: { type: string }
+            retryable: { type: boolean }
+            details:
+              type: array
+              items: { type: object, properties: { field: { type: string }, code: { type: string }, message: { type: string } } }
+
+    Arch: { type: string, enum: [amd64, arm64] }
+    Ring: { type: string, enum: [development, pilot, stable] }
+
+    Page:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array }
+        next_cursor: { type: [string, 'null'] }
+
+    Discovery:
+      type: object
+      properties:
+        api_base: { type: string }
+        oneauth_issuer: { type: string }
+        update_host: { type: string, default: download.worksuitecloud.com }
+
+    ReleaseManifest:
+      description: >
+        Signed OS release manifest per ring and arch, served at
+        https://download.worksuitecloud.com/os/manifests/{ring}/{arch}.json (or the policy's update_mirror).
+        Devices check 15 min after boot and every 6 h (WSOS-AUP-001).
+      type: object
+      required: [release_id, version, min_version, ring, arch, signature]
+      properties:
+        release_id: { type: string }
+        version: { type: string }
+        min_version: { type: string, description: Oldest supported version; devices below it treat the release as mandatory }
+        ring: { $ref: '#/components/schemas/Ring' }
+        arch: { $ref: '#/components/schemas/Arch' }
+        mandatory: { type: boolean }
+        critical: { type: boolean, description: Installs on metered connections and on battery }
+        security: { type: boolean, description: Installs in Automatic and Notify modes (WSOS-AUP-005) }
+        deadline: { type: string, format: date-time, description: For mandatory/critical releases (WSOS-AUP-007) }
+        rollout_percent: { type: integer, minimum: 0, maximum: 100 }
+        state: { type: string, enum: [active, paused, pulled] }
+        rollback_directive:
+          type: [object, 'null']
+          description: Allows this (older) release to replace from_version (WSOS-AUP-003)
+          properties:
+            from_version: { type: string }
+            reason: { type: string }
+        signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the manifest without this field' }
+
+    Policy:
+      type: object
+      required: [version, signature]
+      properties:
+        version: { type: string }
+        update_ring: { $ref: '#/components/schemas/Ring' }
+        update_mode: { type: string, enum: [automatic, notify, manual] }
+        maintenance_window: { type: string }
+        lock_timeout_max_s: { type: integer }
+        offline_access_days: { type: integer }
+        usb_storage: { type: string, enum: [allow, read_only, block] }
+        bluetooth: { type: boolean }
+        app_allowlist: { type: array, items: { type: string } }
+        approved_remotes: { type: array, items: { type: string } }
+        offline_wipe_days: { type: integer, description: WSOS-WIPE-006 offline kill timer; absent = off }
+        update_mirror: { type: string, description: 'WSOS-AUP-009 enterprise mirror (https) for manifests; WorkSuite signatures still required' }
+        signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the policy without this field' }
+
+    CatalogItem:
+      type: object
+      required: [id, source, name, arches]
+      properties:
+        id: { type: string }
+        source: { type: string, enum: [apt, flatpak, appimage] }
+        name: { type: string }
+        arches: { type: array, items: { $ref: '#/components/schemas/Arch' } }
+        required: { type: boolean }
+        blocked: { type: boolean }
+        sha256: { type: string, description: AppImage integrity }
+
+    CommandEnvelope:
+      type: object
+      required: [id, command, device_id, issued_at, expires_at, args, signature]
+      properties:
+        id: { type: string, format: uuid }
+        command: { type: string, enum: [RefreshPolicy, InstallApprovedApplication, ScheduleUpdate, RequestLock, RebootDuringWindow, CollectApprovedDiagnostics, RemoteWipe] }
+        device_id: { type: string }
+        issued_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        args: { type: object }
+        signature:
+          type: object
+          required: [alg, key_id, value]
+          properties: { alg: { const: ed25519 }, key_id: { type: string }, value: { type: string, contentEncoding: base64 } }
+
+    Mutation:
+      type: object
+      required: [mutation_id, module, object_id, operation, base_revision]
+      properties:
+        mutation_id: { type: string, format: uuid }
+        module: { type: string }
+        object_id: { type: string }
+        operation: { type: string, enum: [create, update, delete] }
+        base_revision: { type: [integer, 'null'] }
+        payload: {}
+        force: { type: boolean, description: Last-write-wins types only (preferences) }
+
+    MutationResult:
+      type: object
+      required: [mutation_id, status]
+      properties:
+        mutation_id: { type: string, format: uuid }
+        status: { type: string, enum: [applied, duplicate, conflict, rejected] }
+        revision: { type: integer, description: Authoritative revision (applied/duplicate/conflict) }
+        server_version: { description: Current server data on conflict }
+        server_deleted: { type: boolean }
+        error: { $ref: '#/components/schemas/Error/properties/error' }
+
+    Change:
+      type: object
+      required: [module, object_id, revision, deleted]
+      properties:
+        module: { type: string }
+        object_id: { type: string }
+        revision: { type: integer }
+        deleted: { type: boolean }
+        data: {}

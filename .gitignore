@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-electron/
+*.db
+*.sqlite
+*.tsbuildinfo
+packaging/out/
+live-build/out/

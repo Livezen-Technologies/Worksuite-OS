@@ -1,0 +1,41 @@
+name: Image
+
+# Builds the .debs and the amd64 live ISO inside Debian trixie, then boots it in QEMU (UEFI) and checks the
+# boot marker. Slow (no KVM on hosted runners), so it runs on demand and for release tags.
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: snapshot.debian.org timestamp to build from
+        default: '20261001T000000Z'
+  push:
+    tags: ['v*']
+
+jobs:
+  amd64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: debian:trixie
+      options: --privileged
+    env:
+      SNAPSHOT: ${{ inputs.snapshot || '20261001T000000Z' }}
+      ELECTRON_SKIP_BINARY_DOWNLOAD: ''
+    steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates live-build debootstrap debhelper dpkg-dev fakeroot dbus-daemon qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # -d: Node 22 comes from setup-node, not a dpkg package.
+      - run: packaging/build-debs.sh -d
+      - run: ARCH=amd64 live-build/build.sh
+      - run: tests/vm/boot-test.sh live-build/out/worksuite-os-1.0.0-dev-amd64.iso 2400
+      - uses: actions/upload-artifact@v4
+        with:
+          name: worksuite-os-amd64
+          path: |
+            live-build/out/*.iso
+            live-build/out/*.sha256
+            packaging/out/*.deb

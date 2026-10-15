@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+# One source package, one binary package per serviced component (SRS §11.6, §12.2). Built for amd64 and arm64
+# from the same tag (WSOS-ARM-001). Run from the repository root with packaging/debian copied to ./debian
+# (packaging/build-debs.sh does this).
+export DH_VERBOSE = 1
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# The package service's one runtime dependency (dbus-next) is vendored from its lockfile.
+	cd services/package-service && npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
+	find services/package-service/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore \) -delete
+	# Shell: renderer + Electron main, and the Electron runtime for this architecture.
+	cd shell && npm ci --no-audit --no-fund && npm run build
+	dh_auto_build
+
+override_dh_auto_test:
+	cd services/sync && npm test
+	cd services/credentials && npm test
+	cd services/device-agent && npm test
+	cd shell && npx vitest run
+
+# Electron ships prebuilt and stripped; its shared-library needs are listed in debian/control.
+override_dh_strip:
+	dh_strip --exclude=usr/lib/worksuite/shell/electron
+override_dh_shlibdeps:
+	dh_shlibdeps --exclude=usr/lib/worksuite/shell/electron
+override_dh_dwz:

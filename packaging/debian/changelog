@@ -1,0 +1,6 @@
+worksuite-os (1.0.0~dev1) trixie; urgency=medium
+
+  * First packaged development build: shell, session, user services (sync,
+    credentials broker), package service and device agent.
+
+ -- WorkSuite OS Team <os@worksuitecloud.com>  Thu, 15 Oct 2026 06:00:00 +0000

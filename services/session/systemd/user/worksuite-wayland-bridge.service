@@ -1,0 +1,14 @@
+[Unit]
+Description=WorkSuite Wayland bridge (restricted window operations over D-Bus)
+PartOf=worksuite-session.target
+
+[Service]
+Type=dbus
+ExecStart=/usr/libexec/worksuite/worksuite-wayland-bridge
+BusName=lk.worksuite.WaylandBridge1
+Restart=always
+RestartSec=1s
+Slice=session.slice
+
+[Install]
+WantedBy=worksuite-session.target

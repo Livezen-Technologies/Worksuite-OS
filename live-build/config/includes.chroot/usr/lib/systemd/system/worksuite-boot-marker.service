@@ -1,0 +1,13 @@
+[Unit]
+Description=Report WorkSuite OS boot status on the serial console (VM boot tests)
+After=graphical.target greetd.service
+Wants=graphical.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/worksuite/boot-marker
+StandardOutput=tty
+TTYPath=/dev/ttyS0
+
+[Install]
+WantedBy=graphical.target
