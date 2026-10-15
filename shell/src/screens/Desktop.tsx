@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DesktopProps } from './types'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
+import { LogoMark } from '../components/Logo'
 
 type Kind = 'WorkSuite' | 'Linux app' | 'System'
 interface App { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean }
@@ -226,7 +227,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
 
       <nav aria-label="Taskbar" className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-1.5 border-t border-[#24314a] bg-[rgba(15,23,42,0.94)] px-3 text-[#e2e8f0]">
         <button type="button" aria-label="Open launcher" aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
-          className={`flex size-11 items-center justify-center rounded-[10px] text-white ${launcher ? 'bg-[#2563eb]' : 'bg-[#1e293b] hover:bg-[#334155]'}`}><BIcon name="grid" size={20} /></button>
+          className={`flex size-11 items-center justify-center rounded-[10px] ${launcher ? 'bg-[#334155] ring-2 ring-[#0A6CFF]' : 'bg-[#1e293b] hover:bg-[#334155]'}`}><LogoMark onDark height={30} /></button>
         <div className="mx-1.5 h-7 w-px bg-[#334155]" />
         {TASKBAR.map((t) => {
           const a = byId(t.id)

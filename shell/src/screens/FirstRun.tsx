@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import type { FirstRunProps } from './types'
 import { cloudErrorText, os, serverUrlFor, type CloudAccount } from '../lib/os'
 import { AIconCheck, AIconWifi, AIconAlert } from '../components/AIcons'
+import { LogoMark } from '../components/Logo'
 
 const STEPS = ['Language & region', 'Network', 'Connect to WorkSuite', 'Sign in with OneAuth', 'Privacy & updates'] as const
 type Mode = 'personal' | 'enterprise'
@@ -189,7 +190,7 @@ export default function FirstRun({ onDone }: FirstRunProps) {
       <div className="flex h-[680px] max-h-full w-[1040px] max-w-full overflow-hidden rounded-[20px] border border-[#e2e8f0] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.08)]">
         <aside className="hidden w-[280px] shrink-0 flex-col gap-6 border-r border-[#e2e8f0] bg-[#f8fafc] px-6 py-8 md:flex">
           <div className="flex items-center gap-2.5 text-[15px] font-semibold">
-            <span className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-[#2563eb] font-bold text-white">W</span>
+            <LogoMark height={30} />
             Set up WorkSuite OS
           </div>
           <ol aria-label="Setup steps" className="m-0 flex list-none flex-col gap-1 p-0">

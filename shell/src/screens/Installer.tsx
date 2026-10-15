@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { InstallerProps } from './types'
 import CIcon from '../components/CIcon'
+import { LogoMark } from '../components/Logo'
 
 const STEPS = ['Language', 'Keyboard', 'Time zone', 'Disk', 'Encryption', 'Account', 'Install', 'Done'] as const
 const DISKS = [
@@ -63,7 +64,7 @@ export default function Installer({ onDone }: InstallerProps) {
       <div className="flex h-full max-h-[720px] w-full max-w-[1080px] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.08)]">
         <aside className="hidden w-[260px] shrink-0 flex-col gap-[22px] bg-ws-night px-[22px] py-8 text-slate-200 md:flex">
           <div className="flex items-center gap-2.5 text-[15px] font-semibold">
-            <span className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-blue-600 font-bold text-white">W</span>Install WorkSuite OS
+            <LogoMark onDark height={30} />Install WorkSuite OS
           </div>
           <ol aria-label="Install steps" className="m-0 flex list-none flex-col gap-1 p-0">
             {STEPS.map((s, i) => {

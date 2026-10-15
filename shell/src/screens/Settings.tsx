@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { cloudErrorText, os, policyLines, serverUrlFor, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
 import type { WindowProps } from './types'
 import CIcon from '../components/CIcon'
+import { AppIcon } from '../components/Logo'
 
 const SECTIONS = ['Network', 'Bluetooth', 'Displays', 'Sound', 'Power', 'Printers', 'Apps', 'Accounts', 'Privacy', 'Updates', 'About this device'] as const
 type Section = (typeof SECTIONS)[number]
@@ -217,6 +218,15 @@ function AboutDevice({ compact }: { compact?: boolean }) {
     <div className="flex flex-col gap-4">
       <div className={`${card} flex flex-col gap-2.5 px-5 py-[18px]`}>
         {compact && <div className="text-sm font-semibold">About this device</div>}
+        {!compact && (
+          <div className="flex items-center gap-4 pb-1">
+            <AppIcon size={56} />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[17px] font-semibold">WorkSuite OS</span>
+              <span className="text-[13px] text-ws-muted">{d?.os_version ?? 'Debian 13'}</span>
+            </div>
+          </div>
+        )}
         <dl className="m-0 grid grid-cols-[120px_1fr] gap-y-2 text-[13px]">
           {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-ws-muted">{k}</dt><dd className="m-0">{v}</dd></div>)}
         </dl>

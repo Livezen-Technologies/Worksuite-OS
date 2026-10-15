@@ -4,6 +4,7 @@ import { os } from '../lib/os'
 import { useANow, aShortDate, aTime } from '../components/AClock'
 import { AIconEye, AIconEyeOff, AIconNoWifi, AIconPlus, AIconAlert } from '../components/AIcons'
 import { validateAccountName } from '../components/AAccount'
+import { Lockup } from '../components/Logo'
 
 interface AUser { id: string; name: string; role: string; initial: string }
 const USERS: AUser[] = [
@@ -62,10 +63,7 @@ export default function Greeter({ onSignIn }: GreeterProps) {
       </svg>
 
       <header className="relative flex h-14 shrink-0 items-center justify-between px-7">
-        <div className="flex items-center gap-2.5 text-sm font-semibold">
-          <span className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-[#2563eb] text-[13px] font-bold text-white">W</span>
-          WorkSuite OS
-        </div>
+        <Lockup onDark height={24} />
         <time className="text-sm text-[#cbd5e1]" dateTime={now.toISOString()}>{aShortDate(now)} · {aTime(now)}</time>
       </header>
 
