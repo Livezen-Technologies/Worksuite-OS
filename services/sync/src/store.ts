@@ -12,7 +12,12 @@ export interface LocalWrite {
 }
 
 export class LocalStore {
-  constructor(readonly db: Db, readonly typeOf: (module: string) => DataType, private now = () => Date.now()) {}
+  readonly db: Db;
+  readonly typeOf: (module: string) => DataType;
+  private now: () => number;
+  constructor(db: Db, typeOf: (module: string) => DataType, now: () => number = Date.now) {
+    this.db = db; this.typeOf = typeOf; this.now = now;
+  }
 
   addAccount(a: { id: string; serverUrl: string; orgId: string; userId: string; mode: 'personal' | 'enterprise' }) {
     this.db.prepare('INSERT OR REPLACE INTO accounts(id, server_url, org_id, user_id, mode) VALUES (?,?,?,?,?)')
