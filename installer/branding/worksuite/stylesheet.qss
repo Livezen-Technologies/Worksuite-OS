@@ -1,0 +1,92 @@
+/* WorkSuite installer pages (design: "WorkSuite OS Boot & Install" › Installer). Sidebar and footer are QML. */
+* {
+    font-family: "IBM Plex Sans";
+    font-size: 14px;
+}
+#mainApp, QWidget {
+    background-color: #0A1A3D;
+    color: #E8EEFA;
+}
+QLabel { background: transparent; color: #E8EEFA; }
+QLabel:disabled { color: #5E739C; }
+/* Page titles some modules set (welcome, summary, finished) */
+QLabel#mainText, QLabel#titleLabel { font-size: 32px; font-weight: 700; }
+
+QLineEdit, QSpinBox, QComboBox, QPlainTextEdit, QTextEdit {
+    background-color: rgba(4, 10, 26, 0.5);
+    border: 1px solid rgba(127, 178, 255, 0.2);
+    border-radius: 10px;
+    padding: 0 14px;
+    min-height: 42px;
+    color: #E8EEFA;
+    selection-background-color: #1F6BFF;
+}
+QPlainTextEdit, QTextEdit { padding: 10px 14px; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 1px solid #7FB2FF; }
+QLineEdit[echoMode="2"] { lineedit-password-character: 9679; }
+QComboBox::drop-down { border: none; width: 36px; }
+QComboBox QAbstractItemView {
+    background: #0E2048; border: 1px solid rgba(127, 178, 255, 0.2); selection-background-color: #1F6BFF; outline: 0;
+}
+
+QListView, QTreeView, QTableView {
+    background-color: rgba(14, 32, 72, 0.6);
+    border: 1px solid rgba(127, 178, 255, 0.16);
+    border-radius: 12px;
+    padding: 6px;
+    outline: 0;
+    alternate-background-color: rgba(14, 32, 72, 0.6);
+}
+QListView::item, QTreeView::item { padding: 9px 10px; border-radius: 8px; color: #E8EEFA; }
+QListView::item:selected, QTreeView::item:selected, QTableView::item:selected { background: #1F6BFF; color: #FFFFFF; }
+QListView::item:hover:!selected, QTreeView::item:hover:!selected { background: rgba(127, 178, 255, 0.08); }
+QHeaderView::section { background: transparent; color: #8FA3C8; border: none; padding: 6px 10px; font-size: 12px; }
+
+QPushButton, QToolButton {
+    background: transparent;
+    color: #E8EEFA;
+    border: 1px solid rgba(127, 178, 255, 0.25);
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-weight: 500;
+}
+QPushButton:hover, QToolButton:hover { background: rgba(255, 255, 255, 0.06); }
+QPushButton:pressed, QToolButton:pressed { background: rgba(255, 255, 255, 0.1); }
+QPushButton:default { background: #1F6BFF; border: none; color: #FFFFFF; font-weight: 600; }
+QPushButton:disabled, QToolButton:disabled { color: #5E739C; border-color: rgba(127, 178, 255, 0.1); }
+
+QRadioButton, QCheckBox { spacing: 10px; color: #E8EEFA; background: transparent; }
+QRadioButton::indicator, QCheckBox::indicator { width: 18px; height: 18px; }
+QRadioButton::indicator { border-radius: 9px; border: 2px solid #5E739C; background: transparent; }
+QRadioButton::indicator:checked { border: 5px solid #1F6BFF; background: #FFFFFF; }
+QCheckBox::indicator { border-radius: 4px; border: 2px solid #5E739C; background: transparent; }
+QCheckBox::indicator:checked { border: 2px solid #1F6BFF; background: #1F6BFF; }
+
+QGroupBox {
+    border: 1px solid rgba(127, 178, 255, 0.16);
+    border-radius: 12px;
+    margin-top: 22px;
+    padding: 16px;
+    background: rgba(14, 32, 72, 0.6);
+}
+QGroupBox::title { subcontrol-origin: margin; left: 4px; padding: 0 4px; color: #C9D6EE; font-weight: 500; }
+
+/* Install progress (design: Install progress): thin gradient bar */
+QProgressBar {
+    border: none;
+    border-radius: 5px;
+    background: rgba(127, 178, 255, 0.12);
+    max-height: 10px;
+    text-align: center;
+    color: transparent;
+}
+QProgressBar::chunk {
+    border-radius: 5px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1F6BFF, stop:1 #18D4F0);
+}
+
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+QScrollBar::handle:vertical { background: rgba(127, 178, 255, 0.25); border-radius: 4px; min-height: 30px; }
+QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page { background: none; height: 0; }
+QScrollArea { border: none; background: transparent; }
+QToolTip { background: #0E2048; color: #E8EEFA; border: 1px solid rgba(127, 178, 255, 0.25); padding: 6px 8px; }

@@ -2,11 +2,11 @@
 componentName: worksuite
 welcomeStyleCalamares: false
 welcomeExpandingLogo: true
-windowExpanding: normal
+windowExpanding: fullscreen
 windowSize: 900px,620px
 windowPlacement: center
-sidebar: widget
-navigation: widget
+sidebar: qml
+navigation: qml
 
 strings:
   productName: WorkSuite OS
@@ -29,7 +29,7 @@ slideshow: "show.qml"
 slideshowAPI: 2
 
 style:
-  SidebarBackground: "#0f172a"
-  SidebarText: "#f8fafc"
-  SidebarTextCurrent: "#ffffff"
-  SidebarBackgroundCurrent: "#2563eb"
+  SidebarBackground: "#071330"
+  SidebarText: "#E8EEFA"
+  SidebarTextCurrent: "#FFFFFF"
+  SidebarBackgroundCurrent: "#1F6BFF"

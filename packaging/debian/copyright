@@ -16,3 +16,9 @@ Files: services/package-service/node_modules/*
 Copyright: the respective authors of dbus-next and its dependencies
 License: MIT
  See the LICENSE files inside each module directory.
+
+Files: branding/fonts/ibm-plex/*
+Copyright: 2017 IBM Corp. with Reserved Font Name "Plex"
+License: OFL-1.1
+ This Font Software is licensed under the SIL Open Font License, Version 1.1.
+ The full license text is in branding/fonts/ibm-plex/LICENSE.txt and at https://openfontlicense.org
