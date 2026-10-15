@@ -230,7 +230,12 @@ WorksuiteConfirmViewStep::widget()
     m_widget = new QWidget;
     m_widget->setObjectName( m_mode == Mode::Erase ? QStringLiteral( "wsConfirm" ) : QStringLiteral( "wsRecovery" ) );
     m_widget->setAttribute( Qt::WA_StyledBackground );
-    auto* layout = new QVBoxLayout( m_widget );
+    // Calamares strips the margins of a page's own layout, so the content sits in an inner widget with them.
+    auto* outer = new QVBoxLayout( m_widget );
+    auto* inner = new QWidget;
+    inner->setObjectName( QStringLiteral( "wsPageBody" ) );
+    outer->addWidget( inner );
+    auto* layout = new QVBoxLayout( inner );
     layout->setContentsMargins( 56, 40, 56, 24 );
     layout->setSpacing( 22 );
 
@@ -360,7 +365,8 @@ WorksuiteConfirmViewStep::onActivate()
                                 ? tr( "The target disk could not be identified. Go back and choose the disk again." )
                                 : tr( "After you press Install, these changes can't be undone." ) );
         m_diskName->setText( m_disk.isEmpty() ? tr( "Unknown disk" )
-                                              : QStringLiteral( "%1 · %2" ).arg( model.isEmpty() ? m_disk : model, size ) );
+                             : model.isEmpty()    ? QStringLiteral( "%1 · %2" ).arg( m_disk, size )
+                                                  : QStringLiteral( "%1 · %2 (%3)" ).arg( model, size, m_disk ) );
         m_diskNode->setText( m_disk.isEmpty() ? QString() : QStringLiteral( "/dev/" ) + m_disk );
         while ( auto* item = m_ops->takeAt( 0 ) )
         {

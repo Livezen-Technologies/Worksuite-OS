@@ -138,6 +138,7 @@ QDialogButtonBox { background: transparent; }
 #wsTag[kind="DELETE"] { color: #FF8A7A; background: rgba(255, 138, 122, 0.18); }
 #wsTag[kind="FORMAT"] { color: #C9D6EE; background: rgba(127, 178, 255, 0.12); }
 #wsOp { font-size: 14px; }
+#wsPageBody, #wsDiskCard QWidget, #wsKeyBox QWidget { background: transparent; }
 #wsFieldLabel { color: #C9D6EE; font-size: 13px; font-weight: 500; }
 #wsConfirmInput { font-family: "IBM Plex Mono"; min-height: 42px; border-color: rgba(255, 159, 90, 0.5); }
 #wsConfirmInput:focus { border-color: #FF9F5A; }
