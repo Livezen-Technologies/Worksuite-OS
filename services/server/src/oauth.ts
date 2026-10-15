@@ -5,7 +5,10 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import type { DatabaseSync } from 'node:sqlite';
 import { escapeHtml, HttpError, send, type Ctx, type Router } from './http.ts';
 import { secret, sha256, tx } from './db.ts';
+import { redeemLoginCode, verifyDirectoryUser } from './identity.ts';
 
+export const TOKEN_EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange';
+export const OS_LOGIN_CODE = 'urn:worksuite:params:oauth:token-type:os-login-code';
 export const ACCESS_TTL_S = 15 * 60;
 const REFRESH_TTL_MS = 30 * 86_400_000;
 const CODE_TTL_MS = 2 * 60_000;
@@ -69,6 +72,7 @@ label{display:grid;gap:6px;font-size:14px;color:#94a3b8}</style></head><body>
 <form method="post" action="authorize"><h1>Sign in to WorkSuite</h1>${message ? `<p class="err" role="alert">${escapeHtml(message)}</p>` : ''}
 <label>Email<input name="email" type="email" autocomplete="username" required autofocus></label>
 <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+<label>Verification code (if your account uses one)<input name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6"></label>
 ${hidden}<button type="submit">Sign in</button></form></body></html>`;
 }
 
@@ -81,7 +85,7 @@ export function oauthRoutes(r: Router, db: DatabaseSync, o: OAuthOptions) {
     userinfo_endpoint: `${base}/userinfo`,
     revocation_endpoint: `${base}/revoke`,
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code', 'refresh_token'],
+    grant_types_supported: ['authorization_code', 'refresh_token', TOKEN_EXCHANGE],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none'],
     scopes_supported: ['openid', 'profile', 'offline_access'],
@@ -106,8 +110,11 @@ export function oauthRoutes(r: Router, db: DatabaseSync, o: OAuthOptions) {
   r.on('POST', '/oauth/authorize', async (ctx) => {
     const p = new URLSearchParams(await ctx.body() as Record<string, string>);
     checkAuthz(p);
-    const user = checkPassword(db, p.get('email') ?? '', p.get('password') ?? '');
-    if (!user) return send(ctx, 401, loginPage(p, 'Email or password is incorrect.'), html);
+    // WSOS-DIR-009: TOTP when the account has one enrolled.
+    const v = verifyDirectoryUser(db, null, (p.get('email') ?? '').trim().toLowerCase(), p.get('password') ?? '', { otp: p.get('otp') ?? '' });
+    if (!v.ok && v.code === 'MFA_REQUIRED') return send(ctx, 401, loginPage(p, 'Enter the 6-digit code from your authenticator app.'), html);
+    if (!v.ok || v.user.disabled) return send(ctx, 401, loginPage(p, 'Email, password or code is incorrect.'), html);
+    const user = v.user;
     const code = secret('wsc');
     db.prepare('INSERT INTO oauth_codes (hash, user_id, client_id, redirect_uri, challenge, expires) VALUES (?, ?, ?, ?, ?, ?)')
       .run(sha256(code), user.id, p.get('client_id')!, p.get('redirect_uri')!, p.get('code_challenge')!, Date.now() + CODE_TTL_MS);
@@ -131,6 +138,16 @@ export function oauthRoutes(r: Router, db: DatabaseSync, o: OAuthOptions) {
       const challenge = createHash('sha256').update(f.code_verifier ?? '').digest('base64url');
       if (!/^[A-Za-z0-9._~-]{43,128}$/.test(f.code_verifier ?? '') || challenge !== row.challenge) return tokenError(ctx, 'invalid_grant');
       return send(ctx, 200, issueTokens(db, row.user_id, f.client_id));
+    }
+    // WSOS-DIR-008: RFC 8693 token exchange of the one-time code from a directory sign-in at the greeter. The code is
+    // bound to the device; the device credential must come with it.
+    if (f.grant_type === TOKEN_EXCHANGE) {
+      if (f.subject_token_type !== OS_LOGIN_CODE) return tokenError(ctx, 'invalid_request');
+      const dev = db.prepare('SELECT id, revoked FROM devices WHERE cred_hash = ?').get(sha256(ctx.header('x-ws-device') ?? '')) as { id: string; revoked: number } | undefined;
+      if (!dev || dev.revoked) return tokenError(ctx, 'invalid_grant');
+      const userId = redeemLoginCode(db, f.subject_token ?? '', dev.id);
+      if (userId === null) return tokenError(ctx, 'invalid_grant');
+      return send(ctx, 200, { ...issueTokens(db, userId, f.client_id), issued_token_type: 'urn:ietf:params:oauth:token-type:refresh_token' });
     }
     if (f.grant_type === 'refresh_token') {
       const out = tx(db, () => {

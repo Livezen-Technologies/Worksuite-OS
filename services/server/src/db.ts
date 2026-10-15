@@ -102,6 +102,19 @@ export function openDb(path: string): DatabaseSync {
   const orgCols = (db.prepare('PRAGMA table_info(orgs)').all() as { name: string }[]).map((c) => c.name);
   if (!orgCols.includes('licence')) db.exec('ALTER TABLE orgs ADD COLUMN licence TEXT');
   if (!orgCols.includes('web_apps')) db.exec('ALTER TABLE orgs ADD COLUMN web_apps TEXT');
+  // Directory sign-in: TOTP second factor, password expiry / change-at-next-login, OS login codes (WSOS-DIR-007/008/009).
+  if (!cols.includes('totp_secret')) db.exec('ALTER TABLE users ADD COLUMN totp_secret TEXT');
+  if (!cols.includes('pw_changed_at')) db.exec('ALTER TABLE users ADD COLUMN pw_changed_at INTEGER');
+  if (!cols.includes('must_change_pw')) db.exec('ALTER TABLE users ADD COLUMN must_change_pw INTEGER NOT NULL DEFAULT 0');
+  db.exec('CREATE TABLE IF NOT EXISTS totp_used (user_id INTEGER PRIMARY KEY, last_counter INTEGER NOT NULL)');
+  db.exec('CREATE TABLE IF NOT EXISTS login_codes (hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, device_id TEXT NOT NULL, expires INTEGER NOT NULL)');
+  // Wipe results and device marking (WSOS-WIPE-001/008).
+  const devCols = (db.prepare('PRAGMA table_info(devices)').all() as { name: string }[]).map((c) => c.name);
+  if (!devCols.includes('ownership')) db.exec("ALTER TABLE devices ADD COLUMN ownership TEXT NOT NULL DEFAULT 'corporate'");
+  if (!devCols.includes('wiped_at')) db.exec('ALTER TABLE devices ADD COLUMN wiped_at INTEGER');
+  const wipeCols = (db.prepare('PRAGMA table_info(wipe_requests)').all() as { name: string }[]).map((c) => c.name);
+  if (!wipeCols.includes('result')) db.exec('ALTER TABLE wipe_requests ADD COLUMN result TEXT');
+  if (!wipeCols.includes('result_at')) db.exec('ALTER TABLE wipe_requests ADD COLUMN result_at INTEGER');
   db.exec('CREATE TABLE IF NOT EXISTS release_log (id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL, at INTEGER NOT NULL)');
   return db;
 }

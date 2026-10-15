@@ -14,6 +14,9 @@
 //   worksuite-server release-emergency --db server.db manifest.json [--arch amd64]   (critical, all rings, 100 %)
 //   worksuite-server bundle-build --db server.db manifest.json OUT.wsupdate A.deb [B.deb ...]   (offline update)
 //   worksuite-server grant --db server.db --email a@example.com --permission desktop.releases.manage [--revoke]
+//   worksuite-server directory-set --db server.db --org 1 directory.json   (offline_login_days, password_max_age_days, domain, netbios_domain, upn_suffixes)
+//   worksuite-server totp-enroll|totp-remove --db server.db --email a@example.com      (WSOS-DIR-009; prints the otpauth URI)
+//   worksuite-server password-expire --db server.db --email a@example.com [--revoke]   (change at next sign-in, WSOS-DIR-007)
 //   worksuite-server licence-set --db server.db --org 1 licence.json   ({edition, state, entitlements, grace_until})
 //   worksuite-server keys-export --db server.db DIR | keys-rotate --db server.db | devices --db server.db | device-revoke --db server.db --device ID
 import { createReadStream, readFileSync, realpathSync, statSync } from 'node:fs';
@@ -23,6 +26,7 @@ import { createServer as createHttps } from 'node:https';
 import { parseArgs } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
 import * as admin from './admin.ts';
+import * as identity from './identity.ts';
 import { apiRoutes, purgeTombstones } from './api.ts';
 import { openDb } from './db.ts';
 import { HttpError, makeCtx, Router, sendError } from './http.ts';
@@ -128,6 +132,11 @@ async function main(argv: string[]) {
       if (!dest) throw new Error('usage: bundle-build manifest.json OUT.wsupdate A.deb [B.deb ...]');
       return out(admin.buildBundle(db, readJson(manifest), debs, dest));
     }
+    case 'directory-set': return out(admin.setDirectory(db, org(), readJson(positionals[0])));
+    // Prints the otpauth:// URI once (to stdout, for the user's authenticator app); never takes a secret on argv.
+    case 'totp-enroll': return out(identity.enrollTotp(db, v.email ?? ''));
+    case 'totp-remove': identity.removeTotp(db, v.email ?? ''); return out('ok');
+    case 'password-expire': identity.requirePasswordChange(db, v.email ?? '', !v.revoke); return out('ok');
     case 'grant': return out(admin.grantPermission(db, v.email ?? '', v.permission ?? '', !v.revoke));
     case 'licence-set': return out(admin.setLicence(db, org(), readJson(positionals[0])));
     case 'catalog-put': admin.putCatalogItem(db, readJson(positionals[0])); return;
