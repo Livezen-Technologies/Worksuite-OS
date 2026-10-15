@@ -5,6 +5,7 @@
 #   tests/vm/vm.sh shot DIR NAME               DIR/NAME.png
 #   tests/vm/vm.sh keys DIR KEY...             QEMU key names: tab ret spc esc up down shift-tab ctrl-a …
 #   tests/vm/vm.sh type DIR TEXT               types [A-Za-z0-9 .@_-]
+#   tests/vm/vm.sh console DIR LINE         send LINE to the serial console (log in as user/live on the live ISO)
 #   tests/vm/vm.sh stop DIR
 set -eu
 cmd=${1:?}; dir=${2:?}
@@ -16,7 +17,7 @@ run() {
   qemu-system-x86_64 -machine q35,accel=$accel -m 4096 -smp 4 -cpu max \
     -drive if=pflash,format=raw,readonly=on,file="$code" -drive if=pflash,format=raw,file="$dir/vars.fd" \
     -drive if=virtio,format=qcow2,file="$dir/disk.qcow2" "$@" \
-    -vga virtio -display none -monitor "unix:$dir/monitor.sock,server,nowait" -serial "file:$dir/serial.log" \
+    -vga virtio -display none -monitor "unix:$dir/monitor.sock,server,nowait" -chardev "socket,id=s0,path=$dir/serial.sock,server=on,wait=off,logfile=$dir/serial.log" -serial chardev:s0 \
     -device virtio-tablet-pci -device virtio-keyboard-pci -nic user,model=virtio-net-pci -daemonize -pidfile "$dir/qemu.pid"
 }
 case "$cmd" in
@@ -31,6 +32,7 @@ type) t=${3:?text}; i=0
           [a-z0-9]) k=$c ;; [A-Z]) k="shift-$(printf %s "$c" | tr A-Z a-z)" ;; ' ') k=spc ;; .) k=dot ;; @) k=shift-2 ;; _) k=shift-minus ;; -) k=minus ;;
           *) echo "cannot type '$c'" >&2; exit 2 ;;
         esac; mon "sendkey $k"; sleep 0.15; done ;;
+console) printf '%s\r' "${3:?line}" | socat -t 2 - "UNIX-CONNECT:$dir/serial.sock" >/dev/null ;;
 stop) [ -f "$dir/qemu.pid" ] && kill "$(cat "$dir/qemu.pid")" 2>/dev/null || true ;;
 *) echo "unknown command $cmd" >&2; exit 2 ;;
 esac
