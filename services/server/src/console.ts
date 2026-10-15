@@ -44,6 +44,8 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   offline_access_days: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 365,
   usb_storage: (v) => v === 'allow' || v === 'read_only' || v === 'block',
   bluetooth: (v) => typeof v === 'boolean',
+  login_failures_max: (v) => Number.isInteger(v) && (v as number) >= 3 && (v as number) <= 20,
+  login_lockout_s: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 86_400,
   app_allowlist: (v) => Array.isArray(v) && v.length <= 1000 && v.every((x) => typeof x === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(x)),
   approved_remotes: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && x.length <= 200),
   offline_wipe_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 365,
@@ -83,6 +85,18 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const d = db.prepare('SELECT id, org_id, hostname, revoked FROM devices WHERE id = ? AND org_id = ?').get(id, a.org_id) as { id: string; hostname: string; revoked: number } | undefined;
     if (!d) throw new HttpError(404, 'NOT_FOUND', 'no such device');
     return d;
+  };
+  /** WSOS-WIPE-001: destructive actions need the admin's password again and the device name typed exactly. */
+  const reauth = (ctx: Ctx, a: Admin, b: Record<string, unknown>, hostname: string) => {
+    const addr = ctx.req.socket.remoteAddress ?? '?';
+    if (throttled(addr)) throw new HttpError(429, 'RATE_LIMITED', 'too many failed attempts; try again later', { retryable: true });
+    const u = typeof b.password === 'string' ? checkPassword(db, a.email, b.password) : undefined;
+    if (!u || u.id !== a.id) {
+      failures.get(addr)!.push(Date.now());
+      log(a, 'reauth_failed', { action: 'wipe' });
+      throw new HttpError(401, 'REAUTH_REQUIRED', 'enter your administrator password to confirm');
+    }
+    if (typeof b.confirm_name !== 'string' || b.confirm_name.trim() !== hostname) throw invalid('confirm_name', 'type the device name exactly to confirm');
   };
   const body = async (ctx: Ctx) => {
     const b = await ctx.body();
@@ -217,13 +231,18 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     if (scope !== 'worksuite_data' && scope !== 'full_device') throw invalid('scope', 'worksuite_data or full_device');
     const reason = String(b.reason ?? '').trim();
     if (reason.length < 5 || reason.length > 500) throw invalid('reason', '5 to 500 characters');
+    reauth(ctx, a, b, d.hostname);
     const id = randomUUID();
     db.prepare('INSERT INTO wipe_requests (id, org_id, device_id, scope, reason, requested_by, requested_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, a.org_id, d.id, scope, reason, a.id, Date.now());
     log(a, 'wipe_requested', { wipe_id: id, device_id: d.id, scope });
     send(ctx, 201, { id });
   });
-  r.on('POST', '/admin/api/wipes/{id}/approve', (ctx) => {
+  r.on('POST', '/admin/api/wipes/{id}/approve', async (ctx) => {
     const a = admin(ctx);
+    const b = await body(ctx);
+    const pending = db.prepare('SELECT d.hostname FROM wipe_requests w JOIN devices d ON d.id = w.device_id WHERE w.id = ? AND w.org_id = ?').get(ctx.params.id, a.org_id) as { hostname: string } | undefined;
+    if (!pending) throw new HttpError(404, 'NOT_FOUND', 'no such wipe request');
+    reauth(ctx, a, b, pending.hostname);
     const out = tx(db, () => {
       const w = db.prepare('SELECT id, device_id, scope, requested_by, approved_by, cancelled FROM wipe_requests WHERE id = ? AND org_id = ?').get(ctx.params.id, a.org_id) as
         { id: string; device_id: string; scope: string; requested_by: number; approved_by: number | null; cancelled: number } | undefined;

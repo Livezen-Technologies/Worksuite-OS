@@ -43,7 +43,9 @@ export default function AppCenter({ onClose }: WindowProps) {
     void os.appimageList().then((r) => { if (r.ok) setAppimages(r.value) })
   }
   useEffect(loadCatalog, [])
-  const apps = buildApps(catalog, appimages)
+  const [office, setOffice] = useState(false)
+  useEffect(() => { void os.installedApps().then((r) => setOffice(!!r.office)).catch(() => {}) }, [])
+  const apps = buildApps(catalog, appimages, office)
   const notice0 = catalogNotice(catalog, catalogError)
 
   const [available, setAvailable] = useState<{ packages: string[]; flatpaks: string[]; reboot: boolean } | null>(null)
@@ -184,6 +186,7 @@ export default function AppCenter({ onClose }: WindowProps) {
   }
 
   const cta = (a: AppView): { label: string; act?: () => void; disabled?: boolean }[] => {
+    if (a.builtin === 'office') return [{ label: 'Open', act: () => void os.launchOffice('start') }]
     if (running(a.name)) return [{ label: 'Working…', disabled: true }]
     if (a.appimageId) {
       if (section === 'installed') return [...(a.needsApproval ? [{ label: 'Allow to run', act: () => void appimageAct(a, 'approve') }] : []), { label: 'Update…', act: () => void appimageAct(a, 'update') }, { label: 'Remove', act: () => void appimageAct(a, 'remove') }]
@@ -196,7 +199,8 @@ export default function AppCenter({ onClose }: WindowProps) {
     if (a.installed) return section === 'installed' ? [{ label: 'Remove', act: () => void start(a, 'remove') }] : [{ label: 'Installed', disabled: true }]
     return [{ label: 'Install', act: () => setReview(a) }]
   }
-  const tag = (a: AppView) => a.blocked ? { t: a.blocked, c: 'bg-[#fef2f2] text-[#b91c1c]' }
+  const tag = (a: AppView) => a.builtin ? { t: 'Built in', c: 'bg-[#ecfdf5] text-[#047857]' }
+    : a.blocked ? { t: a.blocked, c: 'bg-[#fef2f2] text-[#b91c1c]' }
     : a.needsApproval ? { t: 'Needs your approval', c: 'bg-[#fffbeb] text-[#b45309]' }
     : a.installed ? { t: 'Installed', c: 'bg-[#ecfdf5] text-[#047857]' }
     : { t: 'Approved', c: 'bg-[#ecfdf5] text-[#047857]' }

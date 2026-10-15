@@ -15,6 +15,12 @@ const rec = (over: Partial<AppImageRecord> = {}): AppImageRecord => ({
 const all = new Set(SOURCES.map((s) => s.id))
 
 describe('App Center catalog', () => {
+  it('WorkSuite Office is a built-in row next to the server catalog, only when present', () => {
+    expect(buildApps(catalog, [], true).find((a) => a.builtin === 'office')).toMatchObject({ source: 'WorkSuite', installed: true, catalogId: null })
+    expect(buildApps(catalog, [], false).some((a) => a.builtin)).toBe(false)
+    expect(buildApps(null, [], true).map((a) => a.name)).toEqual(['WorkSuite Office'])
+  })
+
   it('uses only server items and imported AppImages, never built-in sample apps', () => {
     expect(buildApps(null, [])).toEqual([])
     expect(buildApps({ state: 'not_enrolled', arch: 'amd64', items: [], error: 'x' }, [])).toEqual([])

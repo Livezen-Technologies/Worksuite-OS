@@ -7,9 +7,14 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-AUTH-001/002 greetd default session, no autologin | `live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot`, `installer/modules/usersq.conf`, `installer/branding/worksuite/usersq.qml` | Cfg |
 | WSOS-SES-001 env import before portals | `services/session/bin/worksuite-session` (`--ready`), `services/session/labwc/autostart` | Cfg |
 | WSOS-SES-002 user units bound to `worksuite-session.target` | `services/session/systemd/user/*` | Cfg |
-| WSOS-SES-003 clean logout | `services/session/bin/worksuite-session` (`cleanup`) | Cfg |
-| WSOS-SES-004/005 shell restart ≤ 3 s, recovery after 3 crashes / 60 s | `services/session/systemd/user/worksuite-shell.service`, `worksuite-recovery-launcher.service` | Cfg |
-| WSOS-SES-006 compositor exit → greeter notice | `services/session/bin/worksuite-session` | Cfg |
+| WSOS-SES-003 clean logout (compositor exit and shell Log out) | `services/session/bin/worksuite-session` (`cleanup`, `--logout`), `shell/electron/session.ts` (`logoutCommand`); tests `tests/session/session-test.sh`, `shell/electron/session.test.ts` | Impl |
+| WSOS-SES-004, WSOS-REL-004 apps in their own `app-worksuite-*.scope`, shell restart ≤ 3 s (`KillMode=mixed`) | `shell/electron/session.ts` (`appLaunchCommand`), `services/session/systemd/user/worksuite-shell.service`; test `shell/electron/session.test.ts` | Impl (no VM kill test) |
+| WSOS-SES-005 recovery after 3 crashes / 60 s | `services/session/systemd/user/worksuite-shell.service`, `worksuite-recovery-launcher.service` | Cfg |
+| WSOS-SES-006 compositor exit → greeter notice | `services/session/bin/worksuite-session`, `bin/worksuite-greeter`, `tmpfiles/worksuite-session.conf`, live-build greetd config; test `tests/session/session-test.sh` | Impl |
+| WSOS-LOCK-001/002/004 gtklock (ext-session-lock), lock before suspend, fail closed | `services/session/bin/worksuite-lock`, `bin/worksuite-idle`, `systemd/user/worksuite-idle.service`, `gtklock/{config.ini,style.css}`; test `tests/session/session-test.sh` (stub gtklock) | Impl (not run on a real compositor) |
+| WSOS-LOCK-003 idle timeout within policy maximum | `shell/electron/session.ts`, `shell/src/screens/Settings.tsx` (`LockAfterRow`, Users section), `services/session/bin/worksuite-idle`, `systemd/user/worksuite-idle-policy.path`, `services/device-agent/src/enforce.ts`; tests `session.test.ts`, `session-test.sh`, `agent.test.ts` | Impl |
+| WSOS-AUTH-004 pam_faillock with policy thresholds | `services/session/pam/worksuite-faillock*`, `pam/faillock.conf`, `packaging/debian/worksuite-session.postinst`, `services/device-agent/src/enforce.ts` (`faillockConf`) | Impl (PAM stack not run in a test) |
+| WSOS-INT-010 polkit authentication agent | `services/session/bin/worksuite-polkit-agent`, `systemd/user/worksuite-polkit-agent.service` (lxpolkit / mate-polkit) | Cfg (native agent, not shell-rendered) |
 | WSOS-SHL-001…004 bridge operations, errors, caller check | `native/wayland-bridge/lk.worksuite.WaylandBridge1.xml`, `native/wayland-bridge/README.md` | Doc |
 | WSOS-INT-012 portal backends | `services/session/portals/worksuite-portals.conf` | Cfg |
 | WSOS-DRV-004 conflict copy name | `services/sync/src/policy.ts` (`conflictCopyName`) | Impl |
@@ -34,6 +39,8 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | §9.3 enrollment, WSOS-IDN-005 device credential | `services/device-agent/src/agent.ts` (`enroll`), `src/host.ts` (`publishCredential`); first-run: `shell/src/screens/FirstRun.tsx`, `shell/electron/device.ts` (`enrollDevice`) | Impl |
 | WSOS-MDM-001 inventory and versions | `services/device-agent/src/host.ts` (`facts`, `inventory`), `src/main.ts` | Impl |
 | WSOS-MDM-002 signed policy | `services/device-agent/src/agent.ts` (`refreshPolicy`, `verifyPolicy`) | Impl |
+| WSOS-MDM-002 policy enforcement: lock timeout, offline period, USB storage, Bluetooth, sign-in lockout | `api-contracts/openapi.yaml` (`Policy`), `services/server/src/console.ts` (`POLICY_FIELDS`), `services/device-agent/src/enforce.ts`, `src/host.ts` (`applyEnforcement`, `setOfflineAccessBlock`), `src/agent.ts` (`enforce`, `offlineAccessCheck`); tests `services/device-agent/test/agent.test.ts`, `services/server/test/console.test.ts` | Impl |
+| WSOS-WIPE-001 admin re-authentication and typed device name (plus second approver) | `services/server/src/console.ts` (`reauth`), `console-ui.ts` (`wipeConfirm`); test `services/server/test/console.test.ts` | Impl (no CoreApprovalEngine / wipe permission) |
 | WSOS-MDM-007, WSOS-WIPE-007 management status for users | `services/device-agent/src/agent.ts` (`status`) → `/run/worksuite-device-agent/status.json` → `shell/src/screens/Settings.tsx` (`AboutDevice`) | Impl |
 | WSOS-WIPE-002/003/005/006 remote wipe | `services/device-agent/src/agent.ts` (`wipe`, `offlineKillTimer`), `src/host.ts` (`wipeWorkSuiteData`, `cryptoErase`) | Impl |
 | WSOS-SEC-007 systemd hardening | `services/*/systemd/*.service` | Cfg |
@@ -87,3 +94,39 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 |---|---|---|
 | Signed APT repository per ring (WSOS-AUP-002) | `tools/repo/keygen.sh`, `publish.sh`; served by `worksuite-server --apt-dir` | `tests/repo/apt-e2e.sh` (real apt: verify, upgrade, tampered and foreign-signed refused, no path traversal); CI job `apt-repo` |
 | Public keys on devices (WSOS-SEC-011) | `worksuite-archive-keyring` from `packaging/keyring/` (public keys only; empty = fail closed) | Package builds and lints; install paths checked |
+| No private keys in the tree, HSM/offline key process (WSOS-SEC-011) | `docs/security/hardening.md` | CI `os-scripts` fails on any `PRIVATE KEY` block |
+| SBOM per release (WSOS-SEC-011) | `tools/sbom/spdx.mjs`, `tools/sbom/generate.sh` (SPDX 2.3: image package list, WorkSuite .debs with SHA-256, npm runtime deps incl. Electron; syft when present) | `tools/sbom/spdx.test.mjs` in CI; generated and uploaded per arch in `image.yml` |
+
+## Directory sign-in (`worksuite-directory`)
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-DIR-002/009 directory password check at the greeter | `services/directory/pam/worksuite-directory` (pam-auth-update, `pam_exec expose_authtok`, `[success=end default=ignore]`), `src/main.ts` (HTTPS + device credential) → `POST desktop/v1/os/directory/authenticate` (`services/server/src/api.ts`, `api-contracts/openapi.yaml`) | `services/directory/test/directory.test.ts`; server `api.test.ts` (device-bound, org-scoped, disabled) |
+| WSOS-DIR-003 stable UID, home | UID 200000 + user id, `useradd` with locked password, `pam_mkhomedir` | `directory.test.ts` (uid, conflicts) |
+| WSOS-DIR-004/005 offline cache with policy expiry; disabled refused | `src/directory.ts` (`authenticate`): scrypt verifier, `offline_login_days`, cache purge + lock on `ACCOUNT_DISABLED` | `directory.test.ts` |
+| WSOS-DIR-006 group → role | `localGroups()` with `group_role_map` | `directory.test.ts` |
+| WSOS-DIR-010 break-glass admin | `rotate()`/`session()`, `worksuite-breakglass-rotate.{service,timer}`, `wsadmin` (postinst), server `POST desktop/v1/os/break-glass` + `/events` | `directory.test.ts` (escrow decrypts to the set password, one-time lock, audit queue), `api.test.ts` |
+| Passwords never logged | stdin/HTTPS body only | `directory.test.ts` checks logs, cache and request URL |
+
+## Recovery boot (`worksuite-recovery-boot`)
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-BOOT-003, §9.2-R4 previous kernel kept and bootable | `services/recovery-boot/kernel/zz-worksuite-kernel-retention`, `grub/42_worksuite_recovery` | `tests/boot/recovery-boot.test.sh` (CI `os-scripts`) |
+| §9.2-R3 "WorkSuite Recovery" boot entry → recovery screens | `grub/42_worksuite_recovery`, `systemd/worksuite-recovery.target`, `worksuite-recovery-shell.service`, `shell/electron/bootmode.ts` (`worksuite.recovery=1`) | `recovery-boot.test.sh`, `shell/electron/bootmode.test.ts`; not booted in a VM |
+| §9.2-R1 boot-time package repair | `bin/worksuite-boot-repair`, `worksuite-boot-repair.service` (`OnFailure=` → recovery target) | `recovery-boot.test.sh` (stub dpkg/apt) |
+
+## Hardening
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-SEC-004 per-app session partitions | `shell/electron/appwindows.ts` (`persist:ws-app-<id>`), `ws:openWorkSuiteApp` in `main.ts`/`preload.ts` | `shell/electron/appwindows.test.ts` |
+| WSOS-SEC-009 AppArmor | `security/apparmor/*`, `AppArmorProfile=-…` in units, postinst reload | `tests/security/apparmor.test.sh` (CI) |
+| WSOS-SEC-012 Electron patch policy | `docs/security/hardening.md`, `.github/dependabot.yml` | Process |
+
+## ARM64 and performance gates
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-ARM-001/004/008 arm64 build + QEMU UEFI boot | `.github/workflows/image.yml` matrix (native `ubuntu-24.04-arm`), `tests/vm/qemu-arch.sh`, arch-aware `boot-test.sh`/`server-e2e.sh`, serial console per arch in `live-build/auto/config` | Workflow defined; not yet run green |
+| WSOS-PRF-001…005, REL-001/002, ARM-007 | `tests/perf/guest/*` (probes on `WORKSUITE_PERF=1` images), `tests/perf/gates.tsv` (hw-* = SRS limits, ci-*-tcg = regression bounds, separate ARM rows), `tests/perf/gates.sh`, `boot-test.sh PERF_PROFILE=…` | `tests/perf/gates.test.sh` (CI); VM gates in `image.yml`, not yet run green |

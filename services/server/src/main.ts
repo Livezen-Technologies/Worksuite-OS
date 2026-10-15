@@ -29,7 +29,8 @@ import { HttpError, makeCtx, Router, sendError } from './http.ts';
 import { oauthRoutes } from './oauth.ts';
 import { consoleRoutes } from './console.ts';
 
-export interface ServerOptions { publicUrl: string; clientIds?: string[]; updateHost?: string; aptDir?: string }
+/** webUrl: base the WorkSuite web apps live under (<webUrl>/<app>/); defaults to <publicUrl>/apps/. */
+export interface ServerOptions { publicUrl: string; clientIds?: string[]; updateHost?: string; aptDir?: string; webUrl?: string }
 
 const APT_TYPES: Record<string, string> = { '.deb': 'application/vnd.debian.binary-package', '.gz': 'application/gzip', '.xz': 'application/x-xz', '.gpg': 'application/pgp-signature' };
 
@@ -52,7 +53,8 @@ export function createHandler(db: DatabaseSync, o: ServerOptions) {
   const issuer = new URL('oauth', publicUrl).toString();
   const r = new Router();
   oauthRoutes(r, db, { issuer, clientIds: o.clientIds ?? ['worksuite-os'] });
-  apiRoutes(r, db, { publicUrl, issuer, updateHost: o.updateHost ?? new URL(publicUrl).host });
+  const webUrl = o.webUrl ? o.webUrl.replace(/\/?$/, '/') : new URL('apps/', publicUrl).toString();
+  apiRoutes(r, db, { publicUrl, issuer, updateHost: o.updateHost ?? new URL(publicUrl).host, webUrl });
   consoleRoutes(r, db, { secureCookie: publicUrl.startsWith('https:') });
   return async (req: IncomingMessage, res: ServerResponse) => {
     const ctx = makeCtx(req, res, publicUrl);
@@ -83,7 +85,7 @@ async function main(argv: string[]) {
   const { values: v, positionals } = parseArgs({
     args: rest, allowPositionals: true, options: {
       db: { type: 'string' }, 'public-url': { type: 'string' }, listen: { type: 'string', default: '127.0.0.1:8080' },
-      'tls-cert': { type: 'string' }, 'apt-dir': { type: 'string' }, 'tls-key': { type: 'string' }, 'update-host': { type: 'string' },
+      'tls-cert': { type: 'string' }, 'apt-dir': { type: 'string' }, 'tls-key': { type: 'string' }, 'update-host': { type: 'string' }, 'web-url': { type: 'string' }, apps: { type: 'string' },
       org: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, device: { type: 'string' },
       args: { type: 'string' }, hours: { type: 'string' }, uses: { type: 'string' }, 'ttl-hours': { type: 'string' },
       'require-device': { type: 'boolean' }, admin: { type: 'boolean' },
@@ -99,7 +101,7 @@ async function main(argv: string[]) {
   switch (cmd) {
     case 'serve': {
       if (!v['public-url']) throw new Error('--public-url required (the https URL clients use)');
-      const handler = createHandler(db, { publicUrl: v['public-url'], updateHost: v['update-host'], aptDir: v['apt-dir'] });
+      const handler = createHandler(db, { publicUrl: v['public-url'], updateHost: v['update-host'], aptDir: v['apt-dir'], webUrl: v['web-url'] });
       const server = v['tls-cert'] && v['tls-key']
         ? createHttps({ cert: readFileSync(v['tls-cert']), key: readFileSync(v['tls-key']) }, handler)
         : createHttp(handler);
@@ -110,6 +112,7 @@ async function main(argv: string[]) {
       process.on('SIGTERM', () => server.close(() => process.exit(0)));
       return;
     }
+    case 'set-web-apps': admin.setWebApps(db, org(), v.apps ? v.apps.split(',').map((x) => x.trim()) : null); return out('ok');
     case 'init': return out({ org_id: admin.createOrg(db, v.org ?? v.name ?? 'WorkSuite', { requireDevice: v['require-device'] }) });
     case 'user-add': return out({ user_id: admin.addUser(db, org(), v.email ?? '', v.name ?? v.email ?? '', readStdin(), v.admin ? 'admin' : 'user') });
     case 'enroll-token': return out(admin.createEnrollmentToken(db, org(), { hours: v.hours ? Number(v.hours) : undefined, uses: v.uses ? Number(v.uses) : undefined }));

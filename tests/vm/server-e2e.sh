@@ -23,7 +23,7 @@ prepare)
   printf '%s\n' "$(od -An -tx1 -N16 /dev/urandom | tr -d ' \n')" | srv user-add --org 1 --email e2e@ws.test --name "E2E User" >/dev/null
   printf '{"update_ring":"stable","update_mode":"notify","update_mirror":"https://ws.test:8443","app_allowlist":[]}\n' > "$dir/policy.json"
   srv policy-set --org 1 "$dir/policy.json" >/dev/null
-  printf '{"release_id":"r-1.0.1","version":"1.0.1","min_version":"1.0.0~dev1","ring":"stable","arch":"amd64"}\n' > "$dir/release.json"
+  printf '{"release_id":"r-1.0.1","version":"1.0.1","min_version":"1.0.0~dev1","ring":"stable","arch":"%s"}\n' "${ARCH:-amd64}" > "$dir/release.json"
   srv release-publish "$dir/release.json" >/dev/null
   srv enroll-token --org 1 --hours 48 > "$dir/token"
   srv keys-export "$dir/keys" >/dev/null
@@ -35,12 +35,12 @@ run)
   node --no-warnings "$server_js" serve --db "$dir/server.db" --public-url https://ws.test:8443 --listen 127.0.0.1:8443 \
     --tls-cert "$dir/tls.crt" --tls-key "$dir/tls.key" > "$dir/server.log" 2>&1 &
   server=$!
-  code=/usr/share/OVMF/OVMF_CODE_4M.fd; [ -f "$code" ] || code=/usr/share/OVMF/OVMF_CODE.fd
-  vars=$(mktemp); cp "$(dirname "$code")/$(basename "$code" | sed 's/CODE/VARS/')" "$vars"
-  accel=tcg; [ -w /dev/kvm ] && accel=kvm
-  qemu-system-x86_64 -machine q35,accel=$accel -m 4096 -smp 2 \
-    -drive if=pflash,format=raw,readonly=on,file="$code" -drive if=pflash,format=raw,file="$vars" \
-    -cdrom "$iso" -boot d -display none -serial file:"$log" -no-reboot \
+  . "$(dirname "$0")/qemu-arch.sh" "$iso"
+  vars=$(mktemp); cp "$FW_VARS_TEMPLATE" "$vars"
+  # shellcheck disable=SC2046,SC2086
+  $QEMU $MACHINE -m 4096 -smp 2 \
+    -drive if=pflash,format=raw,readonly=on,file="$FW_CODE" -drive if=pflash,format=raw,file="$vars" \
+    $(cdrom_args "$iso") -display none -serial file:"$log" -no-reboot \
     -fw_cfg name=opt/worksuite/token,file="$dir/token" -fw_cfg name=opt/worksuite/server,string=https://ws.test:8443/ &
   qemu=$!
   trap 'kill $qemu $server 2>/dev/null || true; rm -f "$vars"' EXIT

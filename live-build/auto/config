@@ -8,7 +8,8 @@ SNAPSHOT="${SNAPSHOT:?pin a snapshot.debian.org timestamp for reproducible build
 MIRROR="https://snapshot.debian.org/archive/debian/${SNAPSHOT}/"
 SECMIRROR="https://snapshot.debian.org/archive/debian-security/${SNAPSHOT}/"
 
-if [ "$ARCH" = amd64 ]; then KFLAVOUR=amd64; else KFLAVOUR=arm64; fi
+# Kernel flavour and serial console per architecture (PL011 ttyAMA0 on arm64 virt and most ARM boards).
+if [ "$ARCH" = amd64 ]; then KFLAVOUR=amd64; SERIAL=ttyS0; else KFLAVOUR=arm64; SERIAL=ttyAMA0; fi
 
 lb config noauto \
   --mode debian \
@@ -35,7 +36,7 @@ lb config noauto \
   --iso-application "WorkSuite OS" \
   --iso-publisher "WorkSuite; https://download.worksuitecloud.com" \
   --iso-volume "WORKSUITE_OS" \
-  --bootappend-live "boot=live components locales=en_US.UTF-8 keyboard-layouts=us quiet splash console=tty0 console=ttyS0,115200" \
+  --bootappend-live "boot=live components locales=en_US.UTF-8 keyboard-layouts=us quiet splash console=tty0 console=${SERIAL},115200" \
   --debian-installer none \
   "$@"
 

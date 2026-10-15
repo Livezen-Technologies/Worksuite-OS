@@ -90,6 +90,15 @@ $('#login-form').addEventListener('submit', async (e) => {
 });
 $('#logout').addEventListener('click', async () => { await api('POST', 'logout').catch(() => {}); showLogin(); });
 
+/** WSOS-WIPE-001: the button stays disabled until the device name is typed exactly and a password is entered. */
+function wipeConfirm(hostname, submit, label) {
+  const name = h('input', { 'aria-label': 'Type the device name to confirm', placeholder: 'Type ' + hostname + ' to confirm', autocomplete: 'off', spellcheck: 'false' });
+  const pw = h('input', { 'aria-label': 'Your administrator password', placeholder: 'Your administrator password', type: 'password', autocomplete: 'current-password' });
+  const btn = h('button', { class: 'danger', disabled: true, onclick: () => { const c = { confirm_name: name.value.trim(), password: pw.value }; pw.value = ''; btn.disabled = true; submit(c); } }, label);
+  const check = () => { btn.disabled = !(name.value.trim() === hostname && pw.value.length > 0); };
+  name.oninput = check; pw.oninput = check;
+  return [h('label', {}, 'Device name', name), h('label', {}, 'Password', pw), h('div', {}, btn)];
+}
 const views = {
   async overview() {
     const o = await api('GET', 'overview');
@@ -128,7 +137,7 @@ const views = {
         h('button', { onclick: () => send('CollectApprovedDiagnostics', { bundle_profile: 'basic' }) }, 'Collect diagnostics'),
         h('button', { class: 'danger', onclick: () => { if (confirm('Revoke this device? It stops receiving policy and its credential stops working.')) act(() => api('POST', 'devices/' + id + '/revoke'), 'Device revoked.'); } }, 'Revoke')),
       h('h2', {}, 'Request a remote wipe'), h('div', { class: 'card form' }, h('p', { class: 'muted' }, 'A second administrator must approve the request before the device receives it.'),
-        wipeScope, wipeReason, h('div', {}, h('button', { class: 'danger', onclick: () => act(() => api('POST', 'wipes', { device_id: id, scope: wipeScope.value, reason: wipeReason.value }), 'Wipe requested. Another administrator must approve it.') }, 'Request wipe')))],
+        wipeScope, wipeReason, ...wipeConfirm(d.hostname, (c) => act(() => api('POST', 'wipes', { device_id: id, scope: wipeScope.value, reason: wipeReason.value, ...c }), 'Wipe requested. Another administrator must approve it.'), 'Request wipe'))],
       h('h2', {}, 'Commands'), table(['Command', 'Issued', 'State'], d.commands.map((c) => h('tr', {}, h('td', {}, c.command), h('td', {}, new Date(c.issued_at).toLocaleString()),
         h('td', {}, h('span', { class: c.state === 'completed' ? 'ok' : c.state === 'failed' || c.state === 'rejected' ? 'bad' : '' }, c.state + (c.reason ? ' (' + c.reason + ')' : '')))))),
       h('h2', {}, 'Update results'), table(['Release', 'Result', 'When'], d.updates.map((u) => h('tr', {}, h('td', {}, u.release_id), h('td', { class: u.result === 'success' ? 'ok' : 'bad' }, u.result), h('td', {}, when(u.at)))))];
@@ -140,7 +149,8 @@ const views = {
       h('td', {}, w.requested_by + ', ' + when(w.requested_at)),
       h('td', {}, w.cancelled ? 'Cancelled' : w.approved_by ? 'Approved by ' + w.approved_by : w.mine
         ? h('button', { onclick: () => act(() => api('POST', 'wipes/' + w.id + '/cancel'), 'Request cancelled.') }, 'Cancel')
-        : h('div', { class: 'row' }, h('button', { class: 'danger', onclick: () => { if (confirm('Approve this wipe? The device erases data at its next check-in. This cannot be undone.')) act(() => api('POST', 'wipes/' + w.id + '/approve'), 'Wipe approved and sent.'); } }, 'Approve'),
+        : h('div', { class: 'form' }, h('p', { class: 'muted' }, 'Approving erases data at the device\'s next check-in. This cannot be undone.'),
+          ...wipeConfirm(w.hostname, (c) => act(() => api('POST', 'wipes/' + w.id + '/approve', c), 'Wipe approved and sent.'), 'Approve'),
           h('button', { onclick: () => act(() => api('POST', 'wipes/' + w.id + '/cancel'), 'Request cancelled.') }, 'Reject'))))))];
   },
   async users() {
@@ -175,7 +185,8 @@ const views = {
       const list = (n) => f[n].value.split(/[\s,]+/).filter(Boolean);
       act(() => api('PUT', 'policy', { policy: { update_ring: f.update_ring.value || null, update_mode: f.update_mode.value || null, maintenance_window: f.maintenance_window.value || null,
         usb_storage: f.usb_storage.value || null, bluetooth: f.bluetooth.value === '' ? null : f.bluetooth.value === 'true', lock_timeout_max_s: num('lock_timeout_max_s'),
-        offline_access_days: num('offline_access_days'), offline_wipe_days: num('offline_wipe_days'), update_mirror: f.update_mirror.value || null,
+        offline_access_days: num('offline_access_days'), offline_wipe_days: num('offline_wipe_days'),
+        login_failures_max: num('login_failures_max'), login_lockout_s: num('login_lockout_s'), update_mirror: f.update_mirror.value || null,
         app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
     } },
       h('div', { class: 'row' }, h('label', {}, 'Update ring', sel('update_ring', [['stable', 'Stable'], ['pilot', 'Pilot'], ['development', 'Development']])),
@@ -186,6 +197,8 @@ const views = {
         h('label', {}, 'Max screen-lock delay (s)', h('input', { name: 'lock_timeout_max_s', type: 'number', min: 60, value: p.lock_timeout_max_s ?? '' }))),
       h('div', { class: 'row' }, h('label', {}, 'Offline access (days)', h('input', { name: 'offline_access_days', type: 'number', min: 0, value: p.offline_access_days ?? '' })),
         h('label', {}, 'Wipe after offline (days)', h('input', { name: 'offline_wipe_days', type: 'number', min: 1, value: p.offline_wipe_days ?? '' }))),
+      h('div', { class: 'row' }, h('label', {}, 'Failed sign-ins before lockout', h('input', { name: 'login_failures_max', type: 'number', min: 3, max: 20, value: p.login_failures_max ?? '' })),
+        h('label', {}, 'Lockout duration (s, 0 = until reset)', h('input', { name: 'login_lockout_s', type: 'number', min: 0, value: p.login_lockout_s ?? '' }))),
       h('label', {}, 'Update mirror (https, optional)', h('input', { name: 'update_mirror', value: p.update_mirror || '' })),
       h('label', {}, 'Allowed apps (catalog IDs, one per line)', h('textarea', { name: 'app_allowlist' }, (p.app_allowlist || []).join('\n'))),
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),

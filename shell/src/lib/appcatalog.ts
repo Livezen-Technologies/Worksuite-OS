@@ -2,8 +2,9 @@
 // Pure functions so the filters and states are testable without a window.
 import type { AppCatalog, AppImageRecord, CatalogEntry } from './os'
 
-export type Source = 'APT' | 'Flatpak' | 'AppImage'
+export type Source = 'WorkSuite' | 'APT' | 'Flatpak' | 'AppImage'
 export const SOURCES: { id: Source; label: string }[] = [
+  { id: 'WorkSuite', label: 'Built in' },
   { id: 'APT', label: 'Debian (APT)' },
   { id: 'Flatpak', label: 'Flatpak (approved remotes)' },
   { id: 'AppImage', label: 'AppImage' },
@@ -23,6 +24,8 @@ export interface AppView {
   /** Shown on the card: "Signed by …", "Checksum only — publisher not verified", "Approved by your organization (checksum)". */
   trust: string | null
   needsApproval: boolean
+  /** Ships with WorkSuite OS (not from the catalog): opened, never installed or removed here. */
+  builtin?: 'office'
   sha256?: string
 }
 
@@ -34,7 +37,14 @@ export function appImageTrust(r: AppImageRecord, catalogSha?: Set<string>): stri
   return 'Checksum only · publisher not verified'
 }
 
-export function buildApps(catalog: AppCatalog | null, appimages: AppImageRecord[]): AppView[] {
+/** WorkSuite Office is part of the OS image, so it is a built-in row, shown only when its desktop entry exists. */
+export const OFFICE_ROW: AppView = {
+  key: 'builtin:office', catalogId: null, appimageId: null, name: 'WorkSuite Office', publisher: 'Livezen Technologies',
+  summary: 'Built in: documents, spreadsheets and presentations (.docx, .xlsx, .pptx) with WorkSuite Drive.', source: 'WorkSuite',
+  category: 'Office', installed: true, blocked: null, trust: null, needsApproval: false, builtin: 'office',
+}
+
+export function buildApps(catalog: AppCatalog | null, appimages: AppImageRecord[], office = false): AppView[] {
   const items = catalog?.state === 'ok' ? catalog.items : []
   const catalogSha = new Set(items.filter((i) => i.source === 'appimage' && i.sha256).map((i) => i.sha256!))
   const imported = new Set(appimages.map((a) => a.sha256))
@@ -50,7 +60,7 @@ export function buildApps(catalog: AppCatalog | null, appimages: AppImageRecord[
     summary: r.version ? `Version ${r.version}` : '', source: 'AppImage', category: r.categories[0] ?? 'Other', installed: true, blocked: null,
     trust: appImageTrust(r, catalogSha), needsApproval: !r.approved, sha256: r.sha256,
   }))
-  return [...fromCatalog, ...fromImports].sort((a, b) => a.name.localeCompare(b.name))
+  return [...(office ? [OFFICE_ROW] : []), ...fromCatalog, ...fromImports].sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export function categories(apps: AppView[]): string[] {

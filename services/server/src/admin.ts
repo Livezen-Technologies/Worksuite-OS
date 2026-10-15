@@ -5,7 +5,7 @@ import { basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { DEFAULT_MODULES, secret, sha256 } from './db.ts';
+import { DEFAULT_MODULES, DEFAULT_WEB_APPS, secret, sha256 } from './db.ts';
 import { hashPassword } from './oauth.ts';
 import { activeKey, createKey, signEnvelope, signFlat } from './signing.ts';
 
@@ -15,6 +15,13 @@ export function createOrg(db: DatabaseSync, name: string, o: { requireDevice?: b
   const r = db.prepare('INSERT INTO orgs (name, require_device, modules) VALUES (?, ?, ?)').run(name, o.requireDevice ? 1 : 0, JSON.stringify(DEFAULT_MODULES));
   activeKey(db);
   return Number(r.lastInsertRowid);
+}
+
+/** Which WorkSuite web apps the org's desktops show (null = all). */
+export function setWebApps(db: DatabaseSync, orgId: number, keys: string[] | null) {
+  const known = new Set(DEFAULT_WEB_APPS.map((a) => a.id));
+  for (const k of keys ?? []) if (!known.has(k)) throw new Error(`unknown web app: ${k}`);
+  db.prepare('UPDATE orgs SET web_apps = ? WHERE id = ?').run(keys ? JSON.stringify(keys) : null, orgId);
 }
 
 export function addUser(db: DatabaseSync, orgId: number, email: string, name: string, password: string, role: 'user' | 'admin' = 'user'): number {

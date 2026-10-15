@@ -5,6 +5,8 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
+# WSOS-SEC-009: AppArmor (security/apparmor/); "-" keeps the unit working on kernels without AppArmor.
+AppArmorProfile=-worksuite-device-agent
 Type=simple
 ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/device-agent/src/main.ts
 Restart=on-failure

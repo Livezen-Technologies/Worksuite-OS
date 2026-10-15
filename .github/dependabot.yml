@@ -1,0 +1,14 @@
+# WSOS-SEC-012: Electron security releases must reach stable within 14 days (docs/security/hardening.md).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /shell
+    schedule:
+      interval: daily
+    allow:
+      - dependency-name: electron
+    labels: [security, electron]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -1,0 +1,67 @@
+# AppArmor profile for worksuite-device-agent (WSOS-SEC-009). Applied by the unit (AppArmorProfile=), not by path:
+# the agent runs on worksuite-node, which other services share.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile worksuite-device-agent flags=(attach_disconnected) {
+  include <abstractions/base>
+  include <abstractions/nameservice>
+  include <abstractions/ssl_certs>
+  include <abstractions/openssl>
+
+  # Root work it is allowed to do: inventory, LUKS key-slot wipe, per-user data wipe, reboot.
+  capability dac_override dac_read_search fowner chown sys_admin sys_boot kill,
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network netlink raw,
+  network unix stream,
+  dbus (send, receive) bus=system,
+  unix (create, connect, send, receive, bind, listen, accept) type=stream,
+
+  # Runtime: worksuite-node wrapper → Electron in Node mode.
+  /{usr/,}bin/{sh,dash} ix,
+  /usr/bin/worksuite-node rix,
+  /usr/lib/worksuite/shell/electron/electron mrix,
+  /usr/lib/worksuite/shell/electron/** mr,
+  /usr/lib/worksuite/device-agent/** r,
+  /usr/share/worksuite/keys/** r,
+  /etc/** r,
+  @{PROC}/** r,
+  /sys/** r,
+  /dev/shm/** rwk,
+  /tmp/** rwk,
+
+  owner /var/lib/worksuite-device-agent/ rw,
+  owner /var/lib/worksuite-device-agent/** rwk,
+  /run/worksuite-device-agent/ rw,
+  /run/worksuite-device-agent/** rwk,
+  /var/log/worksuite/ rw,
+  /var/log/worksuite/** rwk,
+  # Per-user data wipe (WSOS-MDM-006).
+  /home/ r,
+  /home/** rwlk,
+
+  # Read-only probes run inside this profile.
+  /usr/bin/{getent,lsblk,findmnt,dpkg-query,flatpak,journalctl} rix,
+  /usr/lib/@{multiarch}/** mr,
+  /var/lib/dpkg/** r,
+  /var/lib/flatpak/** r,
+  /var/log/journal/** r,
+  /run/log/journal/** r,
+  # State-changing tools, arguments fixed in the agent. They inherit this profile (ix): the unit runs with
+  # NoNewPrivileges=yes, under which AppArmor refuses transitions to a wider profile or to unconfined.
+  /usr/bin/{systemctl,loginctl,busctl} rix,
+  /usr/{s,}bin/{shutdown,cryptsetup} rix,
+  /run/systemd/private rw,
+  /run/systemd/** r,
+  /run/dbus/system_bus_socket rw,
+  /dev/mapper/** rw,
+  /dev/{sd,nvme,vd,mmcblk,dm-,loop}* rw,
+  /run/cryptsetup/ rw,
+  /run/cryptsetup/** rwk,
+
+  deny /root/** rwx,
+  deny @{PROC}/sys/kernel/** w,
+}

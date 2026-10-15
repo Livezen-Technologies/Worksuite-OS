@@ -25,6 +25,34 @@ cp "$debs"/*_all.deb "$debs"/*_"$ARCH".deb config/packages.chroot/
 find config/packages.chroot -name '*-dbgsym_*' -delete
 # Boot menu artwork, row images, selection pill and fonts (IBM Plex, bundled) for the live GRUB theme.
 "$here/../branding/grub/live/render.sh" config/bootloaders/grub-pc/live-theme
+# WorkSuite Office (native editors, built by github.com/Livezen-Technologies/worksuite-office CI) ships in release
+# images: tools/fetch-office.sh puts its .deb at live-build/config/packages.chroot/worksuite-office*.deb (or pass
+# WORKSUITE_OFFICE_DEB=path). WORKSUITE_RELEASE=1 (set by CI) fails the build when it is missing; local dev builds
+# without it leave Office out. Nothing is downloaded here. WORKSUITE_OFFICE_SHA256 (optional) pins the file; the
+# package's architecture must match ARCH.
+: "${WORKSUITE_RELEASE:=0}"
+office_found=0
+[ -z "${WORKSUITE_OFFICE_DEB:-}" ] || cp "$WORKSUITE_OFFICE_DEB" config/packages.chroot/worksuite-office_local.deb
+for office in config/packages.chroot/worksuite-office*.deb; do
+  [ -f "$office" ] || continue
+  office_found=1
+  if [ -n "${WORKSUITE_OFFICE_SHA256:-}" ]; then
+    echo "$WORKSUITE_OFFICE_SHA256  $office" | sha256sum -c - >/dev/null || { echo "WorkSuite Office: checksum mismatch for $office" >&2; exit 1; }
+  fi
+  dpkg-deb --info "$office" >/dev/null || { echo "WorkSuite Office: $office is not a valid .deb" >&2; exit 1; }
+  pkg=$(dpkg-deb -f "$office" Package); parch=$(dpkg-deb -f "$office" Architecture)
+  case "$parch" in "$ARCH"|all) ;; *) echo "WorkSuite Office: $office is $parch, not $ARCH; skipping" >&2; rm -f "$office"; continue ;; esac
+  echo "$pkg" >> config/package-lists/worksuite-office.list.chroot
+  echo "WorkSuite Office: installing $pkg $(dpkg-deb -f "$office" Version)"
+done
+[ -s config/package-lists/worksuite-office.list.chroot ] || office_found=0
+if [ "$office_found" = 0 ]; then
+  if [ "$WORKSUITE_RELEASE" = 1 ]; then
+    echo "WorkSuite Office: no $ARCH .deb, and release images must include it; run tools/fetch-office.sh first" >&2
+    exit 1
+  fi
+  echo "WorkSuite Office: no .deb found; building without it (dev build)" >&2
+fi
 if [ -n "${BUILD_HTTPS_PROXY:-}" ]; then
   export https_proxy="$BUILD_HTTPS_PROXY" HTTPS_PROXY="$BUILD_HTTPS_PROXY"
   mkdir -p config/includes.chroot_before_packages/etc/apt/apt.conf.d
@@ -61,6 +89,16 @@ HOOK
   chmod +x config/hooks/normal/9000-worksuite-test-server.hook.chroot
   suffix=-test
 fi
+if [ "${WORKSUITE_PERF:-0}" = 1 ]; then
+  # Perf/reliability probes (tests/perf/guest) run once after boot and print WORKSUITE_PERF lines on the serial
+  # console for tests/vm/boot-test.sh PERF_PROFILE=… (WSOS-PRF-*, REL-001/002, ARM-007). Test images only.
+  inc=config/includes.chroot
+  for f in measure-boot measure-shell login-cycles suspend-cycles; do install -D -m 0755 "$here/../tests/perf/guest/$f" $inc/usr/libexec/worksuite/perf/$f; done
+  install -D -m 0644 "$here/../tests/perf/guest/worksuite-perf.service" $inc/etc/systemd/system/worksuite-perf.service
+  printf '#!/bin/sh\nset -e\nsystemctl enable worksuite-perf.service\n' > config/hooks/normal/9001-worksuite-perf.hook.chroot
+  chmod +x config/hooks/normal/9001-worksuite-perf.hook.chroot
+  suffix="${suffix:-}-perf"
+fi
 [ "$WORKSUITE_REPO" = 1 ] || rm -f config/archives/worksuite.list.* config/includes.chroot/etc/apt/sources.list.d/worksuite.sources
 ARCH="$ARCH" SNAPSHOT="$SNAPSHOT" lb config
 # Snapshot Release files are past Valid-Until by design; auto/config disables that check for apt.
@@ -71,4 +109,7 @@ out="$here/out"; mkdir -p "$out"
 name="worksuite-os-1.0.0-dev-$ARCH${suffix:-}.iso"
 mv "$iso" "$out/$name"
 (cd "$out" && sha256sum "$name" > "$name.sha256")
+# Image package list for the SBOM (tools/sbom/generate.sh, WSOS-SEC-011).
+pk=$(ls ./*.packages 2>/dev/null | head -n1)
+[ -n "$pk" ] && cp "$pk" "$out/${name%.iso}.packages"
 echo "built $out/$name"

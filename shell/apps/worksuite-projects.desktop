@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite Projects
+GenericName=Projects
+Comment=Projects, boards and milestones
+Exec=worksuite-app projects
+TryExec=worksuite-app
+Icon=worksuite-projects
+Terminal=false
+Categories=Office;ProjectManagement;
+Keywords=worksuite;projects;kanban;boards;
+StartupNotify=true
+StartupWMClass=worksuite-projects

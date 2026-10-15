@@ -1,0 +1,19 @@
+[Unit]
+Description=Repair interrupted package operations before sign-in (SRS §9.2)
+DefaultDependencies=no
+After=local-fs.target systemd-remount-fs.service
+Before=greetd.service display-manager.service worksuite-recovery-shell.service systemd-user-sessions.service
+Wants=local-fs.target
+# A failed repair boots the recovery screens instead of a half-configured desktop.
+OnFailure=worksuite-recovery.target
+OnFailureJobMode=isolate
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/worksuite/worksuite-boot-repair
+TimeoutStartSec=30min
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

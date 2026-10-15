@@ -133,10 +133,53 @@ test('device reports and escrow are stored; required fields are validated', asyn
   assert.equal(hb.status, 400);
 });
 
+test('directory authenticate is device-bound, refuses disabled accounts; break-glass use is audited', async () => {
+  const d = await enroll();
+  const auth = (username: string, password: string, device = d.credential) =>
+    call('POST', '/desktop/v1/os/directory/authenticate', { device, body: { username, password } });
+  assert.equal((await call('POST', '/desktop/v1/os/directory/authenticate', { body: { username: 'ana@a.test', password: 'password-123' } })).status, 403);
+  const ok = await auth('Ana@A.test', 'password-123');
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.username, 'ana@a.test');
+  assert.deepEqual(ok.body.groups, ['worksuite-users']);
+  assert.equal(ok.body.offline_login_days, 7);
+  assert.equal(JSON.stringify(ok.body).includes('password'), false);
+  assert.equal((await auth('ana@a.test', 'wrong-password')).body.error.code, 'INVALID_CREDENTIALS');
+  assert.equal((await auth('nobody@a.test', 'password-123')).status, 401);
+  // A device of another organization cannot verify this org's users.
+  const strictDev = await enroll(strictOrg);
+  assert.equal((await auth('ana@a.test', 'password-123', strictDev.credential)).status, 401);
+  const gone = admin.addUser(db, org, 'gone@a.test', 'Gone', 'password-123');
+  db.prepare('UPDATE users SET disabled = 1 WHERE id = ?').run(gone);
+  assert.equal((await auth('gone@a.test', 'password-123')).body.error.code, 'ACCOUNT_DISABLED');
+  const ev = (type: string) => call('POST', '/desktop/v1/os/break-glass/events', { device: d.credential, idem: randomUUID(),
+    body: { id: randomUUID(), type, username: 'wsadmin', at: new Date().toISOString() } });
+  assert.equal((await ev('used')).status, 202);
+  assert.equal((await ev('bogus')).status, 400);
+  const rows = db.prepare('SELECT type FROM audit WHERE principal = ?').all(`device:${d.device_id}`) as { type: string }[];
+  assert.deepEqual(rows.map((r) => r.type), ['break_glass.used']);
+});
+
 test('expired commands are not delivered', async () => {
   const d = await enroll();
   const id = admin.issueCommand(db, d.device_id, 'RefreshPolicy');
   db.prepare('UPDATE commands SET expires = ? WHERE id = ?').run(Date.now() - 1, id);
   const hb = await call('POST', '/desktop/v1/devices/heartbeat', { device: d.credential, body: { os_version: '1', shell_version: '1', kernel_version: '6', policy_version: '0' } });
   assert.deepEqual(hb.body, { commands: [] });
+});
+
+test('bootstrap lists the org\'s web apps with web_url; links resolve to a web_url', async () => {
+  const b = await call('GET', '/desktop/v1/bootstrap', { token: ana });
+  const mail = b.body.apps.find((a: { id: string }) => a.id === 'mail');
+  assert.deepEqual(mail, { id: 'mail', name: 'Mail', web_url: 'https://ws.test/apps/mail/' });
+  assert.equal(b.body.apps.length, 9);
+  const l = await call('GET', '/desktop/v1/links/resolve?url=' + encodeURIComponent('worksuite://drive/files/42?v=1'), { token: ana });
+  assert.deepEqual(l.body, { app_id: 'drive', route: '/files/42', web_url: 'https://ws.test/apps/drive/files/42?v=1' });
+  admin.setWebApps(db, org, ['mail', 'chat']);
+  const b2 = await call('GET', '/desktop/v1/bootstrap', { token: ana });
+  assert.deepEqual(b2.body.apps.map((a: { id: string }) => a.id), ['mail', 'chat']);
+  const l2 = await call('GET', '/desktop/v1/links/resolve?url=' + encodeURIComponent('worksuite://drive/x'), { token: ana });
+  assert.equal(l2.body.web_url, null);
+  assert.throws(() => admin.setWebApps(db, org, ['nope']));
+  admin.setWebApps(db, org, null);
 });
