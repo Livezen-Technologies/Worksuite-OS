@@ -41,3 +41,27 @@ describe('launcher list', () => {
     expect(taskbarApps(apps, ['worksuite-mail', 'worksuite-chat', 'office', 'firefox-esr']).map((a) => a.id)).toEqual(['worksuite-chat', 'firefox-esr'])
   })
 })
+
+describe('WorkSuite Desktop in the start menu', () => {
+  const desk = { id: 'worksuite', name: 'WorkSuite', generic_name: null, comment: null, icon: null, categories: ['Office'], keywords: [] }
+  const web = [{ id: 'mail', name: 'Mail' }, { id: 'drive', name: 'Drive' }, { id: 'projects', name: 'Projects' }, { id: 'hr', name: 'HR' }]
+
+  it('opens its modules in WorkSuite Desktop with --module, the rest in web app windows', () => {
+    const apps = buildLauncherApps(web, [desk, ff], null, 'worksuite')
+    expect(apps.filter((a) => a.kind === 'WorkSuite').map((a) => [a.id, a.launch])).toEqual([
+      ['worksuite-desktop', { worksuite: 'home' }],
+      ['worksuite-mail', { worksuite: 'mail' }],
+      ['worksuite-drive', { worksuite: 'files' }],
+      ['worksuite-projects', { desktop: 'worksuite-projects' }],
+      ['worksuite-hr', { worksuite: 'hr' }],
+    ])
+    // Its own entry is the WorkSuite tile, not a Linux app.
+    expect(apps.some((a) => a.kind === 'Linux app' && a.id === 'worksuite')).toBe(false)
+  })
+
+  it('without it, every tile is a web app window as before', () => {
+    const apps = buildLauncherApps(web, [ff], null, null)
+    expect(apps.filter((a) => a.kind === 'WorkSuite').every((a) => 'desktop' in a.launch)).toBe(true)
+    expect(apps.some((a) => a.id === 'worksuite-desktop')).toBe(false)
+  })
+})

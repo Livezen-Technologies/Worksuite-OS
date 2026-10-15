@@ -13,7 +13,7 @@ import { localUsers } from './users'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
 import { loadSession, parseAppArgs } from './webapps'
-import { execProgram, findOffice, installedApps, OFFICE_NEW } from './xdg'
+import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
@@ -105,8 +105,18 @@ app.whenReady().then(() => {
   handle('ws:installedApps', () => {
     const all = installedApps()
     const office = findOffice(all)
+    const desktop = findWorkSuiteDesktop(all)
     // worksuite-* entries are the web app windows, listed from the org's data instead.
-    return { apps: all.filter((e) => !e.id.startsWith('worksuite-') || e === office).map(({ exec: _e, ...e }) => e), office: office?.id ?? null }
+    return { apps: all.filter((e) => !e.id.startsWith('worksuite-') || e === office).map(({ exec: _e, ...e }) => e), office: office?.id ?? null, desktop: desktop?.id ?? null }
+  })
+  // WorkSuite Desktop modules: its program with --module=<id> (fixed list, no shell), in its own app scope. A second
+  // launch is handed to the running WorkSuite (single instance).
+  handle('ws:launchWorkSuite', (module) => {
+    if (!(DESKTOP_MODULES as readonly string[]).includes(module)) return undefined
+    const desktop = findWorkSuiteDesktop(installedApps())
+    const prog = desktop && execProgram(desktop.exec)
+    const c = desktop && prog ? scopeCommand(desktop.id, [prog, `--module=${module}`]) : null
+    return c ? run(...c) : undefined
   })
   // WorkSuite Office "new document" entries: the detected editor's program with its --new switch (no shell).
   handle('ws:launchOffice', (kind) => {

@@ -91,7 +91,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
     appsLoaded.current = true
     let live = true
     void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null)]).then(([w, i]) => {
-      if (live) setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null))
+      if (live) setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null))
     })
     return () => { live = false }
   }, [launcher])
@@ -106,6 +106,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
     if (!a) return
     if ('screen' in a.launch) onOpen(a.launch.screen)
     else if ('office' in a.launch) void os.launchOffice(a.launch.office)
+    else if ('worksuite' in a.launch) void os.launchWorkSuite(a.launch.worksuite)
     else void os.launchApp(a.launch.desktop)
   }
   const taskbar = taskbarApps(allApps, TASKBAR)
