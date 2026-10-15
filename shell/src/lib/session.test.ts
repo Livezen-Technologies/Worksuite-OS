@@ -26,3 +26,15 @@ describe('policyLines', () => {
       .toEqual(['Updates: pilot ring', 'Screen locks after at most 5 min idle', 'USB storage is blocked', 'Bluetooth is turned off'])
   })
 })
+
+import { managedLabel } from './os'
+
+describe('managedLabel', () => {
+  const base = { agent: true, device: null, org_name: 'Livezen', server: null, last_check_in: null }
+  it('hides the chip on unmanaged devices and shows the ring when set', () => {
+    expect(managedLabel(null)).toBeNull()
+    expect(managedLabel({ ...base, managed: false, policies: null })).toBeNull()
+    expect(managedLabel({ ...base, managed: true, policies: null })).toBe('Managed')
+    expect(managedLabel({ ...base, managed: true, policies: { version: 'v', update_ring: 'pilot', update_mode: null, maintenance_window: null, lock_timeout_max_s: null, offline_access_days: null, usb_storage: null, bluetooth: null, app_allowlist_size: 0 } })).toBe('Managed · pilot ring')
+  })
+})

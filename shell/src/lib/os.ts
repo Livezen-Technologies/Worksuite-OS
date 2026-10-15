@@ -35,6 +35,12 @@ export interface DeviceInfo {
   policies: DevicePolicies | null
 }
 
+/** Taskbar chip text: null when the device isn't managed (WSOS-MDM-007). */
+export function managedLabel(info: DeviceInfo | null): string | null {
+  if (!info?.managed) return null
+  return info.policies?.update_ring ? `Managed · ${info.policies.update_ring} ring` : 'Managed'
+}
+
 /** Policy → plain sentences for the management notice. Only what the policy actually sets. */
 export function policyLines(p: DevicePolicies | null): string[] {
   if (!p) return []

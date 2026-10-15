@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DesktopProps } from './types'
-import { os } from '../lib/os'
+import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
 
 type Kind = 'WorkSuite' | 'Linux app' | 'System'
@@ -67,6 +67,16 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
   const shortDate = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
 
   useEffect(() => { const t = setTimeout(() => setToast(false), 8000); return () => clearTimeout(t) }, [])
+
+  // Management chip from the device agent's status; re-read each minute so enrollment, wipe or revocation show up.
+  const [device, setDevice] = useState<DeviceInfo | null>(null)
+  useEffect(() => {
+    const load = () => void os.deviceInfo().then(setDevice).catch(() => setDevice(null))
+    load()
+    const t = setInterval(load, 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const managed = managedLabel(device)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -235,7 +245,10 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
           ))}
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <span className="hidden rounded-full bg-[#1e3a8a] px-2.5 py-1 text-xs text-[#dbeafe] lg:inline">Managed · pilot ring</span>
+          {managed && (
+            <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? `Managed by ${device.org_name}` : undefined}
+              className="hidden rounded-full bg-[#1e3a8a] px-2.5 py-1 text-xs text-[#dbeafe] hover:bg-[#1e40af] lg:inline">{managed}</button>
+          )}
           <button type="button" aria-label="Network: Livezen-Office, connected" className="flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]"><BIcon name="wifi" /></button>
           <button type="button" aria-label="Volume 60 percent" className="flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]"><BIcon name="volume" /></button>
           <button type="button" aria-label="Battery 82 percent" className="flex h-10 items-center gap-1.5 rounded-lg px-2 text-xs hover:bg-[#1e293b]"><BIcon name="battery" />82%</button>
