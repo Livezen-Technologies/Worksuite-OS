@@ -4,8 +4,9 @@ import { execFile } from 'node:child_process';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, hostname, release, totalmem } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { Host } from './agent.ts';
+import { ENFORCED_PATHS, type Enforcement } from './enforce.ts';
 import type { Policy } from './state.ts';
 
 export interface HostPaths { stateDir: string; runtimeDir: string; auditLog: string }
@@ -131,6 +132,42 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
     publishStatus(status) { writePublic(join(paths.runtimeDir, 'status.json'), JSON.stringify(status, null, 2)); },
 
     async lockAllSessions() { await run('loginctl', ['lock-sessions']); },
+
+    async applyEnforcement(e: Enforcement) {
+      const changed = new Set<string>();
+      for (const [path, content] of Object.entries(e.files)) {
+        let now: string | null = null;
+        try { now = readFileSync(path, 'utf8'); } catch { /* absent */ }
+        if (content === null) { if (now !== null) { rmSync(path, { force: true }); changed.add(path); } continue; }
+        if (now === content) continue;
+        mkdirSync(dirname(path), { recursive: true, mode: 0o755 });
+        writePublic(path, content);
+        changed.add(path);
+      }
+      if (changed.has(ENFORCED_PATHS.usbUdev) || changed.has(ENFORCED_PATHS.usbModprobe)) {
+        await run('udevadm', ['control', '--reload']).catch(() => {});
+        // Re-evaluate disks already plugged in: read-only is applied, ignored disks drop out of UDisks2.
+        await run('udevadm', ['trigger', '--subsystem-match=block', '--action=change']).catch(() => {});
+        if (e.usb_storage === 'block') await run('modprobe', ['-r', 'uas', 'usb_storage']).catch(() => {});   // busy → stays until unplugged
+      }
+      // Bluetooth: only undo what the agent did, so a user's own airplane mode is left alone.
+      const marker = join(paths.stateDir, 'bluetooth-blocked');
+      if (e.bluetooth === 'block') {
+        writeFileSync(marker, '');
+        await run('systemctl', ['mask', '--now', 'bluetooth.service']).catch(() => {});
+        await run('rfkill', ['block', 'bluetooth']).catch(() => {});
+      } else if (existsSync(marker)) {
+        await run('systemctl', ['unmask', 'bluetooth.service']);
+        await run('systemctl', ['start', 'bluetooth.service']).catch(() => {});
+        await run('rfkill', ['unblock', 'bluetooth']).catch(() => {});
+        rmSync(marker, { force: true });
+      }
+    },
+
+    setOfflineAccessBlock(notice) {
+      if (notice) { mkdirSync(dirname(ENFORCED_PATHS.offlineExpired), { recursive: true, mode: 0o755 }); writePublic(ENFORCED_PATHS.offlineExpired, notice); }
+      else rmSync(ENFORCED_PATHS.offlineExpired, { force: true });
+    },
 
     async installApproved(catalogId) {
       const [source, name] = splitCatalogId(catalogId);

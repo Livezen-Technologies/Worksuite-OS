@@ -1,0 +1,17 @@
+[Unit]
+Description=WorkSuite idle and suspend screen lock (swayidle + gtklock)
+PartOf=worksuite-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/worksuite/worksuite-idle
+Restart=always
+RestartSec=1s
+# Only swayidle is stopped on restart (policy or Settings change). A running locker guard stays, so a restart while
+# the screen is locked never leaves the session without a locker (WSOS-LOCK-004).
+KillMode=process
+Slice=session.slice
+
+[Install]
+WantedBy=worksuite-session.target

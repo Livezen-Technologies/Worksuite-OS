@@ -167,6 +167,7 @@ test('device agent: enrollment, signed policy, signed commands with acks, revoca
     async collectDiagnostics(p) { return { profile: p, sha256: '', content: '' }; },
     async isFullyEncrypted() { return true; },
     async wipeWorkSuiteData() {}, async cryptoErase() {},
+    async applyEnforcement(e) { log.push(`enforce usb=${e.usb_storage}`); }, setOfflineAccessBlock() {},
     audit(e) { log.push(`audit ${e}`); },
   };
   const state = new StateFile(join(dir, 'agent-state.json'));

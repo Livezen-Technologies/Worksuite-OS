@@ -6,6 +6,9 @@ export interface WorkSuiteApi {
   logout(): Promise<void>
   power(action: 'suspend' | 'restart' | 'shutdown'): Promise<void>
   launchApp(appId: string): Promise<void>
+  /** Idle screen-lock timeout (seconds, 0 = never) and the organization's maximum (WSOS-LOCK-003). */
+  lockSettings(): Promise<LockSettings>
+  setLockTimeout(seconds: number): Promise<CloudResult<LockSettings>>
   openLink(url: string): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
@@ -133,6 +136,14 @@ export function policyLines(p: DevicePolicies | null): string[] {
   return out
 }
 
+export interface LockSettings { timeout_s: number; max_s: number | null; choices: number[] }
+
+export function lockChoiceLabel(s: number): string {
+  if (s === 0) return 'Never'
+  if (s < 3600) return `${Math.round(s / 60)} min`
+  return s === 3600 ? '1 hour' : `${Math.round(s / 360) / 10} hours`
+}
+
 export type SignOutChoice = 'none' | 'export' | 'discard'
 
 export interface CloudAccount { id: string; name: string | null; server_url: string; state?: string }
@@ -152,6 +163,9 @@ const stub: WorkSuiteApi = {
   async logout() {},
   async power() {},
   async launchApp() {},
+  // Preview: the shipped default (5 min), no policy maximum.
+  async lockSettings() { return { timeout_s: stubLock, max_s: null, choices: [60, 120, 300, 600, 900, 1800, 3600, 0] } },
+  async setLockTimeout(s) { stubLock = s; return { ok: true, value: { timeout_s: s, max_s: null, choices: [60, 120, 300, 600, 900, 1800, 3600, 0] } } },
   async openLink() {},
   async cloudSignIn(serverUrl, _mode) {
     stubAccounts = [{ id: 'preview:u-1', name: 'Hasarinda', server_url: serverUrl, state: 'signed_in' }]
@@ -269,6 +283,7 @@ const stub: WorkSuiteApi = {
 const stubSim = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('sim') ?? 'preview' : 'preview'
 const stubWait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+let stubLock = 300
 let stubAccounts: CloudAccount[] = []
 // Preview only: package jobs finish after a short delay.
 const stubListeners = new Set<(e: PackageJobEvent) => void>()

@@ -7,9 +7,14 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-AUTH-001/002 greetd default session, no autologin | `live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot`, `installer/modules/usersq.conf`, `installer/branding/worksuite/usersq.qml` | Cfg |
 | WSOS-SES-001 env import before portals | `services/session/bin/worksuite-session` (`--ready`), `services/session/labwc/autostart` | Cfg |
 | WSOS-SES-002 user units bound to `worksuite-session.target` | `services/session/systemd/user/*` | Cfg |
-| WSOS-SES-003 clean logout | `services/session/bin/worksuite-session` (`cleanup`) | Cfg |
-| WSOS-SES-004/005 shell restart ≤ 3 s, recovery after 3 crashes / 60 s | `services/session/systemd/user/worksuite-shell.service`, `worksuite-recovery-launcher.service` | Cfg |
-| WSOS-SES-006 compositor exit → greeter notice | `services/session/bin/worksuite-session` | Cfg |
+| WSOS-SES-003 clean logout (compositor exit and shell Log out) | `services/session/bin/worksuite-session` (`cleanup`, `--logout`), `shell/electron/session.ts` (`logoutCommand`); tests `tests/session/session-test.sh`, `shell/electron/session.test.ts` | Impl |
+| WSOS-SES-004, WSOS-REL-004 apps in their own `app-worksuite-*.scope`, shell restart ≤ 3 s (`KillMode=mixed`) | `shell/electron/session.ts` (`appLaunchCommand`), `services/session/systemd/user/worksuite-shell.service`; test `shell/electron/session.test.ts` | Impl (no VM kill test) |
+| WSOS-SES-005 recovery after 3 crashes / 60 s | `services/session/systemd/user/worksuite-shell.service`, `worksuite-recovery-launcher.service` | Cfg |
+| WSOS-SES-006 compositor exit → greeter notice | `services/session/bin/worksuite-session`, `bin/worksuite-greeter`, `tmpfiles/worksuite-session.conf`, live-build greetd config; test `tests/session/session-test.sh` | Impl |
+| WSOS-LOCK-001/002/004 gtklock (ext-session-lock), lock before suspend, fail closed | `services/session/bin/worksuite-lock`, `bin/worksuite-idle`, `systemd/user/worksuite-idle.service`, `gtklock/{config.ini,style.css}`; test `tests/session/session-test.sh` (stub gtklock) | Impl (not run on a real compositor) |
+| WSOS-LOCK-003 idle timeout within policy maximum | `shell/electron/session.ts`, `shell/src/screens/Settings.tsx` (`ScreenLockRow`), `services/session/bin/worksuite-idle`, `systemd/user/worksuite-idle-policy.path`, `services/device-agent/src/enforce.ts`; tests `session.test.ts`, `session-test.sh`, `agent.test.ts` | Impl |
+| WSOS-AUTH-004 pam_faillock with policy thresholds | `services/session/pam/worksuite-faillock*`, `pam/faillock.conf`, `packaging/debian/worksuite-session.postinst`, `services/device-agent/src/enforce.ts` (`faillockConf`) | Impl (PAM stack not run in a test) |
+| WSOS-INT-010 polkit authentication agent | `services/session/bin/worksuite-polkit-agent`, `systemd/user/worksuite-polkit-agent.service` (lxpolkit / mate-polkit) | Cfg (native agent, not shell-rendered) |
 | WSOS-SHL-001…004 bridge operations, errors, caller check | `native/wayland-bridge/lk.worksuite.WaylandBridge1.xml`, `native/wayland-bridge/README.md` | Doc |
 | WSOS-INT-012 portal backends | `services/session/portals/worksuite-portals.conf` | Cfg |
 | WSOS-DRV-004 conflict copy name | `services/sync/src/policy.ts` (`conflictCopyName`) | Impl |
@@ -34,6 +39,8 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | §9.3 enrollment, WSOS-IDN-005 device credential | `services/device-agent/src/agent.ts` (`enroll`), `src/host.ts` (`publishCredential`); first-run: `shell/src/screens/FirstRun.tsx`, `shell/electron/device.ts` (`enrollDevice`) | Impl |
 | WSOS-MDM-001 inventory and versions | `services/device-agent/src/host.ts` (`facts`, `inventory`), `src/main.ts` | Impl |
 | WSOS-MDM-002 signed policy | `services/device-agent/src/agent.ts` (`refreshPolicy`, `verifyPolicy`) | Impl |
+| WSOS-MDM-002 policy enforcement: lock timeout, offline period, USB storage, Bluetooth, sign-in lockout | `api-contracts/openapi.yaml` (`Policy`), `services/server/src/console.ts` (`POLICY_FIELDS`), `services/device-agent/src/enforce.ts`, `src/host.ts` (`applyEnforcement`, `setOfflineAccessBlock`), `src/agent.ts` (`enforce`, `offlineAccessCheck`); tests `services/device-agent/test/agent.test.ts`, `services/server/test/console.test.ts` | Impl |
+| WSOS-WIPE-001 admin re-authentication and typed device name (plus second approver) | `services/server/src/console.ts` (`reauth`), `console-ui.ts` (`wipeConfirm`); test `services/server/test/console.test.ts` | Impl (no CoreApprovalEngine / wipe permission) |
 | WSOS-MDM-007, WSOS-WIPE-007 management status for users | `services/device-agent/src/agent.ts` (`status`) → `/run/worksuite-device-agent/status.json` → `shell/src/screens/Settings.tsx` (`AboutDevice`) | Impl |
 | WSOS-WIPE-002/003/005/006 remote wipe | `services/device-agent/src/agent.ts` (`wipe`, `offlineKillTimer`), `src/host.ts` (`wipeWorkSuiteData`, `cryptoErase`) | Impl |
 | WSOS-SEC-007 systemd hardening | `services/*/systemd/*.service` | Cfg |

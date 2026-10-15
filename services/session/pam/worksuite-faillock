@@ -1,0 +1,10 @@
+Name: WorkSuite: lock an account after repeated failed sign-ins (pam_faillock)
+Default: yes
+Priority: 0
+Auth-Type: Primary
+Auth:
+	[default=die]	pam_faillock.so authfail conf=/etc/worksuite/faillock.conf
+	sufficient	pam_faillock.so authsucc conf=/etc/worksuite/faillock.conf
+Account-Type: Primary
+Account:
+	required	pam_faillock.so conf=/etc/worksuite/faillock.conf

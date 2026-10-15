@@ -1,0 +1,6 @@
+Name: WorkSuite: refuse sign-in when the policy's offline access period has expired
+Default: yes
+Priority: 0
+Account-Type: Primary
+Account:
+	required	pam_nologin.so file=/etc/worksuite/offline-access-expired

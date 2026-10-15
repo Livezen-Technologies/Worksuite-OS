@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply a new screen-lock timeout from the device policy or Settings
+PartOf=worksuite-session.target
+
+[Path]
+# Written by worksuite-device-agent (policy lock_timeout_max_s) and by Settings > Power.
+PathChanged=/etc/worksuite/lock-policy.conf
+PathChanged=%h/.config/worksuite/lock.conf
+Unit=worksuite-idle-restart.service
+
+[Install]
+WantedBy=worksuite-session.target

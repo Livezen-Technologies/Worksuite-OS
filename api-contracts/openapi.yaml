@@ -497,10 +497,12 @@ components:
         update_ring: { $ref: '#/components/schemas/Ring' }
         update_mode: { type: string, enum: [automatic, notify, manual] }
         maintenance_window: { type: string }
-        lock_timeout_max_s: { type: integer }
-        offline_access_days: { type: integer }
-        usb_storage: { type: string, enum: [allow, read_only, block] }
-        bluetooth: { type: boolean }
+        lock_timeout_max_s: { type: integer, minimum: 60, maximum: 86400, description: 'WSOS-LOCK-003 longest idle time before the screen locks; users choose any shorter time, never "never". Device: /etc/worksuite/lock-policy.conf → worksuite-idle' }
+        offline_access_days: { type: integer, minimum: 0, maximum: 365, description: 'WSOS-AUTH-003/DIR-005 days without a check-in after which sessions lock and local sign-in is refused until the device checks in (pam_nologin); absent or 0 = no limit' }
+        usb_storage: { type: string, enum: [allow, read_only, block], description: 'WSOS-INT-004 USB mass storage: block = drivers not loaded and disks hidden from UDisks2; read_only = disks set read-only by udev before mounting' }
+        bluetooth: { type: boolean, description: 'WSOS-INT-003 false = bluetooth.service masked and radios rfkill-blocked; true or absent = allowed' }
+        login_failures_max: { type: integer, minimum: 3, maximum: 20, description: 'WSOS-AUTH-004 pam_faillock deny (default 5)' }
+        login_lockout_s: { type: integer, minimum: 0, maximum: 86400, description: 'WSOS-AUTH-004 pam_faillock unlock_time; 0 = until reset by an administrator (default 600)' }
         app_allowlist: { type: array, items: { type: string } }
         approved_remotes: { type: array, items: { type: string } }
         offline_wipe_days: { type: integer, description: WSOS-WIPE-006 offline kill timer; absent = off }

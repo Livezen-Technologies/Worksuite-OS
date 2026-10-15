@@ -1,0 +1,81 @@
+/* WorkSuite lock screen for gtklock (GTK 3 CSS). Design: docs/design/boot-install/project/Lock.dc.html.
+ * Deep-navy gradient with cyan and blue glows, IBM Plex Sans, large light clock, translucent glass card for the
+ * password field. The design's notification cards are not reproduced: the locker shows no notification content. */
+
+window {
+  background-color: #071330;
+  background-image:
+    radial-gradient(circle at 78% 22%, rgba(24, 212, 240, 0.35) 0%, rgba(24, 212, 240, 0) 38%),
+    radial-gradient(circle at 18% 80%, rgba(31, 107, 255, 0.50) 0%, rgba(31, 107, 255, 0) 45%),
+    linear-gradient(160deg, #0E2A66 0%, #071330 60%, #040A1A 100%);
+  font-family: "IBM Plex Sans", sans-serif;
+  color: #FFFFFF;
+}
+
+#window-box {
+  padding: 32px;
+}
+
+#clock-label {
+  font-size: 168px;
+  font-weight: 300;
+  letter-spacing: -6px;
+  color: #FFFFFF;
+  margin-bottom: 28px;
+}
+
+#body {
+  min-width: 420px;
+  padding: 16px;
+  border-radius: 14px;
+  background-color: rgba(8, 20, 48, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+#input-label,
+#info-label {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+#input-field {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+  caret-color: #FFFFFF;
+  font-size: 15px;
+  box-shadow: none;
+}
+
+#input-field:focus {
+  border-color: #7FB2FF;
+}
+
+#unlock-button {
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: none;
+  background-image: none;
+  background-color: #1F6BFF;
+  color: #FFFFFF;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+#unlock-button:hover {
+  background-color: #3D80FF;
+}
+
+#error-label {
+  color: #FF8A80;
+  font-size: 13px;
+}
+
+#warning-label {
+  color: #FFD27A;
+  font-size: 13px;
+}

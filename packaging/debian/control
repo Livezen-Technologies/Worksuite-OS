@@ -40,11 +40,13 @@ Description: WorkSuite shell (Electron launcher, dashboard, Settings, App Center
 
 Package: worksuite-session
 Architecture: all
-Depends: labwc, systemd, dbus-user-session, ${misc:Depends}
+Depends: labwc, systemd, dbus-user-session, gtklock, swayidle, zenity, lxpolkit | mate-polkit,
+ libpam-modules, libpam-runtime, ${misc:Depends}
 Description: WorkSuite Wayland session file, systemd user units and launcher
  Session entry for the display manager, the worksuite-session launcher and the
  systemd user units bound to worksuite-session.target, plus Labwc and portal
- configuration.
+ configuration, the gtklock/swayidle screen lock, the polkit authentication
+ agent, the greeter wrapper and the pam_faillock sign-in lockout.
 
 Package: worksuite-user-services
 Architecture: amd64 arm64

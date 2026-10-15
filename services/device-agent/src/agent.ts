@@ -2,6 +2,7 @@
 import { verify, type KeyObject } from 'node:crypto';
 import { ApiError, type DeviceApi } from './api.ts';
 import { canonical, validateCommand, type CommandEnvelope, type CommandName } from './commands.ts';
+import { offlineAccessExpired, offlineNotice, policyEnforcement, type Enforcement } from './enforce.ts';
 import type { AgentState, Policy, StateFile } from './state.ts';
 
 export interface Host {
@@ -14,6 +15,10 @@ export interface Host {
   publishPolicy(policy: Policy | null): void;
   publishStatus(status: Record<string, unknown>): void;
   lockAllSessions(): Promise<void>;
+  /** Writes/removes the policy files and flips USB storage and Bluetooth (WSOS-MDM-002). Idempotent. */
+  applyEnforcement(e: Enforcement): Promise<void>;
+  /** Notice text → local sign-in refused with it (pam_nologin); null → allowed again. */
+  setOfflineAccessBlock(notice: string | null): void;
   installApproved(catalogId: string): Promise<void>;
   scheduleUpdate(): Promise<void>;
   scheduleReboot(window: string | undefined): Promise<void>;
@@ -79,8 +84,35 @@ export class Agent {
     if (!this.verifyPolicy(p)) { this.o.host.audit('policy_rejected', { version: p?.version }); throw new Error('POLICY_SIGNATURE'); }
     this.o.state.update((s) => { s.policy = p; s.last_check_in = this.o.now(); });
     this.o.host.publishPolicy(p);
+    await this.enforce();
     this.publishStatus();
     return p;
+  }
+
+  /** Applies the current policy to the machine; an unmanaged device gets every restriction removed. */
+  async enforce(): Promise<void> {
+    const p = this.s.enrolled ? this.s.policy ?? null : null;
+    try {
+      await this.o.host.applyEnforcement(policyEnforcement(p));
+      this.o.host.audit('policy_enforced', { version: p?.version ?? null, usb_storage: p?.usb_storage ?? 'allow', bluetooth: p?.bluetooth ?? true, lock_timeout_max_s: p?.lock_timeout_max_s ?? null });
+    } catch (e) {
+      this.o.host.audit('policy_enforce_failed', { version: p?.version ?? null, error: e instanceof Error ? e.message : String(e) });
+    }
+    if (!this.s.enrolled && this.s.offline_access_expired) this.setOfflineBlock(false);
+  }
+
+  private setOfflineBlock(expired: boolean) {
+    const days = this.s.policy?.offline_access_days ?? 0;
+    this.o.host.setOfflineAccessBlock(expired ? offlineNotice(this.s.org_name, days) : null);
+    this.o.state.update((s) => { s.offline_access_expired = expired; });
+    this.o.host.audit(expired ? 'offline_access_expired' : 'offline_access_restored', { days });
+  }
+
+  /** WSOS-AUTH-003 / WSOS-DIR-005: no check-in for the offline access period → lock now, refuse new sign-ins. */
+  private async offlineAccessCheck() {
+    if (this.s.offline_access_expired || !offlineAccessExpired(this.s.policy, this.s.last_check_in, this.o.now())) return;
+    this.setOfflineBlock(true);
+    await this.o.host.lockAllSessions().catch(() => {});
   }
 
   verifyPolicy(p: Policy): boolean {
@@ -106,10 +138,11 @@ export class Agent {
       });
       await this.refreshFacts();
       this.o.state.update((s) => { s.last_check_in = this.o.now(); });
+      if (this.s.offline_access_expired) this.setOfflineBlock(false);
       for (const c of res.commands ?? []) await this.handle(c);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'DEVICE_REVOKED') return this.unenrollLocally('revoked');
-      if (e instanceof ApiError && e.status === 0) return this.offlineKillTimer();
+      if (e instanceof ApiError && e.status === 0) { await this.offlineAccessCheck(); return this.offlineKillTimer(); }
       throw e;
     } finally {
       this.publishStatus();
@@ -205,6 +238,7 @@ export class Agent {
     this.o.host.publishCredential(null);
     this.o.host.publishPolicy(null);
     this.o.host.audit('unenrolled', { reason });
+    void this.enforce();
   }
 
   private async ack(id: string, state: string, reason?: string) {
@@ -231,10 +265,12 @@ export class Agent {
       device_id: this.s.device_id ?? null,
       last_check_in: this.s.last_check_in ?? null,
       wiped: this.s.wiped ?? false,
+      offline_access_expired: this.s.offline_access_expired ?? false,
       policies: p ? {
         version: p.version, update_ring: p.update_ring ?? null, update_mode: p.update_mode ?? null,
         maintenance_window: p.maintenance_window ?? null, lock_timeout_max_s: p.lock_timeout_max_s ?? null,
         offline_access_days: p.offline_access_days ?? null, usb_storage: p.usb_storage ?? null, bluetooth: p.bluetooth ?? null,
+        login_failures_max: p.login_failures_max ?? null, login_lockout_s: p.login_lockout_s ?? null,
         app_allowlist_size: p.app_allowlist?.length ?? 0,
       } : null,
       can_wipe_data: this.s.enrolled,

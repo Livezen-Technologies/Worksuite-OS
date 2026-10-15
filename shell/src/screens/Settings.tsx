@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { cloudErrorText, os, packageErrorText, policyLines, serverUrlFor, type OsUpdateStatus, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, lockChoiceLabel, os, packageErrorText, policyLines, serverUrlFor, type OsUpdateStatus, type CloudAccount, type DeviceInfo, type LockSettings, type SignOutChoice } from '../lib/os'
 import type { WindowProps } from './types'
 import CIcon from '../components/CIcon'
 import { AppIcon } from '../components/Logo'
@@ -40,6 +40,26 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
+/** WSOS-LOCK-003: idle lock timeout, chosen by the user within the organization's maximum. */
+function ScreenLockRow() {
+  const [s, setS] = useState<LockSettings | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => { void os.lockSettings().then(setS).catch(() => setErr('Screen lock settings are unavailable.')) }, [])
+  const change = async (v: number) => {
+    const r = await os.setLockTimeout(v)
+    if (r.ok) { setS(r.value); setErr(null) } else setErr(r.error === 'above_policy_maximum' ? 'Your organization does not allow a longer time.' : 'Could not save this setting.')
+  }
+  const help = err ?? (!s ? 'Loading…' : s.max_s !== null ? `Your organization allows up to ${lockChoiceLabel(s.max_s)}` : 'Locks the screen after this much idle time and before sleep')
+  return (
+    <Row label="Lock screen after" help={help}>
+      {s && <select aria-label="Lock screen after" value={s.timeout_s} onChange={(e) => void change(Number(e.target.value))}
+        className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-2 text-sm">
+        {s.choices.map((c) => <option key={c} value={c}>{lockChoiceLabel(c)}</option>)}
+      </select>}
+    </Row>
+  )
+}
+
 function SimplePanel({ section }: { section: Section }) {
   const [t, setT] = useState<Record<string, boolean>>({ wifi: true, bt: false, night: false, mute: false, saver: false, loc: false, diag: true })
   const set = (k: string) => (v: boolean) => setT((s) => ({ ...s, [k]: v }))
@@ -73,7 +93,7 @@ function SimplePanel({ section }: { section: Section }) {
       return <Panel title="Power"><div className={card}>
         <Row label="Battery" help="Charging · about 1 h 20 min to full"><span className="text-[13.5px]">74%</span></Row>
         <Row label="Power saver" help="Reduce background activity"><Toggle label="Power saver" checked={t.saver} onChange={set('saver')} /></Row>
-        <Row label="Screen lock" help="Locks after 5 min idle"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span></Row>
+        <ScreenLockRow />
       </div></Panel>
     case 'Printers':
       return <Panel title="Printers"><div className={card}>

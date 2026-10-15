@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } 
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
+import { appLaunchCommand, lockPaths, logoutCommand, readLockSettings, writeLockTimeout } from './session'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceInfo, enrollDevice } from './device'
 import { followJobs, packageClient } from './packages'
@@ -10,7 +11,6 @@ import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
-const APP_ID = /^[A-Za-z0-9._-]+$/
 
 let win: BrowserWindow | null = null
 
@@ -58,12 +58,16 @@ app.whenReady().then(() => {
 
   handle('ws:authenticate', async () => ({ ok: false, message: 'Authentication is handled by the greeter (greetd/PAM).' }))
   handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
-  handle('ws:logout', () => run('systemctl', ['--user', 'stop', 'worksuite-session.target']))
+  handle('ws:logout', () => run(...logoutCommand()))
   handle('ws:power', (action) => {
     const verbs: Record<string, string> = { suspend: 'suspend', restart: 'reboot', shutdown: 'poweroff' }
     return verbs[action] ? run('systemctl', [verbs[action]]) : undefined
   })
-  handle('ws:launchApp', (id) => (APP_ID.test(id) ? run('gtk-launch', [id]) : undefined))
+  handle('ws:launchApp', (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined })
+  // Settings > Power: idle lock timeout within the policy maximum (WSOS-LOCK-003).
+  const lock = lockPaths(app.getPath('home'))
+  handle('ws:lockSettings', () => readLockSettings(lock))
+  handle('ws:setLockTimeout', (s) => writeLockTimeout(lock, Number(s)))
   handle('ws:openLink', (url) => {
     const u = new URL(url)
     if (!ALLOWED_SCHEMES.has(u.protocol)) throw new Error('Scheme not allowed')
