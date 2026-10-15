@@ -227,6 +227,8 @@ export interface DeviceInfo {
   server: string | null
   last_check_in: number | null
   policies: DevicePolicies | null
+  /** WSOS-IDN-004: provisioning requires enrollment (and so a connection) before first use. */
+  provisioning?: { require_enrollment: boolean; server: string | null }
 }
 
 /** Taskbar chip text: null when the device isn't managed (WSOS-MDM-007). */

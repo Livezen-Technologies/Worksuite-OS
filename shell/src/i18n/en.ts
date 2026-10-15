@@ -807,6 +807,8 @@ const en = {
   'setup.browserCloud': 'Your browser opens the WorkSuite Cloud sign-in page. Your password and any two-step check go to OneAuth only; this setup never sees them.',
   'setup.browserOrg': 'Your browser opens the organization sign-in page. Your password and any two-step check go to OneAuth only; this setup never sees them.',
   'setup.codeOptional': 'Enrollment code (from your IT admin, optional)',
+  'setup.enrollRequired': 'Your organization requires this computer to be enrolled before first use. Connect to the network and enter the enrollment code from your IT admin.',
+  'setup.enrollCode': 'Enrollment code (from your IT admin)',
   'setup.enrollComputer': 'Enroll this computer',
   'setup.enrollHint': 'Enrolling lets your organization apply its policies, updates and remote lock or wipe to this computer. An administrator password is needed.',
   'setup.enrolled': 'This computer is now managed by {org}. See Settings › About this device. Sign in with OneAuth next.',

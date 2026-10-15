@@ -61,6 +61,7 @@ override_dh_auto_test:
 	python3 -m unittest discover -s installer/modules/worksuiterecovery/tests
 	sh tests/session/session-test.sh
 	sh tests/session/smartcard-test.sh
+	sh tests/session/autologin-test.sh
 	cd services/session/greeter && python3 -m unittest discover -s tests -t .
 	cd services/sync && npm test
 	cd services/credentials && npm test

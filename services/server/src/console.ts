@@ -53,6 +53,8 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   offline_wipe_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 365,
   // CoreApprovalEngine waiver (WSOS-WIPE-001): personal-owned devices may be wiped with one approval.
   wipe_personal_single_approval: (v) => typeof v === 'boolean',
+  // WSOS-AUTH-002: the one account a kiosk device may sign in automatically (worksuite-autologin --kiosk).
+  kiosk_autologin_user: (v) => typeof v === 'string' && /^[a-z_][a-z0-9_.@-]{0,63}$/.test(v) && v !== 'root' && v !== 'wsadmin',
   // AppImages (WSOS-AIM-002) and local .deb files (WSOS-APT-005).
   appimages: (v) => v === 'allow' || v === 'block',
   appimage_trusted_keys: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && /^[0-9A-Fa-f ]{40,80}$/.test(x)),

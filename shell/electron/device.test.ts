@@ -56,4 +56,15 @@ describe('deviceInfo', () => {
     expect(i.managed).toBe(false)
     expect(i.device?.hostname).toBeTruthy()
   })
+
+  it('WSOS-IDN-004: reads the provisioning requirement (https server only)', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ws-prov-'))
+    const p = path.join(dir, 'provisioning.json')
+    expect(deviceInfo('/nonexistent/status.json', p).provisioning).toEqual({ require_enrollment: false, server: null })
+    writeFileSync(p, JSON.stringify({ require_enrollment: true, server: 'https://work.example.com' }))
+    expect(deviceInfo('/nonexistent/status.json', p).provisioning).toEqual({ require_enrollment: true, server: 'https://work.example.com' })
+    writeFileSync(p, JSON.stringify({ require_enrollment: 'yes', server: 'http://insecure.example' }))
+    expect(deviceInfo('/nonexistent/status.json', p).provisioning).toEqual({ require_enrollment: false, server: null })
+    rmSync(dir, { recursive: true, force: true })
+  })
 })

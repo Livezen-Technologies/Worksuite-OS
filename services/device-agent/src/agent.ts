@@ -316,6 +316,9 @@ export class Agent {
     void this.o.host.applyVpn(null).catch(() => {}).finally(() => this.o.host.forgetWgKey());
     this.o.host.publishCredential(null);
     this.o.host.publishPolicy(null);
+    // WSOS-IDN-007: revocation ends managed sync and policy, never the local accounts: an offline-period block from
+    // the old policy no longer applies.
+    if (this.s.offline_access_expired) this.setOfflineBlock(false);
     this.o.host.audit('unenrolled', { reason });
     void this.enforce();
   }
