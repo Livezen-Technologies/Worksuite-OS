@@ -165,3 +165,11 @@ contextBridge.exposeInMainWorld('worksuitePeripherals', {
   syncFailed: () => ipcRenderer.invoke('ws:syncFailed'),
   syncRetry: (mutationId: string) => ipcRenderer.invoke('ws:syncRetry', String(mutationId)),
 })
+
+// Notifications from apps through the shell's org.freedesktop.Notifications server — see electron/notifications.ts.
+contextBridge.exposeInMainWorld('worksuiteNotifications', {
+  list: () => ipcRenderer.invoke('ws:notifications'),
+  invoke: (id: number, key: string) => ipcRenderer.invoke('ws:notificationInvoke', String(Number(id)), String(key)),
+  dismiss: (id: number) => ipcRenderer.invoke('ws:notificationDismiss', String(Number(id))),
+  onChange: on('ws:notificationsChanged'),
+})

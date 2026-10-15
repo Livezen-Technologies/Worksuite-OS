@@ -24,6 +24,7 @@ import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { startDesktopHost } from './desktopHost'
 import { startPeripheralsHost } from './peripherals'
+import { startNotifications } from './notifications'
 import { fileHead, isWindowsProgram } from './winexe'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
@@ -388,6 +389,8 @@ app.whenReady().then(() => {
   startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
+  // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
+  startNotifications(handle, broadcast)
 })
 
 app.on('window-all-closed', () => app.quit())

@@ -3,6 +3,7 @@ import type { DesktopProps } from './types'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
 import type { Notice } from '../lib/syncNotices'
+import { AppNoticeActions, dismissAppNotices } from '../components/AppNoticeActions'
 import { ageLabel } from '../lib/power'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
@@ -176,7 +177,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           </div>
           <div className="mt-1 flex items-center justify-between">
             <h2 className="m-0 text-base font-semibold">{t('notes.title')}</h2>
-            {notices.length > 0 && <button type="button" onClick={() => setNotices([])} className="cursor-pointer rounded text-[13px] text-[#7FB2FF] hover:text-[#B8D4FF]">{t('notes.clearAll')}</button>}
+            {notices.length > 0 && <button type="button" onClick={() => { dismissAppNotices(notices); setNotices([]) }} className="cursor-pointer rounded text-[13px] text-[#7FB2FF] hover:text-[#B8D4FF]">{t('notes.clearAll')}</button>}
           </div>
           <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-2 overflow-auto p-0">
             {notices.length === 0 && (
@@ -192,6 +193,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                 <div className="flex flex-1 flex-col gap-[3px]">
                   <div className="flex justify-between gap-2"><span className="text-[13px] font-semibold">{x.title}</span><span className="text-[11px] text-[#8FA3C8]">{ageLabel(x.at, now.getTime())}</span></div>
                   <span className="text-[13px] leading-[1.4] text-[#C9D6EE]">{x.body}</span>
+                  {x.app && <AppNoticeActions notice={x} onDone={() => setNotices((all) => all.filter((n) => n.id !== x.id))} />}
                 </div>
               </li>
             ))}
