@@ -140,19 +140,24 @@ export class Agent {
    */
   async refreshVpn(): Promise<VpnConfig | undefined> {
     if (!this.s.enrolled) return undefined;
-    const register = async () => {
-      const pub = await this.o.host.wgPublicKey(true);
-      this.o.state.update((s) => { s.vpn_key_created_at = this.o.now(); });
-      this.o.host.audit('vpn_key_generated', { public_key: pub });
+    const register = async (rotate: boolean) => {
+      const pub = await this.o.host.wgPublicKey(rotate);
+      if (rotate || !this.s.vpn_key_created_at) {
+        this.o.state.update((s) => { s.vpn_key_created_at = this.o.now(); });
+        this.o.host.audit('vpn_key_generated', { public_key: pub });
+      }
       return this.o.api.vpnPeer(pub);
     };
     let cfg: VpnConfig;
     try { cfg = await this.o.api.vpn(); } catch (e) {
       if (!(e instanceof ApiError && e.code === 'VPN_PEER_KEY_REQUIRED')) throw e;
-      cfg = await register();
+      // New keypair only if the server had accepted our current key and then forgot it (admin rotation). Otherwise
+      // (first use, or a server that ignored the key sent at registration) register the key we already hold.
+      const held = this.s.vpn_key_created_at ? await this.o.host.wgPublicKey(false) : undefined;
+      cfg = await register(!!held && this.s.vpn?.enabled === true && this.s.vpn.device_public_key === held);
     }
     if (this.verifyVpn(cfg) && cfg.enabled) {
-      if (rotationDue(cfg, this.s.vpn_key_created_at, this.o.now())) cfg = await register();
+      if (rotationDue(cfg, this.s.vpn_key_created_at, this.o.now())) cfg = await register(true);
       // The server has a different key than ours (e.g. the key file was lost): re-register the key we hold.
       else if (cfg.device_public_key !== await this.o.host.wgPublicKey(false)) cfg = await this.o.api.vpnPeer(await this.o.host.wgPublicKey(false));
     }

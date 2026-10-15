@@ -112,7 +112,7 @@ test('rotation is due after key_rotation_days', () => {
 });
 
 // ---- agent flow with a fake server and host ----
-function world(opts: { orgVpn?: Partial<VpnConfig> | false; policy?: Omit<Policy, 'signature'> } = {}) {
+function world(opts: { orgVpn?: Partial<VpnConfig> | false; policy?: Omit<Policy, 'signature'>; ignoreRegisterKey?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ws-vpn-'));
   let now = Date.parse('2026-10-15T10:00:00Z');
   const s = {
@@ -127,7 +127,7 @@ function world(opts: { orgVpn?: Partial<VpnConfig> | false; policy?: Omit<Policy
     return signed({ ...config(s.peerKey, opts.orgVpn || {}), ...(s.otherDevice ? { device_id: 'dev-2' } : {}) }, s.forge ? attacker.privateKey : server.privateKey);
   };
   const api: DeviceApi = {
-    async register(_u, _t, body) { s.sentBodies.push(body); s.peerKey = body.wg_public_key; return { device_id: 'dev-1', credential: 'c', org_name: 'Org' }; },
+    async register(_u, _t, body) { s.sentBodies.push(body); s.peerKey = opts.ignoreRegisterKey ? undefined : body.wg_public_key; return { device_id: 'dev-1', credential: 'c', org_name: 'Org' }; },
     async heartbeat() { return { commands: [] }; },
     async policy() { return s.policy; },
     async ack() {}, async inventory() {}, async diagnostics() {},
@@ -166,6 +166,17 @@ test('enrolment sends only the WireGuard public key; the verified config is appl
   assert.equal(plan.kill_switch, true);
   assert.equal((w.agent.status().vpn as { always_on: boolean }).always_on, true);
   w.cleanup();
+});
+
+test('first enrolment uses one keypair, even if the server ignored the key sent at registration', async () => {
+  for (const ignoreRegisterKey of [false, true]) {
+    const w = world({ ignoreRegisterKey });
+    await w.agent.enroll('https://ws.example', 'tok');
+    assert.equal(w.s.keys.length, 1, `ignoreRegisterKey=${ignoreRegisterKey}`);
+    assert.equal(w.s.peerKey, w.s.keys[0].publicKey);
+    assert.equal(w.s.applied.at(-1)!.config.device_public_key, w.s.keys[0].publicKey);
+    w.cleanup();
+  }
 });
 
 test('no key on the server (or an admin rotation) → new keypair, public half registered', async () => {

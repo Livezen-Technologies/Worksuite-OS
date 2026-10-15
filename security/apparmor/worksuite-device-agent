@@ -61,6 +61,13 @@ profile worksuite-device-agent flags=(attach_disconnected) {
   /dev/{sd,nvme,vd,mmcblk,dm-,loop}* rw,
   /run/cryptsetup/ rw,
   /run/cryptsetup/** rwk,
+  # Policy enforcement files (services/device-agent/src/enforce.ts ENFORCED_PATHS), written via <path>.tmp + rename.
+  /etc/worksuite/ rw,
+  /etc/worksuite/{lock-policy.conf,faillock.conf,offline-access-expired}{,.tmp} rw,
+  /etc/modprobe.d/worksuite-usb-storage.conf{,.tmp} rw,
+  /etc/udev/rules.d/71-worksuite-usb-storage.rules{,.tmp} rw,
+  /usr/bin/udevadm rix,
+  /usr/{s,}bin/{modprobe,rfkill} rix,
   # Managed WireGuard VPN (WSOS-INT-001): NetworkManager keyfile (0600, holds the device's private key), nmcli over
   # D-Bus, and the nftables kill switch.
   capability net_admin,
