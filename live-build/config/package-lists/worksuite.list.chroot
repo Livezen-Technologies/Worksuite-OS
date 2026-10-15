@@ -20,3 +20,10 @@ fonts-noto-core
 # Recovery (§9.2)
 dialog
 udisks2
+# Settings bridge CLIs (shell/electron/system.ts): nmcli, bluetoothctl, wpctl, upower, lpstat, wlr-randr, udisksctl
+network-manager
+bluez
+wireplumber
+upower
+cups-client
+wlr-randr

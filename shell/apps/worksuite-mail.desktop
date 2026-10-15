@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite Mail
+GenericName=Mail
+Comment=Email with offline cache and shared inboxes
+Exec=worksuite-app mail
+TryExec=worksuite-app
+Icon=worksuite-mail
+Terminal=false
+Categories=Network;Email;
+Keywords=worksuite;mail;email;inbox;
+StartupNotify=true
+StartupWMClass=worksuite-mail

@@ -50,7 +50,24 @@ paths:
       tags: [existing]
       summary: User, org, modules and settings at login
       responses:
-        '200': { description: Bootstrap, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '200':
+          description: Bootstrap
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  user: { type: object }
+                  org: { type: object }
+                  modules: { type: array, items: { type: object } }
+                  apps:
+                    description: >-
+                      WorkSuite web apps enabled for the org. The desktop shows these in its launcher and opens
+                      web_url in a dedicated app window (worksuite-app); navigation stays on web_url's origin.
+                    type: array
+                    items: { $ref: '#/components/schemas/WebApp' }
+                  settings: { type: object }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/apps:
@@ -93,7 +110,7 @@ paths:
       summary: Resolve worksuite:// links
       parameters: [ { name: url, in: query, required: true, schema: { type: string } } ]
       responses:
-        '200': { description: Target, content: { application/json: { schema: { type: object, properties: { app_id: { type: string }, route: { type: string } } } } } }
+        '200': { description: Target, content: { application/json: { schema: { type: object, properties: { app_id: { type: string }, route: { type: string }, web_url: { type: string, format: uri, nullable: true, description: 'URL the app window opens; null when the org has no such web app' } } } } } }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/audit:
@@ -426,6 +443,13 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
+    WebApp:
+      type: object
+      required: [id, name, web_url]
+      properties:
+        id: { type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$', description: 'Module key; the desktop entry is worksuite-<id>.desktop' }
+        name: { type: string }
+        web_url: { type: string, format: uri, description: 'https URL of the module''s web app (<web base>/<id>/)' }
     Error:
       type: object
       required: [error]

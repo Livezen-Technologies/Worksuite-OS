@@ -6,6 +6,13 @@ import path from 'node:path'
 
 export const APP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/   // never starts with '-': not an option
 
+/** Same scope placement for a program started directly (e.g. the Office editor's "new document" switch). */
+export function scopeCommand(id: string, argv: string[], rand: string = randomBytes(4).toString('hex')): [string, string[]] | null {
+  if (!APP_ID.test(id) || !argv.length) return null
+  return ['systemd-run', ['--user', '--scope', '--collect', '--quiet', '--slice=app.slice',
+    `--unit=app-worksuite-${id.replace(/\.desktop$/, '')}-${rand}.scope`, `--description=${id}`, '--', ...argv]]
+}
+
 /**
  * WSOS-SES-004 / WSOS-REL-004: every app runs in its own transient app-*.scope under app.slice, outside
  * worksuite-shell.service's cgroup, so a shell crash or restart never takes app windows with it.

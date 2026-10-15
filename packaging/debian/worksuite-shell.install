@@ -4,3 +4,7 @@ shell/package.json usr/lib/worksuite/shell/
 shell/node_modules/electron/dist/* usr/lib/worksuite/shell/electron/
 shell/bin/worksuite-shell usr/lib/worksuite/shell/
 shell/bin/worksuite-node usr/bin/
+shell/bin/worksuite-app usr/bin/
+shell/apps/*.desktop usr/share/applications/
+shell/apps/worksuite-mimeapps.list usr/share/applications/
+shell/apps/icons/*.svg usr/share/icons/hicolor/scalable/apps/

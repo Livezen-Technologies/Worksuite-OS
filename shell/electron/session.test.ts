@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { appLaunchCommand, effectiveLockTimeout, logoutCommand, readLockSettings, writeLockTimeout, type LockPaths } from './session'
+import { appLaunchCommand, scopeCommand, effectiveLockTimeout, logoutCommand, readLockSettings, writeLockTimeout, type LockPaths } from './session'
 
 describe('appLaunchCommand (WSOS-SES-004, WSOS-REL-004)', () => {
   it('starts each app in its own transient scope under app.slice, not in the shell cgroup', () => {
@@ -16,6 +16,14 @@ describe('appLaunchCommand (WSOS-SES-004, WSOS-REL-004)', () => {
   })
   it('refuses ids that are not plain desktop ids', () => {
     for (const bad of ['', '../x', 'a b', '--help', '-x', 'x;rm', 'a/b']) expect(appLaunchCommand(bad)).toBeNull()
+  })
+})
+
+describe('scopeCommand', () => {
+  it('puts a directly started program in its own app scope', () => {
+    expect(scopeCommand('libreoffice-writer', ['/usr/bin/libreoffice', '--writer'], 'r1')).toEqual(['systemd-run', ['--user', '--scope', '--collect', '--quiet', '--slice=app.slice',
+      '--unit=app-worksuite-libreoffice-writer-r1.scope', '--description=libreoffice-writer', '--', '/usr/bin/libreoffice', '--writer']])
+    expect(scopeCommand('-x', ['a'])).toBeNull()
   })
 })
 
