@@ -60,7 +60,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
   const [workspace, setWorkspace] = useState(1)
   const [toast, setToast] = useState(true)
   const searchRef = useRef<HTMLInputElement>(null)
-  const name = user || 'Hasarinda'
+  const name = displayName(user) || 'Hasarinda'
 
   const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   const longDate = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -84,7 +84,9 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
     if (tab === 'ws' && a.kind !== 'WorkSuite') return false
     if (tab === 'linux' && a.kind !== 'Linux app') return false
     if (tab === 'fav' && !a.fav) return false
-    return !q || a.name.toLowerCase().includes(q)
+    // App Center lives in the footer; it joins the grid only as a search hit so Recent stays visible.
+    if (!q) return a.id !== 'appcenter'
+    return a.name.toLowerCase().includes(q)
   }), [tab, q])
   const settingsHits = q ? SETTINGS_PAGES.filter((s) => s.toLowerCase().includes(q)) : []
   const recent = q ? RECENT.filter((r) => r.name.toLowerCase().includes(q)) : RECENT
@@ -195,6 +197,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
                 <span className="text-[13px] font-semibold">{name}</span>
                 <span className="text-xs text-[#475569]">Livezen Technologies · Enterprise · Synced 1 min ago</span>
               </div>
+              <button type="button" aria-label="App Center" onClick={() => launch('appcenter')} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="grid" /></button>
               <button type="button" aria-label="Settings" onClick={() => { setLauncher(false); onOpen('settings') }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="settings" /></button>
               <button type="button" aria-label="Lock" onClick={() => { setLauncher(false); onLock() }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="lock" /></button>
               <button type="button" aria-label="Power menu" aria-haspopup="menu" aria-expanded={powerOpen} onClick={() => setPowerOpen((v) => !v)} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#b91c1c] hover:bg-[#fef2f2]"><BIcon name="power" /></button>
@@ -248,4 +251,10 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
       </nav>
     </div>
   )
+}
+
+// Login names arrive as user, user@domain or DOMAIN\user; show the bare name capitalised.
+function displayName(login: string) {
+  const bare = login.split('\\').pop()!.split('@')[0]
+  return bare.charAt(0).toUpperCase() + bare.slice(1)
 }
