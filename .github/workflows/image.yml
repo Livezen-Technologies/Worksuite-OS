@@ -1,28 +1,47 @@
 name: Image
 
-# Builds the .debs and the amd64 live ISO inside Debian trixie, then boots it in QEMU (UEFI) and checks the
-# boot marker. Slow (no KVM on hosted runners), so it runs on demand and for release tags.
+# Builds the .debs and the amd64 live ISO inside Debian trixie with WorkSuite Office, boots it in QEMU (UEFI),
+# checks the boot marker and uploads the ISO and its SHA256. Tags v* also attach them to a GitHub release.
+#
+# Secret WORKSUITE_OFFICE_TOKEN: a token with actions:read on Livezen-Technologies/worksuite-office, used to download
+# the "linux-packages-amd64" artifact of its build.yml (tools/fetch-office.sh). Optional variables
+# WORKSUITE_OFFICE_URL + WORKSUITE_OFFICE_SHA256 fetch a published deb instead. Pull requests from forks get no
+# secrets, so they build a dev image without Office.
 on:
   workflow_dispatch:
     inputs:
       snapshot:
         description: snapshot.debian.org timestamp to build from
         default: '20261001T000000Z'
+      office_run:
+        description: worksuite-office build.yml run ID to take the Office deb from (empty for the latest)
+        default: ''
   push:
+    branches: [main]
     tags: ['v*']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   amd64:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     container:
       image: debian:trixie
       options: --privileged
     env:
       SNAPSHOT: ${{ inputs.snapshot || '20261001T000000Z' }}
       ELECTRON_SKIP_BINARY_DOWNLOAD: ''
+      HAS_OFFICE_SOURCE: ${{ secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_OFFICE_URL != '' }}
     steps:
-      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates live-build debootstrap debhelper dpkg-dev fakeroot dbus-daemon qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools
+      - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gh live-build debootstrap debhelper dpkg-dev fakeroot dbus-daemon qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -30,8 +49,26 @@ jobs:
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       # -d: Node 22 comes from setup-node, not a dpkg package.
       - run: packaging/build-debs.sh -d
-      - run: ARCH=amd64 live-build/build.sh
-      - run: tests/vm/boot-test.sh live-build/out/worksuite-os-1.0.0-dev-amd64.iso 2400
+      - name: Fetch WorkSuite Office
+        if: env.HAS_OFFICE_SOURCE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WORKSUITE_OFFICE_TOKEN }}
+          WORKSUITE_OFFICE_URL: ${{ vars.WORKSUITE_OFFICE_URL }}
+          WORKSUITE_OFFICE_SHA256: ${{ vars.WORKSUITE_OFFICE_SHA256 }}
+          WORKSUITE_OFFICE_RUN: ${{ inputs.office_run }}
+        run: ARCH=amd64 tools/fetch-office.sh
+      # Release mode (Office required) everywhere but fork pull requests, which have no secrets.
+      - name: Build the ISO
+        env:
+          WORKSUITE_RELEASE: ${{ (github.event_name != 'pull_request' || env.HAS_OFFICE_SOURCE == 'true') && '1' || '0' }}
+        run: ARCH=amd64 live-build/build.sh
+      - name: Name the ISO
+        id: iso
+        run: |
+          iso=$(ls live-build/out/*-amd64.iso | head -n1)
+          [ -f "$iso.sha256" ] || (cd "$(dirname "$iso")" && sha256sum "$(basename "$iso")" > "$(basename "$iso").sha256")
+          echo "path=$iso" >> "$GITHUB_OUTPUT"
+      - run: tests/vm/boot-test.sh "${{ steps.iso.outputs.path }}" 2400
       - uses: actions/upload-artifact@v4
         with:
           name: worksuite-os-amd64
@@ -39,3 +76,24 @@ jobs:
             live-build/out/*.iso
             live-build/out/*.sha256
             packaging/out/*.deb
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: amd64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: worksuite-os-amd64
+          path: dist
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          files=$(find dist -name '*.iso' -o -name '*.sha256')
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "WorkSuite OS $TAG" --generate-notes
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber $files
