@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -99,5 +99,26 @@ test('corrupt database: outbox exported, file set aside', () => {
   const healthy = join(dir, 'ok.db');
   openDb(healthy).close();
   assert.equal(checkIntegrity(healthy, dir), null);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('sign-out with unsent changes: count, export to a private file, then forget the account', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ws-sync-'));
+  const { store, svc, server, db } = setup();
+  server.failNext = 5;
+  store.write({ accountId: A, module: 'docs', objectId: 'd1', operation: 'create', data: { t: 'draft' } });
+  await svc.syncNow();
+  assert.equal(svc.unsent(A), 1);
+
+  const path = svc.exportUnsent(A, dir);
+  const out = JSON.parse(readFileSync(path, 'utf8'));
+  assert.equal(out.account_id, A);
+  assert.deepEqual(out.changes[0].payload, { t: 'draft' });
+  assert.equal(statSync(path).mode & 0o777, 0o600);
+
+  svc.forgetAccount(A);
+  for (const t of ['outbox', 'objects', 'accounts']) assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n, 0, t);
+  assert.equal(server.effects, 0, 'discarded changes never reach the server');
+  await svc.stop();
   rmSync(dir, { recursive: true, force: true });
 });

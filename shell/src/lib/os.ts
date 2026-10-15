@@ -9,9 +9,14 @@ export interface WorkSuiteApi {
   openLink(url: string): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string): Promise<CloudResult<CloudAccount>>
-  cloudSignOut(accountId: string): Promise<CloudResult<true>>
+  /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
+  cloudSignOut(accountId: string, choice: SignOutChoice): Promise<CloudResult<{ exported: string | null }>>
+  syncUnsent(accountId: string): Promise<CloudResult<number>>
+  syncNow(): Promise<CloudResult<unknown>>
   cloudAccounts(): Promise<CloudResult<CloudAccount[]>>
 }
+
+export type SignOutChoice = 'none' | 'export' | 'discard'
 
 export interface CloudAccount { id: string; name: string | null; server_url: string; state?: string }
 export type CloudResult<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -33,11 +38,19 @@ const stub: WorkSuiteApi = {
     stubAccounts = [{ id: 'preview:u-1', name: 'Hasarinda', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
   },
-  async cloudSignOut(id) { stubAccounts = stubAccounts.filter((a) => a.id !== id); return { ok: true, value: true } },
+  async cloudSignOut(id, choice) {
+    stubAccounts = stubAccounts.filter((a) => a.id !== id)
+    stubUnsent = 0
+    return { ok: true, value: { exported: choice === 'export' ? '~/Documents/WorkSuite unsent changes.json' : null } }
+  },
+  async syncUnsent() { return { ok: true, value: stubUnsent } },
+  async syncNow() { stubUnsent = Math.max(0, stubUnsent - 1); return { ok: true, value: true } },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
 }
 
 let stubAccounts: CloudAccount[] = []
+// Preview only: pretend three offline edits are waiting so the sign-out prompt can be seen.
+let stubUnsent = 3
 
 /** Broker error codes → text for the user. */
 export function cloudErrorText(code: string): string {
@@ -47,6 +60,7 @@ export function cloudErrorText(code: string): string {
     case 'sign_in_timeout': return 'Sign-in wasn’t finished in the browser. Try again.'
     case 'access_denied': return 'Sign-in was cancelled.'
     case 'broker_unavailable': return 'The sign-in service isn’t running. Try again in a moment.'
+    case 'export_failed': return 'Couldn’t save the unsent changes. Nothing was signed out.'
     default: return 'Sign-in didn’t work. Check your connection and try again.'
   }
 }

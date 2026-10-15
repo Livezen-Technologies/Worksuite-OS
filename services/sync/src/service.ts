@@ -1,5 +1,7 @@
 // Long-running sync loop around SyncEngine: push until idle, pull each stream, sleep until the next due time.
-import type { Db } from './db.ts';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tx, type Db } from './db.ts';
 import type { SyncEngine } from './engine.ts';
 import { LocalStore } from './store.ts';
 
@@ -67,6 +69,33 @@ export class SyncService {
   }
 
   listFailed() { return this.accounts().flatMap((a) => this.o.store.failed(a)); }
+
+  /** Unsent = pending or failed outbox rows (WSOS-SYN-008). */
+  unsent(accountId: string): number {
+    return (this.o.db.prepare(`SELECT COUNT(*) AS n FROM outbox WHERE account_id=?`).get(accountId) as { n: number }).n;
+  }
+
+  /** Sign-out choice "export": write unsent changes to a 0600 JSON file the user keeps. Returns its path. */
+  exportUnsent(accountId: string, dir: string): string {
+    const rows = this.o.db.prepare(`SELECT mutation_id, module, object_id, operation, base_revision, payload, state, last_error, created_at
+      FROM outbox WHERE account_id=? ORDER BY seq`).all(accountId) as { payload: string | null }[];
+    const stamp = new Date(this.o.now()).toISOString().replace(/[:.]/g, '-');
+    const path = join(dir, `WorkSuite unsent changes ${stamp}.json`);
+    const changes = rows.map((r) => ({ ...r, payload: r.payload == null ? null : JSON.parse(r.payload) }));
+    writeFileSync(path, JSON.stringify({ account_id: accountId, exported_at: new Date(this.o.now()).toISOString(), changes }, null, 2), { mode: 0o600, flag: 'wx' });
+    return path;
+  }
+
+  /**
+   * Sign-out cleanup ("export" after writing the file, or "discard" after the user confirmed): drop this account's
+   * local WorkSuite state in one transaction so nothing half-synced survives. The next sign-in rebuilds from the server.
+   */
+  forgetAccount(accountId: string) {
+    tx(this.o.db, () => {
+      for (const t of ['outbox', 'conflicts', 'objects', 'sync_cursors', 'file_cache']) this.o.db.prepare(`DELETE FROM ${t} WHERE account_id=?`).run(accountId);
+      this.o.db.prepare('DELETE FROM accounts WHERE id=?').run(accountId);
+    });
+  }
 
   retryFailed(mutationId: string) { this.o.engine.retryFailed(mutationId); return this.syncNow(); }
 

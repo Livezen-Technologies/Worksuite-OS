@@ -7,8 +7,8 @@ import type { TokenProvider } from './transport.ts';
 
 type Request = { id?: unknown; method: string; params?: Record<string, unknown> };
 
-/** Serve lk.worksuite.Sync1-equivalent methods for the shell: Status, ListFailed, RetryFailed, SyncNow. */
-export function serveControl(path: string, svc: SyncService): Server {
+/** Serve lk.worksuite.Sync1-equivalent methods for the shell: Status, ListFailed, RetryFailed, SyncNow, Unsent, ExportUnsent, Forget. */
+export function serveControl(path: string, svc: SyncService, exportDir = '.'): Server {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   rmSync(path, { force: true });
   const server = createServer((sock) => {
@@ -20,7 +20,7 @@ export function serveControl(path: string, svc: SyncService): Server {
       let nl: number;
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-        sock.write(JSON.stringify(await dispatch(svc, line)) + '\n');
+        sock.write(JSON.stringify(await dispatch(svc, line, exportDir)) + '\n');
       }
     });
     sock.on('error', () => {});
@@ -29,7 +29,7 @@ export function serveControl(path: string, svc: SyncService): Server {
   return server;
 }
 
-async function dispatch(svc: SyncService, line: string) {
+async function dispatch(svc: SyncService, line: string, exportDir: string) {
   let req: Request;
   try { req = JSON.parse(line); } catch { return { error: 'bad_request' }; }
   const id = req.id ?? null;
@@ -41,6 +41,19 @@ async function dispatch(svc: SyncService, line: string) {
       const m = req.params?.mutation_id;
       if (typeof m !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(m)) return { id, error: 'invalid_argument' };
       void svc.retryFailed(m);
+      return { id, result: true };
+    }
+    // Sign-out with unsent changes (WSOS-SYN-008): the shell asks Unsent, then the user picks wait / export / discard.
+    case 'Unsent':
+    case 'ExportUnsent':
+    case 'Forget': {
+      const a = req.params?.account_id;
+      if (typeof a !== 'string' || a.length === 0 || a.length > 512) return { id, error: 'invalid_argument' };
+      if (req.method === 'Unsent') return { id, result: svc.unsent(a) };
+      if (req.method === 'ExportUnsent') {
+        try { return { id, result: svc.exportUnsent(a, exportDir) }; } catch { return { id, error: 'export_failed' }; }
+      }
+      svc.forgetAccount(a);
       return { id, result: true };
     }
     default: return { id, error: 'unknown_method' };

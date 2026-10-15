@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { cloudErrorText, os, type CloudAccount } from '../lib/os'
+import { cloudErrorText, os, type CloudAccount, type SignOutChoice } from '../lib/os'
 import type { WindowProps } from './types'
 import CIcon from '../components/CIcon'
 
@@ -278,19 +278,106 @@ export default function Settings({ onClose }: WindowProps) {
 function CloudAccounts() {
   const [accounts, setAccounts] = useState<CloudAccount[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [prompt, setPrompt] = useState<{ account: CloudAccount; unsent: number } | null>(null)
   const load = () => os.cloudAccounts().then((r) => (r.ok ? setAccounts(r.value) : setError(cloudErrorText(r.error))))
   useEffect(() => { void load() }, [])
-  const signOut = async (id: string) => {
-    const r = await os.cloudSignOut(id)
-    if (!r.ok) setError(cloudErrorText(r.error))
+
+  const finish = async (a: CloudAccount, choice: SignOutChoice) => {
+    const r = await os.cloudSignOut(a.id, choice)
+    setPrompt(null)
+    if (!r.ok) { setError(cloudErrorText(r.error)); return }
+    setNotice(r.value.exported ? `Signed out. Unsent changes were saved to ${r.value.exported}` : 'Signed out.')
     void load()
   }
-  if (error) return <Row label="WorkSuite account" help={error}><span className="text-[13.5px] text-ws-muted">Unavailable</span></Row>
+  // WSOS-SYN-008: never sign out silently over unsent changes.
+  const signOut = async (a: CloudAccount) => {
+    setError(null); setNotice(null)
+    const r = await os.syncUnsent(a.id)
+    if (!r.ok) { setError(cloudErrorText(r.error)); return }
+    if (r.value === 0) return finish(a, 'none')
+    setPrompt({ account: a, unsent: r.value })
+  }
+
+  if (error && !accounts) return <Row label="WorkSuite account" help={error}><span className="text-[13.5px] text-ws-muted">Unavailable</span></Row>
   if (!accounts) return <Row label="WorkSuite account"><span className="text-[13.5px] text-ws-muted">Loading…</span></Row>
-  if (!accounts.length) return <Row label="WorkSuite account" help="Not signed in. Sign in from first-run setup or here to sync."><span className="text-[13.5px] text-ws-muted">Signed out</span></Row>
-  return <>{accounts.map((a) => (
-    <Row key={a.id} label={a.name ?? 'WorkSuite account'} help={`${a.server_url}${a.state === 'refresh_failed' ? ' · sign in again to resume sync' : ''}`}>
-      <button type="button" onClick={() => void signOut(a.id)} className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Sign out</button>
-    </Row>
-  ))}</>
+  return <>
+    {(error || notice) && <p role="status" className={`m-0 border-b border-ws-line/60 px-5 py-3 text-[13px] ${error ? 'text-red-700' : 'text-emerald-700'}`}>{error ?? notice}</p>}
+    {accounts.length === 0
+      ? <Row label="WorkSuite account" help="Not signed in. Sign in from first-run setup or here to sync."><span className="text-[13.5px] text-ws-muted">Signed out</span></Row>
+      : accounts.map((a) => (
+        <Row key={a.id} label={a.name ?? 'WorkSuite account'} help={`${a.server_url}${a.state === 'refresh_failed' ? ' · sign in again to resume sync' : ''}`}>
+          <button type="button" onClick={() => void signOut(a)} className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Sign out</button>
+        </Row>
+      ))}
+    {prompt && <UnsentDialog {...prompt} onCancel={() => setPrompt(null)} onChoose={(c) => finish(prompt.account, c)} />}
+  </>
+}
+
+/** Wait to sync, export, or discard (confirmed) — the three choices SRS WSOS-SYN-008 requires. */
+function UnsentDialog({ account, unsent, onCancel, onChoose }: { account: CloudAccount; unsent: number; onCancel: () => void; onChoose: (c: SignOutChoice) => Promise<void> }) {
+  const [left, setLeft] = useState(unsent)
+  const [waiting, setWaiting] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const n = (k: number) => `${k} unsent change${k === 1 ? '' : 's'}`
+
+  // "Wait to sync": ask for a sync and check every 2 s; sign out once nothing is left.
+  useEffect(() => {
+    if (!waiting) return
+    let stop = false
+    const tick = async () => {
+      if (stop) return
+      await os.syncNow()
+      const r = await os.syncUnsent(account.id)
+      if (stop) return
+      if (r.ok && r.value === 0) { stop = true; await onChoose('none'); return }
+      if (r.ok) setLeft(r.value)
+      timer = setTimeout(tick, 2000)
+    }
+    let timer = setTimeout(tick, 0)
+    return () => { stop = true; clearTimeout(timer) }
+  }, [waiting, account.id, onChoose])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy, onCancel])
+
+  const run = async (c: SignOutChoice) => { setBusy(true); await onChoose(c); setBusy(false) }
+  const btn = 'h-10 rounded-lg px-4 text-sm font-semibold disabled:opacity-50'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="unsent-title" aria-describedby="unsent-desc"
+        className="flex w-[460px] max-w-full flex-col gap-4 rounded-2xl bg-ws-surface p-6 text-ws-ink shadow-[0_24px_64px_rgba(2,6,23,0.35)]">
+        <h3 id="unsent-title" className="m-0 text-lg font-semibold">{n(left)}</h3>
+        <p id="unsent-desc" className="m-0 text-sm text-ws-muted">
+          Changes you made offline haven’t reached {account.server_url} yet. Signing out removes WorkSuite data from this computer, so choose what happens to them.
+        </p>
+        {waiting ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-800" aria-live="polite">
+            <span>Syncing… you’ll be signed out when everything has reached the server.</span>
+            <button type="button" onClick={() => setWaiting(false)} className="shrink-0 underline">Stop waiting</button>
+          </div>
+        ) : confirmDiscard ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <span>Discard {n(left)}? They can’t be recovered.</span>
+            <div className="flex justify-end gap-2">
+              <button type="button" disabled={busy} onClick={() => setConfirmDiscard(false)} className={`${btn} border border-slate-300 bg-white text-slate-700`}>Keep them</button>
+              <button type="button" disabled={busy} onClick={() => void run('discard')} className={`${btn} bg-red-700 text-white`}>Discard and sign out</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <button type="button" disabled={busy} onClick={() => setWaiting(true)} className={`${btn} bg-ws-accent text-white`}>Wait to sync, then sign out</button>
+            <button type="button" disabled={busy} onClick={() => void run('export')} className={`${btn} border border-slate-300 bg-ws-surface`}>Save changes to a file and sign out</button>
+            <button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className={`${btn} border border-red-200 bg-ws-surface text-red-700`}>Discard changes…</button>
+          </div>
+        )}
+        <button type="button" disabled={busy} onClick={onCancel} className="self-end text-sm text-ws-muted underline">Cancel — stay signed in</button>
+      </div>
+    </div>
+  )
 }

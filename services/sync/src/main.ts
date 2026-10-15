@@ -79,7 +79,8 @@ async function main() {
     tokens: brokerTokens(join(runtimeDir, 'credentials.sock'), a.id),
   });
   const svc = new SyncService({ db, engine, store, streams: cfg.streams, intervalMs: cfg.interval_ms, log });
-  const control = serveControl(join(runtimeDir, 'sync.sock'), svc);
+  const docs = join(home, 'Documents');
+  const control = serveControl(join(runtimeDir, 'sync.sock'), svc, existsSync(docs) ? docs : home);
 
   const shutdown = async (signal: string) => {
     log('stopping', { signal });

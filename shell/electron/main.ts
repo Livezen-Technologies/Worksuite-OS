@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
-import { brokerCall, followSessionLock, publicAccounts } from './broker'
+import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
@@ -70,7 +70,27 @@ app.whenReady().then(() => {
     const r = await brokerCall('SignIn', { server_url: serverUrl }, 6 * 60_000)
     return r.ok ? { ok: true, value: publicAccounts([r.value])[0] } : r
   })
-  handle('ws:cloudSignOut', (accountId) => brokerCall('SignOut', { account_id: accountId }))
+  // WSOS-SYN-008: the renderer asks how many changes are unsent, the user chooses, then sign-out runs.
+  handle('ws:cloudSignOut', async (accountId, choice) => {
+    if (!['none', 'export', 'discard'].includes(choice)) return { ok: false, error: 'invalid_argument' }
+    let exported: string | null = null
+    if (choice === 'export') {
+      const r = await syncCall('ExportUnsent', { account_id: accountId })
+      if (!r.ok) return r
+      exported = String(r.value)
+    }
+    // Remove this account's local WorkSuite data in every case; no sync service running means there is none.
+    const f = await syncCall('Forget', { account_id: accountId })
+    if (!f.ok && f.error !== 'broker_unavailable') return f
+    const r = await brokerCall('SignOut', { account_id: accountId })
+    return r.ok ? { ok: true, value: { exported } } : r
+  })
+  handle('ws:syncUnsent', async (accountId) => {
+    const r = await syncCall('Unsent', { account_id: accountId })
+    // No sync service running means nothing can be queued for this account.
+    return r.ok ? { ok: true, value: Number(r.value) } : r.error === 'broker_unavailable' ? { ok: true, value: 0 } : r
+  })
+  handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')
     return r.ok ? { ok: true, value: publicAccounts(r.value) } : r

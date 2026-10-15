@@ -24,6 +24,7 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-SYN-004 per-record validation errors, no retry | `services/sync/src/engine.ts`, `LocalStore.failed()` | Impl |
 | WSOS-SYN-005 one refresh on 401, never discard | `services/sync/src/engine.ts` (`authed`) | Impl |
 | WSOS-SYN-006 expired cursor → bounded full resync | `services/sync/src/engine.ts` (`pull`, `sweep`) | Impl |
+| WSOS-SYN-008 sign-out with unsent changes: wait / export / discard | `shell/src/screens/Settings.tsx` (`UnsentDialog`), `shell/electron/main.ts`, `services/sync/src/service.ts` (`unsent`, `exportUnsent`, `forgetAccount`) | Impl |
 | §9.2 local database corruption → export outbox, rebuild | `services/sync/src/main.ts` (`checkIntegrity`) | Impl |
 | WSOS-SES-003 sync stops cleanly on logout | `services/sync/src/service.ts` (`stop`), `worksuite-sync.service` | Impl |
 | §8.4 conflict policy by data type | `services/sync/src/policy.ts` (`resolveConflict`) | Impl |

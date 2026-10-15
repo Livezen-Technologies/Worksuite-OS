@@ -6,11 +6,20 @@ import path from 'node:path'
 
 export type BrokerReply = { ok: true; value: unknown } | { ok: false; error: string }
 
-const socketPath = () => path.join(process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`, 'worksuite', 'credentials.sock')
+const socketPath = (name: string) => path.join(process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`, 'worksuite', name)
 
 export function brokerCall(method: string, params: Record<string, unknown> = {}, timeoutMs = 15_000): Promise<BrokerReply> {
+  return serviceCall('credentials.sock', method, params, timeoutMs)
+}
+
+/** The sync service's control socket (Unsent, ExportUnsent, Forget, SyncNow, Status). */
+export function syncCall(method: string, params: Record<string, unknown> = {}): Promise<BrokerReply> {
+  return serviceCall('sync.sock', method, params, 15_000)
+}
+
+function serviceCall(name: string, method: string, params: Record<string, unknown>, timeoutMs: number): Promise<BrokerReply> {
   return new Promise((resolve) => {
-    const sock = createConnection(socketPath())
+    const sock = createConnection(socketPath(name))
     let buf = ''
     let settled = false
     const finish = (r: BrokerReply) => { if (!settled) { settled = true; sock.destroy(); resolve(r) } }
