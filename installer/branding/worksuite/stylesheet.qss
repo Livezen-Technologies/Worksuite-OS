@@ -120,3 +120,29 @@ QMessageBox { background: #0F2350; border: 1px solid rgba(127, 178, 255, 0.2); b
 QMessageBox QLabel { color: #C9D6EE; font-size: 14px; min-width: 360px; }
 QMessageBox QPushButton { min-width: 96px; padding: 10px 18px; }
 QDialogButtonBox { background: transparent; }
+
+/* Confirm disk and Recovery key (design: Installer sub-steps › 5 · Confirm disk, 6 · Recovery key);
+   worksuiteconfirm names its parts. */
+#wsConfirm { background: qradialgradient(cx:0.7, cy:0, radius:0.8, fx:0.7, fy:0, stop:0 #3A1E22, stop:0.75 #0A1A3D); }
+#wsRecovery { background: qradialgradient(cx:0.7, cy:0, radius:0.8, fx:0.7, fy:0, stop:0 #12306B, stop:0.75 #0A1A3D); }
+#wsEyebrow { color: #18D4F0; font-family: "IBM Plex Mono"; font-size: 12px; letter-spacing: 1px; }
+#wsConfirm #wsEyebrow { color: #FFB98A; }
+#wsTitle { color: #E8EEFA; font-size: 30px; font-weight: 700; }
+#wsSubtitle { color: #8FA3C8; font-size: 15px; }
+#wsConfirm #wsSubtitle { color: #C9D6EE; }
+#wsDiskCard { background: rgba(255, 159, 90, 0.06); border: 1px solid rgba(255, 159, 90, 0.4); border-radius: 14px; }
+#wsDiskHeader { background: transparent; border: none; border-bottom: 1px solid rgba(255, 159, 90, 0.2); border-radius: 0; }
+#wsDiskName { font-size: 16px; font-weight: 600; }
+#wsDiskNode { color: #FFB98A; font-family: "IBM Plex Mono"; font-size: 13px; }
+#wsTag { font-family: "IBM Plex Mono"; font-size: 11px; padding: 3px 0; border-radius: 5px; color: #7FB2FF; background: rgba(31, 107, 255, 0.18); }
+#wsTag[kind="DELETE"] { color: #FF8A7A; background: rgba(255, 138, 122, 0.18); }
+#wsTag[kind="FORMAT"] { color: #C9D6EE; background: rgba(127, 178, 255, 0.12); }
+#wsOp { font-size: 14px; }
+#wsFieldLabel { color: #C9D6EE; font-size: 13px; font-weight: 500; }
+#wsConfirmInput { font-family: "IBM Plex Mono"; min-height: 42px; border-color: rgba(255, 159, 90, 0.5); }
+#wsConfirmInput:focus { border-color: #FF9F5A; }
+#wsKeyBox { background: rgba(4, 10, 26, 0.6); border: 1px dashed rgba(24, 212, 240, 0.5); border-radius: 16px; }
+#wsKeyGroup { background: rgba(14, 32, 72, 0.8); border-radius: 8px; padding: 12px 0; font-family: "IBM Plex Mono"; font-size: 20px; letter-spacing: 2px; }
+#wsKeyPlain { color: #5E739C; font-family: "IBM Plex Mono"; font-size: 12px; }
+#wsAck { background: rgba(14, 32, 72, 0.6); border: 1px solid rgba(127, 178, 255, 0.2); border-radius: 12px; padding: 14px 16px; font-size: 15px; }
+#wsAck:checked { border-color: #1F6BFF; }

@@ -13,6 +13,9 @@
 #include <QString>
 
 class QCheckBox;
+class QFrame;
+class QGridLayout;
+class QVBoxLayout;
 class QLabel;
 class QLineEdit;
 class QWidget;
@@ -47,8 +50,15 @@ private:
     enum class Mode { Erase, Recovery };
     Mode m_mode = Mode::Erase;
     QWidget* m_widget = nullptr;
+    QLabel* m_eyebrow = nullptr;
     QLabel* m_title = nullptr;
     QLabel* m_details = nullptr;
+    QLabel* m_diskName = nullptr;   // erase: disk card header
+    QLabel* m_diskNode = nullptr;
+    QVBoxLayout* m_ops = nullptr;   // erase: the planned partition changes
+    QLabel* m_inputLabel = nullptr;
+    QFrame* m_keyBox = nullptr;     // recovery: the key in groups
+    QGridLayout* m_keyGrid = nullptr;
     QLineEdit* m_input = nullptr;
     QLabel* m_key = nullptr;
     QCheckBox* m_saved = nullptr;
