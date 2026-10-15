@@ -1,0 +1,155 @@
+// Recovery screens (docs/design/boot-install R1–R6): pure helpers for the recovery key, startup repair and
+// snapshots, plus the screen state machine. Nothing here touches the key beyond formatting it in memory.
+
+// --- Recovery key (installer/modules/worksuiterecovery: 8 groups of 5 characters from this alphabet) -----------
+export const KEY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+export const KEY_GROUPS = 8
+export const KEY_GROUP_LEN = 5
+export const KEY_LENGTH = KEY_GROUPS * KEY_GROUP_LEN
+
+/** Uppercase, read look-alikes the way the alphabet intends (O→0, I/L→1) and drop anything else (dashes, spaces). */
+export function normalizeKeyChars(s: string): string {
+  let out = ''
+  for (const ch of s.toUpperCase()) {
+    const c = ch === 'O' ? '0' : ch === 'I' || ch === 'L' ? '1' : ch
+    if (KEY_ALPHABET.includes(c)) out += c
+  }
+  return out
+}
+
+export function emptyKey(): string[] { return Array.from({ length: KEY_GROUPS }, () => '') }
+
+/**
+ * Typing or pasting `text` into group `index`: characters fill that group and flow into the next ones, so a whole
+ * key pasted into the first box lands in all eight. Returns the new groups and the group that should have focus.
+ */
+export function fillKeyGroups(groups: readonly string[], index: number, text: string): { groups: string[]; focus: number } {
+  const next = [...groups]
+  let chars = normalizeKeyChars(text)
+  let i = index
+  if (chars.length <= KEY_GROUP_LEN) {
+    next[i] = chars
+    return { groups: next, focus: chars.length === KEY_GROUP_LEN && i < KEY_GROUPS - 1 ? i + 1 : i }
+  }
+  while (chars && i < KEY_GROUPS) {
+    next[i] = chars.slice(0, KEY_GROUP_LEN)
+    chars = chars.slice(KEY_GROUP_LEN)
+    i++
+  }
+  const last = Math.min(i, KEY_GROUPS) - 1
+  return { groups: next, focus: next[last].length === KEY_GROUP_LEN && last < KEY_GROUPS - 1 ? last + 1 : last }
+}
+
+export function keyComplete(groups: readonly string[]): boolean {
+  return groups.length === KEY_GROUPS && groups.every((g) => g.length === KEY_GROUP_LEN && normalizeKeyChars(g) === g)
+}
+
+/** The key as the installer printed it ("7K2QF-…"), which is exactly what the LUKS key slot holds. */
+export function formatKey(groups: readonly string[]): string { return groups.join('-') }
+
+/** Format check only; whether the key opens the disk is up to cryptsetup. */
+export function keyProblem(groups: readonly string[]): string | null {
+  const n = groups.reduce((a, g) => a + g.length, 0)
+  if (n === 0) return 'Enter your recovery key.'
+  if (!keyComplete(groups)) return `The recovery key has ${KEY_LENGTH} characters. ${n} entered so far.`
+  return null
+}
+
+// --- Startup repair -----------------------------------------------------------------------------------------
+export type CheckId = 'boot' | 'disk' | 'crypt' | 'packages' | 'drivers' | 'update'
+export type CheckOutcome = 'ok' | 'fixed' | 'problem' | 'unavailable'
+export type CheckState = 'wait' | 'active' | CheckOutcome
+export interface CheckResult { status: CheckOutcome; note: string; /** Problem the package service can repair. */ fixable?: boolean }
+
+export const CHECKS: { id: CheckId; label: string }[] = [
+  { id: 'boot', label: 'Boot loader' },
+  { id: 'disk', label: 'Disk and file system' },
+  { id: 'crypt', label: 'Encrypted volume' },
+  { id: 'packages', label: 'System packages' },
+  { id: 'drivers', label: 'Drivers' },
+  { id: 'update', label: 'Last update' },
+]
+
+export interface CheckRow { id: CheckId; label: string; state: CheckState; note: string }
+
+export function initialChecks(): CheckRow[] { return CHECKS.map((c) => ({ ...c, state: 'wait', note: '' })) }
+
+/** Share of checks that have finished, 0–100. */
+export function repairPercent(rows: readonly CheckRow[]): number {
+  if (!rows.length) return 0
+  const done = rows.filter((r) => r.state !== 'wait' && r.state !== 'active').length
+  return Math.round((done / rows.length) * 100)
+}
+
+export function repairSummary(rows: readonly CheckRow[]): { fixed: number; problems: number; skipped: number; title: string; text: string } {
+  const fixed = rows.filter((r) => r.state === 'fixed').length
+  const problems = rows.filter((r) => r.state === 'problem').length
+  const skipped = rows.filter((r) => r.state === 'unavailable' || r.state === 'wait').length
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
+  if (problems > 0) return { fixed, problems, skipped, title: 'Some problems remain',
+    text: `Startup repair ${fixed ? `fixed ${plural(fixed, 'problem')} but ` : ''}couldn't fix ${plural(problems, 'problem')}. Try restoring a snapshot or reinstalling.` }
+  if (fixed > 0) return { fixed, problems, skipped, title: 'Your system is fixed', text: `Startup repair fixed ${plural(fixed, 'problem')}. WorkSuite OS should start normally now.` }
+  return { fixed, problems, skipped, title: 'No problems found', text: 'Startup repair didn’t find anything to fix. WorkSuite OS should start normally now.' }
+}
+
+// --- Snapshots ----------------------------------------------------------------------------------------------
+export interface SnapshotInfo { id: string; title: string; created: number; kind: string; os_version: string; last_working: boolean }
+
+const pad = (n: number) => String(n).padStart(2, '0')
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+
+/** "Today, 02:03 · automatic" / "Sun 11 Oct, 03:00 · automatic". */
+export function snapshotDesc(s: SnapshotInfo, now = new Date()): string {
+  const d = new Date(s.created)
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
+  const day = sameDay(d, now) ? 'Today' : sameDay(d, yesterday) ? 'Yesterday'
+    : `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })}`
+  return `${day}, ${time} · ${s.kind}`
+}
+
+/** "02:03 today" / "11 Oct" for the "Apps installed after …" note. */
+export function snapshotWhen(s: SnapshotInfo, now = new Date()): string {
+  const d = new Date(s.created)
+  if (sameDay(d, now)) return `${pad(d.getHours())}:${pad(d.getMinutes())} today`
+  return `${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })}`
+}
+
+/** Preselect the last snapshot that booted, else the newest. */
+export function defaultSnapshot(list: readonly SnapshotInfo[]): string | null {
+  return (list.find((s) => s.last_working) ?? [...list].sort((a, b) => b.created - a.created)[0])?.id ?? null
+}
+
+// --- Screens ------------------------------------------------------------------------------------------------
+export type RecoveryScreen = 'menu' | 'unlock' | 'repair' | 'snapshots' | 'reset' | 'done'
+export type DoneRowState = 'ok' | 'problem' | 'skipped'
+export interface DoneInfo { title: string; text: string; ok: boolean; rows: { k: string; v: string; state: DoneRowState }[]; report?: string }
+export interface RecoveryState { screen: RecoveryScreen; done: DoneInfo | null }
+export type RecoveryAction = { type: 'open'; screen: Exclude<RecoveryScreen, 'done'> } | { type: 'back' } | { type: 'finish'; done: DoneInfo }
+
+export const initialRecovery: RecoveryState = { screen: 'menu', done: null }
+
+export function recoveryReducer(s: RecoveryState, a: RecoveryAction): RecoveryState {
+  switch (a.type) {
+    case 'open': return s.screen === 'menu' ? { screen: a.screen, done: null } : s
+    case 'back': return { screen: 'menu', done: null }
+    case 'finish': return s.screen === 'menu' ? s : { screen: 'done', done: a.done }
+  }
+}
+
+/** Bridge error codes → text. */
+export function recoveryErrorText(code: string): string {
+  switch (code) {
+    case 'unavailable': return 'This isn’t available in this version of WorkSuite OS.'
+    case 'wrong_key': return 'That key didn’t unlock the disk. Check each group and try again.'
+    case 'not_authorized': return 'An administrator password is needed for this. Nothing was changed.'
+    case 'not_found': return 'That disk isn’t connected any more.'
+    case 'already_unlocked': return 'This disk is already unlocked.'
+    case 'service_unavailable': return 'The package service isn’t running.'
+    default: return 'That didn’t work. Nothing was changed.'
+  }
+}
+
+export function formatGiB(bytes: number | null): string {
+  return bytes == null ? '' : `${(bytes / 2 ** 30).toFixed(1)} GiB`
+}

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceInfo, enrollDevice } from './device'
 import { followJobs, packageClient } from './packages'
+import { recoveryHost } from './recovery'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
@@ -111,6 +112,13 @@ app.whenReady().then(() => {
   handle('ws:updateStatus', (check) => pkg.updateStatus(check === 'check'))
   handle('ws:updateDefer', () => pkg.deferUpdate())
   handle('ws:updateInstallNow', () => pkg.installUpdateNow())
+  handle('ws:pkgRepair', () => pkg.repair())
+  // Recovery screens (§9.2). The unlock secret goes to udisksctl's stdin only; it is never logged or stored.
+  const rec = recoveryHost(pkg)
+  handle('ws:recoveryInfo', () => rec.info())
+  handle('ws:recoveryCheck', (id) => rec.check(id))
+  handle('ws:recoveryUnlock', (device, secret) => rec.unlock(device, secret))
+  for (const ch of ['ws:recoverySnapshots', 'ws:recoveryRestore', 'ws:recoveryReinstall', 'ws:recoveryCopyToUsb', 'ws:recoveryTerminal', 'ws:recoverySaveReport']) handle(ch, () => rec.unavailable())
   // Files: real folders plus Drive sync states from the sync service.
   const files = defaultEnv(async (dir) => { const r = await syncCall('FileStates', { dir }); return r.ok && Array.isArray(r.value) ? r.value as { name: string; state: string }[] : null })
   handle('ws:filesRoots', () => ({ roots: roots(files).map(({ id, label }) => ({ id, label })), drive_exists: existsSync(driveDir(files.home)) }))

@@ -37,6 +37,28 @@ export interface WorkSuiteApi {
   filesOpen(root: string, rel: string): Promise<CloudResult<true>>
   filesStatus(root: string): Promise<{ free_bytes: number | null; drive: { states: Record<string, number>; last_sync: number | null; service_state: string } | null }>
   onPkgJob(cb: (e: PackageJobEvent) => void): () => void
+  /** Package repair (§9.2): finishes interrupted dpkg/apt changes; result arrives through onPkgJob. */
+  pkgRepair(): Promise<CloudResult<string>>
+  // Recovery screens (§9.2). Features that have no service yet answer { ok: false, error: 'unavailable' }.
+  recoveryInfo(): Promise<RecoveryInfo>
+  recoveryCheck(id: CheckId): Promise<CheckResult>
+  /** secret: the formatted recovery key or the passphrase. Sent to udisks over stdin only; never stored. */
+  recoveryUnlock(device: string, secret: string): Promise<CloudResult<true>>
+  recoverySnapshots(): Promise<CloudResult<SnapshotInfo[]>>
+  recoveryRestore(snapshotId: string): Promise<CloudResult<true>>
+  recoveryReinstall(mode: 'keep' | 'erase'): Promise<CloudResult<true>>
+  recoveryCopyToUsb(): Promise<CloudResult<true>>
+  recoveryTerminal(): Promise<CloudResult<true>>
+  recoverySaveReport(text: string): Promise<CloudResult<string>>
+}
+
+export type RecoveryFeature = 'unlock' | 'repair' | 'snapshots' | 'reinstall' | 'copy_usb' | 'terminal' | 'report_usb'
+export interface RecoveryLuksDevice { device: string; name: string; label: string | null; version: string | null; size_bytes: number | null; unlocked: boolean }
+export interface RecoveryInfo {
+  os_version: string | null; disk: string | null; firmware: 'EFI' | 'BIOS'
+  /** Shell restarts counted by systemd before recovery opened; null when unknown. */
+  failures: number | null
+  luks: RecoveryLuksDevice[]; features: Record<RecoveryFeature, boolean>
 }
 
 export interface PackagePreview {
@@ -74,6 +96,7 @@ export function packageErrorText(code: string): string {
 }
 
 import type { SyncStatus } from './syncNotices'
+import type { CheckId, CheckResult, SnapshotInfo } from './recovery'
 
 export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
@@ -203,7 +226,48 @@ const stub: WorkSuiteApi = {
     }
   },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
+  async pkgRepair() { return stubJob('repair', 'repair') },
+  async recoveryInfo() {
+    const all = stubSim !== 'none'
+    return { os_version: '1.1', disk: 'vda', firmware: 'EFI', failures: all ? 3 : null,
+      luks: stubSim === 'none' ? [] : [{ device: '/dev/vda2', name: 'vda2', label: 'WorkSuite', version: '2', size_bytes: 42_412_802_048, unlocked: false }],
+      features: { unlock: all, repair: true, snapshots: all, reinstall: all, copy_usb: false, terminal: false, report_usb: false } }
+  },
+  async recoveryCheck(id) {
+    await stubWait(id === 'packages' ? 1500 : 700)
+    const preview: Record<CheckId, CheckResult> = {
+      boot: { status: 'ok', note: 'Fine' }, disk: { status: 'ok', note: 'Fine' }, crypt: { status: 'ok', note: 'Unlocked' },
+      packages: stubSim === 'none' ? { status: 'unavailable', note: 'Package service isn’t running' } : { status: 'problem', note: 'Interrupted package changes', fixable: true },
+      drivers: { status: 'unavailable', note: 'Not checked in this version' },
+      update: stubSim === 'none' ? { status: 'unavailable', note: 'Update service isn’t running' } : { status: 'ok', note: 'Version 1.1' },
+    }
+    return preview[id]
+  },
+  async recoveryUnlock(_device, secret) {
+    await stubWait(600)
+    // Preview: a key starting 00000 (or the passphrase "wrong") is refused so the error state can be reviewed.
+    return secret.startsWith('00000') || secret === 'wrong' ? { ok: false, error: 'wrong_key' } : { ok: true, value: true }
+  },
+  async recoverySnapshots() {
+    if (stubSim === 'none') return { ok: false, error: 'unavailable' }
+    const at = (d: number, h: number, m: number) => { const t = new Date(); t.setDate(t.getDate() - d); t.setHours(h, m, 0, 0); return t.getTime() }
+    return { ok: true, value: [
+      { id: 'snap-4', title: 'Before update to 1.1', created: at(0, 2, 3), kind: 'automatic', os_version: '1.0', last_working: true },
+      { id: 'snap-3', title: 'Weekly snapshot', created: at(4, 3, 0), kind: 'automatic', os_version: '1.0', last_working: false },
+      { id: 'snap-2', title: 'Before installing Docs', created: at(7, 14, 22), kind: 'app install', os_version: '1.0', last_working: false },
+      { id: 'snap-1', title: 'After first setup', created: at(14, 18, 40), kind: 'install', os_version: '1.0', last_working: false },
+    ] }
+  },
+  async recoveryRestore() { await stubWait(800); return stubSim === 'none' ? { ok: false, error: 'unavailable' } : { ok: true, value: true } },
+  async recoveryReinstall() { await stubWait(800); return stubSim === 'none' ? { ok: false, error: 'unavailable' } : { ok: true, value: true } },
+  async recoveryCopyToUsb() { return { ok: false, error: 'unavailable' } },
+  async recoveryTerminal() { return { ok: false, error: 'unavailable' } },
+  async recoverySaveReport() { return { ok: false, error: 'unavailable' } },
 }
+
+// Preview only: `?sim=none` shows the recovery screens as on a host where none of the optional services exist.
+const stubSim = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('sim') ?? 'preview' : 'preview'
+const stubWait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 let stubAccounts: CloudAccount[] = []
 // Preview only: package jobs finish after a short delay.

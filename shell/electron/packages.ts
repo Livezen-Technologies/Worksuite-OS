@@ -70,6 +70,11 @@ export function packageClient(exec: Exec = realExec) {
       const r = await call(exec, 'InstallUpdateNow', '', [])
       return r.ok ? { ok: true, value: true } : r
     },
+    /** Repair (§9.2): dpkg --configure -a, then apt-get -f install; polkit lk.worksuite.repair. */
+    async repair(): Promise<Reply<string>> {
+      const r = await call(exec, 'Repair', '', [])
+      return r.ok ? { ok: true, value: String(r.value[0]) } : r
+    },
     async applyUpdate(): Promise<Reply<string>> {
       const r = await call(exec, 'ApplyUpdate', 'sa{sv}', ['', '0'])
       return r.ok ? { ok: true, value: String(r.value[0]) } : r
