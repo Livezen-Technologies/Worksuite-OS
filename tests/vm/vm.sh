@@ -1,5 +1,6 @@
 #!/bin/sh
-# Drive a QEMU VM by hand or from a script: boot, screenshot, keys. One VM per DIR.
+# Drive a QEMU VM by hand or from a script: boot, screenshot, keys. One VM per DIR. amd64 or arm64 (UEFI both),
+# chosen by ARCH or the ISO name (tests/vm/qemu-arch.sh).
 #   tests/vm/vm.sh start DIR ISO [disk-size]   UEFI, 4 GiB RAM, virtio disk DIR/disk.qcow2 (/dev/vda), ISO first
 #   tests/vm/vm.sh boot-disk DIR               same VM without the ISO (after an install)
 #   tests/vm/vm.sh shot DIR NAME               DIR/NAME.png
@@ -11,19 +12,28 @@
 set -eu
 cmd=${1:?}; dir=${2:?}
 mon() { printf '%s\n' "$1" | socat - "UNIX-CONNECT:$dir/monitor.sock" >/dev/null; }
+here=$(cd "$(dirname "$0")" && pwd)
+# amd64 or arm64 (WSOS-ARM-008): from ARCH, else the ISO name, else what this VM was started as, else the host.
 run() {
-  code=/usr/share/OVMF/OVMF_CODE_4M.fd; [ -f "$code" ] || code=/usr/share/OVMF/OVMF_CODE.fd
-  [ -f "$dir/vars.fd" ] || cp "$(dirname "$code")/$(basename "$code" | sed 's/CODE/VARS/')" "$dir/vars.fd"
-  accel=tcg; [ -w /dev/kvm ] && accel=kvm
-  qemu-system-x86_64 -machine q35,accel=$accel -m 4096 -smp 4 -cpu Nehalem \
-    -drive if=pflash,format=raw,readonly=on,file="$code" -drive if=pflash,format=raw,file="$dir/vars.fd" \
+  [ -z "${ARCH:-}" ] && [ -f "$dir/arch" ] && ARCH=$(cat "$dir/arch")
+  . "$here/qemu-arch.sh" "${iso:-}"
+  echo "$ARCH" > "$dir/arch"
+  [ -f "$dir/vars.fd" ] || cp "$FW_VARS_TEMPLATE" "$dir/vars.fd"
+  extra="-vga virtio"; [ "$ARCH" = amd64 ] && extra="-cpu Nehalem -vga virtio"; [ "$ARCH" = arm64 ] && extra=""
+  # shellcheck disable=SC2086
+  $QEMU $MACHINE -m 4096 -smp 4 $extra \
+    -drive if=pflash,format=raw,readonly=on,file="$FW_CODE" -drive if=pflash,format=raw,file="$dir/vars.fd" \
     -drive if=virtio,format=qcow2,file="$dir/disk.qcow2" "$@" \
-    -vga virtio -display none -monitor "unix:$dir/monitor.sock,server,nowait" -qmp "unix:$dir/qmp.sock,server=on,wait=off" -chardev "socket,id=s0,path=$dir/serial.sock,server=on,wait=off,logfile=$dir/serial.log" -serial chardev:s0 \
+    -display none -monitor "unix:$dir/monitor.sock,server,nowait" -qmp "unix:$dir/qmp.sock,server=on,wait=off" -chardev "socket,id=s0,path=$dir/serial.sock,server=on,wait=off,logfile=$dir/serial.log" -serial chardev:s0 \
     -device virtio-tablet-pci -device virtio-keyboard-pci -nic user,model=virtio-net-pci -daemonize -pidfile "$dir/qemu.pid"
 }
+# amd64 boots the CD first with -boot; arm64 uses bootindex on the scsi-cd (qemu-arch.sh).
+cdrom_args_for() { if [ "$ARCH" = arm64 ]; then echo "-device virtio-scsi-pci,id=scsi0 -drive if=none,id=cd0,media=cdrom,readonly=on,format=raw,file=$1 -device scsi-cd,drive=cd0,bootindex=0"; else echo "-cdrom $1 -boot order=dc"; fi; }
 case "$cmd" in
 start) mkdir -p "$dir"; [ -f "$dir/disk.qcow2" ] || qemu-img create -f qcow2 "$dir/disk.qcow2" "${4:-40G}" >/dev/null
-       run -cdrom "${3:?iso}" -boot order=dc ;;
+       iso=${3:?iso}; [ -n "${ARCH:-}" ] || case "$iso" in *-arm64*.iso) ARCH=arm64 ;; *-amd64*.iso) ARCH=amd64 ;; *) case "$(uname -m)" in aarch64|arm64) ARCH=arm64 ;; *) ARCH=amd64 ;; esac ;; esac
+       # shellcheck disable=SC2046
+       run $(cdrom_args_for "$iso") ;;
 boot-disk) run ;;
 shot) p="$dir/${3:?name}.ppm"; rm -f "$p"; mon "screendump $p"
       # QEMU writes the PPM asynchronously: wait until it exists and its size stops changing.

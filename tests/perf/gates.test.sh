@@ -15,6 +15,7 @@ WORKSUITE_PERF idle_cpu_pct 6.10
 WORKSUITE_PERF login_cycles_failed 0
 WORKSUITE_PERF login_sessions_leaked 0
 WORKSUITE_PERF login_failed_units_new 0
+WORKSUITE_PERF electron_kill_apps_lost 0
 EOF
 check "good CI log passes" '"$here/gates.sh" "$t/good.log" ci-amd64-tcg > "$t/out"'
 check "optional metrics are skipped, not failed" 'grep -q "^SKIP shell_ready_ms" "$t/out"'
@@ -22,6 +23,8 @@ sed 's/idle_mem_mib 980/idle_mem_mib 1600/' "$t/good.log" > "$t/mem.log"
 check "memory over 1.5 GiB fails" '! "$here/gates.sh" "$t/mem.log" ci-amd64-tcg > "$t/out" && grep -q "^FAIL idle_mem_mib" "$t/out"'
 grep -v boot_to_greeter "$t/good.log" > "$t/miss.log"
 check "missing required metric fails" '! "$here/gates.sh" "$t/miss.log" ci-amd64-tcg > "$t/out" && grep -q "^FAIL boot_to_greeter_s *missing" "$t/out"'
+sed "s/electron_kill_apps_lost 0/electron_kill_apps_lost 1/" "$t/good.log" > "$t/rel4.log"
+check "an app lost when Electron is killed fails (REL-004)" '! "$here/gates.sh" "$t/rel4.log" ci-amd64-tcg > "$t/out" && grep -q "^FAIL electron_kill_apps_lost" "$t/out"'
 check "same log fails the hardware gate (30 s)" '! "$here/gates.sh" "$t/good.log" hw-amd64 >/dev/null'
 check "ARM has its own profile" '"$here/gates.sh" "$t/good.log" ci-arm64-tcg >/dev/null'
 check "unknown profile is an error" '! "$here/gates.sh" "$t/good.log" nope 2>/dev/null'

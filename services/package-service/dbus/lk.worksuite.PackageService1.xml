@@ -82,6 +82,13 @@
     </method>
     <!-- WSOS-FLP-004: flatpak uninstall unused (only runtimes no installed app needs). polkit lk.worksuite.package.install. -->
     <method name="PruneRuntimes"><arg name="job" type="o" direction="out"/></method>
+    <!-- WSOS-FLP-001. polkit: lk.worksuite.package.add-remote (auth_admin). NotAuthorized unless device policy lists the
+         name in approved_remotes and the same https .flatpakrepo URL in flatpak_remotes. -->
+    <method name="AddRemote">
+      <arg name="name" type="s" direction="in"/>
+      <arg name="flatpakrepo_url" type="s" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
     <!-- WSOS-AUP-010 offline .wsupdate bundle from removable media or the caller's home. Inspect (read-only) verifies the
          release-key signature and every package's SHA-256; Install (polkit lk.worksuite.update.apply) re-verifies
          after copying to a root-owned directory and installs with apt (no downloads). -->

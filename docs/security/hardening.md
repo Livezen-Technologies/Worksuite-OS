@@ -100,3 +100,56 @@ script for each architecture and uploads the SBOM with the ISO. The generator is
   mitigates the risk (for example disabling the affected feature by policy), and sets a new date.
 - The Electron runtime is listed in the release SBOM. Scanners can therefore flag a shipped Electron version that
   has open CVEs.
+
+## Web content: navigation, CSP, permissions, URL schemes (WSOS-SEC-001/002/003/006)
+
+The policy lives in `shell/electron/webSecurity.ts` and is tested by `shell/electron/webSecurity.test.ts`.
+
+- **Shell renderers** are sandboxed and context-isolated. They have no Node integration (also not in workers or
+  subframes), no `<webview>` and no insecure content. A shell window never navigates: `will-navigate` is cancelled
+  and `window.open` is denied. WorkSuite app windows stay on their own HTTPS origin (`appwindows.ts`).
+- **CSP.** The shipped `dist/index.html` carries a strict policy with no `'unsafe-inline'` style, no inline script
+  and no remote origin (`SHELL_CSP`). The Vite build writes it in place of the development policy.
+- **Web permissions** are denied by default. The shell's own session never grants any. In app partitions, an
+  administrator can grant named permissions to exact HTTPS origins in `/etc/worksuite/web-permissions.json`, for
+  example `{"https://meet.example.org": ["media", "notifications"]}`. Only `media`, `notifications`,
+  `clipboard-sanitized-write`, `fullscreen`, `geolocation` and `display-capture` can be granted. Anything else, any
+  non-HTTPS origin and any malformed entry is ignored, so it stays denied.
+- **URL schemes** handed to the system are limited to `https:`, `mailto:`, `tel:` and `worksuite:`. URLs with
+  embedded credentials are refused.
+
+## What isolation we do and do not claim (WSOS-SEC-013)
+
+WorkSuite OS isolates **web content**: each WorkSuite web app has its own Electron session partition (SEC-004),
+and the renderers are sandboxed. It isolates **Flatpak apps** to the extent of their Flatpak sandbox and declared
+permissions. Some privileged services run under AppArmor (SEC-009).
+
+WorkSuite OS does **not** isolate native, unsandboxed applications of the same user from each other. Debian
+packages, AppImages and scripts run with the user's full rights. They can read
+each other's files, the user's documents and the session's D-Bus. Their separate `app-worksuite-*.scope` units
+(SES-004) are for resource accounting and crash containment (REL-004), **not** a security boundary. Documentation,
+release notes and marketing must not say otherwise. `tests/security/isolation-claims.test.sh` checks the repository
+docs for claims of that kind and fails the build when it finds one.
+
+## Secure Boot chain and key strategy (WSOS-SEC-014)
+
+**Chain.** UEFI firmware (Microsoft UEFI CA) → Debian `shim-signed` → Debian `grub-efi-{amd64,arm64}-signed` →
+Debian's signed `linux-image-*` → in-tree kernel modules signed by Debian's build key and enforced by the kernel
+lockdown that Secure Boot turns on. The image is built with `--uefi-secure-boot auto`. The installer installs the
+signed GRUB and shim (`installer/tests/test_config.py` checks the package set).
+
+**Keys.**
+
+- WorkSuite OS uses **Debian's** signing chain. We do not operate our own shim, GRUB or kernel signing key, and we
+  do not ship a Machine Owner Key (MOK).
+- The image and installer ship **no out-of-tree or DKMS kernel modules**. A module of that kind would be unsigned
+  and would not load under Secure Boot.
+- If WorkSuite ever needs its own kernel or modules, it will use a WorkSuite MOK. The key is generated and kept
+  offline or in an HSM under the same process as the archive keys (SEC-011), and is enrolled with `mokutil` by the
+  user at the console. Its public half ships in a package. The private key is never in the repository or CI.
+- Revocation follows Debian's SBAT and DBX updates, which arrive through `shim-signed` and `fwupd` with normal
+  updates.
+
+**Advertising.** Secure Boot is **not advertised** as supported until a reference-hardware boot with Secure Boot
+enabled is recorded for each architecture. That recording must show `mokutil --sb-state` = enabled, the kernel
+reporting lockdown, and the installed system booting.

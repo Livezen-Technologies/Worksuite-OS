@@ -171,14 +171,16 @@ const views = {
     const d = await api('GET', 'devices/' + encodeURIComponent(id));
     const hb = d.heartbeat || {};
     const send = (command, args) => act(() => api('POST', 'devices/' + id + '/commands', { command, args }), command + ' sent. It runs at the next check-in.');
-    const wipeReason = h('textarea', { 'aria-label': 'Reason for the wipe', placeholder: 'Reason (shown to the approving administrator)' });
-    const wipeScope = h('select', { 'aria-label': 'Wipe scope' }, h('option', { value: 'worksuite_data' }, 'WorkSuite data only'), h('option', { value: 'full_device' }, 'Full device (crypto-erase)'));
     return [h('p', {}, h('a', { href: '#devices' }, '← Devices')), h('h1', {}, d.hostname || d.id),
       h('div', { class: 'card' }, h('dl', {},
         h('dt', {}, 'Device ID'), h('dd', {}, d.id), h('dt', {}, 'Architecture'), h('dd', {}, d.arch), h('dt', {}, 'Key'), h('dd', {}, d.tpm_backed ? 'TPM-backed' : 'Software'),
         h('dt', {}, 'Enrolled'), h('dd', {}, when(d.enrolled_at)), h('dt', {}, 'Last seen'), h('dd', {}, ago(d.last_seen)),
         h('dt', {}, 'OS / shell / kernel'), h('dd', {}, [hb.os_version, hb.shell_version, hb.kernel_version].map((x) => x || '—').join(' / ')),
-        h('dt', {}, 'Policy version'), h('dd', {}, hb.policy_version || '—'), h('dt', {}, 'Update status'), h('dd', {}, hb.update_status || '—'),
+        h('dt', {}, 'Policy requested'), h('dd', {}, d.policy.requested_version === null ? 'No policy' : 'Version ' + d.policy.requested_version),
+        h('dt', {}, 'Policy observed'), h('dd', {}, d.policy.state === 'applied' ? h('span', { class: 'ok' }, 'Version ' + d.policy.observed_version + ' applied')
+          : d.policy.state === 'pending' ? h('span', { class: 'warn' }, 'Device reports version ' + d.policy.observed_version + ' — not yet applied')
+          : d.policy.state === 'not_reported' ? h('span', { class: 'warn' }, 'Not yet reported by the device') : (d.policy.observed_version ?? '—')),
+        h('dt', {}, 'Update status'), h('dd', {}, hb.update_status || '—'),
         h('dt', {}, 'Inventory'), h('dd', {}, d.inventory ? d.inventory.software_count + ' packages, ' + ago(d.inventory.at) : 'not yet received'),
         h('dt', {}, 'Break-glass password'), h('dd', {}, d.break_glass_escrowed ? 'Escrowed' : 'Not escrowed'),
         h('dt', {}, 'Ownership'), h('dd', {}, d.ownership === 'personal' ? 'Personal' : 'Corporate'),
@@ -191,8 +193,8 @@ const views = {
       h('h2', {}, 'Erase'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
         h('button', { class: 'danger', onclick: () => wipeDialog({ request: true, hostname: d.hostname, label: 'Erase device', meta: 'Last seen ' + ago(d.last_seen) + ' · ' + (d.ownership === 'personal' ? 'personal' : 'corporate') + ' device.', note: 'Logged to the audit trail',
           submit: (c, x) => wipeSubmit(() => api('POST', 'wipes', { device_id: id, ...x, ...c }), (r) => r.waived_second_approver ? 'Erase sent. It runs the next time the device connects.' : 'Erase requested. Another administrator must approve it.') }) }, 'Erase device…'))],
-      h('h2', {}, 'Commands'), table(['Command', 'Issued', 'State'], d.commands.map((c) => h('tr', {}, h('td', {}, c.command), h('td', {}, new Date(c.issued_at).toLocaleString()),
-        h('td', {}, h('span', { class: c.state === 'completed' ? 'ok' : c.state === 'failed' || c.state === 'rejected' ? 'bad' : '' }, c.state + (c.reason ? ' (' + c.reason + ')' : '')))))),
+      h('h2', {}, 'Commands'), table(['Requested', 'Observed on the device'], d.commands.map((c) => h('tr', {}, h('td', {}, h('b', {}, c.command + ' requested'), h('div', { class: 'muted' }, new Date(c.issued_at).toLocaleString())),
+        h('td', {}, h('span', { class: c.state === 'completed' ? 'ok' : c.state === 'failed' || c.state === 'rejected' ? 'bad' : 'warn' }, c.observed + (c.reason ? ' (' + c.reason + ')' : '')))))),
       h('h2', {}, 'Update results'), table(['Release', 'Result', 'When'], d.updates.map((u) => h('tr', {}, h('td', {}, u.release_id), h('td', { class: u.result === 'success' ? 'ok' : 'bad' }, u.result), h('td', {}, when(u.at)))))];
   },
   async wipes() {

@@ -6,9 +6,10 @@ import {
   type Appearance, type Privacy, type Theme,
 } from '../lib/setup'
 import { BG, Icon, Mark, P, StepDots, ghostBtn, mono, primaryBtn } from '../components/Ws'
+import FirstRunNetwork from './FirstRunNetwork'
 import { getLocale, setLocale, t as tr, type Locale, type MessageKey } from '../i18n'
 
-// First boot: Welcome → Appearance → Privacy → WorkSuite apps (+ workspace sign-in) → Ready.
+// First boot: Welcome → Appearance → Privacy → WorkSuite apps (+ network and workspace sign-in) → Ready.
 type Mode = 'personal' | 'enterprise'
 
 const THEME_LOOK: Record<Theme, { bg: string; bar: string; win: string }> = {
@@ -234,6 +235,7 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
           )
         })}
       </div>
+      <FirstRunNetwork />
       <div className="flex w-[900px] max-w-full items-center gap-4 rounded-[14px] border border-[rgba(127,178,255,0.16)] bg-[rgba(14,32,72,0.6)] px-5 py-[18px]">
         {signedIn ? <Icon d={P.check} size={22} stroke="#5FD39A" /> : <Icon d={P.person} size={22} stroke="#18D4F0"><circle cx="12" cy="8" r="4" /></Icon>}
         <span className="flex flex-1 flex-col gap-0.5">

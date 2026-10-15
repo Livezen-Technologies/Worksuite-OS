@@ -15,6 +15,7 @@ import { localeTag, useT } from '../i18n'
 import { UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
+import { markLauncherRequest, reportLauncherFirstFrame } from '../lib/perfProbe'
 import { buildLauncherApps, filterApps, taskbarApps, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
 import GlobalSearch from '../components/GlobalSearch'
@@ -52,7 +53,9 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   const [launcher, setLauncher] = useState(false)
   const [a11yOpen, setA11yOpen] = useState(false)
   // Super key from Labwc arrives over lk.worksuite.Shell1 (WSOS-DSK-011).
-  useLauncherKey(useCallback((a: 'toggle' | 'show') => setLauncher((v) => (a === 'show' ? true : !v)), []))
+  useLauncherKey(useCallback((a: 'toggle' | 'show') => { markLauncherRequest(); setLauncher((v) => (a === 'show' ? true : !v)) }, []))
+  // Launcher first frame (WSOS-PRF-005); only forwarded off the console in perf test runs.
+  useEffect(() => { if (launcher) void reportLauncherFirstFrame() }, [launcher])
   const [tab, setTab] = useState<Tab>('all')
   const [query, setQuery] = useState('')
   const [powerOpen, setPowerOpen] = useState(false)
@@ -84,13 +87,23 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false) }
-      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) setLauncher((v) => !v)
+      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  useEffect(() => { if (launcher) searchRef.current?.focus(); else setQuery('') }, [launcher])
+  const launcherButton = useRef<HTMLButtonElement>(null)
+  const launcherWasOpen = useRef(false)
+  useEffect(() => {
+    if (launcher) searchRef.current?.focus()
+    else {
+      setQuery('')
+      // Focus goes back to the launcher button on close, so screen-reader and keyboard users are not left on <body>.
+      if (launcherWasOpen.current && (!document.activeElement || document.activeElement === document.body)) launcherButton.current?.focus()
+    }
+    launcherWasOpen.current = launcher
+  }, [launcher])
 
   // Start menu list: the org's WorkSuite apps (fallback list when not signed in/offline) and installed XDG apps.
   const [allApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
@@ -175,9 +188,9 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       )}
       {launcher && !q && (
         <div className="absolute inset-x-0 top-0 bottom-14 z-30 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
-          <div id="ws-launcher" role="dialog" aria-label={t('launcher.title')} className="flex h-[650px] max-h-full w-[720px] max-w-full flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_rgba(2,6,23,0.5)]">
+          <div id="ws-launcher" role="dialog" aria-modal="true" aria-label={t('launcher.title')} className="flex h-[650px] max-h-full w-[720px] max-w-full flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_rgba(2,6,23,0.5)]">
             <div className="flex flex-col gap-3.5 px-5 pt-5 pb-3">
-              <label className="flex h-11 items-center gap-2.5 rounded-[10px] border border-[#e2e8f0] bg-[#f1f5f9] px-3.5 text-[#475569]">
+              <label className="flex min-h-11 items-center gap-2.5 rounded-[10px] border border-[#e2e8f0] bg-[#f1f5f9] px-3.5 text-[#475569]">
                 <BIcon name="search" />
                 <span className="sr-only">{t('launcher.search')}</span>
                 <input ref={searchRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('launcher.searchPlaceholder')} className="grow border-0 bg-transparent text-[15px] text-[#0f172a] outline-none" />
@@ -238,7 +251,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       )}
 
       <nav aria-label={t('panel.taskbar')} className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
-        <button type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
+        <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
           className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.45)] ring-2 ring-[#1F6BFF]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
         <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => allApps.find((a) => a.id === id)} onLaunch={launch} only={onPrimary} />
         <div role="group" aria-label={t('panel.workspaces')} className="ml-4 hidden gap-1 sm:flex">
