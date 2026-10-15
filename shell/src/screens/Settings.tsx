@@ -275,6 +275,7 @@ function BluetoothPanel() {
         </ul>
       )}
     </section>
+    <BluetoothPairSection powered={b.powered} paired={b.paired} onChange={() => void reload()} />
     <Note>{t('settings.bt.note')}</Note>
   </>
 }
@@ -283,6 +284,8 @@ function BluetoothPanel() {
 import { DisplayPanel } from './DisplaySettings'
 // Settings › Default apps and clipboard history live in DesktopSettings.tsx (WSOS-DSK-008/009).
 import { ClipboardSection, DefaultAppsPanel } from './DesktopSettings'
+// Pairing, drives, power, printers, input methods, rejected sync changes (WSOS-INT-003…006, 011, SYN-004).
+import { BluetoothPairSection, DeviceExtras, SyncProblemsSection } from './PeripheralSettings'
 
 const THEME_ART: Record<string, { bg: string; win: string; bar: string }> = {
   Light: { bg: 'linear-gradient(135deg,#EAF1FF,#C9DAFF)', win: '#FFFFFF', bar: 'rgba(255,255,255,0.8)' },
@@ -509,6 +512,7 @@ function UsersPanel() {
           <LockAfterRow />
         </div>
       </section>
+      <SyncProblemsSection />
       <section aria-labelledby="other-users" className="flex flex-col gap-2">
         <h2 id="other-users" className="m-0 text-sm font-semibold">{t('settings.users.othersHere')}</h2>
         {r.state === 'ok' && !others.length && <div className={`${card} px-4 py-3 text-[13px] text-[#8FA3C8]`}>{t('settings.users.noOthers')}</div>}
@@ -794,7 +798,7 @@ export default function Settings({ onClose }: WindowProps) {
         {section === 'Default apps' && <DefaultAppsPanel />}
         {section === 'Privacy & security' && <PrivacyPanel />}
         {section === 'Users' && <UsersPanel />}
-        {section === 'Devices' && <DevicesPanel onProblem={setProblem} />}
+        {section === 'Devices' && <><DevicesPanel onProblem={setProblem} /><DeviceExtras /></>}
         {section === 'Drivers' && <DriversPanel onOpenUpdates={() => setSection('Updates')} />}
         {section === 'Updates' && <><H1>{t('settings.nav.Updates')}</H1><UpdatesPanel /></>}
         {section === 'About' && <AboutPanel />}

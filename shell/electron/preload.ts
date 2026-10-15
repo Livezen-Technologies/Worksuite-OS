@@ -142,3 +142,26 @@ contextBridge.exposeInMainWorld('worksuiteDesktop', {
   onClipboard: on('ws:clipboardChanged'),
   problemReport: () => ipcRenderer.invoke('ws:problemReport'),
 })
+
+// Bluetooth pairing, removable storage, power profiles, printers, input methods, sync errors — see electron/peripherals.ts.
+contextBridge.exposeInMainWorld('worksuitePeripherals', {
+  btScan: () => ipcRenderer.invoke('ws:btScan'),
+  btPair: (address: string) => ipcRenderer.invoke('ws:btPair', String(address)),
+  btRemove: (address: string) => ipcRenderer.invoke('ws:btRemove', String(address)),
+  volumes: () => ipcRenderer.invoke('ws:volumes'),
+  volMount: (device: string) => ipcRenderer.invoke('ws:volMount', String(device)),
+  volUnlock: (device: string, passphrase: string) => ipcRenderer.invoke('ws:volUnlock', String(device), String(passphrase)),
+  volEject: (device: string) => ipcRenderer.invoke('ws:volEject', String(device)),
+  powerProfiles: () => ipcRenderer.invoke('ws:powerProfiles'),
+  setPowerProfile: (name: string) => ipcRenderer.invoke('ws:setPowerProfile', String(name)),
+  inhibitors: () => ipcRenderer.invoke('ws:inhibitors'),
+  findPrinters: () => ipcRenderer.invoke('ws:findPrinters'),
+  addPrinter: (uri: string, name: string) => ipcRenderer.invoke('ws:addPrinter', String(uri), String(name)),
+  removePrinter: (name: string) => ipcRenderer.invoke('ws:removePrinter', String(name)),
+  printQueue: () => ipcRenderer.invoke('ws:printQueue'),
+  cancelJob: (id: string) => ipcRenderer.invoke('ws:cancelJob', String(id)),
+  inputMethods: () => ipcRenderer.invoke('ws:inputMethods'),
+  setInputMethods: (ids: string[]) => ipcRenderer.invoke('ws:setInputMethods', ...(Array.isArray(ids) ? ids.map(String) : [])),
+  syncFailed: () => ipcRenderer.invoke('ws:syncFailed'),
+  syncRetry: (mutationId: string) => ipcRenderer.invoke('ws:syncRetry', String(mutationId)),
+})
