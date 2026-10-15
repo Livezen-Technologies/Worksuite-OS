@@ -32,8 +32,10 @@ Item {
         if (i < last) subStep = subCount - 1
         state.set("lastStep", i)
         report()
-        if (skipInExpress && state.get("express", false))
-            Qt.callLater(i > last ? ViewManager.next : ViewManager.back)
+        if (skipInExpress && state.get("express", false)) {
+            skipTimer.forward = i > last
+            skipTimer.start()
+        }
     }
     function leave() {
         active = false
@@ -48,6 +50,14 @@ Item {
     }
     onSubStepChanged: report()
     onSubNextOkChanged: report()
+
+    // Leave just after activation rather than from inside Calamares' own step change.
+    Timer {
+        id: skipTimer
+        property bool forward: true
+        interval: 50
+        onTriggered: forward ? ViewManager.next() : ViewManager.back()
+    }
 
     // The footer asks for the next or previous sub-step.
     property string lastRequest: ""
