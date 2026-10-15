@@ -1,12 +1,13 @@
 // desktop/v1 and desktop/v1/os (api-contracts/openapi.yaml). Tenant scoping comes from the authenticated user or
 // device, never from the request. Idempotency-Key replays within 24 h return the stored response.
-import { createPublicKey, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createPublicKey, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { DEFAULT_WEB_APPS, nextSeq, secret, sha256, tx } from './db.ts';
 import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { userFromBearer, type User } from './oauth.ts';
 import { activeKey, signFlat } from './signing.ts';
-import { licenceFor } from './admin.ts';
+import { licenceFor, revokeDevice } from './admin.ts';
+import { issueLoginCode, setNewPassword, verifyDirectoryUser, type DirUserRow } from './identity.ts';
 import { deviceVpnConfig, isWgKey, registerPeer, removePeer } from './vpn.ts';
 
 export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string; webUrl: string }
@@ -80,6 +81,9 @@ const limitOf = (ctx: Ctx) => {
   if (!Number.isInteger(l) || l < 1 || l > 500) throw invalid('limit', '1..500');
   return l;
 };
+
+/** Org directory settings (orgs.directory). */
+export interface DirectorySettings { type?: string; offline_login_days?: number; password_max_age_days?: number; domain?: string; netbios_domain?: string; upn_suffixes?: string[] }
 
 export function policyFor(db: DatabaseSync, orgId: number) {
   const row = db.prepare('SELECT version, body FROM policies WHERE org_id = ?').get(orgId) as { version: number; body: string } | undefined;
@@ -181,6 +185,63 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     // web_url: where the app window opens this link; null when the org has no such web app.
     const web_url = app ? new URL(route.replace(/^\/+/, '') + u.search, app.web_url).toString() : null;
     send(ctx, 200, { app_id: u.hostname, route, web_url });
+  });
+
+  /*
+   * Search and recent files over the caller's own synced records (desktop/v1/search, files/search, files/recent).
+   * The real platform answers these from GET api/search/global, GET api/files/search and
+   * GET api/drive/list?view=recent (worksuite: app/Modules/Search/Config/Routes.php, app/Modules/Files/Config/Routes.php);
+   * this stub searches the `records` table, which is scoped by user_id, so one account never sees another's.
+   */
+  const SEARCH_TYPES: Record<string, string> = { mail: 'mail', files: 'file', drive: 'file', contacts: 'contact', crm: 'crm', tasks: 'task', chat: 'chat', calendar: 'event', notes: 'note', projects: 'project', docs: 'document' };
+  type Rec = { module: string; object_id: string; data: string | null; updated: number };
+  const textOf = (d: Record<string, unknown>, ...k: string[]) => { for (const x of k) if (typeof d[x] === 'string' && d[x]) return d[x] as string; return ''; };
+  const hit = (r: Rec, q: string) => {
+    const d = (r.data ? JSON.parse(r.data) : {}) as Record<string, unknown>;
+    const title = textOf(d, 'title', 'subject', 'name') || r.object_id;
+    const subtitle = textOf(d, 'subtitle', 'from', 'email', 'snippet', 'body').slice(0, 90);
+    const hay = [title, subtitle, textOf(d, 'body')].join(' ').toLowerCase();
+    if (q && !hay.includes(q)) return null;
+    const t = title.toLowerCase();
+    const score = !q ? 0 : t === q ? 1 : t.startsWith(q) ? 0.8 : t.includes(q) ? 0.6 : 0.3;
+    return { id: `${r.module}:${r.object_id}`, type: SEARCH_TYPES[r.module], title, subtitle: subtitle || null, link: `worksuite://${r.module}/${encodeURIComponent(r.object_id)}`, at: new Date(r.updated).toISOString(), score, d };
+  };
+  const records = (userId: number, modules: string[]) => modules.length === 0 ? [] : db.prepare(
+    `SELECT module, object_id, data, updated FROM records WHERE user_id = ? AND deleted = 0 AND module IN (${modules.map(() => '?').join(',')}) ORDER BY updated DESC LIMIT 2000`,
+  ).all(userId, ...modules) as Rec[];
+  const fileOut = (h: NonNullable<ReturnType<typeof hit>>) => ({
+    id: h.id, name: h.title, ext: (h.title.split('.').pop() ?? '').toLowerCase(), folder: textOf(h.d, 'folder', 'folder_name') || null,
+    size: typeof h.d.size === 'number' ? h.d.size : null, modified: h.at, link: h.link, score: h.score,
+  });
+  const queryOf = (ctx: Ctx) => {
+    const q = (ctx.url.searchParams.get('q') ?? '').trim().toLowerCase();
+    if (q.length < 1 || q.length > 200) throw invalid('q', '1 to 200 characters');
+    return q;
+  };
+
+  r.on('GET', '/desktop/v1/search', (ctx) => {
+    const { user } = userCtx(db, ctx);
+    const q = queryOf(ctx);
+    const want = (ctx.url.searchParams.get('types') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const modules = Object.keys(SEARCH_TYPES).filter((m) => SEARCH_TYPES[m] !== 'file' && (!want.length || want.includes(SEARCH_TYPES[m])));
+    const limit = Math.min(50, limitOf(ctx));
+    const results = records(user.id, modules).map((r) => hit(r, q)).filter((h) => h !== null)
+      .sort((a, b) => b.score - a.score).slice(0, limit).map(({ d: _d, ...h }) => h);
+    send(ctx, 200, { query: q, results, state: 'ready' });
+  });
+
+  r.on('GET', '/desktop/v1/files/search', (ctx) => {
+    const { user } = userCtx(db, ctx);
+    const q = queryOf(ctx);
+    const files = records(user.id, ['files', 'drive']).map((r) => hit(r, q)).filter((h) => h !== null)
+      .sort((a, b) => b.score - a.score).slice(0, Math.min(50, limitOf(ctx))).map(fileOut);
+    send(ctx, 200, { query: q, files });
+  });
+
+  r.on('GET', '/desktop/v1/files/recent', (ctx) => {
+    const { user } = userCtx(db, ctx);
+    const files = records(user.id, ['files', 'drive']).slice(0, Math.min(50, limitOf(ctx))).map((r) => fileOut(hit(r, '')!));
+    send(ctx, 200, { files });
   });
 
   r.on('POST', '/desktop/v1/audit', async (ctx) => {
@@ -314,6 +375,23 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
         const c = db.prepare('SELECT envelope FROM commands WHERE id = ?').get(ctx.params.id) as { envelope: string };
         if (json<{ command: string }>(c.envelope).command === 'RemoteWipe') removePeer(db, d.id);
       }
+      // WSOS-WIPE-008: the result is recorded against the approved request and audited; a completed wipe marks the
+      // device "Wiped" and revokes its credential, so it has to enroll again. A full-device wipe reports "started"
+      // last (the crypto-erase destroys the agent), so that is when it is marked.
+      if (state !== 'received') {
+        const w = db.prepare('SELECT id, org_id, requested_by, scope FROM wipe_requests WHERE command_id = ? AND device_id = ?').get(ctx.params.id, d.id) as { id: string; org_id: number; requested_by: number; scope: string } | undefined;
+        if (w) {
+          const wiped = state === 'completed' || (state === 'started' && w.scope === 'full_device');
+          const now = Date.now();
+          db.prepare('UPDATE wipe_requests SET result = ?, result_at = ? WHERE id = ?').run(state, now, w.id);
+          db.prepare('INSERT INTO admin_log (org_id, user_id, action, detail, at) VALUES (?, ?, ?, ?, ?)')
+            .run(w.org_id, w.requested_by, `wipe_${state}`, JSON.stringify({ wipe_id: w.id, device_id: d.id, reported_by: 'device', reason: typeof b.reason === 'string' ? b.reason.slice(0, 200) : undefined }), now);
+          if (wiped) {
+            db.prepare('UPDATE devices SET wiped_at = ? WHERE id = ?').run(now, d.id);
+            revokeDevice(db, d.id);
+          }
+        }
+      }
       return { status: 204 };
     });
   });
@@ -386,14 +464,46 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     const b = obj(await ctx.body());
     const username = str(b, 'username', 320).trim().toLowerCase();
     const password = str(b, 'password', 1024);
-    const u = db.prepare('SELECT id, email, name, role, pw_salt, pw_hash, disabled FROM users WHERE email = ? AND org_id = ?').get(username, d.org_id) as
-      { id: number; email: string; name: string; role: string; pw_salt: Uint8Array; pw_hash: Uint8Array; disabled: number } | undefined;
-    const got = scryptSync(password, u ? Buffer.from(u.pw_salt) : Buffer.alloc(16), 32);
-    if (!u || !timingSafeEqual(got, Buffer.from(u.pw_hash))) throw new HttpError(401, 'INVALID_CREDENTIALS', 'wrong username or password');
-    if (u.disabled) throw new HttpError(403, 'ACCOUNT_DISABLED', 'account disabled');
-    const dir = json<{ offline_login_days?: number }>((db.prepare('SELECT directory FROM orgs WHERE id = ?').get(d.org_id) as { directory: string }).directory);
-    send(ctx, 200, { username: u.email, user_id: u.id, name: u.name, groups: [u.role === 'admin' ? 'worksuite-admins' : 'worksuite-users'],
-      offline_login_days: dir.offline_login_days ?? 7 });
+    const dir = json<DirectorySettings>((db.prepare('SELECT directory FROM orgs WHERE id = ?').get(d.org_id) as { directory: string }).directory);
+    const v = verifyDirectoryUser(db, d.org_id, username, password, { otp: typeof b.otp === 'string' ? b.otp : undefined, maxAgeDays: dir.password_max_age_days });
+    if (!v.ok) {
+      if (v.code === 'ACCOUNT_DISABLED') throw new HttpError(403, 'ACCOUNT_DISABLED', 'account disabled');
+      if (v.code === 'PASSWORD_EXPIRED') throw new HttpError(401, 'PASSWORD_EXPIRED', 'the password has expired and must be changed');
+      if (v.code === 'MFA_REQUIRED') throw new HttpError(401, 'MFA_REQUIRED', 'a verification code is required');
+      throw new HttpError(401, 'INVALID_CREDENTIALS', 'wrong username or password');
+    }
+    send(ctx, 200, loginReply(v.user, dir, d.id));
+  });
+  const loginReply = (u: DirUserRow, dir: DirectorySettings, deviceId: string) => ({
+    username: u.email, user_id: u.id, name: u.name, groups: [u.role === 'admin' ? 'worksuite-admins' : 'worksuite-users'],
+    offline_login_days: dir.offline_login_days ?? 7, mfa: !!u.totp_secret,
+    // WSOS-DIR-008: exchanged by the session's token broker (os-login grant), bound to this device.
+    login_code: issueLoginCode(db, u.id, deviceId),
+  });
+
+  // WSOS-DIR-007: change an expired (or admin-reset) password at the greeter. Needs the current password (and code).
+  r.on('POST', '/desktop/v1/os/directory/change-password', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    const b = obj(await ctx.body());
+    const username = str(b, 'username', 320).trim().toLowerCase();
+    const oldPw = str(b, 'old_password', 1024);
+    const newPw = str(b, 'new_password', 1024);
+    const v = verifyDirectoryUser(db, d.org_id, username, oldPw, { otp: typeof b.otp === 'string' ? b.otp : undefined });
+    if (!v.ok && v.code !== 'PASSWORD_EXPIRED') {
+      if (v.code === 'ACCOUNT_DISABLED') throw new HttpError(403, 'ACCOUNT_DISABLED', 'account disabled');
+      if (v.code === 'MFA_REQUIRED') throw new HttpError(401, 'MFA_REQUIRED', 'a verification code is required');
+      throw new HttpError(401, 'INVALID_CREDENTIALS', 'wrong username or password');
+    }
+    const user = v.user!;
+    const plain = user.totp_secret && typeof b.otp !== 'string' ? oldPw.replace(/\d{6}$/, '') : oldPw;
+    try { setNewPassword(db, user.id, plain, newPw); } catch (e) { throw invalid('new_password', (e as Error).message); }
+    db.prepare('UPDATE tokens SET revoked = 1 WHERE user_id = ?').run(user.id);   // other sessions sign in again
+    db.prepare('INSERT OR IGNORE INTO audit (id, principal, type, at, data) VALUES (?, ?, ?, ?, ?)')
+      .run(randomUUID(), `device:${d.id}`, 'directory.password_changed', new Date().toISOString(), JSON.stringify({ user_id: user.id }));
+    // The change is the sign-in: same reply as authenticate (a TOTP code is single use, so no second check).
+    if (user.disabled) throw new HttpError(403, 'ACCOUNT_DISABLED', 'account disabled');
+    const dir = json<DirectorySettings>((db.prepare('SELECT directory FROM orgs WHERE id = ?').get(d.org_id) as { directory: string }).directory);
+    send(ctx, 200, loginReply(user, dir, d.id));
   });
 
   // Break-glass audit (WSOS-DIR-010): every use and every rotation is recorded against the device.

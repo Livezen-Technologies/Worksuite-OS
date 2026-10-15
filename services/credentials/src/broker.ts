@@ -1,7 +1,7 @@
 // One token broker for the shell, WorkSuite apps, Office and sync (WSOS-IDN-008).
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { authorizationUrl, discover, OidcError, tokenRequest, userinfo, type Endpoints, type OidcOptions, type TokenSet } from './oidc.ts';
+import { authorizationUrl, discover, OidcError, OS_LOGIN_CODE, TOKEN_EXCHANGE, tokenRequest, userinfo, type Endpoints, type OidcOptions, type TokenSet } from './oidc.ts';
 import { pkcePair, randomState } from './pkce.ts';
 import type { SecretStore } from './keyring.ts';
 
@@ -62,6 +62,23 @@ export class Broker {
     const tokens = await tokenRequest(ep, {
       grant_type: 'authorization_code', code, redirect_uri: redirectUri, client_id: this.o.clientId, code_verifier: verifier,
     }, this.o);
+    return this.finishSignIn(serverUrl, ep, tokens, mode);
+  }
+
+  /**
+   * WSOS-DIR-008: after a directory sign-in at the greeter, exchange the one-time login code (bound to this device)
+   * for tokens: no browser and no second prompt. The code and device credential are used once and not stored.
+   */
+  async signInWithLoginCode(serverUrl: string, code: string, deviceCredential: string): Promise<Account> {
+    if (this.locked) throw new OidcError('locked');
+    const ep = await discover(serverUrl, this.o);
+    const tokens = await tokenRequest(ep, {
+      grant_type: TOKEN_EXCHANGE, subject_token: code, subject_token_type: OS_LOGIN_CODE, client_id: this.o.clientId,
+    }, this.o, { 'x-ws-device': deviceCredential });
+    return this.finishSignIn(serverUrl, ep, tokens, 'enterprise');
+  }
+
+  private async finishSignIn(serverUrl: string, ep: Endpoints, tokens: TokenSet, mode: 'personal' | 'enterprise'): Promise<Account> {
     if (!tokens.refresh_token) throw new OidcError('no_refresh_token');
     const info = await userinfo(ep, tokens.access_token, this.o);
     const account: Account = { id: `${new URL(ep.issuer).host}:${info.sub}`, server_url: serverUrl, issuer: ep.issuer, sub: info.sub, name: info.name };

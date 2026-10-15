@@ -114,7 +114,7 @@ const views = {
       h('tr', { class: 'click', tabindex: 0, onclick: () => { location.hash = 'device/' + d.id; }, onkeydown: (e) => { if (e.key === 'Enter') location.hash = 'device/' + d.id; } },
         h('td', {}, h('b', {}, d.hostname || d.id), h('div', { class: 'muted' }, d.arch)), h('td', {}, d.os_version || '—'), h('td', {}, d.policy_version || '—'),
         h('td', {}, d.encrypted === null ? '—' : d.encrypted ? h('span', { class: 'ok' }, 'Yes') : h('span', { class: 'bad' }, 'No')),
-        h('td', {}, ago(d.last_seen)), h('td', {}, d.revoked ? h('span', { class: 'chip bad' }, 'Revoked') : d.pending ? h('span', { class: 'chip' }, d.pending + ' pending') : h('span', { class: 'chip' }, 'Managed')))))];
+        h('td', {}, ago(d.last_seen)), h('td', {}, d.wiped_at ? h('span', { class: 'chip bad' }, 'Wiped') : d.revoked ? h('span', { class: 'chip bad' }, 'Revoked') : d.pending ? h('span', { class: 'chip' }, d.pending + ' pending') : h('span', { class: 'chip' }, 'Managed')))))];
   },
   async device(id) {
     const d = await api('GET', 'devices/' + encodeURIComponent(id));
@@ -130,13 +130,14 @@ const views = {
         h('dt', {}, 'Policy version'), h('dd', {}, hb.policy_version || '—'), h('dt', {}, 'Update status'), h('dd', {}, hb.update_status || '—'),
         h('dt', {}, 'Inventory'), h('dd', {}, d.inventory ? d.inventory.software_count + ' packages, ' + ago(d.inventory.at) : 'not yet received'),
         h('dt', {}, 'Break-glass password'), h('dd', {}, d.break_glass_escrowed ? 'Escrowed' : 'Not escrowed'),
-        h('dt', {}, 'Status'), h('dd', {}, d.revoked ? h('span', { class: 'bad' }, 'Revoked') : 'Managed'))),
+        h('dt', {}, 'Ownership'), h('dd', {}, d.ownership === 'personal' ? 'Personal' : 'Corporate'),
+        h('dt', {}, 'Status'), h('dd', {}, d.wiped_at ? h('span', { class: 'bad' }, 'Wiped ' + when(d.wiped_at) + ' (must enroll again)') : d.revoked ? h('span', { class: 'bad' }, 'Revoked') : 'Managed'))),
       d.revoked ? null : [h('h2', {}, 'Actions'), h('div', { class: 'row' },
         h('button', { onclick: () => send('RequestLock') }, 'Lock screen'), h('button', { onclick: () => send('RefreshPolicy') }, 'Refresh policy'),
         h('button', { onclick: () => send('ScheduleUpdate') }, 'Install updates'), h('button', { onclick: () => send('RebootDuringWindow') }, 'Restart in maintenance window'),
         h('button', { onclick: () => send('CollectApprovedDiagnostics', { bundle_profile: 'basic' }) }, 'Collect diagnostics'),
         h('button', { class: 'danger', onclick: () => { if (confirm('Revoke this device? It stops receiving policy and its credential stops working.')) act(() => api('POST', 'devices/' + id + '/revoke'), 'Device revoked.'); } }, 'Revoke')),
-      h('h2', {}, 'Request a remote wipe'), h('div', { class: 'card form' }, h('p', { class: 'muted' }, 'A second administrator must approve the request before the device receives it.'),
+      h('h2', {}, 'Request a remote wipe'), h('div', { class: 'card form' }, h('p', { class: 'muted' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
         wipeScope, wipeReason, ...wipeConfirm(d.hostname, (c) => act(() => api('POST', 'wipes', { device_id: id, scope: wipeScope.value, reason: wipeReason.value, ...c }), 'Wipe requested. Another administrator must approve it.'), 'Request wipe'))],
       h('h2', {}, 'Commands'), table(['Command', 'Issued', 'State'], d.commands.map((c) => h('tr', {}, h('td', {}, c.command), h('td', {}, new Date(c.issued_at).toLocaleString()),
         h('td', {}, h('span', { class: c.state === 'completed' ? 'ok' : c.state === 'failed' || c.state === 'rejected' ? 'bad' : '' }, c.state + (c.reason ? ' (' + c.reason + ')' : '')))))),
@@ -147,7 +148,7 @@ const views = {
     return [h('h1', {}, 'Wipe requests'), table(['Device', 'Scope', 'Reason', 'Requested', 'Decision'], items.map((w) => h('tr', {},
       h('td', {}, w.hostname), h('td', {}, w.scope === 'full_device' ? 'Full device' : 'WorkSuite data'), h('td', {}, w.reason),
       h('td', {}, w.requested_by + ', ' + when(w.requested_at)),
-      h('td', {}, w.cancelled ? 'Cancelled' : w.approved_by ? 'Approved by ' + w.approved_by : w.mine
+      h('td', {}, w.cancelled ? 'Cancelled' : w.approved_by ? 'Approved by ' + w.approved_by + (w.result ? ' · device reported ' + w.result + ' ' + when(w.result_at) : '') : w.mine
         ? h('button', { onclick: () => act(() => api('POST', 'wipes/' + w.id + '/cancel'), 'Request cancelled.') }, 'Cancel')
         : h('div', { class: 'form' }, h('p', { class: 'muted' }, 'Approving erases data at the device\'s next check-in. This cannot be undone.'),
           ...wipeConfirm(w.hostname, (c) => act(() => api('POST', 'wipes/' + w.id + '/approve', c), 'Wipe approved and sent.'), 'Approve'),

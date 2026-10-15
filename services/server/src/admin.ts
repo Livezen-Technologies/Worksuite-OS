@@ -79,6 +79,8 @@ export function publishRelease(db: DatabaseSync, m: Record<string, unknown>) {
 // release key, so devices accept a pause/pull/promotion only because it carries a valid signature. ----
 
 export const RELEASE_PERMISSION = 'desktop.releases.manage';
+export { WIPE_PERMISSION } from './approvals.ts';
+import { WIPE_PERMISSION } from './approvals.ts';
 const RINGS = ['development', 'pilot', 'stable'] as const;
 const ARCHES = ['amd64', 'arm64'] as const;
 type Ring = typeof RINGS[number];
@@ -145,7 +147,7 @@ export function emergencyRelease(db: DatabaseSync, m: Record<string, unknown>, a
 }
 
 export function grantPermission(db: DatabaseSync, email: string, permission: string, grant = true) {
-  if (permission !== RELEASE_PERMISSION) throw new Error(`unknown permission ${permission}`);
+  if (permission !== RELEASE_PERMISSION && permission !== WIPE_PERMISSION) throw new Error(`unknown permission ${permission}`);
   const u = db.prepare('SELECT id, permissions FROM users WHERE email = ?').get(email.trim().toLowerCase()) as { id: number; permissions: string } | undefined;
   if (!u) throw new Error('no such user');
   const set = new Set(JSON.parse(u.permissions) as string[]);
@@ -236,4 +238,27 @@ export const rotateKey = (db: DatabaseSync) => createKey(db).key_id;
 
 export function listDevices(db: DatabaseSync) {
   return (db.prepare('SELECT id, org_id, hostname, arch, tpm_backed, revoked, enrolled_at, last_seen FROM devices ORDER BY enrolled_at').all() as Record<string, unknown>[]);
+}
+
+// ---- directory settings (WSOS-DIR-002/004/007) ----
+
+const DOMAIN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)+$/;
+
+/** Validates and stores the org's directory settings; unknown keys are refused. */
+export function setDirectory(db: DatabaseSync, orgId: number, body: Record<string, unknown>) {
+  const out: Record<string, unknown> = { type: 'oneauth' };
+  for (const [k, v] of Object.entries(body)) {
+    switch (k) {
+      case 'type': if (v !== 'oneauth') throw new Error('type must be oneauth'); break;
+      case 'offline_login_days': case 'password_max_age_days':
+        if (!Number.isInteger(v) || (v as number) < 0 || (v as number) > 3650) throw new Error(`${k}: 0 to 3650`); out[k] = v; break;
+      case 'domain': if (typeof v !== 'string' || !DOMAIN.test(v)) throw new Error('domain: a DNS name'); out[k] = v; break;
+      case 'netbios_domain': if (typeof v !== 'string' || !/^[A-Z0-9][A-Z0-9-]{0,14}$/.test(v)) throw new Error('netbios_domain: 1-15 upper-case letters/digits'); out[k] = v; break;
+      case 'upn_suffixes': if (!Array.isArray(v) || v.length > 20 || !v.every((x) => typeof x === 'string' && DOMAIN.test(x))) throw new Error('upn_suffixes: DNS names'); out[k] = v; break;
+      case 'group_role_map': case 'escrow_public_key': out[k] = v; break;
+      default: throw new Error(`unknown directory field ${k}`);
+    }
+  }
+  db.prepare('UPDATE orgs SET directory = ? WHERE id = ?').run(JSON.stringify(out), orgId);
+  return out;
 }

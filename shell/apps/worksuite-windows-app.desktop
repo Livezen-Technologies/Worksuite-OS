@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Windows program
+Comment=Explains that Windows programs do not run on WorkSuite OS
+Exec=/usr/lib/worksuite/shell/worksuite-windows-app %f
+TryExec=/usr/lib/worksuite/shell/worksuite-windows-app
+Icon=dialog-information
+Terminal=false
+NoDisplay=true
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/vnd.microsoft.portable-executable;application/x-msi;application/x-ms-installer;application/x-ms-shortcut;application/x-bat;application/x-msdos-program;

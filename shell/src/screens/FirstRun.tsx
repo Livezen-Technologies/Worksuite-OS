@@ -49,9 +49,18 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
   const [signedIn, setSignedIn] = useState<CloudAccount | null>(null)
   const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // WSOS-IDN-004: provisioning can require enrollment (so a connection) before first use: no skipping setup.
+  const [required, setRequired] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => { headingRef.current?.focus() }, [step])
+  useEffect(() => {
+    void os.deviceInfo().then((i) => {
+      if (!i.provisioning?.require_enrollment || i.managed) return
+      setRequired(true)
+      if (i.provisioning.server) setServer((s) => s || i.provisioning!.server!)
+    }).catch(() => {})
+  }, [])
 
   const pickLook = (a: Appearance) => { setLook(a); applyAppearance(a); writeJson(KEYS.appearance, a) }
   const finish = () => {
@@ -72,6 +81,7 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
   // OIDC + PKCE happens in the system browser through the credentials broker (WSOS-IDN-001); no password here.
   const signIn = async () => {
     if (mode === 'enterprise' && !server.trim()) return setError(tr('setup.enterServer'))
+    if (required && !enrolled && !code.trim()) return setError(tr('setup.enrollRequired'))
     // Enrollment is optional (WSOS-INS-006); with a code it runs first. Organizations that require it refuse sign-in until it's done.
     if (mode === 'enterprise' && code.trim() && !enrolled) return void enroll()
     setError(null); setWaiting(true)
@@ -107,7 +117,7 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
       <button type="button" onClick={() => setStep(1)} className="mt-7 flex cursor-pointer items-center gap-2.5 rounded-xl bg-[#1F6BFF] px-10 py-[15px] text-base font-semibold text-white shadow-[0_10px_30px_rgba(31,107,255,0.4)] hover:bg-[#3A7DFF]">
         {tr('setup.getStarted')}<Icon d={P.arrow} size={18} width={2.5} />
       </button>
-      <button type="button" onClick={finish} className="cursor-pointer rounded-lg p-2.5 text-sm text-[#8FA3C8] hover:text-[#E8EEFA]">{tr('setup.skip')}</button>
+      {!required && <button type="button" onClick={finish} className="cursor-pointer rounded-lg p-2.5 text-sm text-[#8FA3C8] hover:text-[#E8EEFA]">{tr('setup.skip')}</button>}
       <div className="mt-10"><StepDots step={0} /></div>
     </Screen>
   )
@@ -243,10 +253,11 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
         <p className="m-0 text-[15px] text-[#8FA3C8]">{sub}</p>
       </div>
       <div className="flex w-full flex-col items-center" style={{ gap }}>{body}</div>
+      {required && !enrolled && step === 3 && <p role="alert" className="m-0 max-w-[640px] text-center text-[14px] text-[#FFD08A]">{tr('setup.enrollRequired')}</p>}
       <div className="mt-auto flex w-[900px] max-w-full items-center justify-between">
         <button type="button" onClick={() => setStep(step - 1)} className={ghostBtn}>{tr('common.back')}</button>
         <StepDots step={step} />
-        <button type="button" onClick={() => setStep(step + 1)} className={primaryBtn}>
+        <button type="button" disabled={required && !enrolled && step === 3} onClick={() => setStep(step + 1)} className={primaryBtn}>
           {step === 3 ? (apps.length === 1 ? tr('setup.installOne') : apps.length ? tr('setup.installMany', { count: apps.length }) : tr('common.continue')) : tr('common.next')}
         </button>
       </div>
@@ -258,7 +269,7 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
             {([
               ['personal', tr('setup.personal'), tr('setup.personalHint')],
               ['enterprise', tr('setup.enterprise'), tr('setup.enterpriseHint')],
-            ] as const).map(([id, t, d]) => {
+            ] as const).filter(([id]) => !required || id === 'enterprise').map(([id, t, d]) => {
               const on = mode === id
               return (
                 <button key={id} type="button" role="radio" aria-checked={on} disabled={!!enrolled || waiting} onClick={() => { setMode(id); setError(null) }}
@@ -275,7 +286,7 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
               <label className={fieldLabel}>{tr('settings.enroll.server')}
                 <input type="text" value={server} disabled={!!enrolled || waiting} placeholder="work.example.com" spellCheck={false} onChange={(e) => { setServer(e.target.value); setError(null) }} className={field} />
               </label>
-              <label className={fieldLabel}>{tr('setup.codeOptional')}
+              <label className={fieldLabel}>{tr(required ? 'setup.enrollCode' : 'setup.codeOptional')}
                 <input type="text" value={code} disabled={!!enrolled || waiting} autoComplete="off" spellCheck={false} onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null) }} className={`${field} ${mono} tracking-[1px]`} />
               </label>
             </>

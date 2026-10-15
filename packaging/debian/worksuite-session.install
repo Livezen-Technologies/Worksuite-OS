@@ -15,3 +15,5 @@ services/session/pam/worksuite-faillock usr/share/pam-configs/
 services/session/pam/worksuite-faillock-preauth usr/share/pam-configs/
 services/session/pam/worksuite-offline-access usr/share/pam-configs/
 services/session/pam/faillock.conf usr/share/worksuite/
+services/session/greeter/worksuite_greeter usr/lib/worksuite/greeter/
+services/session/bin/worksuite-autologin usr/sbin/

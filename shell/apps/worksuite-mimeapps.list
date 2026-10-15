@@ -21,3 +21,12 @@ audio/flac=io.github.celluloid_player.Celluloid.desktop;
 audio/x-wav=io.github.celluloid_player.Celluloid.desktop;
 audio/mp4=io.github.celluloid_player.Celluloid.desktop;
 audio/aac=io.github.celluloid_player.Celluloid.desktop;
+# Windows programs never run: they open an explanation (WSOS-LCH-003).
+application/x-ms-dos-executable=worksuite-windows-app.desktop;
+application/x-msdownload=worksuite-windows-app.desktop;
+application/vnd.microsoft.portable-executable=worksuite-windows-app.desktop;
+application/x-msi=worksuite-windows-app.desktop;
+application/x-ms-installer=worksuite-windows-app.desktop;
+application/x-ms-shortcut=worksuite-windows-app.desktop;
+application/x-bat=worksuite-windows-app.desktop;
+application/x-msdos-program=worksuite-windows-app.desktop;

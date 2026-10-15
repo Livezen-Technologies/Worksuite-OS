@@ -8,6 +8,7 @@ import { issueCommand, revokeDevice, setPolicy, addUser, createEnrollmentToken, 
 import { secret, sha256, tx } from './db.ts';
 import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { checkPassword } from './oauth.ts';
+import { approvalsNeeded, checkApproval, requirePermission } from './approvals.ts';
 import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
@@ -50,6 +51,10 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   app_allowlist: (v) => Array.isArray(v) && v.length <= 1000 && v.every((x) => typeof x === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(x)),
   approved_remotes: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && x.length <= 200),
   offline_wipe_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 365,
+  // CoreApprovalEngine waiver (WSOS-WIPE-001): personal-owned devices may be wiped with one approval.
+  wipe_personal_single_approval: (v) => typeof v === 'boolean',
+  // WSOS-AUTH-002: the one account a kiosk device may sign in automatically (worksuite-autologin --kiosk).
+  kiosk_autologin_user: (v) => typeof v === 'string' && /^[a-z_][a-z0-9_.@-]{0,63}$/.test(v) && v !== 'root' && v !== 'wsadmin',
   // AppImages (WSOS-AIM-002) and local .deb files (WSOS-APT-005).
   appimages: (v) => v === 'allow' || v === 'block',
   appimage_trusted_keys: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && /^[0-9A-Fa-f ]{40,80}$/.test(x)),
@@ -102,6 +107,8 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     }
     if (typeof b.confirm_name !== 'string' || b.confirm_name.trim() !== hostname) throw invalid('confirm_name', 'type the device name exactly to confirm');
   };
+  const permissionsOf = (a: Admin): string[] =>
+    json<string[]>((db.prepare('SELECT permissions FROM users WHERE id = ?').get(a.id) as { permissions: string }).permissions) ?? [];
   const body = async (ctx: Ctx) => {
     const b = await ctx.body();
     if (!b || typeof b !== 'object' || Array.isArray(b)) throw invalid('body', 'must be an object');
@@ -164,7 +171,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
   // ---- devices ----
   r.on('GET', '/admin/api/devices', (ctx) => {
     const a = admin(ctx);
-    const rows = db.prepare(`SELECT d.id, d.hostname, d.arch, d.tpm_backed, d.revoked, d.enrolled_at, d.last_seen, d.heartbeat,
+    const rows = db.prepare(`SELECT d.id, d.hostname, d.arch, d.tpm_backed, d.revoked, d.enrolled_at, d.last_seen, d.heartbeat, d.ownership, d.wiped_at,
       (SELECT COUNT(*) FROM commands c WHERE c.device_id = d.id AND c.state IN ('pending','received','started') AND c.expires > ?) AS pending
       FROM devices d WHERE d.org_id = ? ORDER BY d.revoked, d.hostname`).all(Date.now(), a.org_id) as Record<string, unknown>[];
     send(ctx, 200, { items: rows.map(({ heartbeat, ...d }) => {
@@ -175,7 +182,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
   r.on('GET', '/admin/api/devices/{id}', (ctx) => {
     const a = admin(ctx);
     device(a, ctx.params.id);
-    const d = db.prepare('SELECT id, hostname, arch, tpm_backed, revoked, enrolled_at, last_seen, heartbeat FROM devices WHERE id = ?').get(ctx.params.id) as Record<string, unknown>;
+    const d = db.prepare('SELECT id, hostname, arch, tpm_backed, revoked, enrolled_at, last_seen, heartbeat, ownership, wiped_at FROM devices WHERE id = ?').get(ctx.params.id) as Record<string, unknown>;
     const commands = (db.prepare('SELECT id, envelope, state, reason, updated FROM commands WHERE device_id = ? ORDER BY rowid DESC LIMIT 50').all(ctx.params.id) as { id: string; envelope: string; state: string; reason: string | null; updated: number }[])
       .map((c) => { const e = json<{ command: string; issued_at: string; expires_at: string }>(c.envelope); return { id: c.id, command: e.command, issued_at: e.issued_at, expires_at: e.expires_at, state: c.state, reason: c.reason, updated: c.updated }; });
     const inv = db.prepare('SELECT body, at FROM inventory WHERE device_id = ?').get(ctx.params.id) as { body: string; at: number } | undefined;
@@ -218,10 +225,21 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     send(ctx, 204);
   });
 
+  // Ownership drives the CoreApprovalEngine waiver for personal devices (WSOS-WIPE-001).
+  r.on('PUT', '/admin/api/devices/{id}/ownership', async (ctx) => {
+    const a = admin(ctx);
+    const d = device(a, ctx.params.id);
+    const b = await body(ctx);
+    if (b.ownership !== 'corporate' && b.ownership !== 'personal') throw invalid('ownership', 'corporate or personal');
+    db.prepare('UPDATE devices SET ownership = ? WHERE id = ?').run(b.ownership, d.id);
+    log(a, 'device_ownership', { device_id: d.id, ownership: b.ownership });
+    send(ctx, 204);
+  });
+
   // ---- wipes (two-person rule) ----
   r.on('GET', '/admin/api/wipes', (ctx) => {
     const a = admin(ctx);
-    send(ctx, 200, { items: db.prepare(`SELECT w.id, w.device_id, d.hostname, w.scope, w.reason, w.requested_at, w.approved_at, w.command_id, w.cancelled,
+    send(ctx, 200, { items: db.prepare(`SELECT w.id, w.device_id, d.hostname, w.scope, w.reason, w.requested_at, w.approved_at, w.command_id, w.cancelled, w.result, w.result_at,
       ru.name AS requested_by, au.name AS approved_by, w.requested_by = ? AS mine
       FROM wipe_requests w JOIN devices d ON d.id = w.device_id JOIN users ru ON ru.id = w.requested_by LEFT JOIN users au ON au.id = w.approved_by
       WHERE w.org_id = ? ORDER BY w.requested_at DESC LIMIT 100`).all(a.id, a.org_id) });
@@ -235,24 +253,35 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     if (scope !== 'worksuite_data' && scope !== 'full_device') throw invalid('scope', 'worksuite_data or full_device');
     const reason = String(b.reason ?? '').trim();
     if (reason.length < 5 || reason.length > 500) throw invalid('reason', '5 to 500 characters');
+    requirePermission('RemoteWipe', permissionsOf(a));
     reauth(ctx, a, b, d.hostname);
     const id = randomUUID();
-    db.prepare('INSERT INTO wipe_requests (id, org_id, device_id, scope, reason, requested_by, requested_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, a.org_id, d.id, scope, reason, a.id, Date.now());
-    log(a, 'wipe_requested', { wipe_id: id, device_id: d.id, scope });
-    send(ctx, 201, { id });
+    const own = db.prepare('SELECT ownership FROM devices WHERE id = ?').get(d.id) as { ownership: string };
+    const pol = db.prepare('SELECT body FROM policies WHERE org_id = ?').get(a.org_id) as { body: string } | undefined;
+    const needed = approvalsNeeded('RemoteWipe', { ownership: own.ownership, policy: json<Record<string, unknown>>(pol?.body ?? '{}') ?? {} });
+    const out = tx(db, () => {
+      db.prepare('INSERT INTO wipe_requests (id, org_id, device_id, scope, reason, requested_by, requested_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, a.org_id, d.id, scope, reason, a.id, Date.now());
+      if (needed > 0) return { id };
+      // Policy waiver: the request is its own approval.
+      const commandId = issueCommand(db, d.id, 'RemoteWipe', { scope, approval_id: id }, 30 * 24);
+      db.prepare('UPDATE wipe_requests SET approved_by = ?, approved_at = ?, command_id = ? WHERE id = ?').run(a.id, Date.now(), commandId, id);
+      return { id, command_id: commandId, waived_second_approver: true };
+    });
+    log(a, 'wipe_requested', { wipe_id: id, device_id: d.id, scope, ...(needed ? {} : { waived_second_approver: true, command_id: out.command_id }) });
+    send(ctx, 201, out);
   });
   r.on('POST', '/admin/api/wipes/{id}/approve', async (ctx) => {
     const a = admin(ctx);
     const b = await body(ctx);
     const pending = db.prepare('SELECT d.hostname FROM wipe_requests w JOIN devices d ON d.id = w.device_id WHERE w.id = ? AND w.org_id = ?').get(ctx.params.id, a.org_id) as { hostname: string } | undefined;
     if (!pending) throw new HttpError(404, 'NOT_FOUND', 'no such wipe request');
+    requirePermission('RemoteWipe', permissionsOf(a));
     reauth(ctx, a, b, pending.hostname);
     const out = tx(db, () => {
       const w = db.prepare('SELECT id, device_id, scope, requested_by, approved_by, cancelled FROM wipe_requests WHERE id = ? AND org_id = ?').get(ctx.params.id, a.org_id) as
         { id: string; device_id: string; scope: string; requested_by: number; approved_by: number | null; cancelled: number } | undefined;
       if (!w) throw new HttpError(404, 'NOT_FOUND', 'no such wipe request');
-      if (w.approved_by || w.cancelled) throw new HttpError(409, 'CONFLICT', 'already decided');
-      if (w.requested_by === a.id) throw new HttpError(403, 'PERMISSION_DENIED', 'a different administrator must approve a wipe');
+      checkApproval('RemoteWipe', { requested_by: w.requested_by, decided: !!(w.approved_by || w.cancelled) }, { id: a.id, permissions: permissionsOf(a) });
       const commandId = issueCommand(db, w.device_id, 'RemoteWipe', { scope: w.scope, approval_id: w.id }, 30 * 24);
       db.prepare('UPDATE wipe_requests SET approved_by = ?, approved_at = ?, command_id = ? WHERE id = ?').run(a.id, Date.now(), commandId, w.id);
       return { command_id: commandId, device_id: w.device_id };

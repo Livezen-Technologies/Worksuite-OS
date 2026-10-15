@@ -12,15 +12,19 @@ import { listDevices } from './hardware'
 import { localUsers } from './users'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
-import { loadSession, parseAppArgs } from './webapps'
+import { loadSession, parseAppArgs, resolveLink } from './webapps'
+import { createSearch, localRecentHits, parseXbel } from './search'
 import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
+import { compress, eject, jobs as fileJobs, mkdirIn, places, recent, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel } from './panelHost'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
+import { startDesktopHost } from './desktopHost'
+import { fileHead, isWindowsProgram } from './winexe'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
@@ -149,6 +153,42 @@ app.whenReady().then(() => {
     // Own app scope either way, like every app launch (WSOS-SES-004).
     const c = kind in OFFICE_NEW && prog ? scopeCommand(office.id, [prog, OFFICE_NEW[kind]]) : appLaunchCommand(office.id)
     return c ? run(...c) : undefined
+  })
+  // Launcher global search (WSOS-LCH, DSK-010): the token is attached here; the renderer only gets results.
+  const brokerFn = (m: string, p?: Record<string, unknown>) => brokerCall(m, p ?? {})
+  const searcher = createSearch({ broker: brokerFn, fetch: (url, init) => fetch(url, { headers: init.headers, signal: init.signal }) })
+  handle('ws:search', (q, types) => searcher.search(q, types ? types.split(',').filter(Boolean) : []))
+  handle('ws:recentFiles', async () => {
+    const home = app.getPath('home')
+    let local: ReturnType<typeof localRecentHits> = []
+    try {
+      const xbel = path.join(process.env.XDG_DATA_HOME || path.join(home, '.local/share'), 'recently-used.xbel')
+      local = localRecentHits(parseXbel(readFileSync(xbel, 'utf8')).filter((r) => existsSync(r.path)), home)
+    } catch { /* no history yet */ }
+    const cloud = await searcher.recent().catch(() => ({ state: 'offline' as const, hits: [] }))
+    return { local, cloud }
+  })
+  // Opens a result: file:// with the default app (or its folder), worksuite:// in WorkSuite Desktop when installed,
+  // else in the module's app window via links/resolve.
+  handle('ws:openSearchResult', async (link, where) => {
+    const u = new URL(link)
+    if (u.protocol === 'file:') {
+      const p = decodeURIComponent(u.pathname)
+      if (!existsSync(p)) return { ok: false, error: 'not_found' }
+      if (where === 'location') shell.showItemInFolder(p); else await shell.openPath(p)
+      return { ok: true }
+    }
+    if (u.protocol !== 'worksuite:') return { ok: false, error: 'invalid_argument' }
+    const desktop = findWorkSuiteDesktop(installedApps())
+    const prog = desktop && execProgram(desktop.exec)
+    const c = desktop && prog ? scopeCommand(desktop.id, [prog, u.toString()]) : null
+    if (c) { await run(...c); return { ok: true } }
+    const s = await loadSession(brokerFn, (url, init) => fetch(url, { headers: init?.headers }))
+    if (!s.ok) return s
+    // "Search in WorkSuite" without WorkSuite Desktop: the web app's own search page.
+    if (u.hostname === 'search') return apps.open('search', new URL(`search?q=${encodeURIComponent(u.searchParams.get('q') ?? '')}`, s.value.account.server_url.replace(/\/?$/, '/')).toString())
+    const web = await resolveLink(s.value, u.toString(), (url, init) => fetch(url, { headers: init?.headers }))
+    return web ? apps.open(u.hostname, web) : { ok: false, error: 'not_found' }
   })
   handle('ws:openLink', (url) => {
     const u = new URL(url)
@@ -304,6 +344,8 @@ app.whenReady().then(() => {
   handle('ws:filesOpen', async (root, rel) => {
     const p = resolveIn(files, root, rel)
     if (!p || !existsSync(p.full)) return { ok: false, error: 'not_found' }
+    // Windows programs are never opened or run; the renderer shows why (WSOS-LCH-003).
+    if (isWindowsProgram(p.full, fileHead(p.full))) return { ok: false, error: 'windows_program' }
     const err = await shell.openPath(p.full)          // default app via XDG (WSOS-DSK-009)
     return err ? { ok: false, error: err } : { ok: true, value: true }
   })
@@ -312,6 +354,23 @@ app.whenReady().then(() => {
     const drive = root === 'drive' ? await syncCall('DriveSummary') : null
     return { free_bytes: r ? freeBytes(r.path) : null, drive: drive?.ok ? drive.value : null }
   })
+  const strs = (json: string): string[] => { try { const v = JSON.parse(json); return Array.isArray(v) ? v.map(String) : [] } catch { return [] } }
+  const fjobs = fileJobs(files, (e) => broadcast('ws:filesJob', e))
+  handle('ws:filesPlaces', () => places(files))
+  handle('ws:filesStarred', () => ({ keys: starred(files), hits: starredHits(files) }))
+  handle('ws:filesStar', (root, rel, on) => setStar(files, root, rel, on === '1'))
+  handle('ws:filesRecent', () => recent(files))
+  handle('ws:filesSearch', (root, rel, q, kind, days) => search(files, root, rel, q, kind, Number(days) || 0))
+  handle('ws:filesMkdir', (root, rel, name) => mkdirIn(files, root, rel, name))
+  handle('ws:filesRename', (root, rel, name) => renameIn(files, root, rel, name))
+  handle('ws:filesTrash', (root, rels) => trash(files, root, strs(rels)))
+  handle('ws:filesTrashList', () => trashList(files))
+  handle('ws:filesTrashRestore', (ids) => trashRestore(files, strs(ids)))
+  handle('ws:filesTrashDelete', (ids) => trashDelete(files, ids === 'all' ? 'all' : strs(ids)))
+  handle('ws:filesPaste', (op, srcRoot, rels, dstRoot, dstRel) => fjobs.start(op, srcRoot, strs(rels), dstRoot, dstRel))
+  handle('ws:filesResolve', (id, r, all) => fjobs.resolve(id, r, all === '1'))
+  handle('ws:filesCompress', (root, rels) => compress(files, root, strs(rels)))
+  handle('ws:filesEject', (id) => eject(files, id))
   followJobs((e) => broadcast(e.kind === 'update_status' ? 'ws:updateStatusChanged' : 'ws:pkgJob', e.kind === 'update_status' ? e.status : e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')
@@ -337,6 +396,8 @@ app.whenReady().then(() => {
   void displays.applySaved()
   // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
   startPanel(handle, broadcast, () => void displays.applySaved())
+  // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
+  startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
 })
 
 app.on('window-all-closed', () => app.quit())

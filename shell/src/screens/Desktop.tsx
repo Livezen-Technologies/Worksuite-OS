@@ -17,13 +17,20 @@ import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
 import { buildLauncherApps, filterApps, taskbarApps, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
+import GlobalSearch from '../components/GlobalSearch'
+import type { SearchHit } from '../../electron/search'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 
-const SETTINGS_PAGES: MessageKey[] = ['launcher.page.network', 'settings.nav.Bluetooth', 'launcher.page.displays', 'settings.nav.Sound', 'launcher.page.power', 'settings.nav.Appearance', 'launcher.page.accounts', 'launcher.page.privacy', 'settings.nav.Updates', 'launcher.page.shortcuts']
+// Settings pages the search finds, with the Settings section each opens.
+const SETTINGS_PAGES: [MessageKey, string][] = [
+  ['launcher.page.network', 'Network'], ['settings.nav.Bluetooth', 'Bluetooth'], ['launcher.page.displays', 'Display'], ['settings.nav.Sound', 'Sound'],
+  ['launcher.page.power', 'Power'], ['settings.nav.Appearance', 'Appearance'], ['launcher.page.accounts', 'Users'], ['launcher.page.privacy', 'Privacy'],
+  ['settings.nav.Updates', 'Updates'], ['launcher.page.shortcuts', 'Keyboard'],
+]
 
-// No recent-files source exists yet, so the launcher shows none rather than sample files.
-const RECENT: { ext: string; name: string; where: string; state: string; cls: string }[] = []
+// Recent files: local (XDG recently-used.xbel) then WorkSuite Drive's recent list, through the main-process bridge.
+const RECENT_MAX = 6
 
 // Taskbar pins (running windows from the Wayland bridge join them, components/PanelItems.tsx); entries the org hasn't enabled or that aren't installed drop out.
 const TASKBAR = ['worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office', 'firefox-esr']
@@ -96,10 +103,16 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
     })
     return () => { live = false }
   }, [launcher])
+  const [recent, setRecent] = useState<SearchHit[]>([])
+  useEffect(() => {
+    if (!launcher) return
+    let live = true
+    void os.recentFiles().then((r) => { if (live) setRecent([...r.local, ...r.cloud.hits].slice(0, RECENT_MAX)) }).catch(() => { if (live) setRecent([]) })
+    return () => { live = false }
+  }, [launcher])
   const q = query.trim().toLowerCase()
   const apps = useMemo(() => filterApps(allApps, tab, q), [allApps, tab, q])
-  const settingsHits = q ? SETTINGS_PAGES.map((k) => t(k)).filter((s) => s.toLowerCase().includes(q)) : []
-  const recent = q ? RECENT.filter((r) => r.name.toLowerCase().includes(q)) : RECENT
+  const settingsHits = useMemo(() => (q ? SETTINGS_PAGES.map(([k, section]) => ({ label: t(k), section })).filter((s) => s.label.toLowerCase().includes(q)) : []), [q, t])
 
   const launch = (id: string) => {
     setLauncher(false)
@@ -148,7 +161,13 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
       {trayOpen && <NotifDock now={now} time={time} notices={notices} setNotices={setNotices} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} />}
 
-      {launcher && (
+      {launcher && q && (
+        <div className="absolute inset-x-0 top-0 bottom-14 z-30 flex items-start justify-center bg-[rgba(2,6,16,0.45)] px-4 pt-[90px] backdrop-blur-[6px]" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
+          <GlobalSearch query={query} onQuery={setQuery} apps={apps} settings={settingsHits} onLaunchApp={launch}
+            onOpenSettings={(s) => { setLauncher(false); openSettingsAt(s) }} onClose={() => setLauncher(false)} />
+        </div>
+      )}
+      {launcher && !q && (
         <div className="absolute inset-x-0 top-0 bottom-14 z-30 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
           <div id="ws-launcher" role="dialog" aria-label={t('launcher.title')} className="flex h-[650px] max-h-full w-[720px] max-w-full flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_rgba(2,6,23,0.5)]">
             <div className="flex flex-col gap-3.5 px-5 pt-5 pb-3">
@@ -180,31 +199,16 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                 </div>
               ) : <p className="px-5 py-3 text-[13px] text-[#475569]">{t('launcher.noApps')}</p>}
 
-              {settingsHits.length > 0 && (
-                <>
-                  <div className="px-5 pt-3 pb-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">{t('launcher.settings')}</div>
-                  <div className="flex flex-col px-3 py-1">
-                    {settingsHits.map((s) => (
-                      <button key={s} type="button" onClick={() => { setLauncher(false); onOpen('settings') }} className="flex h-11 items-center gap-3 rounded-lg px-2 text-left hover:bg-[#f1f5f9]">
-                        <span className="flex size-7 items-center justify-center rounded-md bg-[#f1f5f9] text-[#334155]"><BIcon name="settings" size={16} /></span>
-                        <span className="grow text-[13px]">{s}</span>
-                        <span className="text-xs text-[#475569]">{t('launcher.settings')}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
               {recent.length > 0 && (
                 <>
                   <div className="px-5 pt-3 pb-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">{t('launcher.recent')}</div>
                   <div className="flex flex-col px-3 py-1">
                     {recent.map((r) => (
-                      <button key={r.name} type="button" onClick={() => { setLauncher(false); onOpen('files') }} className="flex h-11 items-center gap-3 rounded-lg px-2 text-left hover:bg-[#f1f5f9]">
-                        <span className="flex size-7 items-center justify-center rounded-md bg-[#eff6ff] text-[11px] font-bold text-[#1d4ed8]">{r.ext}</span>
-                        <span className="grow text-[13px] text-[#0f172a]">{r.name}</span>
-                        <span className="text-xs text-[#475569]">{r.where}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] ${r.cls}`}>{r.state}</span>
+                      <button key={r.id} type="button" onClick={() => { setLauncher(false); void os.openSearchResult(r.link) }} className="flex h-11 items-center gap-3 rounded-lg px-2 text-left hover:bg-[#f1f5f9]">
+                        <span className="flex size-7 items-center justify-center rounded-md bg-[#eff6ff] text-[10px] font-bold text-[#1d4ed8] uppercase">{(r.ext ?? '').slice(0, 4)}</span>
+                        <span className="min-w-0 grow truncate text-[13px] text-[#0f172a]">{r.title}</span>
+                        <span className="truncate text-xs text-[#475569]">{r.subtitle}</span>
+                        <span className="rounded-full bg-[#f1f5f9] px-2 py-0.5 text-[11px] text-[#334155]">{t(r.source === 'local' ? 'launcher.recentLocal' : 'search.source.drive')}</span>
                       </button>
                     ))}
                   </div>
