@@ -16,6 +16,16 @@ Rectangle {
     readonly property var groupOf: [0, 0, 1, 2, 3, 4, 4, 5, 5, 5]
     readonly property var labels: [qsTr("Language"), qsTr("Installation type"), qsTr("Your account"), qsTr("Time zone"), qsTr("Review"), qsTr("Install")]
     readonly property int lastIndex: 9
+    // The whole process under its steps: [design step, Calamares step it belongs to, label]. The install phases
+    // all run in the one exec step, so they share its state.
+    readonly property var subs: [
+        [0, 0, qsTr("Language")], [0, 1, qsTr("Keyboard")],
+        [1, 2, qsTr("Disk")], [1, 2, qsTr("Encryption")],
+        [2, 3, qsTr("Name and password")], [2, 3, qsTr("Computer name")],
+        [3, 4, qsTr("Region and city")],
+        [4, 5, qsTr("Summary")], [4, 6, qsTr("Confirm disk")],
+        [5, 7, qsTr("Copy files")], [5, 7, qsTr("Configure system")], [5, 8, qsTr("Recovery key")], [5, 9, qsTr("Complete")]
+    ]
     readonly property int current: {
         var i = ViewManager.currentStepIndex
         return i >= 0 && i < groupOf.length ? groupOf[i] : 0
@@ -28,8 +38,8 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: 28; anchors.rightMargin: 28; anchors.topMargin: 40; anchors.bottomMargin: 40
-        spacing: 36
+        anchors.leftMargin: 28; anchors.rightMargin: 28; anchors.topMargin: 36; anchors.bottomMargin: 28
+        spacing: 28
 
         RowLayout {
             spacing: 12
@@ -41,6 +51,11 @@ Rectangle {
             spacing: 4
             Repeater {
                 model: sideBar.labels
+                ColumnLayout {
+                    id: group
+                    readonly property int groupIndex: index
+                    Layout.fillWidth: true
+                    spacing: 2
                 Rectangle {
                     readonly property bool auto: sideBar.express && index === 3 && sideBar.current < 3
                     readonly property bool done: index < sideBar.current || sideBar.finished || auto
@@ -75,6 +90,28 @@ Rectangle {
                             text: qsTr("auto"); color: "#5E739C"; font.family: "IBM Plex Mono"; font.pixelSize: 11
                         }
                     }
+                }
+                // Sub-items of the active step: done ✓, current highlighted, later ones dimmed.
+                Repeater {
+                    model: sideBar.subs.filter(function (x) { return x[0] === group.groupIndex && !(x[1] === 1 && sideBar.express) })
+                    RowLayout {
+                        readonly property int stepIndex: modelData[1]
+                        readonly property bool subDone: stepIndex < ViewManager.currentStepIndex || (sideBar.express && stepIndex === 4 && ViewManager.currentStepIndex < 4) || sideBar.finished
+                        readonly property bool subActive: stepIndex === ViewManager.currentStepIndex && !sideBar.finished
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 23; Layout.preferredHeight: 24
+                        spacing: 22
+                        Rectangle { Layout.preferredWidth: 2; Layout.fillHeight: true; color: subActive ? "#1F6BFF" : "#1F7FB2FF" }
+                        Text {
+                            Layout.fillWidth: true
+                            text: (subDone ? "✓  " : "") + modelData[2] + (sideBar.express && stepIndex === 4 && !subActive ? qsTr(" · auto") : "")
+                            color: subActive ? "#E8EEFA" : subDone ? "#5FD39A" : "#5E739C"
+                            font.family: "IBM Plex Sans"; font.pixelSize: 12
+                            font.weight: subActive ? Font.Medium : Font.Normal
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
                 }
             }
         }
