@@ -300,6 +300,14 @@
       <translation>ඔබේ ජාලයේ අනෙක් උපාංග එය මෙම නමින් දකිනු ඇත.</translation>
     </message>
     <message>
+      <source>Change picture</source>
+      <translation>පින්තූරය වෙනස් කරන්න</translation>
+    </message>
+    <message>
+      <source>Choose a picture after installing, in Settings › Users</source>
+      <translation>ස්ථාපනයෙන් පසු සැකසීම් › පරිශීලකයින් තුළ පින්තූරයක් තෝරන්න</translation>
+    </message>
+    <message>
       <source>Your full name</source>
       <translation>ඔබේ සම්පූර්ණ නම</translation>
     </message>
@@ -330,6 +338,18 @@
     <message>
       <source>At least 8 characters</source>
       <translation>අවම වශයෙන් අක්ෂර 8 ක්</translation>
+    </message>
+    <message>
+      <source>Use this password for the administrator account</source>
+      <translation>පරිපාලක ගිණුම සඳහා මෙම මුරපදය භාවිත කරන්න</translation>
+    </message>
+    <message>
+      <source>Sign in automatically</source>
+      <translation>ස්වයංක්‍රීයව පුරනය වන්න</translation>
+    </message>
+    <message>
+      <source>not available</source>
+      <translation>ලබා ගත නොහැක</translation>
     </message>
     <message>
       <source>Computer name</source>

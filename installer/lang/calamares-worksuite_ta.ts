@@ -300,6 +300,14 @@
       <translation>உங்கள் பிணையத்தில் உள்ள பிற சாதனங்கள் இதை இந்தப் பெயரில் பார்க்கும்.</translation>
     </message>
     <message>
+      <source>Change picture</source>
+      <translation>படத்தை மாற்று</translation>
+    </message>
+    <message>
+      <source>Choose a picture after installing, in Settings › Users</source>
+      <translation>நிறுவிய பின் அமைப்புகள் › பயனர்கள் பகுதியில் படத்தைத் தேர்ந்தெடுக்கவும்</translation>
+    </message>
+    <message>
       <source>Your full name</source>
       <translation>உங்கள் முழுப் பெயர்</translation>
     </message>
@@ -330,6 +338,18 @@
     <message>
       <source>At least 8 characters</source>
       <translation>குறைந்தது 8 எழுத்துகள்</translation>
+    </message>
+    <message>
+      <source>Use this password for the administrator account</source>
+      <translation>நிர்வாகி கணக்கிற்கு இந்தக் கடவுச்சொல்லைப் பயன்படுத்து</translation>
+    </message>
+    <message>
+      <source>Sign in automatically</source>
+      <translation>தானாக உள்நுழை</translation>
+    </message>
+    <message>
+      <source>not available</source>
+      <translation>கிடைக்கவில்லை</translation>
     </message>
     <message>
       <source>Computer name</source>
