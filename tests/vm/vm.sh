@@ -56,7 +56,7 @@ type) t=${3:?text}; i=0
       while [ $i -lt ${#t} ]; do c=$(printf %s "$t" | cut -c$((i+1))); i=$((i+1))
         case "$c" in
           [a-z0-9]) k=$c ;; [A-Z]) k="shift-$(printf %s "$c" | tr A-Z a-z)" ;; ' ') k=spc ;; .) k=dot ;; @) k=shift-2 ;; _) k=shift-minus ;; -) k=minus ;; =) k=equal ;; /) k=slash ;; ,) k=comma ;; ';') k=semicolon ;; '|') k=shift-backslash ;; '>') k=shift-dot ;; '<') k=shift-comma ;; :) k=shift-semicolon ;; '(') k=shift-9 ;; ')') k=shift-0 ;; '"') k=shift-apostrophe ;; "'") k=apostrophe ;;
-          '&') k=shift-7 ;; '!') k=shift-1 ;; '$') k=shift-4 ;; '*') k=shift-8 ;; '#') k=shift-3 ;; '+') k=shift-equal ;; '%') k=shift-5 ;;
+          '&') k=shift-7 ;; '!') k=shift-1 ;; '$') k=shift-4 ;; '*') k=shift-8 ;; '#') k=shift-3 ;; '+') k=shift-equal ;; '%') k=shift-5 ;; '^') k=shift-6 ;;
           '?') k=shift-slash ;; '[') k=bracket_left ;; ']') k=bracket_right ;; '{') k=shift-bracket_left ;; '}') k=shift-bracket_right ;; '~') k=shift-grave_accent ;; '\\') k=backslash ;;
           *) echo "cannot type '$c'" >&2; exit 2 ;;
         esac; mon "sendkey $k"; sleep 0.15; done ;;
