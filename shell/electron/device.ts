@@ -5,6 +5,19 @@ import os from 'node:os'
 
 export const STATUS_PATH = '/run/worksuite-device-agent/status.json'
 
+export const DEVICE_TOKEN_PATH = '/run/worksuite-device-agent/device-token'
+
+/**
+ * The device credential for X-WS-Device, or null when the device isn't enrolled (no device in the agent's status, or no
+ * token file). Read fresh on every call so a revoked/unenrolled device stops sending it at once. Main process only.
+ */
+export function deviceCredential(statusPath = STATUS_PATH, tokenPath = DEVICE_TOKEN_PATH): string | null {
+  try {
+    if (!JSON.parse(readFileSync(statusPath, 'utf8'))?.device) return null
+    return readFileSync(tokenPath, 'utf8').trim() || null
+  } catch { return null }
+}
+
 export const PROVISIONING_PATH = '/etc/worksuite/provisioning.json'
 
 /**
