@@ -24,6 +24,11 @@ export interface WorkSuiteApi {
   pkgRemove(catalogId: string): Promise<CloudResult<string>>
   pkgApplyUpdate(): Promise<CloudResult<string>>
   pkgCheckUpdates(): Promise<CloudResult<UpdateSummary>>
+  // Files: roots are "home", "drive" (~/WorkSuite Drive) and "media:<name>"; paths are relative to the root.
+  filesRoots(): Promise<{ roots: { id: string; label: string }[]; drive_exists: boolean }>
+  filesList(root: string, rel: string): Promise<CloudResult<FileEntry[]>>
+  filesOpen(root: string, rel: string): Promise<CloudResult<true>>
+  filesStatus(root: string): Promise<{ free_bytes: number | null; drive: { states: Record<string, number>; last_sync: number | null; service_state: string } | null }>
   onPkgJob(cb: (e: PackageJobEvent) => void): () => void
 }
 
@@ -34,6 +39,8 @@ export interface PackagePreview {
   broad: string[]
 }
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
+/** state: Drive sync state (WSOS-DRV-002), "folder", "local" outside Drive, or "unknown" when sync isn't running. */
+export interface FileEntry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean }
 export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
 
 export function formatBytes(n: number | null): string {
@@ -137,6 +144,21 @@ const stub: WorkSuiteApi = {
   async pkgApplyUpdate() { const r = stubJob('update', 'update'); setTimeout(() => { stubUpdates = { packages: [], flatpaks: [] } }, 800); return r },
   async pkgCheckUpdates() { return { ok: true, value: { ...stubUpdates, reboot_required: false, state: 'idle' } } },
   onPkgJob(cb) { stubListeners.add(cb); return () => { stubListeners.delete(cb) } },
+  async filesRoots() { return { roots: [{ id: 'home', label: 'Home' }, { id: 'media:KINGSTON', label: 'KINGSTON' }, { id: 'drive', label: 'WorkSuite Drive' }], drive_exists: true } },
+  async filesList(root, rel) {
+    const t = Date.now()
+    const f = (name: string, state: string, size: number | null, local = true, dir = false): FileEntry => ({ name, dir, size, modified: local ? t - 3_600_000 : null, state, local })
+    if (root === 'drive' && !rel) return { ok: true, value: [f('Tenders 2026', 'folder', null, true, true), f('Finance', 'folder', null, true, true), f('Handbook.pdf', 'synced', 1_200_000)] }
+    if (root === 'drive') return { ok: true, value: [
+      f('SFCL proposal v3.docx', 'syncing', 6_400_000), f('TSHDA bid — pricing.xlsx', 'synced', 212_000),
+      f('TSHDA bid — pricing (conflict Hasarinda-laptop 2026-10-15).xlsx', 'conflict', 208_000),
+      f('MBSL digital media tender.pdf', 'online-only', null, false), f('Care Me platform — clarifications.pdf', 'pending', 480_000),
+      f('Site walk-through recording.mp4', 'error', 6_200_000_000) ] }
+    if (!rel) return { ok: true, value: [f('Documents', 'local', null, true, true), f('Downloads', 'local', null, true, true), f('notes.txt', 'local', 2_000)] }
+    return { ok: true, value: [f('Invoice INV-2026-0418.pdf', 'local', 182_000), f('worksuite-agent-2.4.1.zip', 'local', 38_200_000)] }
+  },
+  async filesOpen() { return { ok: true, value: true } },
+  async filesStatus(root) { return { free_bytes: 212e9, drive: root === 'drive' ? { states: { synced: 2, syncing: 1, pending: 1, conflict: 1, 'online-only': 1, error: 1 }, last_sync: Date.now() - 60_000, service_state: 'idle' } : null } },
   async deviceInfo() {
     return {
       agent: true, managed: stubManaged, org_name: stubManaged ? 'Livezen Technologies' : null, server: stubManaged ? 'work.livezentech.com' : null, last_check_in: stubManaged ? Date.now() - 4 * 60_000 : null,

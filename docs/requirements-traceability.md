@@ -48,3 +48,4 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 server commit before ack → no duplicate; two offline edits → conflict kept; expired token → pending kept.
 Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | WSOS-APT-001/002/003/004/006, WSOS-APP-002/003, WSOS-FLP-001/002/004, WSOS-UPD-001 (device side) | `services/package-service/src/service.ts`, `src/apt.ts`, `src/dbus.ts` | Impl |
+| §7.2 Files: This Computer / WorkSuite Cloud, WSOS-DRV-002 sync states | `shell/src/screens/Files.tsx`, `shell/electron/files.ts`, `services/sync/src/service.ts` (`fileStates`, `driveSummary`) | Impl (UI; Drive transfer engine not in this repo) |

@@ -1,9 +1,11 @@
 import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceInfo, enrollDevice } from './device'
 import { followJobs, packageClient } from './packages'
+import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
@@ -103,6 +105,21 @@ app.whenReady().then(() => {
   handle('ws:pkgRemove', (catalogId) => pkg.start('Remove', catalogId))
   handle('ws:pkgApplyUpdate', () => pkg.applyUpdate())
   handle('ws:pkgCheckUpdates', () => pkg.checkUpdates())
+  // Files: real folders plus Drive sync states from the sync service.
+  const files = defaultEnv(async (dir) => { const r = await syncCall('FileStates', { dir }); return r.ok && Array.isArray(r.value) ? r.value as { name: string; state: string }[] : null })
+  handle('ws:filesRoots', () => ({ roots: roots(files).map(({ id, label }) => ({ id, label })), drive_exists: existsSync(driveDir(files.home)) }))
+  handle('ws:filesList', (root, rel) => list(files, root, rel))
+  handle('ws:filesOpen', async (root, rel) => {
+    const p = resolveIn(files, root, rel)
+    if (!p || !existsSync(p.full)) return { ok: false, error: 'not_found' }
+    const err = await shell.openPath(p.full)          // default app via XDG (WSOS-DSK-009)
+    return err ? { ok: false, error: err } : { ok: true, value: true }
+  })
+  handle('ws:filesStatus', async (root) => {
+    const r = roots(files).find((x) => x.id === root)
+    const drive = root === 'drive' ? await syncCall('DriveSummary') : null
+    return { free_bytes: r ? freeBytes(r.path) : null, drive: drive?.ok ? drive.value : null }
+  })
   followJobs((e) => win?.webContents.send('ws:pkgJob', e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')

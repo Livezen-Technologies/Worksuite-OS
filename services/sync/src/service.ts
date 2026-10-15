@@ -97,6 +97,24 @@ export class SyncService {
     });
   }
 
+  /**
+   * WSOS-DRV-002: sync state of the Drive entries directly inside `dir` (paths relative to ~/WorkSuite Drive,
+   * "" = root). Includes online-only items that have no local file.
+   */
+  fileStates(dir: string) {
+    const prefix = dir ? `${dir.replace(/\/+$/, '')}/` : '';
+    const rows = this.o.db.prepare(`SELECT path, state, server_revision FROM file_cache WHERE substr(path, 1, ?) = ? ORDER BY path`)
+      .all(prefix.length, prefix) as { path: string; state: string; server_revision: number | null }[];
+    return rows.filter((r) => r.path.length > prefix.length && !r.path.slice(prefix.length).includes('/'))
+      .map((r) => ({ name: r.path.slice(prefix.length), state: r.state, server_revision: r.server_revision }));
+  }
+
+  /** Counts by state for the Files status bar. */
+  driveSummary() {
+    const rows = this.o.db.prepare(`SELECT state, COUNT(*) AS n FROM file_cache GROUP BY state`).all() as { state: string; n: number }[];
+    return { states: Object.fromEntries(rows.map((r) => [r.state, r.n])), last_sync: this.lastSync, service_state: this.state };
+  }
+
   retryFailed(mutationId: string) { this.o.engine.retryFailed(mutationId); return this.syncNow(); }
 
   private accounts(): string[] {

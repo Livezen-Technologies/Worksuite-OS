@@ -122,3 +122,16 @@ test('sign-out with unsent changes: count, export to a private file, then forget
   await svc.stop();
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('Drive file states are listed per folder, including online-only items', async () => {
+  const { svc, db } = setup();
+  const put = db.prepare(`INSERT INTO file_cache(account_id, file_id, path, state) VALUES (?,?,?,?)`);
+  put.run(A, 'f1', 'Tenders/proposal.docx', 'syncing');
+  put.run(A, 'f2', 'Tenders/pricing (conflict laptop 2026-10-15).xlsx', 'conflict');
+  put.run(A, 'f3', 'Tenders/Old/archive.zip', 'online-only');
+  put.run(A, 'f4', 'readme.txt', 'synced');
+  assert.deepEqual(svc.fileStates('Tenders').map((r) => [r.name, r.state]), [['pricing (conflict laptop 2026-10-15).xlsx', 'conflict'], ['proposal.docx', 'syncing']]);
+  assert.deepEqual(svc.fileStates('').map((r) => r.name), ['readme.txt']);
+  assert.deepEqual(svc.driveSummary().states, { conflict: 1, 'online-only': 1, synced: 1, syncing: 1 });
+  await svc.stop();
+});

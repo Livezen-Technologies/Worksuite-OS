@@ -7,7 +7,7 @@ import type { TokenProvider } from './transport.ts';
 
 type Request = { id?: unknown; method: string; params?: Record<string, unknown> };
 
-/** Serve lk.worksuite.Sync1-equivalent methods for the shell: Status, ListFailed, RetryFailed, SyncNow, Unsent, ExportUnsent, Forget. */
+/** Serve lk.worksuite.Sync1-equivalent methods for the shell: Status, ListFailed, RetryFailed, SyncNow, Unsent, ExportUnsent, Forget, FileStates, DriveSummary. */
 export function serveControl(path: string, svc: SyncService, exportDir = '.'): Server {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   rmSync(path, { force: true });
@@ -35,6 +35,12 @@ async function dispatch(svc: SyncService, line: string, exportDir: string) {
   const id = req.id ?? null;
   switch (req.method) {
     case 'Status': return { id, result: svc.status() };
+    case 'DriveSummary': return { id, result: svc.driveSummary() };
+    case 'FileStates': {
+      const dir = req.params?.dir ?? '';
+      if (typeof dir !== 'string' || dir.length > 4096 || dir.split('/').some((seg) => seg === '..' || seg === '.') || dir.startsWith('/')) return { id, error: 'invalid_argument' };
+      return { id, result: svc.fileStates(dir) };
+    }
     case 'ListFailed': return { id, result: svc.listFailed() };
     case 'SyncNow': void svc.syncNow(); return { id, result: true };
     case 'RetryFailed': {

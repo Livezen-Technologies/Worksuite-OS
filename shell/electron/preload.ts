@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld('worksuite', {
   pkgRemove: (catalogId: string) => ipcRenderer.invoke('ws:pkgRemove', String(catalogId)),
   pkgApplyUpdate: () => ipcRenderer.invoke('ws:pkgApplyUpdate'),
   pkgCheckUpdates: () => ipcRenderer.invoke('ws:pkgCheckUpdates'),
+  filesRoots: () => ipcRenderer.invoke('ws:filesRoots'),
+  filesList: (root: string, rel: string) => ipcRenderer.invoke('ws:filesList', String(root), String(rel)),
+  filesOpen: (root: string, rel: string) => ipcRenderer.invoke('ws:filesOpen', String(root), String(rel)),
+  filesStatus: (root: string) => ipcRenderer.invoke('ws:filesStatus', String(root)),
   // Only the event payload reaches the renderer, never the IPC event object.
   onPkgJob: (cb: (e: unknown) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload)
