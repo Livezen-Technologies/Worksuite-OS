@@ -14,6 +14,9 @@ user = "_greetd"
 CONF
 systemctl enable greetd.service worksuite-device-agent.service worksuite-package-service.service worksuite-boot-marker.service
 systemctl set-default graphical.target
+# Seat access through logind (pam_systemd gives the active session the seat). seatd, when present, is tried first by
+# libseat and only admits the video group, which locked out the greeter (_greetd) and every user: no display at all.
+if [ -e /usr/lib/systemd/system/seatd.service ]; then systemctl disable seatd.service >/dev/null 2>&1 || true; systemctl mask seatd.service; fi
 # WSOS-INS-007: no machine-id baked into the image.
 : > /etc/machine-id
 rm -f /var/lib/dbus/machine-id
