@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   cloudSignOut: (accountId: string, choice: string) => ipcRenderer.invoke('ws:cloudSignOut', String(accountId), String(choice)),
   syncUnsent: (accountId: string) => ipcRenderer.invoke('ws:syncUnsent', String(accountId)),
   syncNow: () => ipcRenderer.invoke('ws:syncNow'),
+  syncStatus: () => ipcRenderer.invoke('ws:syncStatus'),
   deviceInfo: () => ipcRenderer.invoke('ws:deviceInfo'),
   enrollDevice: (serverUrl: string, code: string) => ipcRenderer.invoke('ws:enrollDevice', String(serverUrl), String(code)),
   pkgPreview: (catalogId: string, op: string) => ipcRenderer.invoke('ws:pkgPreview', String(catalogId), String(op)),

@@ -3,6 +3,9 @@ import type { DesktopProps } from './types'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
 import { LogoMark } from '../components/Logo'
+import { diffStatus, type Notice, type SyncStatus } from '../lib/syncNotices'
+
+const TONE: Record<Notice['tone'], string> = { ok: 'bg-[#ecfdf5] text-[#047857]', warn: 'bg-[#fffbeb] text-[#b45309]', error: 'bg-[#fef2f2] text-[#b91c1c]' }
 
 type Kind = 'WorkSuite' | 'Linux app' | 'System'
 interface App { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean }
@@ -59,7 +62,11 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
   const [query, setQuery] = useState('')
   const [powerOpen, setPowerOpen] = useState(false)
   const [workspace, setWorkspace] = useState(1)
-  const [toast, setToast] = useState(true)
+  // Notices from the sync service (and later other system sources); newest first.
+  const [notices, setNotices] = useState<(Notice & { at: number })[]>([])
+  const [toast, setToast] = useState<Notice | null>(null)
+  const [unread, setUnread] = useState(0)
+  const [trayOpen, setTrayOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const name = displayName(user) || 'Hasarinda'
 
@@ -67,7 +74,24 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
   const longDate = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
   const shortDate = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
 
-  useEffect(() => { const t = setTimeout(() => setToast(false), 8000); return () => clearTimeout(t) }, [])
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 8000); return () => clearTimeout(t) }, [toast])
+
+  // Poll the sync service's status and turn changes into notices.
+  useEffect(() => {
+    let prev: SyncStatus | null = null
+    const poll = () => void os.syncStatus().then((r) => {
+      if (!r.ok) return
+      const fresh = diffStatus(prev, r.value)
+      prev = r.value
+      if (!fresh.length) return
+      setNotices((all) => [...fresh.map((f) => ({ ...f, at: Date.now() })), ...all].slice(0, 50))
+      setUnread((u) => u + fresh.length)
+      setToast(fresh[0])
+    })
+    poll()
+    const t = setInterval(poll, 15_000)
+    return () => clearInterval(t)
+  }, [])
 
   // Management chip from the device agent's status; re-read each minute so enrollment, wipe or revocation show up.
   const [device, setDevice] = useState<DeviceInfo | null>(null)
@@ -81,7 +105,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false) }
+      if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false) }
       else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) setLauncher((v) => !v)
     }
     window.addEventListener('keydown', onKey)
@@ -129,12 +153,34 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
 
       {toast && (
         <div role="status" className="absolute top-6 right-6 z-20 flex w-[340px] items-start gap-3 rounded-xl bg-white px-4 py-3.5 shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#ecfdf5] text-[#047857]"><BIcon name="check" /></div>
+          <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${TONE[toast.tone]}`}><BIcon name={toast.tone === 'ok' ? 'check' : 'alert'} /></div>
           <div className="flex grow flex-col gap-0.5">
-            <div className="text-[13px] font-semibold">Back online — 14 changes synced</div>
-            <div className="text-xs text-[#475569]">Offline edits in Tasks and CRM reached the server. No conflicts.</div>
+            <div className="text-[13px] font-semibold">{toast.title}</div>
+            <div className="text-xs text-[#475569]">{toast.body}</div>
           </div>
-          <button type="button" aria-label="Dismiss notification" onClick={() => setToast(false)} className="text-[#475569] hover:text-[#0f172a]"><BIcon name="close" size={14} /></button>
+          <button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)} className="text-[#475569] hover:text-[#0f172a]"><BIcon name="close" size={14} /></button>
+        </div>
+      )}
+
+      {trayOpen && (
+        <div role="dialog" aria-label="Notifications" className="absolute right-4 bottom-16 z-40 flex max-h-[60%] w-[360px] flex-col overflow-hidden rounded-xl bg-white shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
+          <div className="flex items-center border-b border-[#e2e8f0] px-4 py-3 text-sm font-semibold">
+            <span className="grow">Notifications</span>
+            {notices.length > 0 && <button type="button" onClick={() => setNotices([])} className="text-xs font-normal text-[#2563eb]">Clear all</button>}
+          </div>
+          <div className="overflow-auto">
+            {notices.length === 0 && <p className="m-0 px-4 py-6 text-center text-[13px] text-[#475569]">No notifications</p>}
+            {notices.map((x) => (
+              <div key={x.id} className="flex gap-3 border-b border-[#f1f5f9] px-4 py-3">
+                <div className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${TONE[x.tone]}`}><BIcon name={x.tone === 'ok' ? 'check' : 'alert'} size={14} /></div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[13px] font-semibold">{x.title}</span>
+                  <span className="text-xs text-[#475569]">{x.body}</span>
+                  <span className="text-[11px] text-[#94a3b8]">{new Date(x.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -253,9 +299,10 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
           <button type="button" aria-label="Network: Livezen-Office, connected" className="flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]"><BIcon name="wifi" /></button>
           <button type="button" aria-label="Volume 60 percent" className="flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]"><BIcon name="volume" /></button>
           <button type="button" aria-label="Battery 82 percent" className="flex h-10 items-center gap-1.5 rounded-lg px-2 text-xs hover:bg-[#1e293b]"><BIcon name="battery" />82%</button>
-          <button type="button" aria-label="Notifications, 3 new" className="relative flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]">
+          <button type="button" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} aria-expanded={trayOpen}
+            onClick={() => { setTrayOpen((v) => !v); setUnread(0) }} className="relative flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]">
             <BIcon name="bell" />
-            <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#dc2626] text-[10px] text-white">3</span>
+            {unread > 0 && <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#dc2626] px-1 text-[10px] text-white">{unread}</span>}
           </button>
           <div className="flex flex-col items-end pr-2 pl-2.5 text-xs leading-[1.3]">
             <span className="text-[#f8fafc]">{time}</span>

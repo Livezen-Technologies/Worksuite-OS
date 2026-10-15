@@ -96,6 +96,7 @@ app.whenReady().then(() => {
     return r.ok ? { ok: true, value: Number(r.value) } : r.error === 'broker_unavailable' ? { ok: true, value: 0 } : r
   })
   handle('ws:syncNow', () => syncCall('SyncNow'))
+  handle('ws:syncStatus', () => syncCall('Status'))
   handle('ws:deviceInfo', () => deviceInfo())
   handle('ws:enrollDevice', (serverUrl, code) => enrollDevice(serverUrl, code))
   // App Center (WSOS-APP-001/002): preview before confirmation, then a job whose result arrives as an event.

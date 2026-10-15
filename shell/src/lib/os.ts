@@ -13,6 +13,8 @@ export interface WorkSuiteApi {
   cloudSignOut(accountId: string, choice: SignOutChoice): Promise<CloudResult<{ exported: string | null }>>
   syncUnsent(accountId: string): Promise<CloudResult<number>>
   syncNow(): Promise<CloudResult<unknown>>
+  /** Sync service Status: state (idle|syncing|offline|auth_required|device_revoked|stopped), pending, failed, conflicts, last_sync. */
+  syncStatus(): Promise<CloudResult<SyncStatus>>
   cloudAccounts(): Promise<CloudResult<CloudAccount[]>>
   /** Settings > About this device (WSOS-MDM-007, WSOS-WIPE-007): device agent status, or local facts when it isn't running. */
   deviceInfo(): Promise<DeviceInfo>
@@ -60,6 +62,8 @@ export function packageErrorText(code: string): string {
     default: return code.charAt(0).toUpperCase() + code.slice(1) + (/[.!]$/.test(code) ? '' : '.')
   }
 }
+
+import type { SyncStatus } from './syncNotices'
 
 export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
@@ -125,6 +129,11 @@ const stub: WorkSuiteApi = {
   },
   async syncUnsent() { return { ok: true, value: stubUnsent } },
   async syncNow() { stubUnsent = Math.max(0, stubUnsent - 1); return { ok: true, value: true } },
+  // Preview: offline with 14 pending, then back online on the second poll.
+  async syncStatus() {
+    stubPolls++
+    return { ok: true, value: stubPolls < 2 ? { state: 'offline', pending: 14, failed: 0, conflicts: 0, last_sync: null } : { state: 'idle', pending: 0, failed: 0, conflicts: 0, last_sync: Date.now() } }
+  },
   async enrollDevice(_url, code) {
     if (code === 'BAD-CODE') return { ok: false, error: 'enrollment_rejected' }
     stubManaged = true
@@ -182,6 +191,7 @@ function stubJob(_id: string, _kind: string): CloudResult<string> {
 }
 // Preview only: pretend three offline edits are waiting so the sign-out prompt can be seen.
 let stubUnsent = 3
+let stubPolls = 0
 // Preview only: unmanaged until enrolled (first-run or Settings).
 let stubManaged = false
 
