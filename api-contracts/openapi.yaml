@@ -284,6 +284,33 @@ paths:
                     properties: { items: { type: array, items: { $ref: '#/components/schemas/CatalogItem' } } }
         default: { $ref: '#/components/responses/Error' }
 
+  /desktop/v1/os/licence:
+    get:
+      tags: [os]
+      summary: Signed, device-bound licence state for update entitlement gating (WSOS-AUP-012)
+      description: >
+        Signed with the release key ("<key_id>:<base64 Ed25519>" over the canonical JSON without the signature), valid
+        for 7 days. Feature releases whose manifest names an entitlement install only with state active and that
+        entitlement; security releases continue during grace. No licence on record answers state expired.
+      responses:
+        '200':
+          description: Licence
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_id, edition, state, entitlements, issued_at, valid_until, signature]
+                properties:
+                  device_id: { type: string }
+                  edition: { type: string }
+                  state: { type: string, enum: [active, grace, expired] }
+                  entitlements: { type: array, items: { type: string } }
+                  grace_until: { type: [string, 'null'], format: date-time }
+                  issued_at: { type: string, format: date-time }
+                  valid_until: { type: string, format: date-time }
+                  signature: { type: string }
+        default: { $ref: '#/components/responses/Error' }
+
   /desktop/v1/os/inventory:
     post:
       tags: [os]
@@ -487,6 +514,12 @@ components:
           properties:
             from_version: { type: string }
             reason: { type: string }
+        entitlement: { type: string, description: Edition entitlement a feature release needs (WSOS-AUP-012); absent = every device }
+        bundle:
+          type: object
+          description: Only in offline .wsupdate bundles (WSOS-AUP-010) - every package in pool/ with its size and SHA-256
+          properties:
+            files: { type: array, items: { type: object, required: [name, sha256, size], properties: { name: { type: string }, sha256: { type: string }, size: { type: integer } } } }
         signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the manifest without this field' }
 
     Policy:
@@ -518,6 +551,9 @@ components:
         required: { type: boolean }
         blocked: { type: boolean }
         sha256: { type: string, description: AppImage integrity }
+        category: { type: string }
+        summary: { type: string }
+        publisher: { type: string }
 
     CommandEnvelope:
       type: object

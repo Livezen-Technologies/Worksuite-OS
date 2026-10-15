@@ -82,6 +82,12 @@ export function openDb(path: string): DatabaseSync {
   // Additive migrations for databases created by earlier versions.
   const cols = (db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes('role')) db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+  // Fine-grained admin permissions, e.g. desktop.releases.manage (WSOS-AUP-013).
+  if (!cols.includes('permissions')) db.exec("ALTER TABLE users ADD COLUMN permissions TEXT NOT NULL DEFAULT '[]'");
+  // CoreLicenseService state per organization (WSOS-AUP-012): {edition, state, entitlements, grace_until}.
+  const orgCols = (db.prepare('PRAGMA table_info(orgs)').all() as { name: string }[]).map((c) => c.name);
+  if (!orgCols.includes('licence')) db.exec('ALTER TABLE orgs ADD COLUMN licence TEXT');
+  db.exec('CREATE TABLE IF NOT EXISTS release_log (id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL, at INTEGER NOT NULL)');
   return db;
 }
 

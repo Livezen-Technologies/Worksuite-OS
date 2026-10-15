@@ -4,7 +4,7 @@
 // (never enabled here) would preflight. Remote wipe needs a second admin's approval (WSOS-WIPE-002).
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { issueCommand, revokeDevice, setPolicy, addUser, createEnrollmentToken, putCatalogItem } from './admin.ts';
+import { issueCommand, revokeDevice, setPolicy, addUser, createEnrollmentToken, putCatalogItem, publishRelease, setReleaseState, promoteRelease, emergencyRelease, logRelease, RELEASE_PERMISSION } from './admin.ts';
 import { secret, sha256, tx } from './db.ts';
 import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { checkPassword } from './oauth.ts';
@@ -47,6 +47,10 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   app_allowlist: (v) => Array.isArray(v) && v.length <= 1000 && v.every((x) => typeof x === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(x)),
   approved_remotes: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && x.length <= 200),
   offline_wipe_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 365,
+  // AppImages (WSOS-AIM-002) and local .deb files (WSOS-APT-005).
+  appimages: (v) => v === 'allow' || v === 'block',
+  appimage_trusted_keys: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && /^[0-9A-Fa-f ]{40,80}$/.test(x)),
+  allow_local_debs: (v) => typeof v === 'boolean',
   update_mirror: (v) => typeof v === 'string' && /^https:\/\/[^\s/]+(\/\S*)?$/.test(v),
 };
 
@@ -322,7 +326,9 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const arches = Array.isArray(b.arches) ? b.arches.filter((x) => x === 'amd64' || x === 'arm64') : [];
     if (!arches.length) throw invalid('arches', 'amd64 and/or arm64');
     if (source === 'appimage' && !/^[0-9a-f]{64}$/.test(String(b.sha256 ?? ''))) throw invalid('sha256', 'AppImages need a sha256');
-    const item = { id, source, name, arches, required: b.required === true, blocked: b.blocked === true, ...(source === 'appimage' ? { sha256: b.sha256 } : {}) };
+    const text = (k: string, max: number) => (typeof b[k] === 'string' && (b[k] as string).trim() ? { [k]: (b[k] as string).trim().slice(0, max) } : {});
+    const item = { id, source, name, arches, required: b.required === true, blocked: b.blocked === true, ...(source === 'appimage' ? { sha256: b.sha256 } : {}),
+      ...text('category', 40), ...text('summary', 200), ...text('publisher', 100) };
     putCatalogItem(db, item);
     log(a, 'catalog_put', { id });
     send(ctx, 200, item);
@@ -340,6 +346,37 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     send(ctx, 200, { items: (db.prepare('SELECT manifest FROM releases ORDER BY ring, arch').all() as { manifest: string }[])
       .map((m) => { const { signature: _s, ...rest } = json<Record<string, unknown>>(m.manifest); return rest; }) });
   });
+
+  // Release management (WSOS-AUP-013): admins with desktop.releases.manage only. Every change re-signs the manifest.
+  const releaseManager = (ctx: Ctx): Admin => {
+    const a = admin(ctx);
+    const row = db.prepare('SELECT permissions FROM users WHERE id = ?').get(a.id) as { permissions: string };
+    if (!(json<string[]>(row.permissions) ?? []).includes(RELEASE_PERMISSION)) throw new HttpError(403, 'PERMISSION_DENIED', `requires ${RELEASE_PERMISSION}`);
+    return a;
+  };
+  const releaseAction = (fn: (a: Admin, b: Record<string, unknown>, ctx: Ctx) => unknown, action: string) => async (ctx: Ctx) => {
+    const a = releaseManager(ctx);
+    const b = await body(ctx);
+    let out: unknown;
+    try { out = fn(a, b, ctx); } catch (e) { throw invalid('release', (e as Error).message); }
+    log(a, action, { ...ctx.params, ...b });
+    send(ctx, 200, { items: (out as Record<string, unknown>[]).map(({ signature: _s, ...rest }) => rest) });
+  };
+  r.on('POST', '/admin/api/releases/publish', releaseAction((a, b) => {
+    const m = b.manifest as Record<string, unknown>;
+    const signed = publishRelease(db, m) as Record<string, unknown>;
+    logRelease(db, a.email, 'release_published', { release_id: signed.release_id, ring: signed.ring, arch: signed.arch });
+    return [signed];
+  }, 'release_published'));
+  r.on('POST', '/admin/api/releases/{ring}/{op}', releaseAction((a, b, ctx) => {
+    const state = ({ pause: 'paused', resume: 'active', pull: 'pulled' } as const)[ctx.params.op as 'pause' | 'resume' | 'pull'];
+    if (!state) throw new Error('operation must be pause, resume or pull');
+    return setReleaseState(db, ctx.params.ring, b.arch as string | undefined, state, a.email);
+  }, 'release_state'));
+  r.on('POST', '/admin/api/releases/promote', releaseAction((a, b) =>
+    promoteRelease(db, String(b.from ?? ''), String(b.to ?? ''), b.arch as string | undefined, { rollout_percent: b.rollout_percent as number | undefined }, a.email), 'release_promoted'));
+  r.on('POST', '/admin/api/releases/emergency', releaseAction((a, b) =>
+    emergencyRelease(db, (b.manifest ?? {}) as Record<string, unknown>, b.arch as string | undefined, a.email), 'release_emergency'));
 
   // ---- activity ----
   r.on('GET', '/admin/api/log', (ctx) => {
