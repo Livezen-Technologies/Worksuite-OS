@@ -50,7 +50,8 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
 
   it('every window is sandboxed with context isolation and no node integration', () => {
     const main = read('main.ts')
-    expect(main).toMatch(/const shellPrefs = \(\) => \(\{[^}]*sandbox: true,\s*contextIsolation: true,\s*nodeIntegration: false/)
+    expect(main).toMatch(/const shellPrefs = \(\) => shellWebPreferences\(/)
+    expect(read('webSecurity.ts')).toMatch(/sandbox: true, contextIsolation: true, nodeIntegration: false/)
     for (const [f, s] of all) {
       expect(s, f).not.toMatch(/nodeIntegration:\s*true|contextIsolation:\s*false|sandbox:\s*false|webSecurity:\s*false/)
     }

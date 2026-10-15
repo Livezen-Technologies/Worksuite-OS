@@ -22,6 +22,8 @@ systemd-run --quiet --unit=worksuite-perf-shell --uid="$uid" -p PAMName=login -p
 end=$(( $(date +%s) + TIMEOUT ))
 while [ "$(date +%s)" -lt "$end" ] && ! grep -q 'WORKSUITE_PERF shell_ready_ms' "$log"; do sleep 0.5; done
 grep -ao 'WORKSUITE_PERF shell_ready_ms [0-9]*' "$log" | head -n1 || echo "WORKSUITE_PERF_SKIP shell_ready_ms: no window within ${TIMEOUT}s"
+# Launcher first frame (WSOS-PRF-005), reported by the shell whenever the launcher is opened during the run.
+grep -ao 'WORKSUITE_PERF launcher_first_frame_ms [0-9]*' "$log" | head -n1 || true
 
 if command -v lswt >/dev/null && command -v gtk-launch >/dev/null; then
   rt=/run/user/$uid
