@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { cloudErrorText, os, policyLines, serverUrlFor, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, os, packageErrorText, policyLines, serverUrlFor, type OsUpdateStatus, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
 import type { WindowProps } from './types'
 import CIcon from '../components/CIcon'
 import { AppIcon } from '../components/Logo'
@@ -7,7 +7,6 @@ import { AppIcon } from '../components/Logo'
 const SECTIONS = ['Network', 'Bluetooth', 'Displays', 'Sound', 'Power', 'Printers', 'Apps', 'Accounts', 'Privacy', 'Updates', 'About this device'] as const
 type Section = (typeof SECTIONS)[number]
 
-type UpdateState = 'idle' | 'checking' | 'downloading' | 'ready' | 'scheduled' | 'restarting'
 
 const card = 'rounded-[14px] border border-ws-line bg-ws-surface'
 
@@ -101,96 +100,96 @@ function SimplePanel({ section }: { section: Section }) {
   }
 }
 
-const POLICY_ROWS = [
-  { label: 'Update source', help: 'Signed APT repository and release manifest', value: 'download.worksuitecloud.com' },
-  { label: 'Update mode', help: 'Download in background, install when idle or in the window', value: 'Automatic' },
-  { label: 'Ring', help: 'Pilot devices get releases before Stable', value: 'Pilot' },
-  { label: 'Maintenance window', help: 'Restarts happen only in this window unless critical', value: 'Daily 22:00–02:00' },
-]
-const HISTORY = [
-  { date: '15 Oct 09:31', name: 'WorkSuite OS 1.0.3 (security)', src: 'download.worksuitecloud.com', ok: false },
-  { date: '08 Oct 22:14', name: 'WorkSuite Desktop shell 1.0.2', src: 'download.worksuitecloud.com', ok: true },
-  { date: '01 Oct 22:05', name: 'Debian kernel 6.12.48', src: 'Debian trixie (pinned)', ok: true },
-]
+const WAIT_REASON: Record<string, string> = {
+  waiting_for_user: 'Ready to install when you are.',
+  outside_window: 'Installs in the maintenance window.',
+  not_idle: 'Installs next time the computer is idle.',
+  metered: 'Waiting for a non-metered connection.',
+  deferred: 'You postponed this update.',
+  paused: 'Your organization paused this release.',
+  pulled: 'This release was withdrawn.',
+  not_in_rollout: 'Rolling out gradually; this computer isn’t included yet.',
+  manual_mode: 'Updates are set to manual.',
+}
+const RING: Record<string, string> = { development: 'Development', pilot: 'Pilot', stable: 'Stable' }
+const MODE: Record<string, string> = { automatic: 'Automatic', notify: 'Notify', manual: 'Manual' }
+const fmt = (ms: number | null | string) => (ms == null ? '—' : new Date(ms).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))
 
+/** Settings › Updates on the package service's update coordinator (WSOS-AUP-011). */
 function Updates() {
-  const [state, setState] = useState<UpdateState>('ready')
-  const [deferrals, setDeferrals] = useState(2)
-  const [metered, setMetered] = useState(true)
-  const [pct, setPct] = useState(0)
+  const [st, setSt] = useState<OsUpdateStatus | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [policy, setPolicy] = useState<DeviceInfo['policies']>(null)
+  const [now, setNow] = useState(Date.now())
 
-  const check = () => {
-    setState('checking')
-    setTimeout(() => setState('ready'), 1200)
+  useEffect(() => {
+    void os.updateStatus(false).then((r) => (r.ok ? setSt(r.value) : setError(packageErrorText(r.error))))
+    void os.deviceInfo().then((d) => setPolicy(d.policies))
+    const off = os.onUpdateStatus(setSt)
+    const t = setInterval(() => setNow(Date.now()), 15_000)
+    return () => { off(); clearInterval(t) }
+  }, [])
+
+  const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    setBusy(true); setError(null)
+    const r = await fn()
+    setBusy(false)
+    if (!r.ok) setError(packageErrorText(r.error ?? 'failed'))
   }
-  const download = () => {
-    setState('downloading'); setPct(0)
-    let p = 0
-    const id = setInterval(() => { p += 20; setPct(p); if (p >= 100) { clearInterval(id); setState('ready') } }, 300)
-  }
-  const schedule = () => { setState('scheduled'); setDeferrals((d) => Math.max(0, d - 1)) }
+  const check = () => act(async () => { const r = await os.updateStatus(true); if (r.ok) setSt(r.value); return r })
+  const later = () => act(async () => { const r = await os.updateDefer(); if (r.ok && !r.value) setError('This update can’t be postponed any more.'); return r })
 
-  const status = {
-    idle: { title: 'WorkSuite OS is up to date', sub: 'Last checked today at 09:31 · Pilot ring' },
-    checking: { title: 'Checking for updates…', sub: 'Contacting download.worksuitecloud.com' },
-    downloading: { title: `Downloading WorkSuite OS 1.0.3 — ${pct}%`, sub: 'Verifying signature after download' },
-    ready: { title: 'WorkSuite OS 1.0.3 is ready — restart to finish', sub: `Downloaded from download.worksuitecloud.com · signature verified · security update · restart required by Fri 17 Oct, 18:00 (${deferrals} deferral${deferrals === 1 ? '' : 's'} left)` },
-    scheduled: { title: 'Restart scheduled tonight at 22:00', sub: `WorkSuite OS 1.0.3 installs in the maintenance window · ${deferrals} deferral${deferrals === 1 ? '' : 's'} left` },
-    restarting: { title: 'Restarting to install WorkSuite OS 1.0.3…', sub: 'Save your work — apps will close' },
-  }[state]
+  const v = st?.version ?? ''
+  const due = st?.deadline ? ` · required by ${fmt(st.deadline)}` : ''
+  const left = st?.deferrals_left != null ? ` · ${st.deferrals_left} postponement${st.deferrals_left === 1 ? '' : 's'} left` : ''
+  const mins = st?.restart_at ? Math.max(0, Math.ceil((st.restart_at - now) / 60_000)) : 0
+  const view = !st ? { title: error ? 'Update status unavailable' : 'Loading…', sub: error ?? '' } : {
+    up_to_date: { title: 'WorkSuite OS is up to date', sub: `Version ${st.installed} · last checked ${fmt(st.last_check)}` },
+    checking: { title: 'Checking for updates…', sub: 'Contacting the update server' },
+    available: { title: `WorkSuite OS ${v} is available`, sub: WAIT_REASON[st.reason ?? ''] ?? '' },
+    waiting: { title: `WorkSuite OS ${v} is ready to install`, sub: `${WAIT_REASON[st.reason ?? ''] ?? ''}${due}${left}` },
+    installing: { title: `Installing WorkSuite OS ${v}…`, sub: 'You can keep working. Signature verified.' },
+    ready_to_restart: { title: 'Restart to finish updating', sub: `WorkSuite OS ${st.installed} is installed` },
+    restart_pending: { title: `Restarting in ${mins} min to install WorkSuite OS ${v}`, sub: 'This update is required by your organization. Save your work.' },
+    failed: { title: 'The last update check or install didn’t work', sub: st.reason ? st.reason.charAt(0).toUpperCase() + st.reason.slice(1) + '.' : '' },
+  }[st.state]
 
-  const btn = 'h-[42px] rounded-[10px] px-4 text-sm'
+  const btn = 'h-[42px] shrink-0 whitespace-nowrap rounded-[10px] px-4 text-sm disabled:opacity-50'
+  const canInstall = st && (st.state === 'waiting' || st.state === 'available') && st.reason !== 'paused' && st.reason !== 'pulled'
+  const policyRows = [
+    { label: 'Update source', help: 'Signed release manifest and APT repository', value: 'download.worksuitecloud.com' },
+    { label: 'Ring', help: 'Pilot devices get releases before Stable', value: RING[policy?.update_ring ?? 'stable'] },
+    { label: 'Update mode', help: 'Automatic installs when idle or in the window; Notify waits for you', value: MODE[policy?.update_mode ?? 'automatic'] },
+    { label: 'Maintenance window', help: 'Automatic installs happen in this window', value: policy?.maintenance_window ?? 'Any time the computer is idle' },
+  ]
   return (
     <Panel title="Updates">
       <div className={`${card} flex items-center gap-4 p-5`} aria-live="polite">
-        <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 ${state === 'checking' ? 'animate-spin' : ''}`}><CIcon name="refresh" size={24} /></span>
+        <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 ${st?.state === 'checking' || st?.state === 'installing' ? 'animate-spin' : ''}`}><CIcon name="refresh" size={24} /></span>
         <div className="flex min-w-0 grow flex-col gap-1">
-          <div className="text-base font-semibold">{status.title}</div>
-          <div className="text-[13px] text-ws-muted">{status.sub}</div>
-          {state === 'downloading' && <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Download progress"><div className="h-full bg-ws-accent transition-all" style={{ width: `${pct}%` }} /></div>}
+          <div className="text-base font-semibold">{view.title}</div>
+          <div className="text-[13px] text-ws-muted">{view.sub}</div>
+          {error && st && <div role="alert" className="text-[13px] text-red-700">{error}</div>}
         </div>
-        {state === 'idle' && <button type="button" onClick={check} className={`${btn} border border-slate-300 bg-ws-surface text-slate-700`}>Check for updates</button>}
-        {state === 'ready' && <>
-          <button type="button" onClick={schedule} disabled={deferrals === 0} className={`${btn} border border-slate-300 bg-ws-surface text-slate-700 disabled:opacity-50`}>Tonight at 22:00</button>
-          <button type="button" onClick={() => setState('restarting')} className={`${btn} bg-ws-accent px-[18px] font-semibold text-white hover:bg-ws-accent-strong`}>Restart now</button>
+        {st && (st.state === 'up_to_date' || st.state === 'failed') && <button type="button" disabled={busy} onClick={() => void check()} className={`${btn} border border-slate-300 bg-ws-surface text-slate-700`}>Check for updates</button>}
+        {canInstall && <>
+          <button type="button" disabled={busy || st!.deferrals_left === 0} onClick={() => void later()} className={`${btn} border border-slate-300 bg-ws-surface text-slate-700`}>Later</button>
+          <button type="button" disabled={busy} onClick={() => void act(os.updateInstallNow)} className={`${btn} bg-ws-accent px-[18px] font-semibold text-white hover:bg-ws-accent-strong`}>Install now</button>
         </>}
-        {state === 'scheduled' && <>
-          <button type="button" onClick={() => setState('ready')} className={`${btn} border border-slate-300 bg-ws-surface text-slate-700`}>Change</button>
-          <button type="button" onClick={() => setState('restarting')} className={`${btn} bg-ws-accent px-[18px] font-semibold text-white`}>Restart now</button>
-        </>}
+        {st?.state === 'ready_to_restart' && <button type="button" onClick={() => void os.power('restart')} className={`${btn} bg-ws-accent px-[18px] font-semibold text-white hover:bg-ws-accent-strong`}>Restart now</button>}
       </div>
 
       <div className={`${card} flex flex-col`}>
-        {POLICY_ROWS.map((r) => (
+        {policyRows.map((r) => (
           <Row key={r.label} label={r.label} help={r.help}>
             <span className="text-[13.5px]">{r.value}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span>
+            {policy && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span>}
           </Row>
         ))}
-        <Row label="Metered connections" help="Pause non-critical downloads on mobile data">
-          <span className="text-[13.5px]">{metered ? 'Paused' : 'Allowed'}</span>
-          <Toggle label="Pause downloads on metered connections" checked={metered} onChange={setMetered} />
+        <Row label="Metered connections" help="Non-critical downloads wait for Wi-Fi or Ethernet">
+          <span className="text-[13.5px] text-ws-muted">Automatic</span>
         </Row>
-      </div>
-
-      <div className={`${card} flex flex-col gap-2.5 px-5 py-4`}>
-        <div className="flex items-center"><span className="text-sm font-semibold">Update history</span>
-          <button type="button" onClick={download} className="ml-auto text-[13px] text-ws-accent hover:text-ws-accent-strong">Install from USB bundle…</button></div>
-        <table className="w-full border-collapse text-[13px]">
-          <thead><tr className="text-left text-xs text-ws-muted"><th className="py-1.5 font-semibold">Date</th><th className="py-1.5 font-semibold">Update</th><th className="py-1.5 font-semibold">Source</th><th className="py-1.5 font-semibold">Result</th></tr></thead>
-          <tbody>
-            {HISTORY.map((h) => (
-              <tr key={h.date}>
-                <td className="border-t border-ws-line/60 py-2 text-ws-muted">{h.date}</td>
-                <td className="border-t border-ws-line/60 py-2">{h.name}</td>
-                <td className="border-t border-ws-line/60 py-2 text-ws-muted">{h.src}</td>
-                <td className="border-t border-ws-line/60 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${h.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>{h.ok ? 'Installed' : state === 'scheduled' ? 'Scheduled 22:00' : 'Ready to restart'}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </Panel>
   )
@@ -326,7 +325,7 @@ export default function Settings({ onClose }: WindowProps) {
               return (
                 <button key={s} type="button" aria-current={cur ? 'page' : undefined} onClick={() => setSection(s)}
                   className={`flex h-9 shrink-0 items-center justify-between rounded-lg px-3 text-left text-sm ${cur ? 'bg-blue-100 font-semibold text-blue-900' : 'text-slate-700 hover:bg-slate-100 dark:text-ws-ink dark:hover:bg-slate-700'}`}>
-                  {s}{s === 'Updates' && <span className="text-[11px] text-blue-700" aria-label="1 update">1</span>}
+                  {s}
                 </button>
               )
             })}

@@ -26,6 +26,11 @@ export interface WorkSuiteApi {
   pkgRemove(catalogId: string): Promise<CloudResult<string>>
   pkgApplyUpdate(): Promise<CloudResult<string>>
   pkgCheckUpdates(): Promise<CloudResult<UpdateSummary>>
+  // OS update coordinator in the package service (WSOS-AUP-011).
+  updateStatus(check: boolean): Promise<CloudResult<OsUpdateStatus>>
+  updateDefer(): Promise<CloudResult<boolean>>
+  updateInstallNow(): Promise<CloudResult<true>>
+  onUpdateStatus(cb: (s: OsUpdateStatus) => void): () => void
   // Files: roots are "home", "drive" (~/WorkSuite Drive) and "media:<name>"; paths are relative to the root.
   filesRoots(): Promise<{ roots: { id: string; label: string }[]; drive_exists: boolean }>
   filesList(root: string, rel: string): Promise<CloudResult<FileEntry[]>>
@@ -39,6 +44,11 @@ export interface PackagePreview {
   disk_bytes: number | null
   permissions: string[]
   broad: string[]
+}
+export interface OsUpdateStatus {
+  state: 'up_to_date' | 'checking' | 'available' | 'waiting' | 'installing' | 'ready_to_restart' | 'restart_pending' | 'failed'
+  version: string | null; installed: string; release_id: string | null; mandatory: boolean; deadline: string | null
+  deferrals_left: number | null; reason: string | null; restart_at: number | null; last_check: number | null
 }
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
 /** state: Drive sync state (WSOS-DRV-002), "folder", "local" outside Drive, or "unknown" when sync isn't running. */
@@ -153,6 +163,21 @@ const stub: WorkSuiteApi = {
   async pkgApplyUpdate() { const r = stubJob('update', 'update'); setTimeout(() => { stubUpdates = { packages: [], flatpaks: [] } }, 800); return r },
   async pkgCheckUpdates() { return { ok: true, value: { ...stubUpdates, reboot_required: false, state: 'idle' } } },
   onPkgJob(cb) { stubListeners.add(cb); return () => { stubListeners.delete(cb) } },
+  async updateStatus(check) {
+    if (check) { stubOs = { ...stubOs, last_check: Date.now() }; stubOsListeners.forEach((l) => l(stubOs)) }
+    return { ok: true, value: stubOs }
+  },
+  async updateDefer() {
+    if ((stubOs.deferrals_left ?? 0) <= 0) return { ok: true, value: false }
+    stubOs = { ...stubOs, state: 'waiting', reason: 'deferred', deferrals_left: (stubOs.deferrals_left ?? 1) - 1 }
+    stubOsListeners.forEach((l) => l(stubOs)); return { ok: true, value: true }
+  },
+  async updateInstallNow() {
+    stubOs = { ...stubOs, state: 'installing', reason: null }; stubOsListeners.forEach((l) => l(stubOs))
+    setTimeout(() => { stubOs = { ...stubOs, state: 'ready_to_restart', installed: stubOs.version ?? stubOs.installed }; stubOsListeners.forEach((l) => l(stubOs)) }, 1200)
+    return { ok: true, value: true }
+  },
+  onUpdateStatus(cb) { stubOsListeners.add(cb); return () => { stubOsListeners.delete(cb) } },
   async filesRoots() { return { roots: [{ id: 'home', label: 'Home' }, { id: 'media:KINGSTON', label: 'KINGSTON' }, { id: 'drive', label: 'WorkSuite Drive' }], drive_exists: true } },
   async filesList(root, rel) {
     const t = Date.now()
@@ -182,6 +207,10 @@ let stubAccounts: CloudAccount[] = []
 // Preview only: package jobs finish after a short delay.
 const stubListeners = new Set<(e: PackageJobEvent) => void>()
 let stubJobId = 0
+// Preview: a mandatory security release waiting for the user.
+let stubOs: OsUpdateStatus = { state: 'waiting', version: '1.0.3', installed: '1.0.2', release_id: 'os-1.0.3', mandatory: true,
+  deadline: new Date(Date.now() + 2 * 86_400_000).toISOString(), deferrals_left: 2, reason: 'waiting_for_user', restart_at: null, last_check: Date.now() - 3_600_000 }
+const stubOsListeners = new Set<(s: OsUpdateStatus) => void>()
 let stubUpdates = { packages: ['firefox-esr', 'libreoffice', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
 function stubJob(_id: string, _kind: string): CloudResult<string> {
   const job = `/lk/worksuite/PackageService1/job/${++stubJobId}`

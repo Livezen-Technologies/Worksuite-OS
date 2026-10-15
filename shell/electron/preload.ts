@@ -20,6 +20,14 @@ contextBridge.exposeInMainWorld('worksuite', {
   pkgRemove: (catalogId: string) => ipcRenderer.invoke('ws:pkgRemove', String(catalogId)),
   pkgApplyUpdate: () => ipcRenderer.invoke('ws:pkgApplyUpdate'),
   pkgCheckUpdates: () => ipcRenderer.invoke('ws:pkgCheckUpdates'),
+  updateStatus: (check: boolean) => ipcRenderer.invoke('ws:updateStatus', check ? 'check' : 'get'),
+  updateDefer: () => ipcRenderer.invoke('ws:updateDefer'),
+  updateInstallNow: () => ipcRenderer.invoke('ws:updateInstallNow'),
+  onUpdateStatus: (cb: (s: unknown) => void) => {
+    const listener = (_e: unknown, payload: unknown) => cb(payload)
+    ipcRenderer.on('ws:updateStatusChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:updateStatusChanged', listener) }
+  },
   filesRoots: () => ipcRenderer.invoke('ws:filesRoots'),
   filesList: (root: string, rel: string) => ipcRenderer.invoke('ws:filesList', String(root), String(rel)),
   filesOpen: (root: string, rel: string) => ipcRenderer.invoke('ws:filesOpen', String(root), String(rel)),

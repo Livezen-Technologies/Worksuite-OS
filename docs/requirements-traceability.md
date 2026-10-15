@@ -49,4 +49,4 @@ server commit before ack → no duplicate; two offline edits → conflict kept; 
 Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | WSOS-APT-001/002/003/004/006, WSOS-APP-002/003, WSOS-FLP-001/002/004, WSOS-UPD-001 (device side) | `services/package-service/src/service.ts`, `src/apt.ts`, `src/dbus.ts` | Impl |
 | §7.2 Files: This Computer / WorkSuite Cloud, WSOS-DRV-002 sync states | `shell/src/screens/Files.tsx`, `shell/electron/files.ts`, `services/sync/src/service.ts` (`fileStates`, `driveSummary`) | Impl (UI; Drive transfer engine not in this repo) |
-| WSOS-AUP-001…009, 011, WSOS-UPD-002/003/005 update coordinator | `services/package-service/src/updates.ts`, `src/coordinator.ts`, `src/dbus.ts` | Impl (Settings › Updates not yet wired) |
+| WSOS-AUP-001…009, 011, WSOS-UPD-002/003/005 update coordinator | `services/package-service/src/updates.ts`, `src/coordinator.ts`, `src/dbus.ts`; Settings › Updates: `shell/src/screens/Settings.tsx`, `shell/electron/packages.ts` | Impl |

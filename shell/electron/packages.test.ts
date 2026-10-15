@@ -59,3 +59,27 @@ describe('checkUpdates', () => {
     expect(f.calls[0].slice(-1)).toEqual(['CheckUpdates'])
   })
 })
+
+describe('UpdateStatusChanged', () => {
+  it('parses the coordinator status from real gdbus monitor output', () => {
+    const e = parseMonitorLine("/lk/worksuite/PackageService1: lk.worksuite.PackageService1.UpdateStatusChanged ('{\"state\":\"failed\",\"version\":null,\"installed\":\"1.0.1\",\"release_id\":null,\"mandatory\":false,\"deadline\":null,\"deferrals_left\":null,\"reason\":\"update information failed its signature check\",\"restart_at\":null,\"last_check\":0}',)")
+    expect(e?.kind).toBe('update_status')
+    expect(e?.status).toMatchObject({ state: 'failed', installed: '1.0.1', reason: 'update information failed its signature check' })
+  })
+  it('unescapes the quotes GVariant escapes', () => {
+    const line = String.raw`/lk/worksuite/PackageService1: lk.worksuite.PackageService1.UpdateStatusChanged ('{"state":"failed","reason":"can\'t reach the update server"}',)`
+    expect(parseMonitorLine(line)?.status).toMatchObject({ state: 'failed', reason: "can't reach the update server" })
+  })
+})
+
+describe('update coordinator calls', () => {
+  it('Install now and Later go through busctl with interactive polkit', async () => {
+    const f = fakeExec({ stdout: '{"type":"b","data":[false]}' })
+    expect(await packageClient(f.exec).deferUpdate()).toEqual({ ok: true, value: false })
+    expect(f.calls[0]).toContain('--allow-interactive-authorization=yes')
+    expect(f.calls[0].slice(-1)).toEqual(['DeferUpdate'])
+    const g = fakeExec({ stdout: JSON.stringify({ type: 's', data: [JSON.stringify({ state: 'up_to_date', installed: '1.0.2' })] }) })
+    expect(await packageClient(g.exec).updateStatus(true)).toEqual({ ok: true, value: { state: 'up_to_date', installed: '1.0.2' } })
+    expect(g.calls[0].slice(-1)).toEqual(['CheckForUpdates'])
+  })
+})

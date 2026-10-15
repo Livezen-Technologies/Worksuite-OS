@@ -108,6 +108,9 @@ app.whenReady().then(() => {
   handle('ws:pkgRemove', (catalogId) => pkg.start('Remove', catalogId))
   handle('ws:pkgApplyUpdate', () => pkg.applyUpdate())
   handle('ws:pkgCheckUpdates', () => pkg.checkUpdates())
+  handle('ws:updateStatus', (check) => pkg.updateStatus(check === 'check'))
+  handle('ws:updateDefer', () => pkg.deferUpdate())
+  handle('ws:updateInstallNow', () => pkg.installUpdateNow())
   // Files: real folders plus Drive sync states from the sync service.
   const files = defaultEnv(async (dir) => { const r = await syncCall('FileStates', { dir }); return r.ok && Array.isArray(r.value) ? r.value as { name: string; state: string }[] : null })
   handle('ws:filesRoots', () => ({ roots: roots(files).map(({ id, label }) => ({ id, label })), drive_exists: existsSync(driveDir(files.home)) }))
@@ -123,7 +126,7 @@ app.whenReady().then(() => {
     const drive = root === 'drive' ? await syncCall('DriveSummary') : null
     return { free_bytes: r ? freeBytes(r.path) : null, drive: drive?.ok ? drive.value : null }
   })
-  followJobs((e) => win?.webContents.send('ws:pkgJob', e))
+  followJobs((e) => win?.webContents.send(e.kind === 'update_status' ? 'ws:updateStatusChanged' : 'ws:pkgJob', e.kind === 'update_status' ? e.status : e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')
     return r.ok ? { ok: true, value: publicAccounts(r.value) } : r

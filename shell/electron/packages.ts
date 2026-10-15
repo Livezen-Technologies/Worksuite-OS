@@ -56,6 +56,20 @@ export function packageClient(exec: Exec = realExec) {
       const list = (k: string) => (Array.isArray(d[k]?.data) ? (d[k].data as unknown[]).map(String) : [])
       return { ok: true, value: { packages: list('packages'), flatpaks: list('flatpaks'), reboot_required: d.reboot_required?.data === true, state: String(d.state?.data ?? 'idle') } }
     },
+    // Update coordinator (WSOS-AUP-011).
+    async updateStatus(check = false): Promise<Reply<unknown>> {
+      const r = await call(exec, check ? 'CheckForUpdates' : 'GetUpdateStatus', '', [])
+      if (!r.ok) return r
+      try { return { ok: true, value: JSON.parse(String(r.value[0])) } } catch { return { ok: false, error: 'failed' } }
+    },
+    async deferUpdate(): Promise<Reply<boolean>> {
+      const r = await call(exec, 'DeferUpdate', '', [])
+      return r.ok ? { ok: true, value: r.value[0] === true } : r
+    },
+    async installUpdateNow(): Promise<Reply<true>> {
+      const r = await call(exec, 'InstallUpdateNow', '', [])
+      return r.ok ? { ok: true, value: true } : r
+    },
     async applyUpdate(): Promise<Reply<string>> {
       const r = await call(exec, 'ApplyUpdate', 'sa{sv}', ['', '0'])
       return r.ok ? { ok: true, value: String(r.value[0]) } : r
@@ -65,7 +79,7 @@ export function packageClient(exec: Exec = realExec) {
 
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
 
-export interface JobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
+export interface JobEvent { job: string; kind: 'progress' | 'finished' | 'update_status'; status?: unknown; percent?: number; phase?: string; result?: string; error?: string }
 
 /** One gdbus monitor line → event. Example:
  *  /lk/worksuite/PackageService1: lk.worksuite.PackageService1.JobFinished (objectpath '/lk/worksuite/PackageService1/job/3', 'failed', {'kind': <'install'>, 'error': <'not approved by your organization'>})
@@ -77,6 +91,11 @@ export function parseMonitorLine(line: string): JobEvent | null {
   if (m) {
     const err = /'error': <'((?:[^'\\]|\\.)*)'>/.exec(m[3])?.[1]?.replace(/\\(.)/g, '$1')
     return { job: m[1], kind: 'finished', result: m[2], ...(err ? { error: err } : {}) }
+  }
+  // GVariant string: single-quoted with \' and \\ escapes (JSON itself uses double quotes).
+  m = /\.UpdateStatusChanged \('((?:[^'\\]|\\.)*)',\)/.exec(line)
+  if (m) {
+    try { return { job: '', kind: 'update_status', status: JSON.parse(m[1].replace(/\\(.)/g, '$1')) } } catch { return null }
   }
   return null
 }
