@@ -1,6 +1,6 @@
 # WorkSuite OS boot splash (design: "WorkSuite OS Boot & Install" > BootSplash, 1280x800 board).
 # One centred column, 28 px apart: the mark in a spinning ring (120 px), the title (Plex Sans Medium 28) over the
-# subtitle (Plex Sans 15, #8FA3C8), then a 420 x 4 progress bar with the phase on the left and "WorkSuite OS 1.1"
+# subtitle (Plex Sans 15, #8FA3C8), then a 420 x 4 progress bar with the phase on the left and "WorkSuite OS <version>" (filled in at package build)
 # on the right (Plex Mono 12, #5E739C); "Press Esc for details" sits 32 px from the bottom (Plex Mono 12, #3D5280).
 # Modes (Plymouth.GetMode): boot -> "Starting WorkSuite OS", shutdown -> "Shutting down", reboot -> "Restarting",
 # updates / system-upgrade / firmware-upgrade -> the same column with update progress and "Don't turn off" copy.
@@ -15,7 +15,7 @@ cy = Window.GetY() + H / 2;
 SANS = "IBM Plex Sans";
 SANS_MEDIUM = "IBM Plex Sans Medium";
 MONO = "IBM Plex Mono";
-VERSION_S = "WorkSuite OS 1.1";
+VERSION_S = "WorkSuite OS @VERSION@";
 
 # Pango sizes are points at 96 dpi: the design's pixel sizes x 0.75.
 fun text(s, px, r, g, b, font) {
@@ -99,7 +99,7 @@ fun progress_callback(duration, progress) {
     else if (mode == "reboot") p = "Rebooting";
     else p = "Unmounting disks";
   } else {
-    if (progress < 0.3) p = "Unlocking disk";
+    if (progress < 0.3) p = "Starting up";
     else if (progress < 0.7) p = "Loading system services";
     else p = "Starting desktop";
   }
