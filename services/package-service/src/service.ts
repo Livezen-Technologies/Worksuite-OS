@@ -106,12 +106,12 @@ export class PackageService extends EventEmitter {
     });
   }
 
-  async checkUpdates(): Promise<{ apt: number; flatpak: number; packages: string[]; reboot_required: boolean; state: string }> {
+  async checkUpdates(): Promise<{ apt: number; flatpak: number; packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }> {
     const list = await this.env.runner.run('apt', ['list', '--upgradable', '-q']);
     const fp = await this.env.runner.run('flatpak', ['remote-ls', '--system', '--updates', '--columns=application']);
     const apt = parseUpgradable(list.stdout);
     const flatpaks = fp.code === 0 ? fp.stdout.split('\n').map((l) => l.trim()).filter((l) => l && l !== 'Application ID') : [];
-    return { apt: apt.length, flatpak: flatpaks.length, packages: apt.map((c) => c.name), reboot_required: this.rebootRequired, state: this.state() };
+    return { apt: apt.length, flatpak: flatpaks.length, packages: apt.map((c) => c.name), flatpaks, reboot_required: this.rebootRequired, state: this.state() };
   }
 
   /** WSOS-UPD-001 coordinator steps that belong on the device. release_id "" = newest the device's ring allows. */

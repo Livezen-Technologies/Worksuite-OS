@@ -10,7 +10,7 @@ type Level = 'Safe' | 'Review' | 'Broad'
 interface Perm { title: string; detail: string; level: Level }
 interface App {
   id: string; mark: string; bg: string; fg: string; name: string; pub: string; desc: string
-  src: Source; category: string; policy: Policy; installed?: boolean; update?: boolean
+  src: Source; category: string; policy: Policy; installed?: boolean
   ref: string; download: string; disk: string; deps: string; perms: Perm[]
   /** Package service catalog id; apps without one (WorkSuite web apps, AppImages) aren't managed here. */
   pkg?: string
@@ -49,16 +49,16 @@ const APPS: App[] = [
     perms: [portal, { title: 'Access your Pictures folder', detail: 'filesystem=xdg-pictures', level: 'Review' }, net('Needed for plug-in downloads and help pages'), { title: 'Run as an X11 app (XWayland)', detail: 'Older apps can read input from other X11 windows', level: 'Broad' }] },
   { id: 'krita', pkg: 'flatpak:org.kde.krita', mark: 'K', bg: '#e0e7ff', fg: '#4338ca', name: 'Krita', pub: 'KDE', desc: 'Digital painting and illustration.', src: 'Flatpak', category: 'Graphics', policy: 'approved', ref: 'org.kde.krita · stable', download: '188 MB', disk: '562 MB', deps: 'KDE 6.7 runtime',
     perms: [portal, { title: 'Access your Pictures folder', detail: 'filesystem=xdg-pictures', level: 'Review' }, { title: 'Use graphics tablets', detail: 'device=all for pen input', level: 'Broad' }] },
-  { id: 'inkscape', pkg: 'apt:inkscape', mark: 'In', bg: '#fae8ff', fg: '#a21caf', name: 'Inkscape', pub: 'Inkscape Project', desc: 'Vector graphics editor for SVG.', src: 'APT', category: 'Graphics', policy: 'admin', ref: 'inkscape 1.2.2 · bookworm', download: '24 MB', disk: '96 MB', deps: '38 packages', perms: [] },
-  { id: 'pdf-studio', mark: 'PS', bg: '#fee2e2', fg: '#b91c1c', name: 'WorkSuite PDF Studio', pub: 'Livezen Technologies', desc: 'Edit, sign and convert PDFs with WorkSuite Drive.', src: 'WorkSuite', category: 'Office', policy: 'approved', installed: true, update: true, ref: 'pdf-studio 3.2', download: '12 MB', disk: '40 MB', deps: 'None', perms: [] },
+  { id: 'inkscape', pkg: 'apt:inkscape', mark: 'In', bg: '#fae8ff', fg: '#a21caf', name: 'Inkscape', pub: 'Inkscape Project', desc: 'Vector graphics editor for SVG.', src: 'APT', category: 'Graphics', policy: 'admin', ref: 'inkscape 1.2.2 · trixie', download: '24 MB', disk: '96 MB', deps: '38 packages', perms: [] },
+  { id: 'pdf-studio', mark: 'PS', bg: '#fee2e2', fg: '#b91c1c', name: 'WorkSuite PDF Studio', pub: 'Livezen Technologies', desc: 'Edit, sign and convert PDFs with WorkSuite Drive.', src: 'WorkSuite', category: 'Office', policy: 'approved', installed: true, ref: 'pdf-studio 3.2', download: '12 MB', disk: '40 MB', deps: 'None', perms: [] },
   { id: 'darktable', pkg: 'flatpak:org.darktable.Darktable', mark: 'Dt', bg: '#e0f2fe', fg: '#0369a1', name: 'darktable', pub: 'darktable org', desc: 'RAW photo workflow and development.', src: 'Flatpak', category: 'Graphics', policy: 'approved', ref: 'org.darktable.Darktable · stable', download: '96 MB', disk: '310 MB', deps: 'GNOME 47 runtime',
     perms: [portal, { title: 'Access your Pictures folder', detail: 'filesystem=xdg-pictures', level: 'Review' }] },
   { id: 'pinta', mark: 'Pi', bg: '#f1f5f9', fg: '#334155', name: 'Pinta.AppImage', pub: 'Imported file', desc: 'Unverified publisher — checksum only.', src: 'AppImage', category: 'Graphics', policy: 'blocked', ref: 'Pinta-2.1-x86_64.AppImage', download: '—', disk: '64 MB', deps: 'None', perms: [] },
-  { id: 'mail', mark: 'M', bg: '#dbeafe', fg: '#1d4ed8', name: 'WorkSuite Mail', pub: 'Livezen Technologies', desc: 'Mail with offline cache and shared inboxes.', src: 'WorkSuite', category: 'Office', policy: 'approved', installed: true, update: true, ref: 'mail 5.1', download: '18 MB', disk: '62 MB', deps: 'None', perms: [] },
-  { id: 'libreoffice', pkg: 'apt:libreoffice', mark: 'LO', bg: '#dcfce7', fg: '#15803d', name: 'LibreOffice', pub: 'The Document Foundation', desc: 'Office suite for legacy document formats.', src: 'APT', category: 'Office', policy: 'approved', installed: true, update: true, ref: 'libreoffice 7.4 · bookworm', download: '210 MB', disk: '640 MB', deps: '112 packages', perms: [] },
+  { id: 'mail', mark: 'M', bg: '#dbeafe', fg: '#1d4ed8', name: 'WorkSuite Mail', pub: 'Livezen Technologies', desc: 'Mail with offline cache and shared inboxes.', src: 'WorkSuite', category: 'Office', policy: 'approved', installed: true, ref: 'mail 5.1', download: '18 MB', disk: '62 MB', deps: 'None', perms: [] },
+  { id: 'libreoffice', pkg: 'apt:libreoffice', mark: 'LO', bg: '#dcfce7', fg: '#15803d', name: 'LibreOffice', pub: 'The Document Foundation', desc: 'Office suite for legacy document formats.', src: 'APT', category: 'Office', policy: 'approved', installed: true, ref: 'libreoffice 7.4 · trixie', download: '210 MB', disk: '640 MB', deps: '112 packages', perms: [] },
   { id: 'vscodium', pkg: 'flatpak:com.vscodium.codium', mark: 'Vs', bg: '#e0f2fe', fg: '#0369a1', name: 'VSCodium', pub: 'VSCodium', desc: 'Code editor without telemetry.', src: 'Flatpak', category: 'Development', policy: 'approved', ref: 'com.vscodium.codium · stable', download: '120 MB', disk: '380 MB', deps: 'Freedesktop 24.08 runtime',
     perms: [portal, { title: 'Full access to your home folder', detail: 'filesystem=home', level: 'Broad' }, net('Extensions and source control')] },
-  { id: 'firefox', pkg: 'apt:firefox-esr', mark: 'Fx', bg: '#f1f5f9', fg: '#334155', name: 'Firefox ESR', pub: 'Mozilla', desc: 'Web browser, managed by policy.', src: 'APT', category: 'Internet', policy: 'approved', installed: true, update: true, ref: 'firefox-esr 128 · bookworm', download: '72 MB', disk: '250 MB', deps: '6 packages', perms: [] },
+  { id: 'firefox', pkg: 'apt:firefox-esr', mark: 'Fx', bg: '#f1f5f9', fg: '#334155', name: 'Firefox ESR', pub: 'Mozilla', desc: 'Web browser, managed by policy.', src: 'APT', category: 'Internet', policy: 'approved', installed: true, ref: 'firefox-esr 128 · trixie', download: '72 MB', disk: '250 MB', deps: '6 packages', perms: [] },
 ]
 
 type Section = 'discover' | 'installed' | 'updates' | 'permissions'
@@ -69,7 +69,17 @@ export default function AppCenter({ onClose }: WindowProps) {
   const [category, setCategory] = useState('All')
   const [query, setQuery] = useState('image editor')
   const [installed, setInstalled] = useState(() => new Set(APPS.filter((a) => a.installed).map((a) => a.id)))
-  const [updates, setUpdates] = useState(() => new Set(APPS.filter((a) => a.update).map((a) => a.id)))
+  // Updates come from the package service's CheckUpdates; apps in the catalog are matched by package id.
+  const [available, setAvailable] = useState<{ packages: string[]; flatpaks: string[]; reboot: boolean } | null>(null)
+  const [updatesError, setUpdatesError] = useState<string | null>(null)
+  const loadUpdates = () => void os.pkgCheckUpdates().then((r) => {
+    if (r.ok) { setAvailable({ packages: r.value.packages, flatpaks: r.value.flatpaks, reboot: r.value.reboot_required }); setUpdatesError(null) }
+    else setUpdatesError(packageErrorText(r.error))
+  })
+  useEffect(loadUpdates, [])
+  const pending = available ? [...available.packages.map((n) => `apt:${n}`), ...available.flatpaks.map((n) => `flatpak:${n}`)] : []
+  const updates = new Set(APPS.filter((a) => a.pkg && pending.includes(a.pkg)).map((a) => a.id))
+  const otherUpdates = pending.filter((id) => !APPS.some((a) => a.pkg === id))
   const [requested, setRequested] = useState<Set<string>>(new Set())
   const [review, setReview] = useState<App | null>(() => APPS[0])
   const [busy, setBusy] = useState(false)
@@ -88,7 +98,7 @@ export default function AppCenter({ onClose }: WindowProps) {
       if (e.result === 'success') {
         if (j.op === 'install') setInstalled((p) => new Set(p).add(j.app))
         if (j.op === 'remove') setInstalled((p) => { const n = new Set(p); n.delete(j.app); return n })
-        if (j.op === 'update') setUpdates(new Set())
+        if (j.op === 'update') loadUpdates()
         setNotice({ text: j.op === 'install' ? `${name} is installed.` : j.op === 'remove' ? `${name} was removed.` : 'Updates are installed.' })
       } else {
         setNotice({ text: `${name}: ${packageErrorText(e.error ?? 'failed')}`, error: true })
@@ -171,7 +181,7 @@ export default function AppCenter({ onClose }: WindowProps) {
         <nav aria-label="App Center sections" className="flex w-[220px] shrink-0 flex-col gap-1 overflow-auto border-r border-[#e2e8f0] bg-white px-3 py-4">
           {navItem('discover', 'Discover')}
           {navItem('installed', 'Installed')}
-          {navItem('updates', 'Updates', updates.size)}
+          {navItem('updates', 'Updates', pending.length)}
           {navItem('permissions', 'Permissions')}
           <div className="mt-4 px-3 text-[11.5px] font-bold tracking-[0.06em] text-[#475569] uppercase">Sources</div>
           {SOURCES.map((s) => (
@@ -195,10 +205,24 @@ export default function AppCenter({ onClose }: WindowProps) {
               <span className="h-1.5 w-40 overflow-hidden rounded-full bg-[#e2e8f0]" role="progressbar" aria-valuenow={j.percent} aria-valuemin={0} aria-valuemax={100}><span className="block h-full bg-[#2563eb]" style={{ width: `${j.percent}%` }} /></span>
             </div>
           ))}
-          {section === 'updates' && updates.size > 0 && (
-            <div className="flex items-center gap-3 rounded-xl border border-[#e2e8f0] bg-white px-4 py-3 text-[13px]">
-              <span className="grow">System and app updates are installed together, in the order your organization’s update ring allows.</span>
-              <button type="button" disabled={updating} onClick={() => void updateAll()} className="h-9 rounded-lg bg-[#2563eb] px-4 text-sm font-semibold text-white disabled:opacity-60">{updating ? 'Updating…' : 'Update all'}</button>
+          {section === 'updates' && (
+            <div className="flex flex-col gap-2 rounded-xl border border-[#e2e8f0] bg-white px-4 py-3 text-[13px]">
+              <div className="flex items-center gap-3">
+                <span className="grow">
+                  {updatesError ? updatesError
+                    : !available ? 'Checking for updates…'
+                    : pending.length === 0 ? 'Everything is up to date.'
+                    : `${pending.length} update${pending.length === 1 ? '' : 's'} available. System and app updates are installed together, as your organization’s update ring allows.`}
+                  {available?.reboot && ' A restart is needed to finish the last update.'}
+                </span>
+                {pending.length > 0 && <button type="button" disabled={updating} onClick={() => void updateAll()} className="h-9 rounded-lg bg-[#2563eb] px-4 text-sm font-semibold text-white disabled:opacity-60">{updating ? 'Updating…' : 'Update all'}</button>}
+              </div>
+              {otherUpdates.length > 0 && (
+                <details className="text-[#475569]">
+                  <summary className="cursor-pointer">{otherUpdates.length} system package{otherUpdates.length === 1 ? '' : 's'}</summary>
+                  <ul className="m-0 mt-2 columns-2 pl-5 font-mono text-[12px] sm:columns-3">{otherUpdates.map((id) => <li key={id}>{id.split(':')[1]}</li>)}</ul>
+                </details>
+              )}
             </div>
           )}
           <label className="flex h-11 shrink-0 items-center gap-2.5 rounded-[10px] border border-[#cbd5e1] bg-white px-3.5 text-[#475569]">

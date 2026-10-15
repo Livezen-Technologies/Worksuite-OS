@@ -102,6 +102,7 @@ app.whenReady().then(() => {
   handle('ws:pkgInstall', (catalogId) => pkg.start('Install', catalogId))
   handle('ws:pkgRemove', (catalogId) => pkg.start('Remove', catalogId))
   handle('ws:pkgApplyUpdate', () => pkg.applyUpdate())
+  handle('ws:pkgCheckUpdates', () => pkg.checkUpdates())
   followJobs((e) => win?.webContents.send('ws:pkgJob', e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')

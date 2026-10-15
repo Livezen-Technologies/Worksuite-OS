@@ -83,7 +83,7 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
       }
       case 'CheckUpdates': {
         const u = await svc.checkUpdates();
-        return Message.newMethodReturn(msg, 'a{sv}', [{ apt: v('u', u.apt), flatpak: v('u', u.flatpak), packages: v('as', u.packages), reboot_required: v('b', u.reboot_required), state: v('s', u.state) }]);
+        return Message.newMethodReturn(msg, 'a{sv}', [{ apt: v('u', u.apt), flatpak: v('u', u.flatpak), packages: v('as', u.packages), flatpaks: v('as', u.flatpaks), reboot_required: v('b', u.reboot_required), state: v('s', u.state) }]);
       }
       case 'ApplyUpdate': {
         const opts = (b[1] ?? {}) as Record<string, { value: unknown }>;

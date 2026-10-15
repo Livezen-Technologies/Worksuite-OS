@@ -26,7 +26,8 @@
       <arg name="operation" type="s" direction="in"/>
       <arg name="preview_json" type="s" direction="out"/>
     </method>
-    <!-- No authorization required: read-only. -->
+    <!-- No authorization required: read-only. Keys: apt (u), flatpak (u), packages (as, APT names),
+         flatpaks (as, app ids), reboot_required (b), state (s). Uses the last refreshed package lists. -->
     <method name="CheckUpdates">
       <arg name="summary" type="a{sv}" direction="out"/>
     </method>

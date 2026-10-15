@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   pkgInstall: (catalogId: string) => ipcRenderer.invoke('ws:pkgInstall', String(catalogId)),
   pkgRemove: (catalogId: string) => ipcRenderer.invoke('ws:pkgRemove', String(catalogId)),
   pkgApplyUpdate: () => ipcRenderer.invoke('ws:pkgApplyUpdate'),
+  pkgCheckUpdates: () => ipcRenderer.invoke('ws:pkgCheckUpdates'),
   // Only the event payload reaches the renderer, never the IPC event object.
   onPkgJob: (cb: (e: unknown) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload)

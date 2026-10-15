@@ -48,3 +48,14 @@ describe('parseMonitorLine', () => {
     expect(parseMonitorLine('something else')).toBeNull()
   })
 })
+
+describe('checkUpdates', () => {
+  it('unwraps busctl a{sv} JSON', async () => {
+    const f = fakeExec({ stdout: JSON.stringify({ type: 'a{sv}', data: [{
+      apt: { type: 'u', data: 2 }, flatpak: { type: 'u', data: 1 }, packages: { type: 'as', data: ['firefox-esr', 'libc6'] },
+      flatpaks: { type: 'as', data: ['org.gimp.GIMP'] }, reboot_required: { type: 'b', data: true }, state: { type: 's', data: 'idle' },
+    }] }) })
+    expect(await packageClient(f.exec).checkUpdates()).toEqual({ ok: true, value: { packages: ['firefox-esr', 'libc6'], flatpaks: ['org.gimp.GIMP'], reboot_required: true, state: 'idle' } })
+    expect(f.calls[0].slice(-1)).toEqual(['CheckUpdates'])
+  })
+})

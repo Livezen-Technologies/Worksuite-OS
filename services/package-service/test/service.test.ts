@@ -155,3 +155,12 @@ test('only the job owner (or root) can cancel, and only while queued', async () 
   await w.done(first);
   assert.throws(() => w.svc.cancel(1000, first), /Busy|already/);
 });
+
+test('CheckUpdates lists APT packages and Flatpak apps with updates', async () => {
+  const w = world((cmd) => {
+    if (cmd === 'apt') return { stdout: 'Listing...\nfirefox-esr/trixie-security 128.3 amd64 [upgradable from: 128.2]\nlibc6/trixie 2.41-2 amd64 [upgradable from: 2.41-1]\n' };
+    if (cmd === 'flatpak') return { stdout: 'Application ID\norg.gimp.GIMP\n' };
+  });
+  const u = await w.svc.checkUpdates();
+  assert.deepEqual({ apt: u.apt, flatpak: u.flatpak, packages: u.packages, flatpaks: u.flatpaks }, { apt: 2, flatpak: 1, packages: ['firefox-esr', 'libc6'], flatpaks: ['org.gimp.GIMP'] });
+});

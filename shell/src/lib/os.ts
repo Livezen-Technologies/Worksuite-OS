@@ -23,6 +23,7 @@ export interface WorkSuiteApi {
   pkgInstall(catalogId: string): Promise<CloudResult<string>>
   pkgRemove(catalogId: string): Promise<CloudResult<string>>
   pkgApplyUpdate(): Promise<CloudResult<string>>
+  pkgCheckUpdates(): Promise<CloudResult<UpdateSummary>>
   onPkgJob(cb: (e: PackageJobEvent) => void): () => void
 }
 
@@ -32,6 +33,7 @@ export interface PackagePreview {
   permissions: string[]
   broad: string[]
 }
+export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
 export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
 
 export function formatBytes(n: number | null): string {
@@ -132,7 +134,8 @@ const stub: WorkSuiteApi = {
   },
   async pkgInstall(id) { return stubJob(id, 'install') },
   async pkgRemove(id) { return stubJob(id, 'remove') },
-  async pkgApplyUpdate() { return stubJob('update', 'update') },
+  async pkgApplyUpdate() { const r = stubJob('update', 'update'); setTimeout(() => { stubUpdates = { packages: [], flatpaks: [] } }, 800); return r },
+  async pkgCheckUpdates() { return { ok: true, value: { ...stubUpdates, reboot_required: false, state: 'idle' } } },
   onPkgJob(cb) { stubListeners.add(cb); return () => { stubListeners.delete(cb) } },
   async deviceInfo() {
     return {
@@ -148,6 +151,7 @@ let stubAccounts: CloudAccount[] = []
 // Preview only: package jobs finish after a short delay.
 const stubListeners = new Set<(e: PackageJobEvent) => void>()
 let stubJobId = 0
+let stubUpdates = { packages: ['firefox-esr', 'libreoffice', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
 function stubJob(_id: string, _kind: string): CloudResult<string> {
   const job = `/lk/worksuite/PackageService1/job/${++stubJobId}`
   setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 50, phase: 'installing' })), 300)

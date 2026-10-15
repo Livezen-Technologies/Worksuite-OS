@@ -48,12 +48,22 @@ export function packageClient(exec: Exec = realExec) {
       const r = await call(exec, op, 'ss', [src, catalogId])
       return r.ok ? { ok: true, value: String(r.value[0]) } : r
     },
+    /** CheckUpdates → plain values (busctl's JSON wraps each a{sv} value as {type, data}). */
+    async checkUpdates(): Promise<Reply<UpdateSummary>> {
+      const r = await call(exec, 'CheckUpdates', '', [])
+      if (!r.ok) return r
+      const d = (r.value[0] ?? {}) as Record<string, { data: unknown }>
+      const list = (k: string) => (Array.isArray(d[k]?.data) ? (d[k].data as unknown[]).map(String) : [])
+      return { ok: true, value: { packages: list('packages'), flatpaks: list('flatpaks'), reboot_required: d.reboot_required?.data === true, state: String(d.state?.data ?? 'idle') } }
+    },
     async applyUpdate(): Promise<Reply<string>> {
       const r = await call(exec, 'ApplyUpdate', 'sa{sv}', ['', '0'])
       return r.ok ? { ok: true, value: String(r.value[0]) } : r
     },
   }
 }
+
+export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
 
 export interface JobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
 
