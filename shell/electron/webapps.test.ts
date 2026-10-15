@@ -53,6 +53,10 @@ describe('bootstrap apps', () => {
   it('uses the contract field and drops unsafe entries', () => {
     expect(webAppsFrom({ apps: [mail, { id: 'x', web_url: 'http://bad/' }, { id: 'BAD', web_url: 'https://a/' }, mail] }, 'https://s/')).toEqual([mail])
   })
+  it('keeps the declared offline level and drops unknown values (WSOS-SYN-009)', () => {
+    const r = webAppsFrom({ apps: [{ ...mail, offline_level: 'cached_read' }, { id: 'chat', name: 'Chat', web_url: 'https://s/chat/', offline_level: 'sometimes' }] }, 'https://s/')
+    expect(r.map((a) => a.offline_level)).toEqual(['cached_read', undefined])
+  })
   it('falls back to <api_base>/apps/<id>/ for servers without apps', () => {
     expect(webAppsFrom({ modules: [] }, 'https://s.test/api', ['mail'])).toEqual([{ id: 'mail', name: 'mail', web_url: 'https://s.test/api/apps/mail/' }])
   })

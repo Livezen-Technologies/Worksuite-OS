@@ -232,6 +232,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                       <span className="flex size-12 items-center justify-center rounded-xl text-[17px] font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
                       <span className="text-xs text-[#0f172a]">{a.name}</span>
                       <span className="text-[10.5px] text-[#475569]">{t(`launcher.kind.${a.kind}` as MessageKey)}</span>
+                      {a.offline && <span className="text-[10.5px] text-[#475569]">{t(`offline.${a.offline}` as MessageKey)}</span>}
                     </button>
                   ))}
                 </div>

@@ -83,11 +83,12 @@ export const DEFAULT_MODULES = [
 ];
 
 /** WorkSuite web apps the desktop can open in an app window; each is served at <web base>/<id>/. */
-export const DEFAULT_WEB_APPS: { id: string; name: string }[] = [
-  { id: 'mail', name: 'Mail' }, { id: 'calendar', name: 'Calendar' }, { id: 'chat', name: 'Chat' },
-  { id: 'drive', name: 'Drive' }, { id: 'tasks', name: 'Tasks' }, { id: 'projects', name: 'Projects' },
-  { id: 'crm', name: 'CRM' }, { id: 'meet', name: 'Meet' },
-  { id: 'pdf-studio', name: 'PDF Studio' },
+// offline_level: what each app declares to the desktop (WSOS-SYN-009); the launcher shows it.
+export const DEFAULT_WEB_APPS: { id: string; name: string; offline_level: 'full_offline' | 'cached_read' | 'online_only' }[] = [
+  { id: 'mail', name: 'Mail', offline_level: 'cached_read' }, { id: 'calendar', name: 'Calendar', offline_level: 'cached_read' }, { id: 'chat', name: 'Chat', offline_level: 'online_only' },
+  { id: 'drive', name: 'Drive', offline_level: 'full_offline' }, { id: 'tasks', name: 'Tasks', offline_level: 'full_offline' }, { id: 'projects', name: 'Projects', offline_level: 'cached_read' },
+  { id: 'crm', name: 'CRM', offline_level: 'cached_read' }, { id: 'meet', name: 'Meet', offline_level: 'online_only' },
+  { id: 'pdf-studio', name: 'PDF Studio', offline_level: 'cached_read' },
 ];
 
 export function openDb(path: string): DatabaseSync {

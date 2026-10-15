@@ -17,7 +17,7 @@ export interface WorkSuiteApi {
   /** Open a search result (worksuite:// or file://), or its location. */
   openSearchResult(link: string, where?: 'open' | 'location'): Promise<{ ok: boolean; error?: string }>
   /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
-  webApps(): Promise<CloudResult<{ id: string; name: string }[]>>
+  webApps(): Promise<CloudResult<{ id: string; name: string; offline_level?: 'full_offline' | 'cached_read' | 'online_only' }[]>>
   /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
   installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null }>
   /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
