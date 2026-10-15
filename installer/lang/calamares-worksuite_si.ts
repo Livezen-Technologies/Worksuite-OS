@@ -218,48 +218,88 @@
   <context>
     <name>show</name>
     <message>
-      <source>STEP 6 · INSTALL</source>
-      <translation>පියවර 6 · ස්ථාපනය</translation>
+      <source>Set language, keyboard and time zone</source>
+      <translation>භාෂාව, යතුරුපුවරුව සහ වේලා කලාපය සකසමින්</translation>
     </message>
     <message>
-      <source>Installing WorkSuite OS</source>
-      <translation>WorkSuite OS ස්ථාපනය වෙමින්</translation>
+      <source>Set up disk unlocking</source>
+      <translation>තැටිය අගුළු හැරීම සකසමින්</translation>
+    </message>
+    <message>
+      <source>Create your account and computer name</source>
+      <translation>ඔබගේ ගිණුම සහ පරිගණක නාමය සාදමින්</translation>
+    </message>
+    <message>
+      <source>Install WorkSuite components</source>
+      <translation>WorkSuite සංරචක ස්ථාපනය කරමින්</translation>
+    </message>
+    <message>
+      <source>Install bootloader</source>
+      <translation>ආරම්භක කාරකය ස්ථාපනය කරමින්</translation>
+    </message>
+    <message>
+      <source>Clean up</source>
+      <translation>පිරිසිදු කරමින්</translation>
+    </message>
+    <message>
+      <source>STEP 6 · COPY FILES</source>
+      <translation>පියවර 6 · ගොනු පිටපත් කිරීම</translation>
+    </message>
+    <message>
+      <source>STEP 6 · CONFIGURE SYSTEM</source>
+      <translation>පියවර 6 · පද්ධතිය සැකසීම</translation>
+    </message>
+    <message>
+      <source>Copying WorkSuite OS</source>
+      <translation>WorkSuite OS පිටපත් වෙමින්</translation>
+    </message>
+    <message>
+      <source>Setting things up</source>
+      <translation>සියල්ල සකසමින්</translation>
     </message>
     <message>
       <source>Keep the computer plugged in. You can't go back from here.</source>
       <translation>පරිගණකය විදුලියට සම්බන්ධව තබන්න. ඔබට මෙතැනින් ආපසු යා නොහැක.</translation>
     </message>
     <message>
-      <source>Copy files</source>
-      <translation>ගොනු පිටපත් කරන්න</translation>
+      <source>Applying your choices. This usually takes under a minute.</source>
+      <translation>ඔබගේ තේරීම් යොදමින්. මෙයට සාමාන්‍යයෙන් මිනිත්තුවකට අඩු කාලයක් ගතවේ.</translation>
     </message>
     <message>
-      <source>Partition and encrypt the disk, then unpack the system image</source>
-      <translation>තැටිය කොටස් කර සංකේතනය කර, පසුව පද්ධති රූපය දිග හරින්න</translation>
+      <source>Unpacking system image</source>
+      <translation>පද්ධති රූපය දිග හරිමින්</translation>
     </message>
     <message>
-      <source>Configure system</source>
-      <translation>පද්ධතිය වින්‍යාස කරන්න</translation>
+      <source>Progress and the file being copied are shown at the bottom of the window.</source>
+      <translation>ප්‍රගතිය සහ පිටපත් වන ගොනුව කවුළුවේ පහළින් පෙන්වයි.</translation>
     </message>
     <message>
-      <source>Create your account, set the computer name, time zone, keyboard and language</source>
-      <translation>ඔබේ ගිණුම සාදා, පරිගණක නම, වේලා කලාපය, යතුරු පුවරුව සහ භාෂාව සකසන්න</translation>
+      <source>Elapsed</source>
+      <translation>ගතවූ කාලය</translation>
     </message>
     <message>
-      <source>Set up startup</source>
-      <translation>ආරම්භය සකසන්න</translation>
+      <source>Encryption</source>
+      <translation>සංකේතනය</translation>
     </message>
     <message>
-      <source>Install the bootloader and prepare disk unlocking</source>
-      <translation>ආරම්භක පූරකය ස්ථාපනය කර තැටි අගුළු හැරීම සූදානම් කරන්න</translation>
+      <source>On</source>
+      <translation>ක්‍රියාත්මකයි</translation>
     </message>
     <message>
-      <source>Recovery key</source>
-      <translation>ප්‍රතිසාධන යතුර</translation>
+      <source>Off</source>
+      <translation>අක්‍රියයි</translation>
     </message>
     <message>
-      <source>Generate the key that can unlock your disk if you forget the passphrase</source>
-      <translation>ඔබට මුරවැකිය අමතක වුවහොත් ඔබේ තැටිය අගුළු හැරිය හැකි යතුර ජනනය කරන්න</translation>
+      <source>Stage</source>
+      <translation>අදියර</translation>
+    </message>
+    <message>
+      <source>1 of 2</source>
+      <translation>2 න් 1</translation>
+    </message>
+    <message>
+      <source>Do not turn off your computer</source>
+      <translation>ඔබගේ පරිගණකය නිවා නොදමන්න</translation>
     </message>
   </context>
   <context>

@@ -218,48 +218,88 @@
   <context>
     <name>show</name>
     <message>
-      <source>STEP 6 · INSTALL</source>
-      <translation>படி 6 · நிறுவல்</translation>
+      <source>Set language, keyboard and time zone</source>
+      <translation>மொழி, விசைப்பலகை மற்றும் நேர மண்டலத்தை அமைக்கிறது</translation>
     </message>
     <message>
-      <source>Installing WorkSuite OS</source>
-      <translation>WorkSuite OS நிறுவப்படுகிறது</translation>
+      <source>Set up disk unlocking</source>
+      <translation>வட்டு திறத்தலை அமைக்கிறது</translation>
+    </message>
+    <message>
+      <source>Create your account and computer name</source>
+      <translation>உங்கள் கணக்கையும் கணினிப் பெயரையும் உருவாக்குகிறது</translation>
+    </message>
+    <message>
+      <source>Install WorkSuite components</source>
+      <translation>WorkSuite கூறுகளை நிறுவுகிறது</translation>
+    </message>
+    <message>
+      <source>Install bootloader</source>
+      <translation>துவக்க ஏற்றியை நிறுவுகிறது</translation>
+    </message>
+    <message>
+      <source>Clean up</source>
+      <translation>சுத்தம் செய்கிறது</translation>
+    </message>
+    <message>
+      <source>STEP 6 · COPY FILES</source>
+      <translation>படி 6 · கோப்புகளை நகலெடுத்தல்</translation>
+    </message>
+    <message>
+      <source>STEP 6 · CONFIGURE SYSTEM</source>
+      <translation>படி 6 · கணினியை உள்ளமைத்தல்</translation>
+    </message>
+    <message>
+      <source>Copying WorkSuite OS</source>
+      <translation>WorkSuite OS நகலெடுக்கப்படுகிறது</translation>
+    </message>
+    <message>
+      <source>Setting things up</source>
+      <translation>அமைத்துக்கொண்டிருக்கிறது</translation>
     </message>
     <message>
       <source>Keep the computer plugged in. You can't go back from here.</source>
       <translation>கணினியை மின்னிணைப்பில் வைத்திருங்கள். இங்கிருந்து பின்செல்ல முடியாது.</translation>
     </message>
     <message>
-      <source>Copy files</source>
-      <translation>கோப்புகளை நகலெடு</translation>
+      <source>Applying your choices. This usually takes under a minute.</source>
+      <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன. இது பொதுவாக ஒரு நிமிடத்திற்குள் முடியும்.</translation>
     </message>
     <message>
-      <source>Partition and encrypt the disk, then unpack the system image</source>
-      <translation>வட்டைப் பகிர்ந்து மறையாக்கி, பின் கணினிப் படிமத்தை விரி</translation>
+      <source>Unpacking system image</source>
+      <translation>கணினிப் படிமம் விரிக்கப்படுகிறது</translation>
     </message>
     <message>
-      <source>Configure system</source>
-      <translation>கணினியை உள்ளமை</translation>
+      <source>Progress and the file being copied are shown at the bottom of the window.</source>
+      <translation>முன்னேற்றமும் நகலெடுக்கப்படும் கோப்பும் சாளரத்தின் கீழே காட்டப்படும்.</translation>
     </message>
     <message>
-      <source>Create your account, set the computer name, time zone, keyboard and language</source>
-      <translation>உங்கள் கணக்கை உருவாக்கி, கணினிப் பெயர், நேர மண்டலம், விசைப்பலகை, மொழியை அமை</translation>
+      <source>Elapsed</source>
+      <translation>கழிந்த நேரம்</translation>
     </message>
     <message>
-      <source>Set up startup</source>
-      <translation>தொடக்கத்தை அமை</translation>
+      <source>Encryption</source>
+      <translation>மறையாக்கம்</translation>
     </message>
     <message>
-      <source>Install the bootloader and prepare disk unlocking</source>
-      <translation>துவக்க ஏற்றியை நிறுவி வட்டைத் திறக்கத் தயார்படுத்து</translation>
+      <source>On</source>
+      <translation>இயக்கத்தில்</translation>
     </message>
     <message>
-      <source>Recovery key</source>
-      <translation>மீட்பு விசை</translation>
+      <source>Off</source>
+      <translation>முடக்கத்தில்</translation>
     </message>
     <message>
-      <source>Generate the key that can unlock your disk if you forget the passphrase</source>
-      <translation>கடவுச்சொற்றொடரை மறந்தால் உங்கள் வட்டைத் திறக்கக்கூடிய விசையை உருவாக்கு</translation>
+      <source>Stage</source>
+      <translation>கட்டம்</translation>
+    </message>
+    <message>
+      <source>1 of 2</source>
+      <translation>2 இல் 1</translation>
+    </message>
+    <message>
+      <source>Do not turn off your computer</source>
+      <translation>உங்கள் கணினியை அணைக்க வேண்டாம்</translation>
     </message>
   </context>
   <context>
