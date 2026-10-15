@@ -13,6 +13,7 @@ import Recovery from './screens/Recovery'
 import Installer from './screens/Installer'
 import { useNotices } from './lib/useNotices'
 import { useT } from './i18n'
+import SafeLauncher from './screens/SafeLauncher'
 
 // `?mode=installer` boots the live-ISO installer; `?mode=recovery` the recovery launcher.
 const mode = new URLSearchParams(location.search).get('mode')
@@ -45,6 +46,8 @@ export default function App() {
   }, [state, send])
 
   if (installing) return <Installer onDone={() => setInstalling(false)} />
+  // Minimal launcher after repeated shell crashes (WSOS-SES-005).
+  if (mode === 'safe') return <SafeLauncher />
 
   switch (state) {
     case 'greeter':

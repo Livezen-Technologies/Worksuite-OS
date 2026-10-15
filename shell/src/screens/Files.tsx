@@ -38,6 +38,7 @@ export default function Files({ onClose }: WindowProps) {
   const [search, setSearch] = useState<{ q: string; kind: string; days: number } | null>(null)
   const [found, setFound] = useState<{ hits: FileHit[]; ms: number; truncated: boolean } | null>(null)
   const [tick, setTick] = useState(0)
+  const [winApp, setWinApp] = useState<string | null>(null)
   const reload = useCallback(() => setTick((n) => n + 1), [])
 
   const go = (p: Place) => { setHist((h) => ({ list: [...h.list.slice(0, h.i + 1), p], i: h.i + 1 })); setSel([]); setSearch(null); setMenu(null) }
@@ -72,8 +73,10 @@ export default function Files({ onClose }: WindowProps) {
   const rows = entries ?? []
   const byName = (n: string) => rows.find((e) => e.name === n)
   const relOf = (n: string) => (dir!.rel ? `${dir!.rel}/${n}` : n)
-  const open = (e: FileEntry) => { if (e.dir) go({ kind: 'dir', root: dir!.root, rel: relOf(e.name) }); else if (e.local) void os.filesOpen(dir!.root, relOf(e.name)) }
-  const openHit = (h: FileHit) => { if (h.dir) go({ kind: 'dir', root: h.root, rel: h.rel }); else void os.filesOpen(h.root, h.rel) }
+  // Windows programs are never run; the main process refuses them and this explains why (WSOS-LCH-003).
+  const openFile = (root: string, rel: string, name: string) => void os.filesOpen(root, rel).then((r) => { if (!r.ok && r.error === 'windows_program') setWinApp(name) })
+  const open = (e: FileEntry) => { if (e.dir) go({ kind: 'dir', root: dir!.root, rel: relOf(e.name) }); else if (e.local) openFile(dir!.root, relOf(e.name), e.name) }
+  const openHit = (h: FileHit) => { if (h.dir) go({ kind: 'dir', root: h.root, rel: h.rel }); else openFile(h.root, h.rel, h.name) }
   const pick = (name: string, ev: React.MouseEvent) => setSel((s) => (ev.ctrlKey || ev.metaKey ? (s.includes(name) ? s.filter((x) => x !== name) : [...s, name]) : [name]))
   const targets = (name: string | null) => (name && !sel.includes(name) ? [name] : sel)
 
@@ -157,6 +160,12 @@ export default function Files({ onClose }: WindowProps) {
           {!search && <button type="button" aria-label={t('files.close')} onClick={onClose} className={`${iconBtn} ${dir ? '' : 'ml-1'}`} style={{ color: C.muted }}><Svg d={P.close} /></button>}
         </header>
 
+        {winApp && (
+          <div role="alert" className="mx-6 mt-4 flex items-center gap-3 rounded-xl px-4 py-3 text-[13px]" style={{ background: 'rgba(31,107,255,0.08)', border: '1px solid rgba(31,107,255,0.3)', color: C.soft }}>
+            <span className="grow"><b>{t('files.winTitle')}</b> {t('files.winBody', { name: winApp })}</span>
+            <button type="button" onClick={() => setWinApp(null)} className={`${btn} text-[13px]`} style={{ color: C.link }}>{t('common.dismiss')}</button>
+          </div>
+        )}
         {cloud && conflicts > 0 && !search && (
           <div role="alert" className="mx-6 mt-4 flex items-center gap-3 rounded-xl px-4 py-3 text-[13px]" style={{ background: 'rgba(255,185,138,0.1)', border: '1px solid rgba(255,185,138,0.4)', color: '#FFD9BF' }}>
             <span className="grow"><b>{t('files.conflicts', { count: formatNumber(conflicts) })}</b> {t('files.conflictBody')}</span>

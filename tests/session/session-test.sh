@@ -125,5 +125,37 @@ grep -q '^KillMode=process$' "$U/worksuite-idle.service" && ok "restarting swayi
 grep -q '^KillMode=mixed$' "$U/worksuite-shell.service" && ok "shell unit: SIGTERM to Electron, then its own helpers" || bad "shell unit KillMode"
 grep -q 'worksuite-greeter' "$ROOT/live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot" && ok "greetd runs the greeter wrapper" || bad "greetd runs the greeter wrapper"
 
+# ---- display environment before portals (WSOS-SES-001) ----
+stub systemctl 'echo "systemctl $*" >> "$LOG"'
+stub dbus-update-activation-environment 'echo "dbus-update-activation-environment $* XDG_CURRENT_DESKTOP=$XDG_CURRENT_DESKTOP" >> "$LOG"'
+ready_log() { : > "$LOG"; env -u DISPLAY WAYLAND_DISPLAY=wayland-1 "$@" sh "$BIN/worksuite-session" --ready; }
+ready_log
+line_of() { grep -n -- "$1" "$LOG" | head -n 1 | cut -d: -f1; }
+imp=$(line_of 'import-environment'); act=$(line_of 'dbus-update-activation-environment'); prt=$(line_of 'try-restart xdg-desktop-portal'); tgt=$(line_of 'start worksuite-session.target')
+[ -n "$imp" ] && [ -n "$act" ] && [ -n "$tgt" ] && [ "$imp" -lt "$tgt" ] && [ "$act" -lt "$tgt" ] && ok "environment imported before the session target starts" || bad "environment imported before the session target starts"
+[ -n "$prt" ] && [ "$act" -lt "$prt" ] && [ "$prt" -lt "$tgt" ] && ok "portals restarted with the imported environment" || bad "portals restarted with the imported environment"
+grep -q 'import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP' "$LOG" && ok "WAYLAND_DISPLAY and XDG_CURRENT_DESKTOP imported" || bad "WAYLAND_DISPLAY and XDG_CURRENT_DESKTOP imported"
+grep -q 'XDG_CURRENT_DESKTOP=WorkSuite:wlroots' "$LOG" && ok "XDG_CURRENT_DESKTOP is WorkSuite:wlroots" || bad "XDG_CURRENT_DESKTOP is WorkSuite:wlroots"
+grep 'import-environment' "$LOG" | grep -qw DISPLAY && bad "DISPLAY not imported without XWayland" || ok "DISPLAY not imported without XWayland"
+ready_log DISPLAY=:0
+grep 'import-environment' "$LOG" | grep -qw DISPLAY && ok "DISPLAY imported when XWayland runs" || bad "DISPLAY imported when XWayland runs"
+
+# ---- every session component is a user unit bound to worksuite-session.target (WSOS-SES-002) ----
+for f in "$U"/*.service "$U"/*.path; do
+    u=$(basename "$f")
+    grep -q '^PartOf=worksuite-session.target$' "$f" && ok "$u is PartOf worksuite-session.target" || bad "$u is PartOf worksuite-session.target"
+    case "$u" in worksuite-recovery-launcher.service|worksuite-idle-restart.service) continue ;; esac
+    grep -q "^Wants=.*$u" "$U/worksuite-session.target" && ok "worksuite-session.target wants $u" || bad "worksuite-session.target wants $u"
+done
+grep -q '^BindsTo=graphical-session.target$' "$U/worksuite-session.target" && ok "session target bound to graphical-session.target" || bad "session target bound to graphical-session.target"
+
+# ---- 3 shell crashes in 60 s → minimal launcher (WSOS-SES-005) ----
+S=$U/worksuite-shell.service; R=$U/worksuite-recovery-launcher.service
+grep -q '^StartLimitIntervalSec=60$' "$S" && grep -q '^StartLimitBurst=3$' "$S" && ok "shell start limit is 3 in 60 s" || bad "shell start limit is 3 in 60 s"
+grep -q '^OnFailure=worksuite-recovery-launcher.service$' "$S" && ok "shell failure starts the recovery launcher" || bad "shell failure starts the recovery launcher"
+grep -q '^ExecStart=/usr/lib/worksuite/shell/worksuite-shell --safe$' "$R" && ok "recovery launcher runs the shell's --safe launcher" || bad "recovery launcher runs --safe"
+grep -q '^Conflicts=worksuite-shell.service$' "$R" && ok "recovery launcher replaces the shell" || bad "recovery launcher replaces the shell"
+grep -q -- '--recovery' "$R" && bad "session launcher is not the boot recovery screens" || ok "session launcher is not the boot recovery screens"
+
 echo "1..$n"
 exit $fail

@@ -23,6 +23,7 @@ const NAV = [
   { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
   { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
   { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
+  { id: 'Default apps', tint: '#0E8FA8', icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 16.5h7M16.5 13v7' },
   { id: 'Privacy & security', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', sep: true },
   { id: 'Users', tint: '#8FA3C8', icon: 'M9 8a3.5 3.5 0 1 0 0 .01M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7' },
   { id: 'Devices', tint: '#8FA3C8', icon: 'M4 6h16v10H4zM2 20h20', sep: true },
@@ -280,6 +281,8 @@ function BluetoothPanel() {
 
 // Settings › Display lives in DisplaySettings.tsx (WSOS-DSK-005/006).
 import { DisplayPanel } from './DisplaySettings'
+// Settings › Default apps and clipboard history live in DesktopSettings.tsx (WSOS-DSK-008/009).
+import { ClipboardSection, DefaultAppsPanel } from './DesktopSettings'
 
 const THEME_ART: Record<string, { bg: string; win: string; bar: string }> = {
   Light: { bg: 'linear-gradient(135deg,#EAF1FF,#C9DAFF)', win: '#FFFFFF', bar: 'rgba(255,255,255,0.8)' },
@@ -444,6 +447,7 @@ function PrivacyPanel() {
         <div className={`${card} px-4 py-3 text-xs leading-relaxed text-[#C9D6EE]`}>{t('settings.priv.note')}</div>
       </section>
     </div>
+    <ClipboardSection />
   </>
 }
 
@@ -787,6 +791,7 @@ export default function Settings({ onClose }: WindowProps) {
         {section === 'Appearance' && <AppearancePanel />}
         {section === 'Sound' && <SoundPanel />}
         {section === 'Notifications' && <NotificationsPanel />}
+        {section === 'Default apps' && <DefaultAppsPanel />}
         {section === 'Privacy & security' && <PrivacyPanel />}
         {section === 'Users' && <UsersPanel />}
         {section === 'Devices' && <DevicesPanel onProblem={setProblem} />}

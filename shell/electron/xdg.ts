@@ -12,6 +12,8 @@ export interface DesktopEntry {
   categories: string[]
   keywords: string[]
   exec: string | null
+  /** MimeType= of the entry (WSOS-DSK-009). */
+  mime_types: string[]
 }
 
 /** Main [Desktop Entry] group as key → value (unlocalised keys plus Name[<lang>] when it matches). */
@@ -52,6 +54,7 @@ export function toEntry(id: string, kv: Record<string, string>, desktops: string
     categories: list(kv.Categories),
     keywords: list(kv['Keywords@l'] ?? kv.Keywords),
     exec: kv.Exec ?? null,
+    mime_types: list(kv.MimeType),
   }
 }
 

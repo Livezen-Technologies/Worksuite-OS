@@ -106,6 +106,16 @@ export function filterApps(apps: LauncherApp[], tab: LauncherTab, query: string)
 
 const rank = (a: LauncherApp, q: string) => (a.name.toLowerCase().startsWith(q) ? 0 : a.name.toLowerCase().includes(q) ? 1 : 2)
 
+/**
+ * Recovery launcher list (WSOS-SES-005): installed apps without terminals or shells, and without the WorkSuite web app
+ * windows (they need the shell that just crashed), sorted by name.
+ */
+export function safeApps<T extends InstalledApp>(apps: T[]): T[] {
+  const TERMINAL = new Set(['TerminalEmulator', 'ConsoleOnly'])
+  return apps.filter((a) => !a.categories.some((c) => TERMINAL.has(c)) && !a.id.startsWith('worksuite-'))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 /** Taskbar pins that exist in the current list (an app the org disabled or that isn't installed drops out). */
 export function taskbarApps(apps: LauncherApp[], pins: string[]): LauncherApp[] {
   return pins.map((id) => apps.find((a) => a.id === id)).filter((a): a is LauncherApp => !!a)

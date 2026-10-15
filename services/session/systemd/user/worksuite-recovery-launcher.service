@@ -7,6 +7,6 @@ Conflicts=worksuite-shell.service
 # WSOS-SEC-009: AppArmor (security/apparmor/worksuite-shell, complain mode for now).
 AppArmorProfile=-worksuite-shell
 Type=simple
-ExecStart=/usr/lib/worksuite/shell/worksuite-shell --recovery
+ExecStart=/usr/lib/worksuite/shell/worksuite-shell --safe
 Restart=on-failure
 RestartSec=1s

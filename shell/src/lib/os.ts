@@ -10,6 +10,12 @@ export interface WorkSuiteApi {
   lockSettings(): Promise<LockSettings>
   setLockTimeout(seconds: number): Promise<CloudResult<LockSettings>>
   openLink(url: string): Promise<void>
+  /** Launcher global search across WorkSuite records and Drive (the main process holds the token). */
+  search(q: string, types?: string[]): Promise<SearchResponse>
+  /** Recent files: local (recently-used.xbel) and WorkSuite Drive. */
+  recentFiles(): Promise<{ local: SearchHit[]; cloud: { state: SourceState; hits: SearchHit[] } }>
+  /** Open a search result (worksuite:// or file://), or its location. */
+  openSearchResult(link: string, where?: 'open' | 'location'): Promise<{ ok: boolean; error?: string }>
   /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
   webApps(): Promise<CloudResult<{ id: string; name: string }[]>>
   /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
@@ -170,6 +176,7 @@ export interface RecoveryInfo {
 import type { DesktopModule } from './launcher'
 import type { HwDevice, HwKind } from '../../electron/hardware'
 import type { LocalUser } from '../../electron/users'
+import type { SearchHit, SearchResponse, SourceState } from '../../electron/search'
 export type { HwDevice, HwKind, LocalUser }
 export interface DriverOffer {
   id: string; device_id: string | null; name: string; summary: string
@@ -312,6 +319,13 @@ const stub: WorkSuiteApi = {
   async lockSettings() { return { timeout_s: stubLock, max_s: null, choices: [60, 120, 300, 600, 900, 1800, 3600, 0] } },
   async setLockTimeout(s) { stubLock = s; return { ok: true, value: { timeout_s: s, max_s: null, choices: [60, 120, 300, 600, 900, 1800, 3600, 0] } } },
   async openLink() {},
+  // Preview: signed out, so search says so instead of inventing results.
+  async search(q) {
+    const query = q.trim()
+    return { query, sources: query ? [{ source: 'worksuite', state: 'not_signed_in', hits: [] }, { source: 'drive', state: 'not_signed_in', hits: [] }] : [], hits: [] }
+  },
+  async recentFiles() { return { local: [], cloud: { state: 'not_signed_in', hits: [] } } },
+  async openSearchResult() { return { ok: true } },
   async webApps() { return { ok: false, error: 'not_signed_in' } },
   async installedApps() {
     return { apps: [

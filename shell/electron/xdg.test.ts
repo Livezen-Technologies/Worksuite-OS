@@ -37,17 +37,21 @@ describe('desktop entries', () => {
     expect(apps.map((a) => a.id)).toEqual(['foo', 'kde-k'])
   })
   it('detects WorkSuite Office by id, Name or Exec', () => {
-    const mk = (id: string, name: string, exec: string) => ({ id, name, exec, generic_name: null, comment: null, icon: null, categories: [], keywords: [] })
+    const mk = (id: string, name: string, exec: string) => ({ id, name, exec, generic_name: null, comment: null, icon: null, categories: [], keywords: [], mime_types: [] })
     expect(findOffice([mk('firefox-esr', 'Firefox', 'firefox'), mk('worksuite-office', 'WorkSuite Office', '/usr/bin/worksuite-office %U')])?.id).toBe('worksuite-office')
     expect(findOffice([mk('x', 'Editors', '/opt/worksuite/desktopeditors/DesktopEditors %U')])?.id).toBe('x')
     expect(findOffice([mk('libreoffice-writer', 'LibreOffice Writer', 'libreoffice --writer')])).toBeNull()
     expect(execProgram('"/opt/a b/x" %U')).toBe('/opt/a b/x')
     expect(execProgram('env FOO=1 x')).toBeNull()
+    // WSOS-LCH-001: an Exec line is never handed to a shell; shells and field codes are refused as programs.
+    expect(execProgram('sh -c "rm -rf ~"')).toBeNull()
+    expect(execProgram('/bin/bash -c x')).toBeNull()
+    expect(execProgram('%U')).toBeNull()
   })
 })
 
 describe('findWorkSuiteDesktop', () => {
-  const e = (id: string, exec: string | null) => ({ id, name: id, generic_name: null, comment: null, icon: null, categories: [], keywords: [], exec })
+  const e = (id: string, exec: string | null) => ({ id, name: id, generic_name: null, comment: null, icon: null, categories: [], keywords: [], exec, mime_types: [] })
   it('finds the worksuite-desktop package entry by id or program', () => {
     expect(findWorkSuiteDesktop([e('foot', 'foot'), e('worksuite', '/opt/WorkSuite/worksuite %U')])?.id).toBe('worksuite')
     expect(findWorkSuiteDesktop([e('lk.worksuite.desktop', '"/opt/WorkSuite/worksuite" %U')])?.id).toBe('lk.worksuite.desktop')
