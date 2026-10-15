@@ -1,0 +1,15 @@
+# WorkSuite OS GRUB theme
+desktop-color: "#0b1120"
+title-text: ""
+terminal-font: "Unifont Regular 16"
+
++ image { left = 50%-40 top = 18% width = 80 height = 101 file = "logo.png" }
++ boot_menu {
+  left = 30% top = 42% width = 40% height = 36%
+  item_font = "Unifont Regular 16"
+  item_color = "#94a3b8" selected_item_color = "#ffffff"
+  item_height = 32 item_spacing = 6 item_padding = 12
+  selected_item_pixmap_style = "select_*.png"
+}
++ label { left = 0 top = 92% width = 100% align = "center" color = "#64748b" font = "Unifont Regular 16"
+  text = "Enter: boot   E: edit   C: command line" }

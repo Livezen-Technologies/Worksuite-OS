@@ -2,14 +2,20 @@ Source: worksuite-os
 Section: x11
 Priority: optional
 Maintainer: WorkSuite OS Team <os@worksuitecloud.com>
-Build-Depends: debhelper-compat (= 13), nodejs (>= 22.18), npm
+Build-Depends: debhelper-compat (= 13), nodejs (>= 22.18), npm,
+# Installer view module, built against the target's Calamares (Qt5 or Qt6 builds).
+ calamares, cmake, extra-cmake-modules, libyaml-cpp-dev,
+ qt6-base-dev | qtbase5-dev, qt6-declarative-dev | qtdeclarative5-dev, qt6-svg-dev | libqt5svg5-dev, qt6-tools-dev | qttools5-dev,
+ libkf6coreaddons-dev | libkf5coreaddons-dev,
+# Branding: SVG sources rendered to PNG for Plymouth, GRUB and icons.
+ librsvg2-bin
 Standards-Version: 4.7.0
 Homepage: https://download.worksuitecloud.com
 Rules-Requires-Root: no
 
 Package: worksuite-desktop
 Architecture: all
-Depends: worksuite-shell, worksuite-session,
+Depends: worksuite-shell, worksuite-session, worksuite-branding,
  worksuite-user-services, worksuite-package-service, worksuite-device-agent,
  labwc, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, xdg-desktop-portal-gtk, gnome-keyring,
@@ -20,7 +26,7 @@ Conflicts: openssh-server
 Description: WorkSuite OS desktop (metapackage)
  Pulls in the WorkSuite session, shell, system services and the Debian
  desktop stack they rely on. No SSH server (WSOS-SEC-010). The native panel,
- Wayland bridge, background, branding, Office and archive keyring packages
+ Wayland bridge, Office and archive keyring packages
  join when their sources exist.
 
 Package: worksuite-shell
@@ -64,3 +70,18 @@ Description: WorkSuite device agent (enrollment, policy, signed remote commands)
  Root agent for organization-managed devices: enrollment, signed policy,
  heartbeat, signed remote commands and remote wipe.
 
+Package: calamares-settings-worksuite
+Architecture: amd64 arm64
+Depends: calamares (>= 3.3), cryptsetup, python3, ${shlibs:Depends}, ${misc:Depends}
+Description: WorkSuite OS installer configuration for Calamares
+ Calamares settings, branding and two WorkSuite modules for the live ISO:
+ a typed disk-name confirmation before erasing (WSOS-INS-003) and a LUKS2
+ recovery key added during install and shown once (WSOS-INS-004).
+
+Package: worksuite-branding
+Architecture: all
+Depends: plymouth, plymouth-label, grub-common, ${misc:Depends}
+Description: WorkSuite OS boot splash, GRUB theme, icons and wallpaper
+ The WorkSuite logo as the Plymouth boot splash (including the disk unlock
+ prompt), the GRUB menu theme with a quiet boot command line, the application
+ icon in the hicolor theme and the default desktop wallpaper.

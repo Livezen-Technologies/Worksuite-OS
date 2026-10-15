@@ -1,0 +1,7 @@
+# Two instances: "erase" after the summary (typed disk-name confirmation) and "recovery" after install
+# (recovery key shown once).
+---
+type: "view"
+name: "worksuiteconfirm"
+interface: "qtplugin"
+load: "libcalamares_viewmodule_worksuiteconfirm.so"

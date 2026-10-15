@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+  update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth \
+    /usr/share/plymouth/themes/worksuite/worksuite.plymouth 150
+  update-alternatives --set default.plymouth /usr/share/plymouth/themes/worksuite/worksuite.plymouth
+  if command -v update-initramfs >/dev/null 2>&1; then update-initramfs -u || true; fi
+  if command -v update-grub >/dev/null 2>&1 && [ -d /boot/grub ]; then update-grub || true; fi
+fi
+#DEBHELPER#
+exit 0

@@ -1,0 +1,7 @@
+# Adds a LUKS2 recovery key slot to every encrypted partition (WSOS-INS-004). Runs after "partition" in exec.
+---
+type:       "job"
+name:       "worksuiterecovery"
+interface:  "python"
+script:     "main.py"
+noconfig:   true

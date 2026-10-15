@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=WorkSuite OS
+Description=WorkSuite OS boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/worksuite
+ScriptFile=/usr/share/plymouth/themes/worksuite/worksuite.script
