@@ -4,6 +4,6 @@ Documentation=man:systemd.special(7)
 BindsTo=graphical-session.target
 Wants=graphical-session-pre.target
 After=graphical-session-pre.target
-Wants=worksuite-shell.service worksuite-panel.service worksuite-wayland-bridge.service worksuite-background.service worksuite-credentials.service worksuite-sync.service
+Wants=worksuite-shell.service worksuite-idle.service worksuite-idle-policy.path worksuite-polkit-agent.service worksuite-panel.service worksuite-wayland-bridge.service worksuite-background.service worksuite-credentials.service worksuite-sync.service
 RefuseManualStart=no
 StopWhenUnneeded=no

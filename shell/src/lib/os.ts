@@ -6,6 +6,9 @@ export interface WorkSuiteApi {
   logout(): Promise<void>
   power(action: 'suspend' | 'restart' | 'shutdown'): Promise<void>
   launchApp(appId: string): Promise<void>
+  /** Idle screen-lock timeout (seconds, 0 = never) and the organization's maximum (WSOS-LOCK-003). */
+  lockSettings(): Promise<LockSettings>
+  setLockTimeout(seconds: number): Promise<CloudResult<LockSettings>>
   openLink(url: string): Promise<void>
   /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
   webApps(): Promise<CloudResult<{ id: string; name: string }[]>>
@@ -193,6 +196,13 @@ export function policyLines(p: DevicePolicies | null): string[] {
   return out
 }
 
+export interface LockSettings { timeout_s: number; max_s: number | null; choices: number[] }
+
+export function lockChoiceLabel(s: number): string {
+  if (s === 0) return 'Never'
+  if (s < 3600) return `${Math.round(s / 60)} min`
+  return s === 3600 ? '1 hour' : `${Math.round(s / 360) / 10} hours`
+}
 export interface InstalledApp { id: string; name: string; generic_name: string | null; comment: string | null; icon: string | null; categories: string[]; keywords: string[] }
 
 export type SignOutChoice = 'none' | 'export' | 'discard'
@@ -214,6 +224,9 @@ const stub: WorkSuiteApi = {
   async logout() {},
   async power() {},
   async launchApp() {},
+  // Preview: the shipped default (5 min), no policy maximum.
+  async lockSettings() { return { timeout_s: stubLock, max_s: null, choices: [60, 120, 300, 600, 900, 1800, 3600, 0] } },
+  async setLockTimeout(s) { stubLock = s; return { ok: true, value: { timeout_s: s, max_s: null, choices: [60, 120, 300, 600, 900, 1800, 3600, 0] } } },
   async openLink() {},
   async webApps() { return { ok: false, error: 'not_signed_in' } },
   async installedApps() {
@@ -385,6 +398,7 @@ const stubSys: { net: NetworkState; bt: BluetoothState; sound: SoundState } = {
 const stubSim = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('sim') ?? 'preview' : 'preview'
 const stubWait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+let stubLock = 300
 // Browser preview only (never in Electron): ?upd=available|downloading|ready|forced|failed|whatsnew|uptodate,
 // ?hw=catalog|new|problem, ?sim=none drive the stub into each board's state.
 const PV = new URLSearchParams(typeof location === 'undefined' ? '' : location.search)

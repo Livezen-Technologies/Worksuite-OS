@@ -2,7 +2,7 @@
 // UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
 // can't tell, the section says so instead of showing sample values.
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { cloudErrorText, formatDuration, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
 import type { WindowProps } from './types'
 import { ACCENTS, DEFAULT_PRIVACY, KEYS, THEMES, accentColor, applyAppearance, loadAppearance, readJson, writeJson, type Appearance, type Privacy } from '../lib/setup'
@@ -334,13 +334,32 @@ function PrivacyPanel() {
   </>
 }
 
+/** WSOS-LOCK-003: idle lock timeout chosen by the user, within the organization's maximum (worksuite-idle applies it). */
+function LockAfterRow() {
+  const [s, setS] = useState<LockSettings | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => { void os.lockSettings().then(setS).catch(() => setErr('Screen lock settings are unavailable.')) }, [])
+  const change = async (v: number) => {
+    const r = await os.setLockTimeout(v)
+    if (r.ok) { setS(r.value); setErr(null) } else setErr(r.error === 'above_policy_maximum' ? 'Your organization does not allow a longer time.' : 'Could not save this setting.')
+  }
+  const help = err ?? (!s ? 'Loading…' : s.max_s !== null ? `Your organization allows up to ${lockChoiceLabel(s.max_s)}` : 'Also locks before sleep')
+  return (
+    <div className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
+      <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm">Lock screen after</span><span className="text-xs text-[#8FA3C8]" role={err ? 'alert' : undefined}>{help}</span></span>
+      {s?.max_s != null && <span className={chip}>Set by policy</span>}
+      {s && <select aria-label="Lock screen after" value={s.timeout_s} onChange={(e) => void change(Number(e.target.value))}
+        className="h-9 rounded-lg border border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.5)] px-2 text-[13px] text-white">
+        {s.choices.map((c) => <option key={c} value={c}>{lockChoiceLabel(c)}</option>)}
+      </select>}
+    </div>
+  )
+}
+
 function UsersPanel() {
   const { r } = useAvail(os.sysUsers)
-  const [info, setInfo] = useState<DeviceInfo | null>(null)
-  useEffect(() => { void os.deviceInfo().then(setInfo).catch(() => {}) }, [])
   const me = r.state === 'ok' ? r.value.users.find((u) => u.login === r.value.current) ?? null : null
   const others = r.state === 'ok' ? r.value.users.filter((u) => u.login !== r.value.current) : []
-  const lock = info?.policies?.lock_timeout_max_s
   return <>
     <H1>Users</H1>
     {r.state === 'unavailable' && <Unavail what="The user list" />}
@@ -360,7 +379,7 @@ function UsersPanel() {
         <span className={chip}>Not allowed</span>
         <Switch small label="Sign in automatically" checked={false} disabled />
       </div>
-      <div className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}><span className="flex-1 text-sm">Lock after</span><span className="text-[13px] text-[#C9D6EE]">{lock ? `At most ${Math.round(lock / 60)} minutes idle` : 'Not set by policy'}</span>{lock ? <span className={chip}>Set by policy</span> : null}</div>
+      <LockAfterRow />
     </div>
     <section aria-labelledby="ws-acct" className="flex flex-col gap-2">
       <h2 id="ws-acct" className={`m-0 font-normal ${sectionLabel}`}>WorkSuite account</h2>

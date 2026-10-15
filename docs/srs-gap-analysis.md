@@ -10,16 +10,16 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | Section | Items | Done | Partial | Missing | Score |
 |---|---|---|---|---|---|
 | 3 Architecture | 4 | 0 | 4 | 0 | 50% |
-| 4 Boot, login, session, lock | 17 | 1 | 11 | 5 | 38% |
-| 5 Shell | 18 | 1 | 8 | 9 | 28% |
+| 4 Boot, login, session, lock | 17 | 10 | 6 | 1 | 76% |
+| 5 Shell | 18 | 1 | 9 | 8 | 31% |
 | 6 Applications | 20 | 6 | 7 | 7 | 48% |
-| 7 Integration and Drive | 19 | 3 | 14 | 2 | 53% |
+| 7 Integration and Drive | 19 | 4 | 14 | 1 | 58% |
 | 8 Identity and sync | 18 | 12 | 6 | 0 | 83% |
-| 9 Updates, MDM, installer | 22 | 10 | 12 | 0 | 73% |
-| 11 Non-functional | 25 | 2 | 15 | 8 | 38% |
-| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 15 | 9 | 16 | 49% |
+| 9 Updates, MDM, installer | 22 | 11 | 11 | 0 | 75% |
+| 11 Non-functional | 25 | 2 | 16 | 7 | 40% |
+| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 15 | 10 | 15 | 50% |
 | Unnumbered requirements (no WSOS ID) | 15 | 3 | 7 | 5 | 43% |
-| **Overall** | **198** | | | | **50.3%** |
+| **Overall** | **198** | | | | **55.1%** |
 
 ## 3 Architecture
 
@@ -39,18 +39,18 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-BOOT-003 | Previous kernel kept selectable | Missing | No GRUB/kernel retention config found (no `grub.d` submenu or apt autoremove kernel settings). |
 | WSOS-AUTH-001 | greetd + PAM greeter, WorkSuite default session | Partial | `live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot` (gtkgreet under cage), `services/session/wayland-sessions/worksuite.desktop`. VM test only checks greetd is active, not a login. |
 | WSOS-AUTH-002 | No autologin by default | Partial | greetd config has no `initial_session`; `installer/modules/usersq.conf`. No kiosk/personal opt-in mechanism; no test. |
-| WSOS-AUTH-003 | Offline login for provisioned local users within policy period | Partial | Local PAM accounts work offline by default; the policy offline period is not enforced anywhere (Settings shows a static "7 days" label). |
-| WSOS-AUTH-004 | PAM faillock with policy thresholds | Missing | No faillock configuration in live-build, installer or packaging. |
+| WSOS-AUTH-003 | Offline login for provisioned local users within policy period | Done | Policy `offline_access_days`: after N days without a check-in the device agent locks all sessions and writes `/etc/worksuite/offline-access-expired`, which pam_nologin (`services/session/pam/worksuite-offline-access`) uses to refuse sign-in until the next successful check-in (`services/device-agent/src/agent.ts` `offlineAccessCheck`, `src/enforce.ts`; tested in `test/agent.test.ts`, incl. restart and restore). Within the period local PAM accounts sign in offline. |
+| WSOS-AUTH-004 | PAM faillock with policy thresholds | Done | pam_faillock profiles `services/session/pam/worksuite-faillock*` (pam-auth-update in `worksuite-session.postinst`; the live-build hook fails the build if common-auth lacks pam_faillock) with `conf=/etc/worksuite/faillock.conf`; thresholds from policy `login_failures_max` / `login_lockout_s` (schema in `api-contracts/openapi.yaml`, validated in `services/server/src/console.ts`, written by the device agent `src/enforce.ts`). Mapping tested in `services/device-agent/test/agent.test.ts`, validation in `services/server/test/console.test.ts`. PAM stack not exercised in a VM test. |
 | WSOS-SES-001 | Import display env before portals | Partial | `services/session/bin/worksuite-session` (`--ready`), `services/session/labwc/autostart`. Not tested. |
 | WSOS-SES-002 | User units bound to worksuite-session.target | Partial | `services/session/systemd/user/*` (PartOf=). Panel and bridge units point at binaries that do not exist. Not tested. |
-| WSOS-SES-003 | Clean logout | Partial | `worksuite-session` `cleanup()`; sync stop tested in `services/sync/test/service.test.ts`. Shell "Log out" (`ws:logout`) stops only the target, not the full cleanup. No REL-001 cycle test. |
-| WSOS-SES-004 | Shell restart ≤3 s without killing app windows | Partial | `worksuite-shell.service` Restart=always RestartSec=1s; but `gtk-launch` is not wrapped in `systemd-run --scope` as the unit comment claims, so apps may share the shell cgroup (`KillMode=control-group`). Not tested. |
+| WSOS-SES-003 | Clean logout | Done | Shell Log out runs `systemd-run --user --unit=worksuite-logout -- worksuite-session --logout` (`shell/electron/session.ts` `logoutCommand`, outside the shell cgroup) → full `cleanup()`: stop sync, stop credentials, lock the keyring, stop the target, unset display variables, end Labwc. Tested: `shell/electron/session.test.ts`, `tests/session/session-test.sh` (order of stop sync → keyring lock, compositor ended). No REL-001 cycle test. |
+| WSOS-SES-004 | Shell restart ≤3 s without killing app windows | Done | `worksuite-shell.service` Restart=always RestartSec=1s, `KillMode=mixed`; apps are launched with `systemd-run --user --scope --slice=app.slice --unit=app-worksuite-<id>-<n>.scope -- gtk-launch <id>` (`shell/electron/session.ts` `appLaunchCommand`, tested in `session.test.ts`), so they are not in the shell cgroup. Unit wiring checked in `tests/session/session-test.sh`; no VM crash test. |
 | WSOS-SES-005 | Recovery launcher after 3 crashes / 60 s | Partial | `StartLimitBurst=3`, `OnFailure=worksuite-recovery-launcher.service`; `shell/src/screens/Recovery.tsx`. Not tested. |
-| WSOS-SES-006 | Labwc exit → greeter notice | Partial | Marker file written by `worksuite-session`; the greeter (gtkgreet) never reads it; `shell/src/screens/Greeter.tsx` is not the shipped greeter. |
-| WSOS-LOCK-001 | ext-session-lock locker, not Electron overlay | Partial | `gtklock` in `packaging/debian/control`; Super+L → `loginctl lock-session` (`labwc/rc.xml`) but nothing connects lock-session to gtklock. `shell/src/screens/Lock.tsx` is a React lock design. |
-| WSOS-LOCK-002 | Lock before suspend, locked on resume | Missing | `swayidle` is a dependency but no swayidle config/unit (before-sleep) exists. |
-| WSOS-LOCK-003 | Idle lock timeout user-configurable within policy max | Missing | Settings › Power shows a static "Set by policy" label; no lock timeout in policy schema (`services/server/src/console.ts`). |
-| WSOS-LOCK-004 | Locker crash fails closed | Missing | No implementation or test (depends on ext-session-lock locker wiring). |
+| WSOS-SES-006 | Labwc exit → greeter notice | Done | `worksuite-session` writes `/run/worksuite/session-notice/uid-<uid>` (tmpfiles: `_greetd`-owned, mode 1733) on abnormal Labwc exit; greetd runs `services/session/bin/worksuite-greeter`, which shows "Your last session ended unexpectedly… open applications may have closed" (zenity), removes the notices, then starts gtkgreet. Tested in `tests/session/session-test.sh`. |
+| WSOS-LOCK-001 | ext-session-lock locker, not Electron overlay | Done | gtklock (ext-session-lock-v1) via `services/session/bin/worksuite-lock`, started by swayidle for `lock` (Super+L, shell Lock and device-agent RequestLock all call `loginctl lock-session`), idle timeout and before-sleep (`worksuite-idle`, `worksuite-idle.service`). Theme `services/session/gtklock/style.css` from the Lock board. Script logic tested with a stub gtklock in `tests/session/session-test.sh`; real gtklock not run in CI. `shell/src/screens/Lock.tsx` is not used as the lock. |
+| WSOS-LOCK-002 | Lock before suspend, locked on resume | Done | `swayidle -w … before-sleep worksuite-lock`: worksuite-lock returns only after gtklock reports the lock held (`-L` hook), so logind's delay inhibitor is released after locking; the lock persists through resume until PAM unlock. Tested with stubs in `tests/session/session-test.sh`; not on hardware (see REL-002). |
+| WSOS-LOCK-003 | Idle lock timeout user-configurable within policy max | Done | Settings › Users "Lock screen after" (`shell/src/screens/Settings.tsx` `LockAfterRow`, `shell/electron/session.ts`) offers only values within policy `lock_timeout_max_s`; the device agent writes `/etc/worksuite/lock-policy.conf`; `worksuite-idle` caps the user value (no "never" under a maximum); `worksuite-idle-policy.path` restarts swayidle on change. Tested in `shell/electron/session.test.ts`, `tests/session/session-test.sh`, `services/device-agent/test/agent.test.ts`. |
+| WSOS-LOCK-004 | Locker crash fails closed | Done | ext-session-lock keeps outputs locked if gtklock dies; the `worksuite-lock` guard restarts gtklock until it exits 0 (PAM success), and `worksuite-idle.service` uses `KillMode=process` so a swayidle restart never kills the locker. Crash/restart tested with a stub gtklock in `tests/session/session-test.sh`; not tested against a real compositor. |
 
 ## 5 Shell
 
@@ -106,14 +106,14 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 |---|---|---|---|
 | WSOS-INT-001 | Networking (NM, VPN, captive portal) | Partial | Settings › Network shows live Wi-Fi/Ethernet state, scans and joins networks via nmcli; Wi-Fi password goes on nmcli stdin (`--ask`), never argv (`shell/electron/system.ts` (`system.test.ts`)). VPN and captive portal not done. |
 | WSOS-INT-002 | Audio (PipeWire) | Done | Settings › Sound reads/sets volume, mute and default output via `wpctl` (`shell/electron/system.ts` (`system.test.ts`)). |
-| WSOS-INT-003 | Bluetooth (BlueZ), policy disable | Partial | Settings › Bluetooth: real power state, paired devices, connect/disconnect via `bluetoothctl` (`shell/electron/system.ts` (`system.test.ts`)); pairing new devices and policy enforcement not done. |
-| WSOS-INT-004 | Storage (UDisks2), policy block removable | Partial | Drives listed from `udisksctl status` in Settings › About this device (`shell/electron/system.ts` (`system.test.ts`)); no USB policy enforcement. |
+| WSOS-INT-003 | Bluetooth (BlueZ), policy disable | Partial | Settings › Bluetooth: real power state, paired devices, connect/disconnect via `bluetoothctl` (`shell/electron/system.ts` (`system.test.ts`)); policy `bluetooth: false` masks bluetooth.service and rfkill-blocks radios (`services/device-agent/src/enforce.ts`, `host.ts`; mapping tested in `agent.test.ts`). Pairing new devices not done; host effects not run in CI. |
+| WSOS-INT-004 | Storage (UDisks2), policy block removable | Partial | Drives listed from `udisksctl status` in Settings › About this device (`shell/electron/system.ts` (`system.test.ts`)); policy `usb_storage` block (modprobe install /bin/false + UDISKS_IGNORE) / read_only (udev blockdev --setro) enforced by the device agent (mapping tested). No mount/eject UI. |
 | WSOS-INT-005 | Power (UPower/logind) | Partial | Suspend/restart/shutdown via `systemctl` (`main.ts`), `lib/power.ts` tested; battery state from `upower` (`shell/electron/system.ts` (`system.test.ts`)); power profiles still static. |
 | WSOS-INT-006 | Printing (CUPS) | Partial | Settings › Printers lists real queues, state and default via `lpstat` (`shell/electron/system.ts` (`system.test.ts`)); adding printers not done. |
 | WSOS-INT-007 | Notifications server (org.freedesktop.Notifications) | Partial | In-shell notice centre with DND (`Desktop.tsx`, `lib/useNotices.ts`, `lib/syncNotices.test.ts`); shell does not own `org.freedesktop.Notifications`. |
 | WSOS-INT-008 | Tray (SNI host) P2 | Missing | Only described in `native/panel/README.md`. |
 | WSOS-INT-009 | Secret Service unlock/lock with session | Partial | `gnome-keyring` dep, lock on logout in `worksuite-session`, broker lock follows session lock (`shell/electron/broker.ts`, `broker.test.ts`); PAM unlock-on-login not configured. |
-| WSOS-INT-010 | Shell-rendered polkit agent | Missing | No polkit agent in shell or packaging. |
+| WSOS-INT-010 | Shell-rendered polkit agent | Partial | `worksuite-polkit-agent.service` runs lxpolkit (or mate-polkit), a native GTK agent that shows the action, program and admin account; failures count toward pam_faillock. Not shell-rendered as the SRS asks; no test. |
 | WSOS-INT-011 | Input methods (fcitx5, Sinhala/Tamil) | Partial | `fcitx5` dependency; no fcitx5 config, Sinhala/Tamil IMs (`fcitx5-m17n` etc.) not listed. |
 | WSOS-INT-012 | Portals with explicit backend config | Partial | `services/session/portals/worksuite-portals.conf`; no per-interface acceptance test. |
 | WSOS-INT-013 | Screen capture consent, indicator | Partial | ScreenCast/Screenshot → wlr backend configured; no consent dialog or persistent indicator. |
@@ -158,7 +158,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-UPD-005 | Report results with OS/shell/kernel versions | Done | `coordinator.ts` → `desktop/v1/os/update-results` (`services/server/src/api.ts`); tested. |
 | WSOS-UPD-006 | Never delete user data/outbox/licences | Partial | Package ops never touch user data by design; no explicit test. |
 | WSOS-MDM-001 | Agent reports hardware, software, versions, update status | Partial | `services/device-agent/src/host.ts` (`facts`, `inventory`); tested with fakes in `agent.test.ts`. Hardware inventory limited. |
-| WSOS-MDM-002 | Policy covers allowlist, repos, ring, window, lock timeout, offline period, USB, Bluetooth | Partial | Signed policy verified (`agent.ts`, tested); schema in `console.ts` lacks lock timeout, USB storage, Bluetooth, offline access period, and these are not enforced on device. |
+| WSOS-MDM-002 | Policy covers allowlist, repos, ring, window, lock timeout, offline period, USB, Bluetooth | Done | All fields in the signed policy schema (`api-contracts/openapi.yaml`, `services/server/src/console.ts`, console form): allowlist, remotes, ring, window, `lock_timeout_max_s`, `offline_access_days`, `usb_storage`, `bluetooth`, plus `login_failures_max`/`login_lockout_s`. Device enforcement in `services/device-agent/src/enforce.ts` + `host.ts` `applyEnforcement` (lock-policy file, faillock.conf, modprobe/udev rules for USB block/read-only, bluetooth.service mask + rfkill), re-applied at start and lifted on unenroll; tested in `services/device-agent/test/agent.test.ts` and `services/server/test/console.test.ts`. Host effects (udevadm/rfkill) not run in CI. |
 | WSOS-MDM-003 | Remote command allow-list | Done | `services/device-agent/src/commands.ts`; `commands.test.ts`. |
 | WSOS-MDM-004 | Unique ID, expiry, signature, replay protection, ack | Done | `commands.ts`, `agent.ts`; `commands.test.ts`, `services/server/test/e2e.test.ts`. |
 | WSOS-MDM-005 | Console shows requested vs observed state | Partial | `services/server/src/console.ts`/`console-ui.ts` show command ack states; requested-vs-observed policy state not separated. |
@@ -185,9 +185,9 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-PRF-005 | Launcher first frame ≤200 ms | Missing | No measurement. |
 | WSOS-PRF-006 | Shell restart ≤3 s | Partial | RestartSec=1s configured; not measured. |
 | WSOS-REL-001 | 100 login/logout cycles clean | Missing | No test. |
-| WSOS-REL-002 | 50 suspend/resume cycles, lock intact | Missing | No test; lock-on-suspend not wired. |
+| WSOS-REL-002 | 50 suspend/resume cycles, lock intact | Partial | Lock before suspend wired (swayidle -w before-sleep → worksuite-lock, see LOCK-002); no 50-cycle suspend/resume test. |
 | WSOS-REL-003 | No lost ack'd write / duplicate effect | Done | `services/sync/test/sync.test.ts` adversarial cases, `services/server/test/e2e.test.ts`. |
-| WSOS-REL-004 | Killing Electron spares apps | Partial | Claimed in `worksuite-shell.service`, but apps are not launched into separate scopes; untested. |
+| WSOS-REL-004 | Killing Electron spares apps | Partial | Apps run in their own `app-worksuite-*.scope` (`shell/electron/session.ts`, unit-tested); no test that kills Electron in a running session. |
 | WSOS-SEC-001 | Sandbox, context isolation, no Node, restricted navigation | Partial | `shell/electron/main.ts` webPreferences, will-navigate blocked; no navigation allow-list for server origins, no test. |
 | WSOS-SEC-002 | Local bundle + restrictive CSP | Partial | CSP meta in `shell/index.html`; `style-src 'unsafe-inline'`; untested. |
 | WSOS-SEC-003 | Web permissions denied by default, per origin grants | Partial | `setPermissionRequestHandler` denies all (`main.ts`); no per-origin grant mechanism. |
@@ -229,7 +229,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-ARM-006 | No x86 emulation (scope) | Done | None shipped. |
 | WSOS-ARM-007 | Separate ARM performance gates | Missing | No performance gates at all. |
 | WSOS-ARM-008 | CI arm64 QEMU UEFI tests | Missing | `tests/vm/boot-test.sh` is x86_64 only. |
-| WSOS-WIPE-001 | Permission, re-auth, typed name, second approver | Partial | Two-person rule in `services/server/src/console.ts` (tested in `console.test.ts`); no admin re-authentication or typed device-name confirmation found; no CoreApprovalEngine. |
+| WSOS-WIPE-001 | Permission, re-auth, typed name, second approver | Partial | Two-person rule plus admin re-authentication (password) and typed device-name confirmation on both request and approval (`services/server/src/console.ts` `reauth`, console UI keeps the button disabled until both are entered; failures audited and throttled); tested in `services/server/test/console.test.ts`. No separate `desktop.devices.wipe` permission (any admin) and no CoreApprovalEngine. |
 | WSOS-WIPE-002 | Data wipe removes tokens, DB, Drive, caches for all users | Done | `services/device-agent/src/host.ts` (`wipeWorkSuiteData`), `agent.ts`; `agent.test.ts` (with fake host). |
 | WSOS-WIPE-003 | Full wipe destroys LUKS slots, refused on unencrypted | Done | `host.ts` (`cryptoErase`), `agent.ts` NOT_ENCRYPTED; `agent.test.ts`. Not exercised on a real LUKS device. |
 | WSOS-WIPE-004 | Signed, device-bound, single-use, 30-day expiry | Done | `commands.ts`, server issues with 30×24 h (`console.ts`); `commands.test.ts`. |
@@ -241,7 +241,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-DIR-002 | Greeter "Other user" with domain formats | Partial | `shell/src/screens/Greeter.tsx` has "Other user" UI and account-name validation (`components/AAccount.ts`); not the shipped greeter, no domain backend. |
 | WSOS-DIR-003 | Home dirs with stable UID/GID | Missing | No sssd/pam_mkhomedir/idmap config. |
 | WSOS-DIR-004 | Cached offline directory login | Missing | Not implemented. |
-| WSOS-DIR-005 | Disabled accounts refused; cache expiry | Missing | Not implemented. |
+| WSOS-DIR-005 | Disabled accounts refused; cache expiry | Partial | Offline period expiry ends local sign-in (pam_nologin file from the device agent, see AUTH-003); no directory accounts, so "disabled account refused at next online login" is not implemented. |
 | WSOS-DIR-006 | Group → local role mapping | Missing | Not implemented. |
 | WSOS-DIR-007 | Password expiry at greeter | Missing | Not implemented. |
 | WSOS-DIR-008 | SSO token after directory login | Missing | Not implemented. |

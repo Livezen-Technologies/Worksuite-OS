@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { Agent, type Host } from '../src/agent.ts';
 import { ApiError, type DeviceApi } from '../src/api.ts';
 import { canonical, signingBytes, type CommandEnvelope } from '../src/commands.ts';
+import { ENFORCED_PATHS, faillockConf, offlineAccessExpired, policyEnforcement, type Enforcement } from '../src/enforce.ts';
 import { splitCatalogId, windowStart } from '../src/host.ts';
 import { StateFile, type Policy } from '../src/state.ts';
 
@@ -31,6 +32,7 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
   const acks: { id: string; state: string; reason?: string }[] = [];
   const s = {
     queue: [] as unknown[], policy: opts.policy ?? signedPolicy({ version: 'p1', app_allowlist: ['flatpak:org.gimp.GIMP'], maintenance_window: '02:00-04:00' }),
+    enforced: [] as Enforcement[], offlineNotice: undefined as string | null | undefined, failEnforce: false,
     down: false, revoked: false, failAck: null as null | string, published: { credential: undefined as string | null | undefined, policy: undefined as Policy | null | undefined },
   };
   const api: DeviceApi = {
@@ -56,6 +58,8 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
     publishPolicy(p) { s.published.policy = p; },
     publishStatus() {},
     async lockAllSessions() { log.push('lock'); },
+    async applyEnforcement(e) { if (s.failEnforce) throw new Error('udevadm: failed'); s.enforced.push(e); },
+    setOfflineAccessBlock(n) { s.offlineNotice = n; log.push(n ? 'offline block' : 'offline unblock'); },
     async installApproved(id) { log.push(`install ${id}`); },
     async scheduleUpdate() { log.push('update'); },
     async scheduleReboot(w) { log.push(`reboot ${w}`); },
@@ -216,4 +220,77 @@ test('host helpers validate maintenance windows and catalog ids', () => {
   assert.deepEqual(splitCatalogId('flatpak:org.gimp.GIMP'), ['flatpak', 'org.gimp.GIMP']);
   assert.throws(() => splitCatalogId('apt:foo;rm -rf /'), /BAD_CATALOG_ID/);
   assert.throws(() => splitCatalogId('deb:foo'), /BAD_CATALOG_ID/);
+});
+
+test('policy enforcement: USB storage, Bluetooth, lock timeout and faillock map to machine settings (WSOS-MDM-002)', () => {
+  const none = policyEnforcement(null);
+  assert.equal(none.usb_storage, 'allow'); assert.equal(none.bluetooth, 'allow');
+  assert.equal(none.files[ENFORCED_PATHS.lockPolicy], null);
+  assert.equal(none.files[ENFORCED_PATHS.usbModprobe], null);
+  assert.equal(none.files[ENFORCED_PATHS.usbUdev], null);
+  assert.equal(none.files[ENFORCED_PATHS.faillock], faillockConf(5, 600));
+
+  const strict = policyEnforcement({ version: 'p', signature: 'x', usb_storage: 'block', bluetooth: false, lock_timeout_max_s: 600, login_failures_max: 3, login_lockout_s: 0 });
+  assert.equal(strict.bluetooth, 'block');
+  assert.match(strict.files[ENFORCED_PATHS.lockPolicy]!, /^LOCK_TIMEOUT_MAX_S=600$/m);
+  assert.match(strict.files[ENFORCED_PATHS.usbModprobe]!, /^install usb_storage \/bin\/false$/m);
+  assert.match(strict.files[ENFORCED_PATHS.usbModprobe]!, /^install uas \/bin\/false$/m);
+  assert.match(strict.files[ENFORCED_PATHS.usbUdev]!, /UDISKS_IGNORE}="1"/);
+  assert.match(strict.files[ENFORCED_PATHS.faillock]!, /^deny = 3$/m);
+  assert.match(strict.files[ENFORCED_PATHS.faillock]!, /^unlock_time = 0$/m);
+
+  const ro = policyEnforcement({ version: 'p', signature: 'x', usb_storage: 'read_only', bluetooth: true });
+  assert.equal(ro.bluetooth, 'allow');
+  assert.equal(ro.files[ENFORCED_PATHS.usbModprobe], null);
+  assert.match(ro.files[ENFORCED_PATHS.usbUdev]!, /ENV\{ID_BUS\}=="usb".*RUN\+="\/usr\/sbin\/blockdev --setro \$devnode"/);
+  // Only integers ever reach the lock file that worksuite-idle reads.
+  assert.equal(policyEnforcement({ version: 'p', signature: 'x', lock_timeout_max_s: '60; rm -rf /' as unknown as number }).files[ENFORCED_PATHS.lockPolicy], null);
+});
+
+test('a verified policy is enforced; a rejected one changes nothing; unenrolling lifts every restriction', async () => {
+  const w = await enrolled({ policy: signedPolicy({ version: 'p1', usb_storage: 'block', bluetooth: false, lock_timeout_max_s: 300 }) });
+  assert.equal(w.s.enforced.at(-1)!.usb_storage, 'block');
+  assert.equal(w.s.enforced.at(-1)!.bluetooth, 'block');
+  const n = w.s.enforced.length;
+  w.s.policy = { ...signedPolicy({ version: 'p2', usb_storage: 'allow' }), signature: 'k1:AAAA' };
+  await assert.rejects(w.agent.refreshPolicy(), /POLICY_SIGNATURE/);
+  assert.equal(w.s.enforced.length, n);
+  w.s.policy = signedPolicy({ version: 'p2', usb_storage: 'read_only' });
+  await w.agent.refreshPolicy();
+  assert.equal(w.s.enforced.at(-1)!.usb_storage, 'read_only');
+  assert.equal(w.s.enforced.at(-1)!.bluetooth, 'allow');
+  assert.equal(w.s.enforced.at(-1)!.files[ENFORCED_PATHS.lockPolicy], null);
+  w.s.revoked = true;
+  await w.agent.checkIn();
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(w.s.enforced.at(-1), policyEnforcement(null));
+  w.cleanup();
+});
+
+test('a failure applying the policy is audited and does not reject the verified policy', async () => {
+  const w = world({ policy: signedPolicy({ version: 'p1', usb_storage: 'block' }) });
+  w.s.failEnforce = true;
+  await w.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(w.agent.status().policies?.usb_storage, 'block');
+  w.cleanup();
+});
+
+test('offline access period: sign-in refused and sessions locked after N days offline, restored on check-in (WSOS-AUTH-003)', async () => {
+  assert.equal(offlineAccessExpired({ version: 'p', signature: 'x' }, NOW - 400 * DAY, NOW), false);
+  const w = await enrolled({ policy: signedPolicy({ version: 'p1', offline_access_days: 7 }) });
+  w.s.down = true;
+  NOW += 6 * DAY; await w.agent.checkIn();
+  assert.deepEqual(w.log, []);
+  NOW += 1 * DAY; await w.agent.checkIn(); await w.agent.checkIn();
+  assert.deepEqual(w.log, ['offline block', 'lock']);
+  assert.match(w.s.offlineNotice!, /Livezen Technologies for 7 days/);
+  assert.equal(w.agent.status().offline_access_expired, true);
+  // Survives an agent restart, then clears at the first successful check-in.
+  const again = w.restart();
+  assert.equal(again.status().offline_access_expired, true);
+  w.s.down = false; w.log.length = 0;
+  await again.checkIn();
+  assert.deepEqual((w.log as string[]).filter((l) => l.startsWith('offline')), ['offline unblock']);
+  assert.equal(again.status().offline_access_expired, false);
+  w.cleanup();
 });

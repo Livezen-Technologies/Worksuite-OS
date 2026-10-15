@@ -1,0 +1,14 @@
+[Unit]
+Description=WorkSuite administrator password prompts (polkit authentication agent)
+PartOf=worksuite-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/worksuite/worksuite-polkit-agent
+Restart=always
+RestartSec=1s
+Slice=session.slice
+
+[Install]
+WantedBy=worksuite-session.target
