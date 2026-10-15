@@ -5,12 +5,18 @@
 #include "ViewManager.h"
 #include "utils/Logger.h"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMouseEvent>
+#include <QWindow>
+#ifdef WORKSUITE_QPA_FOCUS
+#include <qpa/qwindowsysteminterface.h>
+#endif
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
@@ -20,9 +26,139 @@ CALAMARES_PLUGIN_FACTORY_DEFINITION( WorksuiteConfirmViewStepFactory, registerPl
 
 static const char RECOVERY_KEY[] = "worksuiteRecoveryKey";
 
+namespace
+{
+/* Calamares (Qt 6) shows each QML page as a QQuickWindow embedded in the page's widget through a window container,
+   and focuses the page widget, not the container. Keystrokes then stop at the page widget and the WorkSuite QML
+   pages' text fields never get them; a click into the embedded window does not move focus either. This filter
+   gives the container focus when its page widget gets it (or when the container arrives after, once the QML has
+   loaded), and when the embedded window is clicked. Classes are matched by name: no extra Qt link. */
+class QmlFocus : public QObject
+{
+public:
+    using QObject::QObject;
+
+    static QWidget* qmlChild( QWidget* w )
+    {
+        for ( auto* child : w->findChildren< QWidget* >( QString(), Qt::FindDirectChildrenOnly ) )
+        {
+            if ( ( child->inherits( "QWindowContainer" ) || child->inherits( "QQuickWidget" ) ) && child->isVisible() )
+            {
+                return child;
+            }
+        }
+        return nullptr;
+    }
+
+    // The QML window a window container shows: the visible Qt Quick window at the container's position.
+    static QWindow* embeddedWindow( QWidget* container )
+    {
+        const QPoint at = container->mapToGlobal( QPoint( 0, 0 ) );
+        for ( auto* win : QGuiApplication::allWindows() )
+        {
+            if ( win->inherits( "QQuickWindow" ) && win->isVisible() && win->parent() && win->mapToGlobal( QPoint( 0, 0 ) ) == at )
+            {
+                return win;
+            }
+        }
+        return nullptr;
+    }
+
+    // Qt Quick gives an item active focus only while its window is the application's focus window
+    // (QQuickDeliveryAgent: windowHasFocus), and on Wayland an embedded window never becomes it. Make it so, as the
+    // X11 and Windows platforms do when an embedded window is clicked.
+    static void focusWindow( QWindow* win )
+    {
+#ifdef WORKSUITE_QPA_FOCUS
+        if ( QGuiApplication::focusWindow() != win )
+        {
+            QWindowSystemInterface::handleFocusWindowChanged( win, Qt::OtherFocusReason );
+            QWindowSystemInterface::flushWindowSystemEvents();
+        }
+#else
+        Q_UNUSED( win )
+#endif
+    }
+
+    bool eventFilter( QObject* o, QEvent* e ) override
+    {
+        // On Wayland a focused window container does not pass keys on to its window: forward them.
+        if ( o->isWidgetType() && ( e->type() == QEvent::KeyPress || e->type() == QEvent::KeyRelease ) )
+        {
+            auto* w = static_cast< QWidget* >( o );
+            QWidget* container = w->inherits( "QWindowContainer" ) ? w : nullptr;
+            if ( !container )
+            {
+                auto* q = qmlChild( w );
+                container = q && q->inherits( "QWindowContainer" ) ? q : nullptr;
+            }
+            if ( container && !m_forwarding )
+            {
+                if ( auto* win = embeddedWindow( container ) )
+                {
+                    m_forwarding = true;
+                    focusWindow( win );
+                    QCoreApplication::sendEvent( win, e );
+                    m_forwarding = false;
+                    return true;
+                }
+            }
+        }
+        if ( o->isWidgetType() )
+        {
+            auto* w = static_cast< QWidget* >( o );
+            if ( e->type() == QEvent::FocusIn || ( e->type() == QEvent::KeyPress && w->hasFocus() ) )
+            {
+                if ( auto* q = qmlChild( w ) )
+                {
+                    q->setFocus( Qt::OtherFocusReason );
+                }
+            }
+            else if ( e->type() == QEvent::ChildPolished && w->hasFocus() )
+            {
+                if ( auto* q = qmlChild( w ) )
+                {
+                    q->setFocus( Qt::OtherFocusReason );
+                }
+            }
+        }
+        else if ( o->isWindowType() && e->type() == QEvent::MouseButtonPress )
+        {
+            auto* win = static_cast< QWindow* >( o );
+            if ( win->inherits( "QQuickWindow" ) && win->parent() )
+            {
+                focusWindow( win );   // before the press, so the field under it can take focus
+            }
+            // A click in an embedded QML window: focus the container showing it.
+            const QPoint at = static_cast< QMouseEvent* >( e )->globalPosition().toPoint();
+            for ( auto* w : QApplication::allWidgets() )
+            {
+                if ( w->inherits( "QWindowContainer" ) && w->isVisible() && !w->hasFocus()
+                     && QRect( w->mapToGlobal( QPoint( 0, 0 ) ), w->size() ).contains( at ) )
+                {
+                    w->setFocus( Qt::MouseFocusReason );
+                    break;
+                }
+            }
+        }
+        return false;
+    }
+
+private:
+    bool m_forwarding = false;
+};
+}  // namespace
+
 WorksuiteConfirmViewStep::WorksuiteConfirmViewStep( QObject* parent )
     : Calamares::ViewStep( parent )
 {
+    // Both instances load at startup; one filter for the application is enough.
+    static QmlFocus* focus = nullptr;
+    if ( !focus && qApp )
+    {
+        focus = new QmlFocus( qApp );
+        qApp->installEventFilter( focus );
+    }
 }
 
 WorksuiteConfirmViewStep::~WorksuiteConfirmViewStep()
