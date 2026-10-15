@@ -1169,6 +1169,16 @@ const ta: Partial<Record<MessageKey, string>> = {
   'offline.full_offline': 'இணைப்பின்றி இயங்கும்',
   'offline.cached_read': 'இணைப்பின்றி படிக்க மட்டும்',
   'offline.online_only': 'இணையம் தேவை',
+  // Shell-rendered polkit prompt (WSOS-INT-010)
+  'polkit.title': 'நிர்வாகி கடவுச்சொல் தேவை',
+  'polkit.program': 'நிரல்',
+  'polkit.action': 'செயல்',
+  'polkit.account': 'நிர்வாகி கணக்கு',
+  'polkit.asAccount': 'நிர்வாகி கணக்கு: {account}',
+  'polkit.password': 'கடவுச்சொல்',
+  'polkit.wrong': 'அந்தக் கடவுச்சொல் ஏற்கப்படவில்லை. மீண்டும் முயலவும்.',
+  'polkit.checking': 'சரிபார்க்கிறது…',
+  'polkit.authenticate': 'அங்கீகரி',
 }
 
 export default ta

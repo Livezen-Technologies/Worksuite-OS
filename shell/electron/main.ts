@@ -25,6 +25,7 @@ import { realExec } from './system'
 import { startDesktopHost } from './desktopHost'
 import { startPeripheralsHost } from './peripherals'
 import { startNotifications } from './notifications'
+import { runPolkitMode } from './polkitMode'
 import { fileHead, isWindowsProgram } from './winexe'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
@@ -101,7 +102,8 @@ const appRequest = parseAppArgs(process.argv)
 if (appRequest) {
   if (prepareAppMode(appRequest)) runAppMode(appRequest)
   else app.quit()
-} else startShell()
+} else if (process.argv.includes('--polkit-agent')) runPolkitMode() // WSOS-INT-010, electron/polkitMode.ts
+else startShell()
 
 function startShell() {
 app.whenReady().then(() => {

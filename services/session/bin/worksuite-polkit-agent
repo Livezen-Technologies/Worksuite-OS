@@ -1,11 +1,20 @@
 #!/bin/sh
 # polkit authentication agent for the WorkSuite session (WSOS-INT-010). Installed as
-# /usr/lib/worksuite/worksuite-polkit-agent. The agent dialog names the action, the requesting program and the
-# administrator account; PAM checks the password (and pam_faillock counts failures, WSOS-AUTH-004).
-# lxpolkit (GTK) is the qualified agent; mate-polkit is accepted as the alternative dependency.
+# /usr/lib/worksuite/worksuite-polkit-agent. The shell draws the prompt itself (`worksuite-shell --polkit-agent`,
+# shell/electron/polkit.ts): it names the action, the requesting program and the administrator account; PAM checks
+# the password through polkit-agent-helper-1 (and pam_faillock counts failures, WSOS-AUTH-004).
+# If the shell agent cannot register (exit 3: no polkit helper, no graphical session), lxpolkit or mate-polkit
+# takes over so administrator prompts keep working.
 set -u
+SHELL_BIN=${WORKSUITE_SHELL_BIN:-/usr/lib/worksuite/shell/worksuite-shell}
+if [ -x "$SHELL_BIN" ]; then
+    "$SHELL_BIN" --polkit-agent
+    rc=$?
+    [ "$rc" -ne 3 ] && exit "$rc"
+    echo "worksuite-polkit-agent: shell agent unavailable, using the fallback agent" >&2
+fi
 for a in /usr/bin/lxpolkit /usr/libexec/polkit-mate-authentication-agent-1 /usr/lib/mate-polkit/polkit-mate-authentication-agent-1; do
     [ -x "$a" ] && exec "$a"
 done
-echo "worksuite-polkit-agent: no polkit authentication agent installed (lxpolkit or mate-polkit)" >&2
+echo "worksuite-polkit-agent: no polkit authentication agent installed" >&2
 exit 1

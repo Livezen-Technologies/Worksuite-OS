@@ -173,3 +173,11 @@ contextBridge.exposeInMainWorld('worksuiteNotifications', {
   dismiss: (id: number) => ipcRenderer.invoke('ws:notificationDismiss', String(Number(id))),
   onChange: on('ws:notificationsChanged'),
 })
+
+// Administrator password prompt in the polkit agent process only — see electron/polkitMode.ts.
+contextBridge.exposeInMainWorld('worksuitePolkit', {
+  request: () => ipcRenderer.invoke('ws:polkitRequest'),
+  answer: (account: string, password: string) => ipcRenderer.invoke('ws:polkitAnswer', String(account), String(password)),
+  cancel: () => ipcRenderer.invoke('ws:polkitCancel'),
+  onChange: on('ws:polkitChanged'),
+})

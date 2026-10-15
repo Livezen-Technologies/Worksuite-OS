@@ -1195,6 +1195,16 @@ const en = {
   'offline.full_offline': 'Works offline',
   'offline.cached_read': 'Read-only offline',
   'offline.online_only': 'Needs internet',
+  // Shell-rendered polkit prompt (WSOS-INT-010)
+  'polkit.title': 'Administrator password required',
+  'polkit.program': 'Program',
+  'polkit.action': 'Action',
+  'polkit.account': 'Administrator account',
+  'polkit.asAccount': 'Administrator account: {account}',
+  'polkit.password': 'Password',
+  'polkit.wrong': 'That password was not accepted. Try again.',
+  'polkit.checking': 'Checking…',
+  'polkit.authenticate': 'Authenticate',
 } as const
 
 export type MessageKey = keyof typeof en

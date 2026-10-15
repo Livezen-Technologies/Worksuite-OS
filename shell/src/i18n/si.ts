@@ -1169,6 +1169,16 @@ const si: Partial<Record<MessageKey, string>> = {
   'offline.full_offline': 'නොබැඳිව ක්‍රියා කරයි',
   'offline.cached_read': 'නොබැඳිව කියවීමට පමණි',
   'offline.online_only': 'අන්තර්ජාලය අවශ්‍යයි',
+  // Shell-rendered polkit prompt (WSOS-INT-010)
+  'polkit.title': 'පරිපාලක මුරපදය අවශ්‍යයි',
+  'polkit.program': 'වැඩසටහන',
+  'polkit.action': 'ක්‍රියාව',
+  'polkit.account': 'පරිපාලක ගිණුම',
+  'polkit.asAccount': 'පරිපාලක ගිණුම: {account}',
+  'polkit.password': 'මුරපදය',
+  'polkit.wrong': 'එම මුරපදය පිළිගත්තේ නැත. නැවත උත්සාහ කරන්න.',
+  'polkit.checking': 'පරීක්ෂා කරමින්…',
+  'polkit.authenticate': 'සත්‍යාපනය කරන්න',
 }
 
 export default si

@@ -157,5 +157,15 @@ grep -q '^ExecStart=/usr/lib/worksuite/shell/worksuite-shell --safe$' "$R" && ok
 grep -q '^Conflicts=worksuite-shell.service$' "$R" && ok "recovery launcher replaces the shell" || bad "recovery launcher replaces the shell"
 grep -q -- '--recovery' "$R" && bad "session launcher is not the boot recovery screens" || ok "session launcher is not the boot recovery screens"
 
+# ---- polkit agent: shell-rendered first, native fallback only when it cannot register (WSOS-INT-010) ----
+printf '#!/bin/sh\necho "shell $*" >> "%s"\nexit "${SHELL_RC:-0}"\n' "$LOG" > "$T/stub/fake-shell"; chmod +x "$T/stub/fake-shell"
+: > "$LOG"
+WORKSUITE_SHELL_BIN="$T/stub/fake-shell" SHELL_RC=0 sh "$BIN/worksuite-polkit-agent" 2>"$T/pk.err"; rc=$?
+check "shell agent runs with --polkit-agent" "$(cat "$LOG")" "shell --polkit-agent"
+check "no fallback while the shell agent runs" "$rc:$(cat "$T/pk.err")" "0:"
+WORKSUITE_SHELL_BIN="$T/stub/fake-shell" SHELL_RC=3 sh "$BIN/worksuite-polkit-agent" 2>"$T/pk.err" >/dev/null &
+pk=$!; sleep 1; kill $pk 2>/dev/null; wait $pk 2>/dev/null
+grep -q 'using the fallback agent' "$T/pk.err" && ok "falls back when the shell agent cannot register" || bad "falls back when the shell agent cannot register"
+
 echo "1..$n"
 exit $fail
