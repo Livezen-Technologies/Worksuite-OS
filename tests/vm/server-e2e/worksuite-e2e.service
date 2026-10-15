@@ -1,0 +1,15 @@
+[Unit]
+Description=WorkSuite server end-to-end client (test images only)
+After=worksuite-device-agent.service worksuite-package-service.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/worksuite/e2e-client
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyS0
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target
