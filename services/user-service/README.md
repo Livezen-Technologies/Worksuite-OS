@@ -7,3 +7,11 @@ contract the shell uses (`dbus/lk.worksuite.Credentials1.xml`: `lk.worksuite.Cre
 
 Rules: caller UID must equal the session UID (SRS §10.3); refresh tokens only in Secret Service; access tokens in
 memory; `X-WS-Device` added to every desktop API call from the device credential, never from the user token.
+
+## Sync service runtime (`services/sync/src/main.ts`)
+
+- Config: `$XDG_CONFIG_HOME/worksuite/sync.json` (account, device credential, streams, module → data type). Absent = not signed in; the service exits 0.
+- State: `$XDG_STATE_HOME/worksuite/sync.db`. At start a failed `PRAGMA integrity_check` exports pending/failed outbox rows to `outbox-export-<time>.json`, sets the damaged file aside and starts fresh (SRS §9.2).
+- Tokens: requested from the credentials broker at `$XDG_RUNTIME_DIR/worksuite/credentials.sock` (`GetAccessToken`, `force_refresh` on 401).
+- Control: `$XDG_RUNTIME_DIR/worksuite/sync.sock` (0600, line-delimited JSON) with `Status`, `ListFailed`, `RetryFailed`, `SyncNow`, mirroring `lk.worksuite.Sync1`.
+- Loop: push until the outbox is drained or backed off, pull each stream, then sleep until the next retry or the interval (default 60 s). Expired sign-in and revoked devices stop polling until `SyncNow`. SIGTERM finishes the in-flight cycle and closes SQLite.
