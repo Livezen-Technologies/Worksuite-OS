@@ -70,6 +70,26 @@ contextBridge.exposeInMainWorld('worksuite', {
   filesList: (root: string, rel: string) => ipcRenderer.invoke('ws:filesList', String(root), String(rel)),
   filesOpen: (root: string, rel: string) => ipcRenderer.invoke('ws:filesOpen', String(root), String(rel)),
   filesStatus: (root: string) => ipcRenderer.invoke('ws:filesStatus', String(root)),
+  filesPlaces: () => ipcRenderer.invoke('ws:filesPlaces'),
+  filesStarred: () => ipcRenderer.invoke('ws:filesStarred'),
+  filesStar: (root: string, rel: string, on: boolean) => ipcRenderer.invoke('ws:filesStar', String(root), String(rel), on ? '1' : '0'),
+  filesRecent: () => ipcRenderer.invoke('ws:filesRecent'),
+  filesSearch: (root: string, rel: string, q: string, kind: string, days: number) => ipcRenderer.invoke('ws:filesSearch', String(root), String(rel), String(q), String(kind), String(days)),
+  filesMkdir: (root: string, rel: string, name: string) => ipcRenderer.invoke('ws:filesMkdir', String(root), String(rel), String(name)),
+  filesRename: (root: string, rel: string, name: string) => ipcRenderer.invoke('ws:filesRename', String(root), String(rel), String(name)),
+  filesTrash: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesTrash', String(root), JSON.stringify(rels.map(String))),
+  filesTrashList: () => ipcRenderer.invoke('ws:filesTrashList'),
+  filesTrashRestore: (ids: string[]) => ipcRenderer.invoke('ws:filesTrashRestore', JSON.stringify(ids.map(String))),
+  filesTrashDelete: (ids: string[] | 'all') => ipcRenderer.invoke('ws:filesTrashDelete', ids === 'all' ? 'all' : JSON.stringify(ids.map(String))),
+  filesPaste: (op: string, srcRoot: string, rels: string[], dstRoot: string, dstRel: string) => ipcRenderer.invoke('ws:filesPaste', String(op), String(srcRoot), JSON.stringify(rels.map(String)), String(dstRoot), String(dstRel)),
+  filesResolve: (id: string, r: string, all: boolean) => ipcRenderer.invoke('ws:filesResolve', String(id), String(r), all ? '1' : '0'),
+  filesCompress: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesCompress', String(root), JSON.stringify(rels.map(String))),
+  filesEject: (id: string) => ipcRenderer.invoke('ws:filesEject', String(id)),
+  onFilesJob: (cb: (e: unknown) => void) => {
+    const listener = (_e: unknown, payload: unknown) => cb(payload)
+    ipcRenderer.on('ws:filesJob', listener)
+    return () => { ipcRenderer.removeListener('ws:filesJob', listener) }
+  },
   // Only the event payload reaches the renderer, never the IPC event object.
   onPkgJob: (cb: (e: unknown) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload)

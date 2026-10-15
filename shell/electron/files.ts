@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 export type Root = 'home' | 'drive' | `media:${string}`
-export interface Entry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean }
+export interface Entry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean; items?: number | null }
 type Reply<T> = { ok: true; value: T } | { ok: false; error: string }
 
 export interface FileEnv { home: string; user: string; fileStates(dir: string): Promise<{ name: string; state: string }[] | null> }
@@ -48,7 +48,10 @@ export async function list(env: FileEnv, root: string, rel: string): Promise<Rep
       if (name.startsWith('.')) continue
       try {
         const st = lstatSync(path.join(p.full, name))
-        entries.set(name, { name, dir: st.isDirectory(), size: st.isFile() ? st.size : null, modified: st.mtimeMs, state: root === 'drive' ? 'pending' : 'local', local: true })
+        const dir = st.isDirectory()
+        let items: number | null = null
+        if (dir) try { items = readdirSync(path.join(p.full, name)).filter((n) => !n.startsWith('.')).length } catch { /* unreadable */ }
+        entries.set(name, { name, dir, size: st.isFile() ? st.size : null, modified: st.mtimeMs, state: root === 'drive' ? 'pending' : 'local', local: true, ...(dir ? { items } : {}) })
       } catch { /* vanished or unreadable */ }
     }
   }

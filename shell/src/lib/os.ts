@@ -48,6 +48,28 @@ export interface WorkSuiteApi {
   filesOpen(root: string, rel: string): Promise<CloudResult<true>>
   filesStatus(root: string): Promise<{ free_bytes: number | null; drive: { states: Record<string, number>; last_sync: number | null; service_state: string } | null }>
   onPkgJob(cb: (e: PackageJobEvent) => void): () => void
+  /** Sidebar: user name, XDG home folders that exist, removable media and the home disk's usage. */
+  filesPlaces(): Promise<FilePlaces>
+  /** Starred items (~/.config/worksuite/starred.json) as "root:rel" keys and as hits. */
+  filesStarred(): Promise<{ keys: string[]; hits: FileHit[] }>
+  filesStar(root: string, rel: string, on: boolean): Promise<CloudResult<string[]>>
+  /** Recently used files under Home (XDG recently-used.xbel). */
+  filesRecent(): Promise<FileHit[]>
+  /** File-name search below root/rel; kind 'any' | 'documents' | 'spreadsheets'; days 0 = any time. */
+  filesSearch(root: string, rel: string, q: string, kind: string, days: number): Promise<CloudResult<{ hits: FileHit[]; ms: number; truncated: boolean }>>
+  filesMkdir(root: string, rel: string, name: string): Promise<CloudResult<string>>
+  filesRename(root: string, rel: string, name: string): Promise<CloudResult<string>>
+  /** Move to the freedesktop.org Trash. */
+  filesTrash(root: string, rels: string[]): Promise<CloudResult<number>>
+  filesTrashList(): Promise<TrashItem[]>
+  filesTrashRestore(ids: string[]): Promise<CloudResult<{ restored: number; skipped: number }>>
+  filesTrashDelete(ids: string[] | 'all'): Promise<CloudResult<number>>
+  /** Start a copy/move/duplicate job; progress and conflicts arrive through onFilesJob. */
+  filesPaste(op: 'copy' | 'move' | 'duplicate', srcRoot: string, rels: string[], dstRoot: string, dstRel: string): Promise<CloudResult<string>>
+  filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel', all: boolean): Promise<CloudResult<true>>
+  filesCompress(root: string, rels: string[]): Promise<CloudResult<string>>
+  filesEject(id: string): Promise<CloudResult<true>>
+  onFilesJob(cb: (e: FileJob) => void): () => void
   // Settings › Devices: real devices from sysfs (electron/hardware.ts).
   hwDevices(): Promise<CloudResult<HwDevice[]>>
   /** Driver catalog. No service provides one yet, so Electron answers { ok: false, error: 'unavailable' }. */
@@ -187,8 +209,17 @@ export interface AppImageRecord {
   approved: boolean; imported_at: string; approved_at: string | null; categories: string[]
 }
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
+export interface FilePlaces { user: string; folders: string[]; media: { id: string; label: string }[]; disk: { device: string; used: number; total: number } | null }
+export interface FileHit { root: string; rel: string; name: string; dir: boolean; size: number | null; modified: number | null; where: string }
+export interface TrashItem { id: string; name: string; dir: boolean; size: number; orig: string; where: string; deleted: number | null }
+export interface FileStamp { size: number; modified: number }
+export interface FileJob {
+  id: string; op: 'copy' | 'move'; dest: string; state: 'running' | 'conflict' | 'done' | 'failed' | 'cancelled'
+  done: number; total: number; bytes_done: number; bytes_total: number
+  conflict: { name: string; incoming: FileStamp; existing: FileStamp; remaining: number } | null
+}
 /** state: Drive sync state (WSOS-DRV-002), "folder", "local" outside Drive, or "unknown" when sync isn't running. */
-export interface FileEntry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean }
+export interface FileEntry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean; items?: number | null }
 export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
 
 export function formatBytes(n: number | null): string {
@@ -351,9 +382,41 @@ const stub: WorkSuiteApi = {
       f('MBSL digital media tender.pdf', 'online-only', null, false), f('Care Me platform — clarifications.pdf', 'pending', 480_000),
       f('Site walk-through recording.mp4', 'error', 6_200_000_000) ] }
     if (!rel) return { ok: true, value: [f('Documents', 'local', null, true, true), f('Downloads', 'local', null, true, true), f('notes.txt', 'local', 2_000)] }
+    if (rel === 'Documents') return { ok: true, value: STUB_DOCS() }
     return { ok: true, value: [f('Invoice INV-2026-0418.pdf', 'local', 182_000), f('worksuite-agent-2.4.1.zip', 'local', 38_200_000)] }
   },
   async filesOpen() { return { ok: true, value: true } },
+  async filesPlaces() { return { user: 'alex', folders: ['Documents', 'Downloads', 'Pictures', 'Music', 'Videos'], media: [{ id: 'media:KINGSTON', label: 'KINGSTON' }], disk: { device: 'vda', used: 12.8e9, total: 39.5e9 } } },
+  async filesStarred() { return { keys: [], hits: [] } },
+  async filesStar() { return { ok: true, value: [] } },
+  async filesRecent() { return [] },
+  async filesSearch(_r, _rel, q) {
+    const hits = STUB_DOCS().filter((e) => e.name.toLowerCase().includes(q.trim().toLowerCase())).map((e) => ({ root: 'home', rel: `Documents/${e.name}`, name: e.name, dir: e.dir, size: e.size, modified: e.modified, where: '~/Documents' }))
+    return { ok: true, value: { hits, ms: 12, truncated: false } }
+  },
+  async filesMkdir(_r, rel, name) { return { ok: true, value: rel ? `${rel}/${name}` : name } },
+  async filesRename(_r, rel, name) { return { ok: true, value: name || rel } },
+  async filesTrash(_r, rels) { return { ok: true, value: rels.length } },
+  async filesTrashList() {
+    const d = (days: number) => Date.now() - days * 86_400_000
+    return [['Old logo.png', '~/Pictures', 0, 640_000], ['Draft v1.docx', '~/Documents/Projects', 1, 312_000], ['Invoice copy.pdf', '~/Downloads', 9, 220_000]]
+      .map(([name, where, days, size]) => ({ id: String(name), name: String(name), dir: false, size: Number(size), orig: '', where: String(where), deleted: d(Number(days)) }))
+  },
+  async filesTrashRestore(ids) { return { ok: true, value: { restored: ids.length, skipped: 0 } } },
+  async filesTrashDelete(ids) { return { ok: true, value: ids === 'all' ? 0 : ids.length } },
+  async filesPaste(op, _s, rels, dstRoot) {
+    // Preview: a copy that stops on one conflict, like the real job service.
+    const base: FileJob = { id: 'stubjob', op: op === 'move' ? 'move' : 'copy', dest: dstRoot.startsWith('media:') ? dstRoot.slice(6) : '~', state: 'running', done: 0, total: rels.length, bytes_done: 0, bytes_total: rels.length * 2_400_000, conflict: null }
+    setTimeout(() => stubFileJobs.forEach((l) => l({ ...base, state: 'conflict', conflict: { name: rels[0].split('/').pop()!, incoming: { size: 2_400_000, modified: Date.now() - 600_000 }, existing: { size: 2_100_000, modified: Date.now() - 12 * 86_400_000 }, remaining: rels.length - 1 } })), 50)
+    return { ok: true, value: base.id }
+  },
+  async filesResolve(id, r) {
+    stubFileJobs.forEach((l) => l({ id, op: 'copy', dest: 'KINGSTON', state: r === 'cancel' ? 'cancelled' : 'done', done: 1, total: 1, bytes_done: 2_400_000, bytes_total: 2_400_000, conflict: null }))
+    return { ok: true, value: true }
+  },
+  async filesCompress() { return { ok: false, error: 'unavailable' } },
+  async filesEject() { return { ok: false, error: 'unavailable' } },
+  onFilesJob(cb) { stubFileJobs.add(cb); return () => { stubFileJobs.delete(cb) } },
   async filesStatus(root) { return { free_bytes: 212e9, drive: root === 'drive' ? { states: { synced: 2, syncing: 1, pending: 1, conflict: 1, 'online-only': 1, error: 1 }, last_sync: Date.now() - 60_000, service_state: 'idle' } : null } },
   async deviceInfo() {
     return {
@@ -526,6 +589,14 @@ if (typeof window !== 'undefined') {
   if (k === 'downloading') setTimeout(() => emitJob(41, 'downloading'), 400)
   if (k === 'forced') { setTimeout(() => setOs({ state: 'installing', reason: null, restart_at: null }), 600); setTimeout(() => emitJob(50, 'applying'), 800) }
   if (k === 'failed') { setTimeout(() => emitJob(50, 'applying'), 400); setTimeout(() => setOs({ state: 'failed', reason: 'dpkg: error processing package linux-image-6.12 (--configure)' }), 700) }
+}
+const stubFileJobs = new Set<(e: FileJob) => void>()
+function STUB_DOCS(): FileEntry[] {
+  const day = 86_400_000, now = Date.now()
+  const e = (name: string, ago: number, size: number | null, items?: number): FileEntry => ({ name, dir: items != null, size, modified: now - ago * day, state: 'local', local: true, ...(items != null ? { items } : {}) })
+  return [e('Archive', 13, null, 230), e('Contracts', 3, null, 7), e('Invoices', 1, null, 48), e('Projects', 0, null, 12),
+    e('Budget 2027.xlsx', 0, 2_400_000), e('Brand guide.pdf', 14, 8_100_000), e('Logo export.png', 4, 640_000), e('Meeting notes.md', 5, 6_000),
+    e('Proposal v3.docx', 6, 312_000), e('Q4 plan draft.docx', 0, 184_000), e('Roadmap.pptx', 17, 5_600_000), e('Signed NDA.pdf', 3, 220_000), e('Team offsite.pptx', 1, 12_000_000)]
 }
 const stubOsListeners = new Set<(s: OsUpdateStatus) => void>()
 let stubUpdates = { packages: ['firefox-esr', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
