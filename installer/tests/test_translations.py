@@ -33,6 +33,33 @@ class TranslationFilesTest(unittest.TestCase):
                     continue
                 self.assertEqual(sorted(re.findall(r"%\d", m.findtext("source", ""))), sorted(re.findall(r"%\d", t.text or "")), ts.name)
 
+    def test_sinhala_and_tamil_are_complete(self):
+        # SRS §11.5: Sinhala and Tamil in 1.0. Machine-drafted until reviewed (docs/i18n/README.md).
+        for lang in extract.LANGS:
+            root = ET.parse(LANG / f"calamares-worksuite_{lang}.ts").getroot()
+            todo = [m.findtext("source") for m in root.iter("message") if m.find("translation").get("type") == "unfinished"]
+            self.assertEqual(todo, [], lang)
+            for m in root.iter("message"):
+                t = m.find("translation")
+                forms = [f.text for f in t.iter("numerusform")]
+                if "%n" in m.findtext("source", ""):
+                    self.assertEqual(m.get("numerus"), "yes")
+                    self.assertTrue(forms and all(f and "%n" in f for f in forms), m.findtext("source"))
+                else:
+                    self.assertTrue((t.text or "").strip(), m.findtext("source"))
+
+    def test_qm_files_are_named_for_the_branding(self):
+        # Calamares looks for <branding>/lang/calamares-<componentName>_<lang>.qm.
+        desc = (LANG.parent / "branding" / "worksuite" / "branding.desc").read_text(encoding="utf-8")
+        component = re.search(r"^componentName:\s*(\S+)", desc, re.M).group(1)
+        self.assertEqual(component, "worksuite")
+        build = (LANG / "build.sh").read_text(encoding="utf-8")
+        self.assertIn('out="$here/../branding/worksuite/lang"', build)
+        self.assertIn("calamares-worksuite_*.ts", build)
+        rules = (LANG.parent.parent / "packaging" / "debian" / "rules").read_text(encoding="utf-8")
+        self.assertIn("installer/lang/build.sh", rules)
+        self.assertIn("cp -a installer/branding/worksuite/.", rules)
+
     def test_unescape(self):
         self.assertEqual(extract.unescape('"a \\"b\\"" "c"'), 'a "b"c')
 

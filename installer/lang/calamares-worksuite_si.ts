@@ -103,348 +103,351 @@
     <name>finishedq</name>
     <message>
       <source>INSTALLATION STOPPED</source>
-      <translation type="unfinished" />
+      <translation>ස්ථාපනය නැවතුණි</translation>
     </message>
     <message>
       <source>WorkSuite OS was not installed. If the disk was already being changed, it may hold a partial install.</source>
-      <translation type="unfinished" />
+      <translation>WorkSuite OS ස්ථාපනය නොවීය. තැටිය දැනටමත් වෙනස් වෙමින් තිබුණේ නම්, එහි අර්ධ ස්ථාපනයක් තිබිය හැක.</translation>
     </message>
     <message>
       <source>Technical details</source>
-      <translation type="unfinished" />
+      <translation>තාක්ෂණික විස්තර</translation>
     </message>
     <message>
       <source>Usually fixed by:</source>
-      <translation type="unfinished" />
+      <translation>සාමාන්‍යයෙන් නිවැරදි වන්නේ:</translation>
     </message>
     <message>
       <source>restarting and installing again. If it keeps failing, the disk may be in use or failing; the full log is in /root/.cache/calamares/session.log.</source>
-      <translation type="unfinished" />
+      <translation>නැවත ආරම්භ කර නැවත ස්ථාපනය කිරීමෙනි. එය දිගටම අසාර්ථක වේ නම්, තැටිය භාවිතයේ හෝ දෝෂ සහිත විය හැක; සම්පූර්ණ ලොගය /root/.cache/calamares/session.log හි ඇත.</translation>
     </message>
     <message>
       <source>STEP 6 · FAILED</source>
-      <translation type="unfinished" />
+      <translation>පියවර 6 · අසාර්ථකයි</translation>
     </message>
     <message>
       <source>STEP 6 · COMPLETE</source>
-      <translation type="unfinished" />
+      <translation>පියවර 6 · සම්පූර්ණයි</translation>
     </message>
     <message>
       <source>Installation failed</source>
-      <translation type="unfinished" />
+      <translation>ස්ථාපනය අසාර්ථක විය</translation>
     </message>
     <message>
       <source>WorkSuite OS is installed</source>
-      <translation type="unfinished" />
+      <translation>WorkSuite OS ස්ථාපිතයි</translation>
     </message>
     <message>
       <source>Remove the installation media, then restart to sign in.</source>
-      <translation type="unfinished" />
+      <translation>ස්ථාපන මාධ්‍යය ඉවත් කර, පුරනය වීමට නැවත අරඹන්න.</translation>
     </message>
     <message>
       <source>Restart later</source>
-      <translation type="unfinished" />
+      <translation>පසුව නැවත අරඹන්න</translation>
     </message>
     <message>
       <source>Restart now</source>
-      <translation type="unfinished" />
+      <translation>දැන් නැවත අරඹන්න</translation>
     </message>
-    <message>
+    <message numerus="yes">
       <source>Restarting automatically in %n second(s)</source>
-      <translation type="unfinished" />
+      <translation>
+        <numerusform>තත්පර %n කින් ස්වයංක්‍රීයව නැවත ඇරඹේ</numerusform>
+        <numerusform>තත්පර %n කින් ස්වයංක්‍රීයව නැවත ඇරඹේ</numerusform>
+      </translation>
     </message>
   </context>
   <context>
     <name>keyboardq</name>
     <message>
       <source>Step 1 · Keyboard</source>
-      <translation type="unfinished" />
+      <translation>පියවර 1 · යතුරු පුවරුව</translation>
     </message>
     <message>
       <source>Keyboard layout</source>
-      <translation type="unfinished" />
+      <translation>යතුරු පුවරු පිරිසැලසුම</translation>
     </message>
     <message>
       <source>Pick your layout, then type in the box below: the keys you press light up.</source>
-      <translation type="unfinished" />
+      <translation>ඔබේ පිරිසැලසුම තෝරා, පහත කොටුවේ ටයිප් කරන්න: ඔබ ඔබන යතුරු දැල්වේ.</translation>
     </message>
     <message>
       <source>Layout</source>
-      <translation type="unfinished" />
+      <translation>පිරිසැලසුම</translation>
     </message>
     <message>
       <source>Variant</source>
-      <translation type="unfinished" />
+      <translation>ප්‍රභේදය</translation>
     </message>
     <message>
       <source>space</source>
-      <translation type="unfinished" />
+      <translation>හිස්තැන</translation>
     </message>
     <message>
       <source>Test your keyboard</source>
-      <translation type="unfinished" />
+      <translation>ඔබේ යතුරු පුවරුව පරීක්ෂා කරන්න</translation>
     </message>
     <message>
       <source>Type here — keys light up above</source>
-      <translation type="unfinished" />
+      <translation>මෙහි ටයිප් කරන්න — ඉහළ යතුරු දැල්වේ</translation>
     </message>
   </context>
   <context>
     <name>localeq</name>
     <message>
       <source>Step 4 · Region and city</source>
-      <translation type="unfinished" />
+      <translation>පියවර 4 · කලාපය සහ නගරය</translation>
     </message>
     <message>
       <source>Where are you?</source>
-      <translation type="unfinished" />
+      <translation>ඔබ සිටින්නේ කොහේද?</translation>
     </message>
     <message>
       <source>Time zone</source>
-      <translation type="unfinished" />
+      <translation>වේලා කලාපය</translation>
     </message>
     <message>
       <source>Region</source>
-      <translation type="unfinished" />
+      <translation>කලාපය</translation>
     </message>
     <message>
       <source>City</source>
-      <translation type="unfinished" />
+      <translation>නගරය</translation>
     </message>
   </context>
   <context>
     <name>show</name>
     <message>
       <source>STEP 6 · INSTALL</source>
-      <translation type="unfinished" />
+      <translation>පියවර 6 · ස්ථාපනය</translation>
     </message>
     <message>
       <source>Installing WorkSuite OS</source>
-      <translation type="unfinished" />
+      <translation>WorkSuite OS ස්ථාපනය වෙමින්</translation>
     </message>
     <message>
       <source>Keep the computer plugged in. You can't go back from here.</source>
-      <translation type="unfinished" />
+      <translation>පරිගණකය විදුලියට සම්බන්ධව තබන්න. ඔබට මෙතැනින් ආපසු යා නොහැක.</translation>
     </message>
     <message>
       <source>Copy files</source>
-      <translation type="unfinished" />
+      <translation>ගොනු පිටපත් කරන්න</translation>
     </message>
     <message>
       <source>Partition and encrypt the disk, then unpack the system image</source>
-      <translation type="unfinished" />
+      <translation>තැටිය කොටස් කර සංකේතනය කර, පසුව පද්ධති රූපය දිග හරින්න</translation>
     </message>
     <message>
       <source>Configure system</source>
-      <translation type="unfinished" />
+      <translation>පද්ධතිය වින්‍යාස කරන්න</translation>
     </message>
     <message>
       <source>Create your account, set the computer name, time zone, keyboard and language</source>
-      <translation type="unfinished" />
+      <translation>ඔබේ ගිණුම සාදා, පරිගණක නම, වේලා කලාපය, යතුරු පුවරුව සහ භාෂාව සකසන්න</translation>
     </message>
     <message>
       <source>Set up startup</source>
-      <translation type="unfinished" />
+      <translation>ආරම්භය සකසන්න</translation>
     </message>
     <message>
       <source>Install the bootloader and prepare disk unlocking</source>
-      <translation type="unfinished" />
+      <translation>ආරම්භක පූරකය ස්ථාපනය කර තැටි අගුළු හැරීම සූදානම් කරන්න</translation>
     </message>
     <message>
       <source>Recovery key</source>
-      <translation type="unfinished" />
+      <translation>ප්‍රතිසාධන යතුර</translation>
     </message>
     <message>
       <source>Generate the key that can unlock your disk if you forget the passphrase</source>
-      <translation type="unfinished" />
+      <translation>ඔබට මුරවැකිය අමතක වුවහොත් ඔබේ තැටිය අගුළු හැරිය හැකි යතුර ජනනය කරන්න</translation>
     </message>
   </context>
   <context>
     <name>summaryq</name>
     <message>
       <source>Step 5 · Summary</source>
-      <translation type="unfinished" />
+      <translation>පියවර 5 · සාරාංශය</translation>
     </message>
     <message>
       <source>Check your choices</source>
-      <translation type="unfinished" />
+      <translation>ඔබේ තේරීම් පරීක්ෂා කරන්න</translation>
     </message>
     <message>
       <source>Nothing has changed on your disk yet.</source>
-      <translation type="unfinished" />
+      <translation>ඔබේ තැටියේ තවම කිසිවක් වෙනස් වී නැත.</translation>
     </message>
   </context>
   <context>
     <name>usersq</name>
     <message>
       <source>Step 3 · Name and password</source>
-      <translation type="unfinished" />
+      <translation>පියවර 3 · නම සහ මුරපදය</translation>
     </message>
     <message>
       <source>Step 3 · Computer name</source>
-      <translation type="unfinished" />
+      <translation>පියවර 3 · පරිගණක නම</translation>
     </message>
     <message>
       <source>Who will use this computer?</source>
-      <translation type="unfinished" />
+      <translation>මෙම පරිගණකය භාවිත කරන්නේ කවුද?</translation>
     </message>
     <message>
       <source>Name this computer</source>
-      <translation type="unfinished" />
+      <translation>මෙම පරිගණකය නම් කරන්න</translation>
     </message>
     <message>
       <source>Other devices on your network will see it by this name.</source>
-      <translation type="unfinished" />
+      <translation>ඔබේ ජාලයේ අනෙක් උපාංග එය මෙම නමින් දකිනු ඇත.</translation>
     </message>
     <message>
       <source>Your full name</source>
-      <translation type="unfinished" />
+      <translation>ඔබේ සම්පූර්ණ නම</translation>
     </message>
     <message>
       <source>Username for signing in</source>
-      <translation type="unfinished" />
+      <translation>පුරනය වීම සඳහා පරිශීලක නාමය</translation>
     </message>
     <message>
       <source>Lowercase letters, numbers, - and _. Filled in from your name.</source>
-      <translation type="unfinished" />
+      <translation>කුඩා අකුරු, අංක, - සහ _. ඔබේ නමෙන් පුරවා ඇත.</translation>
     </message>
     <message>
       <source>Password</source>
-      <translation type="unfinished" />
+      <translation>මුරපදය</translation>
     </message>
     <message>
       <source>Confirm password</source>
-      <translation type="unfinished" />
+      <translation>මුරපදය තහවුරු කරන්න</translation>
     </message>
     <message>
       <source>Passwords do not match</source>
-      <translation type="unfinished" />
+      <translation>මුරපද නොගැළපේ</translation>
     </message>
     <message>
       <source>Passwords match</source>
-      <translation type="unfinished" />
+      <translation>මුරපද ගැළපේ</translation>
     </message>
     <message>
       <source>At least 8 characters</source>
-      <translation type="unfinished" />
+      <translation>අවම වශයෙන් අක්ෂර 8 ක්</translation>
     </message>
     <message>
       <source>Computer name</source>
-      <translation type="unfinished" />
+      <translation>පරිගණක නම</translation>
     </message>
     <message>
       <source>Lowercase letters, numbers and hyphens</source>
-      <translation type="unfinished" />
+      <translation>කුඩා අකුරු, අංක සහ ඉරි</translation>
     </message>
     <message>
       <source>Suggestions</source>
-      <translation type="unfinished" />
+      <translation>යෝජනා</translation>
     </message>
   </context>
   <context>
     <name>welcomeq</name>
     <message>
       <source>Step 1 · Language</source>
-      <translation type="unfinished" />
+      <translation>පියවර 1 · භාෂාව</translation>
     </message>
     <message>
       <source>Choose your language</source>
-      <translation type="unfinished" />
+      <translation>ඔබේ භාෂාව තෝරන්න</translation>
     </message>
     <message>
       <source>Used for the installer and your new system.</source>
-      <translation type="unfinished" />
+      <translation>ස්ථාපකය සහ ඔබේ නව පද්ධතිය සඳහා භාවිත වේ.</translation>
     </message>
     <message>
       <source>Express install</source>
-      <translation type="unfinished" />
+      <translation>ඉක්මන් ස්ථාපනය</translation>
     </message>
     <message>
       <source>Sensible defaults: US keyboard and Asia/Colombo time. You can change both later in Settings.</source>
-      <translation type="unfinished" />
+      <translation>සුදුසු පෙරනිමි: US යතුරු පුවරුව සහ Asia/Colombo වේලාව. ඔබට දෙකම පසුව සැකසුම් තුළ වෙනස් කළ හැක.</translation>
     </message>
     <message>
       <source>Custom install</source>
-      <translation type="unfinished" />
+      <translation>අභිරුචි ස්ථාපනය</translation>
     </message>
     <message>
       <source>Choose keyboard, time zone and every other setting yourself.</source>
-      <translation type="unfinished" />
+      <translation>යතුරු පුවරුව, වේලා කලාපය සහ අනෙකුත් සෑම සැකසුමක්ම ඔබම තෝරන්න.</translation>
     </message>
     <message>
       <source>Search languages</source>
-      <translation type="unfinished" />
+      <translation>භාෂා සොයන්න</translation>
     </message>
   </context>
   <context>
     <name>WorksuiteConfirmViewStep</name>
     <message>
       <source>Confirm erase</source>
-      <translation type="unfinished" />
+      <translation>මැකීම තහවුරු කරන්න</translation>
     </message>
     <message>
       <source>Recovery key</source>
-      <translation type="unfinished" />
+      <translation>ප්‍රතිසාධන යතුර</translation>
     </message>
     <message>
       <source>Type the disk name to confirm</source>
-      <translation type="unfinished" />
+      <translation>තහවුරු කිරීමට තැටියේ නම ටයිප් කරන්න</translation>
     </message>
     <message>
       <source>I've saved my recovery key somewhere safe</source>
-      <translation type="unfinished" />
+      <translation>මම මගේ ප්‍රතිසාධන යතුර ආරක්ෂිත තැනක සුරැකුවෙමි</translation>
     </message>
     <message>
       <source>STEP 5 · CONFIRM DISK</source>
-      <translation type="unfinished" />
+      <translation>පියවර 5 · තැටිය තහවුරු කරන්න</translation>
     </message>
     <message>
       <source>This will erase your disk</source>
-      <translation type="unfinished" />
+      <translation>මෙය ඔබේ තැටිය මකා දමයි</translation>
     </message>
     <message>
       <source>The target disk could not be identified. Go back and choose the disk again.</source>
-      <translation type="unfinished" />
+      <translation>ඉලක්ක තැටිය හඳුනාගත නොහැකි විය. ආපසු ගොස් තැටිය නැවත තෝරන්න.</translation>
     </message>
     <message>
       <source>After you press Install, these changes can't be undone.</source>
-      <translation type="unfinished" />
+      <translation>ඔබ ස්ථාපනය ඔබූ පසු, මෙම වෙනස්කම් අහෝසි කළ නොහැක.</translation>
     </message>
     <message>
       <source>Unknown disk</source>
-      <translation type="unfinished" />
+      <translation>නොදන්නා තැටිය</translation>
     </message>
     <message>
       <source>DELETE</source>
-      <translation type="unfinished" />
+      <translation>මකන්න</translation>
     </message>
     <message>
       <source>Existing partition table and all data</source>
-      <translation type="unfinished" />
+      <translation>පවතින කොටස් වගුව සහ සියලු දත්ත</translation>
     </message>
     <message>
       <source>FORMAT</source>
-      <translation type="unfinished" />
+      <translation>ආකෘතිගත කරන්න</translation>
     </message>
     <message>
       <source>CREATE</source>
-      <translation type="unfinished" />
+      <translation>සාදන්න</translation>
     </message>
     <message>
       <source>Type %1 to confirm that all data on it will be permanently deleted</source>
-      <translation type="unfinished" />
+      <translation>එහි ඇති සියලු දත්ත ස්ථිරවම මැකී යන බව තහවුරු කිරීමට %1 ටයිප් කරන්න</translation>
     </message>
     <message>
       <source>STEP 6 · RECOVERY KEY</source>
-      <translation type="unfinished" />
+      <translation>පියවර 6 · ප්‍රතිසාධන යතුර</translation>
     </message>
     <message>
       <source>Save your recovery key</source>
-      <translation type="unfinished" />
+      <translation>ඔබේ ප්‍රතිසාධන යතුර සුරකින්න</translation>
     </message>
     <message>
       <source>If you forget your disk passphrase, this key is the only way to unlock your files. It is shown once and is not stored on this computer.</source>
-      <translation type="unfinished" />
+      <translation>ඔබට ඔබේ තැටි මුරවැකිය අමතක වුවහොත්, ඔබේ ගොනු අගුළු හැරීමට ඇති එකම මාර්ගය මෙම යතුරයි. එය එක් වරක් පමණක් පෙන්වන අතර මෙම පරිගණකයේ ගබඩා නොකෙරේ.</translation>
     </message>
   </context>
 </TS>

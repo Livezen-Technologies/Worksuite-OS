@@ -19,6 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 INSTALLER = HERE.parent
 LANGS = ("si", "ta")
+NUMERUS_FORMS = {"si": 2, "ta": 2}
 STR = r'"(?:[^"\\]|\\.)*"'
 QML_RE = re.compile(r"\bqsTr\(\s*(" + STR + r")")
 CPP_RE = re.compile(r"\btr\(\s*((?:" + STR + r"\s*)+)")
@@ -64,8 +65,10 @@ def existing(lang: str) -> dict[tuple[str, str], str]:
         name = ctx.findtext("name", "")
         for msg in ctx.iter("message"):
             t = msg.find("translation")
-            if t is not None and (t.text or "") and t.get("type") not in ("unfinished", "obsolete"):
-                found[(name, msg.findtext("source", ""))] = t.text or ""
+            forms = [f.text or "" for f in t.iter("numerusform")] if t is not None else []
+            text = forms[0] if forms else (t.text or "") if t is not None else ""
+            if text.strip() and t.get("type") not in ("unfinished", "obsolete"):
+                found[(name, msg.findtext("source", ""))] = text
     return found
 
 
@@ -79,10 +82,16 @@ def write(lang: str, src: dict[str, list[str]]) -> None:
             m = ET.SubElement(c, "message")
             ET.SubElement(m, "source").text = s
             tr = ET.SubElement(m, "translation")
-            if (ctx, s) in done:
-                tr.text = done[(ctx, s)]
-            else:
+            text = done.get((ctx, s))
+            if text is None:
                 tr.set("type", "unfinished")
+            if "%n" in s:
+                # qsTr(…, "", n): a plural message; Sinhala and Tamil both have two forms (one, other).
+                m.set("numerus", "yes")
+                for _ in range(NUMERUS_FORMS.get(lang, 2)):
+                    ET.SubElement(tr, "numerusform").text = text
+            else:
+                tr.text = text
     ET.indent(root)
     body = ET.tostring(root, encoding="unicode")
     ts_path(lang).write_text('<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE TS>\n' + body + "\n", encoding="utf-8")

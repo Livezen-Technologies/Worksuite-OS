@@ -1,4 +1,7 @@
 ---
+# Calamares loads this branding's translations from lang/calamares-<componentName>_<language>.qm
+# (calamares-worksuite_si.qm, calamares-worksuite_ta.qm), compiled from installer/lang/*.ts by installer/lang/build.sh.
+# Qt falls back from a regional id to the language (ta_IN → ta), so one file per language covers both.
 componentName: worksuite
 welcomeStyleCalamares: false
 welcomeExpandingLogo: false

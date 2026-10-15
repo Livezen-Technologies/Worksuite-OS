@@ -103,348 +103,351 @@
     <name>finishedq</name>
     <message>
       <source>INSTALLATION STOPPED</source>
-      <translation type="unfinished" />
+      <translation>நிறுவல் நிறுத்தப்பட்டது</translation>
     </message>
     <message>
       <source>WorkSuite OS was not installed. If the disk was already being changed, it may hold a partial install.</source>
-      <translation type="unfinished" />
+      <translation>WorkSuite OS நிறுவப்படவில்லை. வட்டு ஏற்கனவே மாற்றப்பட்டுக்கொண்டிருந்தால், அதில் பகுதி நிறுவல் இருக்கலாம்.</translation>
     </message>
     <message>
       <source>Technical details</source>
-      <translation type="unfinished" />
+      <translation>தொழில்நுட்ப விவரங்கள்</translation>
     </message>
     <message>
       <source>Usually fixed by:</source>
-      <translation type="unfinished" />
+      <translation>பொதுவாகச் சரியாவது:</translation>
     </message>
     <message>
       <source>restarting and installing again. If it keeps failing, the disk may be in use or failing; the full log is in /root/.cache/calamares/session.log.</source>
-      <translation type="unfinished" />
+      <translation>மறுதொடக்கம் செய்து மீண்டும் நிறுவுவதன் மூலம். தொடர்ந்து தோல்வியடைந்தால், வட்டு பயன்பாட்டில் இருக்கலாம் அல்லது பழுதடைந்திருக்கலாம்; முழுப் பதிவு /root/.cache/calamares/session.log இல் உள்ளது.</translation>
     </message>
     <message>
       <source>STEP 6 · FAILED</source>
-      <translation type="unfinished" />
+      <translation>படி 6 · தோல்வி</translation>
     </message>
     <message>
       <source>STEP 6 · COMPLETE</source>
-      <translation type="unfinished" />
+      <translation>படி 6 · முடிந்தது</translation>
     </message>
     <message>
       <source>Installation failed</source>
-      <translation type="unfinished" />
+      <translation>நிறுவல் தோல்வியடைந்தது</translation>
     </message>
     <message>
       <source>WorkSuite OS is installed</source>
-      <translation type="unfinished" />
+      <translation>WorkSuite OS நிறுவப்பட்டது</translation>
     </message>
     <message>
       <source>Remove the installation media, then restart to sign in.</source>
-      <translation type="unfinished" />
+      <translation>நிறுவல் ஊடகத்தை அகற்றி, உள்நுழைய மறுதொடக்கம் செய்யுங்கள்.</translation>
     </message>
     <message>
       <source>Restart later</source>
-      <translation type="unfinished" />
+      <translation>பின்னர் மறுதொடக்கு</translation>
     </message>
     <message>
       <source>Restart now</source>
-      <translation type="unfinished" />
+      <translation>இப்போது மறுதொடக்கு</translation>
     </message>
-    <message>
+    <message numerus="yes">
       <source>Restarting automatically in %n second(s)</source>
-      <translation type="unfinished" />
+      <translation>
+        <numerusform>%n விநாடிகளில் தானாக மறுதொடக்கம் ஆகும்</numerusform>
+        <numerusform>%n விநாடிகளில் தானாக மறுதொடக்கம் ஆகும்</numerusform>
+      </translation>
     </message>
   </context>
   <context>
     <name>keyboardq</name>
     <message>
       <source>Step 1 · Keyboard</source>
-      <translation type="unfinished" />
+      <translation>படி 1 · விசைப்பலகை</translation>
     </message>
     <message>
       <source>Keyboard layout</source>
-      <translation type="unfinished" />
+      <translation>விசைப்பலகை அமைப்பு</translation>
     </message>
     <message>
       <source>Pick your layout, then type in the box below: the keys you press light up.</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் அமைப்பைத் தேர்ந்தெடுத்து, கீழே உள்ள பெட்டியில் தட்டச்சிடுங்கள்: நீங்கள் அழுத்தும் விசைகள் ஒளிரும்.</translation>
     </message>
     <message>
       <source>Layout</source>
-      <translation type="unfinished" />
+      <translation>அமைப்பு</translation>
     </message>
     <message>
       <source>Variant</source>
-      <translation type="unfinished" />
+      <translation>வகை</translation>
     </message>
     <message>
       <source>space</source>
-      <translation type="unfinished" />
+      <translation>இடைவெளி</translation>
     </message>
     <message>
       <source>Test your keyboard</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் விசைப்பலகையைச் சோதிக்கவும்</translation>
     </message>
     <message>
       <source>Type here — keys light up above</source>
-      <translation type="unfinished" />
+      <translation>இங்கே தட்டச்சிடுக — மேலே விசைகள் ஒளிரும்</translation>
     </message>
   </context>
   <context>
     <name>localeq</name>
     <message>
       <source>Step 4 · Region and city</source>
-      <translation type="unfinished" />
+      <translation>படி 4 · பிராந்தியமும் நகரமும்</translation>
     </message>
     <message>
       <source>Where are you?</source>
-      <translation type="unfinished" />
+      <translation>நீங்கள் எங்கே இருக்கிறீர்கள்?</translation>
     </message>
     <message>
       <source>Time zone</source>
-      <translation type="unfinished" />
+      <translation>நேர மண்டலம்</translation>
     </message>
     <message>
       <source>Region</source>
-      <translation type="unfinished" />
+      <translation>பிராந்தியம்</translation>
     </message>
     <message>
       <source>City</source>
-      <translation type="unfinished" />
+      <translation>நகரம்</translation>
     </message>
   </context>
   <context>
     <name>show</name>
     <message>
       <source>STEP 6 · INSTALL</source>
-      <translation type="unfinished" />
+      <translation>படி 6 · நிறுவல்</translation>
     </message>
     <message>
       <source>Installing WorkSuite OS</source>
-      <translation type="unfinished" />
+      <translation>WorkSuite OS நிறுவப்படுகிறது</translation>
     </message>
     <message>
       <source>Keep the computer plugged in. You can't go back from here.</source>
-      <translation type="unfinished" />
+      <translation>கணினியை மின்னிணைப்பில் வைத்திருங்கள். இங்கிருந்து பின்செல்ல முடியாது.</translation>
     </message>
     <message>
       <source>Copy files</source>
-      <translation type="unfinished" />
+      <translation>கோப்புகளை நகலெடு</translation>
     </message>
     <message>
       <source>Partition and encrypt the disk, then unpack the system image</source>
-      <translation type="unfinished" />
+      <translation>வட்டைப் பகிர்ந்து மறையாக்கி, பின் கணினிப் படிமத்தை விரி</translation>
     </message>
     <message>
       <source>Configure system</source>
-      <translation type="unfinished" />
+      <translation>கணினியை உள்ளமை</translation>
     </message>
     <message>
       <source>Create your account, set the computer name, time zone, keyboard and language</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் கணக்கை உருவாக்கி, கணினிப் பெயர், நேர மண்டலம், விசைப்பலகை, மொழியை அமை</translation>
     </message>
     <message>
       <source>Set up startup</source>
-      <translation type="unfinished" />
+      <translation>தொடக்கத்தை அமை</translation>
     </message>
     <message>
       <source>Install the bootloader and prepare disk unlocking</source>
-      <translation type="unfinished" />
+      <translation>துவக்க ஏற்றியை நிறுவி வட்டைத் திறக்கத் தயார்படுத்து</translation>
     </message>
     <message>
       <source>Recovery key</source>
-      <translation type="unfinished" />
+      <translation>மீட்பு விசை</translation>
     </message>
     <message>
       <source>Generate the key that can unlock your disk if you forget the passphrase</source>
-      <translation type="unfinished" />
+      <translation>கடவுச்சொற்றொடரை மறந்தால் உங்கள் வட்டைத் திறக்கக்கூடிய விசையை உருவாக்கு</translation>
     </message>
   </context>
   <context>
     <name>summaryq</name>
     <message>
       <source>Step 5 · Summary</source>
-      <translation type="unfinished" />
+      <translation>படி 5 · சுருக்கம்</translation>
     </message>
     <message>
       <source>Check your choices</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் தேர்வுகளைச் சரிபார்க்கவும்</translation>
     </message>
     <message>
       <source>Nothing has changed on your disk yet.</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் வட்டில் இன்னும் எதுவும் மாறவில்லை.</translation>
     </message>
   </context>
   <context>
     <name>usersq</name>
     <message>
       <source>Step 3 · Name and password</source>
-      <translation type="unfinished" />
+      <translation>படி 3 · பெயரும் கடவுச்சொல்லும்</translation>
     </message>
     <message>
       <source>Step 3 · Computer name</source>
-      <translation type="unfinished" />
+      <translation>படி 3 · கணினிப் பெயர்</translation>
     </message>
     <message>
       <source>Who will use this computer?</source>
-      <translation type="unfinished" />
+      <translation>இந்தக் கணினியை யார் பயன்படுத்துவார்கள்?</translation>
     </message>
     <message>
       <source>Name this computer</source>
-      <translation type="unfinished" />
+      <translation>இந்தக் கணினிக்குப் பெயரிடுங்கள்</translation>
     </message>
     <message>
       <source>Other devices on your network will see it by this name.</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் பிணையத்தில் உள்ள பிற சாதனங்கள் இதை இந்தப் பெயரில் பார்க்கும்.</translation>
     </message>
     <message>
       <source>Your full name</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் முழுப் பெயர்</translation>
     </message>
     <message>
       <source>Username for signing in</source>
-      <translation type="unfinished" />
+      <translation>உள்நுழைவதற்கான பயனர்பெயர்</translation>
     </message>
     <message>
       <source>Lowercase letters, numbers, - and _. Filled in from your name.</source>
-      <translation type="unfinished" />
+      <translation>சிற்றெழுத்துகள், எண்கள், - மற்றும் _. உங்கள் பெயரிலிருந்து நிரப்பப்பட்டது.</translation>
     </message>
     <message>
       <source>Password</source>
-      <translation type="unfinished" />
+      <translation>கடவுச்சொல்</translation>
     </message>
     <message>
       <source>Confirm password</source>
-      <translation type="unfinished" />
+      <translation>கடவுச்சொல்லை உறுதிப்படுத்துக</translation>
     </message>
     <message>
       <source>Passwords do not match</source>
-      <translation type="unfinished" />
+      <translation>கடவுச்சொற்கள் பொருந்தவில்லை</translation>
     </message>
     <message>
       <source>Passwords match</source>
-      <translation type="unfinished" />
+      <translation>கடவுச்சொற்கள் பொருந்துகின்றன</translation>
     </message>
     <message>
       <source>At least 8 characters</source>
-      <translation type="unfinished" />
+      <translation>குறைந்தது 8 எழுத்துகள்</translation>
     </message>
     <message>
       <source>Computer name</source>
-      <translation type="unfinished" />
+      <translation>கணினிப் பெயர்</translation>
     </message>
     <message>
       <source>Lowercase letters, numbers and hyphens</source>
-      <translation type="unfinished" />
+      <translation>சிற்றெழுத்துகள், எண்கள் மற்றும் இடைக்கோடுகள்</translation>
     </message>
     <message>
       <source>Suggestions</source>
-      <translation type="unfinished" />
+      <translation>பரிந்துரைகள்</translation>
     </message>
   </context>
   <context>
     <name>welcomeq</name>
     <message>
       <source>Step 1 · Language</source>
-      <translation type="unfinished" />
+      <translation>படி 1 · மொழி</translation>
     </message>
     <message>
       <source>Choose your language</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்</translation>
     </message>
     <message>
       <source>Used for the installer and your new system.</source>
-      <translation type="unfinished" />
+      <translation>நிறுவிக்கும் உங்கள் புதிய கணினிக்கும் பயன்படும்.</translation>
     </message>
     <message>
       <source>Express install</source>
-      <translation type="unfinished" />
+      <translation>விரைவு நிறுவல்</translation>
     </message>
     <message>
       <source>Sensible defaults: US keyboard and Asia/Colombo time. You can change both later in Settings.</source>
-      <translation type="unfinished" />
+      <translation>பொருத்தமான இயல்புநிலைகள்: US விசைப்பலகை, Asia/Colombo நேரம். இரண்டையும் பின்னர் அமைப்புகளில் மாற்றலாம்.</translation>
     </message>
     <message>
       <source>Custom install</source>
-      <translation type="unfinished" />
+      <translation>தனிப்பயன் நிறுவல்</translation>
     </message>
     <message>
       <source>Choose keyboard, time zone and every other setting yourself.</source>
-      <translation type="unfinished" />
+      <translation>விசைப்பலகை, நேர மண்டலம் உட்பட ஒவ்வொரு அமைப்பையும் நீங்களே தேர்ந்தெடுங்கள்.</translation>
     </message>
     <message>
       <source>Search languages</source>
-      <translation type="unfinished" />
+      <translation>மொழிகளைத் தேடு</translation>
     </message>
   </context>
   <context>
     <name>WorksuiteConfirmViewStep</name>
     <message>
       <source>Confirm erase</source>
-      <translation type="unfinished" />
+      <translation>அழிப்பை உறுதிப்படுத்து</translation>
     </message>
     <message>
       <source>Recovery key</source>
-      <translation type="unfinished" />
+      <translation>மீட்பு விசை</translation>
     </message>
     <message>
       <source>Type the disk name to confirm</source>
-      <translation type="unfinished" />
+      <translation>உறுதிப்படுத்த வட்டின் பெயரைத் தட்டச்சிடுக</translation>
     </message>
     <message>
       <source>I've saved my recovery key somewhere safe</source>
-      <translation type="unfinished" />
+      <translation>என் மீட்பு விசையைப் பாதுகாப்பான இடத்தில் சேமித்துவிட்டேன்</translation>
     </message>
     <message>
       <source>STEP 5 · CONFIRM DISK</source>
-      <translation type="unfinished" />
+      <translation>படி 5 · வட்டை உறுதிப்படுத்து</translation>
     </message>
     <message>
       <source>This will erase your disk</source>
-      <translation type="unfinished" />
+      <translation>இது உங்கள் வட்டை அழிக்கும்</translation>
     </message>
     <message>
       <source>The target disk could not be identified. Go back and choose the disk again.</source>
-      <translation type="unfinished" />
+      <translation>இலக்கு வட்டை அடையாளம் காண முடியவில்லை. பின்சென்று வட்டை மீண்டும் தேர்ந்தெடுக்கவும்.</translation>
     </message>
     <message>
       <source>After you press Install, these changes can't be undone.</source>
-      <translation type="unfinished" />
+      <translation>நிறுவு என்பதை அழுத்திய பின், இந்த மாற்றங்களைச் செயல்தவிர்க்க முடியாது.</translation>
     </message>
     <message>
       <source>Unknown disk</source>
-      <translation type="unfinished" />
+      <translation>தெரியாத வட்டு</translation>
     </message>
     <message>
       <source>DELETE</source>
-      <translation type="unfinished" />
+      <translation>நீக்கு</translation>
     </message>
     <message>
       <source>Existing partition table and all data</source>
-      <translation type="unfinished" />
+      <translation>தற்போதைய பகிர்வு அட்டவணையும் எல்லாத் தரவும்</translation>
     </message>
     <message>
       <source>FORMAT</source>
-      <translation type="unfinished" />
+      <translation>வடிவமை</translation>
     </message>
     <message>
       <source>CREATE</source>
-      <translation type="unfinished" />
+      <translation>உருவாக்கு</translation>
     </message>
     <message>
       <source>Type %1 to confirm that all data on it will be permanently deleted</source>
-      <translation type="unfinished" />
+      <translation>அதிலுள்ள எல்லாத் தரவும் நிரந்தரமாக நீக்கப்படும் என உறுதிப்படுத்த %1 எனத் தட்டச்சிடுக</translation>
     </message>
     <message>
       <source>STEP 6 · RECOVERY KEY</source>
-      <translation type="unfinished" />
+      <translation>படி 6 · மீட்பு விசை</translation>
     </message>
     <message>
       <source>Save your recovery key</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் மீட்பு விசையைச் சேமியுங்கள்</translation>
     </message>
     <message>
       <source>If you forget your disk passphrase, this key is the only way to unlock your files. It is shown once and is not stored on this computer.</source>
-      <translation type="unfinished" />
+      <translation>உங்கள் வட்டுக் கடவுச்சொற்றொடரை மறந்தால், உங்கள் கோப்புகளைத் திறக்க இந்த விசை மட்டுமே வழி. இது ஒருமுறை மட்டுமே காட்டப்படும், இந்தக் கணினியில் சேமிக்கப்படாது.</translation>
     </message>
   </context>
 </TS>
