@@ -18,6 +18,9 @@ systemctl set-default graphical.target
 # Seat access through logind (pam_systemd gives the active session the seat). seatd, when present, is tried first by
 # libseat and only admits the video group, which locked out the greeter (_greetd) and every user: no display at all.
 if [ -e /usr/lib/systemd/system/seatd.service ]; then systemctl disable seatd.service >/dev/null 2>&1 || true; systemctl mask seatd.service; fi
+# Smart-card sign-in is off by default (worksuite-smartcard-setup); libpam-pkcs11's card event manager fails
+# without a reader and is not needed for pam_pkcs11 sign-in, so it stays disabled.
+if [ -e /usr/lib/systemd/system/pkcs11-eventmgr.service ]; then systemctl disable pkcs11-eventmgr.service >/dev/null 2>&1 || true; fi
 # WSOS-INS-007: no machine-id baked into the image.
 : > /etc/machine-id
 rm -f /var/lib/dbus/machine-id
