@@ -56,6 +56,7 @@ override_dh_auto_test:
 	cd services/credentials && npm test
 	cd services/device-agent && npm test
 	cd services/directory && npm test
+	tests/boot/recovery-boot.test.sh
 	cd shell && npx vitest run
 
 # Electron ships prebuilt and stripped; its shared-library needs are listed in debian/control.

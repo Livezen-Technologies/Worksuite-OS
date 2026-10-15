@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { bootMode } from './bootmode'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceInfo, enrollDevice } from './device'
 import { followJobs, packageClient } from './packages'
@@ -47,8 +48,10 @@ function createWindow() {
     if (ALLOWED_SCHEMES.has(new URL(url).protocol)) void shell.openExternal(url)
     return { action: 'deny' }
   })
-  // --recovery (recovery launcher unit) and --installer (live ISO) pick the screen; nothing else is accepted.
-  const mode = process.argv.includes('--recovery') ? 'recovery' : process.argv.includes('--installer') ? 'installer' : null
+  // --recovery (recovery launcher unit), --installer (live ISO) or worksuite.recovery=1 on the kernel command line.
+  let cmdline: string | null = null
+  try { cmdline = readFileSync('/proc/cmdline', 'utf8') } catch { /* not Linux */ }
+  const mode = bootMode(process.argv, cmdline)
   void win.loadFile(path.join(__dirname, '../dist/index.html'), mode ? { query: { mode } } : undefined)
 }
 

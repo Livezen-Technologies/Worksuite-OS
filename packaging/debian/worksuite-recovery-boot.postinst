@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+  # Unprivileged account for the recovery screens (worksuite-recovery-shell.service); polkit asks for an admin.
+  if ! getent passwd worksuite-recovery >/dev/null; then
+    useradd --system --create-home --home-dir /var/lib/worksuite-recovery --shell /usr/sbin/nologin \
+      --groups video,render,input --comment "WorkSuite recovery screens" worksuite-recovery 2>/dev/null \
+      || useradd --system --create-home --home-dir /var/lib/worksuite-recovery --shell /usr/sbin/nologin --comment "WorkSuite recovery screens" worksuite-recovery
+  fi
+  install -d -m 0755 /var/lib/worksuite
+  /etc/kernel/postinst.d/zz-worksuite-kernel-retention || true
+  if command -v update-grub >/dev/null && [ -e /boot/grub/grub.cfg ]; then update-grub || true; fi
+fi
+#DEBHELPER#
+exit 0
