@@ -2,3 +2,7 @@ live-boot
 live-config
 live-config-systemd
 qt6-wayland
+# live-config creates the live user (user / live) only when user-setup is installed, and gives it sudo only with
+# sudo; --apt-recommends false leaves both out, so nobody could log in to the live system (greeter, ttys, serial).
+user-setup
+sudo
