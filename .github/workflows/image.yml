@@ -47,6 +47,10 @@ jobs:
         with:
           node-version: 22
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # Build-Depends from packaging/debian/control, except Node (setup-node provides it).
+      - run: |
+          deps=$(sed -n '/^Build-Depends:/,/^[A-Z][A-Za-z-]*:/p' packaging/debian/control | grep -v '^#' | sed '$d' | sed 's/^Build-Depends://' | tr '\n' ' ' | tr ',' '\n' | grep -vE 'nodejs|npm' | sed 's/^ *//;s/ *$//' | grep . | paste -sd, -)
+          apt-get satisfy -y --no-install-recommends "$deps"
       # -d: Node 22 comes from setup-node, not a dpkg package.
       - run: packaging/build-debs.sh -d
       - name: Fetch WorkSuite Office
