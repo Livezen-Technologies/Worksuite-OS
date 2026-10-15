@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import type { InstallerProps } from './types'
 import CIcon from '../components/CIcon'
 
-const STEPS = ['Language', 'Keyboard', 'Disk', 'Encryption', 'Account', 'Install', 'Done'] as const
+const STEPS = ['Language', 'Keyboard', 'Time zone', 'Disk', 'Encryption', 'Account', 'Install', 'Done'] as const
 const DISKS = [
   { id: 'nvme0n1', name: 'Samsung SSD 980', size: '512 GB', path: '/dev/nvme0n1', note: 'contains Windows 11 (3 partitions)', available: true },
   { id: 'sda', name: 'Kingston DataTraveler', size: '32 GB', path: '/dev/sda', note: 'the installer is running from this drive', available: false },
 ]
 const LANGS = ['English (United States)', 'English (United Kingdom)', 'Deutsch', 'Français', 'Español', 'Sinhala']
+const ZONES = ['Asia/Colombo', 'Asia/Kolkata', 'Asia/Singapore', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Los_Angeles', 'UTC']
 const LAYOUTS = ['English (US)', 'English (UK)', 'German (QWERTZ)', 'French (AZERTY)', 'Spanish']
 
 function makeKey() {
@@ -24,6 +25,8 @@ export default function Installer({ onDone }: InstallerProps) {
   const [lang, setLang] = useState(LANGS[0])
   const [layout, setLayout] = useState(LAYOUTS[0])
   const [test, setTest] = useState('')
+  const [tz, setTz] = useState(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { return 'UTC' } })
+  const [autoTime, setAutoTime] = useState(true)
   const [disk, setDisk] = useState(DISKS[0].id)
   const [confirm, setConfirm] = useState('')
   const [encrypt, setEncrypt] = useState(true)
@@ -47,12 +50,12 @@ export default function Installer({ onDone }: InstallerProps) {
     const id = setInterval(() => setProgress((p) => { const n = Math.min(100, p + 2); if (n >= 100) clearInterval(id); return n }), 120)
     return () => clearInterval(id)
   }, [step])
-  useEffect(() => { if (progress >= 100 && STEPS[step] === 'Install') setStep(6) }, [progress, step])
+  useEffect(() => { if (progress >= 100 && STEPS[step] === 'Install') setStep(7) }, [progress, step])
 
   // Recovery key is displayed exactly once: hide it after leaving the step.
   const next = () => { if (STEPS[step] === 'Encryption' && encrypt) setKeyHidden(true); setStep((s) => s + 1) }
 
-  const canNext = [true, true, diskOk, encOk, !!acctOk, false, true][step]
+  const canNext = [true, true, !!tz, diskOk, encOk, !!acctOk, false, true][step]
   const nextLabel = STEPS[step] === 'Account' ? 'Install' : STEPS[step] === 'Disk' ? 'Erase and continue' : 'Continue'
 
   return (
@@ -82,10 +85,10 @@ export default function Installer({ onDone }: InstallerProps) {
           <div className="flex flex-col gap-1.5">
             <div className="text-[13px] text-slate-600">Step {step + 1} of {STEPS.length}</div>
             <h1 className="m-0 text-[26px] font-[650] tracking-[-0.4px]">{[
-              'Choose your language', 'Choose your keyboard layout', 'Where should WorkSuite OS go?', 'Encrypt the disk',
+              'Choose your language', 'Choose your keyboard layout', 'Select your time zone', 'Where should WorkSuite OS go?', 'Encrypt the disk',
               'Create the administrator account', 'Installing WorkSuite OS', 'WorkSuite OS is installed'][step]}</h1>
             <p className="m-0 text-sm text-slate-600">{[
-              'Used for the installer and as the system default.', 'You can add more layouts later in Settings.',
+              'Used for the installer and as the system default.', 'You can add more layouts later in Settings.', 'Used for the clock, schedules and the update maintenance window.',
               'WorkSuite OS uses the whole disk. Dual boot is not supported in this version.',
               'LUKS2 full-disk encryption protects data if the device is lost. Unlocks with TPM and a passphrase.',
               'This local account can manage the device before it joins your organization.',
@@ -113,6 +116,15 @@ export default function Installer({ onDone }: InstallerProps) {
           </>}
 
           {step === 2 && <>
+            <label className={field}>Time zone
+              <select value={tz} onChange={(e) => setTz(e.target.value)} className={input}>{(ZONES.includes(tz) ? ZONES : [tz, ...ZONES]).map((z) => <option key={z}>{z}</option>)}</select>
+            </label>
+            <label className="flex items-center gap-2.5 text-sm">
+              <input type="checkbox" checked={autoTime} onChange={(e) => setAutoTime(e.target.checked)} className="h-[18px] w-[18px] accent-blue-600" />Set time automatically from the network (NTP)
+            </label>
+          </>}
+
+          {step === 3 && <>
             <div role="radiogroup" aria-label="Target disk" className="flex flex-col gap-2">
               {DISKS.map((d) => {
                 const sel = d.id === disk
@@ -137,7 +149,7 @@ export default function Installer({ onDone }: InstallerProps) {
             </label>
           </>}
 
-          {step === 3 && <>
+          {step === 4 && <>
             <label className="flex items-start gap-2.5 rounded-xl border border-slate-200 p-4">
               <input type="checkbox" checked={encrypt} onChange={(e) => setEncrypt(e.target.checked)} className="mt-0.5 h-[18px] w-[18px] accent-blue-600" />
               <span className="flex flex-col gap-1"><span className="text-sm font-semibold">Encrypt the disk (LUKS2)</span>
@@ -163,7 +175,7 @@ export default function Installer({ onDone }: InstallerProps) {
             </> : <p className="m-0 text-[13px] text-red-700">Without encryption, anyone with the disk can read its data and full remote wipe is unavailable.</p>}
           </>}
 
-          {step === 4 && (
+          {step === 5 && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className={field}>Full name<input value={acct.name} onChange={(e) => setAcct({ ...acct, name: e.target.value })} className={input} /></label>
               <label className={field}>Username (lowercase)<input value={acct.user} onChange={(e) => setAcct({ ...acct, user: e.target.value })} autoComplete="off" className={input} /></label>
@@ -173,7 +185,7 @@ export default function Installer({ onDone }: InstallerProps) {
             </div>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <div className="flex flex-col gap-3" aria-live="polite">
               <div className="h-2.5 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label="Install progress" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
                 <div className="h-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />
@@ -182,18 +194,18 @@ export default function Installer({ onDone }: InstallerProps) {
             </div>
           )}
 
-          {step === 6 && (
+          {step === 7 && (
             <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
               <CIcon name="check" size={22} />Installed on {target.name}{encrypt ? ' with LUKS2 encryption' : ''}. {join ? 'You will be asked to join your organization after restart.' : ''}
             </div>
           )}
 
           <div className="mt-auto flex flex-wrap items-center gap-2.5">
-            {step === 2 && <span className="text-[13px] text-red-700">All data on {target.name} will be permanently erased.</span>}
-            {step > 0 && step < 5 && <button type="button" onClick={() => setStep((s) => s - 1)} className="ml-auto h-11 rounded-[10px] border border-slate-300 bg-white px-[18px] text-sm text-slate-700">Back</button>}
-            {step < 5 && <button type="button" disabled={!canNext} onClick={next}
-              className={`h-11 rounded-[10px] px-[22px] text-sm font-semibold text-white disabled:opacity-50 ${step === 0 ? 'ml-auto' : ''} ${step === 2 ? 'bg-red-700 hover:bg-red-800' : 'bg-blue-600 hover:bg-blue-700'}`}>{nextLabel}</button>}
-            {step === 6 && <button type="button" onClick={onDone} className="ml-auto h-11 rounded-[10px] bg-blue-600 px-[22px] text-sm font-semibold text-white hover:bg-blue-700">Restart now</button>}
+            {step === 3 && <span className="text-[13px] text-red-700">All data on {target.name} will be permanently erased.</span>}
+            {step > 0 && step < 6 && <button type="button" onClick={() => setStep((s) => s - 1)} className="ml-auto h-11 rounded-[10px] border border-slate-300 bg-white px-[18px] text-sm text-slate-700">Back</button>}
+            {step < 6 && <button type="button" disabled={!canNext} onClick={next}
+              className={`h-11 rounded-[10px] px-[22px] text-sm font-semibold text-white disabled:opacity-50 ${step === 0 ? 'ml-auto' : ''} ${step === 3 ? 'bg-red-700 hover:bg-red-800' : 'bg-blue-600 hover:bg-blue-700'}`}>{nextLabel}</button>}
+            {step === 7 && <button type="button" onClick={onDone} className="ml-auto h-11 rounded-[10px] bg-blue-600 px-[22px] text-sm font-semibold text-white hover:bg-blue-700">Restart now</button>}
           </div>
         </section>
       </div>
