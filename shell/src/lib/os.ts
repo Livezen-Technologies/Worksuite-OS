@@ -18,6 +18,38 @@ export interface WorkSuiteApi {
   deviceInfo(): Promise<DeviceInfo>
   /** Enterprise enrollment through the device agent; asks for an administrator password (polkit). */
   enrollDevice(serverUrl: string, code: string): Promise<CloudResult<{ device_id: string; org_name: string | null }>>
+  // App Center through the package service (catalog ids "apt:<name>" / "flatpak:<app id>").
+  pkgPreview(catalogId: string, op: 'install' | 'remove'): Promise<CloudResult<PackagePreview>>
+  pkgInstall(catalogId: string): Promise<CloudResult<string>>
+  pkgRemove(catalogId: string): Promise<CloudResult<string>>
+  pkgApplyUpdate(): Promise<CloudResult<string>>
+  onPkgJob(cb: (e: PackageJobEvent) => void): () => void
+}
+
+export interface PackagePreview {
+  plan: { install: { name: string; version: string }[]; upgrade: { name: string; version: string }[]; remove: { name: string; version: string }[] }
+  disk_bytes: number | null
+  permissions: string[]
+  broad: string[]
+}
+export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
+
+export function formatBytes(n: number | null): string {
+  if (n == null) return '—'
+  const a = Math.abs(n)
+  const s = a >= 1e9 ? `${(a / 1e9).toFixed(1)} GB` : a >= 1e6 ? `${Math.round(a / 1e6)} MB` : `${Math.max(1, Math.round(a / 1e3))} kB`
+  return n < 0 ? `${s} freed` : s
+}
+
+/** Package service error → text. Its own messages are already written for people. */
+export function packageErrorText(code: string): string {
+  switch (code) {
+    case 'not_authorized': return 'An administrator password is needed for this. Nothing was changed.'
+    case 'service_unavailable': return 'The package service isn’t running. Try again in a moment.'
+    case 'invalid_argument': return 'This app can’t be installed from here.'
+    case 'failed': return 'That didn’t work. Nothing was changed.'
+    default: return code.charAt(0).toUpperCase() + code.slice(1) + (/[.!]$/.test(code) ? '' : '.')
+  }
 }
 
 export interface DevicePolicies {
@@ -89,6 +121,19 @@ const stub: WorkSuiteApi = {
     stubManaged = true
     return { ok: true, value: { device_id: 'preview-device', org_name: 'Livezen Technologies' } }
   },
+  async pkgPreview(id, op) {
+    if (id.includes('nmap')) return { ok: false, error: 'not approved by your organization' }
+    return { ok: true, value: {
+      plan: { install: op === 'install' ? [{ name: id.split(':')[1], version: '' }] : [], upgrade: [], remove: op === 'remove' ? [{ name: id.split(':')[1], version: '' }] : [] },
+      disk_bytes: op === 'install' ? 418_000_000 : -418_000_000,
+      permissions: id.startsWith('flatpak:') ? ['shared=network;ipc;', 'filesystems=xdg-pictures;', 'sockets=x11;wayland;'] : [],
+      broad: id.startsWith('flatpak:') ? ['sockets=x11;wayland;'] : [],
+    } }
+  },
+  async pkgInstall(id) { return stubJob(id, 'install') },
+  async pkgRemove(id) { return stubJob(id, 'remove') },
+  async pkgApplyUpdate() { return stubJob('update', 'update') },
+  onPkgJob(cb) { stubListeners.add(cb); return () => { stubListeners.delete(cb) } },
   async deviceInfo() {
     return {
       agent: true, managed: stubManaged, org_name: stubManaged ? 'Livezen Technologies' : null, server: stubManaged ? 'work.livezentech.com' : null, last_check_in: stubManaged ? Date.now() - 4 * 60_000 : null,
@@ -100,6 +145,15 @@ const stub: WorkSuiteApi = {
 }
 
 let stubAccounts: CloudAccount[] = []
+// Preview only: package jobs finish after a short delay.
+const stubListeners = new Set<(e: PackageJobEvent) => void>()
+let stubJobId = 0
+function stubJob(_id: string, _kind: string): CloudResult<string> {
+  const job = `/lk/worksuite/PackageService1/job/${++stubJobId}`
+  setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 50, phase: 'installing' })), 300)
+  setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'finished', result: 'success' })), 900)
+  return { ok: true, value: job }
+}
 // Preview only: pretend three offline edits are waiting so the sign-out prompt can be seen.
 let stubUnsent = 3
 // Preview only: unmanaged until enrolled (first-run or Settings).

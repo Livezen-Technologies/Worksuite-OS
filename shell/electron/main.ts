@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceInfo, enrollDevice } from './device'
+import { followJobs, packageClient } from './packages'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
@@ -95,6 +96,13 @@ app.whenReady().then(() => {
   handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:deviceInfo', () => deviceInfo())
   handle('ws:enrollDevice', (serverUrl, code) => enrollDevice(serverUrl, code))
+  // App Center (WSOS-APP-001/002): preview before confirmation, then a job whose result arrives as an event.
+  const pkg = packageClient()
+  handle('ws:pkgPreview', (catalogId, op) => pkg.preview(catalogId, op === 'remove' ? 'remove' : 'install'))
+  handle('ws:pkgInstall', (catalogId) => pkg.start('Install', catalogId))
+  handle('ws:pkgRemove', (catalogId) => pkg.start('Remove', catalogId))
+  handle('ws:pkgApplyUpdate', () => pkg.applyUpdate())
+  followJobs((e) => win?.webContents.send('ws:pkgJob', e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')
     return r.ok ? { ok: true, value: publicAccounts(r.value) } : r

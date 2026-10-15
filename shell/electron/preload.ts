@@ -14,5 +14,15 @@ contextBridge.exposeInMainWorld('worksuite', {
   syncNow: () => ipcRenderer.invoke('ws:syncNow'),
   deviceInfo: () => ipcRenderer.invoke('ws:deviceInfo'),
   enrollDevice: (serverUrl: string, code: string) => ipcRenderer.invoke('ws:enrollDevice', String(serverUrl), String(code)),
+  pkgPreview: (catalogId: string, op: string) => ipcRenderer.invoke('ws:pkgPreview', String(catalogId), String(op)),
+  pkgInstall: (catalogId: string) => ipcRenderer.invoke('ws:pkgInstall', String(catalogId)),
+  pkgRemove: (catalogId: string) => ipcRenderer.invoke('ws:pkgRemove', String(catalogId)),
+  pkgApplyUpdate: () => ipcRenderer.invoke('ws:pkgApplyUpdate'),
+  // Only the event payload reaches the renderer, never the IPC event object.
+  onPkgJob: (cb: (e: unknown) => void) => {
+    const listener = (_e: unknown, payload: unknown) => cb(payload)
+    ipcRenderer.on('ws:pkgJob', listener)
+    return () => { ipcRenderer.removeListener('ws:pkgJob', listener) }
+  },
   cloudAccounts: () => ipcRenderer.invoke('ws:cloudAccounts'),
 })
