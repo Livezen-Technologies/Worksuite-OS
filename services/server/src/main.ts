@@ -1,7 +1,7 @@
 #!/usr/bin/env worksuite-node
 // worksuite-server: WorkSuite server MVP. Plain HTTP on loopback by default (put TLS in front of it), or HTTPS
 // with --tls-cert/--tls-key. Clients refuse non-https URLs, so production always has TLS in the path.
-//   worksuite-server serve --db server.db --public-url https://ws.example.com [--listen 127.0.0.1:8080]
+//   worksuite-server serve --db server.db --public-url https://ws.example.com [--listen 127.0.0.1:8080] [--apt-dir REPO]
 //   worksuite-server init --db server.db --org "Example Ltd" [--require-device]
 //   worksuite-server user-add --db server.db --org 1 --email a@example.com --name "A User" [--admin]   (password on stdin)
 //   worksuite-server enroll-token --db server.db --org 1 [--hours 24] [--uses 1]
@@ -10,7 +10,8 @@
 //   worksuite-server release-publish --db server.db manifest.json
 //   worksuite-server catalog-put --db server.db item.json | app-put --db server.db app.json
 //   worksuite-server keys-export --db server.db DIR | keys-rotate --db server.db | devices --db server.db | device-revoke --db server.db --device ID
-import { readFileSync } from 'node:fs';
+import { createReadStream, readFileSync, realpathSync, statSync } from 'node:fs';
+import { extname, join, sep } from 'node:path';
 import { createServer as createHttp, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createServer as createHttps } from 'node:https';
 import { parseArgs } from 'node:util';
@@ -22,7 +23,23 @@ import { HttpError, makeCtx, Router, sendError } from './http.ts';
 import { oauthRoutes } from './oauth.ts';
 import { consoleRoutes } from './console.ts';
 
-export interface ServerOptions { publicUrl: string; clientIds?: string[]; updateHost?: string }
+export interface ServerOptions { publicUrl: string; clientIds?: string[]; updateHost?: string; aptDir?: string }
+
+const APT_TYPES: Record<string, string> = { '.deb': 'application/vnd.debian.binary-package', '.gz': 'application/gzip', '.xz': 'application/x-xz', '.gpg': 'application/pgp-signature' };
+
+/** Static APT repository (tools/repo/publish.sh output) at /os/apt/. Integrity comes from the signed InRelease. */
+function serveApt(root: string, path: string, res: ServerResponse): boolean {
+  const rel = decodeURIComponent(path.slice('/os/apt/'.length));
+  if (!/^(dists|pool)\/[A-Za-z0-9._+~\/-]+$/.test(rel) || rel.split('/').some((p) => p === '..' || p === '.' || p === '')) return false;
+  let file: string;
+  try { file = realpathSync(join(root, rel)); } catch { return false; }
+  if (!file.startsWith(realpathSync(root) + sep)) return false;
+  const st = statSync(file);
+  if (!st.isFile()) return false;
+  res.writeHead(200, { 'content-type': APT_TYPES[extname(file)] ?? 'text/plain; charset=utf-8', 'content-length': st.size, 'cache-control': rel.startsWith('pool/') ? 'public, max-age=31536000, immutable' : 'public, max-age=60' });
+  createReadStream(file).pipe(res);
+  return true;
+}
 
 export function createHandler(db: DatabaseSync, o: ServerOptions) {
   const publicUrl = o.publicUrl.replace(/\/?$/, '/');
@@ -34,6 +51,10 @@ export function createHandler(db: DatabaseSync, o: ServerOptions) {
   return async (req: IncomingMessage, res: ServerResponse) => {
     const ctx = makeCtx(req, res, publicUrl);
     try {
+      if (o.aptDir && (req.method === 'GET' || req.method === 'HEAD') && ctx.url.pathname.startsWith('/os/apt/')) {
+        if (serveApt(o.aptDir, ctx.url.pathname, res)) return;
+        throw new HttpError(404, 'NOT_FOUND', 'not found');
+      }
       const m = r.match(req.method ?? 'GET', ctx.url.pathname);
       if (m === 'method') throw new HttpError(405, 'METHOD_NOT_ALLOWED');
       if (!m) throw new HttpError(404, 'NOT_FOUND', 'not found');
@@ -56,7 +77,7 @@ async function main(argv: string[]) {
   const { values: v, positionals } = parseArgs({
     args: rest, allowPositionals: true, options: {
       db: { type: 'string' }, 'public-url': { type: 'string' }, listen: { type: 'string', default: '127.0.0.1:8080' },
-      'tls-cert': { type: 'string' }, 'tls-key': { type: 'string' }, 'update-host': { type: 'string' },
+      'tls-cert': { type: 'string' }, 'apt-dir': { type: 'string' }, 'tls-key': { type: 'string' }, 'update-host': { type: 'string' },
       org: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, device: { type: 'string' },
       args: { type: 'string' }, hours: { type: 'string' }, uses: { type: 'string' }, 'ttl-hours': { type: 'string' },
       'require-device': { type: 'boolean' }, admin: { type: 'boolean' },
@@ -70,7 +91,7 @@ async function main(argv: string[]) {
   switch (cmd) {
     case 'serve': {
       if (!v['public-url']) throw new Error('--public-url required (the https URL clients use)');
-      const handler = createHandler(db, { publicUrl: v['public-url'], updateHost: v['update-host'] });
+      const handler = createHandler(db, { publicUrl: v['public-url'], updateHost: v['update-host'], aptDir: v['apt-dir'] });
       const server = v['tls-cert'] && v['tls-key']
         ? createHttps({ cert: readFileSync(v['tls-cert']), key: readFileSync(v['tls-key']) }, handler)
         : createHttp(handler);

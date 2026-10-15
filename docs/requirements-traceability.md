@@ -72,3 +72,10 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | Signed release manifests (WSOS-AUP-002) | `/os/manifests/{ring}/{arch}.json` | Verified with the package service's `verifyManifest` |
 | Not yet | Federation (AD/LDAP/external OneAuth), resumable diagnostic uploads, admin console, push | — |
 | Admin console (WSOS-MDM-007 admin side, WSOS-WIPE-002 two-person wipe) | `services/server/src/console.ts`, `console-ui.ts` at `/admin` | API tests (auth, CSRF, org isolation, two-person wipe verified with the agent's validator, policy validation); browser run with screenshots in `docs/screenshots/admin/` |
+
+## Signed updates and keys
+
+| Item | Implementation | Verified |
+|---|---|---|
+| Signed APT repository per ring (WSOS-AUP-002) | `tools/repo/keygen.sh`, `publish.sh`; served by `worksuite-server --apt-dir` | `tests/repo/apt-e2e.sh` (real apt: verify, upgrade, tampered and foreign-signed refused, no path traversal); CI job `apt-repo` |
+| Public keys on devices (WSOS-SEC-011) | `worksuite-archive-keyring` from `packaging/keyring/` (public keys only; empty = fail closed) | Package builds and lints; install paths checked |

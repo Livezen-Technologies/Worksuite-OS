@@ -32,6 +32,12 @@ override_dh_auto_install:
 	install -m 0644 build-installer/libcalamares_viewmodule_worksuiteconfirm.so $$m/worksuiteconfirm/ && \
 	install -D -m 0644 installer/modules/worksuiterecovery/module.desc $$m/worksuiterecovery/module.desc && \
 	install -m 0644 installer/modules/worksuiterecovery/main.py $$m/worksuiterecovery/main.py
+	# worksuite-archive-keyring: public keys only (packaging/keyring/README.md).
+	d=debian/worksuite-archive-keyring; \
+	install -d $$d/usr/share/keyrings $$d/usr/share/worksuite/keys/device-commands $$d/usr/share/worksuite/keys/release $$d/usr/share/doc/worksuite-archive-keyring && \
+	install -m 0644 packaging/keyring/README.md $$d/usr/share/doc/worksuite-archive-keyring/README.md && \
+	if [ -f packaging/keyring/worksuite-archive-keyring.gpg ]; then install -m 0644 packaging/keyring/worksuite-archive-keyring.gpg $$d/usr/share/keyrings/; fi && \
+	for k in device-commands release; do for f in packaging/keyring/ed25519/$$k/*.pem; do [ -f "$$f" ] && install -m 0644 "$$f" $$d/usr/share/worksuite/keys/$$k/ || true; done; done
 	# worksuite-branding
 	d=debian/worksuite-branding; p=$$d/usr/share/plymouth/themes/worksuite; g=$$d/usr/share/grub/themes/worksuite; \
 	install -D -m 0644 -t $$p branding/plymouth/worksuite.plymouth branding/plymouth/worksuite.script build-branding/plymouth/*.png && \

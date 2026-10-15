@@ -1,2 +1,4 @@
-Place the release-signing public key as worksuite.key.chroot / worksuite.key.binary (exported from the offline/HSM
-key, WSOS-SEC-011). The same key ships in worksuite-archive-keyring at /usr/share/keyrings/worksuite-archive-keyring.gpg.
+The WorkSuite repository (worksuite.list.*) is used only with WORKSUITE_REPO=1, once the repository exists and
+packaging/keyring/worksuite-archive-keyring.gpg holds its public key (tools/repo/README.md). The key reaches devices in
+worksuite-archive-keyring at /usr/share/keyrings/worksuite-archive-keyring.gpg; for the image build itself, also copy it
+here as worksuite.key.chroot and worksuite.key.binary.

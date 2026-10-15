@@ -46,3 +46,14 @@ jobs:
       - if: matrix.package == 'package-service'
         run: sudo apt-get install -y --no-install-recommends dbus-daemon
       - run: npm test
+
+  apt-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get install -y --no-install-recommends apt-utils gnupg
+      # Signed APT repository with real apt (no root): publish, verify, upgrade; tampered and foreign-signed refused.
+      - run: tests/repo/apt-e2e.sh

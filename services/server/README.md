@@ -15,6 +15,7 @@ provider for the credentials broker. Node 22 TypeScript, `node:sqlite`, no runti
 | Devices | `desktop/v1/devices/register`, `heartbeat`, `commands/{id}/ack`, `policies` | device agent |
 | OS | `desktop/v1/os/catalog`, `inventory`, `update-results`, `diagnostics`, `directory`, `break-glass` | device agent, package service |
 | Releases | `/os/manifests/{ring}/{arch}.json`, `desktop/v1/releases/manifest?platform=os` | update coordinator |
+| APT repository | `/os/apt/` (static, with `--apt-dir`; built by `tools/repo/publish.sh`) | apt on devices |
 | Admin console | `/admin` (UI), `/admin/api/*` | administrators in a browser |
 
 ## Admin console

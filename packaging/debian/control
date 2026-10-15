@@ -15,7 +15,7 @@ Rules-Requires-Root: no
 
 Package: worksuite-desktop
 Architecture: all
-Depends: worksuite-shell, worksuite-session, worksuite-branding,
+Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archive-keyring,
  worksuite-user-services, worksuite-package-service, worksuite-device-agent,
  labwc, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, xdg-desktop-portal-gtk, gnome-keyring,
@@ -56,7 +56,7 @@ Description: WorkSuite user services (catalog, files, credentials broker, sync)
 
 Package: worksuite-package-service
 Architecture: amd64 arm64
-Depends: worksuite-shell (= ${binary:Version}), apt, flatpak, polkitd, dbus, ${misc:Depends}
+Depends: worksuite-shell (= ${binary:Version}), worksuite-archive-keyring, apt, flatpak, polkitd, dbus, ${misc:Depends}
 Description: WorkSuite system package service (D-Bus + polkit)
  Root service on the system bus that installs, removes and updates APT and
  Flatpak software for the shell and the device agent, behind polkit, one job
@@ -64,7 +64,7 @@ Description: WorkSuite system package service (D-Bus + polkit)
 
 Package: worksuite-device-agent
 Architecture: amd64 arm64
-Depends: worksuite-shell (= ${binary:Version}), cryptsetup, dbus, systemd, ${misc:Depends}
+Depends: worksuite-shell (= ${binary:Version}), worksuite-archive-keyring, cryptsetup, dbus, systemd, ${misc:Depends}
 Recommends: tpm2-tools
 Description: WorkSuite device agent (enrollment, policy, signed remote commands)
  Root agent for organization-managed devices: enrollment, signed policy,
@@ -85,3 +85,12 @@ Description: WorkSuite OS boot splash, GRUB theme, icons and wallpaper
  The WorkSuite logo as the Plymouth boot splash (including the disk unlock
  prompt), the GRUB menu theme with a quiet boot command line, the application
  icon in the hicolor theme and the default desktop wallpaper.
+
+Package: worksuite-archive-keyring
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: WorkSuite OS archive and signing keys
+ Public keys that WorkSuite OS uses to verify the WorkSuite APT repository
+ (InRelease), signed device policies and commands, and signed OS release
+ manifests. Contains no private keys.
