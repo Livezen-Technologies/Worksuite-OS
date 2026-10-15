@@ -1,5 +1,6 @@
 #include "WorksuiteConfirmViewStep.h"
 
+#include "Branding.h"
 #include "GlobalStorage.h"
 #include "JobQueue.h"
 #include "ViewManager.h"
@@ -149,6 +150,39 @@ private:
 };
 }  // namespace
 
+/* Calamares applies the branding stylesheet to its main window only, so its error and confirmation dialogs (top-level
+   windows) kept the light default style. Give the application the stylesheet's dialog rules (QDialog, QMessageBox),
+   and its button rules scoped to dialogs. */
+QString
+WorksuiteConfirmViewStep::dialogStyleSheet( const QString& sheet )
+{
+    QString out;
+    static const QRegularExpression rule( QStringLiteral( "([^{}]+)\\{([^{}]*)\\}" ) );
+    QString text = sheet;
+    text.remove( QRegularExpression( QStringLiteral( "/\\*.*?\\*/" ), QRegularExpression::DotMatchesEverythingOption ) );
+    auto it = rule.globalMatch( text );
+    while ( it.hasNext() )
+    {
+        const auto m = it.next();
+        const QString selectors = m.captured( 1 ).trimmed();
+        const QString body = m.captured( 2 ).trimmed();
+        if ( selectors.contains( QStringLiteral( "QDialog" ) ) || selectors.contains( QStringLiteral( "QMessageBox" ) ) )
+        {
+            out += selectors + QStringLiteral( " { " ) + body + QStringLiteral( " }\n" );
+        }
+        else if ( selectors.startsWith( QStringLiteral( "QPushButton" ) ) )
+        {
+            QStringList scoped;
+            for ( const QString& sel : selectors.split( ',' ) )
+            {
+                scoped << QStringLiteral( "QDialog " ) + sel.trimmed();
+            }
+            out += scoped.join( QStringLiteral( ", " ) ) + QStringLiteral( " { " ) + body + QStringLiteral( " }\n" );
+        }
+    }
+    return out;
+}
+
 WorksuiteConfirmViewStep::WorksuiteConfirmViewStep( QObject* parent )
     : Calamares::ViewStep( parent )
 {
@@ -158,6 +192,14 @@ WorksuiteConfirmViewStep::WorksuiteConfirmViewStep( QObject* parent )
     {
         focus = new QmlFocus( qApp );
         qApp->installEventFilter( focus );
+        if ( auto* branding = Calamares::Branding::instance() )
+        {
+            const QString dialogs = dialogStyleSheet( branding->stylesheet() );
+            if ( !dialogs.isEmpty() )
+            {
+                qApp->setStyleSheet( qApp->styleSheet() + dialogs );
+            }
+        }
     }
 }
 

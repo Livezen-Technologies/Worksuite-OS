@@ -28,6 +28,14 @@ private slots:
         QVERIFY( !S::confirmationMatches( "NVME0N1", "nvme0n1" ) );
         QVERIFY( !S::confirmationMatches( "", "" ) );
     }
+    void dialogStyle()
+    {
+        const QString sheet = "/* c { } */ #mainApp { color: red; }\nQPushButton, QToolButton { padding: 8px; }\n"
+                              "QMessageBox QLabel { color: #fff; }\nQDialog { background: #000; }";
+        QCOMPARE( WorksuiteConfirmViewStep::dialogStyleSheet( sheet ),
+                  QString( "QDialog QPushButton, QDialog QToolButton { padding: 8px; }\n"
+                           "QMessageBox QLabel { color: #fff; }\nQDialog { background: #000; }\n" ) );
+    }
 };
 
 QTEST_GUILESS_MAIN( WorksuiteConfirmTests )

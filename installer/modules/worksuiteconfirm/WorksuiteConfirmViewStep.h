@@ -43,6 +43,8 @@ public:
     static QString diskFromDescriptions( const QStringList& descriptions );
     /// Exact match after trimming; "/dev/" prefix allowed.
     static bool confirmationMatches( const QString& typed, const QString& disk );
+    /// The branding stylesheet's rules for dialogs (QDialog, QMessageBox), plus its QPushButton rules scoped to QDialog.
+    static QString dialogStyleSheet( const QString& sheet );
 
 private:
     void refresh();
