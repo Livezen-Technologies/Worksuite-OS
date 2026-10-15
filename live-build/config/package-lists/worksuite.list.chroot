@@ -12,5 +12,7 @@ cryptsetup-initramfs
 tpm2-tools
 firmware-linux-free
 plymouth
+# Scripts for the installer's language list and the desktop (Sinhala, Tamil, Devanagari, Arabic, ...)
+fonts-noto-core
 # Recovery (§9.2)
 dialog

@@ -26,6 +26,7 @@ Rectangle {
         ColumnLayout {
             id: col
             Layout.fillWidth: true
+            Layout.alignment: Qt.AlignTop
             spacing: 3
             RowLayout {
                 spacing: 10

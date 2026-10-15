@@ -14,6 +14,7 @@ WsPage {
     onExpressChosenChanged: page.state.set("express", expressChosen)
     function onActivate() { page.state.set("express", expressChosen); arrive() }
     function onLeave() { leave() }
+    readonly property real cardHeight: Math.max(expressCard.implicitHeight, customCard.implicitHeight)
 
     ColumnLayout {
         anchors.fill: parent
@@ -23,14 +24,16 @@ WsPage {
             Layout.fillWidth: true
             spacing: 12
             WsChoice {
-                Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 1
+                id: expressCard
+                Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.preferredHeight: page.cardHeight
                 title: qsTr("Express install")
                 text: qsTr("Sensible defaults: US keyboard and Asia/Colombo time. You can change both later in Settings.")
                 selected: page.expressChosen
                 onPicked: page.expressChosen = true
             }
             WsChoice {
-                Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 1
+                id: customCard
+                Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.preferredHeight: page.cardHeight
                 title: qsTr("Custom install")
                 text: qsTr("Choose keyboard, time zone and every other setting yourself.")
                 selected: !page.expressChosen
