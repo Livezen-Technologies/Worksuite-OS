@@ -1,9 +1,6 @@
 # WorkSuite desktop (pulls labwc, greetd, portals, PipeWire, NetworkManager, ...)
 worksuite-desktop
-worksuite-archive-keyring
-# Installer (live only; removed by Calamares on install)
-calamares
-calamares-settings-worksuite
+# Installer: Calamares joins once calamares-settings-worksuite is packaged (installer/).
 # Hardware / boot
 grub-efi
 shim-signed

@@ -1,0 +1,18 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: worksuite-os
+Source: https://github.com/Livezen-Technologies/Worksuite-OS
+
+Files: *
+Copyright: 2026 Livezen Technologies
+License: proprietary
+ All rights reserved. Distribution terms are set by Livezen Technologies.
+
+Files: shell/node_modules/electron/dist/*
+Copyright: Electron contributors; The Chromium Authors
+License: MIT and BSD-3-Clause and others
+ See /usr/lib/worksuite/shell/electron/LICENSE and LICENSES.chromium.html.
+
+Files: services/package-service/node_modules/*
+Copyright: the respective authors of dbus-next and its dependencies
+License: MIT
+ See the LICENSE files inside each module directory.

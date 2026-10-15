@@ -6,7 +6,7 @@ After=dbus.service
 [Service]
 Type=dbus
 BusName=lk.worksuite.PackageService1
-ExecStart=/usr/bin/node --no-warnings /usr/lib/worksuite/package-service/src/main.ts
+ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/package-service/src/main.ts
 # Bus-activated. Must not be killed mid-dpkg.
 KillMode=mixed
 TimeoutStopSec=30min

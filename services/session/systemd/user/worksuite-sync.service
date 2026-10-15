@@ -7,7 +7,7 @@ After=worksuite-credentials.service
 [Service]
 Type=simple
 # Node >= 22.18 runs the TypeScript sources directly (type stripping); see services/sync/package.json.
-ExecStart=/usr/bin/node --no-warnings /usr/lib/worksuite/sync/src/main.ts
+ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/sync/src/main.ts
 Restart=on-failure
 RestartSec=5s
 # Let an in-flight batch finish and SQLite close cleanly on logout (WSOS-SES-003).

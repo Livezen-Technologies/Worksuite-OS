@@ -1,0 +1,4 @@
+#!/bin/sh
+# Node runtime for WorkSuite services: the Node built into the shipped Electron (22.x; node:sqlite and TypeScript
+# type stripping), so the image does not depend on Debian's older nodejs.
+ELECTRON_RUN_AS_NODE=1 exec /usr/lib/worksuite/shell/electron/electron "$@"

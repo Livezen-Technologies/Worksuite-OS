@@ -1,0 +1,3 @@
+#!/bin/sh
+# Starts the WorkSuite shell on the session's Wayland display. "--recovery" opens the recovery launcher (WSOS-SES-005).
+exec /usr/lib/worksuite/shell/electron/electron --ozone-platform=wayland /usr/lib/worksuite/shell "$@"

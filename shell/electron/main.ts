@@ -46,7 +46,9 @@ function createWindow() {
     if (ALLOWED_SCHEMES.has(new URL(url).protocol)) void shell.openExternal(url)
     return { action: 'deny' }
   })
-  void win.loadFile(path.join(__dirname, '../dist/index.html'))
+  // --recovery (recovery launcher unit) and --installer (live ISO) pick the screen; nothing else is accepted.
+  const mode = process.argv.includes('--recovery') ? 'recovery' : process.argv.includes('--installer') ? 'installer' : null
+  void win.loadFile(path.join(__dirname, '../dist/index.html'), mode ? { query: { mode } } : undefined)
 }
 
 app.whenReady().then(() => {

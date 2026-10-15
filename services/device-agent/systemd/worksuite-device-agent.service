@@ -6,7 +6,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/node --no-warnings /usr/lib/worksuite/device-agent/src/main.ts
+ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/device-agent/src/main.ts
 Restart=on-failure
 RestartSec=5s
 StateDirectory=worksuite-device-agent
