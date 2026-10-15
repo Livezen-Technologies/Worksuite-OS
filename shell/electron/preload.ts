@@ -161,4 +161,6 @@ contextBridge.exposeInMainWorld('worksuiteDesktop', {
   clipboardCopy: (id: number) => ipcRenderer.invoke('ws:clipboardCopy', String(Number(id))),
   onClipboard: on('ws:clipboardChanged'),
   problemReport: () => ipcRenderer.invoke('ws:problemReport'),
+  shellRestart: () => ipcRenderer.invoke('ws:shellRestart'),
+  shellRestartSeen: (n: number) => ipcRenderer.invoke('ws:shellRestartSeen', String(Math.max(0, Math.floor(Number(n)) || 0))),
 })

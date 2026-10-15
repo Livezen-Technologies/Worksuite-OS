@@ -24,6 +24,14 @@ const TONE: Record<Tone, { icon: string; color: string; bg: string }> = {
   ok: { icon: ICON.check, color: C.green, bg: 'rgba(95,211,154,0.14)' },
   warn: { icon: ICON.alert, color: C.amber, bg: 'rgba(255,159,90,0.14)' },
 }
+/** SetUpdates board hero colours per state. */
+const HERO: Record<Tone, { icon: string; bg: string; border: string }> = {
+  ok: { icon: '#2E9E6A', bg: 'linear-gradient(120deg, rgba(46,158,106,0.25), rgba(14,32,72,0.7))', border: 'rgba(95,211,154,0.35)' },
+  download: { icon: '#1F6BFF', bg: 'linear-gradient(120deg, rgba(31,107,255,0.3), rgba(14,32,72,0.7))', border: 'rgba(127,178,255,0.35)' },
+  busy: { icon: '#0E8FA8', bg: 'linear-gradient(120deg, rgba(14,143,168,0.25), rgba(14,32,72,0.7))', border: 'rgba(24,212,240,0.35)' },
+  ready: { icon: '#B7791F', bg: 'linear-gradient(120deg, rgba(183,121,31,0.25), rgba(14,32,72,0.7))', border: 'rgba(255,185,138,0.4)' },
+  warn: { icon: '#D9572B', bg: 'linear-gradient(120deg, rgba(217,87,43,0.22), rgba(14,32,72,0.7))', border: 'rgba(255,159,90,0.4)' },
+}
 const ACTION_LABEL: Record<Action, string> = messages({ check: 'upd.action.check', later: 'upd.action.later', install: 'upd.action.install', schedule: 'upd.action.schedule', restart: 'upd.action.restart' })
 const RING: Record<string, string> = messages({ development: 'upd.ring.development', pilot: 'upd.ring.pilot', stable: 'upd.ring.stable' })
 const MODE: Record<string, string> = messages({ automatic: 'upd.mode.automatic', notify: 'upd.mode.notify', manual: 'upd.mode.manual' })
@@ -61,55 +69,66 @@ export function UpdatesPanel() {
   const pct = v.progress && v.progress !== 'indeterminate' ? v.progress.percent : null
   const offered = st.version && st.version !== st.installed ? st.version : null
 
+  const hero = HERO[v.tone]
+  const opts: [string, string, string][] = [
+    [t('upd.modeLabel'), policy ? t('upd.setByOrg') : t('upd.onThisComputer'), MODE[policy?.update_mode ?? 'automatic']],
+    [t('upd.installs'), t('upd.installsHint'), policy?.maintenance_window ? t('upd.inWindow', { window: policy.maintenance_window }) : t('upd.whenIdle')],
+    [t('upd.metered'), t('upd.meteredHint'), t('upd.meteredWait')],
+    [t('upd.ringLabel'), policy ? t('upd.setByOrg') : t('upd.onThisComputer'), RING[policy?.update_ring ?? 'stable']],
+  ]
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5">
-      <div className={`${heroCard} flex items-center gap-[18px] p-5`} aria-live="polite">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px]" style={{ background: tone.bg }}>
-          <span className={v.tone === 'busy' && !pct ? 'ws-spin inline-flex' : 'inline-flex'}><Svg d={v.tone === 'busy' && st.state === 'checking' ? ICON.restart : tone.icon} size={28} stroke={tone.color} /></span>
+    <div className="flex min-h-0 flex-1 flex-col gap-3.5">
+      {/* SetUpdates board hero: tinted by state */}
+      <div className="flex items-center gap-5 rounded-[18px] border px-6 py-[22px]" style={{ background: hero.bg, borderColor: hero.border }} aria-live="polite">
+        <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-2xl" style={{ background: hero.icon }}>
+          <span className={v.tone === 'busy' && !pct ? 'ws-spin inline-flex' : 'inline-flex'}><Svg d={v.tone === 'busy' && st.state === 'checking' ? ICON.restart : tone.icon} size={30} stroke="#FFFFFF" /></span>
         </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <span className="text-lg font-semibold">{v.title}</span>
-          <span className="text-[13px] text-[#8FA3C8]">{v.sub}</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
+          <span className="text-xl font-bold">{v.title}</span>
+          <span className="text-[13px] text-[#C9D6EE]">{v.sub}</span>
           {v.progress && st.state === 'installing' && (
-            <div className="mt-1.5 flex flex-col gap-1.5">
-              <Progress value={pct} label={t('upd.progress')} shine />
+            <div className="mt-1 flex flex-col gap-1.5">
+              <Progress value={pct} label={t('upd.progress')} height={6} shine />
               <span className="font-mono text-xs text-[#8FA3C8]">{pct == null ? t('upd.starting') : `${UPDATE_PHASES[v.progress === 'indeterminate' ? '' : v.progress.phase] ?? ''} · ${formatNumber(pct)}%`}</span>
             </div>
           )}
           {error && <span role="alert" className="text-[13px] text-[#FF8A7A]">{error}</span>}
         </div>
-        <div className="flex shrink-0 gap-2.5">
-          {v.secondary && <button type="button" disabled={busy} onClick={() => void act(v.secondary!)} className={btnGhost}>{ACTION_LABEL[v.secondary]}</button>}
-          {v.primary && <button type="button" disabled={busy} onClick={() => void act(v.primary!)} className={v.primary === 'check' ? btnGhost : btnPrimary}>{ACTION_LABEL[v.primary]}</button>}
+        <div className="flex shrink-0 gap-2">
+          {v.secondary && <button type="button" disabled={busy} onClick={() => void act(v.secondary!)} className="cursor-pointer rounded-[10px] border border-white/25 px-4 py-2.5 text-sm hover:bg-white/[0.06] disabled:opacity-50">{ACTION_LABEL[v.secondary]}</button>}
+          {v.primary && <button type="button" disabled={busy} onClick={() => void act(v.primary!)} className="cursor-pointer rounded-[10px] px-[18px] py-2.5 text-sm font-semibold text-white disabled:opacity-50" style={{ background: v.primary === 'check' ? 'rgba(255,255,255,0.14)' : '#1F6BFF' }}>{ACTION_LABEL[v.primary]}</button>}
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4">
-        <section aria-labelledby="upd-notes" className={`${card} flex flex-col gap-3 px-5 py-[18px]`}>
-          <h2 id="upd-notes" className="m-0 text-[15px] font-semibold">{offered ? t('upd.whatsIn', { version: offered }) : `WorkSuite OS ${st.installed}`}</h2>
-          <p className="m-0 text-[13px] leading-[1.5] text-[#8FA3C8]">
-            {offered
-              ? t('upd.notesMissing')
-              : t('upd.noneWaiting')}
-          </p>
-          {st.mandatory && offered && <p className="m-0 text-[13px] text-[#C9D6EE]">{st.deadline ? t('upd.requiredBy', { when: fmtWhen(st.deadline) }) : t('upd.required')}</p>}
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-3">
+        <section aria-labelledby="upd-hist" className="flex flex-col gap-2">
+          <h2 id="upd-hist" className="m-0 text-sm font-semibold">{t('upd.history')}</h2>
+          <div className={`${card} overflow-hidden`}>
+            {offered && (
+              <div className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
+                <span className="h-2 w-2 rounded-full" style={{ background: C.cyan }} />
+                <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">WorkSuite OS {offered}</span><span className="text-[11px] text-[#8FA3C8]">{t('upd.notesMissing')}</span></span>
+                <span className="text-[11px]" style={{ color: C.cyan }}>{t('upd.hist.offered')}</span>
+              </div>
+            )}
+            <div className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
+              <span className="h-2 w-2 rounded-full" style={{ background: C.green }} />
+              <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">WorkSuite OS {st.installed}</span><span className="text-[11px] text-[#8FA3C8]">{t('upd.lastChecked', { when: st.last_check ? fmtWhen(st.last_check) : t('settings.about.notYet') })}</span></span>
+              <span className="text-[11px]" style={{ color: C.green }}>{t('upd.hist.installed')}</span>
+            </div>
+            <div className={`px-4 py-[11px] text-[11px] text-[#8FA3C8] ${rowLine}`}>{t('upd.hist.none')}</div>
+          </div>
         </section>
-        <div className="flex flex-col gap-2.5">
-          <section aria-labelledby="upd-opts" className={`${card} flex flex-col gap-3 px-[18px] py-4`}>
-            <div className="flex items-center justify-between"><h2 id="upd-opts" className="m-0 text-sm font-semibold">{t('upd.options')}</h2>{policy && <span className={chip}>{t('settings.lock.policy')}</span>}</div>
-            {[
-              [t('upd.modeLabel'), MODE[policy?.update_mode ?? 'automatic']],
-              [t('upd.installs'), policy?.maintenance_window ? t('upd.inWindow', { window: policy.maintenance_window }) : t('upd.whenIdle')],
-              [t('upd.metered'), t('upd.meteredWait')],
-            ].map(([k, val]) => (
-              <div key={k} className="flex items-center justify-between gap-3 text-[13px] text-[#C9D6EE]"><span>{k}</span><span className="text-[#E8EEFA]">{val}</span></div>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between"><h2 id="upd-opts" className="m-0 text-sm font-semibold">{t('upd.options')}</h2>{policy && <span className={chip}>{t('settings.lock.policy')}</span>}</div>
+          <div className={`${card} overflow-hidden`} aria-labelledby="upd-opts" role="group">
+            {opts.map(([k, d, val]) => (
+              <div key={k} className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
+                <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px]">{k}</span><span className="text-[11px] text-[#8FA3C8]">{d}</span></span>
+                <span className="text-xs text-[#C9D6EE]">{val}</span>
+              </div>
             ))}
-          </section>
-          <section aria-labelledby="upd-pc" className={`${card} flex flex-col gap-1.5 px-[18px] py-4 text-[13px]`}>
-            <h2 id="upd-pc" className="m-0 text-sm font-semibold">{t('settings.thisComputer')}</h2>
-            <span className="text-[#8FA3C8]">WorkSuite OS {st.installed} · {t('upd.channel', { ring: RING[policy?.update_ring ?? 'stable'] })}</span>
-            <span className="text-[#8FA3C8]">{t('upd.lastChecked', { when: st.last_check ? fmtWhen(st.last_check) : t('settings.about.notYet') })}</span>
-          </section>
+          </div>
           <OfflineBundle />
         </div>
       </div>

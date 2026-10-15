@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { clickAction, panel, taskbarEntries, updateBadge, type PanelWindow, type TrayItem } from '../lib/panel'
 import { os, type OsUpdateStatus, type VpnState } from '../lib/os'
-import { activeVpn } from '../lib/vpn'
+import { activeVpn, vpnErrorText } from '../lib/vpn'
 import { useT } from '../i18n'
 
 // Panel contents fed by the Wayland bridge (SRS §5.1): running windows, tray and update badge.
@@ -91,7 +91,7 @@ export function TrayItems() {
 
 const BADGE_TONE = { available: '#1F6BFF', downloading: '#18A0B8', restart: '#2E9E6A', failed: '#D9452B' } as const
 
-/** Taskbar VPN indicator (WSOS-INT-001): shown while a VPN is connected; opens Settings › Network. */
+/** Taskbar VPN indicator (WSOS-INT-001): shown while a VPN is connected; opens the V3 tunnel panel. */
 export function VpnBadge({ onOpen }: { onOpen: () => void }) {
   const t = useT()
   const [state, setState] = useState<VpnState | null>(null)
@@ -102,15 +102,55 @@ export function VpnBadge({ onOpen }: { onOpen: () => void }) {
     const id = setInterval(load, 15_000)
     return () => { live = false; clearInterval(id) }
   }, [])
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const vpn = activeVpn(state)
-  if (!vpn) return null
-  const label = t('vpn.badge', { name: vpn.name })
+  // Shown while connected, or while the V3 panel is open (so switching the last tunnel off doesn't close it).
+  if (!state || (!vpn && !open)) return null
+  const label = vpn ? t('vpn.badge', { name: vpn.name }) : t('vpn.title')
+  const toggle = async (uuid: string, on: boolean, needsCreds: boolean) => {
+    if (on && needsCreds) { setOpen(false); onOpen(); return } // credentials are asked in Settings › VPN
+    setBusy(uuid); setError(null)
+    const r = await os.sysVpnConnect(uuid, on)
+    setBusy(null)
+    if (!r.available) setError(vpnErrorText(r.reason) || null)
+    const s = await os.sysVpn().catch(() => null)
+    if (s?.available) setState(s.value)
+  }
   return (
-    <button type="button" onClick={onOpen} aria-label={label} title={label}
-      className="flex h-10 cursor-pointer items-center gap-1.5 rounded-[10px] bg-white/[0.12] px-2.5 text-xs font-semibold text-[#9BE7B4] hover:bg-white/20">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z" /></svg>
-      {t('vpn.title')}
-    </button>
+    <span className="relative">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-label={label} title={label} aria-expanded={open} aria-haspopup="dialog"
+        className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/20 ${open ? 'bg-white/20' : 'bg-white/[0.12]'}`}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={vpn ? '#5FD39A' : '#C9D6EE'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4" /></svg>
+      </button>
+      {open && (
+        <div role="dialog" aria-label={t('vpn.title')} className="absolute right-0 bottom-[52px] flex w-[360px] flex-col gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] p-4 text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
+          <span className="flex items-center gap-2.5 rounded-xl px-3 py-2.5" style={{ background: vpn ? '#2E9E6A' : 'rgba(255,255,255,0.06)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4" /></svg>
+            <span className="flex flex-col"><span className="text-[13px] font-semibold">{t('vpn.title')}</span><span className="text-[11px] text-[#DCFCE8]">{vpn ? vpn.name : t('common.notConnected')}</span></span>
+          </span>
+          <div className="overflow-hidden rounded-xl bg-[rgba(4,10,26,0.5)]">
+            <div className="px-3 py-2.5 text-[11px] tracking-[0.06em] text-[#8FA3C8] uppercase">{t('vpn.tunnels')}</div>
+            {state.connections.map((c) => {
+              const locked = c.managed && c.active && state.vpn_required
+              return (
+                <div key={c.uuid} className="flex items-center gap-2.5 border-t border-[rgba(127,178,255,0.08)] px-3 py-2.5">
+                  <span className="h-2 w-2 rounded-full" style={{ background: c.active ? '#5FD39A' : '#5E739C' }} />
+                  <span className="flex flex-1 flex-col"><span className="text-[13px] font-medium">{c.name}</span><span className="font-mono text-[10px] text-[#8FA3C8]">{[c.device, c.active ? t('common.connected') : t('common.off')].filter(Boolean).join(' · ')}</span></span>
+                  <button type="button" role="switch" aria-checked={c.active} aria-label={c.name} disabled={busy !== null || locked} onClick={() => void toggle(c.uuid, !c.active, c.needs_credentials)}
+                    className="relative h-[22px] w-9 cursor-pointer rounded-[11px] disabled:cursor-default disabled:opacity-60" style={{ background: c.active ? '#2E9E6A' : 'rgba(127,178,255,0.25)' }}>
+                    <span className="absolute top-[3px] h-4 w-4 rounded-full bg-white" style={{ left: c.active ? 17 : 3 }} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          {error && <span role="alert" className="text-xs text-[#FF8A7A]">{error}</span>}
+          <button type="button" onClick={() => { setOpen(false); onOpen() }} className="cursor-pointer self-start text-xs text-[#7FB2FF] hover:text-[#B8D4FF]">{t('vpn.settingsLink')}</button>
+        </div>
+      )}
+    </span>
   )
 }
 
