@@ -14,7 +14,7 @@ lb config noauto \
   --mode debian \
   --distribution trixie \
   --architecture "$ARCH" \
-  --archive-areas "main contrib non-free-firmware" \
+  --archive-areas "main non-free-firmware" \
   --parent-mirror-bootstrap "$MIRROR" \
   --parent-mirror-chroot "$MIRROR" \
   --parent-mirror-chroot-security "$SECMIRROR" \
