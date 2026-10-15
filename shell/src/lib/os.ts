@@ -98,6 +98,8 @@ export interface WorkSuiteApi {
   pruneRuntimes(): Promise<CloudResult<string>>
   bundleInspect(handle: string): Promise<CloudResult<BundleInfo>>
   bundleInstall(handle: string): Promise<CloudResult<string>>
+  /** G14: .wsupdate bundles at the top level of mounted USB drives, as pickFile-style handles. */
+  findBundles(): Promise<CloudResult<FoundBundle[]>>
   appimageList(): Promise<CloudResult<AppImageRecord[]>>
   appimageImport(handle: string): Promise<CloudResult<AppImageRecord>>
   appimageApprove(id: string): Promise<CloudResult<AppImageRecord>>
@@ -195,6 +197,8 @@ export interface OsUpdateStatus {
   state: 'up_to_date' | 'checking' | 'available' | 'waiting' | 'installing' | 'ready_to_restart' | 'restart_pending' | 'failed'
   version: string | null; installed: string; release_id: string | null; mandatory: boolean; deadline: string | null
   deferrals_left: number | null; reason: string | null; restart_at: number | null; last_check: number | null
+  /** Emergency security release; resumed: this install picks up an interrupted download (older services omit both). */
+  critical?: boolean; resumed?: boolean
 }
 export interface CatalogEntry {
   id: string; source: 'apt' | 'flatpak' | 'appimage'; name: string; arches: string[]
@@ -209,6 +213,7 @@ export interface LocalDebPreview {
   plan: PackagePreview['plan']; disk_bytes: number | null; token: string
 }
 export interface AppPermissions { app: string; permissions: string[]; overrides: string[]; broad: string[] }
+export interface FoundBundle { handle: string; name: string; drive: string }
 export interface BundleInfo { release_id: string; version: string; packages: number; bytes: number; critical: boolean; verified: true }
 export interface AppImageRecord {
   id: string; name: string; version: string | null; origin: string; sha256: string; arch: string; size: number
@@ -468,8 +473,10 @@ const stub: WorkSuiteApi = {
   async appPermissionsReset() { return { ok: false, error: 'service_unavailable' } },
   async appDataRemove() { return { ok: false, error: 'service_unavailable' } },
   async pruneRuntimes() { return { ok: false, error: 'service_unavailable' } },
-  async bundleInspect() { return { ok: false, error: 'service_unavailable' } },
+  // ?upd=offline previews G14 with a bundle on a USB drive; otherwise there is no package service here.
+  async bundleInspect(h) { return h === 'wsupdate:preview' ? { ok: true, value: { release_id: 'os-1.1.2', version: '1.1.2', packages: 214, bytes: 377_487_360, critical: true, verified: true } } : { ok: false, error: 'service_unavailable' } },
   async bundleInstall() { return { ok: false, error: 'service_unavailable' } },
+  async findBundles() { return { ok: true, value: PV.get('upd') === 'offline' ? [{ handle: 'wsupdate:preview', name: 'worksuite-1.1.2-offline.wsupdate', drive: 'KINGSTON' }] : [] } },
   async appimageList() { return { ok: true, value: [] } },
   async appimageImport() { return { ok: false, error: 'service_unavailable' } },
   async appimageApprove() { return { ok: false, error: 'service_unavailable' } },
@@ -587,6 +594,10 @@ function stubUpdateState(k: string | null): OsUpdateStatus {
   const opt = { ...base, mandatory: false, deadline: null, deferrals_left: null }
   switch (k) {
     case 'available': return opt
+    case 'offline': {
+      const two = new Date(); two.setDate(two.getDate() + 1); two.setHours(2, 0, 0, 0)
+      return { ...base, version: '1.1.2', installed: '1.1.0', release_id: 'os-1.1.2', critical: true, resumed: true, state: 'installing', reason: null, deadline: two.toISOString() }
+    }
     case 'downloading': return { ...opt, state: 'installing', reason: null }
     case 'ready': return { ...opt, state: 'ready_to_restart', installed: '1.0.3', reason: null }
     case 'forced': return { ...base, state: 'restart_pending', reason: 'deadline', restart_at: Date.now() + 60_000 }
@@ -603,6 +614,7 @@ if (typeof window !== 'undefined') {
   const emitJob = (percent: number, phase: string) => stubListeners.forEach((l) => l({ job, kind: 'progress', percent, phase }))
   const setOs = (p: Partial<OsUpdateStatus>) => { stubOs = { ...stubOs, ...p }; stubOsListeners.forEach((l) => l(stubOs)) }
   if (k === 'downloading') setTimeout(() => emitJob(41, 'downloading'), 400)
+  if (k === 'offline') setTimeout(() => emitJob(70, 'downloading'), 400)
   if (k === 'forced') { setTimeout(() => setOs({ state: 'installing', reason: null, restart_at: null }), 600); setTimeout(() => emitJob(50, 'applying'), 800) }
   if (k === 'failed') { setTimeout(() => emitJob(50, 'applying'), 400); setTimeout(() => setOs({ state: 'failed', reason: 'dpkg: error processing package linux-image-6.12 (--configure)' }), 700) }
 }

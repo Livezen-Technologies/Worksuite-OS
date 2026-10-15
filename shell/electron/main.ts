@@ -1,3 +1,4 @@
+import { findBundles } from './bundles'
 import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -280,6 +281,15 @@ app.whenReady().then(() => {
   })
   const pickedPath = (h: string, kind: string) => (h.startsWith(`${kind}:`) ? picked.get(h) ?? null : null)
   const noFile = { ok: false, error: 'invalid_argument' }
+  // G14: .wsupdate bundles on mounted USB drives, behind the same opaque handles as a picked file.
+  handle('ws:findBundles', () => {
+    const found = findBundles(roots(files).filter((r) => r.id.startsWith('media:')))
+    return { ok: true, value: found.map((f) => {
+      const h = [...picked].find(([, p]) => p === f.path)?.[0] ?? `wsupdate:${picked.size + 1}:${Date.now()}`
+      picked.set(h, f.path)
+      return { handle: h, name: f.name, drive: f.drive }
+    }) }
+  })
   // VPN (WSOS-INT-001): list/connect/disconnect/remove, and import of a WireGuard .conf the user picked.
   handle('ws:sysVpn', () => sys.vpn())
   // OpenVPN user name/password arrive only with a Connect click and go to nmcli on stdin (system.ts).
