@@ -18,7 +18,7 @@ run() {
   qemu-system-x86_64 -machine q35,accel=$accel -m 4096 -smp 4 -cpu Nehalem \
     -drive if=pflash,format=raw,readonly=on,file="$code" -drive if=pflash,format=raw,file="$dir/vars.fd" \
     -drive if=virtio,format=qcow2,file="$dir/disk.qcow2" "$@" \
-    -vga virtio -display none -monitor "unix:$dir/monitor.sock,server,nowait" -chardev "socket,id=s0,path=$dir/serial.sock,server=on,wait=off,logfile=$dir/serial.log" -serial chardev:s0 \
+    -vga virtio -display none -monitor "unix:$dir/monitor.sock,server,nowait" -qmp "unix:$dir/qmp.sock,server=on,wait=off" -chardev "socket,id=s0,path=$dir/serial.sock,server=on,wait=off,logfile=$dir/serial.log" -serial chardev:s0 \
     -device virtio-tablet-pci -device virtio-keyboard-pci -nic user,model=virtio-net-pci -daemonize -pidfile "$dir/qemu.pid"
 }
 case "$cmd" in
@@ -32,7 +32,15 @@ shot) p="$dir/${3:?name}.ppm"; rm -f "$p"; mon "screendump $p"
       convert "$p" "$dir/$3.png" 2>/dev/null || pnmtopng "$p" > "$dir/$3.png" 2>/dev/null \
         || python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2])' "$p" "$dir/$3.png"
       rm -f "$p"; echo "$dir/$3.png" ;;
-click) mon "mouse_move ${3:?x} ${4:?y}"; sleep 0.3; mon 'mouse_button 1'; sleep 0.15; mon 'mouse_button 0' ;;
+click) # Absolute position on the virtio tablet through QMP. The monitor's mouse_move is relative and goes to the
+       # PS/2 mouse, whose accelerated motion parks the pointer in a screen corner (clicks miss, the cursor vanishes).
+       x=${3:?x}; y=${4:?y}; W=${VM_W:-1280}; H=${VM_H:-800}
+       ax=$((x * 32767 / (W - 1))); ay=$((y * 32767 / (H - 1)))
+       ev() { printf '{"execute":"qmp_capabilities"}\n{"execute":"input-send-event","arguments":{"events":[%s]}}\n' "$1" \
+                | socat -t 1 - "UNIX-CONNECT:$dir/qmp.sock" >/dev/null; }
+       ev "{\"type\":\"abs\",\"data\":{\"axis\":\"x\",\"value\":$ax}},{\"type\":\"abs\",\"data\":{\"axis\":\"y\",\"value\":$ay}}"
+       sleep 0.3; ev '{"type":"btn","data":{"down":true,"button":"left"}}'
+       sleep 0.15; ev '{"type":"btn","data":{"down":false,"button":"left"}}' ;;
 keys) shift 2; for k in "$@"; do mon "sendkey $k"; sleep 0.3; done ;;
 type) t=${3:?text}; i=0
       while [ $i -lt ${#t} ]; do c=$(printf %s "$t" | cut -c$((i+1))); i=$((i+1))
