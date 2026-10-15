@@ -11,6 +11,7 @@ import AppCenter from './screens/AppCenter'
 import Settings from './screens/Settings'
 import Recovery from './screens/Recovery'
 import Installer from './screens/Installer'
+import { useNotices } from './lib/useNotices'
 
 // `?mode=installer` boots the live-ISO installer; `?mode=recovery` the recovery launcher.
 const mode = new URLSearchParams(location.search).get('mode')
@@ -21,6 +22,8 @@ export default function App() {
   const [firstRun, setFirstRun] = useState(() => localStorageGet('ws.firstRunDone') !== '1')
   const [win, setWin] = useState<WindowApp | null>(null)
   const [installing, setInstalling] = useState(mode === 'installer')
+  const inSession = (state === 'active' && !firstRun) || state === 'locked' || state === 'suspending'
+  const notes = useNotices(inSession)
   const send = useCallback((e: SessionEvent) => setState((s) => nextState(s, e)), [])
 
   useEffect(() => {
@@ -46,15 +49,15 @@ export default function App() {
       return <Greeter onSignIn={(u) => { setUser(u); send('authSuccess') }} />
     case 'locked':
     case 'suspending':
-      return <Lock user={user} onUnlock={() => send('unlock')} />
+      return <Lock user={user} notices={notes.notices} onUnlock={() => send('unlock')} />
     case 'recovery':
       return <Recovery onRestartShell={() => send('shellRestarted')} onLogout={() => send('logout')} />
     case 'loggingOut':
       return null
     case 'active':
-      if (firstRun) return <FirstRun onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
+      if (firstRun) return <FirstRun userName={displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
       return (
-        <Desktop user={user} onLock={() => { void os.lock(); send('lock') }} onLogout={() => { void os.logout(); send('logout') }} onOpen={setWin}>
+        <Desktop user={user} onLock={() => { void os.lock(); send('lock') }} onLogout={() => { void os.logout(); send('logout') }} onOpen={setWin} notes={notes}>
           {win === 'files' && <Files onClose={() => setWin(null)} />}
           {win === 'appcenter' && <AppCenter onClose={() => setWin(null)} />}
           {win === 'settings' && <Settings onClose={() => setWin(null)} />}
@@ -65,3 +68,8 @@ export default function App() {
 
 function localStorageGet(k: string) { try { return localStorage.getItem(k) } catch { return null } }
 function localStorageSet(k: string, v: string) { try { localStorage.setItem(k, v) } catch { /* ignore */ } }
+// Login names arrive as user, user@domain or DOMAIN\user; show the bare name capitalised.
+function displayName(login: string) {
+  const bare = login.split('\\').pop()!.split('@')[0]
+  return bare.charAt(0).toUpperCase() + bare.slice(1)
+}

@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DesktopProps } from './types'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
-import { LogoMark } from '../components/Logo'
-import { diffStatus, type Notice, type SyncStatus } from '../lib/syncNotices'
+import type { Notice } from '../lib/syncNotices'
+import { ageLabel } from '../lib/power'
+import { BG, Icon, Mark, P } from '../components/Ws'
+import { PowerMenu, ShutdownConfirm } from '../components/Power'
 
-const TONE: Record<Notice['tone'], string> = { ok: 'bg-[#ecfdf5] text-[#047857]', warn: 'bg-[#fffbeb] text-[#b45309]', error: 'bg-[#fef2f2] text-[#b91c1c]' }
+const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 
 type Kind = 'WorkSuite' | 'Linux app' | 'System'
 interface App { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean }
@@ -55,18 +57,18 @@ function useClock() {
   return now
 }
 
-export default function Desktop({ user, onLock, onLogout, onOpen, children }: DesktopProps) {
+export default function Desktop({ user, onLock, onLogout, onOpen, notes, children }: DesktopProps) {
   const now = useClock()
   const [launcher, setLauncher] = useState(false)
   const [tab, setTab] = useState<Tab>('all')
   const [query, setQuery] = useState('')
   const [powerOpen, setPowerOpen] = useState(false)
+  const [confirmShutdown, setConfirmShutdown] = useState(false)
   const [workspace, setWorkspace] = useState(1)
-  // Notices from the sync service (and later other system sources); newest first.
-  const [notices, setNotices] = useState<(Notice & { at: number })[]>([])
-  const [toast, setToast] = useState<Notice | null>(null)
-  const [unread, setUnread] = useState(0)
+  const { notices, setNotices, toast, setToast, unread, setUnread } = notes
   const [trayOpen, setTrayOpen] = useState(false)
+  // Do not disturb holds toasts back; notices still collect in the notification center.
+  const [dnd, setDnd] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const name = displayName(user) || 'Hasarinda'
 
@@ -74,24 +76,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
   const longDate = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
   const shortDate = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
 
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 8000); return () => clearTimeout(t) }, [toast])
-
-  // Poll the sync service's status and turn changes into notices.
-  useEffect(() => {
-    let prev: SyncStatus | null = null
-    const poll = () => void os.syncStatus().then((r) => {
-      if (!r.ok) return
-      const fresh = diffStatus(prev, r.value)
-      prev = r.value
-      if (!fresh.length) return
-      setNotices((all) => [...fresh.map((f) => ({ ...f, at: Date.now() })), ...all].slice(0, 50))
-      setUnread((u) => u + fresh.length)
-      setToast(fresh[0])
-    })
-    poll()
-    const t = setInterval(poll, 15_000)
-    return () => clearInterval(t)
-  }, [])
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t) }, [toast, setToast])
 
   // Management chip from the device agent's status; re-read each minute so enrollment, wipe or revocation show up.
   const [device, setDevice] = useState<DeviceInfo | null>(null)
@@ -112,7 +97,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  useEffect(() => { if (launcher) searchRef.current?.focus(); else { setQuery(''); setPowerOpen(false) } }, [launcher])
+  useEffect(() => { if (launcher) searchRef.current?.focus(); else setQuery('') }, [launcher])
 
   const q = query.trim().toLowerCase()
   const apps = useMemo(() => APPS.filter((a) => {
@@ -134,54 +119,67 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
   }
   const byId = (id: string) => APPS.find((a) => a.id === id)!
 
-  return (
-    <div className="relative h-full w-full overflow-hidden bg-[#172033] font-sans text-[#0f172a]">
-      <svg aria-hidden="true" className="absolute inset-0 h-full w-full" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
-        <circle cx="1180" cy="180" r="420" fill="none" stroke="#24314a" />
-        <circle cx="1180" cy="180" r="300" fill="none" stroke="#24314a" />
-        <circle cx="1180" cy="180" r="180" fill="none" stroke="#2b3a56" />
-        <circle cx="220" cy="820" r="360" fill="none" stroke="#1e2a40" />
-      </svg>
+  const quick = [
+    { label: 'Do not disturb', d: P.sleep, on: dnd, run: () => { setDnd((v) => !v); if (!dnd) setToast(null) } },
+    { label: 'Settings', d: P.settings, on: false, run: () => { setTrayOpen(false); onOpen('settings') } },
+    { label: 'Lock', d: P.lock, on: false, run: () => { setTrayOpen(false); onLock() } },
+  ]
 
-      <div className="absolute top-7 left-8 flex flex-col gap-1.5 text-[#e2e8f0]">
-        <div className="text-sm text-[#94a3b8]">{longDate}</div>
+  return (
+    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: BG.desktop }}>
+      <div className="absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
+        <div className="text-sm text-[#8FA3C8]">{longDate}</div>
         <div className="text-[44px] font-light tracking-[-1px]">{time}</div>
       </div>
 
       {/* Work area for open windows, above the taskbar */}
       {children && <div className="absolute inset-x-0 top-0 bottom-14 z-10 px-6 pt-5 pb-5">{children}</div>}
 
-      {toast && (
-        <div role="status" className="absolute top-6 right-6 z-20 flex w-[340px] items-start gap-3 rounded-xl bg-white px-4 py-3.5 shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
-          <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${TONE[toast.tone]}`}><BIcon name={toast.tone === 'ok' ? 'check' : 'alert'} /></div>
-          <div className="flex grow flex-col gap-0.5">
-            <div className="text-[13px] font-semibold">{toast.title}</div>
-            <div className="text-xs text-[#475569]">{toast.body}</div>
+      {toast && !dnd && !trayOpen && (
+        <div role="status" className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] font-bold text-white" style={{ background: TONE_BG[toast.tone] }}><BIcon name={toast.tone === 'ok' ? 'check' : 'alert'} /></span>
+          <div className="flex flex-1 flex-col gap-[3px]">
+            <div className="flex justify-between gap-2"><span className="text-sm font-semibold">{toast.title}</span><span className="text-xs text-[#8FA3C8]">now</span></div>
+            <span className="text-[13px] leading-[1.4] text-[#C9D6EE]">{toast.body}</span>
           </div>
-          <button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)} className="text-[#475569] hover:text-[#0f172a]"><BIcon name="close" size={14} /></button>
+          <button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[#8FA3C8] hover:bg-white/10 hover:text-white"><Icon d={P.close} size={14} /></button>
         </div>
       )}
 
       {trayOpen && (
-        <div role="dialog" aria-label="Notifications" className="absolute right-4 bottom-16 z-40 flex max-h-[60%] w-[360px] flex-col overflow-hidden rounded-xl bg-white shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
-          <div className="flex items-center border-b border-[#e2e8f0] px-4 py-3 text-sm font-semibold">
-            <span className="grow">Notifications</span>
-            {notices.length > 0 && <button type="button" onClick={() => setNotices([])} className="text-xs font-normal text-[#2563eb]">Clear all</button>}
-          </div>
-          <div className="overflow-auto">
-            {notices.length === 0 && <p className="m-0 px-4 py-6 text-center text-[13px] text-[#475569]">No notifications</p>}
-            {notices.map((x) => (
-              <div key={x.id} className="flex gap-3 border-b border-[#f1f5f9] px-4 py-3">
-                <div className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${TONE[x.tone]}`}><BIcon name={x.tone === 'ok' ? 'check' : 'alert'} size={14} /></div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[13px] font-semibold">{x.title}</span>
-                  <span className="text-xs text-[#475569]">{x.body}</span>
-                  <span className="text-[11px] text-[#94a3b8]">{new Date(x.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-              </div>
+        <aside id="ws-notifications" aria-label="Notifications" className="absolute top-3 right-3 bottom-[68px] z-40 flex w-[400px] max-w-[calc(100%-24px)] flex-col gap-3.5 rounded-[20px] border border-[rgba(127,178,255,0.18)] bg-[rgba(10,24,56,0.94)] p-[18px] text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[24px]">
+          <div className="grid grid-cols-3 gap-2">
+            {quick.map((q) => (
+              <button key={q.label} type="button" aria-pressed={q.label === 'Do not disturb' ? q.on : undefined} onClick={q.run}
+                className={`flex cursor-pointer flex-col gap-2 rounded-xl p-3 text-left ${q.on ? 'bg-[#1F6BFF] text-white' : 'bg-white/[0.06] text-[#E8EEFA] hover:bg-white/10'}`}>
+                <Icon d={q.d} size={18} stroke={q.on ? '#FFFFFF' : '#C9D6EE'} />
+                <span className="text-xs font-medium">{q.label}</span>
+              </button>
             ))}
           </div>
-        </div>
+          <div className="mt-1 flex items-center justify-between">
+            <h2 className="m-0 text-base font-semibold">Notifications</h2>
+            {notices.length > 0 && <button type="button" onClick={() => setNotices([])} className="cursor-pointer rounded text-[13px] text-[#7FB2FF] hover:text-[#B8D4FF]">Clear all</button>}
+          </div>
+          <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-2 overflow-auto p-0">
+            {notices.length === 0 && (
+              <li className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(31,107,255,0.15)]"><Icon d={P.bell} size={22} stroke="#7FB2FF" /></span>
+                <span className="text-sm font-semibold">You're all caught up</span>
+                <span className="max-w-[260px] text-[13px] text-[#8FA3C8]">Sync, update and app notifications show up here.</span>
+              </li>
+            )}
+            {notices.map((x) => (
+              <li key={x.id} className="flex gap-3 rounded-xl border border-[rgba(127,178,255,0.1)] bg-white/[0.04] p-3">
+                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] text-white" style={{ background: TONE_BG[x.tone] }}><BIcon name={x.tone === 'ok' ? 'check' : 'alert'} size={16} /></span>
+                <div className="flex flex-1 flex-col gap-[3px]">
+                  <div className="flex justify-between gap-2"><span className="text-[13px] font-semibold">{x.title}</span><span className="text-[11px] text-[#8FA3C8]">{ageLabel(x.at, now.getTime())}</span></div>
+                  <span className="text-[13px] leading-[1.4] text-[#C9D6EE]">{x.body}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </aside>
       )}
 
       {launcher && (
@@ -257,59 +255,51 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
               <button type="button" aria-label="App Center" onClick={() => launch('appcenter')} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="grid" /></button>
               <button type="button" aria-label="Settings" onClick={() => { setLauncher(false); onOpen('settings') }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="settings" /></button>
               <button type="button" aria-label="Lock" onClick={() => { setLauncher(false); onLock() }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="lock" /></button>
-              <button type="button" aria-label="Power menu" aria-haspopup="menu" aria-expanded={powerOpen} onClick={() => setPowerOpen((v) => !v)} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#b91c1c] hover:bg-[#fef2f2]"><BIcon name="power" /></button>
-              {powerOpen && (
-                <div role="menu" aria-label="Power" className="absolute right-5 bottom-[60px] flex w-48 flex-col rounded-xl border border-[#e2e8f0] bg-white p-1.5 shadow-[0_12px_32px_rgba(2,6,23,0.25)]">
-                  <button type="button" role="menuitem" onClick={onLogout} className="h-9 rounded-lg px-3 text-left text-[13px] hover:bg-[#f1f5f9]">Log out</button>
-                  <button type="button" role="menuitem" onClick={() => { setPowerOpen(false); void os.power('suspend') }} className="h-9 rounded-lg px-3 text-left text-[13px] hover:bg-[#f1f5f9]">Suspend</button>
-                  <button type="button" role="menuitem" onClick={() => { setPowerOpen(false); void os.power('restart') }} className="h-9 rounded-lg px-3 text-left text-[13px] hover:bg-[#f1f5f9]">Restart</button>
-                  <button type="button" role="menuitem" onClick={() => { setPowerOpen(false); void os.power('shutdown') }} className="h-9 rounded-lg px-3 text-left text-[13px] text-[#b91c1c] hover:bg-[#fef2f2]">Shut down</button>
-                </div>
-              )}
+              <button type="button" aria-label="Power menu" aria-haspopup="menu" onClick={() => { setLauncher(false); setPowerOpen(true) }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#b91c1c] hover:bg-[#fef2f2]"><BIcon name="power" /></button>
             </div>
           </div>
         </div>
       )}
 
-      <nav aria-label="Taskbar" className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-1.5 border-t border-[#24314a] bg-[rgba(15,23,42,0.94)] px-3 text-[#e2e8f0]">
+      <nav aria-label="Taskbar" className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
         <button type="button" aria-label="Open launcher" aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
-          className={`flex size-11 items-center justify-center rounded-[10px] ${launcher ? 'bg-[#334155] ring-2 ring-[#0A6CFF]' : 'bg-[#1e293b] hover:bg-[#334155]'}`}><LogoMark onDark height={30} /></button>
-        <div className="mx-1.5 h-7 w-px bg-[#334155]" />
+          className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.45)] ring-2 ring-[#1F6BFF]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
         {TASKBAR.map((t) => {
           const a = byId(t.id)
           return (
             <button key={t.id} type="button" aria-label={`${a.name}${t.running ? ', running' : ''}`} onClick={() => launch(t.id)}
-              className={`relative flex size-11 items-center justify-center rounded-[10px] ${t.active ? 'bg-[#1e293b]' : 'hover:bg-[#1e293b]'}`}>
-              <span className="flex size-[30px] items-center justify-center rounded-lg text-xs font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
-              {t.running && <span className={`absolute bottom-[3px] h-[3px] rounded-sm bg-[#60a5fa] ${t.active ? 'w-3.5' : 'w-1.5'}`} />}
+              className={`relative flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${t.active ? 'bg-white/10' : 'hover:bg-white/10'}`}>
+              <span className="flex size-7 items-center justify-center rounded-[7px] text-[11px] font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
+              {t.running && <span className={`absolute bottom-[2px] h-[3px] rounded-sm bg-[#18D4F0] ${t.active ? 'w-3.5' : 'w-1.5'}`} />}
             </button>
           )
         })}
         <div role="group" aria-label="Workspaces" className="ml-4 hidden gap-1 sm:flex">
           {[1, 2, 3].map((n) => (
             <button key={n} type="button" aria-label={`Workspace ${n}`} aria-pressed={workspace === n} onClick={() => setWorkspace(n)}
-              className={`h-7 min-w-7 rounded-md text-xs ${workspace === n ? 'bg-[#334155] text-[#f8fafc]' : 'text-[#94a3b8] hover:bg-[#1e293b]'}`}>{n}</button>
+              className={`h-7 min-w-7 cursor-pointer rounded-md text-xs ${workspace === n ? 'bg-white/[0.14] text-white' : 'text-[#8FA3C8] hover:bg-white/10'}`}>{n}</button>
           ))}
         </div>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-2">
           {managed && (
             <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? `Managed by ${device.org_name}` : undefined}
-              className="hidden rounded-full bg-[#1e3a8a] px-2.5 py-1 text-xs text-[#dbeafe] hover:bg-[#1e40af] lg:inline">{managed}</button>
+              className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
-          <button type="button" aria-label="Network: Livezen-Office, connected" className="flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]"><BIcon name="wifi" /></button>
-          <button type="button" aria-label="Volume 60 percent" className="flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]"><BIcon name="volume" /></button>
-          <button type="button" aria-label="Battery 82 percent" className="flex h-10 items-center gap-1.5 rounded-lg px-2 text-xs hover:bg-[#1e293b]"><BIcon name="battery" />82%</button>
-          <button type="button" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} aria-expanded={trayOpen}
-            onClick={() => { setTrayOpen((v) => !v); setUnread(0) }} className="relative flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]">
-            <BIcon name="bell" />
-            {unread > 0 && <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#dc2626] px-1 text-[10px] text-white">{unread}</span>}
+          <button type="button" aria-label="Notifications and quick settings" aria-expanded={trayOpen} aria-controls="ws-notifications"
+            onClick={() => { setTrayOpen((v) => !v); setUnread(0); setPowerOpen(false) }}
+            className={`flex h-10 cursor-pointer items-center gap-2.5 rounded-[10px] px-3 text-[13px] ${trayOpen ? 'bg-white/20' : 'bg-white/[0.12] hover:bg-white/20'}`}>
+            <time dateTime={now.toISOString()} title={shortDate}>{time}</time>
+            {unread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-[10px] bg-[#1F6BFF] px-1.5 text-[11px] font-bold" aria-label={`${unread} new`}>{unread}</span>}
           </button>
-          <div className="flex flex-col items-end pr-2 pl-2.5 text-xs leading-[1.3]">
-            <span className="text-[#f8fafc]">{time}</span>
-            <span className="text-[#94a3b8]">{shortDate}</span>
-          </div>
+          <button type="button" aria-label="Power" aria-haspopup="menu" aria-expanded={powerOpen} data-power-toggle onClick={() => { setPowerOpen((v) => !v); setTrayOpen(false) }}
+            className="flex size-10 cursor-pointer items-center justify-center rounded-[10px] bg-white/[0.12] shadow-[inset_0_0_0_1px_rgba(127,178,255,0.4)] hover:bg-white/20"><Icon d={P.power} size={18} /></button>
         </div>
       </nav>
+      {powerOpen && (
+        <PowerMenu user={name} className="right-4 bottom-[68px]" onClose={() => setPowerOpen(false)}
+          onLock={onLock} onSignOut={onLogout} onShutdown={() => setConfirmShutdown(true)} />
+      )}
+      {confirmShutdown && <ShutdownConfirm onCancel={() => setConfirmShutdown(false)} />}
     </div>
   )
 }
