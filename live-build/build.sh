@@ -16,6 +16,8 @@ v=$(dpkg-query -W -f='${Version}' live-build 2>/dev/null | sed 's/^1://')
 case "$v" in 2023*|2024*|2025*|2026*|2027*) ;; *) echo "live-build $v is too old; build inside Debian trixie" >&2; exit 1 ;; esac
 
 work=$(mktemp -d)
+# A full lb build leaves several GB; --one-file-system never follows a leftover bind mount.
+trap 'cd /; rm -rf --one-file-system "$work"' EXIT
 cp -a "$here/." "$work/"
 cd "$work"
 mkdir -p config/packages.chroot
