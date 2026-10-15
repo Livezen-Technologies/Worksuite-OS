@@ -34,15 +34,25 @@ def encrypted_partitions(partitions):
 
 
 def add_key(device, passphrase, key, run=subprocess.run):
-    """cryptsetup luksAddKey with both secrets in 0600 files on tmpfs (never on the command line)."""
+    """cryptsetup luksAddKey with both secrets in 0600 files on tmpfs (never on the command line).
+
+    GRUB unlocks the disk at startup (/boot is on the encrypted root) and GRUB 2.12 has no Argon2, the LUKS2 default
+    key derivation: on LUKS2 the user's passphrase slot is converted to PBKDF2 and the recovery slot is added with
+    PBKDF2, so both work at GRUB's prompt."""
+    out = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    luks2 = run(["cryptsetup", "isLuks", "--type", "luks2", device], **out).returncode == 0
+    pbkdf = ["--pbkdf", "pbkdf2"] if luks2 else []
     with tempfile.TemporaryDirectory(dir="/run" if os.path.isdir("/run") else None) as d:
         old, new = os.path.join(d, "old"), os.path.join(d, "new")
         for path, value in ((old, passphrase), (new, key)):
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "w") as f:
                 f.write(value)   # no trailing newline: the key file must equal what is typed at unlock
-        r = run(["cryptsetup", "luksAddKey", "--batch-mode", "--key-file", old, device, new],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if luks2:
+            r = run(["cryptsetup", "luksConvertKey", "--batch-mode", *pbkdf, "--key-file", old, device], **out)
+            if r.returncode != 0:
+                return r.returncode, (r.stderr or "").strip()
+        r = run(["cryptsetup", "luksAddKey", "--batch-mode", *pbkdf, "--key-file", old, device, new], **out)
         return r.returncode, (r.stderr or "").strip()
 
 

@@ -2,14 +2,17 @@
 // UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
 // can't tell, the section says so instead of showing sample values.
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { cloudErrorText, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
 import type { WindowProps } from './types'
 import { ACCENTS, DEFAULT_PRIVACY, KEYS, THEMES, accentColor, applyAppearance, loadAppearance, readJson, writeJson, type Appearance, type Privacy } from '../lib/setup'
 import { needsAttention, fmtWhen } from '../lib/updates'
-import { useOsUpdate } from '../lib/useOsUpdate'
+import { updates, useOsUpdate } from '../lib/useOsUpdate'
+import { useDnd } from '../lib/dnd'
+import { VpnPanel } from './settings/Vpn'
+import { PowerPanel, PrintersPanel } from './settings/Devices'
+import { BigSwitch } from './settings/ui'
 import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
-import { vpnErrorText } from '../lib/vpn'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
 import { UpdatesPanel } from './Updates'
@@ -18,24 +21,29 @@ import { formatDate, formatNumber, t, type MessageKey } from '../i18n'
 
 const NAV = [
   { id: 'Network', tint: '#1F6BFF', icon: 'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' },
+  { id: 'VPN', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4' },
   { id: 'Bluetooth', tint: '#1F6BFF', icon: 'M7 7l10 10-5 5V2l5 5L7 17' },
   { id: 'Display', tint: '#0E8FA8', icon: 'M3 4h18v12H3zM8 20h8M12 16v4', sep: true },
   { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
   { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
   { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
+  { id: 'Power', tint: '#B7791F', icon: 'M13 2L4 14h7l-1 8 9-12h-7z' },
+  { id: 'Printers', tint: '#5E739C', icon: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z' },
   { id: 'Default apps', tint: '#0E8FA8', icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 16.5h7M16.5 13v7' },
   { id: 'Privacy & security', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', sep: true },
-  { id: 'Users', tint: '#8FA3C8', icon: 'M9 8a3.5 3.5 0 1 0 0 .01M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7' },
-  { id: 'Devices', tint: '#8FA3C8', icon: 'M4 6h16v10H4zM2 20h20', sep: true },
-  { id: 'Drivers', tint: '#8FA3C8', icon: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z' },
+  { id: 'Lock screen', tint: '#2E9E6A', icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' },
+  { id: 'Users', tint: '#5E739C', icon: 'M9 8a3.5 3.5 0 1 0 0 .01M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7' },
+  { id: 'Devices', tint: '#5E739C', icon: 'M4 6h16v10H4zM2 20h20', sep: true },
+  { id: 'Drivers', tint: '#5E739C', icon: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z' },
   { id: 'Updates', tint: '#1F6BFF', icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
-  { id: 'About', tint: '#8FA3C8', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01' },
+  { id: 'Managed', tint: '#7A4FE0', icon: 'M3 21h18M5 21V7l7-4 7 4v14M9 10h.01M15 10h.01M9 14h.01M15 14h.01' },
+  { id: 'About', tint: '#5E739C', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01' },
 ] as const
 export type Section = (typeof NAV)[number]['id']
 const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
 const navLabel = (id: Section) => t(`settings.nav.${id}` as MessageKey)
 // Older names (launcher search, earlier builds) still land somewhere sensible.
-const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Printers: 'Devices' }
+const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power' }
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
 /** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
@@ -46,7 +54,7 @@ function useAvail<T>(load: () => Promise<Avail<T>>, pollMs?: number): { r: Res<T
 }
 
 const H1 = ({ children, action }: { children: ReactNode; action?: ReactNode }) => (
-  <div className="flex items-center justify-between gap-4"><h1 className="m-0 text-[28px] font-bold">{children}</h1>{action}</div>
+  <div className="flex items-center justify-between gap-4 pr-10"><h1 className="m-0 text-[28px] font-bold">{children}</h1>{action}</div>
 )
 function Rows({ rows }: { rows: { k: ReactNode; d?: ReactNode; v: ReactNode }[] }) {
   return (
@@ -133,119 +141,7 @@ function NetworkPanel() {
         { t: t('settings.net.adapters'), d: n.devices.map((d) => d.device).join(', ') || t('common.noneFound') },
       ].map((o) => <div key={o.t} className={`${card} flex flex-col gap-1.5 px-[18px] py-4`}><span className="text-sm font-semibold">{o.t}</span><span className="truncate text-[13px] text-[#8FA3C8]">{o.d}</span></div>)}
     </div>
-    <VpnSection />
   </>
-}
-
-/** VPN (WSOS-INT-001): the organization's managed WireGuard VPN and the user's own imported WireGuard files. */
-function VpnSection() {
-  const { r, reload } = useAvail(os.sysVpn, 10_000)
-  const [busy, setBusy] = useState<string | null>(null)
-  const [msg, setMsg] = useState<{ text: string; error: boolean } | null>(null)
-  const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
-  const [ask, setAsk] = useState<{ uuid: string; name: string } | null>(null)
-  const act = async (key: string, fn: () => Promise<{ available: boolean; reason?: string } | { ok: boolean; error?: string }>, done: string) => {
-    setBusy(key); setMsg(null)
-    const res = await fn()
-    setBusy(null)
-    const failed = 'available' in res ? !res.available : !res.ok
-    const why = 'available' in res ? res.reason : res.error
-    if (failed) { const t = vpnErrorText(why ?? ''); if (t) setMsg({ text: t, error: true }) } else setMsg({ text: done, error: false })
-    void reload()
-  }
-  const importFile = () => act('import', async () => {
-    const f = await os.pickFile('wgconf')
-    if (!f.ok) return f
-    return os.sysVpnImport(f.value.handle)
-  }, t('vpn.added'))
-  const importOvpn = () => act('import', async () => {
-    const f = await os.pickFile('ovpn')
-    if (!f.ok) return f
-    return os.sysVpnImportOpenvpn(f.value.handle)
-  }, t('vpn.addedOpenvpn'))
-  // OpenVPN with a password: asked here each time, sent once to nmcli's stdin, never stored by the shell.
-  const toggle = (c: { uuid: string; name: string; active: boolean; needs_credentials: boolean }) => {
-    if (!c.active && c.needs_credentials) { setAsk({ uuid: c.uuid, name: c.name }); return }
-    void act(c.uuid, () => os.sysVpnConnect(c.uuid, !c.active), c.active ? t('vpn.disconnectedFrom', { name: c.name }) : t('vpn.connectedTo', { name: c.name }))
-  }
-  return (
-    <section aria-label={t('vpn.title')} className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('vpn.title')}</h2>
-        {r.state === 'ok' && r.value.user_vpn_allowed && (
-          <span className="flex gap-2">
-            <button type="button" disabled={busy !== null} onClick={() => void importFile()} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{busy === 'import' ? t('vpn.adding') : t('vpn.import')}</button>
-            <button type="button" disabled={busy !== null} onClick={() => void importOvpn()} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{t('vpn.importOpenvpn')}</button>
-          </span>
-        )}
-      </div>
-      {r.state === 'loading' ? <Empty title={t('vpn.reading')} /> : r.state !== 'ok' ? <Unavail what={t('vpn.title')} reason={r.reason} /> : (
-        <>
-          {r.value.connections.length === 0 ? <Empty title={t('vpn.none')}>{r.value.user_vpn_allowed ? t('vpn.importHint2') : t('vpn.blocked')}</Empty> : (
-            <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
-              {r.value.connections.map((c) => {
-                const locked = c.managed && c.active && r.value.vpn_required
-                return (
-                  <li key={c.uuid} className={`flex items-center gap-3.5 px-[18px] py-[11px] ${rowLine}`} style={{ background: c.active ? 'rgba(31,107,255,0.12)' : 'transparent' }}>
-                    <Svg d={LOCK} size={18} stroke={c.active ? C.green : C.soft} />
-                    <span className="flex flex-1 flex-col gap-0.5">
-                      <span className="text-sm" style={{ fontWeight: c.active ? 600 : 400 }}>{c.name}</span>
-                      <span className="text-xs text-[#8FA3C8]">{[c.active ? t('common.connected') : t('common.notConnected'), c.kind === 'wireguard' ? 'WireGuard' : c.kind === 'openvpn' ? 'OpenVPN' : t('vpn.title'), c.managed ? t('vpn.managed') : null].filter(Boolean).join(' · ')}</span>
-                    </span>
-                    {!locked && (
-                      <button type="button" disabled={busy !== null} onClick={() => toggle(c)}
-                        className={`${c.active ? btnGhost : btnPrimary} px-3 py-1.5 text-[13px]`}>{busy === c.uuid ? (c.active ? t('common.disconnecting') : t('common.connecting')) : c.active ? t('common.disconnect') : t('common.connect')}</button>
-                    )}
-                    {!c.managed && (
-                      <button type="button" disabled={busy !== null} aria-label={t('common.removeName', { name: c.name })} onClick={() => setConfirmRemove(c.uuid)} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{t('common.remove')}</button>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          {msg && <p role={msg.error ? 'alert' : 'status'} className="m-0 text-[13px]" style={{ color: msg.error ? '#FF8A7A' : C.green }}>{msg.text}</p>}
-          <Note>{r.value.vpn_required ? t('vpn.requiredNote') : t('vpn.importedNote')}</Note>
-        </>
-      )}
-      {ask && <VpnCredentials name={ask.name} onCancel={() => setAsk(null)} onSubmit={(creds) => { const a = ask; setAsk(null); void act(a.uuid, () => os.sysVpnConnect(a.uuid, true, creds), t('vpn.connectedTo', { name: a.name })) }} />}
-      {confirmRemove && r.state === 'ok' && (
-        <Dialog alert onClose={() => setConfirmRemove(null)}>
-          {(tid) => <>
-            <div className="flex flex-col gap-3 px-6 pt-6 pb-4">
-              <h2 id={tid} className="m-0 text-[19px] font-bold">{t('vpn.removeTitle')}</h2>
-              <p className="m-0 text-sm text-[#C9D6EE]">{t('vpn.removeBody', { name: r.value.connections.find((c) => c.uuid === confirmRemove)?.name ?? '' })}</p>
-            </div>
-            <div className={dialogFooter}>
-              <button type="button" onClick={() => setConfirmRemove(null)} className={`${btnGhost} px-4 py-2 text-[13px]`}>{t('common.cancel')}</button>
-              <button type="button" onClick={() => { const id = confirmRemove; setConfirmRemove(null); void act(id, () => os.sysVpnRemove(id), t('vpn.removed')) }} className={`${btnPrimary} px-4 py-2 text-[13px]`}>{t('common.remove')}</button>
-            </div>
-          </>}
-        </Dialog>
-      )}
-    </section>
-  )
-}
-
-function VpnCredentials({ name, onCancel, onSubmit }: { name: string; onCancel: () => void; onSubmit: (c: { username: string; password: string }) => void }) {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  return (
-    <Dialog onClose={onCancel}>
-      {(tid) => <form onSubmit={(e) => { e.preventDefault(); if (username) onSubmit({ username, password }) }}>
-        <div className="flex flex-col gap-3 px-6 pt-6 pb-4">
-          <h2 id={tid} className="m-0 text-[19px] font-bold">{t('vpn.connectTo', { name })}</h2>
-          <label className="flex flex-col gap-1 text-sm">{t('vpn.username')}<input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} className="rounded-md bg-white/10 px-3 py-2" /></label>
-          <label className="flex flex-col gap-1 text-sm">{t('greeter.password')}<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-md bg-white/10 px-3 py-2" /></label>
-          <p className="m-0 text-xs text-[#8FA3C8]">{t('vpn.notSaved')}</p>
-        </div>
-        <div className={dialogFooter}>
-          <button type="button" onClick={onCancel} className={`${btnGhost} px-4 py-2 text-[13px]`}>{t('common.cancel')}</button>
-          <button type="submit" disabled={!username} className={`${btnPrimary} px-4 py-2 text-[13px]`}>{t('common.connect')}</button>
-        </div>
-      </form>}
-    </Dialog>
-  )
 }
 
 function BluetoothPanel() {
@@ -364,15 +260,44 @@ function SoundPanel() {
   </>
 }
 
+/** SetNotifications board. The shell's notification sources are its own system services; there are no per-app
+ *  notifications yet, so each source shows how it really behaves and can't be switched off. */
 function NotificationsPanel() {
+  const [dnd, setDnd] = useDnd()
+  const general = [
+    [t('settings.notif.onLock'), t('settings.notif.titlesOnly')],
+    [t('settings.notif.position'), t('settings.notif.topRight')],
+    [t('settings.notif.badge'), t('common.on')],
+  ]
+  const sources = [
+    { n: t('settings.notif.sync'), d: t('settings.notif.syncHint'), i: 'D', c: '#B7791F', b: t('settings.notif.banners'), l: t('settings.notif.titlesOnly') },
+    { n: t('settings.nav.Updates'), d: t('settings.notif.updatesHint'), i: 'U', c: '#1F6BFF', b: t('settings.notif.cards'), l: t('settings.notif.hidden') },
+    { n: t('settings.notif.devices'), d: t('settings.notif.devicesHint'), i: 'H', c: '#5E739C', b: t('settings.notif.cards'), l: t('settings.notif.hidden') },
+  ]
+  const cols = 'grid grid-cols-[minmax(0,1fr)_90px_90px_90px_60px] gap-2.5'
   return <>
     <H1>{t('settings.nav.Notifications')}</H1>
-    <Rows rows={[
-      { k: t('quick.dnd'), d: t('settings.notif.dndHint'), v: t('settings.notif.inQuick') },
-      { k: t('settings.notif.sync'), d: t('settings.notif.syncHint'), v: t('common.on') },
-      { k: t('settings.nav.Updates'), d: t('settings.notif.updatesHint'), v: t('common.on') },
-      { k: t('settings.notif.devices'), d: t('settings.notif.devicesHint'), v: t('common.on') },
-    ]} />
+    <div className="flex items-center gap-4 rounded-2xl border px-5 py-4" style={{ background: dnd ? 'rgba(122,79,224,0.18)' : 'rgba(14,32,72,0.7)', borderColor: dnd ? 'rgba(185,160,255,0.5)' : 'rgba(127,178,255,0.14)' }}>
+      <span className="flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: dnd ? '#7A4FE0' : 'rgba(127,178,255,0.2)' }}><Svg d="M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z" size={22} stroke="#FFFFFF" /></span>
+      <span className="flex flex-1 flex-col gap-0.5"><span className="text-base font-semibold">{t('quick.dnd')}</span><span className="text-xs text-[#C9D6EE]">{dnd ? t('settings.notif.dndOn') : t('settings.notif.dndOff')}</span></span>
+      <BigSwitch label={t('quick.dnd')} checked={dnd} color="#7A4FE0" onChange={setDnd} />
+    </div>
+    <div className="grid grid-cols-3 gap-2.5">
+      {general.map(([k, v]) => <div key={k} className={`${card} flex flex-col gap-1.5 px-3.5 py-[13px]`}><span className="text-xs text-[#8FA3C8]">{k}</span><span className="text-sm font-medium">{v}</span></div>)}
+    </div>
+    <div className="flex items-baseline justify-between"><h2 className="m-0 text-sm font-semibold">{t('settings.notif.sources')}</h2><span className="text-[11px] text-[#8FA3C8]">{t('settings.notif.sourcesHint')}</span></div>
+    <div className={`${card} overflow-hidden`} role="table" aria-label={t('settings.notif.sources')}>
+      <div role="row" className={`${cols} border-b border-[rgba(127,178,255,0.1)] px-4 py-[9px] text-[11px] text-[#8FA3C8]`}>
+        <span role="columnheader">{t('settings.notif.source')}</span><span role="columnheader">{t('settings.notif.banners')}</span><span role="columnheader">{t('settings.notif.lockScreen')}</span><span role="columnheader">{t('settings.notif.sound')}</span><span role="columnheader"><span className="sr-only">{t('settings.notif.allowed')}</span></span>
+      </div>
+      {sources.map((a) => (
+        <div role="row" key={a.n} className={`${cols} items-center px-4 py-2.5 text-[13px] ${rowLine}`}>
+          <span role="cell" className="flex items-center gap-2.5"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-xs font-bold" style={{ background: a.c }} aria-hidden="true">{a.i}</span><span className="flex flex-col"><span>{a.n}</span><span className="text-[11px] text-[#8FA3C8]">{a.d}</span></span></span>
+          <span role="cell">{a.b}</span><span role="cell" className="text-[#C9D6EE]">{a.l}</span><span role="cell" className="text-[#C9D6EE]">{t('common.off')}</span>
+          <span role="cell"><Switch small label={t('settings.notif.allowName', { name: a.n })} checked disabled /></span>
+        </div>
+      ))}
+    </div>
     <Note>{t('settings.notif.note')}</Note>
   </>
 }
@@ -541,31 +466,112 @@ function batteryText(b: BatteryState): string {
   return `${b.percentage == null ? '—' : `${formatNumber(b.percentage)}%`} · ${what}${eta ? ` · ${b.state === 'charging' ? t('settings.bat.toFull', { eta }) : t('settings.bat.left', { eta })}` : ''}`
 }
 
+/** SetAbout board. Processor and memory have no bridge source yet, so those tiles say so. */
 function AboutPanel() {
   const { r: disks } = useAvail(os.sysDisks)
   const { r: battery } = useAvail(os.sysBattery, 60_000)
+  const { r: displays } = useAvail(os.sysDisplays)
+  const { status } = useOsUpdate()
+  const [info, setInfo] = useState<DeviceInfo | null>(null)
+  const [gpus, setGpus] = useState<string[] | null>(null)
+  const [free, setFree] = useState<number | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [checking, setChecking] = useState(false)
+  useEffect(() => {
+    void os.deviceInfo().then(setInfo).catch(() => {})
+    void os.hwDevices().then((r) => setGpus(r.ok ? r.value.filter((x) => x.kind === 'graphics').map((x) => x.name) : [])).catch(() => setGpus([]))
+    void os.filesStatus('home').then((r) => setFree(r.free_bytes)).catch(() => {})
+  }, [])
+  if (!info) return <><H1>{t('settings.nav.About')}</H1><Empty title={t('settings.about.loading')} /></>
+  const d = info.device
+  const arch = d?.arch === 'arm64' ? 'ARM64 (arm64)' : d?.arch === 'amd64' ? 'x86-64 (amd64)' : t('common.unknown')
+  const screen = displays.state === 'ok' ? displays.value.find((x) => x.enabled) ?? null : null
+  const na = t('common.unavailable')
+  const specs: { k: string; v: string; d: string; icon: string }[] = [
+    { k: t('settings.about.cpu'), v: na, d: t('settings.about.noSource'), icon: 'M7 7h10v10H7zM9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3' },
+    { k: t('settings.about.memory'), v: na, d: t('settings.about.noSource'), icon: 'M3 7h18v10H3zM7 11v2M11 11v2M15 11v2' },
+    { k: t('settings.about.graphics'), v: gpus === null ? '…' : gpus[0] ?? na, d: gpus && gpus.length > 1 ? `+ ${gpus.slice(1).join(', ')}` : '', icon: 'M3 6h18v12H3zM7 10h4v4H7z' },
+    { k: t('settings.nav.Display'), v: screen?.width && screen.height ? `${formatNumber(screen.width)} × ${formatNumber(screen.height)}` : displays.state === 'loading' ? '…' : na, d: screen ? [screen.refresh ? `${formatNumber(Math.round(screen.refresh))} Hz` : null, screen.scale ? `${formatNumber(Math.round(screen.scale * 100))}%` : null].filter(Boolean).join(' · ') || screen.description : '', icon: 'M3 4h18v12H3zM8 20h8M12 16v4' },
+    { k: t('settings.about.desktop'), v: t('settings.about.shell'), d: t('settings.about.wayland'), icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
+    { k: t('settings.about.kernel'), v: d?.kernel_version ?? t('common.unknown'), d: arch, icon: 'M4 5h16v14H4zM7 9l3 3-3 3M12 15h5' },
+  ]
+  const sec = [
+    { k: t('settings.priv.encryption'), v: d?.encrypted == null ? t('common.unknown') : d.encrypted ? t('settings.about.encrypted') : t('settings.about.notEncrypted'), c: d?.encrypted ? C.green : d?.encrypted === false ? C.amber : '#5E739C' },
+    { k: t('settings.about.secureBoot'), v: na, c: '#5E739C' },
+    { k: t('settings.priv.firewall'), v: na, c: '#5E739C' },
+    { k: t('settings.about.managedBy'), v: info.managed ? info.org_name ?? info.server ?? t('settings.about.yourOrg') : t('settings.about.notManaged'), c: info.managed ? '#B9A0FF' : '#5E739C' },
+  ]
+  const upToDate = status?.state === 'up_to_date'
+  const copy = () => {
+    const text = [`WorkSuite OS ${d?.os_version ?? ''}`.trim(), `${t('settings.about.name')}: ${d?.hostname ?? '—'}`, `${t('settings.about.kernel')}: ${d?.kernel_version ?? '—'} (${d?.arch ?? '—'})`,
+      ...specs.slice(2, 4).map((s) => `${s.k}: ${s.v}${s.d ? ` (${s.d})` : ''}`), `${t('settings.about.battery')}: ${battery.state === 'ok' ? batteryText(battery.value) : t('settings.about.noBattery')}`,
+      ...sec.map((s) => `${s.k}: ${s.v}`)].join('\n')
+    void navigator.clipboard?.writeText(text).then(() => setCopied(true)).catch(() => {})
+  }
+  const drives = disks.state === 'ok' ? disks.value : []
+  return <>
+    <h1 className="sr-only">{t('settings.nav.About')}</h1>
+    <div className="flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.2)] px-6 py-[22px]" style={{ background: 'radial-gradient(circle at 88% 15%, rgba(24,212,240,0.32), transparent 45%), linear-gradient(120deg, #173F94, #0D2353)' }}>
+      <Mark size={76} hole="#14357A" />
+      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <span className="text-[28px] font-bold tracking-[-0.02em]">{d?.os_version ?? 'WorkSuite OS'}</span>
+        <span className="font-mono text-xs text-[#C9D6EE]">{[info.policies?.update_ring, d?.hostname, d?.arch].filter(Boolean).join(' · ') || t('settings.about.versionUnknown')}</span>
+        {status && <span className="flex items-center gap-1.5 text-[13px]" style={{ color: upToDate ? C.green : needsAttention(status) ? C.amber : '#C9D6EE' }}>
+          {upToDate && <Svg d="M5 12.5l4.5 4.5L19 7.5" size={14} stroke={C.green} width={2.6} />}
+          {upToDate ? t('settings.priv.checked', { when: status.last_check ? fmtWhen(status.last_check) : '—' }) : needsAttention(status) ? t('settings.priv.updateWaiting') : t('settings.priv.seeUpdates')}
+        </span>}
+      </span>
+      <span className="flex flex-col gap-2">
+        <button type="button" disabled={checking} onClick={() => { setChecking(true); void updates.check().finally(() => setChecking(false)) }} className="cursor-pointer rounded-[9px] bg-white/[0.14] px-4 py-[9px] text-center text-[13px] font-semibold hover:bg-white/20 disabled:opacity-60">{checking ? t('settings.about.checking') : t('settings.about.checkUpdates')}</button>
+        <button type="button" onClick={copy} className="cursor-pointer rounded-[9px] border border-white/25 px-4 py-[9px] text-center text-[13px] hover:bg-white/[0.06]">{copied ? t('settings.about.copied') : t('settings.about.copyInfo')}</button>
+      </span>
+    </div>
+    <div className={`${card} flex items-center gap-3.5 px-[18px] py-3`}>
+      <Svg d="M4 5h16v11H4zM2 20h20" size={18} stroke="#7FB2FF" />
+      <span className="text-[13px] text-[#8FA3C8]">{t('settings.about.name')}</span>
+      <span className="font-mono text-sm">{d?.hostname ?? t('common.unknown')}</span>
+    </div>
+    <div className="grid grid-cols-3 gap-2.5">
+      {specs.map((s) => (
+        <div key={s.k} className={`${card} flex gap-3 px-3.5 py-[13px]`}>
+          <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[rgba(31,107,255,0.16)]"><Svg d={s.icon} size={17} stroke="#7FB2FF" /></span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[11px] tracking-[0.06em] text-[#8FA3C8] uppercase">{s.k}</span>
+            <span className="truncate text-[13px] font-medium" style={{ color: s.v === na ? C.muted : undefined }}>{s.v}</span>
+            {s.d && <span className="truncate text-[11px] text-[#8FA3C8]">{s.d}</span>}
+          </span>
+        </div>
+      ))}
+    </div>
+    <div className="grid gap-3" style={{ gridTemplateColumns: 'minmax(0,1.2fr) minmax(0,1fr)' }}>
+      <div className={`${card} flex flex-col gap-2.5 px-4 py-3.5`}>
+        <div className="flex justify-between gap-3 text-[13px]"><span className="font-semibold">{t('settings.about.storage')}{drives[0] ? ` · ${drives[0].device}` : ''}</span><span className="text-[#8FA3C8]">{free != null ? t('settings.about.freeHome', { size: formatBytes(free) }) : na}</span></div>
+        <div className="flex flex-col gap-1">
+          {disks.state === 'loading' ? <span className="text-xs text-[#8FA3C8]">…</span> : drives.length === 0 ? <span className="text-xs text-[#8FA3C8]">{disks.state === 'ok' ? t('common.noneFound') : na}</span>
+            : drives.map((x) => <span key={x.device} className="flex items-center gap-1.5 text-[11px] text-[#C9D6EE]"><span className="h-2 w-2 rounded-sm bg-[#1F6BFF]" />{x.model || x.device} <span className="font-mono text-[#8FA3C8]">{x.device}</span></span>)}
+        </div>
+        <span className="text-[11px] text-[#8FA3C8]">{battery.state === 'ok' && battery.value.present ? `${t('settings.about.battery')}: ${batteryText(battery.value)}` : t('settings.about.usageNote')}</span>
+      </div>
+      <div className={`${card} py-1.5`}>
+        {sec.map((s) => (
+          <div key={s.k} className="flex items-center gap-2.5 px-4 py-1.5 text-xs"><span className="h-[7px] w-[7px] rounded-full" style={{ background: s.c }} /><span className="flex-1 text-[#C9D6EE]">{s.k}</span><span className="font-mono text-[11px]" style={{ color: s.v === na ? C.muted : undefined }}>{s.v}</span></div>
+        ))}
+      </div>
+    </div>
+  </>
+}
+
+/** Settings › Managed: WSOS-MDM-007 management disclosure from the device agent, or enrollment when unmanaged. */
+function ManagedPanel() {
   const [showWipe, setShowWipe] = useState(false)
   const [info, setInfo] = useState<DeviceInfo | null>(null)
   useEffect(() => { void os.deviceInfo().then(setInfo).catch(() => {}) }, [])
-  if (!info) return <><H1>{t('settings.nav.About')}</H1><Empty title={t('settings.about.loading')} /></>
+  if (!info) return <><H1>{t('settings.nav.Managed')}</H1><Empty title={t('settings.about.loading')} /></>
   const d = info.device
   const lines = policyLines(info.policies)
   const checked = info.last_check_in ? formatDate(info.last_check_in) : t('settings.about.notYet')
   return <>
-    <H1>{t('settings.nav.About')}</H1>
-    <div className={`${heroCard} flex items-center gap-5 rounded-2xl p-[22px]`}>
-      <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[rgba(31,107,255,0.18)]"><Mark size={48} hole="#0F2350" /></span>
-      <span className="flex flex-col gap-1"><span className="text-xl font-bold">WorkSuite OS</span><span className="text-[13px] text-[#8FA3C8]">{d?.os_version ?? t('settings.about.versionUnknown')}</span></span>
-    </div>
-    <Rows rows={[
-      { k: t('settings.about.name'), v: d?.hostname ?? t('common.unknown') },
-      { k: t('settings.about.arch'), v: d?.arch === 'arm64' ? 'ARM64 (arm64)' : d?.arch === 'amd64' ? 'x86-64 (amd64)' : t('common.unknown') },
-      { k: t('settings.about.kernel'), v: d?.kernel_version ?? t('common.unknown') },
-      { k: t('settings.priv.encryption'), v: d?.encrypted == null ? t('common.unknown') : d.encrypted ? t('settings.about.encrypted') : t('settings.about.notEncrypted') },
-      { k: t('settings.about.storage'), v: disks.state === 'ok' ? disks.value.map((x) => x.model || x.device).join(', ') || t('common.noneFound') : disks.state === 'loading' ? '…' : t('common.unknown') },
-      { k: t('settings.about.battery'), v: battery.state === 'ok' ? batteryText(battery.value) : battery.state === 'loading' ? '…' : t('settings.about.noBattery') },
-    ]} />
-    {/* WSOS-MDM-007: management disclosure, from the device agent */}
+    <H1>{t('settings.nav.Managed')}</H1>
     {info.managed ? (
       <section aria-label={t('settings.about.mgmt')} className="flex flex-col gap-2.5 rounded-[14px] border border-[rgba(31,107,255,0.35)] bg-[rgba(31,107,255,0.1)] px-5 py-[18px]">
         <span className="flex items-center gap-2 text-sm font-semibold"><Svg d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" size={18} stroke="#7FB2FF" />{t('panel.managedBy', { org: info.org_name ?? info.server ?? t('settings.about.yourOrg') })}</span>
@@ -586,6 +592,25 @@ function AboutPanel() {
       </section>
     ) : info.agent ? <EnrollCard onEnrolled={() => void os.deviceInfo().then(setInfo)} />
       : <Empty title={t('settings.about.mgmtUnavailable')}>{t('settings.about.agentDown')}</Empty>}
+  </>
+}
+
+/** Settings › Lock screen: the idle lock from the lock policy (WSOS-LOCK-003) and what the lock screen shows. */
+function LockScreenPanel({ onLock }: { onLock: () => void }) {
+  return <>
+    <H1 action={<button type="button" onClick={onLock} className={btnGhost}>{t('settings.lockscreen.lockNow')}</button>}>{t('settings.nav.Lock screen')}</H1>
+    <div className={`${card} overflow-hidden`}>
+      <LockAfterRow />
+      <div className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
+        <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm">{t('settings.notif.onLock')}</span><span className="text-xs text-[#8FA3C8]">{t('settings.lockscreen.notesHint')}</span></span>
+        <span className="text-[13px] text-[#C9D6EE]">{t('settings.notif.titlesOnly')}</span>
+      </div>
+      <div className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
+        <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm">{t('settings.lockscreen.unlock')}</span><span className="text-xs text-[#8FA3C8]">{t('settings.users.method')}</span></span>
+        <span className="text-[13px] text-[#C9D6EE]">{t('greeter.password')}</span>
+      </div>
+    </div>
+    <Note>{t('settings.lockscreen.note')}</Note>
   </>
 }
 
@@ -727,7 +752,7 @@ function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (
   const [q, setQ] = useState('')
   const items = NAV.filter((n) => navLabel(n.id).toLowerCase().includes(q.trim().toLowerCase()) || n.id.toLowerCase().includes(q.trim().toLowerCase()))
   return (
-    <nav aria-label={t('launcher.settings')} className="box-border flex w-[260px] shrink-0 flex-col gap-3.5 overflow-auto border-r border-[rgba(127,178,255,0.12)] bg-[#071330] px-3.5 py-5">
+    <nav aria-label={t('launcher.settings')} className="box-border flex w-[260px] shrink-0 flex-col gap-3.5 overflow-auto border-r border-[rgba(127,178,255,0.12)] bg-[#071330] px-3.5 pt-5 pb-[72px]">
       <div className="flex items-center gap-3 px-2 pt-2 pb-1">
         <Avatar name={user?.name ?? '?'} size={40} font={14} />
         <span className="flex min-w-0 flex-col gap-px"><span className="truncate text-sm font-semibold">{user?.name ?? t('settings.thisComputer')}</span><span className="text-xs text-[#8FA3C8]">{user?.role ?? t('launcher.settings')}</span></span>
@@ -785,22 +810,28 @@ export default function Settings({ onClose }: WindowProps) {
   return (
     <div role="dialog" aria-modal="false" aria-label={t('launcher.settings')} className="fixed inset-0 z-50 flex bg-[#0A1A3D] font-sans text-[#E8EEFA]">
       <SetNav section={section} onPick={setSection} badges={badges} user={user} />
-      <main className="relative flex min-w-0 flex-1 flex-col gap-5 overflow-auto px-11 py-8" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)' }}>
+      {/* Page frame from the Set* boards: 26/36 px padding, 14 px gap; Privacy & security has its own green tint. */}
+      <main className="relative flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-9 pt-[26px] pb-[82px] [&>*]:shrink-0" style={{ background: `radial-gradient(ellipse 80% 50% at 80% 0%, ${section === 'Privacy & security' ? '#0F3A3A' : '#12306B'} 0%, #0A1A3D 60%)` }}>
         <button type="button" aria-label={t('settings.close')} onClick={onClose} className="absolute top-4 right-4 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#8FA3C8] hover:bg-white/10 hover:text-white">
           <Svg d="M6 6l12 12M18 6L6 18" size={16} />
         </button>
         {section === 'Network' && <NetworkPanel />}
+        {section === 'VPN' && <VpnPanel />}
         {section === 'Bluetooth' && <BluetoothPanel />}
         {section === 'Display' && <DisplayPanel />}
         {section === 'Appearance' && <AppearancePanel />}
         {section === 'Sound' && <SoundPanel />}
         {section === 'Notifications' && <NotificationsPanel />}
+        {section === 'Power' && <PowerPanel />}
+        {section === 'Printers' && <PrintersPanel />}
         {section === 'Default apps' && <DefaultAppsPanel />}
         {section === 'Privacy & security' && <PrivacyPanel />}
+        {section === 'Lock screen' && <LockScreenPanel onLock={() => void os.lock()} />}
         {section === 'Users' && <UsersPanel />}
         {section === 'Devices' && <><DevicesPanel onProblem={setProblem} /><DeviceExtras /></>}
         {section === 'Drivers' && <DriversPanel onOpenUpdates={() => setSection('Updates')} />}
         {section === 'Updates' && <><H1>{t('settings.nav.Updates')}</H1><UpdatesPanel /></>}
+        {section === 'Managed' && <ManagedPanel />}
         {section === 'About' && <AboutPanel />}
       </main>
       {problem && <DeviceProblemDialog device={problem} onClose={() => setProblem(null)} onOpenUpdates={() => setSection('Updates')} onOpenDrivers={() => setSection('Drivers')} />}

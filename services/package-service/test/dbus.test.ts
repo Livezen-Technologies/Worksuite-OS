@@ -97,6 +97,7 @@ test('new methods: catalog/preview/inspect are read-only; local .deb, permission
     ['InstallLocalDeb', 's', ['a'.repeat(64)], 'lk.worksuite.package.install-local'],
     ['ResetAppPermissions', 's', ['flatpak:org.gimp.GIMP'], 'lk.worksuite.package.install'],
     ['PruneRuntimes', '', [], 'lk.worksuite.package.install'],
+    ['AddRemote', 'ss', ['corp', 'https://flatpak.example.lk/corp.flatpakrepo'], 'lk.worksuite.package.add-remote'],
     ['InstallBundle', 's', ['/media/u/stick/x.wsupdate'], 'lk.worksuite.update.apply'],
   ] as const) {
     w.checked.length = 0;

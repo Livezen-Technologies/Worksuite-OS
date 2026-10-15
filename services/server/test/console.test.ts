@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import * as admin from '../src/admin.ts';
 import { openDb } from '../src/db.ts';
 import { createHandler } from '../src/main.ts';
+import { observedCommand, observedPolicy } from '../src/console.ts';
 import { validateCommand, MemoryReplayStore } from '../../device-agent/src/commands.ts';
 import { loadKeys } from '../../device-agent/src/main.ts';
 
@@ -24,6 +25,9 @@ before(async () => {
   admin.addUser(db, orgA, 'bob@a.test', 'Bob', 'bob-password!', 'admin');
   admin.addUser(db, orgA, 'uma@a.test', 'Uma', 'uma-password', 'user');
   admin.addUser(db, orgB, 'zed@b.test', 'Zed', 'zed-password', 'admin');
+  admin.addUser(db, orgA, 'carl@a.test', 'Carl', 'carl-password', 'admin');   // admin without the wipe permission
+  admin.grantPermission(db, 'alice@a.test', admin.WIPE_PERMISSION);
+  admin.grantPermission(db, 'bob@a.test', admin.WIPE_PERMISSION);
   server = createServer(createHandler(db, { publicUrl: 'https://ws.test/' }));
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -82,6 +86,27 @@ test('organizations are isolated', async () => {
   assert.equal((await call('GET', `devices/${devA.device_id}`, { cookie: zed })).status, 404);
   assert.equal((await call('POST', `devices/${devA.device_id}/commands`, { cookie: zed, body: { command: 'RequestLock' } })).status, 404);
   assert.ok(!(await call('GET', 'users', { cookie: zed })).body.items.some((u: { email: string }) => u.email.endsWith('@a.test')));
+});
+
+test('requested and observed state are shown separately (WSOS-MDM-005)', async () => {
+  const dev = await enroll(orgA);
+  const alice = await login('alice@a.test', 'alice-password');
+  assert.equal((await call('POST', `devices/${dev.device_id}/commands`, { cookie: alice, body: { command: 'RequestLock' } })).status, 201);
+  const d = (await call('GET', `devices/${dev.device_id}`, { cookie: alice })).body;
+  const lock = d.commands.find((c: { command: string }) => c.command === 'RequestLock');
+  assert.equal(lock.state, 'pending');
+  assert.equal(lock.observed, 'not yet received');
+  assert.ok(['none', 'not_reported'].includes(d.policy.state));
+  assert.equal(d.policy.observed_version, null);
+
+  const future = new Date(Date.now() + 60_000).toISOString(), past = new Date(Date.now() - 1).toISOString();
+  assert.equal(observedCommand('pending', past, Date.now()), 'expired — never received');
+  assert.equal(observedCommand('received', future, Date.now()), 'received — not yet started');
+  assert.equal(observedCommand('completed', past, Date.now()), 'done');
+  assert.deepEqual(observedPolicy(5, '4'), { requested_version: 5, observed_version: 4, state: 'pending' });
+  assert.deepEqual(observedPolicy(5, 5), { requested_version: 5, observed_version: 5, state: 'applied' });
+  assert.deepEqual(observedPolicy(5, undefined), { requested_version: 5, observed_version: null, state: 'not_reported' });
+  assert.deepEqual(observedPolicy(null, undefined), { requested_version: null, observed_version: null, state: 'none' });
 });
 
 test('routine commands are sent; RemoteWipe needs a second administrator and verifies on the device', async () => {
@@ -162,8 +187,70 @@ test('enrollment tokens and catalog entries are validated', async () => {
   assert.equal((await call('GET', 'catalog', { cookie: alice })).body.items.length, 1);
 });
 
+async function deviceAck(dev: { credential: string }, commandId: string, state: string) {
+  return fetch(`${base}/desktop/v1/devices/commands/${commandId}/ack`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-ws-device': dev.credential, 'idempotency-key': randomUUID() }, body: JSON.stringify({ state }),
+  });
+}
+
+test('WSOS-WIPE-001: requesting and approving a wipe needs desktop.devices.wipe', async () => {
+  const dev = await enroll(orgA);
+  const host = `host-${orgA}`;
+  const carl = await login('carl@a.test', 'carl-password');
+  const alice = await login('alice@a.test', 'alice-password');
+  const req = { device_id: dev.device_id, scope: 'worksuite_data', reason: 'Employee left', confirm_name: host };
+  const denied = await call('POST', 'wipes', { cookie: carl, body: { ...req, password: 'carl-password' } });
+  assert.equal(denied.status, 403);
+  assert.match(denied.body.error.message, /desktop\.devices\.wipe/);
+  const w = await call('POST', 'wipes', { cookie: alice, body: { ...req, password: 'alice-password' } });
+  assert.equal(w.status, 201);
+  assert.equal(w.body.command_id, undefined);   // corporate device: waits for a second approver
+  assert.equal((await call('POST', `wipes/${w.body.id}/approve`, { cookie: carl, body: { password: 'carl-password', confirm_name: host } })).status, 403);
+  await call('POST', `wipes/${w.body.id}/cancel`, { cookie: alice });
+});
+
+test('WSOS-WIPE-001: policy may waive the second approver for personal devices only', async () => {
+  const dev = await enroll(orgA);
+  const host = `host-${orgA}`;
+  const alice = await login('alice@a.test', 'alice-password');
+  const req = { device_id: dev.device_id, scope: 'worksuite_data', reason: 'Lost personal laptop', password: 'alice-password', confirm_name: host };
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { wipe_personal_single_approval: true } } })).status, 200);
+  const corp = await call('POST', 'wipes', { cookie: alice, body: req });
+  assert.equal(corp.body.command_id, undefined);   // waiver does not apply to corporate devices
+  await call('POST', `wipes/${corp.body.id}/cancel`, { cookie: alice });
+  assert.equal((await call('PUT', `devices/${dev.device_id}/ownership`, { cookie: alice, body: { ownership: 'stolen' } })).status, 400);
+  assert.equal((await call('PUT', `devices/${dev.device_id}/ownership`, { cookie: alice, body: { ownership: 'personal' } })).status, 204);
+  const pers = await call('POST', 'wipes', { cookie: alice, body: req });
+  assert.equal(pers.status, 201);
+  assert.equal(pers.body.waived_second_approver, true);
+  assert.ok(pers.body.command_id);
+  await call('PUT', 'policy', { cookie: alice, body: { policy: {} } });
+});
+
+test('WSOS-WIPE-008: results are audited; a wiped device is marked Wiped and must enroll again', async () => {
+  const dev = await enroll(orgA);
+  const host = `host-${orgA}`;
+  const alice = await login('alice@a.test', 'alice-password');
+  const bob = await login('bob@a.test', 'bob-password!');
+  const w = await call('POST', 'wipes', { cookie: alice, body: { device_id: dev.device_id, scope: 'worksuite_data', reason: 'Device retired', password: 'alice-password', confirm_name: host } });
+  const ok = await call('POST', `wipes/${w.body.id}/approve`, { cookie: bob, body: { password: 'bob-password!', confirm_name: host } });
+  assert.equal((await deviceAck(dev, ok.body.command_id, 'started')).status, 204);
+  assert.equal((await call('GET', `devices/${dev.device_id}`, { cookie: alice })).body.wiped_at, null);
+  assert.equal((await deviceAck(dev, ok.body.command_id, 'completed')).status, 204);
+  const d = (await call('GET', `devices/${dev.device_id}`, { cookie: alice })).body;
+  assert.ok(d.wiped_at); assert.equal(d.revoked, true);
+  const listed = (await call('GET', 'wipes', { cookie: alice })).body.items.find((x: { id: string }) => x.id === w.body.id);
+  assert.equal(listed.result, 'completed');
+  // The old credential no longer works: the device has to enroll again.
+  const hb = await fetch(`${base}/desktop/v1/devices/heartbeat`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-ws-device': dev.credential }, body: '{}' });
+  assert.ok(hb.status === 401 || hb.status === 403);
+  const log = (await call('GET', 'log', { cookie: alice })).body.items.map((l: { action: string }) => l.action);
+  assert.ok(log.includes('wipe_completed'));
+});
+
 test('repeated failed sign-ins are throttled', async () => {
   let last = 0;
   for (let i = 0; i < 11; i++) last = (await call('POST', 'login', { body: { email: 'zed@b.test', password: `nope-${i}` } })).status;
   assert.equal(last, 429);
 });
+

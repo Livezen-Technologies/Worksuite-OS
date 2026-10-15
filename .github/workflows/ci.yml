@@ -56,6 +56,7 @@ jobs:
       # AppArmor profiles parse (WSOS-SEC-009); perf gate evaluator (PRF-*).
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends apparmor apparmor-utils
       - run: tests/security/apparmor.test.sh
+      - run: tests/security/isolation-claims.test.sh
       - run: tests/perf/gates.test.sh
       # Session scripts with stubbed programs: lock, idle, greeter, polkit agent fallback, screen-sharing consent.
       - run: sh tests/session/session-test.sh
@@ -74,10 +75,12 @@ jobs:
         with:
           node-version: 22
       # labwc + foot run the headless end-to-end test; the shell's node_modules run the panel-client test.
-      - run: sudo apt-get install -y --no-install-recommends dbus-daemon libwayland-dev labwc foot python3-pip && pip install --break-system-packages pywayland dbus-next
+      - run: sudo apt-get install -y --no-install-recommends dbus-daemon libwayland-dev labwc foot python3-pip && pip install --break-system-packages pywayland dbus-next pyyaml
       - run: cd shell && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --no-audit --no-fund
       - run: make -C native/wayland-bridge test
       - run: python3 -m unittest discover -s installer/tests
+      - run: python3 -m unittest discover -s tests/hw
+      - run: cd services/session/greeter && python3 -m unittest discover -s tests -t .
 
   apt-repo:
     runs-on: ubuntu-latest

@@ -5,8 +5,26 @@ import os from 'node:os'
 
 export const STATUS_PATH = '/run/worksuite-device-agent/status.json'
 
+export const PROVISIONING_PATH = '/etc/worksuite/provisioning.json'
+
+/**
+ * WSOS-IDN-004: OEM / installer provisioning (root-owned, e.g. {"require_enrollment": true, "server": "https://..."}).
+ * When enrollment is required, first-run setup cannot be skipped and needs a connection to enroll.
+ */
+export function provisioning(path = PROVISIONING_PATH): { require_enrollment: boolean; server: string | null } {
+  try {
+    const p = JSON.parse(readFileSync(path, 'utf8'))
+    const server = typeof p.server === 'string' && /^https:\/\//.test(p.server) ? p.server : null
+    return { require_enrollment: p.require_enrollment === true, server }
+  } catch { return { require_enrollment: false, server: null } }
+}
+
 /** Device agent status file (0644, written by worksuite-device-agent); local facts if the agent isn't running. */
-export function deviceInfo(statusPath = STATUS_PATH) {
+export function deviceInfo(statusPath = STATUS_PATH, provisioningPath = PROVISIONING_PATH) {
+  return { ...agentInfo(statusPath), provisioning: provisioning(provisioningPath) }
+}
+
+function agentInfo(statusPath: string) {
   try {
     const st = JSON.parse(readFileSync(statusPath, 'utf8'))
     return { agent: true, device: st.device ?? null, managed: !!st.managed, org_name: st.org_name ?? null, server: st.server ?? null, last_check_in: st.last_check_in ?? null, policies: st.policies ?? null }

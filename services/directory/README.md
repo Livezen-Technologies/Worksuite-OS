@@ -13,5 +13,16 @@ small helper (`src/main.ts`, logic in `src/directory.ts`), `pam_mkhomedir`, `use
 Passwords travel on stdin and in the HTTPS request body only. They are never put in argv, the environment, the
 journal or a file; tests in `test/directory.test.ts` check logs and stored state for the password.
 
-Not covered yet: password-expiry prompts (DIR-007), an SSO token handed to the session (DIR-008), AD/LDAP via
-SSSD (the server endpoint is the only backend today), smart cards (DIR-011).
+Also:
+
+- **Password expiry** (DIR-007): `PASSWORD_EXPIRED` from the server marks the name for the greeter
+  (`/run/worksuite-directory/greeter/<sha256(name)>`); the WorkSuite greeter then answers the password prompt with
+  `ESC "WSCHG" US old US new`, which this helper sends to `desktop/v1/os/directory/change-password`.
+- **Second factor** (DIR-009): accounts with TOTP type the code after the password (the greeter has a separate field
+  and joins them). Offline, only the password part can be checked.
+- **SSO** (DIR-008): the one-time `login_code` from the server goes to `/run/worksuite-directory/sso/<uid>/login.json`
+  (owned by the user, 0600); the session's credentials broker exchanges it for tokens and deletes it.
+- **Greeter domain** (DIR-002): `worksuite-pam-directory greeter-config` (timer) writes `/run/worksuite-directory/greeter.json`.
+- **Smart cards** (DIR-011, P3): `smartcard/` holds a pam_pkcs11 profile (off by default) and `worksuite-smartcard-setup`.
+
+Not covered yet: AD/LDAP via SSSD (the server endpoint is the only backend today), passkeys at the greeter.

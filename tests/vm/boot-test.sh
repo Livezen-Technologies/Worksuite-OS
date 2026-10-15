@@ -3,6 +3,7 @@
 # serial console.
 #   tests/vm/boot-test.sh live-build/out/worksuite-os-1.0.0-dev-amd64.iso [timeout-seconds]
 # ARCH=amd64|arm64 overrides the architecture taken from the ISO name. BOOT_LOG=path keeps the serial log.
+# No network device (-nic none): the image must come up with every remote service unreachable (WSOS-ARC-004).
 # Pass criteria: WORKSUITE_BOOT_OK printed, greetd active, worksuite-node runs, no failed units.
 # PERF_PROFILE=ci-amd64-tcg (a profile in tests/perf/gates.tsv) also waits for the perf probes of a
 # WORKSUITE_PERF=1 image (WORKSUITE_PERF_DONE) and applies those gates (WSOS-PRF-*, REL-001/002, ARM-007).
@@ -15,7 +16,7 @@ cp "$FW_VARS_TEMPLATE" "$vars"
 # shellcheck disable=SC2046,SC2086
 $QEMU $MACHINE -m 4096 -smp 2 \
   -drive if=pflash,format=raw,readonly=on,file="$FW_CODE" -drive if=pflash,format=raw,file="$vars" \
-  $(cdrom_args "$iso") -display none -serial file:"$log" -no-reboot &
+  $(cdrom_args "$iso") -nic none -display none -serial file:"$log" -no-reboot &
 qemu=$!
 trap 'kill $qemu 2>/dev/null || true; rm -f "$vars"' EXIT
 end=$(( $(date +%s) + timeout ))

@@ -301,3 +301,18 @@ test('offline access period: sign-in refused and sessions locked after N days of
   assert.equal(again.status().offline_access_expired, false);
   w.cleanup();
 });
+
+test('WSOS-IDN-007: revocation stops management but never locks or blocks local sign-in', async () => {
+  const w = await enrolled({ policy: signedPolicy({ version: 'p1', offline_access_days: 7 }) });
+  w.s.down = true;
+  NOW += 8 * DAY; await w.agent.checkIn();
+  assert.equal(w.agent.status().offline_access_expired, true);
+  w.s.down = false; w.s.revoked = true; w.log.length = 0;
+  await w.agent.checkIn();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(w.agent.status().managed, false);
+  assert.equal(w.agent.status().offline_access_expired, false);
+  assert.deepEqual((w.log as string[]).filter((l) => l === 'lock' || l === 'offline block'), []);
+  assert.ok((w.log as string[]).includes('offline unblock'));
+  w.cleanup();
+});

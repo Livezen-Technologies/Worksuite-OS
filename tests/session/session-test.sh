@@ -105,13 +105,23 @@ check "session exit status is the compositor's" "$rc" 1
 stub zenity 'echo "zenity $*" >> "$LOG"'
 stub gtkgreet 'echo "gtkgreet $*" >> "$LOG"'
 : > "$LOG"
-sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
+WORKSUITE_GREETER_LEGACY=1 sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
 grep -q "zenity --warning" "$LOG" && grep -q "Open applications may have closed" "$LOG" && ok "greeter shows the notice" || bad "greeter shows the notice"
 grep -q "gtkgreet -c /usr/bin/worksuite-session" "$LOG" && ok "greeter then starts gtkgreet" || bad "greeter then starts gtkgreet"
 [ -e "$T/notice/uid-$(id -u)" ] && bad "notice removed after showing" || ok "notice removed after showing"
 : > "$LOG"
-sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
+WORKSUITE_GREETER_LEGACY=1 sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
 grep -q zenity "$LOG" && bad "no notice after a clean session" || ok "no notice after a clean session"
+# WSOS-AUTH-001: the WorkSuite greeter runs when GTK 4 bindings are present; gtkgreet only as the fallback.
+stub python3 'echo "python3 $*" >> "$LOG"; exit 0'
+: > "$LOG"
+sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
+grep -q "python3 -m worksuite_greeter" "$LOG" && ! grep -q gtkgreet "$LOG" && ok "greeter runs the WorkSuite greeter" || bad "greeter runs the WorkSuite greeter"
+stub python3 'case "$*" in *require_version*) exit 1;; esac; echo "python3 $*" >> "$LOG"'
+: > "$LOG"
+sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
+grep -q gtkgreet "$LOG" && ok "gtkgreet is the fallback without GTK 4" || bad "gtkgreet is the fallback without GTK 4"
+rm -f "$T/stub/python3"
 stub labwc 'exit 0'
 WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"
 [ -e "$T/notice/uid-$(id -u)" ] && bad "clean exit leaves no notice" || ok "clean exit leaves no notice"
@@ -156,16 +166,6 @@ grep -q '^OnFailure=worksuite-recovery-launcher.service$' "$S" && ok "shell fail
 grep -q '^ExecStart=/usr/lib/worksuite/shell/worksuite-shell --safe$' "$R" && ok "recovery launcher runs the shell's --safe launcher" || bad "recovery launcher runs --safe"
 grep -q '^Conflicts=worksuite-shell.service$' "$R" && ok "recovery launcher replaces the shell" || bad "recovery launcher replaces the shell"
 grep -q -- '--recovery' "$R" && bad "session launcher is not the boot recovery screens" || ok "session launcher is not the boot recovery screens"
-
-# ---- polkit agent: shell-rendered first, native fallback only when it cannot register (WSOS-INT-010) ----
-printf '#!/bin/sh\necho "shell $*" >> "%s"\nexit "${SHELL_RC:-0}"\n' "$LOG" > "$T/stub/fake-shell"; chmod +x "$T/stub/fake-shell"
-: > "$LOG"
-WORKSUITE_SHELL_BIN="$T/stub/fake-shell" SHELL_RC=0 sh "$BIN/worksuite-polkit-agent" 2>"$T/pk.err"; rc=$?
-check "shell agent runs with --polkit-agent" "$(cat "$LOG")" "shell --polkit-agent"
-check "no fallback while the shell agent runs" "$rc:$(cat "$T/pk.err")" "0:"
-WORKSUITE_SHELL_BIN="$T/stub/fake-shell" SHELL_RC=3 sh "$BIN/worksuite-polkit-agent" 2>"$T/pk.err" >/dev/null &
-pk=$!; sleep 1; kill $pk 2>/dev/null; wait $pk 2>/dev/null
-grep -q 'using the fallback agent' "$T/pk.err" && ok "falls back when the shell agent cannot register" || bad "falls back when the shell agent cannot register"
 
 # ---- screen-sharing consent per request (WSOS-INT-013) ----
 CH=$BIN/worksuite-screencast-chooser

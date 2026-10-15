@@ -46,9 +46,9 @@ export function authorizationUrl(ep: Endpoints, p: { clientId: string; redirectU
   return u.toString();
 }
 
-export async function tokenRequest(ep: Endpoints, form: Record<string, string>, o: OidcOptions = {}): Promise<TokenSet> {
+export async function tokenRequest(ep: Endpoints, form: Record<string, string>, o: OidcOptions = {}, headers: Record<string, string> = {}): Promise<TokenSet> {
   const r = await getJson(new URL(ep.token_endpoint), o, {
-    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(form).toString(),
+    method: 'POST', headers: { ...headers, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(form).toString(),
   });
   if (r.status !== 200 || typeof r.body.access_token !== 'string') throw new OidcError(r.body.error ?? `http_${r.status}`);
   return r.body as TokenSet;
@@ -59,3 +59,7 @@ export async function userinfo(ep: Endpoints, accessToken: string, o: OidcOption
   if (r.status !== 200 || typeof r.body.sub !== 'string') throw new OidcError('userinfo_failed');
   return r.body as { sub: string; name?: string; email?: string };
 }
+
+/** RFC 8693 token exchange of the one-time code from a directory sign-in at the greeter (WSOS-DIR-008). */
+export const TOKEN_EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange';
+export const OS_LOGIN_CODE = 'urn:worksuite:params:oauth:token-type:os-login-code';

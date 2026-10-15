@@ -3,22 +3,25 @@ import type { DesktopProps } from './types'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
 import type { Notice } from '../lib/syncNotices'
-import { AppNoticeActions, dismissAppNotices } from '../components/AppNoticeActions'
-import { CaptureBadge } from '../components/CaptureBadge'
-import { ageLabel } from '../lib/power'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
 import { RunningApps, TrayItems, UpdateBadge, VpnBadge, useLauncherKey } from '../components/PanelItems'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
 import type { PanelWindow } from '../lib/panel'
 import A11yPanel from '../components/A11yPanel'
+import NotifDock, { MOON } from '../components/NotifDock'
+import { CaptureBadge } from '../components/CaptureBadge'
+import { useDnd } from '../lib/dnd'
 import { localeTag, useT } from '../i18n'
 import { UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
+import { markLauncherRequest, reportLauncherFirstFrame } from '../lib/perfProbe'
 import { buildLauncherApps, filterApps, taskbarApps, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
 import GlobalSearch from '../components/GlobalSearch'
+import ShellRestartNotice from '../components/ShellRestartNotice'
+import AuthPrompt from '../components/AuthPrompt'
 import type { SearchHit } from '../../electron/search'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
@@ -51,7 +54,9 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   const [launcher, setLauncher] = useState(false)
   const [a11yOpen, setA11yOpen] = useState(false)
   // Super key from Labwc arrives over lk.worksuite.Shell1 (WSOS-DSK-011).
-  useLauncherKey(useCallback((a: 'toggle' | 'show') => setLauncher((v) => (a === 'show' ? true : !v)), []))
+  useLauncherKey(useCallback((a: 'toggle' | 'show') => { markLauncherRequest(); setLauncher((v) => (a === 'show' ? true : !v)) }, []))
+  // Launcher first frame (WSOS-PRF-005); only forwarded off the console in perf test runs.
+  useEffect(() => { if (launcher) void reportLauncherFirstFrame() }, [launcher])
   const [tab, setTab] = useState<Tab>('all')
   const [query, setQuery] = useState('')
   const [powerOpen, setPowerOpen] = useState(false)
@@ -60,7 +65,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   const { notices, setNotices, toast, setToast, unread, setUnread } = notes
   const [trayOpen, setTrayOpen] = useState(false)
   // Do not disturb holds toasts back; notices still collect in the notification center.
-  const [dnd, setDnd] = useState(false)
+  const [dnd, setDnd] = useDnd()
   const searchRef = useRef<HTMLInputElement>(null)
   const name = displayName(user) || user
 
@@ -83,13 +88,23 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false) }
-      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) setLauncher((v) => !v)
+      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  useEffect(() => { if (launcher) searchRef.current?.focus(); else setQuery('') }, [launcher])
+  const launcherButton = useRef<HTMLButtonElement>(null)
+  const launcherWasOpen = useRef(false)
+  useEffect(() => {
+    if (launcher) searchRef.current?.focus()
+    else {
+      setQuery('')
+      // Focus goes back to the launcher button on close, so screen-reader and keyboard users are not left on <body>.
+      if (launcherWasOpen.current && (!document.activeElement || document.activeElement === document.body)) launcherButton.current?.focus()
+    }
+    launcherWasOpen.current = launcher
+  }, [launcher])
 
   // Start menu list: the org's WorkSuite apps (fallback list when not signed in/offline) and installed XDG apps.
   const [allApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
@@ -132,11 +147,6 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
   const openSettingsAt = (section: string) => { requestSettingsSection(section); onOpen('settings') }
 
-  const quick = [
-    { label: t('quick.dnd'), d: P.sleep, on: dnd, run: () => { setDnd((v) => !v); if (!dnd) setToast(null) } },
-    { label: t('quick.settings'), d: P.settings, on: false, run: () => { setTrayOpen(false); onOpen('settings') } },
-    { label: t('quick.lock'), d: P.lock, on: false, run: () => { setTrayOpen(false); onLock() } },
-  ]
 
   return (
     <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: wallpaperFor(display, primaryOut, BG.desktop) }}>
@@ -159,48 +169,17 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
         </div>
       )}
 
+      {/* G12: the shell was restarted by systemd; apps in their own scopes kept running */}
+      <ShellRestartNotice />
+      <AuthPrompt />
+
       {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
       <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">
         <DeviceWatcher onOpenUpdates={() => openSettingsAt('Updates')} onOpenDrivers={() => openSettingsAt('Drivers')} />
         <UpdateOverlays quiet={trayOpen || Children.toArray(children).length > 0} onOpenUpdates={() => openSettingsAt('Updates')} />
       </div>
 
-      {trayOpen && (
-        <aside id="ws-notifications" aria-label={t('notes.title')} className="absolute top-3 right-3 bottom-[68px] z-40 flex w-[400px] max-w-[calc(100%-24px)] flex-col gap-3.5 rounded-[20px] border border-[rgba(127,178,255,0.18)] bg-[rgba(10,24,56,0.94)] p-[18px] text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[24px]">
-          <div className="grid grid-cols-3 gap-2">
-            {quick.map((q) => (
-              <button key={q.label} type="button" aria-pressed={q.d === P.sleep ? q.on : undefined} onClick={q.run}
-                className={`flex cursor-pointer flex-col gap-2 rounded-xl p-3 text-left ${q.on ? 'bg-[#1F6BFF] text-white' : 'bg-white/[0.06] text-[#E8EEFA] hover:bg-white/10'}`}>
-                <Icon d={q.d} size={18} stroke={q.on ? '#FFFFFF' : '#C9D6EE'} />
-                <span className="text-xs font-medium">{q.label}</span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-1 flex items-center justify-between">
-            <h2 className="m-0 text-base font-semibold">{t('notes.title')}</h2>
-            {notices.length > 0 && <button type="button" onClick={() => { dismissAppNotices(notices); setNotices([]) }} className="cursor-pointer rounded text-[13px] text-[#7FB2FF] hover:text-[#B8D4FF]">{t('notes.clearAll')}</button>}
-          </div>
-          <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-2 overflow-auto p-0">
-            {notices.length === 0 && (
-              <li className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(31,107,255,0.15)]"><Icon d={P.bell} size={22} stroke="#7FB2FF" /></span>
-                <span className="text-sm font-semibold">{t('notes.empty')}</span>
-                <span className="max-w-[260px] text-[13px] text-[#8FA3C8]">{t('notes.emptyHint')}</span>
-              </li>
-            )}
-            {notices.map((x) => (
-              <li key={x.id} className="flex gap-3 rounded-xl border border-[rgba(127,178,255,0.1)] bg-white/[0.04] p-3">
-                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] text-white" style={{ background: TONE_BG[x.tone] }}><BIcon name={x.tone === 'ok' ? 'check' : 'alert'} size={16} /></span>
-                <div className="flex flex-1 flex-col gap-[3px]">
-                  <div className="flex justify-between gap-2"><span className="text-[13px] font-semibold">{x.title}</span><span className="text-[11px] text-[#8FA3C8]">{ageLabel(x.at, now.getTime())}</span></div>
-                  <span className="text-[13px] leading-[1.4] text-[#C9D6EE]">{x.body}</span>
-                  {x.app && <AppNoticeActions notice={x} onDone={() => setNotices((all) => all.filter((n) => n.id !== x.id))} />}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </aside>
-      )}
+      {trayOpen && <NotifDock now={now} time={time} notices={notices} setNotices={setNotices} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} />}
 
       {launcher && q && (
         <div className="absolute inset-x-0 top-0 bottom-14 z-30 flex items-start justify-center bg-[rgba(2,6,16,0.45)] px-4 pt-[90px] backdrop-blur-[6px]" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
@@ -210,9 +189,9 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       )}
       {launcher && !q && (
         <div className="absolute inset-x-0 top-0 bottom-14 z-30 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
-          <div id="ws-launcher" role="dialog" aria-label={t('launcher.title')} className="flex h-[650px] max-h-full w-[720px] max-w-full flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_rgba(2,6,23,0.5)]">
+          <div id="ws-launcher" role="dialog" aria-modal="true" aria-label={t('launcher.title')} className="flex h-[650px] max-h-full w-[720px] max-w-full flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_rgba(2,6,23,0.5)]">
             <div className="flex flex-col gap-3.5 px-5 pt-5 pb-3">
-              <label className="flex h-11 items-center gap-2.5 rounded-[10px] border border-[#e2e8f0] bg-[#f1f5f9] px-3.5 text-[#475569]">
+              <label className="flex min-h-11 items-center gap-2.5 rounded-[10px] border border-[#e2e8f0] bg-[#f1f5f9] px-3.5 text-[#475569]">
                 <BIcon name="search" />
                 <span className="sr-only">{t('launcher.search')}</span>
                 <input ref={searchRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('launcher.searchPlaceholder')} className="grow border-0 bg-transparent text-[15px] text-[#0f172a] outline-none" />
@@ -235,7 +214,6 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                       <span className="flex size-12 items-center justify-center rounded-xl text-[17px] font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
                       <span className="text-xs text-[#0f172a]">{a.name}</span>
                       <span className="text-[10.5px] text-[#475569]">{t(`launcher.kind.${a.kind}` as MessageKey)}</span>
-                      {a.offline && <span className="text-[10.5px] text-[#475569]">{t(`offline.${a.offline}` as MessageKey)}</span>}
                     </button>
                   ))}
                 </div>
@@ -274,7 +252,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       )}
 
       <nav aria-label={t('panel.taskbar')} className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
-        <button type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
+        <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
           className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.45)] ring-2 ring-[#1F6BFF]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
         <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => allApps.find((a) => a.id === id)} onLaunch={launch} only={onPrimary} />
         <div role="group" aria-label={t('panel.workspaces')} className="ml-4 hidden gap-1 sm:flex">
@@ -290,13 +268,14 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           )}
           <TrayItems />
           <CaptureBadge />
-          <VpnBadge onOpen={() => openSettingsAt('Network')} />
+          <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false) }}
             className="flex size-10 cursor-pointer items-center justify-center rounded-[10px] bg-white/[0.12] hover:bg-white/20"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
           <button type="button" aria-label={t('panel.notifications')} aria-expanded={trayOpen} aria-controls="ws-notifications"
             onClick={() => { setTrayOpen((v) => !v); setUnread(0); setPowerOpen(false) }}
             className={`flex h-10 cursor-pointer items-center gap-2.5 rounded-[10px] px-3 text-[13px] ${trayOpen ? 'bg-white/20' : 'bg-white/[0.12] hover:bg-white/20'}`}>
+            {dnd && <Icon d={MOON} size={14} />}
             <time dateTime={now.toISOString()} title={shortDate}>{time}</time>
             {unread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-[10px] bg-[#1F6BFF] px-1.5 text-[11px] font-bold" aria-label={t('panel.newCount', { count: unread })}>{unread}</span>}
           </button>

@@ -4,7 +4,7 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 
 | Requirement | Files | Status |
 |---|---|---|
-| WSOS-AUTH-001/002 greetd default session, no autologin | `live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot`, `installer/modules/usersq.conf`, `installer/branding/worksuite/usersq.qml` | Cfg |
+| WSOS-AUTH-001/002 greetd default session, no autologin | `live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot`, WorkSuite greeter `services/session/greeter/` (greetd IPC, PAM conversation, starts `worksuite-session`), `services/session/bin/worksuite-greeter`; opt-in autologin only via `services/session/bin/worksuite-autologin` (`--personal` unmanaged non-admin, `--kiosk` with policy `kiosk_autologin_user`); tests `services/session/greeter/tests/test_login.py`, `tests/session/session-test.sh`, `tests/session/autologin-test.sh` | Impl |
 | WSOS-SES-001 env import before portals | `services/session/bin/worksuite-session` (`--ready`), `services/session/labwc/autostart`; test `tests/session/session-test.sh` | Impl |
 | WSOS-SES-002 user units bound to `worksuite-session.target` | `services/session/systemd/user/*`; test `tests/session/session-test.sh` (wiring) | Impl (no real user manager in CI) |
 | WSOS-SES-003 clean logout (compositor exit and shell Log out) | `services/session/bin/worksuite-session` (`cleanup`, `--logout`), `shell/electron/session.ts` (`logoutCommand`); tests `tests/session/session-test.sh`, `shell/electron/session.test.ts` | Impl |
@@ -23,7 +23,7 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-INT-001 managed WireGuard VPN (server-issued per-device config, device-held keys, always-on, kill switch, rotation, removal on revoke/wipe) | `live-build/config/package-lists/worksuite.list.chroot` (`wireguard-tools`, `nftables`), `api-contracts/openapi.yaml` (`/desktop/v1/os/vpn`, `/desktop/v1/os/vpn/peer`, `VpnConfig`, Policy `vpn_required`/`user_vpn`), `services/server/src/vpn.ts`, `src/api.ts`, `src/console.ts` (`/admin/api/vpn`), `services/device-agent/src/vpn.ts`, `src/agent.ts` (`refreshVpn`, `enforceVpn`), `src/host.ts` (`applyVpn`), `systemd/worksuite-device-agent.service`, `security/apparmor/worksuite-device-agent`; tests `services/server/test/vpn.test.ts`, `test/e2e.test.ts`, `services/device-agent/test/vpn.test.ts` | Impl (nmcli/nft effects not run in CI) |
 | WSOS-INT-001 user WireGuard VPN (import .conf, connect/disconnect/remove, taskbar status, policy can forbid) | `shell/electron/system.ts` (`parseWgConf`, `vpn*`), `electron/main.ts`, `electron/preload.ts`, `src/screens/Settings.tsx` (`VpnSection`), `src/components/PanelItems.tsx` (`VpnBadge`), `src/lib/vpn.ts`; test `shell/electron/vpn.test.ts` | Impl |
 | WSOS-INT-001 user OpenVPN (import .ovpn with hook refusal, private certificate copies, credentials on stdin) and captive-portal sign-in window | `live-build/config/package-lists/worksuite.list.chroot` (`network-manager-openvpn`), `live-build/config/includes.chroot/etc/NetworkManager/conf.d/20-worksuite-connectivity.conf`, `shell/electron/openvpn.ts`, `electron/connectivity.ts`, `electron/system.ts` (`vpnImportOpenvpn`, `connectivity`), `electron/main.ts` (`startPortalWatch`), `src/screens/Settings.tsx`, `docs/networking.md`; tests `shell/electron/openvpn.test.ts`, `electron/connectivity.test.ts` | Impl (nmcli effects not run in CI) |
-| WSOS-INT-010 polkit authentication agent | `shell/electron/polkit.ts`, `polkitMode.ts`, `src/screens/PolkitPrompt.tsx` (shell-rendered, `worksuite-shell --polkit-agent`); lxpolkit/mate-polkit fallback in `services/session/bin/worksuite-polkit-agent` | Impl + unit/D-Bus tests (not run against real polkitd) |
+| WSOS-INT-010 polkit authentication agent | `services/session/polkit` (PolkitAgent listener) relaying to `shell/electron/polkit.ts` and `src/components/AuthPrompt.tsx`; lxpolkit/mate-polkit fallback in `services/session/bin/worksuite-polkit-agent` | Impl + tests (not run against real polkitd) |
 | WSOS-SHL-001…004 bridge operations, errors, caller check | `native/wayland-bridge/worksuite_bridge/`, `native/wayland-bridge/lk.worksuite.WaylandBridge1.xml` | `native/wayland-bridge/tests/` |
 | WSOS-INT-012 portal backends | `services/session/portals/worksuite-portals.conf`, checked by `shell/electron/sessionConfig.test.ts` | Cfg + test |
 | WSOS-INT-003…006 Bluetooth pairing, drives, power profiles, printers | `shell/electron/peripherals.ts`, `shell/src/screens/PeripheralSettings.tsx` | Impl + tests |
@@ -56,7 +56,10 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-MDM-001 inventory and versions | `services/device-agent/src/host.ts` (`facts`, `inventory`), `src/main.ts` | Impl |
 | WSOS-MDM-002 signed policy | `services/device-agent/src/agent.ts` (`refreshPolicy`, `verifyPolicy`) | Impl |
 | WSOS-MDM-002 policy enforcement: lock timeout, offline period, USB storage, Bluetooth, sign-in lockout | `api-contracts/openapi.yaml` (`Policy`), `services/server/src/console.ts` (`POLICY_FIELDS`), `services/device-agent/src/enforce.ts`, `src/host.ts` (`applyEnforcement`, `setOfflineAccessBlock`), `src/agent.ts` (`enforce`, `offlineAccessCheck`); tests `services/device-agent/test/agent.test.ts`, `services/server/test/console.test.ts` | Impl |
-| WSOS-WIPE-001 admin re-authentication and typed device name (plus second approver) | `services/server/src/console.ts` (`reauth`), `console-ui.ts` (`wipeConfirm`); test `services/server/test/console.test.ts` | Impl (no CoreApprovalEngine / wipe permission) |
+| WSOS-WIPE-001 `desktop.devices.wipe`, admin re-authentication, typed device name, second approver | CoreApprovalEngine `services/server/src/approvals.ts` (permission, distinct approver, personal-device waiver by policy `wipe_personal_single_approval`), `services/server/src/console.ts` (`reauth`, ownership route), `console-ui.ts` (`wipeConfirm`); test `services/server/test/console.test.ts` | Impl |
+| WSOS-WIPE-008 wipe audit, devices marked Wiped and re-enrolment | `services/server/src/api.ts` (command ack → `wipe_requests.result`, `admin_log wipe_*`, `devices.wiped_at`, credential revoked), console "Wiped" status; test `services/server/test/console.test.ts` | Impl |
+| WSOS-IDN-004 enrollment required before first use | `/etc/worksuite/provisioning.json` → `shell/electron/device.ts` (`provisioning`), `shell/src/screens/FirstRun.tsx`; tests `shell/electron/device.test.ts`, `shell/src/screens/FirstRun.test.tsx` | Impl |
+| WSOS-IDN-007 revocation keeps local accounts | `services/device-agent/src/agent.ts` (`unenrollLocally` lifts the offline block); test `services/device-agent/test/agent.test.ts` | Impl |
 | WSOS-MDM-007, WSOS-WIPE-007 management status for users | `services/device-agent/src/agent.ts` (`status`) → `/run/worksuite-device-agent/status.json` → `shell/src/screens/Settings.tsx` (`AboutDevice`) | Impl |
 | WSOS-WIPE-002/003/005/006 remote wipe | `services/device-agent/src/agent.ts` (`wipe`, `offlineKillTimer`), `src/host.ts` (`wipeWorkSuiteData`, `cryptoErase`) | Impl |
 | WSOS-SEC-007 systemd hardening | `services/*/systemd/*.service` | Cfg |
@@ -118,6 +121,12 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | Requirement | Implementation | Verified |
 |---|---|---|
 | WSOS-DIR-002/009 directory password check at the greeter | `services/directory/pam/worksuite-directory` (pam-auth-update, `pam_exec expose_authtok`, `[success=end default=ignore]`), `src/main.ts` (HTTPS + device credential) → `POST desktop/v1/os/directory/authenticate` (`services/server/src/api.ts`, `api-contracts/openapi.yaml`) | `services/directory/test/directory.test.ts`; server `api.test.ts` (device-bound, org-scoped, disabled) |
+| WSOS-DIR-001 join (setup, Settings, policy) | Enrollment in first-run and Settings › About (`EnrollCard`), directory settings from the server (`worksuite-server directory-set`, `GET desktop/v1/os/directory`), greeter domain `worksuite-directory-greeter.timer` | `shell/electron/device.test.ts`, `services/server/test/identity.test.ts` |
+| WSOS-DIR-002 Other user, domain shown, user / user@domain / DOMAIN\\user | `services/session/greeter/worksuite_greeter/login.py` (`normalize`, `domain_label`), `ui.py`; `worksuite-pam-directory greeter-config` | `services/session/greeter/tests/test_login.py` |
+| WSOS-DIR-007 password expiry / change at next sign-in | `services/server/src/identity.ts`, `api.ts` (`PASSWORD_EXPIRED`, `change-password`); `services/directory/src/directory.ts` (`CHANGE_PREFIX`, `markName`); greeter change form | `services/server/test/identity.test.ts`, `directory.test.ts`, `test_login.py` |
+| WSOS-DIR-008 tokens after directory sign-in without a second prompt | login code (`identity.ts` `issueLoginCode`), RFC 8693 exchange in `oauth.ts`; handoff `services/directory/src/main.ts`; broker `services/credentials/src/main.ts` (`importLoginHandoff`), `broker.ts` (`signInWithLoginCode`) | `identity.test.ts`, `services/credentials/test/broker.test.ts`, `directory.test.ts` |
+| WSOS-DIR-009 MFA (TOTP) | `identity.ts` (RFC 6238, replay-protected, `worksuite-server totp-enroll`), greeter code field, OneAuth sign-in page | `identity.test.ts` (RFC test vectors), `directory.test.ts`; passkeys not implemented |
+| WSOS-DIR-011 smart card (P3) | `services/directory/smartcard/` (pam_pkcs11 profile, off by default; `worksuite-smartcard-setup`) | `tests/session/smartcard-test.sh` (no hardware) |
 | WSOS-DIR-003 stable UID, home | UID 200000 + user id, `useradd` with locked password, `pam_mkhomedir` | `directory.test.ts` (uid, conflicts) |
 | WSOS-DIR-004/005 offline cache with policy expiry; disabled refused | `src/directory.ts` (`authenticate`): scrypt verifier, `offline_login_days`, cache purge + lock on `ACCOUNT_DISABLED` | `directory.test.ts` |
 | WSOS-DIR-006 group → role | `localGroups()` with `group_role_map` | `directory.test.ts` |
@@ -139,6 +148,15 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | WSOS-SEC-004 per-app session partitions | `shell/electron/appwindows.ts` (`persist:ws-app-<id>`), `ws:openWorkSuiteApp` in `main.ts`/`preload.ts` | `shell/electron/appwindows.test.ts` |
 | WSOS-SEC-009 AppArmor | `security/apparmor/*`, `AppArmorProfile=-…` in units, postinst reload | `tests/security/apparmor.test.sh` (CI) |
 | WSOS-SEC-012 Electron patch policy | `docs/security/hardening.md`, `.github/dependabot.yml` | Process |
+| WSOS-SEC-001 renderer prefs, no navigation | `shell/electron/webSecurity.ts` `shellWebPreferences`, `main.ts`, `appwindows.ts` `navigationDecision` | `shell/electron/webSecurity.test.ts`, `appwindows.test.ts`, `boundary.test.ts` |
+| WSOS-SEC-002 strict CSP in the shipped bundle | `SHELL_CSP` (`webSecurity.ts`), build-only plugin in `shell/vite.config.ts` | `webSecurity.test.ts` |
+| WSOS-SEC-003 default-deny web permissions, per-origin admin grants | `webSecurity.ts` `parseGrants`/`permissionAllowed`, `/etc/worksuite/web-permissions.json`, `appwindows.ts` | `webSecurity.test.ts`, `appwindows.test.ts` |
+| WSOS-SEC-006 URL scheme allow-list | `webSecurity.ts` `externalAllowed` | `webSecurity.test.ts` |
+| WSOS-SEC-013 no isolation claims for unsandboxed apps | `docs/security/hardening.md` | `tests/security/isolation-claims.test.sh` (CI) |
+| WSOS-SEC-014 Secure Boot chain and key strategy | `docs/security/hardening.md`, `live-build/auto/config` | Hardware boot pending |
+| WSOS-REL-004 killing Electron spares apps | `session.ts` app scopes | `tests/perf/guest/electron-kill` + `electron_kill_apps_lost` gate (`tests/perf/gates.tsv`, `gates.test.sh`) |
+| WSOS-PRF-005 launcher first frame | `shell/src/lib/perfProbe.ts`, `screens/Desktop.tsx`, forwarding in `main.ts`, `measure-shell` | `perfProbe.test.ts`; `launcher_first_frame_ms` gate (hw, optional) |
+| WSOS-ACC text size reflow, launcher dialog semantics | `shell/src/index.css` (`data-text-scale`), `lib/a11y.ts`, `screens/Desktop.tsx` | `lib/textScale.test.ts`, `lib/a11y.test.ts`, `a11y.axe.test.tsx` |
 
 ## ARM64 and performance gates
 
@@ -146,3 +164,22 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 |---|---|---|
 | WSOS-ARM-001/004/008 arm64 build + QEMU UEFI boot | `.github/workflows/image.yml` matrix (native `ubuntu-24.04-arm`), `tests/vm/qemu-arch.sh`, arch-aware `boot-test.sh`/`server-e2e.sh`, serial console per arch in `live-build/auto/config` | Workflow defined; not yet run green |
 | WSOS-PRF-001…005, REL-001/002, ARM-007 | `tests/perf/guest/*` (probes on `WORKSUITE_PERF=1` images), `tests/perf/gates.tsv` (hw-* = SRS limits, ci-*-tcg = regression bounds, separate ARM rows), `tests/perf/gates.sh`, `boot-test.sh PERF_PROFILE=…` | `tests/perf/gates.test.sh` (CI); VM gates in `image.yml`, not yet run green |
+
+## Architecture boundary, installer, updates and MDM
+
+| Requirement | Implementation | Verified |
+|---|---|---|
+| WSOS-ARC-001 Electron main as user, no root command runner | `shell/electron/main.ts` (one `ipcMain.handle` behind `validSender`, `execFile` arrays), sandboxed windows, user unit `worksuite-shell.service`; the only elevation is `pkexec /usr/bin/worksuite-device-agent enroll` | `shell/electron/boundary.test.ts` |
+| WSOS-ARC-003 native apps are compositor windows | `gtk-launch` in its own scope (`xdg.ts`, `session.ts`), labwc; no BrowserView/WebContentsView/webview/reparenting | `shell/electron/boundary.test.ts` |
+| WSOS-ARC-004 desktop with remote services unreachable | shell loads `dist/index.html` from disk, CSP `'self'` only; CI boot test runs with `-nic none` | `boundary.test.ts`, `tests/vm/boot-test.sh` |
+| WSOS-UPD-001 post-update health check | `services/package-service/src/coordinator.ts` (`health`: `dpkg --audit`, installed version = manifest, `healthCheck` env: failed WorkSuite units in `main.ts`); failure skips reboot, runs repair, reports `health_failures` for a signed rollback directive | `test/coordinator.test.ts` |
+| WSOS-UPD-006 updates never delete user data/outbox/licences | update path runs only apt/flatpak/dpkg; no rm/autoremove/purge or user paths | `test/coordinator.test.ts` |
+| WSOS-FLP-001 adding a remote: admin + policy | `AddRemote` (polkit `lk.worksuite.package.add-remote`, auth_admin) + policy `approved_remotes` and `flatpak_remotes` (exact https `.flatpakrepo` URL) | `test/features.test.ts`, `test/dbus.test.ts` |
+| WSOS-MDM-001 hardware, software, versions, update status | `services/device-agent/src/inventory.ts` (sysfs DMI/disks/NICs/GPUs/batteries, firmware), `host.ts` inventory + `versions` + `update`; package service publishes `/run/worksuite-package-service/update-status.json` | `services/device-agent/test/inventory.test.ts` |
+| WSOS-MDM-005 requested vs observed | `services/server/src/console.ts` (`observedCommand`, `observedPolicy`), `console-ui.ts` (Requested / Observed columns, policy requested vs observed) | `services/server/test/console.test.ts` |
+| WSOS-INS-002 language, keyboard, timezone, first admin | `installer/settings.conf`, `modules/usersq.conf` (sudo group, root locked) | `installer/tests/test_config.py` |
+| WSOS-INS-005 offline install | `packages.conf` remove-only, no internet requirement, unpack from ISO squashfs, bootloader packages in image | `installer/tests/test_config.py` (config); no install run in CI |
+| WSOS-INS-007 fresh identity, no live credentials | `machineid.conf`, image hook empties machine-id, no `networkcfg` (live Wi-Fi secrets), `shellprocess-worksuite.conf` clears agent/enrollment/SSH host keys/NM connections | `installer/tests/test_config.py` |
+| WSOS-INS-009 first-boot assistant | `shell/src/screens/FirstRun.tsx` + `FirstRunNetwork.tsx` (NetworkManager list/join, password on nmcli stdin), mode, sign-in, skip | `FirstRun.test.tsx` |
+| WSOS-ARM-003 certified list, same gates as x86 | `tests/hw/gates.tsv`, `tests/hw/certified.tsv`, `tests/hw/probe.sh` | `tests/hw/test_hw.py` (no ARM machine qualified yet) |
+| WSOS-ARM-008 arm64 VM tests | `tests/vm/vm.sh` now arch-aware via `qemu-arch.sh` | not yet run green |

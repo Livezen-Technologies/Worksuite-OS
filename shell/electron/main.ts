@@ -18,6 +18,7 @@ import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, install
 import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
+import { compress, eject, jobs as fileJobs, mkdirIn, places, recent, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel } from './panelHost'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import { outputWindows } from './outputWindows'
@@ -25,12 +26,13 @@ import { realExec } from './system'
 import { startDesktopHost } from './desktopHost'
 import { startPeripheralsHost } from './peripherals'
 import { startNotifications } from './notifications'
-import { runPolkitMode } from './polkitMode'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
+import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
+import { externalAllowed, loadGrants, permissionAllowed, shellWebPreferences } from './webSecurity'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
-const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
+// URL scheme allow-list, renderer prefs and per-origin permission grants: ./webSecurity (WSOS-SEC-001/003/006).
 
 let win: BrowserWindow | null = null
 // The main window plus one desktop/taskbar window per secondary monitor (WSOS-DSK-005).
@@ -44,13 +46,7 @@ function broadcast(channel: string, payload: unknown) {
   for (const wc of shellContents) if (!wc.isDestroyed()) wc.send(channel, payload)
 }
 
-const shellPrefs = () => ({
-  preload: path.join(__dirname, 'preload.cjs'),
-  sandbox: true,
-  contextIsolation: true,
-  nodeIntegration: false,
-  webSecurity: true,
-})
+const shellPrefs = () => shellWebPreferences(path.join(__dirname, 'preload.cjs'))
 
 const monitors = outputWindows((r) => {
   const w = new BrowserWindow({ x: r.x, y: r.y, width: r.width, height: r.height, fullscreen: true, frame: false, title: `WorkSuite desktop ${r.name}`, backgroundColor: '#0f172a', webPreferences: shellPrefs() })
@@ -84,9 +80,11 @@ function createWindow() {
   shellContents.add(win.webContents)
   // Perf probe (tests/perf/guest/measure-shell, WSOS-PRF-002/006): process start → first window ready.
   if (process.env.WORKSUITE_PERF === '1') win.once('ready-to-show', () => process.stdout.write(`WORKSUITE_PERF shell_ready_ms ${Math.round(process.uptime() * 1000)}\n`))
+  // Renderer probes (launcher first frame, WSOS-PRF-005) report on the console; forwarded only in perf runs.
+  if (process.env.WORKSUITE_PERF === '1') win.webContents.on('console-message', (ev) => { if (/^WORKSUITE_PERF [a-z_]+ \d+$/.test(ev.message)) process.stdout.write(`${ev.message}\n`) })
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (ALLOWED_SCHEMES.has(new URL(url).protocol)) void shell.openExternal(url)
+    if (externalAllowed(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
   // --recovery (recovery launcher unit), --installer (live ISO) or worksuite.recovery=1 on the kernel command line.
@@ -103,13 +101,15 @@ const appRequest = parseAppArgs(process.argv)
 if (appRequest) {
   if (prepareAppMode(appRequest)) runAppMode(appRequest)
   else app.quit()
-} else if (process.argv.includes('--polkit-agent')) runPolkitMode() // WSOS-INT-010, electron/polkitMode.ts
-else startShell()
+} else startShell()
 
 function startShell() {
 app.whenReady().then(() => {
-  // Web permissions denied by default (WSOS-SEC-003).
+  // Web permissions denied by default; the shell's own session never gets any (WSOS-SEC-003).
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
+  session.defaultSession.setPermissionCheckHandler(() => false)
+  // Administrator grants for exact HTTPS origins of WorkSuite apps (/etc/worksuite/web-permissions.json).
+  const webGrants = loadGrants()
 
   handle('ws:authenticate', async () => ({ ok: false, message: 'Authentication is handled by the greeter (greetd/PAM).' }))
   handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
@@ -122,7 +122,8 @@ app.whenReady().then(() => {
   const apps = appWindows({
     session: (p) => session.fromPartition(p),
     window: ({ partition, title }) => new BrowserWindow({ title, backgroundColor: '#0f172a', webPreferences: appWebPreferences(partition) }),
-    openExternal: (u) => { if (ALLOWED_SCHEMES.has(new URL(u).protocol)) void shell.openExternal(u) },
+    openExternal: (u) => { if (externalAllowed(u)) void shell.openExternal(u) },
+    permission: (perm, url) => permissionAllowed(webGrants, url, perm),
   })
   handle('ws:openWorkSuiteApp', (id, url) => apps.open(id, url))
   handle('ws:launchApp', (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined })
@@ -197,9 +198,8 @@ app.whenReady().then(() => {
     return web ? apps.open(u.hostname, web) : { ok: false, error: 'not_found' }
   })
   handle('ws:openLink', (url) => {
-    const u = new URL(url)
-    if (!ALLOWED_SCHEMES.has(u.protocol)) throw new Error('Scheme not allowed')
-    return shell.openExternal(u.toString())
+    if (!externalAllowed(url)) throw new Error('Scheme not allowed')
+    return shell.openExternal(new URL(url).toString())
   })
   // Sign-in waits for the user in the browser; the broker gives up after 5 minutes.
   handle('ws:cloudSignIn', async (serverUrl, mode) => {
@@ -370,6 +370,23 @@ app.whenReady().then(() => {
     const drive = root === 'drive' ? await syncCall('DriveSummary') : null
     return { free_bytes: r ? freeBytes(r.path) : null, drive: drive?.ok ? drive.value : null }
   })
+  const strs = (json: string): string[] => { try { const v = JSON.parse(json); return Array.isArray(v) ? v.map(String) : [] } catch { return [] } }
+  const fjobs = fileJobs(files, (e) => broadcast('ws:filesJob', e))
+  handle('ws:filesPlaces', () => places(files))
+  handle('ws:filesStarred', () => ({ keys: starred(files), hits: starredHits(files) }))
+  handle('ws:filesStar', (root, rel, on) => setStar(files, root, rel, on === '1'))
+  handle('ws:filesRecent', () => recent(files))
+  handle('ws:filesSearch', (root, rel, q, kind, days) => search(files, root, rel, q, kind, Number(days) || 0))
+  handle('ws:filesMkdir', (root, rel, name) => mkdirIn(files, root, rel, name))
+  handle('ws:filesRename', (root, rel, name) => renameIn(files, root, rel, name))
+  handle('ws:filesTrash', (root, rels) => trash(files, root, strs(rels)))
+  handle('ws:filesTrashList', () => trashList(files))
+  handle('ws:filesTrashRestore', (ids) => trashRestore(files, strs(ids)))
+  handle('ws:filesTrashDelete', (ids) => trashDelete(files, ids === 'all' ? 'all' : strs(ids)))
+  handle('ws:filesPaste', (op, srcRoot, rels, dstRoot, dstRel) => fjobs.start(op, srcRoot, strs(rels), dstRoot, dstRel))
+  handle('ws:filesResolve', (id, r, all) => fjobs.resolve(id, r, all === '1'))
+  handle('ws:filesCompress', (root, rels) => compress(files, root, strs(rels)))
+  handle('ws:filesEject', (id) => eject(files, id))
   followJobs((e) => broadcast(e.kind === 'update_status' ? 'ws:updateStatusChanged' : 'ws:pkgJob', e.kind === 'update_status' ? e.status : e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')
@@ -401,6 +418,8 @@ app.whenReady().then(() => {
   startPeripheralsHost(handle, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
   startNotifications(handle, broadcast)
+  // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
+  startPolkitBridge(handle, broadcast)
 })
 
 app.on('window-all-closed', () => app.quit())

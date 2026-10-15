@@ -175,6 +175,23 @@ test('flatpak: permissions review, system override reset and pruning only throug
   assert.deepEqual(w.audit.find(([e]) => e === 'flatpak_runtimes_pruned')![1].removed, ['org.gnome.Platform//46', 'org.gnome.Platform.Locale//46']);
 });
 
+test('adding a Flatpak remote needs policy permission for that exact name and URL (WSOS-FLP-001)', async () => {
+  const url = 'https://flatpak.example.lk/corp.flatpakrepo';
+  const unmanaged = world();
+  assert.throws(() => unmanaged.svc.addRemote(1000, 'corp', url), (e: { code?: string }) => e.code === 'NotAuthorized');
+  const policy = { approved_remotes: ['flathub', 'corp'], flatpak_remotes: { corp: url } };
+  const w = world(undefined, { policy: () => policy });
+  assert.throws(() => w.svc.addRemote(1000, 'corp', 'https://evil.example/corp.flatpakrepo'), (e: { code?: string }) => e.code === 'NotAuthorized');
+  assert.throws(() => w.svc.addRemote(1000, 'other', url), (e: { code?: string }) => e.code === 'NotAuthorized');
+  assert.throws(() => w.svc.addRemote(1000, 'corp', 'http://flatpak.example.lk/corp.flatpakrepo'), (e: { code?: string }) => e.code === 'InvalidArgs');
+  assert.throws(() => w.svc.addRemote(1000, '--no-gpg-verify', url), (e: { code?: string }) => e.code === 'InvalidArgs');
+  assert.deepEqual(w.calls, []);
+  assert.equal(w.audit.filter(([e]) => e === 'flatpak_remote_refused').length, 2);
+  assert.equal((await w.done(w.svc.addRemote(1000, 'corp', url))).state, 'success');
+  assert.deepEqual(w.calls, [`flatpak remote-add --system --if-not-exists --from corp ${url}`]);
+  assert.ok(w.audit.some(([e]) => e === 'flatpak_remote_added'));
+});
+
 // ---------------- offline bundles (WSOS-AUP-010) ----------------
 
 function bundleWorld(installed = '1.0.0', key = releaseKey(), script: Script = () => undefined) {

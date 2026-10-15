@@ -70,6 +70,31 @@ export function serve(path: string, broker: Broker): Server {
   return server;
 }
 
+/**
+ * WSOS-DIR-008: the directory PAM helper leaves a one-time login code for this user after a greeter sign-in
+ * (/run/worksuite-directory/sso/<uid>/login.json, 0600). Use it once: delete it first, then exchange it.
+ */
+export async function importLoginHandoff(broker: Broker, o: { path: string; deviceCredential: () => string | null; log: (e: string, f?: Record<string, unknown>) => void; now?: () => number }) {
+  let raw: string;
+  try { raw = readFileSync(o.path, 'utf8'); } catch { return null; }
+  rmSync(o.path, { force: true });
+  let h: { server_url?: unknown; login_code?: unknown; issued_at?: unknown };
+  try { h = JSON.parse(raw); } catch { o.log('login_handoff_invalid'); return null; }
+  const server = str(h.server_url), code = str(h.login_code, 512);
+  const issued = typeof h.issued_at === 'string' ? Date.parse(h.issued_at) : NaN;
+  if (!server || !code || !(issued > (o.now ?? Date.now)() - 2 * 60_000)) { o.log('login_handoff_stale'); return null; }
+  const device = o.deviceCredential();
+  if (!device) { o.log('login_handoff_no_device'); return null; }
+  try {
+    const a = await broker.signInWithLoginCode(server, code, device);
+    o.log('signed_in_from_greeter', { account: a.id });
+    return a;
+  } catch (e) {
+    o.log('login_handoff_failed', { error: e instanceof OidcError ? e.code : 'internal_error' });
+    return null;
+  }
+}
+
 async function main() {
   const env = process.env;
   const configDir = join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'worksuite');
@@ -111,6 +136,7 @@ async function main() {
     },
   });
   const server = serve(join(runtimeDir, 'credentials.sock'), broker);
+  await importLoginHandoff(broker, { path: join(env.WORKSUITE_DIRECTORY_RUN || '/run/worksuite-directory', 'sso', String(process.getuid?.() ?? -1), 'login.json'), deviceCredential: readDeviceCredential, log });
   const stop = () => { broker.lock(); server.close(); process.exit(0); };
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);

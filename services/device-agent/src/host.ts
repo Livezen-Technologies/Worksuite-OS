@@ -10,6 +10,7 @@ import { lookup } from 'node:dns/promises';
 import { ENFORCED_PATHS, type Enforcement } from './enforce.ts';
 import { KILLSWITCH_TABLE, parseNmConnections, renderKillSwitch, renderNmConnection, VPN_CONNECTION_UUID, VPN_KEYFILE, wgKeyPair, wgPublicKey } from './vpn.ts';
 import type { Policy } from './state.ts';
+import { collectHardware, readUpdateStatus } from './inventory.ts';
 
 export interface HostPaths { stateDir: string; runtimeDir: string; auditLog: string }
 
@@ -105,7 +106,7 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
         os_version: readOr('/etc/worksuite-release', osr.PRETTY_NAME ?? 'unknown'),
         shell_version: await run('dpkg-query', ['-W', '-f=${Version}', 'worksuite-shell']).catch(() => 'unknown'),
         kernel_version: release(),
-        update_status: readOr('/var/lib/worksuite-update/status', 'unknown'),
+        update_status: readUpdateStatus()?.state ?? 'unknown',
       };
     },
 
@@ -113,11 +114,14 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
       const pkgs = await run('dpkg-query', ['-W', '-f=${Package}\t${Version}\t${Architecture}\n']).catch(() => '');
       const flatpaks = await run('flatpak', ['list', '--app', '--columns=application,version,origin']).catch(() => '');
       return {
+        // WSOS-MDM-001: hardware, OS/shell/kernel versions and update status alongside the software lists.
         hardware: {
-          vendor: readOr('/sys/class/dmi/id/sys_vendor'), model: readOr('/sys/class/dmi/id/product_name'),
+          ...collectHardware(),
           cpu: cpus()[0]?.model ?? '', cores: cpus().length, memory_bytes: totalmem(),
           tpm: existsSync('/dev/tpmrm0'), encrypted: (await luksDevices().catch(() => [])).length > 0,
         },
+        versions: await this.facts(),
+        update: readUpdateStatus(),
         packages: pkgs.split('\n').filter(Boolean).map((l) => { const [name, version, arch] = l.split('\t'); return { source: 'apt', name, version, arch }; }),
         flatpaks: flatpaks.split('\n').filter(Boolean).map((l) => { const [name, version, origin] = l.split('\t'); return { source: 'flatpak', name, version, origin }; }),
       };
