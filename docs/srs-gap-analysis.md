@@ -5,6 +5,7 @@ Scoring: Done = 1 (implemented **and** covered by an automated test or CI run), 
 Config without a test, UI mock-ups with static data, and contract-only items count as Partial at most. `docs/requirements-traceability.md` was used as a starting point; every row was re-checked in code.
 WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one row.
 Updated 2026-10-15 for the Wayland bridge, panel/tray/update badge, accessibility and localisation work (rows SHL, DSK-003/005/007/011, INT-008, ACC, AUP-011, SES-002, §11.5), and for the WireGuard VPN (INT-001).
+Updated again for per-monitor panels, display settings and hotplug (DSK-005/006/007).
 
 ## Summary
 
@@ -12,7 +13,7 @@ Updated 2026-10-15 for the Wayland bridge, panel/tray/update badge, accessibilit
 |---|---|---|---|---|---|
 | 3 Architecture | 4 | 0 | 4 | 0 | 50% |
 | 4 Boot, login, session, lock | 17 | 11 | 6 | 0 | 82% |
-| 5 Shell | 18 | 4 | 10 | 4 | 50% |
+| 5 Shell | 18 | 7 | 9 | 2 | 64% |
 | 6 Applications | 20 | 15 | 4 | 1 | 85% |
 | 7 Integration and Drive | 19 | 5 | 14 | 0 | 63% |
 | 8 Identity and sync | 18 | 12 | 6 | 0 | 83% |
@@ -20,7 +21,7 @@ Updated 2026-10-15 for the Wayland bridge, panel/tray/update badge, accessibilit
 | 11 Non-functional | 25 | 5 | 20 | 0 | 60% |
 | 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 26 | 10 | 4 | 78% |
 | Unnumbered requirements (no WSOS ID) | 15 | 5 | 7 | 3 | 57% |
-| **Overall** | **198** | 95 | 91 | 12 | **71.0%** |
+| **Overall** | **198** | 98 | 90 | 10 | **72.2%** |
 
 ## 3 Architecture
 
@@ -65,9 +66,9 @@ Updated 2026-10-15 for the Wayland bridge, panel/tray/update badge, accessibilit
 | WSOS-DSK-002 | Search apps/settings/files/records ≤300 ms | Partial | Launcher search UI over in-memory static lists (`Desktop.tsx`); no real file/record index, no timing test. |
 | WSOS-DSK-003 | Panel: running windows, minimize/restore, workspaces | Partial | Taskbar combines the launcher pins (`lib/launcher.ts` `taskbarApps`) with real windows from the bridge, click raises/minimizes (`shell/src/components/PanelItems.tsx`, `lib/panel.ts`, `electron/panel.ts`); tested in `lib/panel.test.ts`, `electron/panel.test.ts`, `native/wayland-bridge/tests/test_shell_client.py` and headless Labwc. Workspace buttons are still local state. |
 | WSOS-DSK-004 | Panel: clock, network, volume, battery, BT, notifications, power | Partial | Clock, notification centre and power menu exist (`Desktop.tsx`, `components/Power.tsx`, `lib/power.ts` tested); network/volume/battery/BT are not wired to NetworkManager/PipeWire/UPower/BlueZ. |
-| WSOS-DSK-005 | Per-monitor panel/background, 100–200% scaling | Missing | The panel is the shell's single fullscreen window (no layer-shell surface per output). The bridge exposes `ListOutputs`/`OutputsChanged` (tested) for this work; text size 100–200 % exists in the accessibility panel. |
-| WSOS-DSK-006 | Display settings persisted per monitor | Partial | Settings › Displays lists real outputs, mode, refresh and scale from `wlr-randr --json` (`shell/electron/system.ts` (`system.test.ts`)); changing and persisting per-monitor settings not done. |
-| WSOS-DSK-007 | Monitor disconnect moves windows/launcher | Missing | The bridge emits `OutputsChanged` on output removal; nothing consumes it yet. |
+| WSOS-DSK-005 | Per-monitor panel/background, 100–200% scaling | Done | The bridge maps a transparent bottom-layer wlr-layer-shell surface per output with an exclusive zone of the taskbar height (`native/wayland-bridge/worksuite_bridge/layer.py`), so maximised windows stop above the taskbar on every monitor; headless Labwc with two outputs checks each usable area, also at scale 2 (`tests/test_labwc.py`). The shell opens a fullscreen desktop/taskbar window per secondary output listing only the windows on it, with per-monitor wallpaper (`shell/electron/outputWindows.ts`, `src/screens/OutputDesktop.tsx`, `src/lib/displays.ts`; `outputWindows.test.ts`, `DisplaySettings.test.tsx`). Scale 100–200 % per output in Settings › Display. Placing the Electron windows relies on Chromium sending `xdg_toplevel.set_fullscreen(output)`; the Labwc test covers that request with a test client, not with Electron itself. |
+| WSOS-DSK-006 | Display settings persisted per monitor | Done | Settings › Display changes resolution, refresh, scale, position, primary, on/off and mirror/extend per monitor through one `wlr-randr` call, with a 15-second "Keep these settings?" revert; kept layouts and wallpapers are saved per monitor set (EDID identity) in `~/.config/worksuite/displays.json` and re-applied at login and on hotplug (`shell/electron/displays.ts`, `src/screens/DisplaySettings.tsx`). Tests: parsers, layout, revert timer, the manager, and real `wlr-randr` against headless Labwc with two outputs (`displays.test.ts`), plus the UI countdown in jsdom (`DisplaySettings.test.tsx`). Mirror uses `wl-mirror` (Labwc keeps outputs from overlapping). |
+| WSOS-DSK-007 | Monitor disconnect moves windows/launcher | Done | On unplug Labwc moves windows off the removed output; the bridge drops that output's panel reservation, relists the windows on their new output and emits `OutputsChanged` (headless Labwc test unplugs and re-plugs `HEADLESS-2` with `wlr-randr`). The shell re-applies the saved layout for the new monitor set and closes, opens or moves its per-monitor windows (`panel.test.ts`, `outputWindows.test.ts`, `displays.test.ts`). |
 | WSOS-DSK-008 | Clipboard history off by default, excludes passwords | Missing | No clipboard history. |
 | WSOS-DSK-009 | Default apps / mimeapps.list editable in Settings | Missing | Files open via `shell.openPath` (XDG default); no Settings editor, no mimeapps.list handling. |
 | WSOS-DSK-010 | worksuite:// links resolve via links/resolve | Partial | `worksuite:` allow-listed in `shell/electron/main.ts`; server route `desktop/v1/links/resolve` in `services/server/src/api.ts`; no client-side resolution or scheme handler. |
