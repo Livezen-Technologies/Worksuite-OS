@@ -5,7 +5,6 @@ import io.calamares.ui 1.0
 import io.calamares.core 1.0
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
-import "WsState.js" as State
 
 Item {
     id: page
@@ -14,13 +13,14 @@ Item {
     property string subtitle
     property bool skipInExpress: false
     default property alias content: body.data
+    property WsState state: WsState {}
 
     // Called from each page's onActivate().
     function arrive() {
         var i = ViewManager.currentStepIndex
-        var last = State.get("lastStep", -1)
-        State.set("lastStep", i)
-        if (skipInExpress && State.get("express", false))
+        var last = page.state.get("lastStep", -1)
+        page.state.set("lastStep", i)
+        if (skipInExpress && page.state.get("express", false))
             Qt.callLater(i > last ? ViewManager.next : ViewManager.back)
     }
 

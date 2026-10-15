@@ -4,16 +4,15 @@ import io.calamares.core 1.0
 import io.calamares.ui 1.0
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
-import "WsState.js" as State
 
 WsPage {
     id: page
     step: 1
     title: qsTr("Welcome to WorkSuite OS")
     subtitle: qsTr("Choose your language and how you'd like to install.")
-    property bool expressChosen: State.get("express", true)
-    onExpressChosenChanged: State.set("express", expressChosen)
-    function onActivate() { State.set("express", expressChosen); arrive() }
+    property bool expressChosen: page.state.get("express", true)
+    onExpressChosenChanged: page.state.set("express", expressChosen)
+    function onActivate() { page.state.set("express", expressChosen); arrive() }
 
     RowLayout {
         anchors.fill: parent

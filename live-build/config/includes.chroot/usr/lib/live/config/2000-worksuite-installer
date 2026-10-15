@@ -9,7 +9,7 @@ cat > /etc/greetd/config.toml <<'CONF'
 vt = 7
 # Installer first; if it exits, the normal greeter comes back.
 [initial_session]
-command = "env QT_QPA_PLATFORM=wayland XDG_SESSION_TYPE=wayland QML_XHR_ALLOW_FILE_READ=1 QML_XHR_ALLOW_FILE_WRITE=1 worksuite-cage -s -- calamares"
+command = "env QT_QPA_PLATFORM=wayland XDG_SESSION_TYPE=wayland worksuite-cage -s -- calamares"
 user = "root"
 [default_session]
 command = "worksuite-cage -s -- gtkgreet -c /usr/bin/worksuite-session"

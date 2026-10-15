@@ -5,7 +5,6 @@ import io.calamares.ui 1.0
 import io.calamares.core 1.0
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
-import "WsState.js" as State
 
 Rectangle {
     id: sideBar
@@ -15,6 +14,7 @@ Rectangle {
     // Calamares step index → design step: welcome, keyboard | partition | users | locale | summary, confirm-erase | install, recovery key, finished
     readonly property var groupOf: [0, 0, 1, 2, 3, 4, 4, 5, 5, 5]
     readonly property var labels: [qsTr("Language"), qsTr("Installation type"), qsTr("Your account"), qsTr("Time zone"), qsTr("Review"), qsTr("Install")]
+    property WsState state: WsState {}
     readonly property int lastIndex: 9
     // The whole process under its steps: [design step, Calamares step it belongs to, label]. The install phases
     // all run in the one exec step, so they share its state.
@@ -32,7 +32,7 @@ Rectangle {
     }
     readonly property bool finished: ViewManager.currentStepIndex >= lastIndex
     // Express install fills in the time zone; re-read on every step change.
-    readonly property bool express: ViewManager.currentStepIndex >= 0 && State.get("express", false)
+    readonly property bool express: ViewManager.currentStepIndex >= 0 && sideBar.state.get("express", false)
 
     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1F7FB2FF" }   // rgba(127,178,255,0.12)
 
