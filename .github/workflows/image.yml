@@ -58,7 +58,7 @@ jobs:
             boot_timeout: 2400
           - arch: arm64
             runner: ubuntu-24.04-arm
-            qemu: qemu-system-arm qemu-efi-aarch64
+            qemu: qemu-system-arm qemu-efi-aarch64 ipxe-qemu
             boot_timeout: 4800
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 300
