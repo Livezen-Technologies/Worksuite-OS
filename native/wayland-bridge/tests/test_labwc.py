@@ -71,6 +71,7 @@ class LabwcTest(unittest.TestCase):
             self.pump(backend, lambda: not registry.list())
             foot.wait(timeout=10)
         finally:
+            backend.disconnect()
             if foot.poll() is None:
                 foot.kill()
                 foot.wait()

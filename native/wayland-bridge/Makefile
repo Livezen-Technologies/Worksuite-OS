@@ -10,6 +10,6 @@ protocols:
 	touch worksuite_bridge/protocol/__init__.py
 
 test: protocols
-	python3 -m unittest discover -s tests -t . -v
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -t . -v
 
 .PHONY: all protocols test

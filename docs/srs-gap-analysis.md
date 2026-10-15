@@ -4,6 +4,7 @@ Source: *WorkSuite OS — Software Requirements Specification* (1.0 draft), chec
 Scoring: Done = 1 (implemented **and** covered by an automated test or CI run), Partial = 0.5, Missing = 0.
 Config without a test, UI mock-ups with static data, and contract-only items count as Partial at most. `docs/requirements-traceability.md` was used as a starting point; every row was re-checked in code.
 WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one row.
+Updated 2026-10-15 for the Wayland bridge, panel/tray/update badge, accessibility and localisation work (rows SHL, DSK-003/005/007/011, INT-008, ACC, AUP-011, SES-002, §11.5).
 
 ## Summary
 
@@ -11,24 +12,24 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 |---|---|---|---|---|---|
 | 3 Architecture | 4 | 0 | 4 | 0 | 50% |
 | 4 Boot, login, session, lock | 17 | 1 | 11 | 5 | 38% |
-| 5 Shell | 18 | 1 | 8 | 9 | 28% |
+| 5 Shell | 18 | 4 | 9 | 5 | 47% |
 | 6 Applications | 20 | 6 | 7 | 7 | 48% |
-| 7 Integration and Drive | 19 | 3 | 14 | 2 | 53% |
+| 7 Integration and Drive | 19 | 4 | 14 | 1 | 58% |
 | 8 Identity and sync | 18 | 12 | 6 | 0 | 83% |
 | 9 Updates, MDM, installer | 22 | 10 | 12 | 0 | 73% |
 | 11 Non-functional | 25 | 2 | 15 | 8 | 38% |
-| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 15 | 9 | 16 | 49% |
+| 14 Additions (AUP, ARM, WIPE, DIR) | 40 | 16 | 8 | 16 | 50% |
 | Unnumbered requirements (no WSOS ID) | 15 | 3 | 7 | 5 | 43% |
-| **Overall** | **198** | | | | **50.3%** |
+| **Overall** | **198** | 58 | 93 | 47 | **52.8%** |
 
 ## 3 Architecture
 
 | ID | Requirement | Status | Evidence / reason |
 |---|---|---|---|
 | WSOS-ARC-001 | Electron main runs as user, not a root command runner | Partial | `shell/electron/main.ts` uses fixed execFile arrays and sender-checked IPC; privileged ops go to package-service D-Bus. No test of the renderer→system boundary (§13.1 Security layer). |
-| WSOS-ARC-002 | Privileged ops are named D-Bus methods behind polkit | Partial | `services/package-service/src/dbus.ts` + `polkit/lk.worksuite.package.policy`, tested in `services/package-service/test/dbus.test.ts`. Device agent D-Bus (`services/device-agent/dbus/*.xml`, `polkit/`) has no dispatch tests; the Wayland bridge does not exist. |
+| WSOS-ARC-002 | Privileged ops are named D-Bus methods behind polkit | Partial | `services/package-service/src/dbus.ts` + `polkit/lk.worksuite.package.policy`, tested in `services/package-service/test/dbus.test.ts`. Window operations are named methods on `lk.worksuite.WaylandBridge1` with a caller check (`native/wayland-bridge/`, tested). Device agent D-Bus (`services/device-agent/dbus/*.xml`, `polkit/`) has no dispatch tests. |
 | WSOS-ARC-003 | Native apps stay independent compositor windows | Partial | Apps launched with `gtk-launch` (`shell/electron/main.ts`), Labwc owns windows (`services/session/labwc/rc.xml`). No embedding, but no test. |
-| WSOS-ARC-004 | Desktop usable with all remote services unreachable | Partial | Shell bundled locally, sync offline-first (`services/sync/src/service.ts`). No offline E2E test; panel/bridge not built. |
+| WSOS-ARC-004 | Desktop usable with all remote services unreachable | Partial | Shell bundled locally, sync offline-first (`services/sync/src/service.ts`); the panel and bridge are local-only (`native/wayland-bridge/`). No offline E2E test. |
 
 ## 4 Boot, login, session, lock
 
@@ -42,7 +43,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-AUTH-003 | Offline login for provisioned local users within policy period | Partial | Local PAM accounts work offline by default; the policy offline period is not enforced anywhere (Settings shows a static "7 days" label). |
 | WSOS-AUTH-004 | PAM faillock with policy thresholds | Missing | No faillock configuration in live-build, installer or packaging. |
 | WSOS-SES-001 | Import display env before portals | Partial | `services/session/bin/worksuite-session` (`--ready`), `services/session/labwc/autostart`. Not tested. |
-| WSOS-SES-002 | User units bound to worksuite-session.target | Partial | `services/session/systemd/user/*` (PartOf=). Panel and bridge units point at binaries that do not exist. Not tested. |
+| WSOS-SES-002 | User units bound to worksuite-session.target | Partial | `services/session/systemd/user/*` (PartOf=). Units now match the shipped binaries: `worksuite-wayland-bridge.service` runs `/usr/libexec/worksuite/worksuite-wayland-bridge` (package `worksuite-wayland-bridge`); the separate panel unit was removed because the shell is the panel (`native/panel/README.md`). Units themselves are not tested in a session. |
 | WSOS-SES-003 | Clean logout | Partial | `worksuite-session` `cleanup()`; sync stop tested in `services/sync/test/service.test.ts`. Shell "Log out" (`ws:logout`) stops only the target, not the full cleanup. No REL-001 cycle test. |
 | WSOS-SES-004 | Shell restart ≤3 s without killing app windows | Partial | `worksuite-shell.service` Restart=always RestartSec=1s; but `gtk-launch` is not wrapped in `systemd-run --scope` as the unit comment claims, so apps may share the shell cgroup (`KillMode=control-group`). Not tested. |
 | WSOS-SES-005 | Recovery launcher after 3 crashes / 60 s | Partial | `StartLimitBurst=3`, `OnFailure=worksuite-recovery-launcher.service`; `shell/src/screens/Recovery.tsx`. Not tested. |
@@ -56,21 +57,21 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 
 | ID | Requirement | Status | Evidence / reason |
 |---|---|---|---|
-| WSOS-SHL-001 | Bridge exposes only supported ops, NotSupported otherwise | Missing | Only `native/wayland-bridge/lk.worksuite.WaylandBridge1.xml` + README; no code. |
-| WSOS-SHL-002 | xdg-activation and focus-stealing prevention | Missing | Bridge not implemented. |
-| WSOS-SHL-003 | Stale handles → NotFound | Missing | Bridge not implemented. |
-| WSOS-SHL-004 | Only shell/panel may call bridge | Missing | Bridge not implemented (no D-Bus policy file either). |
+| WSOS-SHL-001 | Bridge exposes only supported ops, NotSupported otherwise | Done | `native/wayland-bridge/worksuite_bridge/service.py` (`SupportedOperations`, `Error.NotSupported`), `wayland.py` (probes `zwlr_foreign_toplevel_manager_v1`/`wl_seat`); `tests/test_dbus.py` (`test_not_supported_and_property`), `tests/test_labwc.py` (headless Labwc reports activate/close/minimize). |
+| WSOS-SHL-002 | xdg-activation and focus-stealing prevention | Partial | `ActivateWindow` accepts the token, but wlr-foreign-toplevel `activate` cannot carry it, so Labwc treats the request as the panel's; only verified shell callers reach it (`native/wayland-bridge/README.md`). No xdg-activation forwarding. |
+| WSOS-SHL-003 | Stale handles → NotFound | Done | Random never-reused handles (`worksuite_bridge/model.py`); `tests/test_model.py`, `tests/test_dbus.py` (`test_stale_handle_is_not_found`), shell mapping in `shell/electron/panel.test.ts`. |
+| WSOS-SHL-004 | Only shell/panel may call bridge | Done | Bus credentials + `/proc/<pid>/exe` check (`worksuite_bridge/access.py`, `service.py`), window signals unicast to subscribers; `tests/test_dbus.py` (`test_other_programs_are_denied`, `test_signals_only_to_subscribers`), `tests/test_model.py`. |
 | WSOS-DSK-001 | Launcher lists WorkSuite + installed Linux apps, favourites/pins | Partial | Launcher UI in `shell/src/screens/Desktop.tsx` uses static app data; no desktop-entry scan and no `desktop/v1/apps` client (server route exists in `services/server/src/api.ts`). |
 | WSOS-DSK-002 | Search apps/settings/files/records ≤300 ms | Partial | Launcher search UI over in-memory static lists (`Desktop.tsx`); no real file/record index, no timing test. |
-| WSOS-DSK-003 | Panel: running windows, minimize/restore, workspaces | Partial | Mock taskbar/workspace buttons in `Desktop.tsx` (local state); native panel (`native/panel/README.md`) not written, no bridge. |
+| WSOS-DSK-003 | Panel: running windows, minimize/restore, workspaces | Partial | Taskbar shows real windows from the bridge, click raises/minimizes (`shell/src/components/PanelItems.tsx`, `lib/panel.ts`, `electron/panel.ts`); tested in `lib/panel.test.ts`, `electron/panel.test.ts`, `native/wayland-bridge/tests/test_shell_client.py` and headless Labwc. Workspace buttons are still local state. |
 | WSOS-DSK-004 | Panel: clock, network, volume, battery, BT, notifications, power | Partial | Clock, notification centre and power menu exist (`Desktop.tsx`, `components/Power.tsx`, `lib/power.ts` tested); network/volume/battery/BT are not wired to NetworkManager/PipeWire/UPower/BlueZ. |
-| WSOS-DSK-005 | Per-monitor panel/background, 100–200% scaling | Missing | Native panel not implemented; no multi-output handling. |
+| WSOS-DSK-005 | Per-monitor panel/background, 100–200% scaling | Missing | The panel is the shell's single fullscreen window (no layer-shell surface per output). The bridge exposes `ListOutputs`/`OutputsChanged` (tested) for this work; text size 100–200 % exists in the accessibility panel. |
 | WSOS-DSK-006 | Display settings persisted per monitor | Missing | Settings › Displays is static text (`shell/src/screens/Settings.tsx` `SimplePanel`). |
-| WSOS-DSK-007 | Monitor disconnect moves windows/launcher | Missing | No implementation. |
+| WSOS-DSK-007 | Monitor disconnect moves windows/launcher | Missing | The bridge emits `OutputsChanged` on output removal; nothing consumes it yet. |
 | WSOS-DSK-008 | Clipboard history off by default, excludes passwords | Missing | No clipboard history. |
 | WSOS-DSK-009 | Default apps / mimeapps.list editable in Settings | Missing | Files open via `shell.openPath` (XDG default); no Settings editor, no mimeapps.list handling. |
 | WSOS-DSK-010 | worksuite:// links resolve via links/resolve | Partial | `worksuite:` allow-listed in `shell/electron/main.ts`; server route `desktop/v1/links/resolve` in `services/server/src/api.ts`; no client-side resolution or scheme handler. |
-| WSOS-DSK-011 | Shortcuts: Super, Alt+Tab, workspaces, Super+L, screenshot | Partial | `services/session/labwc/rc.xml` has Super, Alt+Tab, Super+L; Super calls `lk.worksuite.Shell1` which the shell never exports; no workspace or screenshot bindings. |
+| WSOS-DSK-011 | Shortcuts: Super, Alt+Tab, workspaces, Super+L, screenshot | Partial | `services/session/labwc/rc.xml` has Super, Alt+Tab, Super+L; the shell now exports `lk.worksuite.Shell1.ToggleLauncher` for Super (`shell/electron/panel.ts`, `shell/dbus/lk.worksuite.Shell1.xml`; tested in `electron/panel.test.ts` and with busctl in `native/wayland-bridge/tests/test_shell_client.py`). No workspace or screenshot bindings. |
 | WSOS-DSK-012 | Shell assets packaged locally | Done | Vite bundle loaded with `loadFile` (`shell/electron/main.ts`), packaged by `packaging/debian/worksuite-shell.install`; built in CI (`.github/workflows/ci.yml`) and booted in the image test. |
 | WSOS-DSK-013 | File dialogs, DnD, clipboard, printing, links behave as standard | Partial | Portal config (`services/session/portals/worksuite-portals.conf`); no portal acceptance tests. |
 | WSOS-DSK-014 | Tailwind v4 tokens, light and dark themes | Partial | Tailwind tokens in `shell/src/index.css`; no dark theme switch verified. |
@@ -111,7 +112,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-INT-005 | Power (UPower/logind) | Partial | Suspend/restart/shutdown via `systemctl` (`main.ts`), `lib/power.ts` tested; battery/profiles static. |
 | WSOS-INT-006 | Printing (CUPS) | Partial | `cups` dep; Settings › Printers static. |
 | WSOS-INT-007 | Notifications server (org.freedesktop.Notifications) | Partial | In-shell notice centre with DND (`Desktop.tsx`, `lib/useNotices.ts`, `lib/syncNotices.test.ts`); shell does not own `org.freedesktop.Notifications`. |
-| WSOS-INT-008 | Tray (SNI host) P2 | Missing | Only described in `native/panel/README.md`. |
+| WSOS-INT-008 | Tray (SNI host) P2 | Done | `org.kde.StatusNotifierWatcher` + host and `lk.worksuite.Tray1` in the bridge (`native/wayland-bridge/worksuite_bridge/service.py`, `lk.worksuite.Tray1.xml`), tray buttons in the taskbar (`shell/src/components/PanelItems.tsx`); `tests/test_dbus.py` (`test_tray_watcher`: register, list, activate, unregister on exit). Menus (`com.canonical.dbusmenu`) not supported. |
 | WSOS-INT-009 | Secret Service unlock/lock with session | Partial | `gnome-keyring` dep, lock on logout in `worksuite-session`, broker lock follows session lock (`shell/electron/broker.ts`, `broker.test.ts`); PAM unlock-on-login not configured. |
 | WSOS-INT-010 | Shell-rendered polkit agent | Missing | No polkit agent in shell or packaging. |
 | WSOS-INT-011 | Input methods (fcitx5, Sinhala/Tamil) | Partial | `fcitx5` dependency; no fcitx5 config, Sinhala/Tamil IMs (`fcitx5-m17n` etc.) not listed. |
@@ -202,7 +203,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-SEC-012 | Electron supported, patched in 14 days | Partial | Electron pinned in `shell/package.json`; no update policy/automation. |
 | WSOS-SEC-013 | Docs don't claim isolation of unsandboxed apps | Partial | No contrary claim found; no explicit statement or review. |
 | WSOS-SEC-014 | Secure Boot full chain + key strategy (P2) | Partial | `shim-signed`, `--uefi-secure-boot auto`; no documented key strategy or module signing. |
-| WSOS-ACC-001…006 | Accessibility: keyboard, focus, Orca, high contrast, 200% text, reduced motion | Partial | ARIA labels and keyboard handling in shell screens (`Desktop.tsx`); no high-contrast theme, reduced-motion handling or Orca qualification. |
+| WSOS-ACC-001…006 | Accessibility: keyboard, focus, Orca, high contrast, 200% text, reduced motion | Partial | High-contrast theme, reduced-motion setting on top of `prefers-reduced-motion`, text size 100/150/200 % (`shell/src/lib/a11y.ts`, `index.css`, `components/A11yPanel.tsx` on greeter and desktop), visible focus ring, roving arrow keys in taskbar/tray, `BWindow` no longer `role=application`. axe-core audit of every shell screen (`shell/src/a11y.axe.test.tsx`) and contrast audit of all text colours (`shell/src/lib/contrast.test.ts`; low-contrast `#5E739C` fixed). Not done: Orca qualification on the real session, keyboard walk-throughs of Settings/App Center/installer, text scale by zoom rather than reflow. |
 
 ## 14 Additions (AUP, ARM, WIPE, DIR)
 
@@ -218,13 +219,13 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | WSOS-AUP-008 | Resumable downloads; pause on metered unless critical | Partial | Metered handling tested (`updates.ts`); no resumable download logic (apt handles partials implicitly, untested). |
 | WSOS-AUP-009 | Policy mirror, signatures still verified | Done | `coordinator.ts` (`update_mirror`); tested in `coordinator.test.ts`. |
 | WSOS-AUP-010 | Signed .wsupdate bundles from USB | Missing | Only mentioned in `services/package-service/README.md`. |
-| WSOS-AUP-011 | Settings › Updates + panel badge; results reported | Partial | Settings › Updates (`Settings.tsx`, `shell/electron/packages.ts`, tested) and result reporting done; no panel badge (native panel missing). |
+| WSOS-AUP-011 | Settings › Updates + panel badge; results reported | Done | Settings › Updates (`Settings.tsx`, `shell/electron/packages.ts`, tested), result reporting, and the panel badge for available/installing/restart/failed (`shell/src/components/PanelItems.tsx`, `updateBadge` tested in `lib/panel.test.ts`). |
 | WSOS-AUP-012 | Edition entitlement gating; security during grace | Missing | No licence/entitlement handling. |
 | WSOS-AUP-013 | Update Center admin: publish, promote, pause, pull | Partial | Signed publish in `services/server/src/admin.ts`; no promote/pause/pull or `desktop.releases.manage` permission. |
 | WSOS-ARM-001 | arm64 packages and ISO from same tag | Partial | `live-build/auto/config` accepts arm64, `packaging/debian/control` arch lists; CI builds amd64 only (`.github/workflows/image.yml`). |
 | WSOS-ARM-002 | ARM via UEFI only | Partial | grub-efi for arm64 configured; never booted. |
 | WSOS-ARM-003 | Certified ARM list with hardware gates | Missing | No list. |
-| WSOS-ARM-004 | Native arm64 builds of Electron, panel, bridge, services, Office | Partial | Package architectures declared; panel/bridge/Office absent; no arm64 build. |
+| WSOS-ARM-004 | Native arm64 builds of Electron, panel, bridge, services, Office | Partial | Package architectures declared; the bridge is `Architecture: all` (Python) and the panel is the shell; Office absent; no arm64 build. |
 | WSOS-ARM-005 | App Center arch filtering, AppImage arch check | Missing | Not implemented. |
 | WSOS-ARM-006 | No x86 emulation (scope) | Done | None shipped. |
 | WSOS-ARM-007 | Separate ARM performance gates | Missing | No performance gates at all. |
@@ -262,7 +263,7 @@ WSOS-ACC-001…006 appear in the SRS only as a range, so they are scored as one 
 | §9.3 enrolment flow | Short-lived token, device key pair (TPM when available), signed policy, heartbeat | Done | `services/device-agent/src/agent.ts` (`enroll`, `refreshPolicy`), server `api.ts`; `agent.test.ts`, `services/server/test/e2e.test.ts`. |
 | §7.1 portal acceptance | Test each portal interface used | Missing | No portal tests. |
 | §7.1 Meet screencast | ScreenCast portal path, consent + emergency stop | Missing | Not implemented. |
-| §11.5 Localisation | Externalised strings; Sinhala/Tamil input in 1.0; locale formats | Partial | Noto fonts and fcitx5 dependency; UI strings hard-coded English; no i18n framework. |
+| §11.5 Localisation | Externalised strings; Sinhala/Tamil input in 1.0; locale formats | Partial | Message catalog `shell/src/i18n/` (English source, Sinhala and Tamil drafts awaiting native review, English fallback, `Intl` dates/numbers/LKR–GBP currency), language picker in the accessibility panel; strings extracted from Desktop, Greeter and the power menu (`i18n.test.ts` checks keys/placeholders). Installer: qsTr/tr strings extracted into `installer/lang/calamares-worksuite_{si,ta}.ts` and compiled to the branding's `lang/*.qm` at build (`installer/lang/build.sh`, `installer/tests/test_translations.py`); only navigation and sidebar are translated. Settings, App Center, Files, Lock, Recovery and First run strings are still English literals. fcitx5 + Noto fonts for input. |
 | §11.6-a | One Debian package per component + metapackage | Done | `packaging/debian/control`, `packaging/build-debs.sh`; built in `image.yml`. |
 | §11.6-b | Defaults in /usr/share,/etc; user state in XDG dirs | Partial | Followed in services; untested. |
 | §11.6-c | Structured JSON logs with request IDs | Partial | Request IDs in transports and server (`services/server/src/http.ts`, `services/sync/src/transport.ts`); not uniform JSON to journald. |

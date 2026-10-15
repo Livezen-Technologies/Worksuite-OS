@@ -10,7 +10,7 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-SES-003 clean logout | `services/session/bin/worksuite-session` (`cleanup`) | Cfg |
 | WSOS-SES-004/005 shell restart ≤ 3 s, recovery after 3 crashes / 60 s | `services/session/systemd/user/worksuite-shell.service`, `worksuite-recovery-launcher.service` | Cfg |
 | WSOS-SES-006 compositor exit → greeter notice | `services/session/bin/worksuite-session` | Cfg |
-| WSOS-SHL-001…004 bridge operations, errors, caller check | `native/wayland-bridge/lk.worksuite.WaylandBridge1.xml`, `native/wayland-bridge/README.md` | Doc |
+| WSOS-SHL-001…004 bridge operations, errors, caller check | `native/wayland-bridge/worksuite_bridge/`, `native/wayland-bridge/lk.worksuite.WaylandBridge1.xml` | `native/wayland-bridge/tests/` |
 | WSOS-INT-012 portal backends | `services/session/portals/worksuite-portals.conf` | Cfg |
 | WSOS-DRV-004 conflict copy name | `services/sync/src/policy.ts` (`conflictCopyName`) | Impl |
 | WSOS-IDN-001 OIDC code + PKCE, no client secret | `services/credentials/src/broker.ts` (`signIn`), `src/oidc.ts`, `src/pkce.ts` | Impl |

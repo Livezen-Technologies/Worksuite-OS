@@ -47,6 +47,19 @@ jobs:
         run: sudo apt-get install -y --no-install-recommends dbus-daemon
       - run: npm test
 
+  wayland-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # labwc + foot run the headless end-to-end test; the shell's node_modules run the panel-client test.
+      - run: sudo apt-get install -y --no-install-recommends dbus-daemon libwayland-dev labwc foot python3-pip && pip install --break-system-packages pywayland dbus-next
+      - run: cd shell && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --no-audit --no-fund
+      - run: make -C native/wayland-bridge test
+      - run: python3 -m unittest discover -s installer/tests
+
   apt-repo:
     runs-on: ubuntu-latest
     steps:

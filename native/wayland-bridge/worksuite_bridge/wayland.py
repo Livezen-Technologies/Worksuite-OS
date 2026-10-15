@@ -58,6 +58,18 @@ class WaylandBackend(Backend):
         if self.manager is None:
             log.warning("compositor does not offer zwlr_foreign_toplevel_manager_v1; window operations unsupported")
 
+    def disconnect(self) -> None:
+        """Drops every proxy before the display goes away (pywayland proxies must not outlive it)."""
+        import gc
+        self.manager = self.seat = None
+        self._outputs.clear()
+        self._tops.clear()
+        self._registry_proxy = None
+        for w in self.registry.list():
+            self.registry.remove(w.native)
+        gc.collect()
+        self.display.disconnect()
+
     def attach(self, loop: asyncio.AbstractEventLoop) -> None:
         loop.add_reader(self.display.get_fd(), self._readable)
         self.display.flush()

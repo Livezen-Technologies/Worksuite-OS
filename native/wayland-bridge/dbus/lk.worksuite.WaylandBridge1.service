@@ -1,0 +1,5 @@
+# Session-bus activation goes through systemd so the bridge runs in its unit (Restart=always, session.slice).
+[D-BUS Service]
+Name=lk.worksuite.WaylandBridge1
+Exec=/bin/false
+SystemdService=worksuite-wayland-bridge.service

@@ -1,0 +1,5 @@
+native/wayland-bridge/worksuite_bridge usr/lib/worksuite/wayland-bridge/
+native/wayland-bridge/bin/worksuite-wayland-bridge usr/libexec/worksuite/
+native/wayland-bridge/lk.worksuite.WaylandBridge1.xml usr/share/dbus-1/interfaces/
+native/wayland-bridge/lk.worksuite.Tray1.xml usr/share/dbus-1/interfaces/
+native/wayland-bridge/dbus/lk.worksuite.WaylandBridge1.service usr/share/dbus-1/services/

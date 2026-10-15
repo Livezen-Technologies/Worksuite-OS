@@ -1,6 +1,8 @@
 [Unit]
 Description=WorkSuite shell (launcher, dashboard, Settings, App Center)
 PartOf=worksuite-session.target
+# The shell is the panel (taskbar, tray, launcher); its window list comes from the bridge (native/panel/README.md).
+Wants=worksuite-wayland-bridge.service
 After=worksuite-wayland-bridge.service
 # WSOS-SES-005: 3 crashes inside 60 s exhaust the start limit → recovery launcher.
 StartLimitIntervalSec=60

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Session bus: exported by the shell's Electron main process (shell/electron/panel.ts) as lk.worksuite.Shell1. -->
+<node name="/lk/worksuite/Shell1">
+  <interface name="lk.worksuite.Shell1">
+    <!-- Super key (services/session/labwc/rc.xml): open or close the launcher. -->
+    <method name="ToggleLauncher"/>
+    <method name="ShowLauncher"/>
+  </interface>
+</node>

@@ -66,7 +66,15 @@ export class PanelClient {
   tray: TrayItem[] = []
   private refreshTimer: ReturnType<typeof setTimeout> | null = null
 
-  constructor(private bus: PanelBus, private events: PanelEvents, private debounceMs = 50) {}
+  private bus: PanelBus
+  private events: PanelEvents
+  private debounceMs: number
+
+  constructor(bus: PanelBus, events: PanelEvents, debounceMs = 50) {
+    this.bus = bus
+    this.events = events
+    this.debounceMs = debounceMs
+  }
 
   private call(path: string, iface: string, member: string, signature = '', body: unknown[] = []) {
     return this.bus.call(new Message({ destination: BRIDGE, path, interface: iface, member, signature, body }))

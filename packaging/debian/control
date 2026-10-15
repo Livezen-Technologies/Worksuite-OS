@@ -8,7 +8,11 @@ Build-Depends: debhelper-compat (= 13), nodejs (>= 22.18), npm,
  qt6-base-dev | qtbase5-dev, qt6-base-private-dev | qtbase5-dev, qt6-declarative-dev | qtdeclarative5-dev, qt6-svg-dev | libqt5svg5-dev, qt6-tools-dev | qttools5-dev,
  libkf6coreaddons-dev | libkf5coreaddons-dev,
 # Branding: SVG sources rendered to PNG for Plymouth, GRUB and icons.
- librsvg2-bin, grub-common, fonts-dejavu-core
+ librsvg2-bin, grub-common, fonts-dejavu-core,
+# Wayland bridge: protocol bindings generated with pywayland-scanner from wayland.xml; D-Bus tests on a private bus.
+ python3, python3-pywayland, python3-dbus-next, libwayland-dev, pkgconf, dbus-daemon,
+# Installer translations (.ts → .qm).
+ qt6-l10n-tools | qttools5-dev-tools
 Standards-Version: 4.7.0
 Homepage: https://download.worksuitecloud.com
 Rules-Requires-Root: no
@@ -16,7 +20,7 @@ Rules-Requires-Root: no
 Package: worksuite-desktop
 Architecture: all
 Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archive-keyring,
- worksuite-user-services, worksuite-package-service, worksuite-device-agent,
+ worksuite-user-services, worksuite-package-service, worksuite-device-agent, worksuite-wayland-bridge,
  labwc, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, xdg-desktop-portal-gtk, gnome-keyring,
  pipewire, pipewire-pulse, wireplumber, network-manager, bluez, udisks2, upower, cups, polkitd, pkexec,
@@ -25,9 +29,9 @@ Recommends: fwupd
 Conflicts: openssh-server
 Description: WorkSuite OS desktop (metapackage)
  Pulls in the WorkSuite session, shell, system services and the Debian
- desktop stack they rely on. No SSH server (WSOS-SEC-010). The native panel,
- Wayland bridge, Office and archive keyring packages
- join when their sources exist.
+ desktop stack they rely on. No SSH server (WSOS-SEC-010). The shell is
+ also the panel (taskbar, tray, update badge); its window list comes from
+ worksuite-wayland-bridge.
 
 Package: worksuite-shell
 Architecture: amd64 arm64
@@ -37,6 +41,15 @@ Description: WorkSuite shell (Electron launcher, dashboard, Settings, App Center
  desktop, Files, App Center, Settings, recovery launcher and installer UI,
  with a bundled Electron runtime. Also provides worksuite-node, the Node
  runtime the WorkSuite services run on.
+
+Package: worksuite-wayland-bridge
+Architecture: all
+Depends: python3, python3-pywayland, python3-dbus-next, labwc, ${misc:Depends}
+Description: WorkSuite Wayland bridge (window list, tray watcher) on D-Bus
+ Session service lk.worksuite.WaylandBridge1: lists, activates, minimizes and
+ closes Labwc windows through wlr-foreign-toplevel-management for the WorkSuite
+ shell's panel only (caller verified by bus credentials). Also the
+ StatusNotifierItem watcher and host behind the panel's tray.
 
 Package: worksuite-session
 Architecture: all
