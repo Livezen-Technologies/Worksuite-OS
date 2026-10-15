@@ -1,4 +1,4 @@
-/* Final page (design: Installer › Complete). The recovery key was shown on the step before. */
+/* Step 6 · Complete (design: Installer sub-steps › 6 · Complete). The recovery key was shown on the step before. */
 import io.calamares.core 1.0
 import io.calamares.ui 1.0
 import QtQuick 2.15
@@ -21,15 +21,20 @@ WsPage {
             Text { anchors.centerIn: parent; text: config.failed ? "!" : "✓"; color: config.failed ? "#FF9F5A" : "#5FD39A"; font.pixelSize: 48; font.weight: Font.Bold }
         }
         Text {
-            Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 12
+            Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 8
+            text: config.failed ? qsTr("STEP 6 · FAILED") : qsTr("STEP 6 · COMPLETE")
+            color: config.failed ? "#FF9F5A" : "#5FD39A"; font.family: "IBM Plex Mono"; font.pixelSize: 12; font.letterSpacing: 1
+        }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
             text: config.failed ? qsTr("Installation failed") : qsTr("WorkSuite OS is installed")
-            color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 38; font.weight: Font.Bold; font.letterSpacing: -0.7
+            color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 36; font.weight: Font.Bold; font.letterSpacing: -0.7
         }
         Text {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; lineHeight: 1.4
             text: config.failed ? config.failureMessage + (config.failureDetails ? "\n" + config.failureDetails : "")
-                : qsTr("Remove the USB drive, then restart. Setup will finish the first time you sign in.")
+                : qsTr("Remove the installation media, then restart to sign in.")
             color: "#8FA3C8"; font.family: "IBM Plex Sans"; font.pixelSize: 16
         }
         RowLayout {

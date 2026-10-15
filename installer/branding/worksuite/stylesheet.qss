@@ -97,8 +97,8 @@ EncryptWidget QLineEdit { min-height: 30px; padding: 0 10px; border-radius: 8px;
 
 /* Calamares fixes the QML sidebar's width (12 lines of text, at most 190 px) and caps the QML footer at 64 px
    (CalamaresWindow.cpp). Of the two panels directly in the window, the sidebar is the one without a fixed height. */
-#mainApp > QQuickWidget[maximumHeight="16777215"] { min-width: 288px; max-width: 288px; }
-#mainApp > QQuickWidget[maximumHeight="64"] { min-height: 88px; max-height: 88px; }
+#mainApp > QQuickWidget[maximumHeight="16777215"] { min-width: 260px; max-width: 260px; }
+#mainApp > QQuickWidget[maximumHeight="64"] { min-height: 80px; max-height: 80px; }
 
 /* Partition page (design: Installation type · erase disk). Stock Calamares widgets, styled toward the design. */
 #ChoicePage QScrollArea, #ChoicePage #scrollAreaWidgetContents { background: transparent; border: none; }
@@ -108,3 +108,13 @@ EncryptWidget QLineEdit { min-height: 30px; padding: 0 10px; border-radius: 8px;
 #ChoicePage #hLine { color: rgba(127, 178, 255, 0.12); max-height: 1px; }
 #m_encryptCheckBox { font-size: 15px; font-weight: 600; }
 #partitionLabel { color: #C9D6EE; font-size: 12px; }
+
+/* Install step: the bar and status line Calamares puts under the slideshow, lined up with the page content. */
+#exec-progress { margin: 0 56px; }
+#exec-message { color: #8FA3C8; font-family: "IBM Plex Mono"; font-size: 12px; margin: 6px 56px 18px; }
+
+/* Message boxes (design: Message boxes): raised navy card, primary button blue. */
+QMessageBox { background: #0F2350; border: 1px solid rgba(127, 178, 255, 0.2); border-radius: 18px; }
+QMessageBox QLabel { color: #C9D6EE; font-size: 14px; min-width: 360px; }
+QMessageBox QPushButton { min-width: 96px; padding: 10px 18px; }
+QDialogButtonBox { background: transparent; }

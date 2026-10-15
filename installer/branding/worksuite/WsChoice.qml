@@ -9,13 +9,13 @@ Rectangle {
     property string badge
     property bool selected: false
     signal picked()
-    implicitHeight: col.implicitHeight + 36
+    implicitHeight: col.implicitHeight + 30
     radius: 12
-    color: selected ? "#2E1F6BFF" : "#990E2048"
-    border.width: selected ? 2 : 1
+    color: selected ? "#1F1F6BFF" : "#990E2048"
+    border.width: 1
     border.color: selected ? "#1F6BFF" : mouse.containsMouse ? "#557FB2FF" : "#297FB2FF"
     RowLayout {
-        anchors.fill: parent; anchors.margins: 18
+        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; anchors.topMargin: 15; anchors.bottomMargin: 15
         spacing: 14
         Rectangle {
             Layout.alignment: Qt.AlignTop
@@ -26,10 +26,10 @@ Rectangle {
         ColumnLayout {
             id: col
             Layout.fillWidth: true
-            spacing: 6
+            spacing: 3
             RowLayout {
                 spacing: 10
-                Text { text: c.title; color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 16; font.weight: Font.DemiBold }
+                Text { text: c.title; color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 15; font.weight: Font.DemiBold }
                 Rectangle {
                     visible: c.badge !== ""
                     radius: 6; color: "#2618D4F0"; implicitWidth: b.implicitWidth + 14; implicitHeight: 20

@@ -1,4 +1,6 @@
-/* WorkSuite installer footer: "Quit installer" left, Back and the primary action right (design: Installer). */
+/* WorkSuite installer footer: "Quit installer" left, Back and the primary action right (design: Installer).
+   A page with sub-steps of its own (Your account) reports them through WsState; Back and Continue then move
+   between its sub-steps before moving between Calamares steps. */
 import io.calamares.ui 1.0
 import io.calamares.core 1.0
 import QtQuick 2.15
@@ -6,8 +8,26 @@ import QtQuick.Layouts 1.15
 
 Rectangle {
     id: nav
-    implicitHeight: 88
+    implicitHeight: 80
     color: "#0A1A3D"
+
+    property WsState state: WsState {}
+    property int subCount: 0
+    property int subStep: 0
+    property bool subNextOk: true
+    Timer {
+        interval: 150; running: true; repeat: true; triggeredOnStart: true
+        onTriggered: {
+            nav.subCount = nav.state.get("subCount", 0)
+            nav.subStep = nav.state.get("subStep", 0)
+            nav.subNextOk = nav.state.get("subNextOk", true)
+        }
+    }
+    readonly property bool inSubs: subCount > 1
+    function request(dir) {
+        nav.state.set("subRequest", dir + ":" + Date.now())
+        nav.subStep += dir === "next" ? 1 : -1   // shown at once; the page confirms on its next report
+    }
     Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: "#1F7FB2FF" }   // rgba(127,178,255,0.12)
 
     component NavButton: Rectangle {
@@ -51,7 +71,7 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 72; anchors.rightMargin: 72
+        anchors.leftMargin: 56; anchors.rightMargin: 56
         spacing: 12
         NavButton {
             label: qsTr("Quit installer"); quiet: true
@@ -61,13 +81,14 @@ Rectangle {
         Item { Layout.fillWidth: true }
         NavButton {
             label: ViewManager.backLabel
-            visible: ViewManager.backAndNextVisible; enabled: ViewManager.backEnabled
-            onActivated: ViewManager.back()
+            visible: ViewManager.backAndNextVisible; enabled: (nav.inSubs && nav.subStep > 0) || ViewManager.backEnabled
+            onActivated: nav.inSubs && nav.subStep > 0 ? nav.request("back") : ViewManager.back()
         }
         NavButton {
             label: ViewManager.nextLabel.replace("&", "") === "Next" ? qsTr("Continue") : ViewManager.nextLabel; primary: true
-            visible: ViewManager.backAndNextVisible; enabled: ViewManager.nextEnabled
-            onActivated: ViewManager.next()
+            readonly property bool moreSubs: nav.inSubs && nav.subStep < nav.subCount - 1
+            visible: ViewManager.backAndNextVisible; enabled: moreSubs ? nav.subNextOk : ViewManager.nextEnabled
+            onActivated: moreSubs ? nav.request("next") : ViewManager.next()
         }
     }
 }
