@@ -12,6 +12,10 @@ describe('launcher list', () => {
       ['worksuite-mail', { desktop: 'worksuite-mail' }], ['worksuite-newmod', { desktop: 'worksuite-newmod' }]])
     expect(apps.find((a) => a.id === 'worksuite-newmod')?.mark).toBe('NM')
   })
+  it('carries the offline level each app declares (WSOS-SYN-009)', () => {
+    const apps = buildLauncherApps([{ id: 'mail', name: 'Mail', offline_level: 'full_offline' }, { id: 'chat', name: 'Chat' }], [], null)
+    expect(apps.filter((a) => a.kind === 'WorkSuite').map((a) => a.offline)).toEqual(['full_offline', undefined])
+  })
   it('falls back to the built-in list when the org list is unknown', () => {
     expect(buildLauncherApps(null, null, null).filter((a) => a.kind === 'WorkSuite')).toHaveLength(9)
   })

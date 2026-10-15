@@ -164,3 +164,43 @@ contextBridge.exposeInMainWorld('worksuiteDesktop', {
   shellRestart: () => ipcRenderer.invoke('ws:shellRestart'),
   shellRestartSeen: (n: number) => ipcRenderer.invoke('ws:shellRestartSeen', String(Math.max(0, Math.floor(Number(n)) || 0))),
 })
+
+// Administrator prompts from the WorkSuite polkit agent — see electron/polkit.ts.
+contextBridge.exposeInMainWorld('worksuitePolkit', {
+  state: () => ipcRenderer.invoke('ws:polkitState'),
+  respond: (id: string, password: string) => ipcRenderer.invoke('ws:polkitRespond', String(id), String(password)),
+  cancel: (id: string) => ipcRenderer.invoke('ws:polkitCancel', String(id)),
+  onState: on('ws:polkit'),
+})
+
+// Bluetooth pairing, removable storage, power profiles, printers, input methods, sync errors — see electron/peripherals.ts.
+contextBridge.exposeInMainWorld('worksuitePeripherals', {
+  btScan: () => ipcRenderer.invoke('ws:btScan'),
+  btPair: (address: string) => ipcRenderer.invoke('ws:btPair', String(address)),
+  btRemove: (address: string) => ipcRenderer.invoke('ws:btRemove', String(address)),
+  volumes: () => ipcRenderer.invoke('ws:volumes'),
+  volMount: (device: string) => ipcRenderer.invoke('ws:volMount', String(device)),
+  volUnlock: (device: string, passphrase: string) => ipcRenderer.invoke('ws:volUnlock', String(device), String(passphrase)),
+  volEject: (device: string) => ipcRenderer.invoke('ws:volEject', String(device)),
+  powerProfiles: () => ipcRenderer.invoke('ws:powerProfiles'),
+  setPowerProfile: (name: string) => ipcRenderer.invoke('ws:setPowerProfile', String(name)),
+  inhibitors: () => ipcRenderer.invoke('ws:inhibitors'),
+  findPrinters: () => ipcRenderer.invoke('ws:findPrinters'),
+  addPrinter: (uri: string, name: string) => ipcRenderer.invoke('ws:addPrinter', String(uri), String(name)),
+  removePrinter: (name: string) => ipcRenderer.invoke('ws:removePrinter', String(name)),
+  printQueue: () => ipcRenderer.invoke('ws:printQueue'),
+  cancelJob: (id: string) => ipcRenderer.invoke('ws:cancelJob', String(id)),
+  screenCapture: () => ipcRenderer.invoke('ws:screenCapture'),
+  inputMethods: () => ipcRenderer.invoke('ws:inputMethods'),
+  setInputMethods: (ids: string[]) => ipcRenderer.invoke('ws:setInputMethods', ...(Array.isArray(ids) ? ids.map(String) : [])),
+  syncFailed: () => ipcRenderer.invoke('ws:syncFailed'),
+  syncRetry: (mutationId: string) => ipcRenderer.invoke('ws:syncRetry', String(mutationId)),
+})
+
+// Notifications from apps through the shell's org.freedesktop.Notifications server — see electron/notifications.ts.
+contextBridge.exposeInMainWorld('worksuiteNotifications', {
+  list: () => ipcRenderer.invoke('ws:notifications'),
+  invoke: (id: number, key: string) => ipcRenderer.invoke('ws:notificationInvoke', String(Number(id)), String(key)),
+  dismiss: (id: number) => ipcRenderer.invoke('ws:notificationDismiss', String(Number(id))),
+  onChange: on('ws:notificationsChanged'),
+})

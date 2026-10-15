@@ -24,6 +24,10 @@ import { arrange, displayManager, outputRects, type DisplayState } from './displ
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { startDesktopHost } from './desktopHost'
+import { startPeripheralsHost } from './peripherals'
+import { startNotifications } from './notifications'
+import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
+import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
 import { externalAllowed, loadGrants, permissionAllowed, shellWebPreferences } from './webSecurity'
 
@@ -90,6 +94,8 @@ function createWindow() {
   void win.loadFile(path.join(__dirname, '../dist/index.html'), mode ? { query: { mode } } : undefined)
 }
 
+// WSOS-INT-011: Sinhala/Tamil typing in the shell and app windows through fcitx5 (Wayland text-input-v3).
+app.commandLine.appendSwitch('enable-wayland-ime')
 // `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
 const appRequest = parseAppArgs(process.argv)
 if (appRequest) {
@@ -128,7 +134,7 @@ app.whenReady().then(() => {
   // Launcher data: the org's WorkSuite web apps (no token leaves the main process) and installed XDG apps.
   handle('ws:webApps', async () => {
     const r = await loadSession((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }))
-    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name }) => ({ id, name })) } : r
+    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name, offline_level }) => ({ id, name, offline_level })) } : r
   })
   handle('ws:installedApps', () => {
     const all = installedApps()
@@ -226,6 +232,9 @@ app.whenReady().then(() => {
   })
   handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:syncStatus', () => syncCall('Status'))
+  // WSOS-SYN-004: rejected changes are shown against their record; retry only when the user asks.
+  handle('ws:syncFailed', () => syncCall('ListFailed'))
+  handle('ws:syncRetry', (mutationId) => syncCall('RetryFailed', { mutation_id: mutationId }))
   handle('ws:deviceInfo', () => deviceInfo())
   // Settings → NetworkManager, BlueZ, PipeWire, UPower, CUPS, wlr-randr, UDisks2 (WSOS-INT-001…006, DSK-006).
   const sys = systemBridge()
@@ -346,6 +355,13 @@ app.whenReady().then(() => {
     if (!p || !existsSync(p.full)) return { ok: false, error: 'not_found' }
     // Windows programs are never opened or run; the renderer shows why (WSOS-LCH-003).
     if (isWindowsProgram(p.full, fileHead(p.full))) return { ok: false, error: 'windows_program' }
+    // Drive documents open in WorkSuite Office under the server file lock (WSOS-DRV-003, electron/officeLock.ts).
+    const office = root === 'drive' && isOfficeDoc(p.full) ? findOffice(installedApps()) : null
+    const prog = office ? execProgram(office.exec) : null
+    if (office && prog) {
+      const r = await openWithLock(rel, p.full, { syncCall, launch: (f) => { const c = scopeCommand(office.id, [prog, f]); return c ? launchAndWait(c) : Promise.resolve() } })
+      return { ok: true, value: r.outcome }
+    }
     const err = await shell.openPath(p.full)          // default app via XDG (WSOS-DSK-009)
     return err ? { ok: false, error: err } : { ok: true, value: true }
   })
@@ -398,6 +414,12 @@ app.whenReady().then(() => {
   startPanel(handle, broadcast, () => void displays.applySaved())
   // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
   startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
+  // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
+  startPeripheralsHost(handle, app.getPath('home'))
+  // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
+  startNotifications(handle, broadcast)
+  // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
+  startPolkitBridge(handle, broadcast)
 })
 
 app.on('window-all-closed', () => app.quit())

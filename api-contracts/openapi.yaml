@@ -645,6 +645,7 @@ components:
         id: { type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$', description: 'Module key; the desktop entry is worksuite-<id>.desktop' }
         name: { type: string }
         web_url: { type: string, format: uri, description: 'https URL of the module''s web app (<web base>/<id>/)' }
+        offline_level: { type: string, enum: [full_offline, cached_read, online_only], description: 'Offline level the app declares (WSOS-SYN-009); shown in the desktop launcher' }
     WireGuardKey:
       type: string
       pattern: '^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw480]=$'

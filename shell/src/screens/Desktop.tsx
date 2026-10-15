@@ -10,6 +10,7 @@ import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
 import type { PanelWindow } from '../lib/panel'
 import A11yPanel from '../components/A11yPanel'
 import NotifDock, { MOON } from '../components/NotifDock'
+import { CaptureBadge } from '../components/CaptureBadge'
 import { useDnd } from '../lib/dnd'
 import { localeTag, useT } from '../i18n'
 import { UpdateOverlays } from './Updates'
@@ -20,6 +21,7 @@ import { buildLauncherApps, filterApps, taskbarApps, type LauncherApp } from '..
 import type { MessageKey } from '../i18n'
 import GlobalSearch from '../components/GlobalSearch'
 import ShellRestartNotice from '../components/ShellRestartNotice'
+import AuthPrompt from '../components/AuthPrompt'
 import type { SearchHit } from '../../electron/search'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
@@ -169,6 +171,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
       {/* G12: the shell was restarted by systemd; apps in their own scopes kept running */}
       <ShellRestartNotice />
+      <AuthPrompt />
 
       {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
       <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">
@@ -264,6 +267,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
           <TrayItems />
+          <CaptureBadge />
           <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false) }}
