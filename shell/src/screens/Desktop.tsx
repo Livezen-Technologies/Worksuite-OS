@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Children, useEffect, useMemo, useRef, useState } from 'react'
 import type { DesktopProps } from './types'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
@@ -6,6 +6,9 @@ import type { Notice } from '../lib/syncNotices'
 import { ageLabel } from '../lib/power'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
+import { TaskbarUpdateButton, UpdateOverlays } from './Updates'
+import { DeviceWatcher } from './Hardware'
+import { requestSettingsSection } from '../lib/settingsNav'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 
@@ -119,6 +122,8 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   }
   const byId = (id: string) => APPS.find((a) => a.id === id)!
 
+  const openSettingsAt = (section: string) => { requestSettingsSection(section); onOpen('settings') }
+
   const quick = [
     { label: 'Do not disturb', d: P.sleep, on: dnd, run: () => { setDnd((v) => !v); if (!dnd) setToast(null) } },
     { label: 'Settings', d: P.settings, on: false, run: () => { setTrayOpen(false); onOpen('settings') } },
@@ -145,6 +150,12 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           <button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[#8FA3C8] hover:bg-white/10 hover:text-white"><Icon d={P.close} size={14} /></button>
         </div>
       )}
+
+      {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
+      <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">
+        <DeviceWatcher onOpenUpdates={() => openSettingsAt('Updates')} onOpenDrivers={() => openSettingsAt('Drivers')} />
+        <UpdateOverlays quiet={trayOpen || Children.toArray(children).length > 0} onOpenUpdates={() => openSettingsAt('Updates')} />
+      </div>
 
       {trayOpen && (
         <aside id="ws-notifications" aria-label="Notifications" className="absolute top-3 right-3 bottom-[68px] z-40 flex w-[400px] max-w-[calc(100%-24px)] flex-col gap-3.5 rounded-[20px] border border-[rgba(127,178,255,0.18)] bg-[rgba(10,24,56,0.94)] p-[18px] text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[24px]">
@@ -281,6 +292,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <TaskbarUpdateButton onOpen={() => openSettingsAt('Updates')} />
           {managed && (
             <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? `Managed by ${device.org_name}` : undefined}
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>

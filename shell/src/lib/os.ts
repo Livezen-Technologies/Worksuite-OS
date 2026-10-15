@@ -37,6 +37,28 @@ export interface WorkSuiteApi {
   filesOpen(root: string, rel: string): Promise<CloudResult<true>>
   filesStatus(root: string): Promise<{ free_bytes: number | null; drive: { states: Record<string, number>; last_sync: number | null; service_state: string } | null }>
   onPkgJob(cb: (e: PackageJobEvent) => void): () => void
+  // Settings › Devices: real devices from sysfs (electron/hardware.ts).
+  hwDevices(): Promise<CloudResult<HwDevice[]>>
+  /** Driver catalog. No service provides one yet, so Electron answers { ok: false, error: 'unavailable' }. */
+  hwDriverUpdates(): Promise<CloudResult<DriverOffer[]>>
+  /** Install driver offers; progress arrives through onPkgJob with phase = offer id. Electron: 'unavailable'. */
+  hwInstallDrivers(ids: string[]): Promise<CloudResult<string>>
+  // Settings facts, read-only (electron/system.ts).
+  sysUsers(): Promise<CloudResult<{ current: string; users: LocalUser[] }>>
+  sysNetwork(): Promise<CloudResult<NetworkInfo>>
+  sysBluetooth(): Promise<CloudResult<BluetoothInfo>>
+  sysDisplays(): Promise<CloudResult<DisplayInfo>>
+  sysSound(): Promise<CloudResult<SoundInfo>>
+}
+
+import type { HwDevice, HwKind } from '../../electron/hardware'
+import type { BluetoothInfo, DisplayInfo, LocalUser, NetworkInfo, SoundInfo } from '../../electron/system'
+export type { HwDevice, HwKind, BluetoothInfo, DisplayInfo, LocalUser, NetworkInfo, SoundInfo }
+export interface DriverOffer {
+  id: string; device_id: string | null; name: string; summary: string
+  from_version: string | null; to_version: string
+  license: 'open' | 'proprietary'; category: 'security' | 'recommended' | 'optional'
+  size_bytes: number | null; restart: boolean
 }
 
 export interface PackagePreview {
@@ -203,15 +225,95 @@ const stub: WorkSuiteApi = {
     }
   },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
+  async hwDevices() {
+    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
+    const extra = PV.get('hw') === 'new' && Date.now() - stubStart > 3000 ? [STUB_NEW] : PV.get('hw') === 'problem' && Date.now() - stubStart > 3000 ? [{ ...STUB_NEW, driver: null, driver_version: null }] : []
+    return { ok: true, value: [...STUB_DEVICES, ...extra] }
+  },
+  async hwDriverUpdates() { return PV.get('hw') === 'catalog' ? { ok: true, value: STUB_OFFERS } : { ok: false, error: 'unavailable' } },
+  async hwInstallDrivers(ids) {
+    if (PV.get('hw') !== 'catalog') return { ok: false, error: 'unavailable' }
+    const job = `/lk/worksuite/PackageService1/job/${++stubJobId}`
+    ids.forEach((id, i) => {
+      setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 100, phase: id })), 400 + i * 100)
+      if (i === 1) setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 62, phase: ids[1] })), 500)
+    })
+    return { ok: true, value: job }
+  },
+  async sysUsers() {
+    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
+    return { ok: true, value: { current: 'preview', users: [{ login: 'preview', name: 'Preview User', uid: 1000, admin: true }, { login: 'second', name: 'Second User', uid: 1001, admin: false }] } }
+  },
+  async sysNetwork() {
+    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
+    return { ok: true, value: { wifi_enabled: true, interfaces: [{ name: 'wlp0s20f3', type: 'wifi', up: true }, { name: 'enp0s31f6', type: 'ethernet', up: false }],
+      wifi: [{ ssid: 'Preview-Net', signal: 82, secure: true, active: true }, { ssid: 'Preview-Guest', signal: 64, secure: false, active: false }, { ssid: 'Preview-Lab', signal: 38, secure: true, active: false }] } }
+  },
+  async sysBluetooth() {
+    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
+    return { ok: true, value: { adapter: true, powered: true, name: 'preview-laptop', paired: [{ address: '00:00:00:00:00:01', name: 'Preview Keyboard', connected: null }] } }
+  },
+  async sysDisplays() {
+    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
+    return { ok: true, value: { outputs: [{ name: 'eDP-1', built_in: true, mode: '1920x1200' }, { name: 'HDMI-A-1', built_in: false, mode: '2560x1440' }], brightness: 70 } }
+  },
+  async sysSound() {
+    if (PV.get('sys') === 'empty') return { ok: false, error: 'unavailable' }
+    return { ok: true, value: { output: { name: 'Built-in Audio Analog Stereo', volume: 64, muted: false }, input: { name: 'Built-in Audio Microphone', volume: 80, muted: false } } }
+  },
 }
+
+// Browser preview only (never in Electron): ?upd=available|downloading|ready|forced|failed|whatsnew|uptodate,
+// ?hw=catalog|new|problem, ?sys=empty drive the stub into each board's state.
+const PV = new URLSearchParams(typeof location === 'undefined' ? '' : location.search)
+const stubStart = Date.now()
+const dev = (id: string, name: string, vendor: string | null, kind: HwKind, bus: 'usb' | 'pci', driver: string | null, extra: Partial<HwDevice> = {}): HwDevice =>
+  ({ id, name, vendor, kind, bus, built_in: bus === 'pci', driver, driver_version: null, driver_proprietary: driver ? false : null, ids: '0000:0000', ...extra })
+const STUB_DEVICES: HwDevice[] = [
+  dev('usb:1-1', 'USB Keyboard', 'Preview', 'keyboard', 'usb', 'usbhid'),
+  dev('usb:1-3', 'USB Printer', 'Preview', 'printer', 'usb', 'usblp'),
+  dev('pci:0000:00:14.3', 'Wireless adapter', 'Preview', 'wireless', 'pci', 'iwlwifi'),
+  dev('pci:0000:00:02.0', 'Integrated graphics', 'Preview', 'graphics', 'pci', 'i915'),
+  dev('pci:0000:00:1f.3', 'Audio controller', 'Preview', 'audio', 'pci', 'snd_hda_intel'),
+]
+const STUB_NEW = dev('usb:1-2', 'USB Camera', 'Preview', 'camera', 'usb', 'uvcvideo', { driver_version: '1.1.1' })
+const STUB_OFFERS: DriverOffer[] = [
+  { id: 'drv-gfx', device_id: 'pci:0000:00:02.0', name: 'Graphics driver (preview)', summary: 'Preview catalog entry', from_version: '1.0', to_version: '1.1', license: 'proprietary', category: 'optional', size_bytes: 140e6, restart: true },
+  { id: 'drv-cam', device_id: 'usb:1-2', name: 'Camera driver (preview)', summary: 'Preview catalog entry', from_version: null, to_version: '2.0', license: 'open', category: 'recommended', size_bytes: 4e6, restart: false },
+  { id: 'drv-wifi', device_id: 'pci:0000:00:14.3', name: 'Wi-Fi firmware (preview)', summary: 'Preview catalog entry', from_version: '83', to_version: '86', license: 'open', category: 'security', size_bytes: 2e6, restart: false },
+]
 
 let stubAccounts: CloudAccount[] = []
 // Preview only: package jobs finish after a short delay.
 const stubListeners = new Set<(e: PackageJobEvent) => void>()
 let stubJobId = 0
 // Preview: a mandatory security release waiting for the user.
-let stubOs: OsUpdateStatus = { state: 'waiting', version: '1.0.3', installed: '1.0.2', release_id: 'os-1.0.3', mandatory: true,
-  deadline: new Date(Date.now() + 2 * 86_400_000).toISOString(), deferrals_left: 2, reason: 'waiting_for_user', restart_at: null, last_check: Date.now() - 3_600_000 }
+let stubOs: OsUpdateStatus = stubUpdateState(PV.get('upd'))
+function stubUpdateState(k: string | null): OsUpdateStatus {
+  const base: OsUpdateStatus = { state: 'waiting', version: '1.0.3', installed: '1.0.2', release_id: 'os-1.0.3', mandatory: true,
+    deadline: new Date(Date.now() + 2 * 86_400_000).toISOString(), deferrals_left: 2, reason: 'waiting_for_user', restart_at: null, last_check: Date.now() - 3_600_000 }
+  const opt = { ...base, mandatory: false, deadline: null, deferrals_left: null }
+  switch (k) {
+    case 'available': return opt
+    case 'downloading': return { ...opt, state: 'installing', reason: null }
+    case 'ready': return { ...opt, state: 'ready_to_restart', installed: '1.0.3', reason: null }
+    case 'forced': return { ...base, state: 'restart_pending', reason: 'deadline', restart_at: Date.now() + 60_000 }
+    case 'failed': return { ...opt, state: 'installing', reason: null }
+    case 'whatsnew': return { ...opt, state: 'up_to_date', installed: '1.0.3', version: '1.0.3', reason: null }
+    case 'uptodate': return { ...opt, state: 'up_to_date', version: null, installed: '1.0.2', release_id: null, reason: null }
+    default: return base
+  }
+}
+// Preview: drive the update job the way the package service does (JobProgress phases, then a status change).
+if (typeof window !== 'undefined') {
+  const k = PV.get('upd')
+  const job = '/lk/worksuite/PackageService1/job/90'
+  const emitJob = (percent: number, phase: string) => stubListeners.forEach((l) => l({ job, kind: 'progress', percent, phase }))
+  const setOs = (p: Partial<OsUpdateStatus>) => { stubOs = { ...stubOs, ...p }; stubOsListeners.forEach((l) => l(stubOs)) }
+  if (k === 'downloading') setTimeout(() => emitJob(41, 'downloading'), 400)
+  if (k === 'forced') { setTimeout(() => setOs({ state: 'installing', reason: null, restart_at: null }), 600); setTimeout(() => emitJob(50, 'applying'), 800) }
+  if (k === 'failed') { setTimeout(() => emitJob(50, 'applying'), 400); setTimeout(() => setOs({ state: 'failed', reason: 'dpkg: error processing package linux-image-6.12 (--configure)' }), 700) }
+}
 const stubOsListeners = new Set<(s: OsUpdateStatus) => void>()
 let stubUpdates = { packages: ['firefox-esr', 'libreoffice', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
 function stubJob(_id: string, _kind: string): CloudResult<string> {

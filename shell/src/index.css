@@ -12,6 +12,7 @@
 /* WorkSuite UI tokens (WSOS-DSK-014): light and dark themes. */
 @theme {
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --color-ws-ink: #0f172a;
   --color-ws-muted: #475569;
   --color-ws-line: #e2e8f0;
@@ -53,3 +54,9 @@
 /* Wrong-password shake (Login board). */
 @keyframes ws-shake { 0%, 100% { transform: translateX(0) } 20%, 60% { transform: translateX(-8px) } 40%, 80% { transform: translateX(8px) } }
 .ws-shake { animation: ws-shake 0.4s ease; }
+
+/* Update and device boards: spinners and the progress shimmer (reduced motion turns these off above). */
+@keyframes ws-spin { to { transform: rotate(360deg) } }
+.ws-spin { animation: ws-spin 1.1s linear infinite; transform-origin: 50% 50%; }
+@keyframes ws-shimmer { 0% { transform: translateX(-100%) } 100% { transform: translateX(250%) } }
+.ws-shine { animation: ws-shimmer 1.8s ease-in-out infinite; }

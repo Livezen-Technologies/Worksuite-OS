@@ -1,274 +1,417 @@
-import { useEffect, useState } from 'react'
-import { cloudErrorText, os, packageErrorText, policyLines, serverUrlFor, type OsUpdateStatus, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
+// Settings app (boards SetNav, SetNetwork, SetBluetooth, SetDisplay, SetAppearance, SetSound, SetPrivacy, SetUsers,
+// UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
+// can't tell, the section says so instead of showing sample values.
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { cloudErrorText, os, policyLines, serverUrlFor, type BluetoothInfo, type CloudAccount, type CloudResult, type DeviceInfo, type DisplayInfo, type HwDevice, type LocalUser, type NetworkInfo, type SignOutChoice, type SoundInfo } from '../lib/os'
 import type { WindowProps } from './types'
-import CIcon from '../components/CIcon'
-import { AppIcon } from '../components/Logo'
+import { ACCENTS, DEFAULT_PRIVACY, KEYS, THEMES, accentColor, applyAppearance, loadAppearance, readJson, writeJson, type Appearance, type Privacy } from '../lib/setup'
+import { needsAttention, fmtWhen } from '../lib/updates'
+import { useOsUpdate } from '../lib/useOsUpdate'
+import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
+import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
+import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
+import { UpdatesPanel } from './Updates'
+import { DeviceProblemDialog, DevicesPanel, DriversPanel, Empty } from './Hardware'
 
-const SECTIONS = ['Network', 'Bluetooth', 'Displays', 'Sound', 'Power', 'Printers', 'Apps', 'Accounts', 'Privacy', 'Updates', 'About this device'] as const
-type Section = (typeof SECTIONS)[number]
+const NAV = [
+  { id: 'Network', tint: '#1F6BFF', icon: 'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' },
+  { id: 'Bluetooth', tint: '#1F6BFF', icon: 'M7 7l10 10-5 5V2l5 5L7 17' },
+  { id: 'Display', tint: '#0E8FA8', icon: 'M3 4h18v12H3zM8 20h8M12 16v4', sep: true },
+  { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
+  { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
+  { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
+  { id: 'Privacy & security', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', sep: true },
+  { id: 'Users', tint: '#5E739C', icon: 'M9 8a3.5 3.5 0 1 0 0 .01M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7' },
+  { id: 'Devices', tint: '#5E739C', icon: 'M4 6h16v10H4zM2 20h20', sep: true },
+  { id: 'Drivers', tint: '#5E739C', icon: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z' },
+  { id: 'Updates', tint: '#1F6BFF', icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
+  { id: 'About', tint: '#5E739C', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01' },
+] as const
+export type Section = (typeof NAV)[number]['id']
+const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
+// Older names (launcher search, earlier builds) still land somewhere sensible.
+const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Printers: 'Devices' }
 
-
-const card = 'rounded-[14px] border border-ws-line bg-ws-surface'
-
-function Toggle({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${checked ? 'bg-ws-accent' : 'bg-slate-300'}`}>
-      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${checked ? 'left-[22px]' : 'left-0.5'}`} />
-    </button>
-  )
+type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable' }
+function useBridge<T>(load: () => Promise<CloudResult<T>>): Res<T> {
+  const [r, setR] = useState<Res<T>>({ state: 'loading' })
+  useEffect(() => { void load().then((x) => setR(x.ok ? { state: 'ok', value: x.value } : { state: 'unavailable' })).catch(() => setR({ state: 'unavailable' })) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return r
 }
 
-function Row({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
+const H1 = ({ children, action }: { children: ReactNode; action?: ReactNode }) => (
+  <div className="flex items-center justify-between gap-4"><h1 className="m-0 text-[28px] font-bold">{children}</h1>{action}</div>
+)
+function Rows({ rows }: { rows: { k: ReactNode; d?: ReactNode; v: ReactNode }[] }) {
   return (
-    <div className="flex items-center gap-4 border-b border-ws-line/60 px-5 py-3.5 last:border-b-0">
-      <div className="flex min-w-0 grow flex-col gap-0.5">
-        <span className="text-sm font-semibold">{label}</span>
-        {help && <span className="text-[12.5px] text-ws-muted">{help}</span>}
-      </div>
-      {children}
+    <div className={`${card} overflow-hidden`}>
+      {rows.map((r, i) => (
+        <div key={i} className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
+          <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{r.k}</span>{r.d && <span className="text-xs text-[#8FA3C8]">{r.d}</span>}</span>
+          <span className="text-[13px] text-[#C9D6EE]">{r.v}</span>
+        </div>
+      ))}
     </div>
   )
 }
+/** The boards' select look, read-only: shows the real value or "Unavailable". */
+const Value = ({ children, min = 180 }: { children: ReactNode; min?: number }) => (
+  <span className="box-border flex justify-between gap-3 rounded-[9px] border border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.5)] px-3 py-[9px] text-[13px]" style={{ minWidth: min }}>
+    {children ?? <span className="text-[#8FA3C8]">Unavailable</span>}
+  </span>
+)
+const Unavail = ({ what }: { what: string }) => <Empty title={`${what} isn't available`}>The shell couldn't read this from the system.</Empty>
+const Note = ({ children }: { children: ReactNode }) => <p className="m-0 text-xs leading-[1.5] text-[#8FA3C8]">{children}</p>
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex min-w-0 grow flex-col gap-4">
-      <h1 className="m-0 text-2xl font-[650]">{title}</h1>
-      {children}
+const WIFI_BARS = (s: number) => (s >= 67 ? 'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' : s >= 34 ? 'M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' : 'M9 16a5 5 0 0 1 6 0')
+const LOCK = 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z'
+
+function NetworkPanel() {
+  const r = useBridge<NetworkInfo>(os.sysNetwork)
+  if (r.state !== 'ok') return <><H1>Network</H1>{r.state === 'loading' ? <Empty title="Reading network status…" /> : <Unavail what="Network information" />}</>
+  const n = r.value
+  const active = n.wifi?.find((w) => w.active)
+  const wifiIf = n.interfaces.find((i) => i.type === 'wifi')
+  const eth = n.interfaces.filter((i) => i.type === 'ethernet')
+  return <>
+    <H1>Network</H1>
+    <div className={`${heroCard} flex items-center gap-4 px-5 py-[18px]`}>
+      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#1F6BFF]"><Svg d={WIFI_BARS(100)} size={24} stroke="#FFFFFF" /></span>
+      <span className="flex flex-1 flex-col gap-0.5">
+        <span className="text-base font-semibold">Wi-Fi</span>
+        <span className="text-[13px]" style={{ color: active ? C.green : C.muted }}>
+          {!wifiIf ? 'No Wi-Fi adapter' : n.wifi_enabled === false ? 'Off' : active ? `Connected to ${active.ssid}` : n.wifi_enabled == null ? 'Status unavailable' : 'Not connected'}
+        </span>
+      </span>
+      {n.wifi_enabled != null && <Switch label="Wi-Fi" checked={n.wifi_enabled} />}
+    </div>
+    <section aria-label="Available networks" className="flex flex-col gap-2">
+      <h2 className={`m-0 font-normal ${sectionLabel}`}>Available networks</h2>
+      {n.wifi === null ? <Empty title="Network list unavailable">NetworkManager didn't answer, so nearby networks can't be listed.</Empty>
+        : n.wifi.length === 0 ? <Empty title="No networks found" />
+        : (
+          <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
+            {n.wifi.map((w) => (
+              <li key={w.ssid} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`} style={{ background: w.active ? 'rgba(31,107,255,0.12)' : 'transparent' }}>
+                <Svg d={WIFI_BARS(w.signal)} size={20} stroke={w.active ? C.cyan : C.soft} />
+                <span className="flex-1 text-sm" style={{ fontWeight: w.active ? 600 : 400 }}>{w.ssid}</span>
+                <span className="text-xs text-[#8FA3C8]">{w.active ? 'Connected' : w.secure ? '' : 'Open'}</span>
+                {w.secure && <Svg d={LOCK} size={14} stroke={C.muted} />}
+                <span className="sr-only">{w.secure ? 'Secured' : 'Open'}, signal {w.signal}%</span>
+              </li>
+            ))}
+          </ul>
+        )}
     </section>
-  )
+    <div className="grid grid-cols-3 gap-3">
+      {[
+        { t: 'Ethernet', d: eth.length ? (eth.some((e) => e.up) ? 'Connected' : 'Cable unplugged') : 'No Ethernet adapter' },
+        { t: 'Adapters', d: n.interfaces.map((i) => i.name).join(', ') || 'None found' },
+        { t: 'VPN and proxy', d: 'Not configurable here yet' },
+      ].map((o) => <div key={o.t} className={`${card} flex flex-col gap-1.5 px-[18px] py-4`}><span className="text-sm font-semibold">{o.t}</span><span className="truncate text-[13px] text-[#8FA3C8]">{o.d}</span></div>)}
+    </div>
+    <Note>Connecting to networks and turning Wi-Fi on or off isn't available from Settings yet.</Note>
+  </>
 }
 
-function SimplePanel({ section }: { section: Section }) {
-  const [t, setT] = useState<Record<string, boolean>>({ wifi: true, bt: false, night: false, mute: false, saver: false, loc: false, diag: true })
-  const set = (k: string) => (v: boolean) => setT((s) => ({ ...s, [k]: v }))
-  const [vol, setVol] = useState(60)
-  const [bright, setBright] = useState(80)
-  switch (section) {
-    case 'Network':
-      return <Panel title="Network"><div className={card}>
-        <Row label="Wi-Fi" help="Connected to LIVEZEN-CORP · WPA2-Enterprise"><Toggle label="Wi-Fi" checked={t.wifi} onChange={set('wifi')} /></Row>
-        <Row label="Ethernet" help="Cable unplugged"><span className="text-[13.5px] text-ws-muted">Disconnected</span></Row>
-        <Row label="VPN" help="Managed by your organization"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span></Row>
-      </div></Panel>
-    case 'Bluetooth':
-      return <Panel title="Bluetooth"><div className={card}>
-        <Row label="Bluetooth" help={t.bt ? 'Discoverable as LZT-LAP-0142' : 'Off'}><Toggle label="Bluetooth" checked={t.bt} onChange={set('bt')} /></Row>
-        <Row label="Paired devices" help="Logitech MX Keys"><span className="text-[13.5px] text-ws-muted">{t.bt ? 'Connected' : 'Not connected'}</span></Row>
-      </div></Panel>
-    case 'Displays':
-      return <Panel title="Displays"><div className={card}>
-        <Row label="Built-in display" help="1920 × 1200 · 100%"><span className="text-[13.5px]">Primary</span></Row>
-        <Row label="Brightness"><input aria-label="Brightness" type="range" min={0} max={100} value={bright} onChange={(e) => setBright(+e.target.value)} className="w-48 accent-ws-accent" /></Row>
-        <Row label="Night light" help="Warmer colors after sunset"><Toggle label="Night light" checked={t.night} onChange={set('night')} /></Row>
-      </div></Panel>
-    case 'Sound':
-      return <Panel title="Sound"><div className={card}>
-        <Row label="Output" help="Built-in speakers"><input aria-label="Volume" type="range" min={0} max={100} value={vol} onChange={(e) => setVol(+e.target.value)} className="w-48 accent-ws-accent" /></Row>
-        <Row label="Mute"><Toggle label="Mute" checked={t.mute} onChange={set('mute')} /></Row>
-        <Row label="Input" help="Built-in microphone"><span className="text-[13.5px] text-ws-muted">Default</span></Row>
-      </div></Panel>
-    case 'Power':
-      return <Panel title="Power"><div className={card}>
-        <Row label="Battery" help="Charging · about 1 h 20 min to full"><span className="text-[13.5px]">74%</span></Row>
-        <Row label="Power saver" help="Reduce background activity"><Toggle label="Power saver" checked={t.saver} onChange={set('saver')} /></Row>
-        <Row label="Screen lock" help="Locks after 5 min idle"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span></Row>
-      </div></Panel>
-    case 'Printers':
-      return <Panel title="Printers"><div className={card}>
-        <Row label="HP LaserJet M507 — Floor 3" help="Network printer · shared by IT"><span className="text-[13.5px]">Default</span></Row>
-        <Row label="Add a printer" help="Only printers approved by your organization can be added"><button type="button" className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Add…</button></Row>
-      </div></Panel>
-    case 'Apps':
-      return <Panel title="Apps"><div className={card}>
-        {['Firefox ESR', 'WorkSuite Office', 'Files', 'Terminal'].map((a) => <Row key={a} label={a} help="Approved by your organization"><span className="text-[13.5px] text-ws-muted">Installed</span></Row>)}
-      </div></Panel>
-    case 'Accounts':
-      return <Panel title="Accounts"><div className={card}>
-        <CloudAccounts />
-        <Row label="Offline sign-in" help="Allowed for 7 days without network"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span></Row>
-      </div></Panel>
-    case 'Privacy':
-      return <Panel title="Privacy"><div className={card}>
-        <Row label="Location services"><Toggle label="Location services" checked={t.loc} onChange={set('loc')} /></Row>
-        <Row label="Send diagnostics" help="Crash reports go to your IT team"><Toggle label="Send diagnostics" checked={t.diag} onChange={set('diag')} /></Row>
-        <Row label="Monitoring" help="No keylogging, camera access or remote shell by your organization"><span className="text-[13.5px] text-ws-muted">None</span></Row>
-      </div></Panel>
-    default:
-      return null
-  }
+function BluetoothPanel() {
+  const r = useBridge<BluetoothInfo>(os.sysBluetooth)
+  if (r.state !== 'ok') return <><H1>Bluetooth</H1>{r.state === 'loading' ? <Empty title="Reading Bluetooth status…" /> : <Unavail what="Bluetooth information" />}</>
+  const b = r.value
+  return <>
+    <H1>Bluetooth</H1>
+    <div className={`${heroCard} flex items-center gap-4 px-5 py-[18px]`}>
+      <span className="flex flex-1 flex-col gap-0.5">
+        <span className="text-base font-semibold">Bluetooth</span>
+        <span className="text-[13px] text-[#8FA3C8]">{!b.adapter ? 'This computer has no Bluetooth adapter' : b.powered == null ? 'Status unavailable' : b.powered ? `On${b.name ? ` · this computer appears as "${b.name}"` : ''}` : 'Off'}</span>
+      </span>
+      {b.powered != null && <Switch label="Bluetooth" checked={b.powered} />}
+    </div>
+    {b.adapter && (
+      <section aria-label="My devices" className="flex flex-col gap-2">
+        <h2 className={`m-0 font-normal ${sectionLabel}`}>My devices</h2>
+        {b.paired === null ? <Empty title="Paired devices unavailable">The Bluetooth service didn't answer.</Empty>
+          : b.paired.length === 0 ? <Empty title="No paired devices" />
+          : (
+            <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
+              {b.paired.map((d) => (
+                <li key={d.address} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(31,107,255,0.16)]"><Svg d="M7 7l10 10-5 5V2l5 5L7 17" size={18} stroke="#7FB2FF" /></span>
+                  <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{d.name}</span><span className="text-xs text-[#8FA3C8]">Paired</span></span>
+                </li>
+              ))}
+            </ul>
+          )}
+      </section>
+    )}
+    <Note>Pairing, connecting and scanning for nearby devices aren't available from Settings yet.</Note>
+  </>
 }
 
-const WAIT_REASON: Record<string, string> = {
-  waiting_for_user: 'Ready to install when you are.',
-  outside_window: 'Installs in the maintenance window.',
-  not_idle: 'Installs next time the computer is idle.',
-  metered: 'Waiting for a non-metered connection.',
-  deferred: 'You postponed this update.',
-  paused: 'Your organization paused this release.',
-  pulled: 'This release was withdrawn.',
-  not_in_rollout: 'Rolling out gradually; this computer isn’t included yet.',
-  manual_mode: 'Updates are set to manual.',
-}
-const RING: Record<string, string> = { development: 'Development', pilot: 'Pilot', stable: 'Stable' }
-const MODE: Record<string, string> = { automatic: 'Automatic', notify: 'Notify', manual: 'Manual' }
-const fmt = (ms: number | null | string) => (ms == null ? '—' : new Date(ms).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))
-
-/** Settings › Updates on the package service's update coordinator (WSOS-AUP-011). */
-function Updates() {
-  const [st, setSt] = useState<OsUpdateStatus | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [policy, setPolicy] = useState<DeviceInfo['policies']>(null)
-  const [now, setNow] = useState(Date.now())
-
-  useEffect(() => {
-    void os.updateStatus(false).then((r) => (r.ok ? setSt(r.value) : setError(packageErrorText(r.error))))
-    void os.deviceInfo().then((d) => setPolicy(d.policies))
-    const off = os.onUpdateStatus(setSt)
-    const t = setInterval(() => setNow(Date.now()), 15_000)
-    return () => { off(); clearInterval(t) }
-  }, [])
-
-  const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
-    setBusy(true); setError(null)
-    const r = await fn()
-    setBusy(false)
-    if (!r.ok) setError(packageErrorText(r.error ?? 'failed'))
-  }
-  const check = () => act(async () => { const r = await os.updateStatus(true); if (r.ok) setSt(r.value); return r })
-  const later = () => act(async () => { const r = await os.updateDefer(); if (r.ok && !r.value) setError('This update can’t be postponed any more.'); return r })
-
-  const v = st?.version ?? ''
-  const due = st?.deadline ? ` · required by ${fmt(st.deadline)}` : ''
-  const left = st?.deferrals_left != null ? ` · ${st.deferrals_left} postponement${st.deferrals_left === 1 ? '' : 's'} left` : ''
-  const mins = st?.restart_at ? Math.max(0, Math.ceil((st.restart_at - now) / 60_000)) : 0
-  const view = !st ? { title: error ? 'Update status unavailable' : 'Loading…', sub: error ?? '' } : {
-    up_to_date: { title: 'WorkSuite OS is up to date', sub: `Version ${st.installed} · last checked ${fmt(st.last_check)}` },
-    checking: { title: 'Checking for updates…', sub: 'Contacting the update server' },
-    available: { title: `WorkSuite OS ${v} is available`, sub: WAIT_REASON[st.reason ?? ''] ?? '' },
-    waiting: { title: `WorkSuite OS ${v} is ready to install`, sub: `${WAIT_REASON[st.reason ?? ''] ?? ''}${due}${left}` },
-    installing: { title: `Installing WorkSuite OS ${v}…`, sub: 'You can keep working. Signature verified.' },
-    ready_to_restart: { title: 'Restart to finish updating', sub: `WorkSuite OS ${st.installed} is installed` },
-    restart_pending: { title: `Restarting in ${mins} min to install WorkSuite OS ${v}`, sub: 'This update is required by your organization. Save your work.' },
-    failed: { title: 'The last update check or install didn’t work', sub: st.reason ? st.reason.charAt(0).toUpperCase() + st.reason.slice(1) + '.' : '' },
-  }[st.state]
-
-  const btn = 'h-[42px] shrink-0 whitespace-nowrap rounded-[10px] px-4 text-sm disabled:opacity-50'
-  const canInstall = st && (st.state === 'waiting' || st.state === 'available') && st.reason !== 'paused' && st.reason !== 'pulled'
-  const policyRows = [
-    { label: 'Update source', help: 'Signed release manifest and APT repository', value: 'download.worksuitecloud.com' },
-    { label: 'Ring', help: 'Pilot devices get releases before Stable', value: RING[policy?.update_ring ?? 'stable'] },
-    { label: 'Update mode', help: 'Automatic installs when idle or in the window; Notify waits for you', value: MODE[policy?.update_mode ?? 'automatic'] },
-    { label: 'Maintenance window', help: 'Automatic installs happen in this window', value: policy?.maintenance_window ?? 'Any time the computer is idle' },
-  ]
-  return (
-    <Panel title="Updates">
-      <div className={`${card} flex items-center gap-4 p-5`} aria-live="polite">
-        <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 ${st?.state === 'checking' || st?.state === 'installing' ? 'animate-spin' : ''}`}><CIcon name="refresh" size={24} /></span>
-        <div className="flex min-w-0 grow flex-col gap-1">
-          <div className="text-base font-semibold">{view.title}</div>
-          <div className="text-[13px] text-ws-muted">{view.sub}</div>
-          {error && st && <div role="alert" className="text-[13px] text-red-700">{error}</div>}
+function DisplayPanel() {
+  const r = useBridge<DisplayInfo>(os.sysDisplays)
+  if (r.state !== 'ok') return <><H1>Display</H1>{r.state === 'loading' ? <Empty title="Reading displays…" /> : <Unavail what="Display information" />}</>
+  const d = r.value
+  const primary = d.outputs.find((o) => o.built_in) ?? d.outputs[0]
+  const res = primary?.mode?.replace('x', ' × ') ?? null
+  return <>
+    <H1>Display</H1>
+    <div className="flex h-[200px] items-center justify-center gap-5 rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(4,10,26,0.5)]" aria-label="Connected displays" role="img">
+      {d.outputs.length === 0 && <span className="text-[13px] text-[#8FA3C8]">No connected displays reported</span>}
+      {d.outputs.map((o, i) => (
+        <div key={o.name} className={`box-border flex items-end rounded-[10px] p-2.5 text-[13px] ${o === primary ? 'h-[136px] w-[220px] border-2 border-[#1F6BFF] bg-[linear-gradient(160deg,#1F4FB0,#0A1A3D)] font-semibold' : 'h-[100px] w-[170px] border border-[rgba(127,178,255,0.3)] bg-[rgba(14,32,72,0.8)] text-[#C9D6EE]'}`}>
+          {i + 1} · {o.built_in ? 'Built-in' : o.name}
         </div>
-        {st && (st.state === 'up_to_date' || st.state === 'failed') && <button type="button" disabled={busy} onClick={() => void check()} className={`${btn} border border-slate-300 bg-ws-surface text-slate-700`}>Check for updates</button>}
-        {canInstall && <>
-          <button type="button" disabled={busy || st!.deferrals_left === 0} onClick={() => void later()} className={`${btn} border border-slate-300 bg-ws-surface text-slate-700`}>Later</button>
-          <button type="button" disabled={busy} onClick={() => void act(os.updateInstallNow)} className={`${btn} bg-ws-accent px-[18px] font-semibold text-white hover:bg-ws-accent-strong`}>Install now</button>
-        </>}
-        {st?.state === 'ready_to_restart' && <button type="button" onClick={() => void os.power('restart')} className={`${btn} bg-ws-accent px-[18px] font-semibold text-white hover:bg-ws-accent-strong`}>Restart now</button>}
-      </div>
-
-      <div className={`${card} flex flex-col`}>
-        {policyRows.map((r) => (
-          <Row key={r.label} label={r.label} help={r.help}>
-            <span className="text-[13.5px]">{r.value}</span>
-            {policy && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span>}
-          </Row>
-        ))}
-        <Row label="Metered connections" help="Non-critical downloads wait for Wi-Fi or Ethernet">
-          <span className="text-[13.5px] text-ws-muted">Automatic</span>
-        </Row>
-      </div>
-    </Panel>
-  )
+      ))}
+    </div>
+    <div className={`${card} overflow-hidden`}>
+      {[
+        { k: 'Resolution', d: 'Preferred mode of this screen', v: <Value>{res}</Value> },
+        { k: 'Scale', d: 'Make text and apps larger', v: <Value>{null}</Value> },
+        { k: 'Refresh rate', d: 'Smoother motion', v: <Value>{null}</Value> },
+        { k: 'Brightness', d: d.brightness == null ? 'No adjustable backlight found' : 'Current backlight level', v: d.brightness == null ? <Value>{null}</Value> : <span className="flex items-center gap-3"><input type="range" aria-label="Brightness" disabled value={d.brightness} readOnly className="w-[220px] accent-[#1F6BFF]" /><span className="w-10 text-right font-mono text-[13px]">{d.brightness}%</span></span> },
+        { k: 'Night light', d: 'Warmer colors at night', v: <Value>{null}</Value> },
+      ].map((row) => (
+        <div key={row.k} className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
+          <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{row.k}</span><span className="text-xs text-[#8FA3C8]">{row.d}</span></span>
+          {row.v}
+        </div>
+      ))}
+    </div>
+    <Note>Display settings are shown as the system reports them; changing them from here isn't available yet.</Note>
+  </>
 }
 
-function AboutDevice({ compact }: { compact?: boolean }) {
+const THEME_ART: Record<string, { bg: string; win: string; bar: string }> = {
+  Light: { bg: 'linear-gradient(135deg,#EAF1FF,#C9DAFF)', win: '#FFFFFF', bar: 'rgba(255,255,255,0.8)' },
+  Dark: { bg: 'linear-gradient(135deg,#0E2357,#060E22)', win: '#13264F', bar: 'rgba(255,255,255,0.08)' },
+  Auto: { bg: 'linear-gradient(135deg,#EAF1FF 0%,#EAF1FF 50%,#0E2357 50%,#060E22 100%)', win: '#5E739C', bar: 'rgba(127,178,255,0.25)' },
+}
+function AppearancePanel() {
+  const [a, setA] = useState<Appearance>(() => loadAppearance())
+  const save = (n: Appearance) => { setA(n); writeJson(KEYS.appearance, n); applyAppearance(n) }
+  const accent = accentColor(a.accent)
+  const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  return <>
+    <H1>Appearance</H1>
+    <fieldset className="m-0 flex flex-col gap-2.5 border-0 p-0">
+      <legend className="mb-2.5 p-0 text-sm font-semibold">Theme</legend>
+      <div className="grid grid-cols-3 gap-3.5">
+        {THEMES.map((t) => (
+          <button key={t} type="button" aria-pressed={a.theme === t} onClick={() => save({ ...a, theme: t })}
+            className="flex cursor-pointer flex-col gap-2.5 rounded-[14px] border-2 bg-[rgba(14,32,72,0.5)] p-2.5 text-left" style={{ borderColor: a.theme === t ? accent : 'transparent' }}>
+            <span className="relative block h-[110px] overflow-hidden rounded-[9px]" style={{ background: THEME_ART[t].bg }} aria-hidden="true">
+              <span className="absolute top-3.5 left-3.5 h-16 w-[100px] rounded-[7px]" style={{ background: THEME_ART[t].win }} />
+              <span className="absolute top-6 left-[22px] h-[7px] w-[50px] rounded" style={{ background: accent }} />
+              <span className="absolute inset-x-2 bottom-2 h-4 rounded-[5px]" style={{ background: THEME_ART[t].bar }} />
+            </span>
+            <span className="px-1 text-sm font-semibold">{t}</span>
+          </button>
+        ))}
+      </div>
+    </fieldset>
+    <fieldset className="m-0 flex flex-col gap-2.5 border-0 p-0">
+      <legend className="mb-2.5 p-0 text-sm font-semibold">Accent color</legend>
+      <div className="flex gap-3.5">
+        {ACCENTS.map((x) => (
+          <button key={x.name} type="button" aria-label={x.name} aria-pressed={a.accent === x.name} onClick={() => save({ ...a, accent: x.name })}
+            className="h-8 w-8 cursor-pointer rounded-full" style={{ background: x.color, boxShadow: a.accent === x.name ? '0 0 0 3px #0A1A3D, 0 0 0 5px #FFFFFF' : 'none' }} />
+        ))}
+      </div>
+    </fieldset>
+    <Rows rows={[
+      { k: 'Wallpaper', v: 'WorkSuite (default)' },
+      { k: 'Font', v: 'IBM Plex Sans' },
+      { k: 'Reduce motion', v: reduce ? 'On (system setting)' : 'Off (system setting)' },
+    ]} />
+  </>
+}
+
+function SoundPanel() {
+  const r = useBridge<SoundInfo>(os.sysSound)
+  if (r.state !== 'ok') return <><H1>Sound</H1>{r.state === 'loading' ? <Empty title="Reading sound devices…" /> : <Unavail what="Sound information" />}</>
+  const blocks = [
+    { title: 'Output', dev: r.value.output, icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
+    { title: 'Input', dev: r.value.input, icon: 'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM6 11a6 6 0 0 0 12 0M12 17v4' },
+  ]
+  return <>
+    <H1>Sound</H1>
+    {blocks.map((b) => (
+      <section key={b.title} aria-label={b.title} className={`${card} flex flex-col gap-2.5 px-5 py-[18px]`}>
+        <div className="flex items-center justify-between"><h2 className="m-0 text-[15px] font-semibold">{b.title}</h2><Value min={260}>{b.dev ? (b.dev.name ?? 'Default device') : null}</Value></div>
+        {b.dev ? (
+          <div className="flex items-center gap-3.5">
+            <Svg d={b.icon} size={20} stroke={C.soft} />
+            <input type="range" aria-label={`${b.title} volume`} disabled readOnly value={b.dev.volume} className="flex-1 accent-[#1F6BFF]" />
+            <span className="w-[72px] text-right font-mono text-[13px]">{b.dev.muted ? 'Muted' : `${b.dev.volume}%`}</span>
+          </div>
+        ) : <span className="text-[13px] text-[#8FA3C8]">No {b.title.toLowerCase()} device</span>}
+      </section>
+    ))}
+    <Note>Volumes are shown as the sound server reports them. Changing them here and per-app volume aren't available yet.</Note>
+  </>
+}
+
+function NotificationsPanel() {
+  return <>
+    <H1>Notifications</H1>
+    <Rows rows={[
+      { k: 'Do not disturb', d: 'Holds back pop-ups; notices still collect in the notification center', v: 'In quick settings' },
+      { k: 'Sync', d: 'Offline, back online and sync problems', v: 'On' },
+      { k: 'Updates', d: 'Update available, restart needed and update problems', v: 'On' },
+      { k: 'New devices', d: 'A device was connected or needs a driver', v: 'On' },
+    ]} />
+    <Note>Per-app notification settings aren't available yet.</Note>
+  </>
+}
+
+function PrivacyPanel() {
+  const [p, setP] = useState<Privacy>(() => readJson<Privacy>(KEYS.privacy, DEFAULT_PRIVACY))
+  const [info, setInfo] = useState<DeviceInfo | null>(null)
+  const { status } = useOsUpdate()
+  useEffect(() => { void os.deviceInfo().then(setInfo).catch(() => {}) }, [])
+  const set = (k: keyof Privacy) => (v: boolean) => { const n = { ...p, [k]: v }; setP(n); writeJson(KEYS.privacy, n) }
+  const enc = info?.device?.encrypted
+  const good = { bg: 'rgba(95,211,154,0.08)', bd: 'rgba(95,211,154,0.3)', c: C.green }
+  const warn = { bg: 'rgba(255,159,90,0.08)', bd: 'rgba(255,159,90,0.3)', c: C.amber }
+  const unk = { bg: 'rgba(14,32,72,0.6)', bd: 'rgba(127,178,255,0.12)', c: C.muted }
+  const cards = [
+    { t: enc ? 'Disk encrypted' : enc === false ? 'Disk not encrypted' : 'Disk encryption', d: enc ? 'LUKS2 · on' : enc === false ? 'Data on this disk is readable if removed' : 'Status unavailable', tone: enc ? good : enc === false ? warn : unk, icon: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4' },
+    { t: 'Firewall', d: 'Status unavailable', tone: unk, icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z' },
+    status?.state === 'up_to_date'
+      ? { t: 'Up to date', d: `Checked ${status.last_check ? fmtWhen(status.last_check) : '—'}`, tone: good, icon: 'M5 12.5l4.5 4.5L19 7.5' }
+      : { t: needsAttention(status) ? 'Update waiting' : 'Updates', d: needsAttention(status) ? 'Open Updates to install' : status ? 'See Updates' : 'Status unavailable', tone: needsAttention(status) ? warn : unk, icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
+  ]
+  const perms: { k: keyof Privacy; t: string; d: string; icon: string }[] = [
+    { k: 'location', t: 'Location', d: 'Let apps ask for this computer’s location', icon: 'M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z' },
+    { k: 'updates', t: 'Automatic security updates', d: 'Install security fixes when the computer is idle', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z' },
+    { k: 'crash', t: 'Send crash reports', d: 'Helps fix problems; no files or personal content', icon: 'M12 8v5M12 16.5v.5M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z' },
+    { k: 'usage', t: 'Share usage statistics', d: 'Which features are used, never what you do in them', icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
+  ]
+  return <>
+    <H1>Privacy &amp; security</H1>
+    <div className="grid grid-cols-3 gap-3">
+      {cards.map((c) => (
+        <div key={c.t} className="flex items-center gap-3 rounded-[14px] border p-4" style={{ background: c.tone.bg, borderColor: c.tone.bd }}>
+          <Svg d={c.icon} size={22} stroke={c.tone.c} />
+          <span className="flex flex-col gap-0.5"><span className="text-sm font-semibold">{c.t}</span><span className="text-xs text-[#8FA3C8]">{c.d}</span></span>
+        </div>
+      ))}
+    </div>
+    <h2 className={`m-0 mt-1 font-normal ${sectionLabel}`}>Your choices</h2>
+    <div className={`${card} overflow-hidden`}>
+      {perms.map((x) => (
+        <div key={x.k} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
+          <Svg d={x.icon} size={20} stroke="#7FB2FF" />
+          <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{x.t}</span><span className="text-xs text-[#8FA3C8]">{x.d}</span></span>
+          <Switch small label={x.t} checked={p[x.k]} onChange={set(x.k)} />
+        </div>
+      ))}
+    </div>
+    <Note>Per-app camera, microphone and screen-recording permissions aren't managed by WorkSuite OS yet. Your organization never gets keylogging, camera access or a remote shell.</Note>
+  </>
+}
+
+function UsersPanel() {
+  const r = useBridge(os.sysUsers)
+  const [info, setInfo] = useState<DeviceInfo | null>(null)
+  useEffect(() => { void os.deviceInfo().then(setInfo).catch(() => {}) }, [])
+  const me = r.state === 'ok' ? r.value.users.find((u) => u.login === r.value.current) ?? null : null
+  const others = r.state === 'ok' ? r.value.users.filter((u) => u.login !== r.value.current) : []
+  const lock = info?.policies?.lock_timeout_max_s
+  return <>
+    <H1>Users</H1>
+    {r.state === 'unavailable' && <Unavail what="The user list" />}
+    {r.state === 'ok' && (
+      <div className={`${heroCard} flex items-center gap-5 rounded-2xl p-[22px]`}>
+        <Avatar name={me?.name ?? r.value.current} size={80} font={28} />
+        <span className="flex flex-1 flex-col gap-1">
+          <span className="text-xl font-bold">{me?.name ?? r.value.current}</span>
+          <span className="text-[13px] text-[#8FA3C8]">{r.value.current}{me ? ` · ${me.admin ? 'Administrator' : 'Standard user'}` : ''} · you</span>
+        </span>
+      </div>
+    )}
+    <div className={`${card} overflow-hidden`}>
+      <div className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}><span className="flex-1 text-sm">Sign-in method</span><span className="text-[13px] text-[#C9D6EE]">Password</span></div>
+      <div className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
+        <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm">Sign in automatically</span><span className="text-xs text-[#8FA3C8]">WorkSuite OS always asks for a password</span></span>
+        <span className={chip}>Not allowed</span>
+        <Switch small label="Sign in automatically" checked={false} disabled />
+      </div>
+      <div className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}><span className="flex-1 text-sm">Lock after</span><span className="text-[13px] text-[#C9D6EE]">{lock ? `At most ${Math.round(lock / 60)} minutes idle` : 'Not set by policy'}</span>{lock ? <span className={chip}>Set by policy</span> : null}</div>
+    </div>
+    <section aria-labelledby="ws-acct" className="flex flex-col gap-2">
+      <h2 id="ws-acct" className={`m-0 font-normal ${sectionLabel}`}>WorkSuite account</h2>
+      <div className={`${card} overflow-hidden`}><CloudAccounts /></div>
+    </section>
+    {others.length > 0 && (
+      <section aria-labelledby="other-users" className="flex flex-col gap-2">
+        <h2 id="other-users" className={`m-0 font-normal ${sectionLabel}`}>Other users</h2>
+        <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
+          {others.map((u: LocalUser, i) => (
+            <li key={u.login} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
+              <Avatar name={u.name} size={38} font={14} bg={AVATAR_GRADIENTS[(i + 1) % AVATAR_GRADIENTS.length]} />
+              <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{u.name}</span><span className="text-xs text-[#8FA3C8]">{u.login} · {u.admin ? 'Administrator' : 'Standard user'}</span></span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+    <Note>Adding users and changing passwords aren't available from Settings yet.</Note>
+  </>
+}
+
+function AboutPanel() {
   const [showWipe, setShowWipe] = useState(false)
   const [info, setInfo] = useState<DeviceInfo | null>(null)
-  useEffect(() => { void os.deviceInfo().then(setInfo) }, [])
-  if (!info) return <div className={`${card} px-5 py-[18px] text-[13px] text-ws-muted`}>Loading device information…</div>
-
+  useEffect(() => { void os.deviceInfo().then(setInfo).catch(() => {}) }, [])
+  if (!info) return <><H1>About</H1><Empty title="Loading device information…" /></>
   const d = info.device
-  const enc = d?.encrypted == null ? 'Unknown' : d.encrypted ? 'Encrypted (LUKS2)' : 'Not encrypted'
-  const rows: [string, string][] = [
-    ['Name', d?.hostname ?? 'Unknown'],
-    ['OS', d?.os_version ?? 'Unknown'],
-    ['Architecture', d?.arch === 'arm64' ? 'ARM64 (arm64)' : 'x86-64 (amd64)'],
-    ['Kernel', d?.kernel_version ?? 'Unknown'],
-    ['Encryption', enc],
-  ]
   const lines = policyLines(info.policies)
   const checked = info.last_check_in ? new Date(info.last_check_in).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'not yet'
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className={`${card} flex flex-col gap-2.5 px-5 py-[18px]`}>
-        {compact && <div className="text-sm font-semibold">About this device</div>}
-        {!compact && (
-          <div className="flex items-center gap-4 pb-1">
-            <AppIcon size={56} />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[17px] font-semibold">WorkSuite OS</span>
-              <span className="text-[13px] text-ws-muted">{d?.os_version ?? 'Debian 13'}</span>
-            </div>
+  return <>
+    <H1>About</H1>
+    <div className={`${heroCard} flex items-center gap-5 rounded-2xl p-[22px]`}>
+      <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[rgba(31,107,255,0.18)]"><Mark size={48} hole="#0F2350" /></span>
+      <span className="flex flex-col gap-1"><span className="text-xl font-bold">WorkSuite OS</span><span className="text-[13px] text-[#8FA3C8]">{d?.os_version ?? 'Version unknown'}</span></span>
+    </div>
+    <Rows rows={[
+      { k: 'Device name', v: d?.hostname ?? 'Unknown' },
+      { k: 'Architecture', v: d?.arch === 'arm64' ? 'ARM64 (arm64)' : d?.arch === 'amd64' ? 'x86-64 (amd64)' : 'Unknown' },
+      { k: 'Kernel', v: d?.kernel_version ?? 'Unknown' },
+      { k: 'Disk encryption', v: d?.encrypted == null ? 'Unknown' : d.encrypted ? 'Encrypted (LUKS2)' : 'Not encrypted' },
+    ]} />
+    {/* WSOS-MDM-007: management disclosure, from the device agent */}
+    {info.managed ? (
+      <section aria-label="Device management" className="flex flex-col gap-2.5 rounded-[14px] border border-[rgba(31,107,255,0.35)] bg-[rgba(31,107,255,0.1)] px-5 py-[18px]">
+        <span className="flex items-center gap-2 text-sm font-semibold"><Svg d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" size={18} stroke="#7FB2FF" />Managed by {info.org_name ?? info.server ?? 'your organization'}</span>
+        <ul className="m-0 list-disc pl-[18px] text-[13px] leading-relaxed text-[#C9D6EE]">
+          {lines.map((l) => <li key={l}>{l}</li>)}
+          <li>Your organization can remotely lock this device and wipe WorkSuite data{d?.encrypted ? ' or the whole device' : ''}</li>
+        </ul>
+        <span className="text-xs text-[#8FA3C8]">{info.server ? `${info.server} · ` : ''}Last policy check {checked} · no keylogging, camera access or remote shell</span>
+        {/* WSOS-WIPE-007: explain wipe scope */}
+        <button type="button" aria-expanded={showWipe} onClick={() => setShowWipe((v) => !v)} className={`${linkBtn} self-start`}>{showWipe ? 'Hide' : 'What a remote wipe does'}</button>
+        {showWipe && (
+          <div className="rounded-[10px] border border-[rgba(127,178,255,0.16)] bg-[rgba(4,10,26,0.4)] p-3 text-[12.5px] leading-relaxed text-[#C9D6EE]">
+            <p className="m-0"><strong>WorkSuite data wipe</strong> signs everyone out and removes WorkSuite accounts, synced WorkSuite files and the WorkSuite Drive folder for every user. Other files in home folders stay.</p>
+            <p className="mb-0 mt-2"><strong>Full device wipe</strong>{d?.encrypted ? ' destroys the disk encryption keys, making all data unrecoverable, then restarts the computer.' : ' is only possible on encrypted devices; this one is not encrypted.'}</p>
+            <p className="mb-0 mt-2">Every wipe needs an administrator plus a second approver and is recorded by your organization.</p>
           </div>
         )}
-        <dl className="m-0 grid grid-cols-[120px_1fr] gap-y-2 text-[13px]">
-          {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-ws-muted">{k}</dt><dd className="m-0">{v}</dd></div>)}
-        </dl>
-      </div>
-      {/* WSOS-MDM-007: management disclosure, from the device agent */}
-      {info.managed ? (
-        <div className="flex flex-col gap-2.5 rounded-[14px] border border-blue-200 bg-blue-50 px-5 py-[18px]">
-          <div className="flex items-center gap-2 text-sm font-semibold text-blue-900"><CIcon name="shield" />Managed by {info.org_name ?? info.server ?? 'your organization'}</div>
-          <ul className="m-0 pl-[18px] text-[13px] leading-relaxed text-slate-800 list-disc">
-            {lines.map((l) => <li key={l}>{l}</li>)}
-            <li>Your organization can remotely lock this device and wipe WorkSuite data{d?.encrypted ? ' or the whole device' : ''}</li>
-          </ul>
-          <div className="text-xs text-blue-900">{info.server ? `${info.server} · ` : ''}Last policy check {checked} · no keylogging, camera access or remote shell</div>
-          {/* WSOS-WIPE-007: explain wipe scope */}
-          <button type="button" aria-expanded={showWipe} onClick={() => setShowWipe((v) => !v)} className="self-start text-[13px] text-ws-accent hover:text-ws-accent-strong">
-            {showWipe ? 'Hide' : 'What a remote wipe does'}
-          </button>
-          {showWipe && (
-            <div className="rounded-lg border border-blue-200 bg-white p-3 text-[12.5px] leading-relaxed text-slate-700">
-              <p className="m-0"><strong>WorkSuite data wipe</strong> signs everyone out and removes WorkSuite accounts, synced WorkSuite files and the WorkSuite Drive folder for every user. Other files in home folders stay.</p>
-              <p className="mb-0 mt-2"><strong>Full device wipe</strong>{d?.encrypted ? ' destroys the disk encryption keys, making all data unrecoverable, then restarts the computer.' : ' is only possible on encrypted devices; this one is not encrypted.'}</p>
-              <p className="mb-0 mt-2">Every wipe needs an administrator plus a second approver and is recorded by your organization.</p>
-            </div>
-          )}
-        </div>
-      ) : info.agent ? (
-        <EnrollCard compact={compact} onEnrolled={() => void os.deviceInfo().then(setInfo)} />
-      ) : (
-        <div className={`${card} px-5 py-[18px] text-[13px] text-ws-muted`}>Management status is unavailable: the WorkSuite device agent isn’t running.</div>
-      )}
-    </div>
-  )
+      </section>
+    ) : info.agent ? <EnrollCard onEnrolled={() => void os.deviceInfo().then(setInfo)} />
+      : <Empty title="Management status is unavailable">The WorkSuite device agent isn’t running.</Empty>}
+  </>
 }
 
 /** Enroll an unmanaged device with an organization (§9.3); same path as first-run: device agent via pkexec. */
-function EnrollCard({ compact, onEnrolled }: { compact?: boolean; onEnrolled: () => void }) {
+function EnrollCard({ onEnrolled }: { onEnrolled: () => void }) {
   const [open, setOpen] = useState(false)
   const [server, setServer] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const field = 'h-10 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm font-normal text-ws-ink outline-none focus:border-ws-accent'
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!server.trim() || !code.trim()) return setError('Enter the server address and the enrollment code from your IT admin.')
@@ -278,68 +421,25 @@ function EnrollCard({ compact, onEnrolled }: { compact?: boolean; onEnrolled: ()
     if (!r.ok) return setError(cloudErrorText(r.error))
     onEnrolled()
   }
-
   return (
     <div className={`${card} flex flex-col gap-3 px-5 py-[18px] text-[13px]`}>
-      <span className="text-ws-muted">This device isn’t managed by an organization.</span>
-      {!open ? (
-        !compact && <button type="button" onClick={() => setOpen(true)} className="self-start h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Enroll with an organization…</button>
-      ) : (
+      <span className="text-[#8FA3C8]">This device isn’t managed by an organization.</span>
+      {!open ? <button type="button" onClick={() => setOpen(true)} className={`${btnGhost} self-start`}>Enroll with an organization…</button> : (
         <form onSubmit={submit} className="flex flex-col gap-3" aria-label="Enroll this device">
-          <p className="m-0 text-ws-muted">Your organization will be able to apply its policies and updates, and lock or wipe this device remotely. An administrator password is needed.</p>
+          <p className="m-0 text-[#8FA3C8]">Your organization will be able to apply its policies and updates, and lock or wipe this device remotely. An administrator password is needed.</p>
           <label className="flex flex-col gap-1 font-semibold">Server address
-            <input value={server} onChange={(e) => { setServer(e.target.value); setError(null) }} placeholder="work.example.com" spellCheck={false} className={field} />
+            <input value={server} onChange={(e) => { setServer(e.target.value); setError(null) }} placeholder="work.example.com" spellCheck={false} className={`${field} font-normal`} />
           </label>
           <label className="flex flex-col gap-1 font-semibold">Enrollment code
-            <input value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null) }} autoComplete="off" spellCheck={false} className={`${field} w-[260px] max-w-full font-mono tracking-[1px]`} />
+            <input value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null) }} autoComplete="off" spellCheck={false} className={`${field} w-[260px] max-w-full font-mono font-normal tracking-[1px]`} />
           </label>
-          {error && <p role="alert" className="m-0 text-red-700">{error}</p>}
+          {error && <p role="alert" className="m-0 text-[#FF8A7A]">{error}</p>}
           <div className="flex gap-2">
-            <button type="submit" disabled={busy} className="h-9 rounded-lg bg-ws-accent px-4 text-sm font-semibold text-white disabled:opacity-60">{busy ? 'Enrolling…' : 'Enroll this device'}</button>
-            <button type="button" disabled={busy} onClick={() => { setOpen(false); setError(null) }} className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Cancel</button>
+            <button type="submit" disabled={busy} className={btnPrimary}>{busy ? 'Enrolling…' : 'Enroll this device'}</button>
+            <button type="button" disabled={busy} onClick={() => { setOpen(false); setError(null) }} className={btnGhost}>Cancel</button>
           </div>
         </form>
       )}
-    </div>
-  )
-}
-
-export default function Settings({ onClose }: WindowProps) {
-  const [section, setSection] = useState<Section>('Updates')
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 bottom-[56px] p-[20px_24px]">
-      <div role="dialog" aria-label="Settings" className="pointer-events-auto flex h-full w-full flex-col overflow-hidden rounded-xl bg-slate-100 text-ws-ink shadow-[0_16px_48px_rgba(2,6,23,0.45)] dark:bg-ws-subtle">
-        <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-ws-line bg-ws-surface pl-4 pr-2">
-          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-md bg-slate-700 text-[11px] font-bold text-white">S</span>
-          <span className="text-[13px] font-semibold">Settings</span>
-          <div className="ml-auto flex gap-0.5">
-            <button type="button" aria-label="Minimize" className="flex h-8 w-9 items-center justify-center rounded-md text-ws-muted hover:bg-slate-100"><CIcon name="min" size={14} /></button>
-            <button type="button" aria-label="Maximize" className="flex h-8 w-9 items-center justify-center rounded-md text-ws-muted hover:bg-slate-100"><CIcon name="max" size={14} /></button>
-            <button type="button" aria-label="Close" onClick={onClose} className="flex h-8 w-9 items-center justify-center rounded-md text-ws-muted hover:bg-red-600 hover:text-white"><CIcon name="close" size={14} /></button>
-          </div>
-        </div>
-        <div className="flex min-h-0 grow">
-          <nav aria-label="Settings sections" className="flex w-60 shrink-0 flex-col gap-0.5 overflow-auto border-r border-ws-line bg-ws-surface p-3">
-            {SECTIONS.map((s) => {
-              const cur = s === section
-              return (
-                <button key={s} type="button" aria-current={cur ? 'page' : undefined} onClick={() => setSection(s)}
-                  className={`flex h-9 shrink-0 items-center justify-between rounded-lg px-3 text-left text-sm ${cur ? 'bg-blue-100 font-semibold text-blue-900' : 'text-slate-700 hover:bg-slate-100 dark:text-ws-ink dark:hover:bg-slate-700'}`}>
-                  {s}
-                </button>
-              )
-            })}
-          </nav>
-          <main className="flex min-w-0 grow gap-5 overflow-auto px-7 py-6">
-            {section === 'Updates' ? <>
-              <Updates />
-              <aside aria-label="About this device" className="w-[360px] shrink-0"><AboutDevice compact /></aside>
-            </> : section === 'About this device' ? (
-              <Panel title="About this device"><div className="max-w-[640px]"><AboutDevice /></div></Panel>
-            ) : <SimplePanel key={section} section={section} />}
-          </main>
-        </div>
-      </div>
     </div>
   )
 }
@@ -352,7 +452,6 @@ function CloudAccounts() {
   const [prompt, setPrompt] = useState<{ account: CloudAccount; unsent: number } | null>(null)
   const load = () => os.cloudAccounts().then((r) => (r.ok ? setAccounts(r.value) : setError(cloudErrorText(r.error))))
   useEffect(() => { void load() }, [])
-
   const finish = async (a: CloudAccount, choice: SignOutChoice) => {
     const r = await os.cloudSignOut(a.id, choice)
     setPrompt(null)
@@ -368,18 +467,17 @@ function CloudAccounts() {
     if (r.value === 0) return finish(a, 'none')
     setPrompt({ account: a, unsent: r.value })
   }
-
-  if (error && !accounts) return <Row label="WorkSuite account" help={error}><span className="text-[13.5px] text-ws-muted">Unavailable</span></Row>
-  if (!accounts) return <Row label="WorkSuite account"><span className="text-[13.5px] text-ws-muted">Loading…</span></Row>
+  const row = (k: ReactNode, d: ReactNode, v: ReactNode, key?: string) => (
+    <div key={key} className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}><span className="flex flex-1 flex-col gap-0.5"><span className="text-sm">{k}</span>{d && <span className="text-xs text-[#8FA3C8]">{d}</span>}</span>{v}</div>
+  )
+  if (error && !accounts) return row('WorkSuite account', error, <span className="text-[13px] text-[#8FA3C8]">Unavailable</span>)
+  if (!accounts) return row('WorkSuite account', null, <span className="text-[13px] text-[#8FA3C8]">Loading…</span>)
   return <>
-    {(error || notice) && <p role="status" className={`m-0 border-b border-ws-line/60 px-5 py-3 text-[13px] ${error ? 'text-red-700' : 'text-emerald-700'}`}>{error ?? notice}</p>}
+    {(error || notice) && <p role="status" className={`m-0 px-[18px] py-3 text-[13px] ${rowLine}`} style={{ color: error ? C.red : C.green }}>{error ?? notice}</p>}
     {accounts.length === 0
-      ? <Row label="WorkSuite account" help="Not signed in. Sign in from first-run setup or here to sync."><span className="text-[13.5px] text-ws-muted">Signed out</span></Row>
-      : accounts.map((a) => (
-        <Row key={a.id} label={a.name ?? 'WorkSuite account'} help={`${a.server_url}${a.state === 'refresh_failed' ? ' · sign in again to resume sync' : ''}`}>
-          <button type="button" onClick={() => void signOut(a)} className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Sign out</button>
-        </Row>
-      ))}
+      ? row('Not signed in', 'Sign in from first-run setup to sync.', <span className="text-[13px] text-[#8FA3C8]">Signed out</span>)
+      : accounts.map((a) => row(a.name ?? 'WorkSuite account', `${a.server_url}${a.state === 'refresh_failed' ? ' · sign in again to resume sync' : ''}`,
+        <button type="button" onClick={() => void signOut(a)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>Sign out</button>, a.id))}
     {prompt && <UnsentDialog {...prompt} onCancel={() => setPrompt(null)} onChoose={(c) => finish(prompt.account, c)} />}
   </>
 }
@@ -391,7 +489,6 @@ function UnsentDialog({ account, unsent, onCancel, onChoose }: { account: CloudA
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [busy, setBusy] = useState(false)
   const n = (k: number) => `${k} unsent change${k === 1 ? '' : 's'}`
-
   // "Wait to sync": ask for a sync and check every 2 s; sign out once nothing is left.
   useEffect(() => {
     if (!waiting) return
@@ -408,46 +505,121 @@ function UnsentDialog({ account, unsent, onCancel, onChoose }: { account: CloudA
     let timer = setTimeout(tick, 0)
     return () => { stop = true; clearTimeout(timer) }
   }, [waiting, account.id, onChoose])
+  const run = async (c: SignOutChoice) => { setBusy(true); await onChoose(c); setBusy(false) }
+  return (
+    <Dialog width={460} alert onClose={busy ? undefined : onCancel}>
+      {(tid) => <>
+        <div className="flex flex-col gap-3 px-6 pt-6 pb-4">
+          <h2 id={tid} className="m-0 text-[19px] font-bold">{n(left)}</h2>
+          <p className="m-0 text-sm text-[#C9D6EE]">Changes you made offline haven’t reached {account.server_url} yet. Signing out removes WorkSuite data from this computer, so choose what happens to them.</p>
+          {waiting ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-[rgba(31,107,255,0.12)] px-4 py-3 text-sm" aria-live="polite">
+              <span>Syncing… you’ll be signed out when everything has reached the server.</span>
+              <button type="button" onClick={() => setWaiting(false)} className={linkBtn}>Stop waiting</button>
+            </div>
+          ) : confirmDiscard ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-[rgba(255,138,122,0.3)] bg-[rgba(255,138,122,0.08)] px-4 py-3 text-sm">
+              <span>Discard {n(left)}? They can’t be recovered.</span>
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={busy} onClick={() => setConfirmDiscard(false)} className={btnGhost}>Keep them</button>
+                <button type="button" disabled={busy} onClick={() => void run('discard')} className={`${btnPrimary} bg-[#D9452B] hover:bg-[#E5573D]`}>Discard and sign out</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <button type="button" disabled={busy} onClick={() => setWaiting(true)} className={btnPrimary}>Wait to sync, then sign out</button>
+              <button type="button" disabled={busy} onClick={() => void run('export')} className={btnGhost}>Save changes to a file and sign out</button>
+              <button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className={`${btnGhost} text-[#FF8A7A]`}>Discard changes…</button>
+            </div>
+          )}
+        </div>
+        <div className={dialogFooter}><button type="button" disabled={busy} onClick={onCancel} className={btnGhost}>Cancel — stay signed in</button></div>
+      </>}
+    </Dialog>
+  )
+}
 
+function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (s: Section) => void; badges: Partial<Record<Section, string>>; user: { name: string; role: string } | null }) {
+  const [q, setQ] = useState('')
+  const items = NAV.filter((n) => n.id.toLowerCase().includes(q.trim().toLowerCase()))
+  return (
+    <nav aria-label="Settings" className="box-border flex w-[260px] shrink-0 flex-col gap-3.5 overflow-auto border-r border-[rgba(127,178,255,0.12)] bg-[#071330] px-3.5 py-5">
+      <div className="flex items-center gap-3 px-2 pt-2 pb-1">
+        <Avatar name={user?.name ?? '?'} size={40} font={14} />
+        <span className="flex min-w-0 flex-col gap-px"><span className="truncate text-sm font-semibold">{user?.name ?? 'This computer'}</span><span className="text-xs text-[#8FA3C8]">{user?.role ?? 'Settings'}</span></span>
+      </div>
+      <label className="flex h-[38px] items-center gap-2 rounded-[9px] border border-[rgba(127,178,255,0.14)] bg-[rgba(4,10,26,0.5)] px-3 text-[13px] text-[#8FA3C8] focus-within:border-[#1F6BFF]">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8FA3C8" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+        <span className="sr-only">Search settings</span>
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search settings" className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8]" />
+      </label>
+      <ul className="m-0 flex list-none flex-col gap-px p-0">
+        {items.map((n) => {
+          const on = n.id === section
+          const badge = badges[n.id]
+          return (
+            <li key={n.id}>
+              {'sep' in n && n.sep && !q && <div className="mx-2 my-1.5 h-px bg-[rgba(127,178,255,0.1)]" aria-hidden="true" />}
+              <button type="button" aria-current={on ? 'page' : undefined} onClick={() => onPick(n.id)}
+                className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm ${on ? 'bg-[rgba(31,107,255,0.2)] font-semibold text-white' : 'text-[#C9D6EE] hover:bg-white/[0.05]'}`}>
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px]" style={{ background: n.tint }}><Svg d={n.icon} size={15} stroke="#FFFFFF" width={2.2} /></span>
+                {n.id}
+                {badge && <span className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-[9px] bg-[#1F6BFF] px-[5px] text-[11px] font-bold text-white" aria-label={`${badge} pending`}>{badge}</span>}
+              </button>
+            </li>
+          )
+        })}
+        {!items.length && <li className="px-2.5 py-2 text-[13px] text-[#8FA3C8]">No settings match.</li>}
+      </ul>
+    </nav>
+  )
+}
+
+export default function Settings({ onClose }: WindowProps) {
+  const [section, setSection] = useState<Section>(() => {
+    const s = takeSettingsSection()
+    return isSection(s) ? s : (s && ALIAS[s]) || 'Network'
+  })
+  const [problem, setProblem] = useState<HwDevice | null>(null)
+  const [driverCount, setDriverCount] = useState(0)
+  const [user, setUser] = useState<{ name: string; role: string } | null>(null)
+  const { status } = useOsUpdate()
+  useEffect(() => onSettingsSection((s) => setSection(isSection(s) ? s : ALIAS[s] ?? 'Network')), [])
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onCancel() }
+    void os.hwDriverUpdates().then((r) => setDriverCount(r.ok ? r.value.length : 0)).catch(() => {})
+    void os.sysUsers().then((r) => {
+      if (!r.ok) return
+      const me = r.value.users.find((u) => u.login === r.value.current)
+      setUser({ name: me?.name ?? r.value.current, role: me ? (me.admin ? 'Administrator' : 'Standard user') : 'Signed in' })
+    }).catch(() => {})
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[aria-modal="true"]')) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onCancel])
-
-  const run = async (c: SignOutChoice) => { setBusy(true); await onChoose(c); setBusy(false) }
-  const btn = 'h-10 rounded-lg px-4 text-sm font-semibold disabled:opacity-50'
+  }, [onClose])
+  const badges = useMemo(() => ({ ...(driverCount ? { Drivers: String(driverCount) } : {}), ...(needsAttention(status) ? { Updates: '1' } : {}) }), [driverCount, status])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div role="alertdialog" aria-modal="true" aria-labelledby="unsent-title" aria-describedby="unsent-desc"
-        className="flex w-[460px] max-w-full flex-col gap-4 rounded-2xl bg-ws-surface p-6 text-ws-ink shadow-[0_24px_64px_rgba(2,6,23,0.35)]">
-        <h3 id="unsent-title" className="m-0 text-lg font-semibold">{n(left)}</h3>
-        <p id="unsent-desc" className="m-0 text-sm text-ws-muted">
-          Changes you made offline haven’t reached {account.server_url} yet. Signing out removes WorkSuite data from this computer, so choose what happens to them.
-        </p>
-        {waiting ? (
-          <div className="flex items-center justify-between gap-3 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-800" aria-live="polite">
-            <span>Syncing… you’ll be signed out when everything has reached the server.</span>
-            <button type="button" onClick={() => setWaiting(false)} className="shrink-0 underline">Stop waiting</button>
-          </div>
-        ) : confirmDiscard ? (
-          <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            <span>Discard {n(left)}? They can’t be recovered.</span>
-            <div className="flex justify-end gap-2">
-              <button type="button" disabled={busy} onClick={() => setConfirmDiscard(false)} className={`${btn} border border-slate-300 bg-white text-slate-700`}>Keep them</button>
-              <button type="button" disabled={busy} onClick={() => void run('discard')} className={`${btn} bg-red-700 text-white`}>Discard and sign out</button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <button type="button" disabled={busy} onClick={() => setWaiting(true)} className={`${btn} bg-ws-accent text-white`}>Wait to sync, then sign out</button>
-            <button type="button" disabled={busy} onClick={() => void run('export')} className={`${btn} border border-slate-300 bg-ws-surface`}>Save changes to a file and sign out</button>
-            <button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className={`${btn} border border-red-200 bg-ws-surface text-red-700`}>Discard changes…</button>
-          </div>
-        )}
-        <button type="button" disabled={busy} onClick={onCancel} className="self-end text-sm text-ws-muted underline">Cancel — stay signed in</button>
-      </div>
+    <div role="dialog" aria-modal="false" aria-label="Settings" className="fixed inset-0 z-50 flex bg-[#0A1A3D] font-sans text-[#E8EEFA]">
+      <SetNav section={section} onPick={setSection} badges={badges} user={user} />
+      <main className="relative flex min-w-0 flex-1 flex-col gap-5 overflow-auto px-11 py-8" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)' }}>
+        <button type="button" aria-label="Close Settings" onClick={onClose} className="absolute top-4 right-4 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#8FA3C8] hover:bg-white/10 hover:text-white">
+          <Svg d="M6 6l12 12M18 6L6 18" size={16} />
+        </button>
+        {section === 'Network' && <NetworkPanel />}
+        {section === 'Bluetooth' && <BluetoothPanel />}
+        {section === 'Display' && <DisplayPanel />}
+        {section === 'Appearance' && <AppearancePanel />}
+        {section === 'Sound' && <SoundPanel />}
+        {section === 'Notifications' && <NotificationsPanel />}
+        {section === 'Privacy & security' && <PrivacyPanel />}
+        {section === 'Users' && <UsersPanel />}
+        {section === 'Devices' && <DevicesPanel onProblem={setProblem} />}
+        {section === 'Drivers' && <DriversPanel onOpenUpdates={() => setSection('Updates')} />}
+        {section === 'Updates' && <><H1>Updates</H1><UpdatesPanel /></>}
+        {section === 'About' && <AboutPanel />}
+      </main>
+      {problem && <DeviceProblemDialog device={problem} onClose={() => setProblem(null)} onOpenUpdates={() => setSection('Updates')} onOpenDrivers={() => setSection('Drivers')} />}
     </div>
   )
 }
+

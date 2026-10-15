@@ -5,6 +5,8 @@ import path from 'node:path'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceInfo, enrollDevice } from './device'
 import { followJobs, packageClient } from './packages'
+import { listDevices } from './hardware'
+import { systemInfo } from './system'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
@@ -111,6 +113,17 @@ app.whenReady().then(() => {
   handle('ws:updateStatus', (check) => pkg.updateStatus(check === 'check'))
   handle('ws:updateDefer', () => pkg.deferUpdate())
   handle('ws:updateInstallNow', () => pkg.installUpdateNow())
+  // Devices: sysfs, read-only. There is no driver catalog or driver installer service yet, so those say so.
+  handle('ws:hwDevices', () => { try { return { ok: true, value: listDevices() } } catch { return { ok: false, error: 'unavailable' } } })
+  handle('ws:hwDriverUpdates', () => ({ ok: false, error: 'unavailable' }))
+  handle('ws:hwInstallDrivers', () => ({ ok: false, error: 'unavailable' }))
+  // Settings facts (read-only): users, network, Bluetooth, displays, sound.
+  const sys = systemInfo()
+  handle('ws:sysUsers', () => sys.users())
+  handle('ws:sysNetwork', () => sys.network())
+  handle('ws:sysBluetooth', () => sys.bluetooth())
+  handle('ws:sysDisplays', () => sys.displays())
+  handle('ws:sysSound', () => sys.sound())
   // Files: real folders plus Drive sync states from the sync service.
   const files = defaultEnv(async (dir) => { const r = await syncCall('FileStates', { dir }); return r.ok && Array.isArray(r.value) ? r.value as { name: string; state: string }[] : null })
   handle('ws:filesRoots', () => ({ roots: roots(files).map(({ id, label }) => ({ id, label })), drive_exists: existsSync(driveDir(files.home)) }))

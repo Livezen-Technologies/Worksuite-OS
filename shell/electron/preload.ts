@@ -38,5 +38,13 @@ contextBridge.exposeInMainWorld('worksuite', {
     ipcRenderer.on('ws:pkgJob', listener)
     return () => { ipcRenderer.removeListener('ws:pkgJob', listener) }
   },
+  hwDevices: () => ipcRenderer.invoke('ws:hwDevices'),
+  hwDriverUpdates: () => ipcRenderer.invoke('ws:hwDriverUpdates'),
+  hwInstallDrivers: (ids: string[]) => ipcRenderer.invoke('ws:hwInstallDrivers', ...(Array.isArray(ids) ? ids.map(String) : [])),
+  sysUsers: () => ipcRenderer.invoke('ws:sysUsers'),
+  sysNetwork: () => ipcRenderer.invoke('ws:sysNetwork'),
+  sysBluetooth: () => ipcRenderer.invoke('ws:sysBluetooth'),
+  sysDisplays: () => ipcRenderer.invoke('ws:sysDisplays'),
+  sysSound: () => ipcRenderer.invoke('ws:sysSound'),
   cloudAccounts: () => ipcRenderer.invoke('ws:cloudAccounts'),
 })
