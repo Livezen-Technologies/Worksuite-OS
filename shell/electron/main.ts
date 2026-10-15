@@ -24,6 +24,7 @@ import { arrange, displayManager, outputRects, type DisplayState } from './displ
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { startDesktopHost } from './desktopHost'
+import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
@@ -398,6 +399,8 @@ app.whenReady().then(() => {
   startPanel(handle, broadcast, () => void displays.applySaved())
   // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
   startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
+  // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
+  startPolkitBridge(handle, broadcast)
 })
 
 app.on('window-all-closed', () => app.quit())

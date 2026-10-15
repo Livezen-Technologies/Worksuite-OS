@@ -164,3 +164,11 @@ contextBridge.exposeInMainWorld('worksuiteDesktop', {
   shellRestart: () => ipcRenderer.invoke('ws:shellRestart'),
   shellRestartSeen: (n: number) => ipcRenderer.invoke('ws:shellRestartSeen', String(Math.max(0, Math.floor(Number(n)) || 0))),
 })
+
+// Administrator prompts from the WorkSuite polkit agent — see electron/polkit.ts.
+contextBridge.exposeInMainWorld('worksuitePolkit', {
+  state: () => ipcRenderer.invoke('ws:polkitState'),
+  respond: (id: string, password: string) => ipcRenderer.invoke('ws:polkitRespond', String(id), String(password)),
+  cancel: (id: string) => ipcRenderer.invoke('ws:polkitCancel', String(id)),
+  onState: on('ws:polkit'),
+})
