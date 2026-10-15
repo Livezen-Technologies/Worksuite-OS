@@ -4,6 +4,7 @@
 #   tests/vm/vm.sh boot-disk DIR               same VM without the ISO (after an install)
 #   tests/vm/vm.sh shot DIR NAME               DIR/NAME.png
 #   tests/vm/vm.sh keys DIR KEY...             QEMU key names: tab ret spc esc up down shift-tab ctrl-a …
+#   tests/vm/vm.sh click DIR X Y              left click at screen pixel X,Y (virtio tablet, absolute)
 #   tests/vm/vm.sh type DIR TEXT               types [A-Za-z0-9 .@_=/-]
 #   tests/vm/vm.sh console DIR LINE         send LINE to the serial console (log in as user/live on the live ISO)
 #   tests/vm/vm.sh stop DIR
@@ -25,6 +26,7 @@ start) mkdir -p "$dir"; [ -f "$dir/disk.qcow2" ] || qemu-img create -f qcow2 "$d
        run -cdrom "${3:?iso}" -boot order=dc ;;
 boot-disk) run ;;
 shot) mon "screendump $dir/${3:?name}.ppm"; sleep 1; convert "$dir/$3.ppm" "$dir/$3.png" 2>/dev/null || pnmtopng "$dir/$3.ppm" > "$dir/$3.png"; rm -f "$dir/$3.ppm"; echo "$dir/$3.png" ;;
+click) mon "mouse_move ${3:?x} ${4:?y}"; sleep 0.3; mon 'mouse_button 1'; sleep 0.15; mon 'mouse_button 0' ;;
 keys) shift 2; for k in "$@"; do mon "sendkey $k"; sleep 0.3; done ;;
 type) t=${3:?text}; i=0
       while [ $i -lt ${#t} ]; do c=$(printf %s "$t" | cut -c$((i+1))); i=$((i+1))
