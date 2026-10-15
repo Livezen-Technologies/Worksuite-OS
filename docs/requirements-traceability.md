@@ -23,9 +23,16 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-INT-001 managed WireGuard VPN (server-issued per-device config, device-held keys, always-on, kill switch, rotation, removal on revoke/wipe) | `live-build/config/package-lists/worksuite.list.chroot` (`wireguard-tools`, `nftables`), `api-contracts/openapi.yaml` (`/desktop/v1/os/vpn`, `/desktop/v1/os/vpn/peer`, `VpnConfig`, Policy `vpn_required`/`user_vpn`), `services/server/src/vpn.ts`, `src/api.ts`, `src/console.ts` (`/admin/api/vpn`), `services/device-agent/src/vpn.ts`, `src/agent.ts` (`refreshVpn`, `enforceVpn`), `src/host.ts` (`applyVpn`), `systemd/worksuite-device-agent.service`, `security/apparmor/worksuite-device-agent`; tests `services/server/test/vpn.test.ts`, `test/e2e.test.ts`, `services/device-agent/test/vpn.test.ts` | Impl (nmcli/nft effects not run in CI) |
 | WSOS-INT-001 user WireGuard VPN (import .conf, connect/disconnect/remove, taskbar status, policy can forbid) | `shell/electron/system.ts` (`parseWgConf`, `vpn*`), `electron/main.ts`, `electron/preload.ts`, `src/screens/Settings.tsx` (`VpnSection`), `src/components/PanelItems.tsx` (`VpnBadge`), `src/lib/vpn.ts`; test `shell/electron/vpn.test.ts` | Impl |
 | WSOS-INT-001 user OpenVPN (import .ovpn with hook refusal, private certificate copies, credentials on stdin) and captive-portal sign-in window | `live-build/config/package-lists/worksuite.list.chroot` (`network-manager-openvpn`), `live-build/config/includes.chroot/etc/NetworkManager/conf.d/20-worksuite-connectivity.conf`, `shell/electron/openvpn.ts`, `electron/connectivity.ts`, `electron/system.ts` (`vpnImportOpenvpn`, `connectivity`), `electron/main.ts` (`startPortalWatch`), `src/screens/Settings.tsx`, `docs/networking.md`; tests `shell/electron/openvpn.test.ts`, `electron/connectivity.test.ts` | Impl (nmcli effects not run in CI) |
-| WSOS-INT-010 polkit authentication agent | `services/session/bin/worksuite-polkit-agent`, `systemd/user/worksuite-polkit-agent.service` (lxpolkit / mate-polkit) | Cfg (native agent, not shell-rendered) |
+| WSOS-INT-010 polkit authentication agent | `shell/electron/polkit.ts`, `polkitMode.ts`, `src/screens/PolkitPrompt.tsx` (shell-rendered, `worksuite-shell --polkit-agent`); lxpolkit/mate-polkit fallback in `services/session/bin/worksuite-polkit-agent` | Impl + unit/D-Bus tests (not run against real polkitd) |
 | WSOS-SHL-001…004 bridge operations, errors, caller check | `native/wayland-bridge/worksuite_bridge/`, `native/wayland-bridge/lk.worksuite.WaylandBridge1.xml` | `native/wayland-bridge/tests/` |
-| WSOS-INT-012 portal backends | `services/session/portals/worksuite-portals.conf` | Cfg |
+| WSOS-INT-012 portal backends | `services/session/portals/worksuite-portals.conf`, checked by `shell/electron/sessionConfig.test.ts` | Cfg + test |
+| WSOS-INT-003…006 Bluetooth pairing, drives, power profiles, printers | `shell/electron/peripherals.ts`, `shell/src/screens/PeripheralSettings.tsx` | Impl + tests |
+| WSOS-INT-007 notification server | `shell/electron/notifications.ts`, `shell/src/lib/appNotifications.ts` | Impl + D-Bus tests |
+| WSOS-INT-009 keyring unlock on sign-in | `libpam-gnome-keyring` (control), image hook check | Cfg + test |
+| WSOS-INT-011 input methods | `services/session/fcitx5/profile`, `worksuite-input-method.service`, `labwc/environment`, Settings input methods | Cfg + tests |
+| WSOS-INT-013 screen-sharing consent, indicator | `services/session/bin/worksuite-screencast-chooser`, `xdg-desktop-portal-wlr/config`, `shell/src/components/CaptureBadge.tsx` | Impl + tests |
+| WSOS-SYN-009 offline level | `services/server/src/db.ts` DEFAULT_WEB_APPS, `shell/src/lib/launcher.ts` | Impl + tests |
+| WSOS-SYN-010 store on encrypted storage | `services/sync/src/storage.ts` | Impl + tests |
 | WSOS-DRV-004 conflict copy name | `services/sync/src/policy.ts` (`conflictCopyName`) | Impl |
 | WSOS-IDN-001 OIDC code + PKCE, no client secret | `services/credentials/src/broker.ts` (`signIn`), `src/oidc.ts`, `src/pkce.ts` | Impl |
 | WSOS-IDN-002/003/008 token broker | `services/credentials/src/broker.ts`, `src/keyring.ts`, `services/user-service/dbus/lk.worksuite.Credentials1.xml` | Impl |
@@ -35,7 +42,7 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-SYN-001 dedupe by mutation_id | `api-contracts/openapi.yaml` (`sync/mutations`), `services/sync/test/sync.test.ts` | Impl (client) |
 | WSOS-SYN-002 ack + cursor in one transaction | `services/sync/src/engine.ts` (`pushOnce`, `pull`) | Impl |
 | WSOS-SYN-003 backoff 1 s → 5 min, jitter | `services/sync/src/backoff.ts` | Impl |
-| WSOS-SYN-004 per-record validation errors, no retry | `services/sync/src/engine.ts`, `LocalStore.failed()` | Impl |
+| WSOS-SYN-004 per-record validation errors, no retry | `services/sync/src/engine.ts`, `LocalStore.failed()`; shown per record in Settings › Users (`shell/src/screens/PeripheralSettings.tsx`) | Impl + tests |
 | WSOS-SYN-005 one refresh on 401, never discard | `services/sync/src/engine.ts` (`authed`) | Impl |
 | WSOS-SYN-006 expired cursor → bounded full resync | `services/sync/src/engine.ts` (`pull`, `sweep`) | Impl |
 | WSOS-SYN-008 sign-out with unsent changes: wait / export / discard | `shell/src/screens/Settings.tsx` (`UnsentDialog`), `shell/electron/main.ts`, `services/sync/src/service.ts` (`unsent`, `exportUnsent`, `forgetAccount`) | Impl |
@@ -89,7 +96,7 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | OneAuth sign-in (WSOS-IDN-001..003): OIDC code + PKCE S256, loopback redirects, 15 min access tokens, rotating refresh tokens with reuse detection, revocation | `src/oauth.ts` | E2E with the broker's `discover`/`tokenRequest`/`userinfo` |
 | Device enrollment, signed policy, signed commands, acks, revocation (WSOS-MDM-001..006, WSOS-IDN-005) | `src/api.ts`, `src/admin.ts` | E2E with the real device `Agent` |
 | Idempotent sync mutations, conflicts, cursor paging, tombstone window and 410 (WSOS-SYN-001, -006, -007) | `src/api.ts` | E2E with the sync transport; API tests |
-| Document locks (WSOS-DRV-003) | `files/{id}/lock` | API tests |
+| Document locks (WSOS-DRV-003) | `files/{id}/lock`; client: `services/sync/src/locks.ts`, `shell/electron/officeLock.ts` | API + client tests (needs DRV-001 file map) |
 | Signed release manifests (WSOS-AUP-002) | `/os/manifests/{ring}/{arch}.json` | Verified with the package service's `verifyManifest` |
 | Release pause/resume/pull, ring promotion, emergency release to all rings (WSOS-UPD-004, WSOS-AUP-013), `desktop.releases.manage` | `src/admin.ts`, admin API `/admin/api/releases/*` (`src/console.ts`), CLI `release-*`, `grant` | `test/releases.test.ts` (re-signed manifests verified with the package service) |
 | Device licence for update entitlements (WSOS-AUP-012) | `GET /desktop/v1/os/licence` (`src/api.ts`, `admin.ts` `licenceFor`), CLI `licence-set` | `test/releases.test.ts` with the package service's `verifyLicence` |
