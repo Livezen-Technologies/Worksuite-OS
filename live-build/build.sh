@@ -34,7 +34,7 @@ rm -f /etc/apt/apt.conf.d/00build-proxy /etc/apt/build-proxy-ca.crt
 HOOK
   chmod +x config/hooks/normal/9999-build-proxy-cleanup.hook.chroot
 fi
-[ "$WORKSUITE_REPO" = 1 ] || rm -f config/archives/worksuite.list.*
+[ "$WORKSUITE_REPO" = 1 ] || rm -f config/archives/worksuite.list.* config/includes.chroot/etc/apt/sources.list.d/worksuite.sources
 ARCH="$ARCH" SNAPSHOT="$SNAPSHOT" lb config
 # Snapshot Release files are past Valid-Until by design; auto/config disables that check for apt.
 lb build > build.log 2>&1 || { tail -40 build.log >&2; exit 1; }
