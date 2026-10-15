@@ -72,7 +72,10 @@ Description: WorkSuite device agent (enrollment, policy, signed remote commands)
 
 Package: calamares-settings-worksuite
 Architecture: amd64 arm64
-Depends: calamares (>= 3.3), cryptsetup, python3, ${shlibs:Depends}, ${misc:Depends}
+Depends: calamares (>= 3.3), cryptsetup, python3,
+# QML sidebar, footer and slideshow (images install without Recommends, so these must be explicit).
+ qml6-module-qtquick, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtqml-workerscript, qt6-svg-plugins,
+ ${shlibs:Depends}, ${misc:Depends}
 Description: WorkSuite OS installer configuration for Calamares
  Calamares settings, branding and two WorkSuite modules for the live ISO:
  a typed disk-name confirmation before erasing (WSOS-INS-003) and a LUKS2
