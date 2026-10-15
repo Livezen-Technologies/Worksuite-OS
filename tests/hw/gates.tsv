@@ -1,0 +1,8 @@
+# Hardware qualification gates (WSOS-ARM-003: ARM machines pass the same gates as x86).
+# gate        applies_to    check (run by tests/hw/probe.sh on the machine, results recorded in certified.tsv)
+uefi          amd64,arm64   booted through UEFI (/sys/firmware/efi present); on arm64 no vendor device tree needed
+gpu           amd64,arm64   a DRM card with a hardware driver drives the internal display (simpledrm/efifb alone fails)
+wifi          amd64,arm64   a wireless interface with an in-tree driver and firmware scans and lists networks
+suspend       amd64,arm64   suspend-to-RAM and resume via rtcwake succeed 3 times; /sys/power/suspend_stats/fail unchanged
+audio         amd64,arm64   PipeWire lists at least one output sink
+storage       amd64,arm64   the internal disk is visible and installable (NVMe/SATA/UFS/eMMC)
