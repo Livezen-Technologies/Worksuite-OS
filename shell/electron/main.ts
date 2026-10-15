@@ -1,3 +1,4 @@
+import { findBundles } from './bundles'
 import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -24,6 +25,8 @@ import { arrange, displayManager, outputRects, type DisplayState } from './displ
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { startDesktopHost } from './desktopHost'
+import { markShellReady, startMonitorHost } from './monitorHost'
+import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
 import { startNotifications } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
@@ -80,6 +83,7 @@ function createWindow() {
   shellContents.add(win.webContents)
   // Perf probe (tests/perf/guest/measure-shell, WSOS-PRF-002/006): process start → first window ready.
   if (process.env.WORKSUITE_PERF === '1') win.once('ready-to-show', () => process.stdout.write(`WORKSUITE_PERF shell_ready_ms ${Math.round(process.uptime() * 1000)}\n`))
+  win.once('ready-to-show', () => markShellReady(Math.round(process.uptime() * 1000)))
   // Renderer probes (launcher first frame, WSOS-PRF-005) report on the console; forwarded only in perf runs.
   if (process.env.WORKSUITE_PERF === '1') win.webContents.on('console-message', (ev) => { if (/^WORKSUITE_PERF [a-z_]+ \d+$/.test(ev.message)) process.stdout.write(`${ev.message}\n`) })
   win.webContents.on('will-navigate', (e) => e.preventDefault())
@@ -288,6 +292,15 @@ app.whenReady().then(() => {
   })
   const pickedPath = (h: string, kind: string) => (h.startsWith(`${kind}:`) ? picked.get(h) ?? null : null)
   const noFile = { ok: false, error: 'invalid_argument' }
+  // G14: .wsupdate bundles on mounted USB drives, behind the same opaque handles as a picked file.
+  handle('ws:findBundles', () => {
+    const found = findBundles(roots(files).filter((r) => r.id.startsWith('media:')))
+    return { ok: true, value: found.map((f) => {
+      const h = [...picked].find(([, p]) => p === f.path)?.[0] ?? `wsupdate:${picked.size + 1}:${Date.now()}`
+      picked.set(h, f.path)
+      return { handle: h, name: f.name, drive: f.drive }
+    }) }
+  })
   // VPN (WSOS-INT-001): list/connect/disconnect/remove, and import of a WireGuard .conf the user picked.
   handle('ws:sysVpn', () => sys.vpn())
   // OpenVPN user name/password arrive only with a Connect click and go to nmcli on stdin (system.ts).
@@ -330,6 +343,14 @@ app.whenReady().then(() => {
     return pkg.resetAppPermissions(id)
   })
   handle('ws:appDataRemove', (id) => fpUser.removeAppData(id))
+  // App detail (G09): this user's switches for single declared permissions (flatpak override --user).
+  const fpPerms = flatpakPermsClient(realExec)
+  handle('ws:appPermsUserOff', (id) => fpPerms.userOff(id))
+  handle('ws:appPermSet', async (id, perm, on) => {
+    const d = await pkg.appPermissions(id)
+    if (!d.ok) return d
+    return fpPerms.set(id, perm, on === 'on', (d.value as { permissions?: string[] }).permissions ?? [])
+  })
   handle('ws:pruneRuntimes', () => pkg.pruneRuntimes())
   handle('ws:bundleInspect', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInspect(p) : noFile })
   handle('ws:bundleInstall', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInstall(p) : noFile })
@@ -415,6 +436,8 @@ app.whenReady().then(() => {
   startPanel(handle, broadcast, () => void displays.applySaved())
   // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
   startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
+  // System monitor (G11) and quick settings brightness / power mode (G01).
+  startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).

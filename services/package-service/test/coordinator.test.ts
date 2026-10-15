@@ -9,7 +9,8 @@ const keys = generateKeyPairSync('ed25519');
 const signed = (m: Record<string, unknown>, key = keys.privateKey) => ({ ...m, signature: `r1:${sign(null, Buffer.from(canonical(m)), key).toString('base64')}` });
 const base = { release_id: 'os-1.0.2', version: '1.0.2', min_version: '1.0.0', ring: 'stable', arch: 'amd64', rollout_percent: 100, state: 'active' };
 
-function world(opts: { manifest?: unknown; policy?: ReturnType<CoordinatorEnv['policy']>; idle?: boolean; installed?: string; reboot?: boolean; aptFails?: boolean; health?: string[]; dpkgAudit?: string; badVersion?: boolean } = {}) {
+function world(opts: { manifest?: unknown; policy?: ReturnType<CoordinatorEnv['policy']>; idle?: boolean; installed?: string; reboot?: boolean; aptFails?: boolean; health?: string[]; dpkgAudit?: string; badVersion?: boolean; downloadFails?: number } = {}) {
+  let dlFails = opts.downloadFails ?? 0;
   const log: string[] = [];
   const reports: Record<string, unknown>[] = [];
   let store = { deferrals: {} as Record<string, number> };
@@ -19,6 +20,7 @@ function world(opts: { manifest?: unknown; policy?: ReturnType<CoordinatorEnv['p
     runner: { async run(cmd, args) {
       calls.push([cmd, ...args]);
       if (cmd === 'dpkg' && args[0] === '--audit') return { code: 0, stdout: opts.dpkgAudit ?? '', stderr: '' };
+      if (cmd === 'apt-get' && args.includes('--download-only') && dlFails > 0) { dlFails--; return { code: 100, stdout: '', stderr: 'E: Failed to fetch https://repo/pool/x.deb  Connection timed out' }; }
       if (cmd === 'test') return { code: opts.reboot ? 0 : 1, stdout: '', stderr: '' };
       if (cmd === 'apt-get' && args.includes('full-upgrade') && args.includes('-y') && !args.includes('--download-only')) {
         log.push('apply'); if (opts.aptFails) return { code: 100, stdout: '', stderr: 'E: Sub-process /usr/bin/dpkg returned an error code (1)' };
@@ -159,4 +161,18 @@ test('updates never touch user data, the outbox or licences (WSOS-UPD-006)', asy
     assert.ok(!['rm', 'shred', 'find', 'mv'].includes(c[0]), `unexpected command ${c.join(' ')}`);
     for (const a of c) assert.doesNotMatch(a, /\/home|outbox|licen[cs]e|\/var\/lib\/worksuite-sync|autoremove|--purge/, c.join(' '));
   }
+});
+
+test('an emergency release is flagged critical, and an install after a dropped download is marked resumed (G14)', async () => {
+  const w = world({ manifest: signed({ ...base, critical: true }), downloadFails: 3 });
+  await w.c.check();
+  assert.equal(w.c.status.critical, true);
+  assert.equal(w.c.status.state, 'waiting');
+  assert.equal(w.c.status.reason, 'download_interrupted');
+  const seen: boolean[] = [];
+  w.c.on('status', (s) => { if (s.state === 'installing') seen.push(s.resumed); });
+  await w.c.installNow();
+  assert.deepEqual(seen, [true]);
+  assert.equal(w.c.status.state, 'up_to_date');
+  assert.equal(w.c.status.resumed, false);
 });

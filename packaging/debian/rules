@@ -35,7 +35,9 @@ override_dh_auto_install:
 	install -D -m 0644 installer/modules/worksuiteconfirm/module.desc $$m/worksuiteconfirm/module.desc && \
 	install -m 0644 build-installer/libcalamares_viewmodule_worksuiteconfirm.so $$m/worksuiteconfirm/ && \
 	install -D -m 0644 installer/modules/worksuiterecovery/module.desc $$m/worksuiterecovery/module.desc && \
-	install -m 0644 installer/modules/worksuiterecovery/main.py $$m/worksuiterecovery/main.py
+	install -m 0644 installer/modules/worksuiterecovery/main.py $$m/worksuiterecovery/main.py && \
+	install -D -m 0644 installer/modules/worksuitephase/module.desc $$m/worksuitephase/module.desc && \
+	install -m 0644 installer/modules/worksuitephase/main.py $$m/worksuitephase/main.py
 	# worksuite-archive-keyring: public keys only (packaging/keyring/README.md).
 	d=debian/worksuite-archive-keyring; \
 	install -d $$d/usr/share/keyrings $$d/usr/share/worksuite/keys/device-commands $$d/usr/share/worksuite/keys/release $$d/usr/share/doc/worksuite-archive-keyring && \
@@ -48,7 +50,8 @@ override_dh_auto_install:
 	# worksuite-branding
 	d=debian/worksuite-branding; p=$$d/usr/share/plymouth/themes/worksuite; g=$$d/usr/share/grub/themes/worksuite; \
 	install -D -m 0644 -t $$p branding/plymouth/worksuite.plymouth branding/plymouth/worksuite.script build-branding/plymouth/*.png && \
-	install -D -m 0644 -t $$g branding/grub/theme.txt build-branding/grub/*.png build-branding/grub/*.pf2 && \
+	install -D -m 0644 -t $$g branding/grub/theme.txt branding/grub/theme-failed.txt build-branding/grub/*.png build-branding/grub/*.pf2 && \
+	install -D -m 0644 -t $$g/icons build-branding/grub/icons/*.png && \
 	install -D -m 0644 branding/grub/worksuite.cfg $$d/etc/default/grub.d/worksuite.cfg && \
 	install -D -m 0644 -t $$d/usr/share/fonts/truetype/ibm-plex branding/fonts/ibm-plex/*.ttf && \
 	install -D -m 0644 branding/icons/worksuite.svg $$d/usr/share/icons/hicolor/scalable/apps/worksuite.svg && \
@@ -59,6 +62,7 @@ override_dh_auto_install:
 override_dh_auto_test:
 	cd build-installer && QT_QPA_PLATFORM=offscreen ctest --output-on-failure
 	python3 -m unittest discover -s installer/modules/worksuiterecovery/tests
+	python3 -m unittest discover -s installer/modules/worksuitephase/tests
 	sh tests/session/session-test.sh
 	sh tests/session/smartcard-test.sh
 	sh tests/session/autologin-test.sh

@@ -1,3 +1,4 @@
+services/recovery-boot/grub/05_worksuite_bootcheck etc/grub.d/
 services/recovery-boot/grub/42_worksuite_recovery etc/grub.d/
 services/recovery-boot/kernel/zz-worksuite-kernel-retention etc/kernel/postinst.d/
 services/recovery-boot/kernel/zz-worksuite-kernel-retention etc/kernel/postrm.d/
@@ -5,5 +6,6 @@ services/recovery-boot/bin/worksuite-boot-repair usr/libexec/worksuite/
 services/recovery-boot/systemd/worksuite-recovery.target usr/lib/systemd/system/
 services/recovery-boot/systemd/worksuite-recovery-shell.service usr/lib/systemd/system/
 services/recovery-boot/systemd/worksuite-boot-repair.service usr/lib/systemd/system/
+services/recovery-boot/systemd/worksuite-boot-ok.service usr/lib/systemd/system/
 services/recovery-boot/README.md usr/share/doc/worksuite-recovery-boot/
 services/recovery-boot/bin/worksuite-reinstall usr/libexec/worksuite/

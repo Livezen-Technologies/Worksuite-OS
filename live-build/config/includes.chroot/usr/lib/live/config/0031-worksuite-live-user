@@ -1,0 +1,17 @@
+#!/bin/sh
+# live-config component: the live user (user / live) when live-config's user-setup could not create it.
+# user-setup always asks for UID 1000, which worksuite-directory's break-glass account (wsadmin) already holds, so
+# adduser fails and nobody can log in to the live system. Create the user with the next free UID instead, with the
+# same password and groups. Runs after 0030-user-setup and before 0040-sudo (which gives it sudo).
+[ -e /var/lib/live/config/worksuite-live-user ] && exit 0
+name="${LIVE_USERNAME:-user}"
+if ! getent passwd "$name" >/dev/null; then
+    echo -n " worksuite-live-user"
+    adduser --disabled-password --comment "${LIVE_USER_FULLNAME:-Live user}" "$name" >/dev/null
+    # live-config's default password, "live" (same crypt string as 0030-user-setup).
+    usermod -p '8Ab05sVQ4LLps' "$name"
+    for g in $(echo "${LIVE_USER_DEFAULT_GROUPS:-audio cdrom dip floppy video plugdev netdev powerdev scanner bluetooth}" | tr ',' ' '); do
+        getent group "$g" >/dev/null && adduser "$name" "$g" >/dev/null 2>&1
+    done
+fi
+touch /var/lib/live/config/worksuite-live-user

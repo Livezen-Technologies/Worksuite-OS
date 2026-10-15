@@ -111,10 +111,13 @@ contextBridge.exposeInMainWorld('worksuite', {
   localDebInstall: (token: string) => ipcRenderer.invoke('ws:localDebInstall', String(token)),
   appPermissions: (catalogId: string) => ipcRenderer.invoke('ws:appPermissions', String(catalogId)),
   appPermissionsReset: (catalogId: string) => ipcRenderer.invoke('ws:appPermissionsReset', String(catalogId)),
+  appPermsUserOff: (catalogId: string) => ipcRenderer.invoke('ws:appPermsUserOff', String(catalogId)),
+  appPermSet: (catalogId: string, perm: string, on: boolean) => ipcRenderer.invoke('ws:appPermSet', String(catalogId), String(perm), on ? 'on' : 'off'),
   appDataRemove: (catalogId: string) => ipcRenderer.invoke('ws:appDataRemove', String(catalogId)),
   pruneRuntimes: () => ipcRenderer.invoke('ws:pruneRuntimes'),
   bundleInspect: (handle: string) => ipcRenderer.invoke('ws:bundleInspect', String(handle)),
   bundleInstall: (handle: string) => ipcRenderer.invoke('ws:bundleInstall', String(handle)),
+  findBundles: () => ipcRenderer.invoke('ws:findBundles'),
   appimageList: () => ipcRenderer.invoke('ws:appimageList'),
   appimageImport: (handle: string) => ipcRenderer.invoke('ws:appimageImport', String(handle)),
   appimageApprove: (id: string) => ipcRenderer.invoke('ws:appimageApprove', String(id)),
@@ -163,6 +166,16 @@ contextBridge.exposeInMainWorld('worksuiteDesktop', {
   problemReport: () => ipcRenderer.invoke('ws:problemReport'),
   shellRestart: () => ipcRenderer.invoke('ws:shellRestart'),
   shellRestartSeen: (n: number) => ipcRenderer.invoke('ws:shellRestartSeen', String(Math.max(0, Math.floor(Number(n)) || 0))),
+})
+
+// System monitor (G11) and quick settings brightness / power mode (G01).
+contextBridge.exposeInMainWorld('worksuiteMonitor', {
+  sysBrightness: () => ipcRenderer.invoke('ws:sysBrightness'),
+  sysSetBrightness: (percent: number) => ipcRenderer.invoke('ws:sysSetBrightness', String(percent)),
+  monitorSample: () => ipcRenderer.invoke('ws:monitorSample'),
+  monitorHealth: () => ipcRenderer.invoke('ws:monitorHealth'),
+  monitorStartup: () => ipcRenderer.invoke('ws:monitorStartup'),
+  monitorEnd: (pid: number) => ipcRenderer.invoke('ws:monitorEnd', String(pid)),
 })
 
 // Administrator prompts from the WorkSuite polkit agent — see electron/polkit.ts.

@@ -88,6 +88,8 @@
 [data-high-contrast] ::placeholder { color: #d4d4d4 !important; }
 [data-high-contrast] :focus-visible { outline: 3px solid #ffd400 !important; outline-offset: 2px !important; }
 [data-high-contrast] :disabled { color: #d4d4d4 !important; border-style: dashed !important; }
+@keyframes ws-rise { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+.ws-rise { animation: ws-rise 0.2s ease-out; }
 
 /* Text size 150 % / 200 % (WSOS-ACC-001…006): text grows and the layout reflows around it, instead of zooming the
    whole page. Tailwind's named sizes are rescaled through their theme variables; px sizes used in the shell get a rule
