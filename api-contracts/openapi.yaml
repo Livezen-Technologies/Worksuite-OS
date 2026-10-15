@@ -153,6 +153,7 @@ paths:
                 tpm_backed: { type: boolean }
                 arch: { $ref: '#/components/schemas/Arch' }
                 hostname: { type: string }
+                wg_public_key: { $ref: '#/components/schemas/WireGuardKey', description: 'Optional: the device''s WireGuard public key for the managed VPN (never the private key)' }
       responses:
         '201': { description: Device credential, content: { application/json: { schema: { type: object, required: [device_id, credential], properties: { device_id: { type: string }, credential: { type: string } } } } } }
         default: { $ref: '#/components/responses/Error' }
@@ -326,6 +327,43 @@ paths:
                   issued_at: { type: string, format: date-time }
                   valid_until: { type: string, format: date-time }
                   signature: { type: string }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/vpn:
+    get:
+      tags: [os]
+      summary: Signed per-device WireGuard config for the organization's managed VPN (WSOS-INT-001)
+      description: >
+        The organization holds the gateway endpoint, its public key, the address pool, allowed IPs, DNS and the
+        always-on / kill-switch flags; each device gets its own tunnel address. Signed like policies ("<key_id>:<base64
+        Ed25519>" over the canonical JSON without the signature). Never contains a private key: the device generates its
+        own keypair and registers only the public key (devices/register wg_public_key, or PUT os/vpn/peer). No VPN for
+        the organization answers enabled false (signed), and the device removes its managed connection.
+      security: [ { device: [] } ]
+      responses:
+        '200': { description: Config, content: { application/json: { schema: { $ref: '#/components/schemas/VpnConfig' } } } }
+        '409': { description: 'VPN_PEER_KEY_REQUIRED (register a public key first; also after an admin rotates the key) or VPN_POOL_EXHAUSTED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/vpn/peer:
+    put:
+      tags: [os]
+      summary: Register or rotate the device's WireGuard public key; returns the new signed config
+      security: [ { device: [] } ]
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [public_key]
+              additionalProperties: false
+              properties:
+                public_key: { $ref: '#/components/schemas/WireGuardKey' }
+      responses:
+        '200': { description: Config, content: { application/json: { schema: { $ref: '#/components/schemas/VpnConfig' } } } }
+        '409': { description: VPN_KEY_IN_USE (key registered to another device) or VPN_POOL_EXHAUSTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/os/inventory:
@@ -531,6 +569,46 @@ components:
         id: { type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$', description: 'Module key; the desktop entry is worksuite-<id>.desktop' }
         name: { type: string }
         web_url: { type: string, format: uri, description: 'https URL of the module''s web app (<web base>/<id>/)' }
+    WireGuardKey:
+      type: string
+      pattern: '^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw480]=$'
+      description: WireGuard Curve25519 public key, base64 of 32 bytes (wg pubkey form)
+
+    VpnConfig:
+      type: object
+      required: [device_id, enabled, version, issued_at, signature]
+      description: >
+        Managed WireGuard VPN for one device (WSOS-INT-001). The device applies it as the NetworkManager system
+        connection "WorkSuite VPN" (type wireguard, root-only keyfile with its own private key); always_on or policy
+        vpn_required → autoconnect; kill_switch → nftables drops non-tunnel traffic except the WireGuard handshake to the
+        endpoint, DHCP and neighbour discovery. Revocation, wipe or enabled false → the connection and kill switch are removed.
+      properties:
+        device_id: { type: string }
+        enabled: { type: boolean }
+        version: { type: string, description: Organization VPN settings version }
+        issued_at: { type: string, format: date-time }
+        device_public_key: { $ref: '#/components/schemas/WireGuardKey' }
+        interface:
+          type: object
+          required: [address, dns, dns_search]
+          properties:
+            address: { type: array, items: { type: string }, description: 'Tunnel address(es), CIDR, e.g. 10.70.0.2/32' }
+            dns: { type: array, items: { type: string } }
+            dns_search: { type: array, items: { type: string } }
+            mtu: { type: integer, minimum: 1280, maximum: 1500 }
+        peer:
+          type: object
+          required: [public_key, endpoint, allowed_ips]
+          properties:
+            public_key: { $ref: '#/components/schemas/WireGuardKey' }
+            endpoint: { type: string, description: 'host:port of the gateway' }
+            allowed_ips: { type: array, items: { type: string }, description: '0.0.0.0/0 = full tunnel' }
+            persistent_keepalive: { type: integer }
+        always_on: { type: boolean }
+        kill_switch: { type: boolean, description: Only offered with a full tunnel }
+        key_rotation_days: { type: integer, description: The device generates a new keypair this often and registers the public key }
+        signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) without this field' }
+
     Error:
       type: object
       required: [error]
@@ -618,6 +696,8 @@ components:
         approved_remotes: { type: array, items: { type: string } }
         offline_wipe_days: { type: integer, description: WSOS-WIPE-006 offline kill timer; absent = off }
         update_mirror: { type: string, description: 'WSOS-AUP-009 enterprise mirror (https) for manifests; WorkSuite signatures still required' }
+        vpn_required: { type: boolean, description: 'WSOS-INT-001 the managed VPN connects at boot and reconnects (always-on) even if the VPN config does not ask for it' }
+        user_vpn: { type: string, enum: [allow, block], description: 'WSOS-INT-001 block = Settings offers no VPN import and the agent removes every VPN profile except the managed one; absent = allow' }
         signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the policy without this field' }
 
     CatalogItem:

@@ -8,6 +8,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { DEFAULT_MODULES, DEFAULT_WEB_APPS, secret, sha256 } from './db.ts';
 import { hashPassword } from './oauth.ts';
 import { activeKey, createKey, signEnvelope, signFlat } from './signing.ts';
+import { removePeer } from './vpn.ts';
 
 const COMMANDS = ['RefreshPolicy', 'InstallApprovedApplication', 'ScheduleUpdate', 'RequestLock', 'RebootDuringWindow', 'CollectApprovedDiagnostics', 'RemoteWipe'];
 
@@ -61,6 +62,7 @@ export function issueCommand(db: DatabaseSync, deviceId: string, command: string
 }
 
 export function revokeDevice(db: DatabaseSync, deviceId: string) {
+  removePeer(db, deviceId);   // the gateway drops the revoked device's WireGuard peer on its next sync
   return db.prepare('UPDATE devices SET revoked = 1 WHERE id = ?').run(deviceId).changes > 0;
 }
 
