@@ -1,39 +1,96 @@
-# WorkSuite OS boot splash: centred logo on #0b1120, a progress bar, and the disk-unlock prompt.
-Window.SetBackgroundTopColor(0.043, 0.067, 0.125);
-Window.SetBackgroundBottomColor(0.043, 0.067, 0.125);
+# WorkSuite OS boot splash (design: "WorkSuite OS Boot & Install" › Boot splash): the mark in a spinning ring,
+# "Starting WorkSuite OS" / "Shutting down" / "Restarting", a thin progress bar with the current phase, and the
+# disk-unlock prompt (LUKS, SRS full-disk encryption).
+Window.SetBackgroundTopColor(0.016, 0.039, 0.102);      # #040A1A
+Window.SetBackgroundBottomColor(0.016, 0.039, 0.102);
 cx = Window.GetX() + Window.GetWidth() / 2;
 cy = Window.GetY() + Window.GetHeight() / 2;
+SANS = "IBM Plex Sans";
+MONO = "IBM Plex Mono";
 
-logo.image = Image("logo.png");
-logo.sprite = Sprite(logo.image);
-logo.sprite.SetPosition(cx - logo.image.GetWidth() / 2, cy - logo.image.GetHeight() / 2 - 40, 1);
+fun text(s, size, r, g, b, font) {
+  return Image.Text(s, r, g, b, 1, font + " " + size);
+}
+fun place_center(sprite, y) {
+  sprite.SetPosition(cx - sprite.GetImage().GetWidth() / 2, y, 3);
+}
 
+# Ring and mark, 120 px, centred a little above the middle.
+ring_y = cy - 150;
+ring.track = Sprite(Image("ring-track.png"));
+ring.track.SetPosition(cx - 60, ring_y, 1);
+ring.arc_image = Image("ring-arc.png");
+ring.arc = Sprite(ring.arc_image);
+ring.arc.SetPosition(cx - 60, ring_y, 2);
+ring.angle = 0;
+mark = Sprite(Image("mark.png"));
+mark.SetPosition(cx - 24, ring_y + 36, 3);
+
+fun refresh_callback() {
+  ring.angle += 0.075;                                   # ~1.4 s per turn at 60 fps
+  if (ring.angle > 6.2832) ring.angle -= 6.2832;
+  ring.arc.SetImage(ring.arc_image.Rotate(ring.angle));
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# Title and subtitle by mode.
+mode = Plymouth.GetMode();
+if (mode == "shutdown") { title_s = "Shutting down"; sub_s = "Saving settings and closing apps."; }
+else if (mode == "reboot") { title_s = "Restarting"; sub_s = "You'll be back in a moment."; }
+else { title_s = "Starting WorkSuite OS"; sub_s = "Getting your workspace ready."; }
+title = Sprite(text(title_s, 28, 0.91, 0.933, 0.98, SANS));
+place_center(title, ring_y + 148);
+sub = Sprite(text(sub_s, 15, 0.561, 0.639, 0.784, SANS));
+place_center(sub, ring_y + 194);
+
+# Progress: 420 x 4 track, gradient bar, phase on the left.
 track.image = Image("progress-track.png");
 track.sprite = Sprite(track.image);
-track.x = cx - track.image.GetWidth() / 2;
-track.y = cy + logo.image.GetHeight() / 2 + 20;
+track.x = cx - 210;
+track.y = ring_y + 244;
 track.sprite.SetPosition(track.x, track.y, 1);
 bar.original = Image("progress-bar.png");
 bar.sprite = Sprite();
 bar.sprite.SetPosition(track.x, track.y, 2);
+phase = Sprite();
+brand = Sprite(text("WorkSuite OS", 12, 0.369, 0.451, 0.612, MONO));
+brand.SetPosition(track.x + 420 - brand.GetImage().GetWidth(), track.y + 14, 3);
+last_phase = "";
 
 fun progress_callback(duration, progress) {
-  w = Math.Int(bar.original.GetWidth() * progress);
+  w = Math.Int(420 * progress);
   if (w < 1) w = 1;
-  bar.sprite.SetImage(bar.original.Scale(w, bar.original.GetHeight()));
+  bar.sprite.SetImage(bar.original.Scale(w, 4));
+  if (mode == "shutdown" || mode == "reboot") {
+    if (progress < 0.5) p = "Closing apps";
+    else if (mode == "reboot") p = "Rebooting";
+    else p = "Unmounting disks";
+  } else {
+    if (progress < 0.3) p = "Unlocking disk";
+    else if (progress < 0.7) p = "Loading system services";
+    else p = "Starting desktop";
+  }
+  if (p != last_phase) {
+    phase.SetImage(text(p, 12, 0.369, 0.451, 0.612, MONO));
+    phase.SetPosition(track.x, track.y + 14, 3);
+    last_phase = p;
+  }
 }
 Plymouth.SetBootProgressFunction(progress_callback);
 
-# Disk unlock (LUKS, SRS full-disk encryption).
+hint = Sprite(text("Press Esc for details", 12, 0.239, 0.322, 0.502, MONO));
+place_center(hint, Window.GetY() + Window.GetHeight() - 44);
+
+# Disk unlock: prompt, then the typed characters as dots in a field-like line.
 prompt.sprite = Sprite();
 entry.sprite = Sprite();
-fun display_password_callback(text, bullets) {
-  prompt.sprite.SetImage(Image.Text(text, 0.89, 0.91, 0.94));
-  prompt.sprite.SetPosition(cx - prompt.sprite.GetImage().GetWidth() / 2, track.y + 40, 3);
+fun display_password_callback(text_s, bullets) {
+  prompt.sprite.SetImage(text(text_s, 15, 0.788, 0.839, 0.933, SANS));
+  place_center(prompt.sprite, track.y + 44);
   dots = "";
   for (i = 0; i < bullets; i++) dots += "●";
-  entry.sprite.SetImage(Image.Text(dots + " ", 0.0, 0.85, 0.95));
-  entry.sprite.SetPosition(cx - entry.sprite.GetImage().GetWidth() / 2, track.y + 70, 3);
+  entry.sprite.SetImage(text(dots + " ", 18, 0.094, 0.831, 0.941, SANS));
+  place_center(entry.sprite, track.y + 74);
   prompt.sprite.SetOpacity(1); entry.sprite.SetOpacity(1);
 }
 fun display_normal_callback() {
@@ -43,8 +100,8 @@ Plymouth.SetDisplayPasswordFunction(display_password_callback);
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
 
 message.sprite = Sprite();
-fun message_callback(text) {
-  message.sprite.SetImage(Image.Text(text, 0.6, 0.65, 0.72));
-  message.sprite.SetPosition(cx - message.sprite.GetImage().GetWidth() / 2, Window.GetHeight() - 60, 3);
+fun message_callback(text_s) {
+  message.sprite.SetImage(text(text_s, 13, 0.561, 0.639, 0.784, SANS));
+  place_center(message.sprite, Window.GetY() + Window.GetHeight() - 80);
 }
 Plymouth.SetMessageFunction(message_callback);
