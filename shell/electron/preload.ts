@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   webApps: () => ipcRenderer.invoke('ws:webApps'),
   installedApps: () => ipcRenderer.invoke('ws:installedApps'),
   launchOffice: (kind: string) => ipcRenderer.invoke('ws:launchOffice', String(kind)),
+  launchWorkSuite: (module: string) => ipcRenderer.invoke('ws:launchWorkSuite', String(module)),
   openLink: (url: string) => ipcRenderer.invoke('ws:openLink', String(url)),
   cloudSignIn: (serverUrl: string, mode: string) => ipcRenderer.invoke('ws:cloudSignIn', String(serverUrl), String(mode)),
   cloudSignOut: (accountId: string, choice: string) => ipcRenderer.invoke('ws:cloudSignOut', String(accountId), String(choice)),

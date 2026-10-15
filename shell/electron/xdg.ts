@@ -112,3 +112,16 @@ export function execProgram(exec: string | null): string | null {
 
 /** ONLYOFFICE DesktopEditors' "new document" switches. */
 export const OFFICE_NEW: Record<string, string> = { docs: '--new:word', sheets: '--new:cell', slides: '--new:slide' }
+
+/**
+ * WorkSuite Desktop (the native client, package worksuite-desktop from github.com/Livezen-Technologies/worksuite-desktop)
+ * installs /usr/share/applications/worksuite.desktop with Exec=/opt/WorkSuite/worksuite %U. Found by that id, or by
+ * an Exec whose program is .../WorkSuite/worksuite or worksuite.
+ */
+export function findWorkSuiteDesktop(entries: DesktopEntry[]): DesktopEntry | null {
+  return entries.find((e) => e.id === 'worksuite') ??
+    entries.find((e) => { const p = execProgram(e.exec); return !!p && /(^|\/)(WorkSuite\/)?worksuite$/.test(p) }) ?? null
+}
+
+/** Modules WorkSuite Desktop opens with --module=<id> (its shared/os-mode.ts LAUNCH_MODULES). */
+export const DESKTOP_MODULES = ['home', 'mail', 'chat', 'calendar', 'tasks', 'files', 'crm', 'hr'] as const
