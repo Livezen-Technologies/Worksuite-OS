@@ -55,6 +55,19 @@ describe('panel client', () => {
     expect(n).toBe(1)
   })
 
+  it('reports hotplug (OutputsChanged) and relists windows on their new output', async () => {
+    let n = 0
+    const f = fakeBus({ ListWindows: () => { n++; return [[]] } })
+    const outputs = vi.fn()
+    const c = new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn(), outputs }, 5)
+    await c.start()
+    n = 0
+    f.emit(new Message({ type: 4, path: BRIDGE_PATH, interface: BRIDGE, member: 'OutputsChanged' }))
+    await new Promise((r) => setTimeout(r, 30))
+    expect(outputs).toHaveBeenCalledOnce()
+    expect(n).toBe(1)
+  })
+
   it('maps bridge errors to codes', async () => {
     const f = fakeBus({
       ActivateWindow: () => dbusError('lk.worksuite.WaylandBridge1.Error.NotFound'),

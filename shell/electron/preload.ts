@@ -37,6 +37,16 @@ contextBridge.exposeInMainWorld('worksuite', {
   sysBattery: () => ipcRenderer.invoke('ws:sysBattery'),
   sysPrinters: () => ipcRenderer.invoke('ws:sysPrinters'),
   sysDisplays: () => ipcRenderer.invoke('ws:sysDisplays'),
+  displayState: () => ipcRenderer.invoke('ws:displayState'),
+  displayApply: (layout: unknown, sides: unknown) => ipcRenderer.invoke('ws:displayApply', JSON.stringify({ layout, sides })),
+  displayKeep: () => ipcRenderer.invoke('ws:displayKeep'),
+  displayRevert: () => ipcRenderer.invoke('ws:displayRevert'),
+  displayWallpaper: (output: string, id: string) => ipcRenderer.invoke('ws:displayWallpaper', String(output), String(id)),
+  onDisplaysChanged: (cb: (s: unknown) => void) => {
+    const listener = (_e: unknown, s: unknown) => cb(s)
+    ipcRenderer.on('ws:displaysChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:displaysChanged', listener) }
+  },
   sysDisks: () => ipcRenderer.invoke('ws:sysDisks'),
   enrollDevice: (serverUrl: string, code: string) => ipcRenderer.invoke('ws:enrollDevice', String(serverUrl), String(code)),
   pkgPreview: (catalogId: string, op: string) => ipcRenderer.invoke('ws:pkgPreview', String(catalogId), String(op)),

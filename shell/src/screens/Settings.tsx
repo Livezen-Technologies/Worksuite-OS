@@ -240,38 +240,8 @@ function BluetoothPanel() {
   </>
 }
 
-function DisplayPanel() {
-  const { r } = useAvail(os.sysDisplays)
-  if (r.state !== 'ok') return <><H1>Display</H1>{r.state === 'loading' ? <Empty title="Reading displays…" /> : <Unavail what="Display information" reason={r.reason} />}</>
-  const outs = r.value.filter((d) => d.enabled)
-  const primary = outs[0]
-  return <>
-    <H1>Display</H1>
-    <div className="flex h-[200px] items-center justify-center gap-5 rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(4,10,26,0.5)]" aria-label="Connected displays" role="img">
-      {outs.length === 0 && <span className="text-[13px] text-[#8FA3C8]">No connected displays reported</span>}
-      {outs.map((o, i) => (
-        <div key={o.name} className={`box-border flex items-end rounded-[10px] p-2.5 text-[13px] ${i === 0 ? 'h-[136px] w-[220px] border-2 border-[#1F6BFF] bg-[linear-gradient(160deg,#1F4FB0,#0A1A3D)] font-semibold' : 'h-[100px] w-[170px] border border-[rgba(127,178,255,0.3)] bg-[rgba(14,32,72,0.8)] text-[#C9D6EE]'}`}>
-          {i + 1} · {o.description || o.name}
-        </div>
-      ))}
-    </div>
-    <div className={`${card} overflow-hidden`}>
-      {[
-        { k: 'Resolution', d: 'Current mode', v: primary?.width ? `${primary.width} × ${primary.height}` : null },
-        { k: 'Scale', d: 'Make text and apps larger', v: primary?.scale ? `${Math.round(primary.scale * 100)}%` : null },
-        { k: 'Refresh rate', d: 'Smoother motion', v: primary?.refresh ? `${Math.round(primary.refresh)} Hz` : null },
-        { k: 'Brightness', d: 'Adjust the screen backlight', v: null },
-        { k: 'Night light', d: 'Warmer colors at night', v: null },
-      ].map((row) => (
-        <div key={row.k} className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}>
-          <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{row.k}</span><span className="text-xs text-[#8FA3C8]">{row.d}</span></span>
-          <Value>{row.v}</Value>
-        </div>
-      ))}
-    </div>
-    <Note>Displays are shown as the compositor reports them; changing resolution, scale, brightness or night light from here isn't available yet.</Note>
-  </>
-}
+// Settings › Display lives in DisplaySettings.tsx (WSOS-DSK-005/006).
+import { DisplayPanel } from './DisplaySettings'
 
 const THEME_ART: Record<string, { bg: string; win: string; bar: string }> = {
   Light: { bg: 'linear-gradient(135deg,#EAF1FF,#C9DAFF)', win: '#FFFFFF', bar: 'rgba(255,255,255,0.8)' },

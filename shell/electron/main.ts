@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
@@ -17,15 +17,43 @@ import { execProgram, findOffice, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge } from './system'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
 import { startPanel } from './panelHost'
+import { arrange, displayManager, outputRects, type DisplayState } from './displays'
+import { outputWindows } from './outputWindows'
+import { realExec } from './system'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
 
 let win: BrowserWindow | null = null
+// The main window plus one desktop/taskbar window per secondary monitor (WSOS-DSK-005).
+const shellContents = new Set<Electron.WebContents>()
 
 function validSender(e: IpcMainInvokeEvent) {
-  return win !== null && e.sender === win.webContents && e.senderFrame?.url.startsWith('file://') === true
+  return shellContents.has(e.sender) && e.senderFrame?.url.startsWith('file://') === true
 }
+
+function broadcast(channel: string, payload: unknown) {
+  for (const wc of shellContents) if (!wc.isDestroyed()) wc.send(channel, payload)
+}
+
+const shellPrefs = () => ({
+  preload: path.join(__dirname, 'preload.cjs'),
+  sandbox: true,
+  contextIsolation: true,
+  nodeIntegration: false,
+  webSecurity: true,
+})
+
+const monitors = outputWindows((r) => {
+  const w = new BrowserWindow({ x: r.x, y: r.y, width: r.width, height: r.height, fullscreen: true, frame: false, title: `WorkSuite desktop ${r.name}`, backgroundColor: '#0f172a', webPreferences: shellPrefs() })
+  const wc = w.webContents
+  shellContents.add(wc)
+  w.on('closed', () => { shellContents.delete(wc); monitors.forget(r.name) })
+  wc.on('will-navigate', (e) => e.preventDefault())
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }))
+  void w.loadFile(path.join(__dirname, '../dist/index.html'), { query: { mode: 'output', output: r.name } })
+  return w
+}, () => win)
 
 function handle(channel: string, fn: (...args: string[]) => unknown) {
   ipcMain.handle(channel, (e, ...args) => {
@@ -43,14 +71,9 @@ function createWindow() {
   win = new BrowserWindow({
     fullscreen: true,
     backgroundColor: '#0f172a',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      sandbox: true,
-      contextIsolation: true,
-      nodeIntegration: false,
-      webSecurity: true,
-    },
+    webPreferences: shellPrefs(),
   })
+  shellContents.add(win.webContents)
   // Perf probe (tests/perf/guest/measure-shell, WSOS-PRF-002/006): process start → first window ready.
   if (process.env.WORKSUITE_PERF === '1') win.once('ready-to-show', () => process.stdout.write(`WORKSUITE_PERF shell_ready_ms ${Math.round(process.uptime() * 1000)}\n`))
   win.webContents.on('will-navigate', (e) => e.preventDefault())
@@ -259,15 +282,31 @@ app.whenReady().then(() => {
     const drive = root === 'drive' ? await syncCall('DriveSummary') : null
     return { free_bytes: r ? freeBytes(r.path) : null, drive: drive?.ok ? drive.value : null }
   })
-  followJobs((e) => win?.webContents.send(e.kind === 'update_status' ? 'ws:updateStatusChanged' : 'ws:pkgJob', e.kind === 'update_status' ? e.status : e))
+  followJobs((e) => broadcast(e.kind === 'update_status' ? 'ws:updateStatusChanged' : 'ws:pkgJob', e.kind === 'update_status' ? e.status : e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')
     return r.ok ? { ok: true, value: publicAccounts(r.value) } : r
   })
   followSessionLock((locked) => void brokerCall(locked ? 'Lock' : 'Unlock'))
   createWindow()
+  // Settings › Display (WSOS-DSK-006): changes revert after 15 s unless kept; kept layouts are saved per monitor set
+  // and re-applied at login and on hotplug, which also re-plans the per-monitor windows (DSK-005/007).
+  const displays = displayManager({
+    exec: realExec,
+    storeFile: path.join(app.getPath('home'), '.config', 'worksuite', 'displays.json'),
+    spawn: (cmd, args) => { const p = spawn(cmd, args, { stdio: 'ignore' }); p.on('error', () => undefined); return { kill: () => p.kill() } },
+    onChange: (st: DisplayState) => { broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)) },
+  })
+  handle('ws:displayState', () => displays.state())
+  handle('ws:displayApply', (json) => {
+    try { const p = JSON.parse(json); return displays.apply(arrange(p.layout, p.sides ?? {})) } catch { return { ok: false, error: 'bad_layout' } }
+  })
+  handle('ws:displayKeep', () => displays.confirm())
+  handle('ws:displayRevert', () => displays.revert())
+  handle('ws:displayWallpaper', (output, id) => displays.setWallpaper(output, id))
+  void displays.applySaved()
   // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
-  startPanel(handle, (channel, payload) => win?.webContents.send(channel, payload))
+  startPanel(handle, broadcast, () => void displays.applySaved())
 })
 
 app.on('window-all-closed', () => app.quit())

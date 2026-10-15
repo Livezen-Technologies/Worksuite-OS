@@ -59,6 +59,8 @@ export interface PanelEvents {
   windows(list: PanelWindow[]): void
   tray(items: TrayItem[]): void
   launcher(action: 'toggle' | 'show'): void
+  /** A monitor was plugged, unplugged or reconfigured (bridge OutputsChanged, WSOS-DSK-007). */
+  outputs?(): void
 }
 
 export class PanelClient {
@@ -115,6 +117,7 @@ export class PanelClient {
   private onSignal(msg: Msg) {
     if (msg.type !== 4 /* SIGNAL */) return
     if (msg.interface === BRIDGE && ['WindowAdded', 'WindowChanged', 'WindowRemoved'].includes(msg.member ?? '')) this.scheduleRefresh()
+    else if (msg.interface === BRIDGE && msg.member === 'OutputsChanged') { this.events.outputs?.(); this.scheduleRefresh() }
     else if (msg.interface === TRAY_IFACE && msg.member === 'ItemsChanged') void this.refreshTray()
     else if (msg.member === 'NameOwnerChanged' && msg.body?.[0] === BRIDGE && msg.body?.[2]) void this.reconnect()
     else if (msg.member === 'NameOwnerChanged' && msg.body?.[0] === BRIDGE) { this.windows = []; this.tray = []; this.events.windows([]); this.events.tray([]) }

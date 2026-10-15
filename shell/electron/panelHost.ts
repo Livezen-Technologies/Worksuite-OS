@@ -4,7 +4,7 @@ import { PanelClient } from './panel'
 
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 
-export function startPanel(handle: Handle, send: (channel: string, payload: unknown) => void): PanelClient | null {
+export function startPanel(handle: Handle, send: (channel: string, payload: unknown) => void, outputsChanged: () => void = () => undefined): PanelClient | null {
   let client: PanelClient | null = null
   try {
     const bus = dbus.sessionBus()
@@ -13,6 +13,7 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
       windows: (w) => send('ws:panelWindowsChanged', w),
       tray: (t) => send('ws:panelTrayChanged', t),
       launcher: (a) => send('ws:launcher', a),
+      outputs: outputsChanged,
     })
     void client.start().catch(() => undefined)
   } catch {
