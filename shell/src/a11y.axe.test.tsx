@@ -103,6 +103,19 @@ describe('axe audit', () => {
     expect(await audit(el)).toEqual([])
   })
 
+  it('launcher is a modal dialog for screen readers and Escape returns focus to its button', async () => {
+    const el = await render(<DesktopHost />)
+    await click(el, 'Open launcher')
+    const dlg = el.querySelector('#ws-launcher')!
+    expect(dlg.getAttribute('role')).toBe('dialog')
+    expect(dlg.getAttribute('aria-modal')).toBe('true')
+    expect(dlg.contains(document.activeElement)).toBe(true)
+    ;(document.activeElement as HTMLElement).blur()
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    expect(el.querySelector('#ws-launcher')).toBeNull()
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Open launcher')
+  })
+
   it('every taskbar control is reachable and named', async () => {
     const el = await render(<DesktopHost />)
     const nav = el.querySelector('nav')!

@@ -11,15 +11,18 @@ import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
 import type { PanelWindow } from '../lib/panel'
 import A11yPanel from '../components/A11yPanel'
 import NotifDock, { MOON } from '../components/NotifDock'
+import { CaptureBadge } from '../components/CaptureBadge'
 import { useDnd } from '../lib/dnd'
 import { localeTag, t as t0, useT } from '../i18n'
 import { UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
+import { markLauncherRequest, reportLauncherFirstFrame } from '../lib/perfProbe'
 import { alphaGroups, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
 import GlobalSearch from '../components/GlobalSearch'
 import ShellRestartNotice from '../components/ShellRestartNotice'
+import AuthPrompt from '../components/AuthPrompt'
 import type { SearchHit } from '../../electron/search'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
@@ -54,7 +57,9 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   const [launcher, setLauncher] = useState(false)
   const [a11yOpen, setA11yOpen] = useState(false)
   // Super key from Labwc arrives over lk.worksuite.Shell1 (WSOS-DSK-011).
-  useLauncherKey(useCallback((a: 'toggle' | 'show') => setLauncher((v) => (a === 'show' ? true : !v)), []))
+  useLauncherKey(useCallback((a: 'toggle' | 'show') => { markLauncherRequest(); setLauncher((v) => (a === 'show' ? true : !v)) }, []))
+  // Launcher first frame (WSOS-PRF-005); only forwarded off the console in perf test runs.
+  useEffect(() => { if (launcher) void reportLauncherFirstFrame() }, [launcher])
   const [allView, setAllView] = useState(false)
   const [qsOpen, setQsOpen] = useState(false)
   const [quick, refreshQuick] = useQuickState()
@@ -87,13 +92,24 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false); setQsOpen(false) }
-      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) setLauncher((v) => !v)
+      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  useEffect(() => { if (launcher) searchRef.current?.focus(); else { setQuery(''); setAllView(false) } }, [launcher])
+  const launcherButton = useRef<HTMLButtonElement>(null)
+  const launcherWasOpen = useRef(false)
+  useEffect(() => {
+    if (launcher) searchRef.current?.focus()
+    else {
+      setQuery('')
+      setAllView(false)
+      // Focus goes back to the launcher button on close, so screen-reader and keyboard users are not left on <body>.
+      if (launcherWasOpen.current && (!document.activeElement || document.activeElement === document.body)) launcherButton.current?.focus()
+    }
+    launcherWasOpen.current = launcher
+  }, [launcher])
 
   // Start menu list: the org's WorkSuite apps (fallback list when not signed in/offline) and installed XDG apps.
   const [allApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
@@ -162,6 +178,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
       {/* G12: the shell was restarted by systemd; apps in their own scopes kept running */}
       <ShellRestartNotice />
+      <AuthPrompt />
 
       {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
       <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">
@@ -179,7 +196,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       )}
       {launcher && !q && (
         <div className="absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-end justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
-          <div id="ws-launcher" role="dialog" aria-label={t('launcher.title')} className="ws-rise flex h-[660px] max-h-full w-[660px] max-w-full flex-col overflow-hidden rounded-[22px] border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] text-[#E8EEFA] shadow-[0_40px_90px_rgba(0,0,0,0.6)] backdrop-blur-[24px]">
+          <div id="ws-launcher" role="dialog" aria-modal="true" aria-label={t('launcher.title')} className="ws-rise flex h-[660px] max-h-full w-[660px] max-w-full flex-col overflow-hidden rounded-[22px] border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] text-[#E8EEFA] shadow-[0_40px_90px_rgba(0,0,0,0.6)] backdrop-blur-[24px]">
             <div className="flex min-h-0 flex-1 flex-col gap-[18px] px-[26px] pt-[22px]">
               <label className="box-border flex h-11 shrink-0 items-center gap-2.5 rounded-[22px] border border-[rgba(127,178,255,0.18)] bg-[rgba(4,10,26,0.6)] px-4 text-[#8FA3C8] focus-within:border-[#1F6BFF]">
                 <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={16} width={2.2} />
@@ -263,7 +280,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       )}
 
       <nav aria-label={t('panel.taskbar')} className="absolute inset-x-0 bottom-0 z-40 box-border flex h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px]">
-        <button type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
+        <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
           className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
         <button type="button" onClick={() => setLauncher(true)} className="box-border hidden h-9 w-[200px] cursor-text items-center gap-2 rounded-[9px] bg-white/[0.06] px-3 text-[13px] text-[#8FA3C8] hover:bg-white/10 md:flex">
           <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={14} width={2.2} />{t('launcher.search')}
@@ -276,6 +293,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
           <TrayItems />
+          <CaptureBadge />
           <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setQsOpen(false) }}

@@ -90,3 +90,40 @@
 [data-high-contrast] :disabled { color: #d4d4d4 !important; border-style: dashed !important; }
 @keyframes ws-rise { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
 .ws-rise { animation: ws-rise 0.2s ease-out; }
+
+/* Text size 150 % / 200 % (WSOS-ACC-001…006): text grows and the layout reflows around it, instead of zooming the
+   whole page. Tailwind's named sizes are rescaled through their theme variables; px sizes used in the shell get a rule
+   each (shell/src/lib/textScale.test.ts fails when a new px size is used without one). Display sizes ≥44px stay. */
+:root[data-text-scale] {
+  --text-xs: calc(0.75rem * var(--ws-text-scale));
+  --text-sm: calc(0.875rem * var(--ws-text-scale));
+  --text-base: calc(1rem * var(--ws-text-scale));
+  --text-lg: calc(1.125rem * var(--ws-text-scale));
+  --text-xl: calc(1.25rem * var(--ws-text-scale));
+  --text-2xl: calc(1.5rem * var(--ws-text-scale));
+  --text-3xl: calc(1.875rem * var(--ws-text-scale));
+  --text-4xl: calc(2.25rem * var(--ws-text-scale));
+}
+:root[data-text-scale] body { font-size: calc(1rem * var(--ws-text-scale)); overflow-wrap: anywhere; }
+:root[data-text-scale] .text-\[8px\] { font-size: calc(8px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[9px\] { font-size: calc(9px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[10px\] { font-size: calc(10px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[10\.5px\] { font-size: calc(10.5px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[11px\] { font-size: calc(11px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[11\.5px\] { font-size: calc(11.5px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[12px\] { font-size: calc(12px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[12\.5px\] { font-size: calc(12.5px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[13px\] { font-size: calc(13px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[13\.5px\] { font-size: calc(13.5px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[14px\] { font-size: calc(14px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[15px\] { font-size: calc(15px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[17px\] { font-size: calc(17px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[19px\] { font-size: calc(19px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[20px\] { font-size: calc(20px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[21px\] { font-size: calc(21px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[22px\] { font-size: calc(22px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[26px\] { font-size: calc(26px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[28px\] { font-size: calc(28px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[30px\] { font-size: calc(30px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[32px\] { font-size: calc(32px * var(--ws-text-scale)); }
+:root[data-text-scale] .text-\[34px\] { font-size: calc(34px * var(--ws-text-scale)); }

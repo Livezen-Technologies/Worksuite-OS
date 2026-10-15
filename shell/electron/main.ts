@@ -26,10 +26,15 @@ import { realExec } from './system'
 import { startDesktopHost } from './desktopHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
+import { startPeripheralsHost } from './peripherals'
+import { startNotifications } from './notifications'
+import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
+import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
+import { externalAllowed, loadGrants, permissionAllowed, shellWebPreferences } from './webSecurity'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
-const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
+// URL scheme allow-list, renderer prefs and per-origin permission grants: ./webSecurity (WSOS-SEC-001/003/006).
 
 let win: BrowserWindow | null = null
 // The main window plus one desktop/taskbar window per secondary monitor (WSOS-DSK-005).
@@ -43,13 +48,7 @@ function broadcast(channel: string, payload: unknown) {
   for (const wc of shellContents) if (!wc.isDestroyed()) wc.send(channel, payload)
 }
 
-const shellPrefs = () => ({
-  preload: path.join(__dirname, 'preload.cjs'),
-  sandbox: true,
-  contextIsolation: true,
-  nodeIntegration: false,
-  webSecurity: true,
-})
+const shellPrefs = () => shellWebPreferences(path.join(__dirname, 'preload.cjs'))
 
 const monitors = outputWindows((r) => {
   const w = new BrowserWindow({ x: r.x, y: r.y, width: r.width, height: r.height, fullscreen: true, frame: false, title: `WorkSuite desktop ${r.name}`, backgroundColor: '#0f172a', webPreferences: shellPrefs() })
@@ -84,9 +83,11 @@ function createWindow() {
   // Perf probe (tests/perf/guest/measure-shell, WSOS-PRF-002/006): process start → first window ready.
   if (process.env.WORKSUITE_PERF === '1') win.once('ready-to-show', () => process.stdout.write(`WORKSUITE_PERF shell_ready_ms ${Math.round(process.uptime() * 1000)}\n`))
   win.once('ready-to-show', () => markShellReady(Math.round(process.uptime() * 1000)))
+  // Renderer probes (launcher first frame, WSOS-PRF-005) report on the console; forwarded only in perf runs.
+  if (process.env.WORKSUITE_PERF === '1') win.webContents.on('console-message', (ev) => { if (/^WORKSUITE_PERF [a-z_]+ \d+$/.test(ev.message)) process.stdout.write(`${ev.message}\n`) })
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (ALLOWED_SCHEMES.has(new URL(url).protocol)) void shell.openExternal(url)
+    if (externalAllowed(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
   // --recovery (recovery launcher unit), --installer (live ISO) or worksuite.recovery=1 on the kernel command line.
@@ -96,6 +97,8 @@ function createWindow() {
   void win.loadFile(path.join(__dirname, '../dist/index.html'), mode ? { query: { mode } } : undefined)
 }
 
+// WSOS-INT-011: Sinhala/Tamil typing in the shell and app windows through fcitx5 (Wayland text-input-v3).
+app.commandLine.appendSwitch('enable-wayland-ime')
 // `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
 const appRequest = parseAppArgs(process.argv)
 if (appRequest) {
@@ -105,8 +108,11 @@ if (appRequest) {
 
 function startShell() {
 app.whenReady().then(() => {
-  // Web permissions denied by default (WSOS-SEC-003).
+  // Web permissions denied by default; the shell's own session never gets any (WSOS-SEC-003).
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
+  session.defaultSession.setPermissionCheckHandler(() => false)
+  // Administrator grants for exact HTTPS origins of WorkSuite apps (/etc/worksuite/web-permissions.json).
+  const webGrants = loadGrants()
 
   handle('ws:authenticate', async () => ({ ok: false, message: 'Authentication is handled by the greeter (greetd/PAM).' }))
   handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
@@ -119,7 +125,8 @@ app.whenReady().then(() => {
   const apps = appWindows({
     session: (p) => session.fromPartition(p),
     window: ({ partition, title }) => new BrowserWindow({ title, backgroundColor: '#0f172a', webPreferences: appWebPreferences(partition) }),
-    openExternal: (u) => { if (ALLOWED_SCHEMES.has(new URL(u).protocol)) void shell.openExternal(u) },
+    openExternal: (u) => { if (externalAllowed(u)) void shell.openExternal(u) },
+    permission: (perm, url) => permissionAllowed(webGrants, url, perm),
   })
   handle('ws:openWorkSuiteApp', (id, url) => apps.open(id, url))
   handle('ws:launchApp', (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined })
@@ -130,7 +137,7 @@ app.whenReady().then(() => {
   // Launcher data: the org's WorkSuite web apps (no token leaves the main process) and installed XDG apps.
   handle('ws:webApps', async () => {
     const r = await loadSession((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }))
-    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name }) => ({ id, name })) } : r
+    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name, offline_level }) => ({ id, name, offline_level })) } : r
   })
   handle('ws:installedApps', () => {
     const all = installedApps()
@@ -194,9 +201,8 @@ app.whenReady().then(() => {
     return web ? apps.open(u.hostname, web) : { ok: false, error: 'not_found' }
   })
   handle('ws:openLink', (url) => {
-    const u = new URL(url)
-    if (!ALLOWED_SCHEMES.has(u.protocol)) throw new Error('Scheme not allowed')
-    return shell.openExternal(u.toString())
+    if (!externalAllowed(url)) throw new Error('Scheme not allowed')
+    return shell.openExternal(new URL(url).toString())
   })
   // Sign-in waits for the user in the browser; the broker gives up after 5 minutes.
   handle('ws:cloudSignIn', async (serverUrl, mode) => {
@@ -229,6 +235,9 @@ app.whenReady().then(() => {
   })
   handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:syncStatus', () => syncCall('Status'))
+  // WSOS-SYN-004: rejected changes are shown against their record; retry only when the user asks.
+  handle('ws:syncFailed', () => syncCall('ListFailed'))
+  handle('ws:syncRetry', (mutationId) => syncCall('RetryFailed', { mutation_id: mutationId }))
   handle('ws:deviceInfo', () => deviceInfo())
   // Settings → NetworkManager, BlueZ, PipeWire, UPower, CUPS, wlr-randr, UDisks2 (WSOS-INT-001…006, DSK-006).
   const sys = systemBridge()
@@ -357,6 +366,13 @@ app.whenReady().then(() => {
     if (!p || !existsSync(p.full)) return { ok: false, error: 'not_found' }
     // Windows programs are never opened or run; the renderer shows why (WSOS-LCH-003).
     if (isWindowsProgram(p.full, fileHead(p.full))) return { ok: false, error: 'windows_program' }
+    // Drive documents open in WorkSuite Office under the server file lock (WSOS-DRV-003, electron/officeLock.ts).
+    const office = root === 'drive' && isOfficeDoc(p.full) ? findOffice(installedApps()) : null
+    const prog = office ? execProgram(office.exec) : null
+    if (office && prog) {
+      const r = await openWithLock(rel, p.full, { syncCall, launch: (f) => { const c = scopeCommand(office.id, [prog, f]); return c ? launchAndWait(c) : Promise.resolve() } })
+      return { ok: true, value: r.outcome }
+    }
     const err = await shell.openPath(p.full)          // default app via XDG (WSOS-DSK-009)
     return err ? { ok: false, error: err } : { ok: true, value: true }
   })
@@ -411,6 +427,12 @@ app.whenReady().then(() => {
   startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
   // System monitor (G11) and quick settings brightness / power mode (G01).
   startMonitorHost(handle)
+  // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
+  startPeripheralsHost(handle, app.getPath('home'))
+  // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
+  startNotifications(handle, broadcast)
+  // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
+  startPolkitBridge(handle, broadcast)
 })
 
 app.on('window-all-closed', () => app.quit())

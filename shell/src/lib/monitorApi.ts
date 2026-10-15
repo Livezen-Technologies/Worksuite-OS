@@ -1,20 +1,18 @@
-// Renderer side of electron/monitorHost.ts: system monitor samples (G11) and quick settings brightness / power mode
-// (G01). In Electron the preload exposes `window.worksuiteMonitor`. In the browser preview the Vite dev server
+// Renderer side of electron/monitorHost.ts: system monitor samples (G11) and quick settings brightness (G01).
+// In Electron the preload exposes `window.worksuiteMonitor`. In the browser preview the Vite dev server
 // answers the same calls from this machine's /proc (vite.config.ts), so the preview shows real numbers too; when
 // neither is there every call says unavailable.
 import type { MonitorSnapshot, HealthItem, StartupEntry } from '../../electron/monitor'
-import type { Backlight, PowerModeState, PowerProfile } from '../../electron/quick'
+import type { Backlight } from '../../electron/quick'
 import type { Avail } from './os'
 
 export type { MonitorSnapshot, MonitorGroup, MonitorProcess, HealthItem, StartupEntry } from '../../electron/monitor'
-export type { Backlight, PowerModeState, PowerProfile } from '../../electron/quick'
+export type { Backlight } from '../../electron/quick'
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
 export interface MonitorApi {
   sysBrightness(): Promise<Avail<Backlight>>
   sysSetBrightness(percent: number): Promise<Avail<true>>
-  sysPowerMode(): Promise<Avail<PowerModeState>>
-  sysSetPowerMode(mode: PowerProfile): Promise<Avail<true>>
   monitorSample(): Promise<Avail<MonitorSnapshot>>
   monitorHealth(): Promise<Avail<HealthItem[]>>
   monitorStartup(): Promise<Avail<StartupEntry[]>>
@@ -37,8 +35,6 @@ const devOr = <T>(op: string, fallback: T, arg?: string | number) => dev<T>(op, 
 const preview: MonitorApi = {
   sysBrightness: () => devOr('brightness', NONE),
   sysSetBrightness: (p) => devOr('setBrightness', NONE, p),
-  sysPowerMode: () => devOr('powerMode', NONE),
-  sysSetPowerMode: (m) => devOr('setPowerMode', NONE, m),
   monitorSample: () => devOr('sample', NONE),
   monitorHealth: () => devOr('health', NONE),
   monitorStartup: () => devOr('startup', NONE),

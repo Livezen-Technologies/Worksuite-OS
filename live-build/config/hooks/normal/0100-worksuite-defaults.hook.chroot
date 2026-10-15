@@ -23,3 +23,5 @@ if [ -e /usr/lib/systemd/system/seatd.service ]; then systemctl disable seatd.se
 rm -f /var/lib/dbus/machine-id
 # WSOS-AUTH-004: the pam_faillock profiles from worksuite-session must be active.
 grep -q pam_faillock.so /etc/pam.d/common-auth || { echo "pam_faillock is not enabled in common-auth" >&2; exit 1; }
+# WSOS-INT-009: the sign-in password unlocks the login keyring (libpam-gnome-keyring's pam-auth-update profile).
+grep -q pam_gnome_keyring.so /etc/pam.d/common-auth && grep -q pam_gnome_keyring.so /etc/pam.d/common-session || { echo "pam_gnome_keyring is not enabled" >&2; exit 1; }

@@ -5,6 +5,8 @@ import { useState } from 'react'
 import BIcon from './BIcon'
 import { Icon, P } from './Ws'
 import type { TimedNotice } from '../lib/useNotices'
+import { AppNoticeActions, dismissAppNotices } from './AppNoticeActions'
+import { appIdOf, notificationsApi } from '../lib/appNotifications'
 import { ageLabel } from '../lib/power'
 import { localeTag, useT } from '../i18n'
 
@@ -35,7 +37,8 @@ export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd 
   const shown = tab === 'mentions' ? [] : notices
   const priority = shown.filter((n) => n.tone !== 'ok')
   const earlier = shown.filter((n) => n.tone === 'ok')
-  const dismiss = (id: string) => setNotices(notices.filter((n) => n.id !== id))
+  // App notifications are closed on the server too, so the app gets NotificationClosed (WSOS-INT-007).
+  const dismiss = (id: string) => { const a = appIdOf({ id }); if (a !== null) void notificationsApi()?.dismiss(a); setNotices(notices.filter((n) => n.id !== id)) }
   const tabs: [Tab, string][] = [['all', t('dock.all')], ['mentions', t('dock.mentions')], ['system', t('dock.system')]]
 
   return (
@@ -78,7 +81,7 @@ export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd 
         <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-2.5">
           <h2 className="m-0 text-[15px] font-semibold">{t('notes.title')}</h2>
           <span className="flex h-5 min-w-5 items-center justify-center rounded-[10px] bg-[rgba(31,107,255,0.35)] px-1.5 text-[11px] font-bold">{notices.length}</span>
-          {notices.length > 0 && <button type="button" onClick={() => setNotices([])} className="ml-auto cursor-pointer text-xs text-[#7FB2FF] hover:text-[#B8D4FF]">{t('notes.clearAll')}</button>}
+          {notices.length > 0 && <button type="button" onClick={() => { dismissAppNotices(notices); setNotices([]) }} className="ml-auto cursor-pointer text-xs text-[#7FB2FF] hover:text-[#B8D4FF]">{t('notes.clearAll')}</button>}
         </div>
         <div role="tablist" aria-label={t('notes.title')} className="mx-4 mb-2.5 flex rounded-[10px] bg-white/[0.06] p-[3px]">
           {tabs.map(([id, label]) => (
@@ -102,6 +105,7 @@ export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd 
                   <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                     <span className="flex items-baseline gap-1.5"><span className="truncate text-[13px] font-semibold">{x.title}</span><span className="ml-auto flex-none text-[11px] text-[#8FA3C8]">{ageLabel(x.at, now.getTime())}</span></span>
                     <span className="text-xs leading-[1.4] text-[#C9D6EE]">{x.body}</span>
+                    {x.app && <AppNoticeActions notice={x} onDone={() => setNotices(notices.filter((n) => n.id !== x.id))} />}
                   </span>
                   <button type="button" aria-label={t('notes.dismiss')} onClick={() => dismiss(x.id)}
                     className="absolute -top-1.5 -left-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-[#2A3B66] text-xs leading-none hover:bg-[#3A4E80]"><Icon d={P.close} size={10} /></button>

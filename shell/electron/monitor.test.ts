@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { classify, descendants, endProcess, energyOf, health, monitorSampler, parseAnalyzeTime, parseAutostart, parseCgroup, parseCpuMhz, parseDiskstats, parseMeminfo, parseNetDev, parsePidStat, parseProcStat, type ProcSource } from './monitor'
 import { overrideFlag, parseUserOff, splitPermissions, flatpakPermsClient } from './flatpakPerms'
-import { parseProfiles, pickBacklight, quickBridge, type BacklightFs } from './quick'
+import { pickBacklight, quickBridge, type BacklightFs } from './quick'
 
 describe('proc parsers', () => {
   it('reads /proc/stat totals and cores', () => {
@@ -127,12 +127,6 @@ describe('quick settings bridge', () => {
     await q.setBrightness(30)
     expect(calls[0]).toEqual(['busctl', 'call', 'org.freedesktop.login1', '/org/freedesktop/login1/session/auto', 'org.freedesktop.login1.Session', 'SetBrightness', 'ssu', 'backlight', 'acpi_video0', '30'])
     expect(quickBridge(async () => ({ code: 0, stdout: '', stderr: '' }), fs({})).brightness()).toEqual({ available: false, reason: 'no_backlight' })
-  })
-  it('reads and sets the power profile', async () => {
-    expect(parseProfiles('  performance:\n    CpuDriver:\tintel_pstate\n\n* balanced:\n    CpuDriver:\tintel_pstate\n\n  power-saver:\n')).toEqual({ active: 'balanced', profiles: ['power-saver', 'balanced', 'performance'] })
-    const q = quickBridge(async () => ({ code: 1, stdout: '', stderr: '', missing: true }))
-    expect(await q.powerMode()).toEqual({ available: false, reason: 'tool_missing' })
-    expect(await q.setPowerMode('turbo')).toEqual({ available: false, reason: 'invalid_argument' })
   })
 })
 

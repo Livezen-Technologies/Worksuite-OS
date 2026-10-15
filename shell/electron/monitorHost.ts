@@ -38,6 +38,4 @@ export function startMonitorHost(handle: Handle) {
   const quick = quickBridge(realExec)
   handle('ws:sysBrightness', () => quick.brightness())
   handle('ws:sysSetBrightness', (p) => quick.setBrightness(Number(p)))
-  handle('ws:sysPowerMode', () => quick.powerMode())
-  handle('ws:sysSetPowerMode', (p) => quick.setPowerMode(p))
 }

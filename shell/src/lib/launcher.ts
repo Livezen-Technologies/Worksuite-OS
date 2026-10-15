@@ -19,7 +19,9 @@ export const DESKTOP_MODULE_FOR: Record<string, DesktopModule> = {
   mail: 'mail', chat: 'chat', calendar: 'calendar', tasks: 'tasks', drive: 'files', files: 'files', crm: 'crm', hr: 'hr',
 }
 
-export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[] }
+export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[]; offline?: OfflineLevel }
+/** Offline level the app declares (WSOS-SYN-009); shown in the launcher. */
+export type OfflineLevel = 'full_offline' | 'cached_read' | 'online_only'
 
 /** Launcher marks for the WorkSuite modules; the .desktop id is worksuite-<module>. */
 const WS_STYLE: Record<string, { name: string; mark: string; bg: string; fg: string; fav?: boolean }> = {
@@ -56,17 +58,18 @@ function initials(name: string) {
  * desktop: the WorkSuite Desktop entry id when it is installed: its modules open there (`--module=<id>`), the rest
  * in worksuite-app web windows.
  */
-export function buildLauncherApps(webApps: { id: string; name: string }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null): LauncherApp[] {
+export function buildLauncherApps(webApps: { id: string; name: string; offline_level?: OfflineLevel }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null): LauncherApp[] {
   const out: LauncherApp[] = []
   if (desktop) {
     out.push({ id: 'worksuite-desktop', name: 'WorkSuite', mark: 'W', bg: '#2563eb', fg: '#ffffff', kind: 'WorkSuite', fav: true, launch: { worksuite: 'home' }, keywords: ['worksuite', 'home', 'desktop'] })
   }
-  for (const a of webApps ?? FALLBACK_WEB_APPS) {
+  for (const a of (webApps ?? FALLBACK_WEB_APPS) as { id: string; name: string; offline_level?: OfflineLevel }[]) {
     const st = WS_STYLE[a.id]
     const mod = desktop ? DESKTOP_MODULE_FOR[a.id] : undefined
     out.push({
       id: `worksuite-${a.id}`, name: st?.name ?? a.name, mark: st?.mark ?? initials(a.name), bg: st?.bg ?? '#e2e8f0', fg: st?.fg ?? '#1e293b',
       kind: 'WorkSuite', fav: st?.fav, launch: mod ? { worksuite: mod } : { desktop: `worksuite-${a.id}` }, keywords: ['worksuite', a.id],
+      ...(a.offline_level ? { offline: a.offline_level } : {}),
     })
   }
   if (office) {

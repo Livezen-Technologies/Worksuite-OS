@@ -1,7 +1,7 @@
 export type WindowApp = 'files' | 'appcenter' | 'settings' | 'monitor'
 
 export interface GreeterProps { onSignIn: (user: string) => void }
-export interface LockProps { user: string; onUnlock: () => void; notices?: { id: string; title: string; at: number; tone: 'ok' | 'warn' | 'error' }[] }
+export interface LockProps { user: string; onUnlock: () => void; notices?: { id: string; title: string; at: number; tone: 'ok' | 'warn' | 'error'; app?: string }[] }
 export interface FirstRunProps { onDone: () => void; userName?: string }
 export interface DesktopProps {
   user: string

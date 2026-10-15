@@ -54,6 +54,20 @@ button:disabled{opacity:.5;cursor:default}:focus-visible{outline:2px solid var(-
 .secret{font-family:ui-monospace,monospace;word-break:break-all;background:var(--chip);padding:10px;border-radius:8px}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;max-width:min(420px,90vw)}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:0}dt{color:var(--muted)}dd{margin:0}
+.grow{flex:1;margin:0}.modal-back{position:fixed;inset:0;background:rgba(2,6,16,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.wipe-dlg{width:min(520px,100%);border-radius:20px;background:#0F2350;color:#E8EEFA;border:1px solid rgba(255,138,122,.5);box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}
+.wipe-dlg .muted{color:#8FA3C8}.wipe-head{padding:24px 24px 14px;display:flex;gap:16px}.wipe-head h2{margin:0 0 6px;font-size:20px}
+.wipe-head p{margin:0;font-size:14px;color:#C9D6EE;line-height:1.5}.wipe-head p.muted{color:#8FA3C8;margin-top:4px}
+.wipe-icon{flex:none;width:48px;height:48px;border-radius:14px;background:rgba(217,69,43,.18) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23FF8A7A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13'/%3E%3C/svg%3E") center no-repeat}
+.wipe-body{padding:6px 24px 18px;display:grid;gap:14px}.wipe-body .field{display:grid;gap:6px}.wipe-body label,.wipe-body .lbl{font-size:12px;color:#C9D6EE;display:block}
+.wipe-body strong{color:#fff}.wipe-dlg input,.wipe-dlg textarea{height:44px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(4,10,26,.6);color:#fff}
+.wipe-dlg textarea{height:auto;min-height:0;padding:10px 14px;resize:vertical}.wipe-dlg .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:14px}
+.wipe-dlg input.good{border-color:#5FD39A}.wipe-dlg input.bad{border-color:#FF8A7A}
+.seg{display:flex;gap:8px;flex-wrap:wrap}.seg button{background:rgba(4,10,26,.6);color:#C9D6EE;border:1px solid rgba(127,178,255,.25);border-radius:10px;font-size:13px}
+.seg button[aria-checked=true]{border-color:#FF8A7A;color:#fff;background:rgba(217,69,43,.18)}
+.wipe-foot{padding:14px 18px;background:rgba(4,10,26,.35);border-top:1px solid rgba(127,178,255,.12);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.wipe-foot .muted{font-size:12px}.wipe-foot button{padding:10px 18px;border-radius:10px;background:transparent;color:#E8EEFA;border:1px solid rgba(127,178,255,.25);font-weight:500}
+.wipe-foot button.erase{background:#D9452B;border-color:transparent;color:#fff;font-weight:600}.wipe-foot button.erase:disabled{opacity:1;background:rgba(217,69,43,.3);color:rgba(255,255,255,.5)}
 @media (max-width:760px){.shell{grid-template-columns:1fr}.side{flex-direction:row;flex-wrap:wrap;padding:10px}.side .brand{width:100%;padding-bottom:8px}
 .me{width:100%;border:0}main{padding:16px}}
 `;
@@ -90,14 +104,51 @@ $('#login-form').addEventListener('submit', async (e) => {
 });
 $('#logout').addEventListener('click', async () => { await api('POST', 'logout').catch(() => {}); showLogin(); });
 
-/** WSOS-WIPE-001: the button stays disabled until the device name is typed exactly and a password is entered. */
-function wipeConfirm(hostname, submit, label) {
-  const name = h('input', { 'aria-label': 'Type the device name to confirm', placeholder: 'Type ' + hostname + ' to confirm', autocomplete: 'off', spellcheck: 'false' });
-  const pw = h('input', { 'aria-label': 'Your administrator password', placeholder: 'Your administrator password', type: 'password', autocomplete: 'current-password' });
-  const btn = h('button', { class: 'danger', disabled: true, onclick: () => { const c = { confirm_name: name.value.trim(), password: pw.value }; pw.value = ''; btn.disabled = true; submit(c); } }, label);
-  const check = () => { btn.disabled = !(name.value.trim() === hostname && pw.value.length > 0); };
-  name.oninput = check; pw.oninput = check;
-  return [h('label', {}, 'Device name', name), h('label', {}, 'Password', pw), h('div', {}, btn)];
+/** G16 / WSOS-WIPE-001: the erase dialog. Its button stays disabled until the admin password is entered and the device
+ *  name is typed exactly; the server checks both again (reauth) and logs the attempt to the audit trail. */
+function wipeDialog(o) {
+  const prev = document.activeElement;
+  const back = h('div', { class: 'modal-back' });
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); if (prev && prev.focus) prev.focus(); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const pw = h('input', { id: 'wp-pw', type: 'password', autocomplete: 'current-password' });
+  const name = h('input', { id: 'wp-name', class: 'mono', autocomplete: 'off', spellcheck: 'false' });
+  let scope = 'full_device';
+  const scopeBtns = o.request ? [['full_device', 'Everything (crypto-erase)'], ['worksuite_data', 'WorkSuite data only']].map(([v, l]) =>
+    h('button', { type: 'button', role: 'radio', 'aria-checked': String(v === scope), onclick: (e) => { scope = v; for (const b of scopeBtns) b.setAttribute('aria-checked', String(b === e.currentTarget)); body.textContent = text(); } }, l)) : [];
+  const reason = o.request ? h('textarea', { id: 'wp-reason', rows: 2, placeholder: 'Shown to the approving administrator' }) : null;
+  const text = () => (o.request ? scope : o.scope) === 'full_device'
+    ? 'All data, accounts and apps are erased the next time it connects. This can\'t be undone.'
+    : 'WorkSuite data, accounts and the device\'s enrollment are removed the next time it connects. This can\'t be undone.';
+  const body = h('p', {}, text());
+  const btn = h('button', { class: 'erase', disabled: true, onclick: () => {
+    const c = { confirm_name: name.value.trim(), password: pw.value };
+    pw.value = ''; check();
+    o.submit(c, o.request ? { scope, reason: reason.value } : {}).then((ok) => { if (ok) close(); });
+  } }, o.label);
+  const check = () => {
+    const nameOk = name.value.trim() === o.hostname, pwOk = pw.value.length > 0, reasonOk = !reason || reason.value.trim().length >= 5;
+    pw.classList.toggle('good', pwOk); name.classList.toggle('good', nameOk); name.classList.toggle('bad', !!name.value && !nameOk);
+    btn.disabled = !(nameOk && pwOk && reasonOk);
+  };
+  pw.oninput = check; name.oninput = check; if (reason) reason.oninput = check;
+  const step = (n, label, input) => h('div', { class: 'field' }, h('label', { for: input.id }, n + ' · ', label), input);
+  const n = o.request ? 3 : 1;
+  const dlg = h('div', { role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'wp-t', 'aria-describedby': 'wp-d', class: 'wipe-dlg' },
+    h('div', { class: 'wipe-head' }, h('span', { class: 'wipe-icon', 'aria-hidden': 'true' }),
+      h('div', {}, h('h2', { id: 'wp-t' }, 'Erase ' + o.hostname + '?'), h('div', { id: 'wp-d' }, body, h('p', { class: 'muted' }, o.meta)))),
+    h('div', { class: 'wipe-body' },
+      o.request ? [h('div', { class: 'field' }, h('span', { class: 'lbl' }, '1 · What to erase'), h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'What to erase' }, scopeBtns)),
+        step(2, 'Reason (sent to the audit trail)', reason)] : null,
+      step(n, 'Re-enter your admin password', pw),
+      step(n + 1, ['Type the device name ', h('strong', { class: 'mono' }, o.hostname), ' to confirm'], name)),
+    h('div', { class: 'wipe-foot' }, h('span', { class: 'muted' }, o.note),
+      h('div', { class: 'row' }, h('button', { onclick: close }, 'Cancel'), btn)));
+  back.append(dlg); document.body.append(back); document.addEventListener('keydown', onKey);
+  (reason || pw).focus();
+}
+async function wipeSubmit(fn, msg) {
+  try { const r = await fn(); toast(msg(r)); route(); return true; } catch (e) { toast(e.message); return false; }
 }
 const views = {
   async overview() {
@@ -120,14 +171,16 @@ const views = {
     const d = await api('GET', 'devices/' + encodeURIComponent(id));
     const hb = d.heartbeat || {};
     const send = (command, args) => act(() => api('POST', 'devices/' + id + '/commands', { command, args }), command + ' sent. It runs at the next check-in.');
-    const wipeReason = h('textarea', { 'aria-label': 'Reason for the wipe', placeholder: 'Reason (shown to the approving administrator)' });
-    const wipeScope = h('select', { 'aria-label': 'Wipe scope' }, h('option', { value: 'worksuite_data' }, 'WorkSuite data only'), h('option', { value: 'full_device' }, 'Full device (crypto-erase)'));
     return [h('p', {}, h('a', { href: '#devices' }, '← Devices')), h('h1', {}, d.hostname || d.id),
       h('div', { class: 'card' }, h('dl', {},
         h('dt', {}, 'Device ID'), h('dd', {}, d.id), h('dt', {}, 'Architecture'), h('dd', {}, d.arch), h('dt', {}, 'Key'), h('dd', {}, d.tpm_backed ? 'TPM-backed' : 'Software'),
         h('dt', {}, 'Enrolled'), h('dd', {}, when(d.enrolled_at)), h('dt', {}, 'Last seen'), h('dd', {}, ago(d.last_seen)),
         h('dt', {}, 'OS / shell / kernel'), h('dd', {}, [hb.os_version, hb.shell_version, hb.kernel_version].map((x) => x || '—').join(' / ')),
-        h('dt', {}, 'Policy version'), h('dd', {}, hb.policy_version || '—'), h('dt', {}, 'Update status'), h('dd', {}, hb.update_status || '—'),
+        h('dt', {}, 'Policy requested'), h('dd', {}, d.policy.requested_version === null ? 'No policy' : 'Version ' + d.policy.requested_version),
+        h('dt', {}, 'Policy observed'), h('dd', {}, d.policy.state === 'applied' ? h('span', { class: 'ok' }, 'Version ' + d.policy.observed_version + ' applied')
+          : d.policy.state === 'pending' ? h('span', { class: 'warn' }, 'Device reports version ' + d.policy.observed_version + ' — not yet applied')
+          : d.policy.state === 'not_reported' ? h('span', { class: 'warn' }, 'Not yet reported by the device') : (d.policy.observed_version ?? '—')),
+        h('dt', {}, 'Update status'), h('dd', {}, hb.update_status || '—'),
         h('dt', {}, 'Inventory'), h('dd', {}, d.inventory ? d.inventory.software_count + ' packages, ' + ago(d.inventory.at) : 'not yet received'),
         h('dt', {}, 'Break-glass password'), h('dd', {}, d.break_glass_escrowed ? 'Escrowed' : 'Not escrowed'),
         h('dt', {}, 'Ownership'), h('dd', {}, d.ownership === 'personal' ? 'Personal' : 'Corporate'),
@@ -137,10 +190,11 @@ const views = {
         h('button', { onclick: () => send('ScheduleUpdate') }, 'Install updates'), h('button', { onclick: () => send('RebootDuringWindow') }, 'Restart in maintenance window'),
         h('button', { onclick: () => send('CollectApprovedDiagnostics', { bundle_profile: 'basic' }) }, 'Collect diagnostics'),
         h('button', { class: 'danger', onclick: () => { if (confirm('Revoke this device? It stops receiving policy and its credential stops working.')) act(() => api('POST', 'devices/' + id + '/revoke'), 'Device revoked.'); } }, 'Revoke')),
-      h('h2', {}, 'Request a remote wipe'), h('div', { class: 'card form' }, h('p', { class: 'muted' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
-        wipeScope, wipeReason, ...wipeConfirm(d.hostname, (c) => act(() => api('POST', 'wipes', { device_id: id, scope: wipeScope.value, reason: wipeReason.value, ...c }), 'Wipe requested. Another administrator must approve it.'), 'Request wipe'))],
-      h('h2', {}, 'Commands'), table(['Command', 'Issued', 'State'], d.commands.map((c) => h('tr', {}, h('td', {}, c.command), h('td', {}, new Date(c.issued_at).toLocaleString()),
-        h('td', {}, h('span', { class: c.state === 'completed' ? 'ok' : c.state === 'failed' || c.state === 'rejected' ? 'bad' : '' }, c.state + (c.reason ? ' (' + c.reason + ')' : '')))))),
+      h('h2', {}, 'Erase'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
+        h('button', { class: 'danger', onclick: () => wipeDialog({ request: true, hostname: d.hostname, label: 'Erase device', meta: 'Last seen ' + ago(d.last_seen) + ' · ' + (d.ownership === 'personal' ? 'personal' : 'corporate') + ' device.', note: 'Logged to the audit trail',
+          submit: (c, x) => wipeSubmit(() => api('POST', 'wipes', { device_id: id, ...x, ...c }), (r) => r.waived_second_approver ? 'Erase sent. It runs the next time the device connects.' : 'Erase requested. Another administrator must approve it.') }) }, 'Erase device…'))],
+      h('h2', {}, 'Commands'), table(['Requested', 'Observed on the device'], d.commands.map((c) => h('tr', {}, h('td', {}, h('b', {}, c.command + ' requested'), h('div', { class: 'muted' }, new Date(c.issued_at).toLocaleString())),
+        h('td', {}, h('span', { class: c.state === 'completed' ? 'ok' : c.state === 'failed' || c.state === 'rejected' ? 'bad' : 'warn' }, c.observed + (c.reason ? ' (' + c.reason + ')' : '')))))),
       h('h2', {}, 'Update results'), table(['Release', 'Result', 'When'], d.updates.map((u) => h('tr', {}, h('td', {}, u.release_id), h('td', { class: u.result === 'success' ? 'ok' : 'bad' }, u.result), h('td', {}, when(u.at)))))];
   },
   async wipes() {
@@ -150,8 +204,9 @@ const views = {
       h('td', {}, w.requested_by + ', ' + when(w.requested_at)),
       h('td', {}, w.cancelled ? 'Cancelled' : w.approved_by ? 'Approved by ' + w.approved_by + (w.result ? ' · device reported ' + w.result + ' ' + when(w.result_at) : '') : w.mine
         ? h('button', { onclick: () => act(() => api('POST', 'wipes/' + w.id + '/cancel'), 'Request cancelled.') }, 'Cancel')
-        : h('div', { class: 'form' }, h('p', { class: 'muted' }, 'Approving erases data at the device\'s next check-in. This cannot be undone.'),
-          ...wipeConfirm(w.hostname, (c) => act(() => api('POST', 'wipes/' + w.id + '/approve', c), 'Wipe approved and sent.'), 'Approve'),
+        : h('div', { class: 'row' },
+          h('button', { class: 'danger', onclick: () => wipeDialog({ hostname: w.hostname, scope: w.scope, label: 'Approve erase', meta: 'Requested by ' + w.requested_by + ': “' + w.reason + '”', note: 'Logged to the audit trail',
+            submit: (c) => wipeSubmit(() => api('POST', 'wipes/' + w.id + '/approve', c), () => 'Erase approved and sent.') }) }, 'Approve…'),
           h('button', { onclick: () => act(() => api('POST', 'wipes/' + w.id + '/cancel'), 'Request cancelled.') }, 'Reject'))))))];
   },
   async users() {

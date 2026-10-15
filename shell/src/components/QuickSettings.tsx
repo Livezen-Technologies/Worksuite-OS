@@ -1,9 +1,10 @@
 // Quick settings (G01): the taskbar's status group (Wi-Fi, Bluetooth, volume, battery) and the panel it opens.
 // Everything reads and changes the real services through the Settings bridge (NetworkManager, BlueZ, PipeWire,
-// UPower) and monitorApi (backlight, power-profiles-daemon). A service that isn't there shows as unavailable.
+// UPower), monitorApi (backlight) and peripheralsApi (power-profiles-daemon). A service that isn't there shows as unavailable.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formatDuration, os, type BatteryState, type BluetoothState, type NetworkState, type SoundState } from '../lib/os'
-import { monitorApi, type Backlight, type PowerModeState, type PowerProfile } from '../lib/monitorApi'
+import { monitorApi, type Backlight } from '../lib/monitorApi'
+import { peripheralsApi, type PowerProfiles } from '../lib/peripheralsApi'
 import { formatNumber, t, type MessageKey } from '../i18n'
 
 const D = {
@@ -28,7 +29,7 @@ const Ico = ({ d, size = 16, stroke = '#FFFFFF' }: { d: string; size?: number; s
 
 export interface QuickState {
   net: NetworkState | null; bt: BluetoothState | null; sound: SoundState | null; battery: BatteryState | null
-  light: Backlight | null; mode: PowerModeState | null
+  light: Backlight | null; mode: PowerProfiles | null
 }
 
 /** Polls the services while mounted (taskbar icons) and right away on `refresh` (after a change in the panel). */
@@ -36,7 +37,7 @@ export function useQuickState(): [QuickState, () => void] {
   const [s, setS] = useState<QuickState>({ net: null, bt: null, sound: null, battery: null, light: null, mode: null })
   const load = useCallback(() => {
     const v = <T,>(p: Promise<{ available: true; value: T } | { available: false; reason: string }>) => p.then((r) => (r.available ? r.value : null)).catch(() => null)
-    void Promise.all([v(os.sysNetwork()), v(os.sysBluetooth()), v(os.sysSound()), v(os.sysBattery()), v(monitorApi.sysBrightness()), v(monitorApi.sysPowerMode())])
+    void Promise.all([v(os.sysNetwork()), v(os.sysBluetooth()), v(os.sysSound()), v(os.sysBattery()), v(monitorApi.sysBrightness()), v(peripheralsApi()?.powerProfiles() ?? Promise.resolve({ available: false as const, reason: 'no_bridge' }))])
       .then(([net, bt, sound, battery, light, mode]) => setS({ net, bt, sound, battery, light, mode }))
   }, [])
   useEffect(() => { load(); const id = setInterval(load, 15_000); return () => clearInterval(id) }, [load])
@@ -73,7 +74,7 @@ export function QuickTray({ state, open, onToggle }: { state: QuickState; open: 
   )
 }
 
-const PROFILE_KEY: Record<PowerProfile, MessageKey> = { 'power-saver': 'qs.mode.saver', balanced: 'qs.mode.balanced', performance: 'qs.mode.performance' }
+const PROFILE_KEY: Record<string, MessageKey> = { 'power-saver': 'qs.mode.saver', balanced: 'qs.mode.balanced', performance: 'qs.mode.performance' }
 
 export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, onPower, onClose }: {
   state: QuickState; refresh: () => void; dnd: boolean; setDnd: (v: boolean) => void
@@ -95,7 +96,7 @@ export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, on
   const btOn = bt?.powered ?? false
   const btCount = bt?.paired.filter((d) => d.connected).length ?? 0
   const act = (p: Promise<unknown>) => void p.finally(refresh)
-  const nextMode = (m: PowerModeState) => m.profiles[(m.profiles.indexOf(m.active) + 1) % m.profiles.length]
+  const nextMode = (m: PowerProfiles) => m.profiles[(m.profiles.indexOf(m.active) + 1) % m.profiles.length]
 
   const tiles: { id: string; title: string; sub: string; d: string; on: boolean; disabled: boolean; click: () => void }[] = [
     { id: 'wifi', title: t('qs.wifi'), d: D.wifi, on: !!net?.wifi_enabled, disabled: !net || !wifi,
@@ -106,8 +107,8 @@ export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, on
       click: () => act(os.sysSetBluetooth(!btOn)) },
     { id: 'dnd', title: t('quick.dnd'), d: D.moon, on: dnd, disabled: false, sub: dnd ? t('common.on') : t('common.off'), click: () => setDnd(!dnd) },
     { id: 'mode', title: t('qs.powerMode'), d: D.bolt, on: false, disabled: !mode || mode.profiles.length < 2,
-      sub: mode ? t(PROFILE_KEY[mode.active]) : t('common.unavailable'),
-      click: () => act(monitorApi.sysSetPowerMode(nextMode(mode!))) },
+      sub: mode ? (PROFILE_KEY[mode.active] ? t(PROFILE_KEY[mode.active]) : mode.active) : t('common.unavailable'),
+      click: () => act(peripheralsApi()?.setPowerProfile(nextMode(mode!)) ?? Promise.resolve()) },
   ]
   const batt = batteryText(battery)
   const foot = 'flex size-8 cursor-pointer items-center justify-center rounded-lg bg-white/[0.08] hover:bg-white/[0.16]'

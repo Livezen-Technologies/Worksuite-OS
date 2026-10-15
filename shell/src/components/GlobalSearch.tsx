@@ -88,7 +88,7 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
 
   let k = 0
   return (
-    <div role="dialog" aria-label={t('launcher.search')} onKeyDown={onKey} id="ws-launcher"
+    <div role="dialog" aria-modal="true" aria-label={t('launcher.search')} onKeyDown={onKey} id="ws-launcher"
       className="w-[860px] max-w-full overflow-hidden rounded-[20px] border border-[rgba(127,178,255,0.22)] bg-[rgba(10,24,56,0.98)] font-sans text-[#E8EEFA] shadow-[0_40px_100px_rgba(0,0,0,0.6)]">
       <div className="flex items-center gap-3.5 border-b border-[rgba(127,178,255,0.12)] px-[22px] py-[18px]">
         <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>

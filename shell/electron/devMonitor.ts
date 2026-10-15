@@ -21,7 +21,6 @@ export function devMonitor() {
       case 'health': body = { available: true, value: await health(realExec, null, parseMeminfo(src.read('/proc/meminfo') ?? ''), lastCpu) }; break
       case 'startup': body = { available: true, value: readAutostart(homedir()) }; break
       case 'brightness': body = quick.brightness(); break
-      case 'powerMode': body = await quick.powerMode(); break
       default: body = refused
     }
     res.setHeader('content-type', 'application/json')

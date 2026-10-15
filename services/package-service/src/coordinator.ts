@@ -46,6 +46,8 @@ export interface CoordinatorEnv {
   licence?(): Promise<unknown>;
   deviceId?(): string | null;
   audit(event: string, fields: Record<string, unknown>): void;
+  /** WSOS-UPD-001: extra post-update checks (failed critical systemd units etc.); returns the names of failed checks. */
+  healthCheck?(): Promise<string[]>;
 }
 
 const SUITE: Record<Ring, string> = { development: 'trixie-dev', pilot: 'trixie-pilot', stable: 'trixie-stable' };
@@ -181,21 +183,39 @@ export class Coordinator extends EventEmitter {
   }
 
   private async finish(m: Manifest, job: Job, rebootAfter: boolean) {
-    const ok = job.state === 'success';
+    let ok = job.state === 'success';
     // WSOS-AUP-008: an interrupted download is not a failed update. apt keeps the partial files and resumes them
     // (HTTP Range) on the next attempt, which the next check cycle or "Install now" starts.
     if (!ok && /^download interrupted/.test(job.error ?? '')) {
       this.set({ state: 'waiting', reason: 'download_interrupted', restart_at: null });
       return;
     }
+    // WSOS-UPD-001: health check after a successful apply. A failure keeps the device off the reboot path, runs
+    // `dpkg --configure -a` if packages were left unconfigured, and is reported so the server can issue a signed
+    // rollback directive (WSOS-AUP-003).
+    const failures = ok ? await this.health(m) : [];
+    if (failures.length) {
+      ok = false;
+      job = { ...job, error: `health check failed: ${failures.join(', ')}` };
+      this.env.audit('health_check_failed', { release_id: m.release_id, failures });
+      if (failures.includes('dpkg_unconfigured')) { try { this.svc.repair(0); } catch { /* reported below */ } }
+    }
     await this.reportSafe({
       release_id: m.release_id, result: ok ? 'success' : 'failed', reboot_required: this.svc.rebootRequired,
-      health_check: ok ? 'pass' : 'fail', ...(ok ? {} : { error: job.error ?? 'failed' }),
+      health_check: ok ? 'pass' : 'fail', ...(failures.length ? { health_failures: failures } : {}), ...(ok ? {} : { error: job.error ?? 'failed' }),
     });
     if (!ok) { this.set({ state: 'failed', reason: job.error ?? 'update failed', restart_at: null }); return; }
     const s = this.env.load(); delete s.deferrals[m.release_id]; this.env.save(s);
     this.set({ state: this.svc.rebootRequired ? 'ready_to_restart' : 'up_to_date', installed: this.env.installedVersion(), reason: null, restart_at: null });
     if (rebootAfter && this.svc.rebootRequired) await this.env.reboot();
+  }
+
+  private async health(m: Manifest): Promise<string[]> {
+    const failures: string[] = [];
+    try { if (await this.svc.detectInterrupted()) failures.push('dpkg_unconfigured'); } catch { failures.push('dpkg_audit_failed'); }
+    if (this.env.installedVersion() !== m.version) failures.push('version_mismatch');
+    if (this.env.healthCheck) { try { failures.push(...await this.env.healthCheck()); } catch { failures.push('health_check_error'); } }
+    return failures;
   }
 
   private async reportSafe(r: Record<string, unknown>) {

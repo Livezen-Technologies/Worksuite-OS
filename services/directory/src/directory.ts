@@ -21,7 +21,7 @@ export const DIRECTORY_NAME = /^[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,6
 export interface DirectoryUser { username: string; user_id: number; name: string; groups: string[]; offline_login_days: number; mfa?: boolean; login_code?: string }
 export interface CacheEntry extends Omit<DirectoryUser, 'login_code'> { salt: string; verifier: string; cached_at: number }
 /** Non-secret settings the greeter shows (WSOS-DIR-002). */
-export interface GreeterConfig { domain?: string; netbios_domain?: string; upn_suffixes?: string[] }
+export interface GreeterConfig { domain?: string; netbios_domain?: string; upn_suffixes?: string[]; org_name?: string; server_host?: string }
 /** Greeter status for a name after a failed sign-in: shown, never secret (WSOS-DIR-007/009). */
 export type NameStatus = 'expired' | 'mfa';
 
@@ -39,7 +39,7 @@ export function parseChange(secret: string): { old: string; next: string } | nul
 }
 /** Password part of "password + 6-digit code" for accounts with a second factor. */
 export const withoutCode = (s: string) => s.replace(/\d{6}$/, '');
-export interface AuditEvent { id: string; type: 'used' | 'rotated'; username: string; at: string }
+export interface AuditEvent { id: string; type: 'used' | 'rotated'; username: string; at: string; reason?: string }
 
 export class ServerError extends Error {
   readonly status: number; readonly code: string;
@@ -68,6 +68,15 @@ export interface Store {
   /** WSOS-DIR-008: hand the one-time login code to the user's session (file owned by uid, mode 0600). */
   handoff(name: string, uid: number, data: { server_url: string; login_code: string; username: string }): void;
   saveGreeterConfig(c: GreeterConfig): void;
+  /** G04: the reason typed at the greeter for a break-glass sign-in (read once, then removed). */
+  takeBreakGlassReason?(): string | null;
+}
+
+/** G04: when each cached account's offline sign-in stops working, so the greeter can show the days left. */
+export function offlineUntil(cache: Record<string, CacheEntry>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [name, c] of Object.entries(cache)) out[name] = c.cached_at + c.offline_login_days * DAY;
+  return out;
 }
 
 export interface Accounts {
@@ -175,8 +184,8 @@ async function flush(d: Deps) {
   d.store.savePending(left);
 }
 
-async function audit(d: Deps, type: AuditEvent['type']) {
-  const e: AuditEvent = { id: randomUUID(), type, username: BREAK_GLASS_USER, at: new Date((d.now ?? Date.now)()).toISOString() };
+async function audit(d: Deps, type: AuditEvent['type'], reason?: string) {
+  const e: AuditEvent = { id: randomUUID(), type, username: BREAK_GLASS_USER, at: new Date((d.now ?? Date.now)()).toISOString(), ...(reason ? { reason } : {}) };
   d.store.savePending([...d.store.pending(), e]);
   await flush(d);
 }
@@ -186,7 +195,9 @@ export async function session(d: Deps, user: string): Promise<void> {
   if (user !== BREAK_GLASS_USER) return;
   d.log(`break-glass: ${BREAK_GLASS_USER} session opened; password invalidated, rotation started`);
   await d.accounts.lock(BREAK_GLASS_USER);
-  await audit(d, 'used');
+  let reason: string | null = null;
+  try { reason = d.store.takeBreakGlassReason?.()?.replace(/[\x00-\x1f]/g, ' ').trim().slice(0, 200) || null; } catch { /* no reason */ }
+  await audit(d, 'used', reason ?? undefined);
   await d.accounts.startRotation();
 }
 

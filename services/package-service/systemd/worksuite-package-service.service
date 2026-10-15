@@ -33,6 +33,9 @@ UMask=0022
 ReadWritePaths=/var/lib/worksuite-package-service /var/lib/dpkg /var/lib/apt /var/cache/apt /var/lib/flatpak /var/log/worksuite /boot /usr /etc /opt
 LogsDirectory=worksuite
 StateDirectory=worksuite-package-service
+# update-status.json for the device agent (WSOS-MDM-001)
+RuntimeDirectory=worksuite-package-service
+RuntimeDirectoryMode=0755
 StateDirectoryMode=0700
 
 [Install]

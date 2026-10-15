@@ -7,12 +7,14 @@ import { execFile, spawn } from 'node:child_process';
 import { chownSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { authenticate, greeterConfig, rotate, ServerError, session, type Accounts, type Deps, type Server, type Store } from './directory.ts';
+import { authenticate, greeterConfig, offlineUntil, rotate, ServerError, session, type Accounts, type Deps, type Server, type Store } from './directory.ts';
 
 const STATE_DIR = process.env.WORKSUITE_DIRECTORY_STATE ?? '/var/lib/worksuite-directory';
 // Runtime files for the greeter (status markers, domain settings) and the per-user login-code handoff.
 const RUN_DIR = process.env.WORKSUITE_DIRECTORY_RUN ?? '/run/worksuite-directory';
 const AGENT_STATE = process.env.WORKSUITE_AGENT_STATE ?? '/var/lib/worksuite-device-agent/state.json';
+// G04: the greeter (_greetd) leaves the break-glass reason here (tmpfiles: 1730 root:_greetd).
+const BREAK_GLASS_DIR = process.env.WORKSUITE_BREAK_GLASS_DIR ?? '/run/worksuite/break-glass';
 
 const readJson = <T>(p: string, dflt: T): T => { try { return JSON.parse(readFileSync(p, 'utf8')) as T; } catch { return dflt; } };
 function writeJson(p: string, v: unknown) {
@@ -55,7 +57,16 @@ export function httpServer(fetchImpl: typeof fetch = fetch): Server {
 
 export const fileStore = (): Store => ({
   cache: () => readJson(join(STATE_DIR, 'cache.json'), {}),
-  saveCache: (c) => writeJson(join(STATE_DIR, 'cache.json'), c),
+  saveCache: (c) => {
+    writeJson(join(STATE_DIR, 'cache.json'), c);
+    // G04: offline sign-in end per account (hashed name -> ms), readable by the greeter; no secrets.
+    const until = Object.fromEntries(Object.entries(offlineUntil(c)).map(([n, t]) => [nameKey(n), t]));
+    try {
+      mkdirSync(RUN_DIR, { recursive: true, mode: 0o755 });
+      writeFileSync(join(RUN_DIR, 'offline.json.tmp'), JSON.stringify(until), { mode: 0o644 });
+      renameSync(join(RUN_DIR, 'offline.json.tmp'), join(RUN_DIR, 'offline.json'));
+    } catch { /* the greeter then shows no day count */ }
+  },
   pending: () => readJson(join(STATE_DIR, 'pending-events.json'), []),
   savePending: (p) => writeJson(join(STATE_DIR, 'pending-events.json'), p),
   markName: (name, status) => {
@@ -77,9 +88,17 @@ export const fileStore = (): Store => ({
     chownSync(f + '.tmp', uid, gid);
     renameSync(f + '.tmp', f);
   },
+  takeBreakGlassReason: () => {
+    const f = join(BREAK_GLASS_DIR, 'reason');
+    try { const r = readFileSync(f, 'utf8').slice(0, 400); rmSync(f, { force: true }); return r; } catch { return null; }
+  },
   saveGreeterConfig: (c) => {
     mkdirSync(RUN_DIR, { recursive: true, mode: 0o755 });
-    writeFileSync(join(RUN_DIR, 'greeter.json.tmp'), JSON.stringify(c), { mode: 0o644 });
+    // G04: organization name for the greeter header and the server host it probes for "Directory reachable".
+    const a = readJson<{ org_name?: string; server_url?: string }>(AGENT_STATE, {});
+    let server_host: string | undefined;
+    try { server_host = a.server_url ? new URL(a.server_url).host : undefined; } catch { /* none */ }
+    writeFileSync(join(RUN_DIR, 'greeter.json.tmp'), JSON.stringify({ ...c, org_name: c.org_name ?? a.org_name, server_host: c.server_host ?? server_host }), { mode: 0o644 });
     renameSync(join(RUN_DIR, 'greeter.json.tmp'), join(RUN_DIR, 'greeter.json'));
   },
 });

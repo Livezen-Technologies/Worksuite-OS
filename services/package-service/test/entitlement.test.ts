@@ -35,10 +35,12 @@ test('feature releases need the entitlement; security releases continue during g
 
 function world(opts: { licence?: unknown; download?: 'fail' | 'ok' }) {
   const audits: string[] = [];
+  let installed = '1.0.1';
   const svc = new PackageService({
     runner: { async run(cmd, args) {
       if (cmd === 'test') return { code: 1, stdout: '', stderr: '' };
       if (cmd === 'apt-get' && args.includes('--download-only') && opts.download === 'fail') return { code: 100, stdout: '', stderr: 'E: Failed to fetch https://x/a.deb Connection timed out' };
+      if (cmd === 'apt-get' && args.includes('full-upgrade') && !args.includes('--download-only')) installed = String(manifest({}).version);
       return { code: 0, stdout: '', stderr: '' };
     } },
     policy: () => null, sources: () => [], power: () => ({ ac: true, battery: null }), freeBytes: () => 1e12, audit() {}, sleep: async () => {},
@@ -47,7 +49,7 @@ function world(opts: { licence?: unknown; download?: 'fail' | 'ok' }) {
   let store = { deferrals: {} as Record<string, number> };
   const env: CoordinatorEnv = {
     fetchJson: async () => manifest({ entitlement: 'business' }), keys: key.keys, policy: () => ({ update_mode: 'automatic' }), arch: 'amd64',
-    installedVersion: () => '1.0.1', deviceKey: () => 'k', idle: async () => true, metered: async () => false, setSuite() {},
+    installedVersion: () => installed, deviceKey: () => 'k', idle: async () => true, metered: async () => false, setSuite() {},
     load: () => store, save: (s) => { store = s; }, report: async (r) => { reports.push(r); }, reboot: async () => {}, now: () => now.getTime(),
     licence: async () => opts.licence ?? null, deviceId: () => 'dev-1', audit: (e) => { audits.push(e); },
   };

@@ -10,7 +10,7 @@ Build-Depends: debhelper-compat (= 13), nodejs (>= 22.18), npm,
 # Branding: SVG sources rendered to PNG for Plymouth, GRUB and icons.
  librsvg2-bin, grub-common, fonts-dejavu-core,
 # Wayland bridge: protocol bindings generated with pywayland-scanner from wayland.xml; D-Bus tests on a private bus.
- python3, python3-pywayland, python3-cffi-backend, python3-dbus-next, libwayland-dev, pkgconf, dbus-daemon,
+ python3, python3-pywayland, python3-cffi-backend, python3-dbus-next, python3-yaml, libwayland-dev, pkgconf, dbus-daemon,
 # Installer translations (.ts → .qm).
  qt6-l10n-tools | qttools5-dev-tools
 Standards-Version: 4.7.0
@@ -24,7 +24,7 @@ Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archi
  labwc, wlr-randr, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, xdg-desktop-portal-gtk, gnome-keyring,
  pipewire, pipewire-pulse, wireplumber, network-manager, bluez, udisks2, upower, cups, polkitd, pkexec,
- flatpak, fcitx5, apparmor, ${misc:Depends}
+ flatpak, fcitx5, fcitx5-m17n, fcitx5-frontend-gtk3, fcitx5-frontend-gtk4, fcitx5-frontend-qt6, apparmor, ${misc:Depends}
 Recommends: fwupd, wl-mirror, worksuite-office | worksuite-desktopeditors
 Conflicts: openssh-server
 Description: WorkSuite OS desktop (metapackage)
@@ -60,7 +60,7 @@ Package: worksuite-session
 Architecture: all
 Depends: labwc, systemd, dbus-user-session, gtklock, swayidle, zenity, lxpolkit | mate-polkit,
  libpam-modules, libpam-runtime, ${misc:Depends}
-Recommends: python3, python3-gi, gir1.2-gtk-4.0
+Recommends: python3, python3-gi, gir1.2-gtk-4.0, gir1.2-polkit-1.0
 Description: WorkSuite Wayland session file, systemd user units and launcher
  Session entry for the display manager, the worksuite-session launcher and the
  systemd user units bound to worksuite-session.target, plus Labwc and portal
@@ -69,7 +69,7 @@ Description: WorkSuite Wayland session file, systemd user units and launcher
 
 Package: worksuite-user-services
 Architecture: amd64 arm64
-Depends: worksuite-shell (= ${binary:Version}), gnome-keyring, libsecret-tools, xdg-utils, ${misc:Depends}
+Depends: worksuite-shell (= ${binary:Version}), gnome-keyring, libpam-gnome-keyring, libsecret-tools, xdg-utils, ${misc:Depends}
 Description: WorkSuite user services (catalog, files, credentials broker, sync)
  Per-user services: the offline-first sync service (local SQLite store and
  outbox) and the credentials broker (OneAuth sign-in, keyring-held refresh
