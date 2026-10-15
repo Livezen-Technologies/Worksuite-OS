@@ -1,3 +1,5 @@
 services/sync/src usr/lib/worksuite/sync/
 services/sync/package.json usr/lib/worksuite/sync/
 services/user-service/dbus/lk.worksuite.Credentials1.xml usr/share/dbus-1/interfaces/
+services/credentials/src usr/lib/worksuite/credentials/
+services/credentials/package.json usr/lib/worksuite/credentials/

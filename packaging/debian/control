@@ -48,7 +48,7 @@ Description: WorkSuite Wayland session file, systemd user units and launcher
 
 Package: worksuite-user-services
 Architecture: amd64 arm64
-Depends: nodejs (>= 22), gnome-keyring, ${misc:Depends}
+Depends: nodejs (>= 22.18), gnome-keyring, libsecret-tools, xdg-utils, ${misc:Depends}
 Description: WorkSuite user services (catalog, files, credentials broker, sync)
 
 Package: worksuite-package-service

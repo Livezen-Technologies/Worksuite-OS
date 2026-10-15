@@ -31,6 +31,7 @@ ready() {
 cleanup() {
     # WSOS-SES-003: does not rely on the user manager exiting.
     systemctl --user stop worksuite-sync.service 2>/dev/null          # flushes in-flight batch, closes SQLite
+    systemctl --user stop worksuite-credentials.service 2>/dev/null   # drops in-memory access tokens
     dbus-send --session --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets \
         org.freedesktop.Secret.Service.Lock array:objpath:/org/freedesktop/secrets/collection/login >/dev/null 2>&1
     systemctl --user stop worksuite-session.target 2>/dev/null

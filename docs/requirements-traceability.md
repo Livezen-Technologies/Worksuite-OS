@@ -13,7 +13,8 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-SHL-001…004 bridge operations, errors, caller check | `native/wayland-bridge/lk.worksuite.WaylandBridge1.xml`, `native/wayland-bridge/README.md` | Doc |
 | WSOS-INT-012 portal backends | `services/session/portals/worksuite-portals.conf` | Cfg |
 | WSOS-DRV-004 conflict copy name | `services/sync/src/policy.ts` (`conflictCopyName`) | Impl |
-| WSOS-IDN-002/003/008 token broker | `services/user-service/dbus/lk.worksuite.Credentials1.xml` | Doc |
+| WSOS-IDN-001 OIDC code + PKCE, no client secret | `services/credentials/src/broker.ts` (`signIn`), `src/oidc.ts`, `src/pkce.ts` | Impl |
+| WSOS-IDN-002/003/008 token broker | `services/credentials/src/broker.ts`, `src/keyring.ts`, `services/user-service/dbus/lk.worksuite.Credentials1.xml` | Impl |
 | WSOS-IDN-005 `X-WS-Device` on every call | `services/sync/src/transport.ts` (`fetchTransport`), `api-contracts/openapi.yaml` | Impl |
 | WSOS-IDN-006 DEVICE_REVOKED stops sync | `services/sync/src/engine.ts` | Impl |
 | §8.2 local store, write + outbox in one transaction | `services/sync/src/db.ts`, `services/sync/src/store.ts` | Impl |

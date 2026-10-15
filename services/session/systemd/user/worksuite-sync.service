@@ -1,6 +1,8 @@
 [Unit]
 Description=WorkSuite sync service (local store, outbox, Drive)
 PartOf=worksuite-session.target
+Wants=worksuite-credentials.service
+After=worksuite-credentials.service
 
 [Service]
 Type=simple
