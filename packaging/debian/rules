@@ -50,7 +50,8 @@ override_dh_auto_install:
 	# worksuite-branding
 	d=debian/worksuite-branding; p=$$d/usr/share/plymouth/themes/worksuite; g=$$d/usr/share/grub/themes/worksuite; \
 	install -D -m 0644 -t $$p branding/plymouth/worksuite.plymouth branding/plymouth/worksuite.script build-branding/plymouth/*.png && \
-	install -D -m 0644 -t $$g branding/grub/theme.txt build-branding/grub/*.png build-branding/grub/*.pf2 && \
+	install -D -m 0644 -t $$g branding/grub/theme.txt branding/grub/theme-failed.txt build-branding/grub/*.png build-branding/grub/*.pf2 && \
+	install -D -m 0644 -t $$g/icons build-branding/grub/icons/*.png && \
 	install -D -m 0644 branding/grub/worksuite.cfg $$d/etc/default/grub.d/worksuite.cfg && \
 	install -D -m 0644 -t $$d/usr/share/fonts/truetype/ibm-plex branding/fonts/ibm-plex/*.ttf && \
 	install -D -m 0644 branding/icons/worksuite.svg $$d/usr/share/icons/hicolor/scalable/apps/worksuite.svg && \

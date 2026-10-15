@@ -8,6 +8,7 @@ import { useOsUpdate, updates } from '../lib/useOsUpdate'
 import { REMIND_KEY, SEEN_KEY, UPDATE_PHASES, fmtWhen, heroView, needsAttention, canDefer, restartOptions, whatsNew, type Action, type RestartChoice, type Tone } from '../lib/updates'
 import { C, Dialog, OptionCard, Progress, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, heroCard, linkBtn, rowLine } from '../components/Dk'
 import { Mark } from '../components/Ws'
+import { OfflineUpdates, showsOffline, useUsbBundles } from './UpdatesOffline'
 import { formatNumber, messages, t } from '../i18n'
 
 export const ICON = {
@@ -53,9 +54,11 @@ export function UpdatesPanel() {
   const [busy, setBusy] = useState(false)
   const [schedule, setSchedule] = useState(false)
   const [policy, setPolicy] = useState<DeviceInfo['policies']>(null)
+  const [orgName, setOrgName] = useState<string | null>(null)
+  const bundles = useUsbBundles()
   const [, tick] = useState(0)
   useEffect(() => {
-    void os.deviceInfo().then((d) => setPolicy(d.policies)).catch(() => {})
+    void os.deviceInfo().then((d) => { setPolicy(d.policies); setOrgName(d.org_name) }).catch(() => {})
     const t = setInterval(() => tick((n) => n + 1), 15_000)
     return () => clearInterval(t)
   }, [])
@@ -63,6 +66,8 @@ export function UpdatesPanel() {
   if (!st) {
     return <div className={`${heroCard} p-5 text-sm text-[#8FA3C8]`} role="status">{error ? t('upd.statusUnavailable', { error }) : t('upd.loading')}</div>
   }
+  // G14: emergency release, resumed download or a bundle on a USB drive.
+  if (showsOffline(st, bundles)) return <OfflineUpdates st={st} job={job} policy={policy} orgName={orgName} bundles={bundles} />
   const v = heroView(st, job)
   const tone = TONE[v.tone]
   const act = async (a: Action) => { setBusy(true); await run(a, () => setSchedule(true)); setBusy(false) }

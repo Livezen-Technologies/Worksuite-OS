@@ -1,0 +1,42 @@
+# G13 "Boot options": the last start did not finish (worksuite_boot_ok=0 in grubenv), so
+# /etc/grub.d/05_worksuite_bootcheck selects the previous kernel and loads this theme. Same menu as theme.txt,
+# 70 px lower, under the warning banner drawn on background-failed.png.
+desktop-image: "background-failed.png"
+desktop-image-scale-method: "padding"
+desktop-color: "#040A1A"
+title-text: ""
+message-font: "IBM Plex Sans Regular 15"
+message-color: "#E8EEFA"
+terminal-font: "Unifont Regular 16"
+
++ boot_menu {
+        left = 50%-292
+        top = 50%-170
+        width = 584
+        height = 288
+        icon_width = 20
+        icon_height = 20
+        item_icon_space = 14
+        item_height = 28
+        item_padding = 6
+        item_spacing = 20
+        item_font = "IBM Plex Sans Regular 15"
+        item_color = "#E8EEFA"
+        selected_item_font = "IBM Plex Sans Bold 15"
+        selected_item_color = "#FFFFFF"
+        selected_item_pixmap_style = "select_*.png"
+        scrollbar = false
+}
+
+# Countdown at the right end of the banner. GRUB fills %d and hides it once a key stops the countdown.
++ label {
+        id = "__timeout__"
+        left = 50%+176
+        top = 50%-245
+        width = 108
+        height = 20
+        align = "right"
+        font = "IBM Plex Sans Bold 13"
+        color = "#FFB98A"
+        text = "Starting in %d s"
+}

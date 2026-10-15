@@ -117,6 +117,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   pruneRuntimes: () => ipcRenderer.invoke('ws:pruneRuntimes'),
   bundleInspect: (handle: string) => ipcRenderer.invoke('ws:bundleInspect', String(handle)),
   bundleInstall: (handle: string) => ipcRenderer.invoke('ws:bundleInstall', String(handle)),
+  findBundles: () => ipcRenderer.invoke('ws:findBundles'),
   appimageList: () => ipcRenderer.invoke('ws:appimageList'),
   appimageImport: (handle: string) => ipcRenderer.invoke('ws:appimageImport', String(handle)),
   appimageApprove: (id: string) => ipcRenderer.invoke('ws:appimageApprove', String(id)),

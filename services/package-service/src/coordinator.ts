@@ -19,11 +19,13 @@ export interface UpdateStatus {
   installed: string;
   release_id: string | null;
   mandatory: boolean;
+  critical: boolean;                 // emergency security release: installs on battery and metered links
   deadline: string | null;
   deferrals_left: number | null;
   reason: string | null;             // waiting reason, refusal or error
   restart_at: number | null;
   last_check: number | null;
+  resumed: boolean;                  // this install picks up a download that was interrupted (apt resumes partials)
 }
 
 export interface CoordinatorEnv {
@@ -64,11 +66,12 @@ export class Coordinator extends EventEmitter {
   private timers: NodeJS.Timeout[] = [];
   private env: CoordinatorEnv;
   private svc: PackageService;
+  private interrupted: string | null = null;   // release id whose download was cut off
 
   constructor(env: CoordinatorEnv, svc: PackageService) {
     super();
     this.env = env; this.svc = svc;
-    this.status = { state: 'up_to_date', version: null, installed: env.installedVersion(), release_id: null, mandatory: false, deadline: null, deferrals_left: null, reason: null, restart_at: null, last_check: null };
+    this.status = { state: 'up_to_date', version: null, installed: env.installedVersion(), release_id: null, mandatory: false, deadline: null, deferrals_left: null, reason: null, restart_at: null, last_check: null, critical: false, resumed: false };
   }
 
   /** WSOS-AUP-001: first check 15 min after start, then every 6 h. */
@@ -114,7 +117,7 @@ export class Coordinator extends EventEmitter {
       window: policy?.maintenance_window, deviceKey: this.env.deviceKey(), now: new Date(this.env.now()),
       idle: await this.env.idle(), metered: await this.env.metered(), deferrals: used,
     });
-    const offer = { version: raw.version, release_id: raw.release_id, mandatory: !!(raw.mandatory || raw.critical), deadline: raw.deadline ?? null,
+    const offer = { version: raw.version, release_id: raw.release_id, mandatory: !!(raw.mandatory || raw.critical), critical: !!raw.critical, deadline: raw.deadline ?? null,
       deferrals_left: raw.mandatory || raw.critical ? Math.max(0, 3 - used) : null, last_check: this.env.now() };
     switch (d.action) {
       case 'none': this.set({ ...offer, state: d.reason === 'up_to_date' ? 'up_to_date' : 'available', reason: d.reason === 'up_to_date' ? null : d.reason }); break;
@@ -168,7 +171,7 @@ export class Coordinator extends EventEmitter {
 
   private install(rebootAfter = false): Promise<void> {
     const m = this.manifest!;
-    this.set({ state: 'installing', reason: null });
+    this.set({ state: 'installing', reason: null, resumed: this.interrupted === m.release_id });
     return new Promise((resolve) => {
       let id: number;
       try { id = this.svc.applyUpdate(0, m.release_id, { allow_battery: !!m.critical }); }
@@ -187,12 +190,14 @@ export class Coordinator extends EventEmitter {
     // WSOS-AUP-008: an interrupted download is not a failed update. apt keeps the partial files and resumes them
     // (HTTP Range) on the next attempt, which the next check cycle or "Install now" starts.
     if (!ok && /^download interrupted/.test(job.error ?? '')) {
-      this.set({ state: 'waiting', reason: 'download_interrupted', restart_at: null });
+      this.interrupted = m.release_id;
+      this.set({ state: 'waiting', reason: 'download_interrupted', restart_at: null, resumed: false });
       return;
     }
     // WSOS-UPD-001: health check after a successful apply. A failure keeps the device off the reboot path, runs
     // `dpkg --configure -a` if packages were left unconfigured, and is reported so the server can issue a signed
     // rollback directive (WSOS-AUP-003).
+    this.interrupted = null;
     const failures = ok ? await this.health(m) : [];
     if (failures.length) {
       ok = false;
@@ -204,9 +209,9 @@ export class Coordinator extends EventEmitter {
       release_id: m.release_id, result: ok ? 'success' : 'failed', reboot_required: this.svc.rebootRequired,
       health_check: ok ? 'pass' : 'fail', ...(failures.length ? { health_failures: failures } : {}), ...(ok ? {} : { error: job.error ?? 'failed' }),
     });
-    if (!ok) { this.set({ state: 'failed', reason: job.error ?? 'update failed', restart_at: null }); return; }
+    if (!ok) { this.set({ state: 'failed', reason: job.error ?? 'update failed', restart_at: null, resumed: false }); return; }
     const s = this.env.load(); delete s.deferrals[m.release_id]; this.env.save(s);
-    this.set({ state: this.svc.rebootRequired ? 'ready_to_restart' : 'up_to_date', installed: this.env.installedVersion(), reason: null, restart_at: null });
+    this.set({ state: this.svc.rebootRequired ? 'ready_to_restart' : 'up_to_date', installed: this.env.installedVersion(), reason: null, restart_at: null, resumed: false });
     if (rebootAfter && this.svc.rebootRequired) await this.env.reboot();
   }
 

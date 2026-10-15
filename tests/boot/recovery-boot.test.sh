@@ -23,6 +23,16 @@ check "version order is not lexical" '! echo "$out" | grep -q "previous kernel 6
 mkdir -p "$t/empty"
 check "no kernels, no entries" '[ -z "$(WORKSUITE_BOOT_DIR="$t/empty" sh "$rb/grub/42_worksuite_recovery")" ]'
 
+check "row icons: recovery and previous classes" 'echo "$out" | grep -q "class ws-recovery" && echo "$out" | grep -q "class ws-previous"'
+
+# G13 failed-start fallback
+bc=$(WORKSUITE_BOOT_DIR="$t/boot" GRUB_THEME=/usr/share/grub/themes/worksuite/theme.txt sh "$rb/grub/05_worksuite_bootcheck")
+check "failed start selects the previous kernel" 'echo "$bc" | grep -q "set default=\"worksuite-previous-6.12.38+deb13-amd64\""'
+check "failed start loads the banner theme" 'echo "$bc" | grep -q "theme=\"/usr/share/grub/themes/worksuite/theme-failed.txt\""'
+check "each start is marked pending" 'echo "$bc" | grep -q "^save_env worksuite_boot_ok"'
+check "one kernel: no fallback" '[ -z "$(WORKSUITE_BOOT_DIR="$t/empty" sh "$rb/grub/05_worksuite_bootcheck")" ]'
+check "success unit clears the mark" 'grep -q "grub-editenv /boot/grub/grubenv set worksuite_boot_ok=1" "$rb/systemd/worksuite-boot-ok.service"'
+
 # Kernel retention
 WORKSUITE_BOOT_DIR="$t/boot" WORKSUITE_APT_CONF="$t/keep.conf" WORKSUITE_RUNNING=6.12.9+deb13-amd64 sh "$rb/kernel/zz-worksuite-kernel-retention"
 check "newest kept" 'grep -qF "\"^linux-image-6\.12\.50\+deb13-amd64\$\";" "$t/keep.conf"'
