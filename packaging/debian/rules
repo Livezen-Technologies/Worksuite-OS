@@ -3,6 +3,7 @@
 # from the same tag (WSOS-ARM-001). Run from the repository root with packaging/debian copied to ./debian
 # (packaging/build-debs.sh does this).
 export DH_VERBOSE = 1
+include /usr/share/dpkg/architecture.mk
 
 %:
 	dh $@
@@ -13,9 +14,26 @@ override_dh_auto_build:
 	find services/package-service/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore \) -delete
 	# Shell: renderer + Electron main, and the Electron runtime for this architecture.
 	cd shell && npm ci --no-audit --no-fund && npm run build
+	# Calamares view module (installer/modules/worksuiteconfirm).
+	cmake -S installer/modules/worksuiteconfirm -B build-installer -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWORKSUITE_TESTS=ON
+	cmake --build build-installer
 	dh_auto_build
 
+override_dh_auto_install:
+	dh_auto_install
+	# calamares-settings-worksuite: config, branding and the two WorkSuite modules next to the stock ones.
+	d=debian/calamares-settings-worksuite; m=$$d/usr/lib/$(DEB_HOST_MULTIARCH)/calamares/modules; \
+	install -D -m 0644 installer/settings.conf $$d/etc/calamares/settings.conf && \
+	install -d $$d/etc/calamares/modules && install -m 0644 installer/modules/*.conf $$d/etc/calamares/modules/ && \
+	install -d $$d/usr/share/calamares/branding/worksuite && cp -a installer/branding/worksuite/. $$d/usr/share/calamares/branding/worksuite/ && \
+	install -D -m 0644 installer/modules/worksuiteconfirm/module.desc $$m/worksuiteconfirm/module.desc && \
+	install -m 0644 build-installer/libcalamares_viewmodule_worksuiteconfirm.so $$m/worksuiteconfirm/ && \
+	install -D -m 0644 installer/modules/worksuiterecovery/module.desc $$m/worksuiterecovery/module.desc && \
+	install -m 0644 installer/modules/worksuiterecovery/main.py $$m/worksuiterecovery/main.py
+
 override_dh_auto_test:
+	cd build-installer && QT_QPA_PLATFORM=offscreen ctest --output-on-failure
+	python3 -m unittest discover -s installer/modules/worksuiterecovery/tests
 	cd services/sync && npm test
 	cd services/credentials && npm test
 	cd services/device-agent && npm test
