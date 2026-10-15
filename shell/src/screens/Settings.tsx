@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { cloudErrorText, os, type CloudAccount, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, os, policyLines, type CloudAccount, type DeviceInfo, type SignOutChoice } from '../lib/os'
 import type { WindowProps } from './types'
 import CIcon from '../components/CIcon'
 
@@ -197,39 +197,56 @@ function Updates() {
 
 function AboutDevice({ compact }: { compact?: boolean }) {
   const [showWipe, setShowWipe] = useState(false)
+  const [info, setInfo] = useState<DeviceInfo | null>(null)
+  useEffect(() => { void os.deviceInfo().then(setInfo) }, [])
+  if (!info) return <div className={`${card} px-5 py-[18px] text-[13px] text-ws-muted`}>Loading device information…</div>
+
+  const d = info.device
+  const enc = d?.encrypted == null ? 'Unknown' : d.encrypted ? 'Encrypted (LUKS2)' : 'Not encrypted'
+  const rows: [string, string][] = [
+    ['Name', d?.hostname ?? 'Unknown'],
+    ['OS', d?.os_version ?? 'Unknown'],
+    ['Architecture', d?.arch === 'arm64' ? 'ARM64 (arm64)' : 'x86-64 (amd64)'],
+    ['Kernel', d?.kernel_version ?? 'Unknown'],
+    ['Encryption', enc],
+  ]
+  const lines = policyLines(info.policies)
+  const checked = info.last_check_in ? new Date(info.last_check_in).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'not yet'
+
   return (
     <div className="flex flex-col gap-4">
       <div className={`${card} flex flex-col gap-2.5 px-5 py-[18px]`}>
         {compact && <div className="text-sm font-semibold">About this device</div>}
         <dl className="m-0 grid grid-cols-[120px_1fr] gap-y-2 text-[13px]">
-          {[['Name', 'LZT-LAP-0142'], ['OS', 'WorkSuite OS 1.0.2 (trixie)'], ['Architecture', 'x86-64 (amd64)'], ['Encryption', 'LUKS2 · TPM-bound'], ['Directory', 'Joined to LIVEZEN.LOCAL (Active Directory)'], ['WorkSuite', 'work.livezentech.com · Enterprise']].map(([k, v]) => (
-            <div key={k} className="contents"><dt className="text-ws-muted">{k}</dt><dd className="m-0">{v}</dd></div>
-          ))}
+          {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-ws-muted">{k}</dt><dd className="m-0">{v}</dd></div>)}
         </dl>
       </div>
-      {/* WSOS-MDM-007: management disclosure */}
-      <div className="flex flex-col gap-2.5 rounded-[14px] border border-blue-200 bg-blue-50 px-5 py-[18px]">
-        <div className="flex items-center gap-2 text-sm font-semibold text-blue-900"><CIcon name="shield" />Managed by Livezen Technologies</div>
-        <ul className="m-0 pl-[18px] text-[13px] leading-relaxed text-slate-800 list-disc">
-          <li>Approved apps and repositories only</li>
-          <li>Pilot update ring, Automatic mode</li>
-          <li>Screen locks after 5 min idle</li>
-          <li>Offline sign-in allowed for 7 days</li>
-          <li>Your organization can remotely lock this device and wipe WorkSuite data or the whole device</li>
-        </ul>
-        <div className="text-xs text-blue-900">Last policy check 09:58 · no keylogging, camera or remote shell</div>
-        {/* WSOS-WIPE-007: explain wipe scope */}
-        <button type="button" aria-expanded={showWipe} onClick={() => setShowWipe((s) => !s)} className="self-start text-[13px] text-ws-accent hover:text-ws-accent-strong">
-          {showWipe ? 'Hide' : 'What a remote wipe does'}
-        </button>
-        {showWipe && (
-          <div className="rounded-lg border border-blue-200 bg-white p-3 text-[12.5px] leading-relaxed text-slate-700">
-            <p className="m-0"><strong>WorkSuite data wipe</strong> removes your work account, synced WorkSuite files and cached credentials. Personal files in your home folder stay.</p>
-            <p className="mb-0 mt-2"><strong>Full device wipe</strong> destroys the LUKS2 encryption keys, making all data unrecoverable, then returns the device to the installer.</p>
-            <p className="mb-0 mt-2">You are notified on screen before any wipe runs, and each request is logged.</p>
-          </div>
-        )}
-      </div>
+      {/* WSOS-MDM-007: management disclosure, from the device agent */}
+      {info.managed ? (
+        <div className="flex flex-col gap-2.5 rounded-[14px] border border-blue-200 bg-blue-50 px-5 py-[18px]">
+          <div className="flex items-center gap-2 text-sm font-semibold text-blue-900"><CIcon name="shield" />Managed by {info.org_name ?? info.server ?? 'your organization'}</div>
+          <ul className="m-0 pl-[18px] text-[13px] leading-relaxed text-slate-800 list-disc">
+            {lines.map((l) => <li key={l}>{l}</li>)}
+            <li>Your organization can remotely lock this device and wipe WorkSuite data{d?.encrypted ? ' or the whole device' : ''}</li>
+          </ul>
+          <div className="text-xs text-blue-900">{info.server ? `${info.server} · ` : ''}Last policy check {checked} · no keylogging, camera access or remote shell</div>
+          {/* WSOS-WIPE-007: explain wipe scope */}
+          <button type="button" aria-expanded={showWipe} onClick={() => setShowWipe((v) => !v)} className="self-start text-[13px] text-ws-accent hover:text-ws-accent-strong">
+            {showWipe ? 'Hide' : 'What a remote wipe does'}
+          </button>
+          {showWipe && (
+            <div className="rounded-lg border border-blue-200 bg-white p-3 text-[12.5px] leading-relaxed text-slate-700">
+              <p className="m-0"><strong>WorkSuite data wipe</strong> signs everyone out and removes WorkSuite accounts, synced WorkSuite files and the WorkSuite Drive folder for every user. Other files in home folders stay.</p>
+              <p className="mb-0 mt-2"><strong>Full device wipe</strong>{d?.encrypted ? ' destroys the disk encryption keys, making all data unrecoverable, then restarts the computer.' : ' is only possible on encrypted devices; this one is not encrypted.'}</p>
+              <p className="mb-0 mt-2">Every wipe needs an administrator plus a second approver and is recorded by your organization.</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className={`${card} px-5 py-[18px] text-[13px] text-ws-muted`}>
+          {info.agent ? 'This device isn’t managed by an organization.' : 'Management status is unavailable: the WorkSuite device agent isn’t running.'}
+        </div>
+      )}
     </div>
   )
 }

@@ -12,5 +12,6 @@ contextBridge.exposeInMainWorld('worksuite', {
   cloudSignOut: (accountId: string, choice: string) => ipcRenderer.invoke('ws:cloudSignOut', String(accountId), String(choice)),
   syncUnsent: (accountId: string) => ipcRenderer.invoke('ws:syncUnsent', String(accountId)),
   syncNow: () => ipcRenderer.invoke('ws:syncNow'),
+  deviceInfo: () => ipcRenderer.invoke('ws:deviceInfo'),
   cloudAccounts: () => ipcRenderer.invoke('ws:cloudAccounts'),
 })

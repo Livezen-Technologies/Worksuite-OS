@@ -35,6 +35,7 @@ async function daemon() {
   host.publishCredential(state.state.enrolled ? state.state.credential ?? null : null);
   host.publishPolicy(state.state.enrolled ? state.state.policy ?? null : null);
   agent.publishStatus();
+  void agent.refreshFacts().catch(() => {});
 
   let busy: Promise<unknown> = Promise.resolve();
   const serial = <T>(fn: () => Promise<T>) => { const p = busy.then(fn, fn); busy = p.catch(() => {}); return p; };

@@ -34,7 +34,7 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | §9.3 enrollment, WSOS-IDN-005 device credential | `services/device-agent/src/agent.ts` (`enroll`), `src/host.ts` (`publishCredential`) | Impl |
 | WSOS-MDM-001 inventory and versions | `services/device-agent/src/host.ts` (`facts`, `inventory`), `src/main.ts` | Impl |
 | WSOS-MDM-002 signed policy | `services/device-agent/src/agent.ts` (`refreshPolicy`, `verifyPolicy`) | Impl |
-| WSOS-MDM-007, WSOS-WIPE-007 management status for users | `services/device-agent/src/agent.ts` (`status`) → `/run/worksuite-device-agent/status.json` | Impl (Settings not yet reading it) |
+| WSOS-MDM-007, WSOS-WIPE-007 management status for users | `services/device-agent/src/agent.ts` (`status`) → `/run/worksuite-device-agent/status.json` → `shell/src/screens/Settings.tsx` (`AboutDevice`) | Impl |
 | WSOS-WIPE-002/003/005/006 remote wipe | `services/device-agent/src/agent.ts` (`wipe`, `offlineKillTimer`), `src/host.ts` (`wipeWorkSuiteData`, `cryptoErase`) | Impl |
 | WSOS-SEC-007 systemd hardening | `services/*/systemd/*.service` | Cfg |
 | WSOS-SEC-010 no SSH server | `packaging/debian/control` (`Conflicts: openssh-server`), live-build hook | Cfg |

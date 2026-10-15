@@ -39,8 +39,18 @@ const DAY = 86_400_000;
 
 class WipeDeferred extends Error {}
 
+export interface DeviceFacts { hostname: string; os_version: string; arch: string; kernel_version: string; encrypted: boolean }
+
 export class Agent {
   private o: AgentOptions & { now: () => number };
+  private facts: DeviceFacts | null = null;
+
+  /** Facts shown in Settings > About this device, managed or not. */
+  async refreshFacts() {
+    const f = await this.o.host.facts();
+    this.facts = { hostname: f.hostname, os_version: f.os_version, arch: f.arch, kernel_version: f.kernel_version, encrypted: await this.o.host.isFullyEncrypted().catch(() => false) };
+    this.publishStatus();
+  }
   constructor(opts: AgentOptions) { this.o = { now: Date.now, ...opts }; }
   private get s(): AgentState { return this.o.state.state; }
 
@@ -93,6 +103,7 @@ export class Agent {
         policy_version: this.s.policy?.version ?? '', update_status: f.update_status,
         observed: { policy_version: this.s.policy?.version ?? null, encrypted: await this.o.host.isFullyEncrypted() },
       });
+      await this.refreshFacts();
       this.o.state.update((s) => { s.last_check_in = this.o.now(); });
       for (const c of res.commands ?? []) await this.handle(c);
     } catch (e) {
@@ -212,6 +223,7 @@ export class Agent {
   status() {
     const p = this.s.policy;
     return {
+      device: this.facts,
       managed: this.s.enrolled,
       org_name: this.s.org_name ?? null,
       server: this.s.server_url ? new URL(this.s.server_url).host : null,

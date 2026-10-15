@@ -14,6 +14,37 @@ export interface WorkSuiteApi {
   syncUnsent(accountId: string): Promise<CloudResult<number>>
   syncNow(): Promise<CloudResult<unknown>>
   cloudAccounts(): Promise<CloudResult<CloudAccount[]>>
+  /** Settings > About this device (WSOS-MDM-007, WSOS-WIPE-007): device agent status, or local facts when it isn't running. */
+  deviceInfo(): Promise<DeviceInfo>
+}
+
+export interface DevicePolicies {
+  version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
+  lock_timeout_max_s: number | null; offline_access_days: number | null; usb_storage: string | null; bluetooth: boolean | null
+  app_allowlist_size: number
+}
+export interface DeviceInfo {
+  agent: boolean
+  device: { hostname: string; os_version: string; arch: string; kernel_version: string; encrypted: boolean | null } | null
+  managed: boolean
+  org_name: string | null
+  server: string | null
+  last_check_in: number | null
+  policies: DevicePolicies | null
+}
+
+/** Policy → plain sentences for the management notice. Only what the policy actually sets. */
+export function policyLines(p: DevicePolicies | null): string[] {
+  if (!p) return []
+  const out: string[] = []
+  if (p.app_allowlist_size > 0) out.push(`Only approved apps can be installed (${p.app_allowlist_size} approved)`)
+  if (p.update_ring || p.update_mode) out.push(`Updates: ${[p.update_ring && `${p.update_ring} ring`, p.update_mode && `${p.update_mode} mode`].filter(Boolean).join(', ')}${p.maintenance_window ? `, restarts ${p.maintenance_window}` : ''}`)
+  if (p.lock_timeout_max_s) out.push(`Screen locks after at most ${Math.round(p.lock_timeout_max_s / 60)} min idle`)
+  if (p.offline_access_days) out.push(`Offline sign-in allowed for ${p.offline_access_days} days`)
+  if (p.usb_storage === 'block') out.push('USB storage is blocked')
+  else if (p.usb_storage === 'read_only') out.push('USB storage is read-only')
+  if (p.bluetooth === false) out.push('Bluetooth is turned off')
+  return out
 }
 
 export type SignOutChoice = 'none' | 'export' | 'discard'
@@ -45,6 +76,13 @@ const stub: WorkSuiteApi = {
   },
   async syncUnsent() { return { ok: true, value: stubUnsent } },
   async syncNow() { stubUnsent = Math.max(0, stubUnsent - 1); return { ok: true, value: true } },
+  async deviceInfo() {
+    return {
+      agent: true, managed: true, org_name: 'Livezen Technologies', server: 'work.livezentech.com', last_check_in: Date.now() - 4 * 60_000,
+      device: { hostname: 'LZT-LAP-0142', os_version: 'WorkSuite OS 1.0 (preview)', arch: 'amd64', kernel_version: '6.12', encrypted: true },
+      policies: { version: 'preview', update_ring: 'pilot', update_mode: 'automatic', maintenance_window: '02:00-04:00', lock_timeout_max_s: 300, offline_access_days: 7, usb_storage: 'read_only', bluetooth: null, app_allowlist_size: 42 },
+    }
+  },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
 }
 

@@ -16,3 +16,13 @@ describe('session lifecycle', () => {
     expect(shouldEnterRecovery([0, 10_000, 50_000], 65_000)).toBe(false)
   })
 })
+
+import { policyLines } from './os'
+
+describe('policyLines', () => {
+  it('describes only what the policy sets', () => {
+    expect(policyLines(null)).toEqual([])
+    expect(policyLines({ version: 'v', update_ring: 'pilot', update_mode: null, maintenance_window: null, lock_timeout_max_s: 300, offline_access_days: null, usb_storage: 'block', bluetooth: false, app_allowlist_size: 0 }))
+      .toEqual(['Updates: pilot ring', 'Screen locks after at most 5 min idle', 'USB storage is blocked', 'Bluetooth is turned off'])
+  })
+})

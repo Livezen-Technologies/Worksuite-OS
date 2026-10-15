@@ -1,5 +1,7 @@
 import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 
@@ -92,6 +94,7 @@ app.whenReady().then(() => {
     return r.ok ? { ok: true, value: Number(r.value) } : r.error === 'broker_unavailable' ? { ok: true, value: 0 } : r
   })
   handle('ws:syncNow', () => syncCall('SyncNow'))
+  handle('ws:deviceInfo', () => deviceInfo())
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')
     return r.ok ? { ok: true, value: publicAccounts(r.value) } : r
@@ -101,3 +104,18 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => app.quit())
+
+/** Device agent status file (0644, written by worksuite-device-agent); local facts if the agent isn't running. */
+function deviceInfo() {
+  try {
+    const st = JSON.parse(readFileSync('/run/worksuite-device-agent/status.json', 'utf8'))
+    return { agent: true, device: st.device ?? null, managed: !!st.managed, org_name: st.org_name ?? null, server: st.server ?? null, last_check_in: st.last_check_in ?? null, policies: st.policies ?? null }
+  } catch {
+    let osVersion = 'unknown'
+    try { osVersion = /^PRETTY_NAME="?([^"\n]*)/m.exec(readFileSync('/etc/os-release', 'utf8'))?.[1] ?? osVersion } catch { /* keep unknown */ }
+    return {
+      agent: false, managed: false, org_name: null, server: null, last_check_in: null, policies: null,
+      device: { hostname: os.hostname(), os_version: osVersion, arch: process.arch === 'arm64' ? 'arm64' : 'amd64', kernel_version: os.release(), encrypted: null },
+    }
+  }
+}
