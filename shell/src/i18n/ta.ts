@@ -1182,6 +1182,8 @@ const ta: Partial<Record<MessageKey, string>> = {
   // Screen capture indicator (WSOS-INT-013)
   'capture.active': 'திரை பகிரப்படுகிறது',
   'capture.hint': 'ஒரு பயன்பாடு உங்கள் திரையைப் பதிவுசெய்கிறது அல்லது பகிர்கிறது. அந்தப் பயன்பாட்டில் நிறுத்தவும்.',
+  // Drive file lock (WSOS-DRV-003)
+  'files.readOnlyCopy': '{name} வேறொருவரால் திருத்தப்படுகிறது. படிக்க மட்டுமான நகல் திறக்கப்பட்டது; அதன் மாற்றங்கள் Drive இல் சேமிக்கப்படாது.',
 }
 
 export default ta

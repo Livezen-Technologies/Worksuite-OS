@@ -26,6 +26,7 @@ import { startDesktopHost } from './desktopHost'
 import { startPeripheralsHost } from './peripherals'
 import { startNotifications } from './notifications'
 import { runPolkitMode } from './polkitMode'
+import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { fileHead, isWindowsProgram } from './winexe'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
@@ -354,6 +355,13 @@ app.whenReady().then(() => {
     if (!p || !existsSync(p.full)) return { ok: false, error: 'not_found' }
     // Windows programs are never opened or run; the renderer shows why (WSOS-LCH-003).
     if (isWindowsProgram(p.full, fileHead(p.full))) return { ok: false, error: 'windows_program' }
+    // Drive documents open in WorkSuite Office under the server file lock (WSOS-DRV-003, electron/officeLock.ts).
+    const office = root === 'drive' && isOfficeDoc(p.full) ? findOffice(installedApps()) : null
+    const prog = office ? execProgram(office.exec) : null
+    if (office && prog) {
+      const r = await openWithLock(rel, p.full, { syncCall, launch: (f) => { const c = scopeCommand(office.id, [prog, f]); return c ? launchAndWait(c) : Promise.resolve() } })
+      return { ok: true, value: r.outcome }
+    }
     const err = await shell.openPath(p.full)          // default app via XDG (WSOS-DSK-009)
     return err ? { ok: false, error: err } : { ok: true, value: true }
   })

@@ -48,6 +48,7 @@ export default function Files({ onClose }: WindowProps) {
   const [status, setStatus] = useState<Awaited<ReturnType<typeof os.filesStatus>> | null>(null)
   const [conflictsDismissed, setConflictsDismissed] = useState(false)
   const [winApp, setWinApp] = useState<string | null>(null)
+  const [readOnly, setReadOnly] = useState<string | null>(null)
 
   useEffect(() => { void os.filesRoots().then((r) => { setRoots(r.roots); setDriveExists(r.drive_exists) }) }, [])
 
@@ -64,7 +65,7 @@ export default function Files({ onClose }: WindowProps) {
     const p = rel ? `${rel}/${e.name}` : e.name
     if (e.dir) return go(root, p)
     // Windows programs are never run; the main process refuses them and this explains why (WSOS-LCH-003).
-    if (e.local) void os.filesOpen(root, p).then((r) => { if (!r.ok && r.error === 'windows_program') setWinApp(e.name) })
+    if (e.local) void os.filesOpen(root, p).then((r) => { if (!r.ok && r.error === 'windows_program') setWinApp(e.name); if (r.ok && (r.value as unknown) === 'read_only_copy') setReadOnly(e.name) })
   }
   const rootLabel = roots.find((r) => r.id === root)?.label ?? (cloud ? 'WorkSuite Drive' : t('files.home'))
   const crumbs = [{ label: cloud ? 'WorkSuite Cloud' : rootLabel, rel: '' }, ...rel.split('/').filter(Boolean).map((seg, i, all) => ({ label: seg, rel: all.slice(0, i + 1).join('/') }))]
@@ -114,6 +115,13 @@ export default function Files({ onClose }: WindowProps) {
           </div>
         </div>
 
+        {readOnly && (
+          <div role="status" className="mx-5 mt-3.5 flex items-center gap-3 rounded-[10px] border border-[#bfdbfe] bg-[#eff6ff] px-3.5 py-3 text-[13px] text-[#1e3a8a]">
+            <BIcon name="alert" />
+            <span className="grow">{t('files.readOnlyCopy', { name: readOnly })}</span>
+            <button type="button" onClick={() => setReadOnly(null)} className="h-8 rounded-lg border border-[#93c5fd] bg-white px-3 text-[13px] text-[#1e3a8a]">{t('common.dismiss')}</button>
+          </div>
+        )}
         {winApp && (
           <div role="alert" className="mx-5 mt-3.5 flex items-center gap-3 rounded-[10px] border border-[#bfdbfe] bg-[#eff6ff] px-3.5 py-3 text-[13px] text-[#1e3a8a]">
             <BIcon name="alert" />

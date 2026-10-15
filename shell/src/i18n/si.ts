@@ -1182,6 +1182,8 @@ const si: Partial<Record<MessageKey, string>> = {
   // Screen capture indicator (WSOS-INT-013)
   'capture.active': 'තිරය බෙදා ගනිමින්',
   'capture.hint': 'යෙදුමක් ඔබේ තිරය පටිගත කරයි හෝ බෙදා ගනී. එය එම යෙදුමෙන් නවත්වන්න.',
+  // Drive file lock (WSOS-DRV-003)
+  'files.readOnlyCopy': '{name} වෙනත් අයෙකු විසින් සංස්කරණය කරමින් පවතී. කියවීමට පමණක් පිටපතක් විවෘත කළා; එහි වෙනස්කම් Drive වෙත සුරැකෙන්නේ නැත.',
 }
 
 export default si

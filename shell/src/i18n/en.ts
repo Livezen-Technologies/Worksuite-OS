@@ -1208,6 +1208,8 @@ const en = {
   // Screen capture indicator (WSOS-INT-013)
   'capture.active': 'Sharing screen',
   'capture.hint': 'An app is recording or sharing your screen. Stop it in that app.',
+  // Drive file lock (WSOS-DRV-003)
+  'files.readOnlyCopy': '{name} is being edited by someone else. A read-only copy was opened; changes to it are not saved to Drive.',
 } as const
 
 export type MessageKey = keyof typeof en
