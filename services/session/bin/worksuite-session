@@ -49,6 +49,7 @@ case "${1:-}" in
         # shellcheck disable=SC2086
         systemctl --user unset-environment $VARS 2>/dev/null
         export XDG_CURRENT_DESKTOP=WorkSuite:wlroots XDG_SESSION_TYPE=wayland
+        . /usr/lib/worksuite/wlr-env
         labwc -C /etc/xdg/worksuite/labwc
         rc=$?
         cleanup

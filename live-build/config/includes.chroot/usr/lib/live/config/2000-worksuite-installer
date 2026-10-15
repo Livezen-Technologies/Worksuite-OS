@@ -9,10 +9,10 @@ cat > /etc/greetd/config.toml <<'CONF'
 vt = 7
 # Installer first; if it exits, the normal greeter comes back.
 [initial_session]
-command = "env QT_QPA_PLATFORM=wayland XDG_SESSION_TYPE=wayland cage -s -- calamares"
+command = "env QT_QPA_PLATFORM=wayland XDG_SESSION_TYPE=wayland worksuite-cage -s -- calamares"
 user = "root"
 [default_session]
-command = "cage -s -- gtkgreet -c /usr/bin/worksuite-session"
+command = "worksuite-cage -s -- gtkgreet -c /usr/bin/worksuite-session"
 user = "_greetd"
 CONF
 touch /var/lib/live/config/worksuite-installer

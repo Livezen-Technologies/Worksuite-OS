@@ -3,3 +3,5 @@ services/session/bin/worksuite-session usr/bin/
 services/session/labwc/* etc/xdg/worksuite/labwc/
 services/session/portals/worksuite-portals.conf usr/share/xdg-desktop-portal/
 services/session/systemd/user/* usr/lib/systemd/user/
+services/session/bin/worksuite-cage usr/bin/
+services/session/bin/wlr-env usr/lib/worksuite/

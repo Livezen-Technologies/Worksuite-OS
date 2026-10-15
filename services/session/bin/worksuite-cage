@@ -1,0 +1,4 @@
+#!/bin/sh
+# cage with WorkSuite's renderer selection (greeter, live installer). Same arguments as cage.
+. /usr/lib/worksuite/wlr-env
+exec cage "$@"

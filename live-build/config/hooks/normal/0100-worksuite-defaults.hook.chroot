@@ -9,7 +9,7 @@ cat > /etc/greetd/config.toml <<'CONF'
 [terminal]
 vt = 7
 [default_session]
-command = "cage -s -- gtkgreet -c /usr/bin/worksuite-session"
+command = "worksuite-cage -s -- gtkgreet -c /usr/bin/worksuite-session"
 user = "_greetd"
 CONF
 systemctl enable greetd.service worksuite-device-agent.service worksuite-package-service.service worksuite-boot-marker.service
