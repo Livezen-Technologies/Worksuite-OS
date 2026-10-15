@@ -101,7 +101,8 @@ export class Agent {
       const res = await this.o.api.heartbeat({
         os_version: f.os_version, shell_version: f.shell_version, kernel_version: f.kernel_version,
         policy_version: this.s.policy?.version ?? '', update_status: f.update_status,
-        observed: { policy_version: this.s.policy?.version ?? null, encrypted: await this.o.host.isFullyEncrypted() },
+        // Unknown encryption (e.g. an overlay root on the live ISO) reports false; it must never block the check-in.
+        observed: { policy_version: this.s.policy?.version ?? null, encrypted: await this.o.host.isFullyEncrypted().catch(() => false) },
       });
       await this.refreshFacts();
       this.o.state.update((s) => { s.last_check_in = this.o.now(); });

@@ -60,7 +60,7 @@ run)
   [ "$(q "SELECT state FROM commands ORDER BY rowid DESC LIMIT 1")" = completed ] || { echo "FAIL: command not completed"; fail=1; }
   [ -n "$(q "SELECT heartbeat FROM devices WHERE heartbeat IS NOT NULL")" ] || { echo "FAIL: no heartbeat"; fail=1; }
   grep -aq 'WORKSUITE_E2E_POLICY 1 notify' "$log" || { echo "FAIL: signed policy not applied"; fail=1; }
-  grep -aq 'WORKSUITE_E2E_UPDATE available 1.0.1' "$log" || { echo "FAIL: update not offered from the signed manifest"; fail=1; }
+  grep -aEq 'WORKSUITE_E2E_UPDATE (available|waiting) 1.0.1' "$log" || { echo "FAIL: update not offered from the signed manifest"; fail=1; }   # notify mode: waiting_for_user
   [ $fail = 0 ] && echo "PASS ($accel)"
   [ $fail = 0 ] || { echo "--- server log"; tail -20 "$dir/server.log"; echo "--- last console lines"; tail -30 "$log" | tr -d '\r'; }
   exit $fail

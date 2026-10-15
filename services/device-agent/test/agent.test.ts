@@ -25,7 +25,7 @@ function command(command: string, args: Record<string, unknown> = {}, over: Part
   return e;
 }
 
-function world(opts: { encrypted?: boolean; policy?: Policy } = {}) {
+function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ws-agent-'));
   const log: string[] = [];
   const acks: { id: string; state: string; reason?: string }[] = [];
@@ -60,7 +60,7 @@ function world(opts: { encrypted?: boolean; policy?: Policy } = {}) {
     async scheduleUpdate() { log.push('update'); },
     async scheduleReboot(w) { log.push(`reboot ${w}`); },
     async collectDiagnostics(p) { return { profile: p, sha256: 'x', content: '{}' }; },
-    async isFullyEncrypted() { return opts.encrypted ?? false; },
+    async isFullyEncrypted() { if (opts.encrypted === 'error') throw new Error('lsblk: overlay: not a block device'); return opts.encrypted ?? false; },
     async wipeWorkSuiteData() { log.push('wipe data'); },
     async cryptoErase() { log.push('crypto erase'); },
     audit() {},
@@ -111,6 +111,14 @@ test('command: received → run → completed; replay after restart is not run a
   w.s.queue = [c];
   await w.restart().checkIn();
   assert.deepEqual(w.log, [], 'replayed command ignored, even after a restart');
+  w.cleanup();
+});
+
+test('check-in still runs commands when encryption cannot be determined (overlay root on the live ISO)', async () => {
+  const w = await enrolled({ encrypted: 'error' });
+  w.s.queue = [command('RequestLock')];
+  await w.agent.checkIn();
+  assert.deepEqual(w.log, ['ack received', 'lock', 'ack completed']);
   w.cleanup();
 });
 

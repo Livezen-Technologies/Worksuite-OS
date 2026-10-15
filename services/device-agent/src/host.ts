@@ -157,6 +157,7 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
 
     async isFullyEncrypted() {
       const src = (await run('findmnt', ['-n', '-o', 'SOURCE', '/'])).trim();
+      if (!src.startsWith('/dev/')) return false;   // overlay (live ISO), tmpfs, network roots: not a LUKS disk
       const j = JSON.parse(await run('lsblk', ['-J', '-s', '-p', '-o', 'PATH,FSTYPE', src])) as { blockdevices: { fstype: string | null; children?: unknown[] }[] };
       const any = (ns: { fstype: string | null; children?: unknown[] }[]): boolean => ns.some((n) => n.fstype === 'crypto_LUKS' || (n.children ? any(n.children as typeof ns) : false));
       return any(j.blockdevices);
