@@ -30,6 +30,7 @@ lb config noauto \
   --firmware-binary true \
   --firmware-chroot true \
   --apt-recommends false \
+  --apt-options "--yes -o Acquire::Check-Valid-Until=false" \
   --apt-secure true \
   --iso-application "WorkSuite OS" \
   --iso-publisher "WorkSuite; https://download.worksuitecloud.com" \

@@ -36,8 +36,10 @@ HOOK
 fi
 [ "$WORKSUITE_REPO" = 1 ] || rm -f config/archives/worksuite.list.*
 ARCH="$ARCH" SNAPSHOT="$SNAPSHOT" lb config
-lb build 2>&1 | tee build.log
-iso=$(ls ./*.iso | head -n1)
+# Snapshot Release files are past Valid-Until by design; auto/config disables that check for apt.
+lb build > build.log 2>&1 || { tail -40 build.log >&2; exit 1; }
+iso=$(ls ./*.iso 2>/dev/null | head -n1)
+[ -n "$iso" ] || { tail -40 build.log >&2; echo "lb build produced no ISO" >&2; exit 1; }
 out="$here/out"; mkdir -p "$out"
 name="worksuite-os-1.0.0-dev-$ARCH.iso"
 mv "$iso" "$out/$name"
