@@ -58,6 +58,12 @@ CREATE TABLE IF NOT EXISTS break_glass (device_id TEXT PRIMARY KEY, body TEXT NO
 CREATE TABLE IF NOT EXISTS releases (ring TEXT NOT NULL, arch TEXT NOT NULL, manifest TEXT NOT NULL, PRIMARY KEY (ring, arch));
 CREATE TABLE IF NOT EXISTS catalog (id TEXT PRIMARY KEY, item TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS apps (id TEXT PRIMARY KEY, item TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS admin_sessions (hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS wipe_requests (
+  id TEXT PRIMARY KEY, org_id INTEGER NOT NULL, device_id TEXT NOT NULL, scope TEXT NOT NULL, reason TEXT NOT NULL,
+  requested_by INTEGER NOT NULL, requested_at INTEGER NOT NULL, approved_by INTEGER, approved_at INTEGER, command_id TEXT, cancelled INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS admin_log (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, user_id INTEGER NOT NULL, action TEXT NOT NULL, detail TEXT, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS signing_keys (key_id TEXT PRIMARY KEY, private_pem TEXT NOT NULL, public_pem TEXT NOT NULL, created INTEGER NOT NULL);
 `;
 
@@ -73,6 +79,9 @@ export const DEFAULT_MODULES = [
 export function openDb(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec(SCHEMA);
+  // Additive migrations for databases created by earlier versions.
+  const cols = (db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name);
+  if (!cols.includes('role')) db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
   return db;
 }
 

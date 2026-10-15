@@ -71,3 +71,4 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | Document locks (WSOS-DRV-003) | `files/{id}/lock` | API tests |
 | Signed release manifests (WSOS-AUP-002) | `/os/manifests/{ring}/{arch}.json` | Verified with the package service's `verifyManifest` |
 | Not yet | Federation (AD/LDAP/external OneAuth), resumable diagnostic uploads, admin console, push | — |
+| Admin console (WSOS-MDM-007 admin side, WSOS-WIPE-002 two-person wipe) | `services/server/src/console.ts`, `console-ui.ts` at `/admin` | API tests (auth, CSRF, org isolation, two-person wipe verified with the agent's validator, policy validation); browser run with screenshots in `docs/screenshots/admin/` |

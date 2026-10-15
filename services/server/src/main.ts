@@ -3,7 +3,7 @@
 // with --tls-cert/--tls-key. Clients refuse non-https URLs, so production always has TLS in the path.
 //   worksuite-server serve --db server.db --public-url https://ws.example.com [--listen 127.0.0.1:8080]
 //   worksuite-server init --db server.db --org "Example Ltd" [--require-device]
-//   worksuite-server user-add --db server.db --org 1 --email a@example.com --name "A User"   (password on stdin)
+//   worksuite-server user-add --db server.db --org 1 --email a@example.com --name "A User" [--admin]   (password on stdin)
 //   worksuite-server enroll-token --db server.db --org 1 [--hours 24] [--uses 1]
 //   worksuite-server policy-set --db server.db --org 1 policy.json
 //   worksuite-server command --db server.db --device ID --name RefreshPolicy [--args '{}'] [--ttl-hours 24]
@@ -20,6 +20,7 @@ import { apiRoutes, purgeTombstones } from './api.ts';
 import { openDb } from './db.ts';
 import { HttpError, makeCtx, Router, sendError } from './http.ts';
 import { oauthRoutes } from './oauth.ts';
+import { consoleRoutes } from './console.ts';
 
 export interface ServerOptions { publicUrl: string; clientIds?: string[]; updateHost?: string }
 
@@ -29,6 +30,7 @@ export function createHandler(db: DatabaseSync, o: ServerOptions) {
   const r = new Router();
   oauthRoutes(r, db, { issuer, clientIds: o.clientIds ?? ['worksuite-os'] });
   apiRoutes(r, db, { publicUrl, issuer, updateHost: o.updateHost ?? new URL(publicUrl).host });
+  consoleRoutes(r, db, { secureCookie: publicUrl.startsWith('https:') });
   return async (req: IncomingMessage, res: ServerResponse) => {
     const ctx = makeCtx(req, res, publicUrl);
     try {
@@ -57,7 +59,7 @@ async function main(argv: string[]) {
       'tls-cert': { type: 'string' }, 'tls-key': { type: 'string' }, 'update-host': { type: 'string' },
       org: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, device: { type: 'string' },
       args: { type: 'string' }, hours: { type: 'string' }, uses: { type: 'string' }, 'ttl-hours': { type: 'string' },
-      'require-device': { type: 'boolean' },
+      'require-device': { type: 'boolean' }, admin: { type: 'boolean' },
     },
   });
   if (!v.db) throw new Error('--db PATH required');
@@ -80,7 +82,7 @@ async function main(argv: string[]) {
       return;
     }
     case 'init': return out({ org_id: admin.createOrg(db, v.org ?? v.name ?? 'WorkSuite', { requireDevice: v['require-device'] }) });
-    case 'user-add': return out({ user_id: admin.addUser(db, org(), v.email ?? '', v.name ?? v.email ?? '', readStdin()) });
+    case 'user-add': return out({ user_id: admin.addUser(db, org(), v.email ?? '', v.name ?? v.email ?? '', readStdin(), v.admin ? 'admin' : 'user') });
     case 'enroll-token': return out(admin.createEnrollmentToken(db, org(), { hours: v.hours ? Number(v.hours) : undefined, uses: v.uses ? Number(v.uses) : undefined }));
     case 'policy-set': return out({ version: admin.setPolicy(db, org(), readJson(positionals[0])) });
     case 'command': return out({ command_id: admin.issueCommand(db, v.device ?? '', v.name ?? '', v.args ? JSON.parse(v.args) : {}, v['ttl-hours'] ? Number(v['ttl-hours']) : undefined) });

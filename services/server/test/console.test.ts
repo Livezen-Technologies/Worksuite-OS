@@ -1,0 +1,155 @@
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import * as admin from '../src/admin.ts';
+import { openDb } from '../src/db.ts';
+import { createHandler } from '../src/main.ts';
+import { validateCommand, MemoryReplayStore } from '../../device-agent/src/commands.ts';
+import { loadKeys } from '../../device-agent/src/main.ts';
+
+let dir: string, server: Server, base: string, db: ReturnType<typeof openDb>;
+let orgA: number, orgB: number;
+
+before(async () => {
+  dir = mkdtempSync(join(tmpdir(), 'ws-console-'));
+  db = openDb(join(dir, 'db'));
+  orgA = admin.createOrg(db, 'Org A');
+  orgB = admin.createOrg(db, 'Org B');
+  admin.addUser(db, orgA, 'alice@a.test', 'Alice', 'alice-password', 'admin');
+  admin.addUser(db, orgA, 'bob@a.test', 'Bob', 'bob-password!', 'admin');
+  admin.addUser(db, orgA, 'uma@a.test', 'Uma', 'uma-password', 'user');
+  admin.addUser(db, orgB, 'zed@b.test', 'Zed', 'zed-password', 'admin');
+  server = createServer(createHandler(db, { publicUrl: 'https://ws.test/' }));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+});
+after(() => { server.close(); rmSync(dir, { recursive: true, force: true }); });
+
+async function call(method: string, path: string, o: { cookie?: string; body?: unknown; header?: boolean } = {}) {
+  const res = await fetch(`${base}/admin/api/${path}`, {
+    method,
+    headers: { ...(o.header === false ? {} : { 'x-ws-admin': '1' }), ...(o.cookie ? { cookie: o.cookie } : {}), ...(o.body ? { 'content-type': 'application/json' } : {}) },
+    body: o.body ? JSON.stringify(o.body) : undefined,
+  });
+  const text = await res.text();
+  return { status: res.status, body: text ? JSON.parse(text) : undefined, headers: res.headers };
+}
+async function login(email: string, password: string) {
+  const r = await call('POST', 'login', { body: { email, password } });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const c = r.headers.get('set-cookie')!;
+  assert.match(c, /HttpOnly/); assert.match(c, /SameSite=Strict/); assert.match(c, /Secure/); assert.match(c, /Path=\/admin/);
+  return c.split(';')[0];
+}
+async function enroll(orgId: number) {
+  const res = await fetch(`${base}/desktop/v1/devices/register`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': randomUUID() },
+    body: JSON.stringify({ enrollment_token: admin.createEnrollmentToken(db, orgId), public_key: generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' }), arch: 'amd64', hostname: `host-${orgId}` }),
+  });
+  return (await res.json()) as { device_id: string; credential: string };
+}
+
+test('the page is served with a strict CSP and no inline script', async () => {
+  const res = await fetch(`${base}/admin`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-security-policy')!, /script-src 'self'/);
+  const html = await res.text();
+  assert.doesNotMatch(html, /<script>(?!<\/script>)/);
+  assert.equal((await fetch(`${base}/admin/app.js`)).headers.get('content-type'), 'text/javascript; charset=utf-8');
+});
+
+test('sign-in: administrators only, header required, sessions end on sign-out', async () => {
+  assert.equal((await call('POST', 'login', { body: { email: 'uma@a.test', password: 'uma-password' } })).status, 401);
+  assert.equal((await call('POST', 'login', { body: { email: 'alice@a.test', password: 'wrong' } })).status, 401);
+  assert.equal((await call('POST', 'login', { body: { email: 'alice@a.test', password: 'alice-password' }, header: false })).status, 403);
+  const c = await login('alice@a.test', 'alice-password');
+  assert.equal((await call('GET', 'me', { cookie: c })).body.org_name, 'Org A');
+  // CSRF: the cookie alone is not enough.
+  assert.equal((await call('GET', 'me', { cookie: c, header: false })).status, 403);
+  await call('POST', 'logout', { cookie: c });
+  assert.equal((await call('GET', 'me', { cookie: c })).status, 401);
+});
+
+test('organizations are isolated', async () => {
+  const devA = await enroll(orgA);
+  const zed = await login('zed@b.test', 'zed-password');
+  assert.deepEqual((await call('GET', 'devices', { cookie: zed })).body.items, []);
+  assert.equal((await call('GET', `devices/${devA.device_id}`, { cookie: zed })).status, 404);
+  assert.equal((await call('POST', `devices/${devA.device_id}/commands`, { cookie: zed, body: { command: 'RequestLock' } })).status, 404);
+  assert.ok(!(await call('GET', 'users', { cookie: zed })).body.items.some((u: { email: string }) => u.email.endsWith('@a.test')));
+});
+
+test('routine commands are sent; RemoteWipe needs a second administrator and verifies on the device', async () => {
+  const dev = await enroll(orgA);
+  const alice = await login('alice@a.test', 'alice-password');
+  const bob = await login('bob@a.test', 'bob-password!');
+  assert.equal((await call('POST', `devices/${dev.device_id}/commands`, { cookie: alice, body: { command: 'RequestLock' } })).status, 201);
+  assert.equal((await call('POST', `devices/${dev.device_id}/commands`, { cookie: alice, body: { command: 'RemoteWipe', args: { scope: 'full_device' } } })).status, 400);
+  assert.equal((await call('POST', `devices/${dev.device_id}/commands`, { cookie: alice, body: { command: 'InstallApprovedApplication', args: { catalog_id: 'flatpak:not.there' } } })).status, 400);
+
+  assert.equal((await call('POST', 'wipes', { cookie: alice, body: { device_id: dev.device_id, scope: 'full_device', reason: 'x' } })).status, 400);
+  const w = await call('POST', 'wipes', { cookie: alice, body: { device_id: dev.device_id, scope: 'full_device', reason: 'Laptop reported stolen' } });
+  assert.equal(w.status, 201);
+  assert.equal((await call('POST', `wipes/${w.body.id}/approve`, { cookie: alice })).status, 403);   // not by the requester
+  const ok = await call('POST', `wipes/${w.body.id}/approve`, { cookie: bob });
+  assert.equal(ok.status, 200);
+  assert.equal((await call('POST', `wipes/${w.body.id}/approve`, { cookie: bob })).status, 409);
+
+  // The device accepts the envelope: signed, bound to it, with the approval id.
+  const keysDir = join(dir, 'keys');
+  admin.exportKeys(db, keysDir);
+  const env = JSON.parse((db.prepare('SELECT envelope FROM commands WHERE id = ?').get(ok.body.command_id) as { envelope: string }).envelope);
+  const v = validateCommand(env, { deviceId: dev.device_id, keys: loadKeys(keysDir), replay: new MemoryReplayStore() });
+  assert.equal(v.ok, true);
+  assert.deepEqual(env.args, { scope: 'full_device', approval_id: w.body.id });
+
+  const log = (await call('GET', 'log', { cookie: bob })).body.items.map((l: { action: string }) => l.action);
+  assert.ok(log.includes('wipe_requested') && log.includes('wipe_approved'));
+});
+
+test('policy: validated, versioned, signed, and active devices are nudged', async () => {
+  const alice = await login('alice@a.test', 'alice-password');
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { usb_storage: 'sometimes' } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { run_this: 'rm -rf /' } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { update_mirror: 'http://insecure.example' } } })).status, 400);
+  const r = await call('PUT', 'policy', { cookie: alice, body: { policy: { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00', offline_access_days: null } } });
+  assert.equal(r.status, 200);
+  assert.ok(r.body.devices_notified >= 1);
+  const p = await call('GET', 'policy', { cookie: alice });
+  assert.deepEqual(p.body.policy, { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00' });
+});
+
+test('disabling a user ends their tokens; admins cannot disable themselves', async () => {
+  const alice = await login('alice@a.test', 'alice-password');
+  const users = (await call('GET', 'users', { cookie: alice })).body.items as { id: number; email: string }[];
+  const me = users.find((u) => u.email === 'alice@a.test')!, bob = users.find((u) => u.email === 'bob@a.test')!;
+  assert.equal((await call('POST', `users/${me.id}/disable`, { cookie: alice })).status, 409);
+  const bobCookie = await login('bob@a.test', 'bob-password!');
+  assert.equal((await call('POST', `users/${bob.id}/disable`, { cookie: alice })).status, 204);
+  assert.equal((await call('GET', 'me', { cookie: bobCookie })).status, 401);
+  await call('POST', `users/${bob.id}/enable`, { cookie: alice });
+  assert.equal((await call('POST', 'users', { cookie: alice, body: { email: 'new@a.test', name: 'New', password: 'short' } })).status, 400);
+  assert.equal((await call('POST', 'users', { cookie: alice, body: { email: 'uma@a.test', name: 'Dup', password: 'long enough pw' } })).body.error.message, 'a user with this email already exists');
+});
+
+test('enrollment tokens and catalog entries are validated', async () => {
+  const alice = await login('alice@a.test', 'alice-password');
+  assert.equal((await call('POST', 'enrollment-tokens', { cookie: alice, body: { hours: 0 } })).status, 400);
+  const t = await call('POST', 'enrollment-tokens', { cookie: alice, body: { hours: 2, uses: 1 } });
+  assert.match(t.body.token, /^wse_/);
+  assert.equal((await call('PUT', 'catalog/flatpak:org.gimp.GIMP', { cookie: alice, body: { source: 'apt', name: 'GIMP', arches: ['amd64'] } })).status, 400);
+  assert.equal((await call('PUT', 'catalog/appimage:tool', { cookie: alice, body: { source: 'appimage', name: 'Tool', arches: ['amd64'] } })).status, 400);
+  assert.equal((await call('PUT', 'catalog/flatpak:org.gimp.GIMP', { cookie: alice, body: { source: 'flatpak', name: 'GIMP', arches: ['amd64', 'arm64'] } })).status, 200);
+  assert.equal((await call('GET', 'catalog', { cookie: alice })).body.items.length, 1);
+});
+
+test('repeated failed sign-ins are throttled', async () => {
+  let last = 0;
+  for (let i = 0; i < 11; i++) last = (await call('POST', 'login', { body: { email: 'zed@b.test', password: `nope-${i}` } })).status;
+  assert.equal(last, 429);
+});

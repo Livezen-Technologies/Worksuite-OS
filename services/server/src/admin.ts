@@ -15,10 +15,11 @@ export function createOrg(db: DatabaseSync, name: string, o: { requireDevice?: b
   return Number(r.lastInsertRowid);
 }
 
-export function addUser(db: DatabaseSync, orgId: number, email: string, name: string, password: string): number {
+export function addUser(db: DatabaseSync, orgId: number, email: string, name: string, password: string, role: 'user' | 'admin' = 'user'): number {
   if (password.length < 10) throw new Error('password must be at least 10 characters');
+  if (!/^[^\s@]+@[^\s@]+$/.test(email.trim())) throw new Error('email is not valid');
   const { salt, hash } = hashPassword(password);
-  const r = db.prepare('INSERT INTO users (org_id, email, name, pw_salt, pw_hash) VALUES (?, ?, ?, ?, ?)').run(orgId, email.trim().toLowerCase(), name, salt, hash);
+  const r = db.prepare('INSERT INTO users (org_id, email, name, pw_salt, pw_hash, role) VALUES (?, ?, ?, ?, ?, ?)').run(orgId, email.trim().toLowerCase(), name, salt, hash, role);
   return Number(r.lastInsertRowid);
 }
 
