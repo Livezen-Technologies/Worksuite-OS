@@ -8,6 +8,9 @@ worksuite-branding
 grub-efi
 shim-signed
 cryptsetup
+# File systems the installer creates: FAT32 for the EFI partition (kpmcore runs mkfs.fat)
+dosfstools
+mtools
 cryptsetup-initramfs
 tpm2-tools
 firmware-linux-free
