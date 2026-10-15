@@ -3,7 +3,6 @@
 import io.calamares.core 1.0
 import io.calamares.ui 1.0
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 WsPage {
@@ -38,13 +37,6 @@ WsPage {
                 width: 112; height: 112; radius: 56
                 gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: "#1F6BFF" } GradientStop { position: 1; color: "#18D4F0" } }
                 Text { anchors.centerIn: parent; text: page.initials || "?"; color: "#FFFFFF"; font.family: "IBM Plex Sans"; font.pixelSize: 40; font.weight: Font.DemiBold }
-            }
-            // The installer has no picture source; the picture is chosen later in Settings › Users.
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Change picture"); color: "#5E739C"; font.family: "IBM Plex Sans"; font.pixelSize: 13
-                ToolTip.visible: picMouse.containsMouse; ToolTip.text: qsTr("Choose a picture after installing, in Settings › Users")
-                MouseArea { id: picMouse; anchors.fill: parent; hoverEnabled: true }
             }
         }
         GridLayout {
@@ -82,21 +74,6 @@ WsPage {
                 text: problem !== "" ? problem : page.matches ? qsTr("Passwords match") : qsTr("At least 8 characters")
                 color: problem !== "" ? "#FF8A7A" : page.matches ? "#5FD39A" : "#8FA3C8"
                 font.family: "IBM Plex Sans"; font.pixelSize: 13; wrapMode: Text.WordWrap
-            }
-            // Both fixed by policy (users.conf): root stays locked and this account administers through sudo, so
-            // its password is the administrator password; automatic sign-in is off (WSOS-AUTH-002). Shown disabled.
-            Repeater {
-                model: [[true, qsTr("Use this password for the administrator account")],
-                        [false, qsTr("Sign in automatically") + " · " + qsTr("not available")]]
-                RowLayout {
-                    Layout.columnSpan: 2; Layout.fillWidth: true; spacing: 10; opacity: 0.6
-                    Rectangle {
-                        width: 18; height: 18; radius: 4
-                        color: modelData[0] ? "#1F6BFF" : "transparent"; border.width: modelData[0] ? 0 : 1; border.color: "#5E739C"
-                        Text { anchors.centerIn: parent; visible: modelData[0]; text: "✓"; color: "#FFFFFF"; font.pixelSize: 12; font.weight: Font.DemiBold }
-                    }
-                    Text { Layout.fillWidth: true; text: modelData[1]; color: "#C9D6EE"; font.family: "IBM Plex Sans"; font.pixelSize: 14 }
-                }
             }
         }
     }

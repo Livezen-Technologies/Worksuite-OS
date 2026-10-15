@@ -113,6 +113,59 @@ paths:
         '200': { description: Target, content: { application/json: { schema: { type: object, properties: { app_id: { type: string }, route: { type: string }, web_url: { type: string, format: uri, nullable: true, description: 'URL the app window opens; null when the org has no such web app' } } } } } }
         default: { $ref: '#/components/responses/Error' }
 
+  /desktop/v1/search:
+    get:
+      tags: [search]
+      summary: Search WorkSuite records the caller may open (launcher global search, WSOS-LCH)
+      description: |
+        Results are scoped server-side to what the signed-in user can open; clients must not cache them across accounts.
+        Platform mapping: GET /api/search/global?q=&types= (worksuite app/Modules/Search/Config/Routes.php,
+        GlobalSearchController::query), whose data.results[].items[] {id,title,subtitle,route,at,score} become results
+        with type from the group key and link worksuite://<module><route>.
+      security: [ { bearer: [] } ]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { name: types, in: query, required: false, description: 'Comma-separated: mail, contact, crm, task, chat, event, note, project, document', schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses:
+        '200':
+          description: Results, best first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [query, results]
+                properties:
+                  query: { type: string }
+                  state: { type: string, enum: [ready, building], description: 'building: the index is incomplete, so an empty answer is not "nothing there"' }
+                  results: { type: array, items: { $ref: '#/components/schemas/SearchResult' } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/files/search:
+    get:
+      tags: [search]
+      summary: Search Drive files the caller may open
+      description: 'Platform mapping: GET /api/files/search?q=&limit= (worksuite app/Modules/Files/Config/Routes.php, FilesController::search; data.files[]).'
+      security: [ { bearer: [] } ]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses:
+        '200': { description: 'Files, best first', content: { application/json: { schema: { type: object, required: [files], properties: { query: { type: string }, files: { type: array, items: { $ref: '#/components/schemas/DriveFile' } } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/files/recent:
+    get:
+      tags: [search]
+      summary: The caller's recently opened Drive files, newest first
+      description: 'Platform mapping: GET /api/drive/list?view=recent (worksuite app/Modules/Files/Config/Routes.php, DriveController::list over file_recents).'
+      security: [ { bearer: [] } ]
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses:
+        '200': { description: Recent files, content: { application/json: { schema: { type: object, required: [files], properties: { files: { type: array, items: { $ref: '#/components/schemas/DriveFile' } } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+
   /desktop/v1/audit:
     post:
       tags: [existing]
@@ -562,6 +615,29 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
+    SearchResult:
+      type: object
+      required: [id, type, title, link]
+      properties:
+        id: { type: string }
+        type: { type: string, description: 'mail, contact, crm, task, chat, event, note, project, document' }
+        title: { type: string }
+        subtitle: { type: string, nullable: true }
+        link: { type: string, description: 'worksuite:// deep link, resolved with links/resolve' }
+        at: { type: string, format: date-time, nullable: true }
+        score: { type: number }
+    DriveFile:
+      type: object
+      required: [id, name, link]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ext: { type: string }
+        folder: { type: string, nullable: true }
+        size: { type: integer, nullable: true }
+        modified: { type: string, format: date-time, nullable: true }
+        link: { type: string, description: 'worksuite://files/... deep link' }
+        score: { type: number }
     WebApp:
       type: object
       required: [id, name, web_url]
