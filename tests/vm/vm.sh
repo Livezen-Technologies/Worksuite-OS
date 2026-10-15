@@ -5,7 +5,7 @@
 #   tests/vm/vm.sh shot DIR NAME               DIR/NAME.png
 #   tests/vm/vm.sh keys DIR KEY...             QEMU key names: tab ret spc esc up down shift-tab ctrl-a …
 #   tests/vm/vm.sh click DIR X Y              left click at screen pixel X,Y (virtio tablet, absolute)
-#   tests/vm/vm.sh type DIR TEXT               types [A-Za-z0-9 .@_=/-]
+#   tests/vm/vm.sh type DIR TEXT               types [A-Za-z0-9 .@_=/-] and most shell punctuation
 #   tests/vm/vm.sh console DIR LINE         send LINE to the serial console (log in as user/live on the live ISO)
 #   tests/vm/vm.sh stop DIR
 set -eu
@@ -25,13 +25,21 @@ case "$cmd" in
 start) mkdir -p "$dir"; [ -f "$dir/disk.qcow2" ] || qemu-img create -f qcow2 "$dir/disk.qcow2" "${4:-40G}" >/dev/null
        run -cdrom "${3:?iso}" -boot order=dc ;;
 boot-disk) run ;;
-shot) mon "screendump $dir/${3:?name}.ppm"; sleep 1; convert "$dir/$3.ppm" "$dir/$3.png" 2>/dev/null || pnmtopng "$dir/$3.ppm" > "$dir/$3.png"; rm -f "$dir/$3.ppm"; echo "$dir/$3.png" ;;
+shot) p="$dir/${3:?name}.ppm"; rm -f "$p"; mon "screendump $p"
+      # QEMU writes the PPM asynchronously: wait until it exists and its size stops changing.
+      n=0; last=-1; while [ $n -lt 50 ]; do s=$(stat -c %s "$p" 2>/dev/null || echo 0)
+        [ "$s" -gt 0 ] && [ "$s" = "$last" ] && break; last=$s; n=$((n+1)); sleep 0.2; done
+      convert "$p" "$dir/$3.png" 2>/dev/null || pnmtopng "$p" > "$dir/$3.png" 2>/dev/null \
+        || python3 -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2])' "$p" "$dir/$3.png"
+      rm -f "$p"; echo "$dir/$3.png" ;;
 click) mon "mouse_move ${3:?x} ${4:?y}"; sleep 0.3; mon 'mouse_button 1'; sleep 0.15; mon 'mouse_button 0' ;;
 keys) shift 2; for k in "$@"; do mon "sendkey $k"; sleep 0.3; done ;;
 type) t=${3:?text}; i=0
       while [ $i -lt ${#t} ]; do c=$(printf %s "$t" | cut -c$((i+1))); i=$((i+1))
         case "$c" in
           [a-z0-9]) k=$c ;; [A-Z]) k="shift-$(printf %s "$c" | tr A-Z a-z)" ;; ' ') k=spc ;; .) k=dot ;; @) k=shift-2 ;; _) k=shift-minus ;; -) k=minus ;; =) k=equal ;; /) k=slash ;; ,) k=comma ;; ';') k=semicolon ;; '|') k=shift-backslash ;; '>') k=shift-dot ;; '<') k=shift-comma ;; :) k=shift-semicolon ;; '(') k=shift-9 ;; ')') k=shift-0 ;; '"') k=shift-apostrophe ;; "'") k=apostrophe ;;
+          '&') k=shift-7 ;; '!') k=shift-1 ;; '$') k=shift-4 ;; '*') k=shift-8 ;; '#') k=shift-3 ;; '+') k=shift-equal ;; '%') k=shift-5 ;;
+          '?') k=shift-slash ;; '[') k=bracket_left ;; ']') k=bracket_right ;; '{') k=shift-bracket_left ;; '}') k=shift-bracket_right ;; '~') k=shift-grave_accent ;; '\\') k=backslash ;;
           *) echo "cannot type '$c'" >&2; exit 2 ;;
         esac; mon "sendkey $k"; sleep 0.15; done ;;
 console) printf '%s\r' "${3:?line}" | socat -t 2 - "UNIX-CONNECT:$dir/serial.sock" >/dev/null ;;

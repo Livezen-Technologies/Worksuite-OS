@@ -1,0 +1,270 @@
+// Settings → host bridge (WSOS-INT-001…006, WSOS-DSK-006). Each area reads real state through the stock CLI
+// of its service (nmcli, bluetoothctl, wpctl, upower, lpstat, wlr-randr, udisksctl) with fixed argument arrays,
+// never a shell. When the tool is missing or the service isn't running the answer is
+// `{ available: false, reason }`, never invented values. The Wi-Fi password only goes to nmcli's stdin (--ask).
+import { execFile, spawn } from 'node:child_process'
+
+export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
+export type Exec = (cmd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string; missing?: boolean }>
+export type WithStdin = (cmd: string, args: string[], input: string) => Promise<{ code: number; stderr: string }>
+
+export const realExec: Exec = (cmd, args) => new Promise((resolve) => {
+  execFile(cmd, args, { timeout: 15_000, env: { ...process.env, LC_ALL: 'C' } }, (err, stdout, stderr) => {
+    const missing = (err as NodeJS.ErrnoException | null)?.code === 'ENOENT'
+    resolve({ code: err ? 1 : 0, stdout: String(stdout), stderr: String(stderr), missing })
+  })
+})
+
+export const realWithStdin: WithStdin = (cmd, args, input) => new Promise((resolve) => {
+  const child = spawn(cmd, args, { stdio: ['pipe', 'ignore', 'pipe'], env: { ...process.env, LC_ALL: 'C' } })
+  let stderr = ''
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', (c: string) => { stderr += c })
+  child.on('error', () => resolve({ code: 1, stderr: 'spawn_failed' }))
+  child.on('close', (code) => resolve({ code: code ?? 1, stderr }))
+  child.stdin.end(input)
+})
+
+// ---------- types ----------
+export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean }
+export interface NetDevice { device: string; type: string; state: string; connection: string | null }
+export interface NetworkState { wifi_enabled: boolean; devices: NetDevice[]; networks: WifiNetwork[] }
+export interface BtDevice { address: string; name: string; connected: boolean }
+export interface BluetoothState { powered: boolean; name: string | null; discoverable: boolean; paired: BtDevice[] }
+export interface AudioDevice { id: number; name: string; is_default: boolean }
+export interface SoundState { volume: number; muted: boolean; outputs: AudioDevice[]; inputs: AudioDevice[] }
+export interface BatteryState { present: boolean; percentage: number | null; state: string; time_to_full_s: number | null; time_to_empty_s: number | null; on_battery: boolean }
+export interface Printer { name: string; state: 'idle' | 'printing' | 'disabled' | 'unknown'; is_default: boolean }
+export interface Display { name: string; description: string; enabled: boolean; width: number | null; height: number | null; refresh: number | null; scale: number | null }
+export interface Drive { model: string; serial: string; device: string }
+
+// ---------- parsers (pure) ----------
+/** Splits one line of `nmcli -t` output on unescaped ':' and unescapes '\:' and '\\'. */
+export function splitTerse(line: string): string[] {
+  const out: string[] = []; let cur = ''
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (c === '\\' && i + 1 < line.length) { cur += line[++i]; continue }
+    if (c === ':') { out.push(cur); cur = ''; continue }
+    cur += c
+  }
+  out.push(cur)
+  return out
+}
+
+/** `nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY device wifi list`; hidden SSIDs dropped, strongest per SSID kept. */
+export function parseWifiList(text: string): WifiNetwork[] {
+  const by = new Map<string, WifiNetwork>()
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    const [inUse, ssid, signal, security] = splitTerse(line)
+    if (!ssid) continue
+    const n: WifiNetwork = { ssid, signal: Number(signal) || 0, security: security && security !== '--' ? security : '', in_use: inUse === '*' }
+    const prev = by.get(ssid)
+    if (!prev || n.in_use || (!prev.in_use && n.signal > prev.signal)) by.set(ssid, n)
+  }
+  return [...by.values()].sort((a, b) => Number(b.in_use) - Number(a.in_use) || b.signal - a.signal)
+}
+
+/** `nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device`; loopback dropped. */
+export function parseNmDevices(text: string): NetDevice[] {
+  return text.split('\n').filter((l) => l.trim()).map(splitTerse)
+    .filter(([, type]) => type !== 'loopback')
+    .map(([device, type, state, connection]) => ({ device, type, state, connection: connection && connection !== '--' ? connection : null }))
+}
+
+/** `bluetoothctl show` → controller facts; null when no controller is listed. */
+export function parseBtShow(text: string): Omit<BluetoothState, 'paired'> | null {
+  if (!/^Controller /m.test(text)) return null
+  const field = (k: string) => text.match(new RegExp(`^\\s*${k}:\\s*(.*)$`, 'm'))?.[1].trim() ?? null
+  return { powered: field('Powered') === 'yes', name: field('Alias') ?? field('Name'), discoverable: field('Discoverable') === 'yes' }
+}
+
+/** `bluetoothctl devices [Paired|Connected]` → address/name pairs. */
+export function parseBtDevices(text: string): { address: string; name: string }[] {
+  const out: { address: string; name: string }[] = []
+  for (const m of text.matchAll(/^Device ([0-9A-F]{2}(?::[0-9A-F]{2}){5}) ?(.*)$/gim)) out.push({ address: m[1].toUpperCase(), name: m[2].trim() || m[1] })
+  return out
+}
+
+/** `wpctl get-volume @DEFAULT_AUDIO_SINK@` → "Volume: 0.60 [MUTED]". */
+export function parseWpVolume(text: string): { volume: number; muted: boolean } | null {
+  const m = text.match(/Volume:\s*([\d.]+)/)
+  if (!m) return null
+  return { volume: Math.round(Number(m[1]) * 100), muted: /\[MUTED\]/.test(text) }
+}
+
+/** Sinks and Sources of the Audio section of `wpctl status`. */
+export function parseWpStatus(text: string): { outputs: AudioDevice[]; inputs: AudioDevice[] } {
+  const outputs: AudioDevice[] = [], inputs: AudioDevice[] = []
+  let section: 'audio' | 'other' = 'other'
+  let list: AudioDevice[] | null = null
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/[│├└─]/g, ' ')
+    if (/^\S/.test(line)) { section = /^Audio/.test(line) ? 'audio' : 'other'; list = null; continue }
+    if (section !== 'audio') continue
+    const head = line.trim()
+    if (/^Sinks:$/.test(head)) { list = outputs; continue }
+    if (/^Sources:$/.test(head)) { list = inputs; continue }
+    if (/^[A-Za-z ]+:$/.test(head) || head === '') { list = null; continue }
+    const m = head.match(/^(\*)?\s*(\d+)\.\s+(.*?)(?:\s+\[vol:[^\]]*\])?$/)
+    if (list && m) list.push({ id: Number(m[2]), name: m[3].trim(), is_default: m[1] === '*' })
+  }
+  return { outputs, inputs }
+}
+
+function durationSeconds(v: string | undefined): number | null {
+  const m = v?.match(/([\d.]+)\s*(second|minute|hour|day)/)
+  if (!m) return null
+  const unit = { second: 1, minute: 60, hour: 3600, day: 86400 }[m[2] as 'second']
+  return Math.round(Number(m[1]) * unit)
+}
+
+/** `upower -i <battery path>`. */
+export function parseUpowerBattery(text: string): BatteryState {
+  const f = (k: string) => text.match(new RegExp(`^\\s*${k}:\\s*(.*)$`, 'm'))?.[1].trim()
+  const pct = f('percentage')
+  const state = f('state') ?? 'unknown'
+  return {
+    present: f('present') !== 'no' && pct !== undefined,
+    percentage: pct ? Math.round(Number(pct.replace('%', ''))) : null,
+    state,
+    time_to_full_s: durationSeconds(f('time to full')),
+    time_to_empty_s: durationSeconds(f('time to empty')),
+    on_battery: state === 'discharging',
+  }
+}
+
+/** `lpstat -p -d` → printers and the default destination. */
+export function parseLpstat(text: string): Printer[] {
+  const def = text.match(/^system default destination:\s*(\S+)/m)?.[1] ?? null
+  const out: Printer[] = []
+  for (const m of text.matchAll(/^printer (\S+) (?:is (idle)|(now printing)|(disabled))?/gm)) {
+    out.push({ name: m[1], state: m[2] ? 'idle' : m[3] ? 'printing' : m[4] ? 'disabled' : 'unknown', is_default: m[1] === def })
+  }
+  return out
+}
+
+/** `wlr-randr --json`. */
+export function parseWlrRandr(text: string): Display[] {
+  let data: unknown
+  try { data = JSON.parse(text) } catch { return [] }
+  if (!Array.isArray(data)) return []
+  return data.map((o: Record<string, unknown>) => {
+    const modes = Array.isArray(o.modes) ? (o.modes as Record<string, unknown>[]) : []
+    const cur = modes.find((m) => m.current) ?? null
+    return {
+      name: String(o.name ?? ''), description: String(o.description ?? o.model ?? ''), enabled: o.enabled !== false,
+      width: cur ? Number(cur.width) : null, height: cur ? Number(cur.height) : null,
+      refresh: cur ? Math.round(Number(cur.refresh) * 100) / 100 : null,
+      scale: typeof o.scale === 'number' ? o.scale : null,
+    }
+  })
+}
+
+/** `udisksctl status`: fixed-width columns located from the header line. */
+export function parseUdisksStatus(text: string): Drive[] {
+  const lines = text.split('\n')
+  const header = lines.findIndex((l) => /^MODEL\s+REVISION\s+SERIAL\s+DEVICE/.test(l))
+  if (header < 0) return []
+  const h = lines[header]
+  const cols = ['REVISION', 'SERIAL', 'DEVICE'].map((c) => h.indexOf(c))
+  return lines.slice(header + 1).filter((l) => l.trim() && !/^-+$/.test(l.trim())).map((l) => ({
+    model: l.slice(0, cols[0]).trim(), serial: l.slice(cols[1], cols[2]).trim(), device: l.slice(cols[2]).trim(),
+  })).filter((d) => d.device)
+}
+
+// ---------- bridge ----------
+const SSID_MAX = 32
+const BT_ADDR = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i
+
+function unavailable(r: { missing?: boolean; stderr: string }, tool: string): { available: false; reason: string } {
+  return { available: false, reason: r.missing ? `${tool}_missing` : 'service_unavailable' }
+}
+
+export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realWithStdin) {
+  return {
+    async network(): Promise<Avail<NetworkState>> {
+      const radio = await exec('nmcli', ['-t', '-f', 'WIFI', 'radio'])
+      if (radio.code !== 0) return unavailable(radio, 'nmcli')
+      const [dev, list] = await Promise.all([
+        exec('nmcli', ['-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device']),
+        exec('nmcli', ['-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list']),
+      ])
+      return { available: true, value: { wifi_enabled: radio.stdout.trim() === 'enabled', devices: parseNmDevices(dev.stdout), networks: list.code === 0 ? parseWifiList(list.stdout) : [] } }
+    },
+    async setWifi(on: boolean): Promise<Avail<true>> {
+      const r = await exec('nmcli', ['radio', 'wifi', on ? 'on' : 'off'])
+      return r.code === 0 ? { available: true, value: true } : unavailable(r, 'nmcli')
+    },
+    /** Password goes to nmcli's stdin (`--ask`), never argv. Empty password = open network. */
+    async wifiConnect(ssid: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+      if (!ssid || ssid.length > SSID_MAX || /[\0\n]/.test(ssid) || /[\0\n]/.test(password)) return { ok: false, error: 'invalid_argument' }
+      const r = await withStdin('nmcli', ['--ask', '-w', '45', 'device', 'wifi', 'connect', ssid], password ? `${password}\n` : '\n')
+      if (r.code === 0) return { ok: true }
+      if (r.stderr === 'spawn_failed') return { ok: false, error: 'unavailable' }
+      return { ok: false, error: /secrets were required|password|802-1x|psk/i.test(r.stderr) ? 'bad_password' : 'connect_failed' }
+    },
+    async bluetooth(): Promise<Avail<BluetoothState>> {
+      const show = await exec('bluetoothctl', ['show'])
+      if (show.code !== 0) return unavailable(show, 'bluetoothctl')
+      const ctl = parseBtShow(show.stdout)
+      if (!ctl) return { available: false, reason: 'no_adapter' }
+      const [paired, connected] = await Promise.all([exec('bluetoothctl', ['devices', 'Paired']), exec('bluetoothctl', ['devices', 'Connected'])])
+      const conn = new Set(parseBtDevices(connected.stdout).map((d) => d.address))
+      return { available: true, value: { ...ctl, paired: parseBtDevices(paired.stdout).map((d) => ({ ...d, connected: conn.has(d.address) })) } }
+    },
+    async setBluetooth(on: boolean): Promise<Avail<true>> {
+      const r = await exec('bluetoothctl', ['power', on ? 'on' : 'off'])
+      return r.code === 0 ? { available: true, value: true } : unavailable(r, 'bluetoothctl')
+    },
+    async btConnect(address: string, on: boolean): Promise<Avail<true>> {
+      if (!BT_ADDR.test(address)) return { available: false, reason: 'invalid_argument' }
+      const r = await exec('bluetoothctl', [on ? 'connect' : 'disconnect', address])
+      return r.code === 0 ? { available: true, value: true } : unavailable(r, 'bluetoothctl')
+    },
+    async sound(): Promise<Avail<SoundState>> {
+      const vol = await exec('wpctl', ['get-volume', '@DEFAULT_AUDIO_SINK@'])
+      const v = vol.code === 0 ? parseWpVolume(vol.stdout) : null
+      if (!v) return unavailable(vol, 'wpctl')
+      const st = await exec('wpctl', ['status'])
+      return { available: true, value: { ...v, ...parseWpStatus(st.stdout) } }
+    },
+    async setVolume(percent: number): Promise<Avail<true>> {
+      const p = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)))
+      const r = await exec('wpctl', ['set-volume', '@DEFAULT_AUDIO_SINK@', `${p}%`])
+      return r.code === 0 ? { available: true, value: true } : unavailable(r, 'wpctl')
+    },
+    async setMute(muted: boolean): Promise<Avail<true>> {
+      const r = await exec('wpctl', ['set-mute', '@DEFAULT_AUDIO_SINK@', muted ? '1' : '0'])
+      return r.code === 0 ? { available: true, value: true } : unavailable(r, 'wpctl')
+    },
+    async setDefaultAudio(id: number): Promise<Avail<true>> {
+      if (!Number.isInteger(id) || id < 0) return { available: false, reason: 'invalid_argument' }
+      const r = await exec('wpctl', ['set-default', String(id)])
+      return r.code === 0 ? { available: true, value: true } : unavailable(r, 'wpctl')
+    },
+    async battery(): Promise<Avail<BatteryState>> {
+      const e = await exec('upower', ['-e'])
+      if (e.code !== 0) return unavailable(e, 'upower')
+      const bat = e.stdout.split('\n').map((s) => s.trim()).find((p) => /\/battery_/.test(p))
+      if (!bat) return { available: false, reason: 'no_battery' }
+      const i = await exec('upower', ['-i', bat])
+      return i.code === 0 ? { available: true, value: parseUpowerBattery(i.stdout) } : unavailable(i, 'upower')
+    },
+    async printers(): Promise<Avail<Printer[]>> {
+      const r = await exec('lpstat', ['-p', '-d'])
+      // lpstat exits non-zero with "No destinations added." when CUPS runs but has no printers.
+      if (r.code !== 0 && /no destinations/i.test(r.stdout + r.stderr)) return { available: true, value: [] }
+      return r.code === 0 ? { available: true, value: parseLpstat(r.stdout) } : unavailable(r, 'lpstat')
+    },
+    async displays(): Promise<Avail<Display[]>> {
+      const r = await exec('wlr-randr', ['--json'])
+      return r.code === 0 ? { available: true, value: parseWlrRandr(r.stdout) } : unavailable(r, 'wlr-randr')
+    },
+    async disks(): Promise<Avail<Drive[]>> {
+      const r = await exec('udisksctl', ['status'])
+      return r.code === 0 ? { available: true, value: parseUdisksStatus(r.stdout) } : unavailable(r, 'udisksctl')
+    },
+  }
+}

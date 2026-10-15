@@ -38,6 +38,9 @@ override_dh_auto_install:
 	install -m 0644 packaging/keyring/README.md $$d/usr/share/doc/worksuite-archive-keyring/README.md && \
 	if [ -f packaging/keyring/worksuite-archive-keyring.gpg ]; then install -m 0644 packaging/keyring/worksuite-archive-keyring.gpg $$d/usr/share/keyrings/; fi && \
 	for k in device-commands release; do for f in packaging/keyring/ed25519/$$k/*.pem; do [ -f "$$f" ] && install -m 0644 "$$f" $$d/usr/share/worksuite/keys/$$k/ || true; done; done
+	# worksuite-shell: 256 px PNGs of the WorkSuite app icons (Electron window icons can't be SVG).
+	for f in shell/apps/icons/*.svg; do n=$$(basename $$f .svg); install -d debian/worksuite-shell/usr/share/icons/hicolor/256x256/apps && \
+	  rsvg-convert -w 256 -h 256 $$f -o debian/worksuite-shell/usr/share/icons/hicolor/256x256/apps/$$n.png || exit 1; done
 	# worksuite-branding
 	d=debian/worksuite-branding; p=$$d/usr/share/plymouth/themes/worksuite; g=$$d/usr/share/grub/themes/worksuite; \
 	install -D -m 0644 -t $$p branding/plymouth/worksuite.plymouth branding/plymouth/worksuite.script build-branding/plymouth/*.png && \
@@ -52,6 +55,7 @@ override_dh_auto_install:
 override_dh_auto_test:
 	cd build-installer && QT_QPA_PLATFORM=offscreen ctest --output-on-failure
 	python3 -m unittest discover -s installer/modules/worksuiterecovery/tests
+	sh tests/session/session-test.sh
 	cd services/sync && npm test
 	cd services/credentials && npm test
 	cd services/device-agent && npm test

@@ -12,12 +12,16 @@ OnFailure=worksuite-recovery-launcher.service
 AppArmorProfile=-worksuite-shell
 Type=simple
 ExecStart=/usr/lib/worksuite/shell/worksuite-shell
-# WSOS-SES-004: restart within 3 s; app windows are not in this cgroup (apps are launched
-# into their own transient app-*.scope via systemd-run --user --scope), so a crash or restart
-# never kills them (WSOS-REL-004).
+# WSOS-SES-004: restart within 3 s. Apps are not in this cgroup: the shell launches each one into
+# its own transient app-worksuite-<id>-<n>.scope under app.slice (shell/electron/session.ts,
+# appLaunchCommand), so a crash or restart never kills them (WSOS-REL-004). Log out runs as its
+# own transient unit (worksuite-logout.service) for the same reason.
 Restart=always
 RestartSec=1s
-KillMode=control-group
+# Electron's main process gets SIGTERM first to close cleanly; anything of the shell's own still
+# left (renderer, GPU and utility processes) is then SIGKILLed so a restart never doubles them.
+KillMode=mixed
+TimeoutStopSec=5s
 Slice=session.slice
 
 [Install]

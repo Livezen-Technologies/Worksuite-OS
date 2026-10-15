@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite CRM
+GenericName=CRM
+Comment=Customers, leads and deals
+Exec=worksuite-app crm
+TryExec=worksuite-app
+Icon=worksuite-crm
+Terminal=false
+Categories=Office;
+Keywords=worksuite;crm;customers;sales;leads;
+StartupNotify=true
+StartupWMClass=worksuite-crm

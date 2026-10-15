@@ -4,15 +4,21 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
 import { bootMode } from './bootmode'
+import { appLaunchCommand, scopeCommand, lockPaths, logoutCommand, readLockSettings, writeLockTimeout } from './session'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceInfo, enrollDevice } from './device'
 import { followJobs, packageClient } from './packages'
+import { listDevices } from './hardware'
+import { localUsers } from './users'
 import { recoveryHost } from './recovery'
+import { prepareAppMode, runAppMode } from './appwindow'
+import { loadSession, parseAppArgs } from './webapps'
+import { execProgram, findOffice, installedApps, OFFICE_NEW } from './xdg'
+import { systemBridge } from './system'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
-const APP_ID = /^[A-Za-z0-9._-]+$/
 
 let win: BrowserWindow | null = null
 
@@ -58,18 +64,25 @@ function createWindow() {
   void win.loadFile(path.join(__dirname, '../dist/index.html'), mode ? { query: { mode } } : undefined)
 }
 
+// `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
+const appRequest = parseAppArgs(process.argv)
+if (appRequest) {
+  if (prepareAppMode(appRequest)) runAppMode(appRequest)
+  else app.quit()
+} else startShell()
+
+function startShell() {
 app.whenReady().then(() => {
   // Web permissions denied by default (WSOS-SEC-003).
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
 
   handle('ws:authenticate', async () => ({ ok: false, message: 'Authentication is handled by the greeter (greetd/PAM).' }))
   handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
-  handle('ws:logout', () => run('systemctl', ['--user', 'stop', 'worksuite-session.target']))
+  handle('ws:logout', () => run(...logoutCommand()))
   handle('ws:power', (action) => {
     const verbs: Record<string, string> = { suspend: 'suspend', restart: 'reboot', shutdown: 'poweroff' }
     return verbs[action] ? run('systemctl', [verbs[action]]) : undefined
   })
-  handle('ws:launchApp', (id) => (APP_ID.test(id) ? run('gtk-launch', [id]) : undefined))
   // WorkSuite web apps: one window and one persistent session partition per app (WSOS-SEC-004).
   const apps = appWindows({
     session: (p) => session.fromPartition(p),
@@ -77,6 +90,31 @@ app.whenReady().then(() => {
     openExternal: (u) => { if (ALLOWED_SCHEMES.has(new URL(u).protocol)) void shell.openExternal(u) },
   })
   handle('ws:openWorkSuiteApp', (id, url) => apps.open(id, url))
+  handle('ws:launchApp', (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined })
+  // Settings: idle lock timeout within the policy maximum (WSOS-LOCK-003).
+  const lock = lockPaths(app.getPath('home'))
+  handle('ws:lockSettings', () => readLockSettings(lock))
+  handle('ws:setLockTimeout', (s) => writeLockTimeout(lock, Number(s)))
+  // Launcher data: the org's WorkSuite web apps (no token leaves the main process) and installed XDG apps.
+  handle('ws:webApps', async () => {
+    const r = await loadSession((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }))
+    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name }) => ({ id, name })) } : r
+  })
+  handle('ws:installedApps', () => {
+    const all = installedApps()
+    const office = findOffice(all)
+    // worksuite-* entries are the web app windows, listed from the org's data instead.
+    return { apps: all.filter((e) => !e.id.startsWith('worksuite-') || e === office).map(({ exec: _e, ...e }) => e), office: office?.id ?? null }
+  })
+  // WorkSuite Office "new document" entries: the detected editor's program with its --new switch (no shell).
+  handle('ws:launchOffice', (kind) => {
+    const office = findOffice(installedApps())
+    if (!office) return undefined
+    const prog = execProgram(office.exec)
+    // Own app scope either way, like every app launch (WSOS-SES-004).
+    const c = kind in OFFICE_NEW && prog ? scopeCommand(office.id, [prog, OFFICE_NEW[kind]]) : appLaunchCommand(office.id)
+    return c ? run(...c) : undefined
+  })
   handle('ws:openLink', (url) => {
     const u = new URL(url)
     if (!ALLOWED_SCHEMES.has(u.protocol)) throw new Error('Scheme not allowed')
@@ -114,6 +152,22 @@ app.whenReady().then(() => {
   handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:syncStatus', () => syncCall('Status'))
   handle('ws:deviceInfo', () => deviceInfo())
+  // Settings → NetworkManager, BlueZ, PipeWire, UPower, CUPS, wlr-randr, UDisks2 (WSOS-INT-001…006, DSK-006).
+  const sys = systemBridge()
+  handle('ws:sysNetwork', () => sys.network())
+  handle('ws:sysSetWifi', (on) => sys.setWifi(on === 'on'))
+  handle('ws:sysWifiConnect', (ssid, password) => sys.wifiConnect(ssid, password))
+  handle('ws:sysBluetooth', () => sys.bluetooth())
+  handle('ws:sysSetBluetooth', (on) => sys.setBluetooth(on === 'on'))
+  handle('ws:sysBtConnect', (address, on) => sys.btConnect(address, on === 'on'))
+  handle('ws:sysSound', () => sys.sound())
+  handle('ws:sysSetVolume', (p) => sys.setVolume(Number(p)))
+  handle('ws:sysSetMute', (on) => sys.setMute(on === 'on'))
+  handle('ws:sysSetDefaultAudio', (id) => sys.setDefaultAudio(Number(id)))
+  handle('ws:sysBattery', () => sys.battery())
+  handle('ws:sysPrinters', () => sys.printers())
+  handle('ws:sysDisplays', () => sys.displays())
+  handle('ws:sysDisks', () => sys.disks())
   handle('ws:enrollDevice', (serverUrl, code) => enrollDevice(serverUrl, code))
   // App Center (WSOS-APP-001/002): preview before confirmation, then a job whose result arrives as an event.
   const pkg = packageClient()
@@ -125,6 +179,11 @@ app.whenReady().then(() => {
   handle('ws:updateStatus', (check) => pkg.updateStatus(check === 'check'))
   handle('ws:updateDefer', () => pkg.deferUpdate())
   handle('ws:updateInstallNow', () => pkg.installUpdateNow())
+  // Devices: sysfs, read-only. There is no driver catalog or driver installer service yet, so those say so.
+  handle('ws:hwDevices', () => { try { return { ok: true, value: listDevices() } } catch { return { ok: false, error: 'unavailable' } } })
+  handle('ws:hwDriverUpdates', () => ({ ok: false, error: 'unavailable' }))
+  handle('ws:hwInstallDrivers', () => ({ ok: false, error: 'unavailable' }))
+  handle('ws:sysUsers', () => localUsers())
   handle('ws:pkgRepair', () => pkg.repair())
   // Recovery screens (§9.2). The unlock secret goes to udisksctl's stdin only; it is never logged or stored.
   const rec = recoveryHost(pkg)
@@ -157,4 +216,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => app.quit())
+}
 

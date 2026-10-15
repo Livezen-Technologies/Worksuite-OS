@@ -92,13 +92,24 @@ test('routine commands are sent; RemoteWipe needs a second administrator and ver
   assert.equal((await call('POST', `devices/${dev.device_id}/commands`, { cookie: alice, body: { command: 'RemoteWipe', args: { scope: 'full_device' } } })).status, 400);
   assert.equal((await call('POST', `devices/${dev.device_id}/commands`, { cookie: alice, body: { command: 'InstallApprovedApplication', args: { catalog_id: 'flatpak:not.there' } } })).status, 400);
 
-  assert.equal((await call('POST', 'wipes', { cookie: alice, body: { device_id: dev.device_id, scope: 'full_device', reason: 'x' } })).status, 400);
-  const w = await call('POST', 'wipes', { cookie: alice, body: { device_id: dev.device_id, scope: 'full_device', reason: 'Laptop reported stolen' } });
+  const host = `host-${orgA}`;
+  const reqBody = { device_id: dev.device_id, scope: 'full_device', reason: 'Laptop reported stolen' };
+  assert.equal((await call('POST', 'wipes', { cookie: alice, body: { ...reqBody, reason: 'x', password: 'alice-password', confirm_name: host } })).status, 400);
+  // WSOS-WIPE-001: re-authentication and the typed device name are both required.
+  const noPw = await call('POST', 'wipes', { cookie: alice, body: { ...reqBody, confirm_name: host } });
+  assert.equal(noPw.status, 401); assert.equal(noPw.body.error.code, 'REAUTH_REQUIRED');
+  assert.equal((await call('POST', 'wipes', { cookie: alice, body: { ...reqBody, password: 'bob-password!', confirm_name: host } })).status, 401);   // someone else's password
+  const badName = await call('POST', 'wipes', { cookie: alice, body: { ...reqBody, password: 'alice-password', confirm_name: host.toUpperCase() } });
+  assert.equal(badName.status, 400);
+  assert.equal((await call('GET', 'wipes', { cookie: alice })).body.items.length, 0);   // nothing was created
+  const w = await call('POST', 'wipes', { cookie: alice, body: { ...reqBody, password: 'alice-password', confirm_name: host } });
   assert.equal(w.status, 201);
-  assert.equal((await call('POST', `wipes/${w.body.id}/approve`, { cookie: alice })).status, 403);   // not by the requester
-  const ok = await call('POST', `wipes/${w.body.id}/approve`, { cookie: bob });
+  assert.equal((await call('POST', `wipes/${w.body.id}/approve`, { cookie: alice, body: { password: 'alice-password', confirm_name: host } })).status, 403);   // not by the requester
+  assert.equal((await call('POST', `wipes/${w.body.id}/approve`, { cookie: bob, body: { confirm_name: host } })).status, 401);
+  assert.equal((await call('POST', `wipes/${w.body.id}/approve`, { cookie: bob, body: { password: 'bob-password!', confirm_name: 'other' } })).status, 400);
+  const ok = await call('POST', `wipes/${w.body.id}/approve`, { cookie: bob, body: { password: 'bob-password!', confirm_name: host } });
   assert.equal(ok.status, 200);
-  assert.equal((await call('POST', `wipes/${w.body.id}/approve`, { cookie: bob })).status, 409);
+  assert.equal((await call('POST', `wipes/${w.body.id}/approve`, { cookie: bob, body: { password: 'bob-password!', confirm_name: host } })).status, 409);
 
   // The device accepts the envelope: signed, bound to it, with the approval id.
   const keysDir = join(dir, 'keys');
@@ -109,7 +120,7 @@ test('routine commands are sent; RemoteWipe needs a second administrator and ver
   assert.deepEqual(env.args, { scope: 'full_device', approval_id: w.body.id });
 
   const log = (await call('GET', 'log', { cookie: bob })).body.items.map((l: { action: string }) => l.action);
-  assert.ok(log.includes('wipe_requested') && log.includes('wipe_approved'));
+  assert.ok(log.includes('wipe_requested') && log.includes('wipe_approved') && log.includes('reauth_failed'));
 });
 
 test('policy: validated, versioned, signed, and active devices are nudged', async () => {
@@ -117,11 +128,14 @@ test('policy: validated, versioned, signed, and active devices are nudged', asyn
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { usb_storage: 'sometimes' } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { run_this: 'rm -rf /' } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { update_mirror: 'http://insecure.example' } } })).status, 400);
-  const r = await call('PUT', 'policy', { cookie: alice, body: { policy: { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00', offline_access_days: null } } });
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { lock_timeout_max_s: 30 } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { login_failures_max: 1 } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { bluetooth: 'off' } } })).status, 400);
+  const r = await call('PUT', 'policy', { cookie: alice, body: { policy: { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00', offline_access_days: null, lock_timeout_max_s: 600, login_failures_max: 5, login_lockout_s: 900 } } });
   assert.equal(r.status, 200);
   assert.ok(r.body.devices_notified >= 1);
   const p = await call('GET', 'policy', { cookie: alice });
-  assert.deepEqual(p.body.policy, { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00' });
+  assert.deepEqual(p.body.policy, { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00', lock_timeout_max_s: 600, login_failures_max: 5, login_lockout_s: 900 });
 });
 
 test('disabling a user ends their tokens; admins cannot disable themselves', async () => {

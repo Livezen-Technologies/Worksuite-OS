@@ -2,12 +2,12 @@
 // device, never from the request. Idempotency-Key replays within 24 h return the stored response.
 import { createPublicKey, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { nextSeq, secret, sha256, tx } from './db.ts';
+import { DEFAULT_WEB_APPS, nextSeq, secret, sha256, tx } from './db.ts';
 import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { userFromBearer, type User } from './oauth.ts';
 import { activeKey, signFlat } from './signing.ts';
 
-export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string }
+export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string; webUrl: string }
 
 interface Device { id: string; org_id: number; revoked: number }
 
@@ -143,6 +143,13 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     send(ctx, 200, { api_base: o.publicUrl, oneauth_issuer: o.issuer, update_host: o.updateHost }));
 
   // ---- user endpoints ----
+  // Web apps enabled for the org, each with the URL the desktop opens in its app window.
+  const webApps = (orgId: number) => {
+    const row = db.prepare('SELECT web_apps FROM orgs WHERE id = ?').get(orgId) as { web_apps: string | null };
+    const keys: string[] | null = row.web_apps ? json(row.web_apps) : null;
+    return DEFAULT_WEB_APPS.filter((a) => !keys || keys.includes(a.id)).map((a) => ({ ...a, web_url: new URL(`${a.id}/`, o.webUrl).toString() }));
+  };
+
   r.on('GET', '/desktop/v1/bootstrap', (ctx) => {
     const { user } = userCtx(db, ctx);
     const org = db.prepare('SELECT id, name, modules FROM orgs WHERE id = ?').get(user.org_id) as { id: number; name: string; modules: string };
@@ -150,6 +157,7 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
       user: { id: String(user.id), name: user.name, email: user.email },
       org: { id: String(org.id), name: org.name },
       modules: json(org.modules),
+      apps: webApps(org.id),
       settings: {},
     });
   });
@@ -162,11 +170,15 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
   });
 
   r.on('GET', '/desktop/v1/links/resolve', (ctx) => {
-    userCtx(db, ctx);
+    const { user } = userCtx(db, ctx);
     let u: URL;
     try { u = new URL(ctx.url.searchParams.get('url') ?? ''); } catch { throw invalid('url'); }
     if (u.protocol !== 'worksuite:' || !MODULE_KEY.test(u.hostname)) throw new HttpError(404, 'NOT_FOUND', 'unknown link');
-    send(ctx, 200, { app_id: u.hostname, route: u.pathname || '/' });
+    const route = u.pathname || '/';
+    const app = webApps(user.org_id).find((a) => a.id === u.hostname);
+    // web_url: where the app window opens this link; null when the org has no such web app.
+    const web_url = app ? new URL(route.replace(/^\/+/, '') + u.search, app.web_url).toString() : null;
+    send(ctx, 200, { app_id: u.hostname, route, web_url });
   });
 
   r.on('POST', '/desktop/v1/audit', async (ctx) => {

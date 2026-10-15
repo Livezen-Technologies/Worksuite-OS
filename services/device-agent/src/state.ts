@@ -12,6 +12,9 @@ export interface Policy {
   offline_access_days?: number;
   usb_storage?: 'allow' | 'read_only' | 'block';
   bluetooth?: boolean;
+  /** WSOS-AUTH-004: pam_faillock deny (failed sign-ins before lockout) and unlock_time (0 = until an admin resets). */
+  login_failures_max?: number;
+  login_lockout_s?: number;
   app_allowlist?: string[];
   approved_remotes?: string[];
   /** WSOS-WIPE-006 (P2): local WorkSuite data wipe after this many days without a policy check-in. */
@@ -33,6 +36,8 @@ export interface AgentState {
   /** Commands whose final ack has not been delivered yet. */
   pending_acks: { id: string; state: string; reason?: string }[];
   wiped?: boolean;
+  /** Offline access period exceeded: local sign-in refused until the next successful check-in. */
+  offline_access_expired?: boolean;
 }
 
 export const emptyState = (): AgentState => ({ enrolled: false, seen_commands: {}, pending_acks: [] });
