@@ -23,10 +23,8 @@ cd "$work"
 mkdir -p config/packages.chroot
 cp "$debs"/*_all.deb "$debs"/*_"$ARCH".deb config/packages.chroot/
 find config/packages.chroot -name '*-dbgsym_*' -delete
-# Boot menu fonts (smooth DejaVu Sans instead of the Unifont bitmap font); GRUB loads every .pf2 in the theme directory.
-for f in "DejaVuSans 14" "DejaVuSans 16" "DejaVuSans-Bold 16"; do set -- $f
-  grub-mkfont -s "$2" -o "config/bootloaders/grub-pc/live-theme/$(echo "$1" | tr A-Z a-z)-$2.pf2" "/usr/share/fonts/truetype/dejavu/$1.ttf"
-done
+# Boot menu artwork, row images, selection pill and fonts (IBM Plex, bundled) for the live GRUB theme.
+"$here/../branding/grub/live/render.sh" config/bootloaders/grub-pc/live-theme
 if [ -n "${BUILD_HTTPS_PROXY:-}" ]; then
   export https_proxy="$BUILD_HTTPS_PROXY" HTTPS_PROXY="$BUILD_HTTPS_PROXY"
   mkdir -p config/includes.chroot_before_packages/etc/apt/apt.conf.d

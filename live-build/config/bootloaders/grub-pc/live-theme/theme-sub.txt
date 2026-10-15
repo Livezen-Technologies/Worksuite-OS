@@ -1,0 +1,20 @@
+# Submenus (Utilities): plain text rows on the same background.
+desktop-image: "../splash.png"
+desktop-image-scale-method: "padding"
+desktop-color: "#060E22"
+title-text: ""
++ boot_menu {
+        left = 50%-240
+        top = 50%-96
+        width = 480
+        height = 220
+        item_font = "IBM Plex Sans Regular 16"
+        item_color = "#C9D6EE"
+        selected_item_font = "IBM Plex Sans Regular 16"
+        selected_item_color = "#FFFFFF"
+        item_height = 28
+        item_padding = 6
+        item_spacing = 20
+        selected_item_pixmap_style = "select_*.png"
+        scrollbar = false
+}

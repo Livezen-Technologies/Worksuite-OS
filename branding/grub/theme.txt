@@ -11,10 +11,8 @@ terminal-font: "Unifont Regular 16"
   item_height = 32 item_spacing = 6 item_padding = 12
   selected_item_pixmap_style = "select_*.png"
 }
-# Countdown: thin rounded bar, remaining time underneath.
+# Countdown: thin rounded bar (a tiny font keeps GRUB from growing it to text height).
 + progress_bar { id = "__timeout__" left = 30%+12 top = 80% width = 40%-24 height = 6
-  bar_style = "progress_bar_*.png" highlight_style = "progress_highlight_*.png" text = "" }
-+ label { id = "__timeout__" left = 30% top = 80%+14 width = 40% height = 20 align = "center" color = "#94a3b8"
-  font = "DejaVu Sans Regular 14" text = "@TIMEOUT_NOTIFICATION_MIDDLE@" }
+  bar_style = "progress_bar_*.png" highlight_style = "progress_highlight_*.png" font = "DejaVu Sans Regular 6" text = "" }
 + label { left = 0 top = 92% width = 100% align = "center" color = "#475569" font = "DejaVu Sans Regular 14"
   text = "Enter  boot      E  edit      C  command line" }

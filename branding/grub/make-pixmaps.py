@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """GRUB theme pixmaps: rounded 9-slice pieces (anti-aliased), no dependencies.
-   make-pixmaps.py OUTDIR  →  progress_bar_*.png (track), progress_highlight_*.png (fill), select_*.png (menu selection)
+   make-pixmaps.py OUTDIR [live]  →  progress_bar_*.png (track), progress_highlight_*.png (fill), select_*.png (selection)
+   "live": only the ISO menu's selection pill (solid WorkSuite blue, radius 10).
 GRUB builds a styled box from <prefix>_{nw,n,ne,w,c,e,sw,s,se}.png; the corners carry the rounding."""
 import struct, sys, zlib, os
 
@@ -31,6 +32,9 @@ def box(out, prefix, r, rgb, alpha):
 
 out = sys.argv[1]
 os.makedirs(out, exist_ok=True)
+if sys.argv[2:] == ['live']:
+    box(out, 'select', 10, (0x1f, 0x6b, 0xff), 1.0)
+    sys.exit(0)
 box(out, 'progress_bar', 3, (0x1e, 0x29, 0x3b), 1.0)          # track
 box(out, 'progress_highlight', 3, (0x0a, 0x6c, 0xff), 1.0)    # fill, WorkSuite blue
-box(out, 'select', 8, (0x0a, 0x6c, 0xff), 0.28)               # selected menu item
+box(out, 'select', 4, (0x0a, 0x6c, 0xff), 0.28)               # selected menu item
