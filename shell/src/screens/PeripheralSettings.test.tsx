@@ -12,6 +12,7 @@ const calls: string[] = []
 const ok = <T,>(value: T) => ({ available: true as const, value })
 let vols: Volume[] = [{ device: '/dev/sdb2', disk: '/dev/sdb', label: 'secret', size: '15G', fstype: 'crypto_LUKS', mountpoint: null, encrypted: true, unlocked: null }]
 let enabled = ['keyboard-us']
+let capturing = 0
 const fake: PeripheralsApi = {
   async btScan() { calls.push('scan'); return ok([{ address: 'AA:BB:CC:DD:EE:01', name: 'Keyboard K380' }]) },
   async btPair(a) { calls.push(`pair ${a}`); return ok(true as const) },
@@ -33,6 +34,7 @@ const fake: PeripheralsApi = {
   async removePrinter() { return ok(true as const) },
   async printQueue() { return ok({ jobs: [{ id: 'Office-3', printer: 'Office', user: 'u', size: '10' }], issues: [{ name: 'Office', reason: 'Paper jam' }] }) },
   async cancelJob(id) { calls.push(`cancel ${id}`); return ok(true as const) },
+  async screenCapture() { return ok(capturing) },
   async inputMethods() { return ok({ enabled, available: ['keyboard-us', 'm17n_si_wijesekara', 'm17n_ta_tamil99'] }) },
   async setInputMethods(ids) { calls.push(`ims ${ids.join(',')}`); enabled = ids; return ok(true as const) },
   async syncFailed() { return { ok: true, value: [{ mutation_id: 'm-1', module: 'crm', object_id: 'lead-7', last_error: '403 forbidden' }] } },
@@ -132,5 +134,17 @@ describe('rejected sync changes (WSOS-SYN-004)', () => {
     await click(button('Try again'))
     expect(calls).toEqual(['retry m-1'])
     expect(failureKind('422 validation_failed: name required')).toBe('validation')
+  })
+})
+
+describe('screen capture indicator (WSOS-INT-013)', () => {
+  it('shows while a capture runs and disappears after', async () => {
+    const { CaptureBadge } = await import('../components/CaptureBadge')
+    capturing = 1
+    const h = await render(<CaptureBadge pollMs={10} />)
+    expect(h.textContent).toContain('Sharing screen')
+    capturing = 0
+    await act(async () => { await new Promise((r) => setTimeout(r, 40)) })
+    expect(h.textContent).toBe('')
   })
 })

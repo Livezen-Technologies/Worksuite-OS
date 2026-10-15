@@ -160,6 +160,7 @@ contextBridge.exposeInMainWorld('worksuitePeripherals', {
   removePrinter: (name: string) => ipcRenderer.invoke('ws:removePrinter', String(name)),
   printQueue: () => ipcRenderer.invoke('ws:printQueue'),
   cancelJob: (id: string) => ipcRenderer.invoke('ws:cancelJob', String(id)),
+  screenCapture: () => ipcRenderer.invoke('ws:screenCapture'),
   inputMethods: () => ipcRenderer.invoke('ws:inputMethods'),
   setInputMethods: (ids: string[]) => ipcRenderer.invoke('ws:setInputMethods', ...(Array.isArray(ids) ? ids.map(String) : [])),
   syncFailed: () => ipcRenderer.invoke('ws:syncFailed'),

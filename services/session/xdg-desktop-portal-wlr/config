@@ -1,0 +1,6 @@
+# xdg-desktop-portal-wlr, installed as /etc/xdg/xdg-desktop-portal-wlr/config (WSOS-INT-013).
+# Every ScreenCast request asks the user first: the chooser is a consent dialog, and cancelling it denies the
+# request. xdpw keeps no grants, so a denial is never turned into a silent allow later.
+[screencast]
+chooser_type=dmenu
+chooser_cmd=/usr/lib/worksuite/worksuite-screencast-chooser

@@ -190,6 +190,16 @@ export function renderFcitxProfile(methods: string[], layout = 'us'): string {
 
 export interface InputState { enabled: string[]; available: InputMethodId[] }
 
+// ---------- screen capture indicator (WSOS-INT-013) ----------
+/** `pw-dump` → running screen-capture streams from xdg-desktop-portal-wlr (node.name xdpw_stream…). */
+export function activeCaptures(json: string): number {
+  try {
+    const objs = JSON.parse(json) as { type?: string; info?: { state?: string; props?: Record<string, unknown> } }[]
+    return objs.filter((o) => o.type === 'PipeWire:Interface:Node' && String(o.info?.props?.['node.name'] ?? '').startsWith('xdpw_stream')
+      && o.info?.props?.['media.class'] === 'Video/Source' && (o.info?.state === 'running' || o.info?.state === 'idle')).length
+  } catch { return 0 }
+}
+
 // ---------- bridge ----------
 const ok = <T>(value: T): Avail<T> => ({ available: true, value })
 const fail = (reason: string): { available: false; reason: string } => ({ available: false, reason })
@@ -313,6 +323,11 @@ export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin
       return r.code === 0 ? ok(true) : tool(r, 'cancel', cupsError(r.stderr))
     },
 
+    async screenCapture(): Promise<Avail<number>> {
+      const r = await exec('pw-dump', [])
+      return r.code === 0 ? ok(activeCaptures(r.stdout)) : tool(r, 'pw-dump', 'service_unavailable')
+    },
+
     // Input methods (WSOS-INT-011)
     async inputMethods(): Promise<Avail<InputState>> {
       const text = (await fs.read(userProfile)) ?? (await fs.read('/etc/xdg/fcitx5/profile'))
@@ -347,6 +362,7 @@ export function startPeripheralsHost(handle: Handle, home: string, b: Peripheral
   handle('ws:removePrinter', (n) => b.removePrinter(n))
   handle('ws:printQueue', () => b.printQueue())
   handle('ws:cancelJob', (id) => b.cancelJob(id))
+  handle('ws:screenCapture', () => b.screenCapture())
   handle('ws:inputMethods', () => b.inputMethods())
   handle('ws:setInputMethods', (...ids) => b.setInputMethods(ids))
 }

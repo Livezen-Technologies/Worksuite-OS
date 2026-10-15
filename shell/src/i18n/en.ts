@@ -1205,6 +1205,9 @@ const en = {
   'polkit.wrong': 'That password was not accepted. Try again.',
   'polkit.checking': 'Checking…',
   'polkit.authenticate': 'Authenticate',
+  // Screen capture indicator (WSOS-INT-013)
+  'capture.active': 'Sharing screen',
+  'capture.hint': 'An app is recording or sharing your screen. Stop it in that app.',
 } as const
 
 export type MessageKey = keyof typeof en

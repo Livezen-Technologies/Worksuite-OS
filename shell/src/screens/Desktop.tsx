@@ -4,6 +4,7 @@ import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
 import type { Notice } from '../lib/syncNotices'
 import { AppNoticeActions, dismissAppNotices } from '../components/AppNoticeActions'
+import { CaptureBadge } from '../components/CaptureBadge'
 import { ageLabel } from '../lib/power'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
@@ -288,6 +289,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
           <TrayItems />
+          <CaptureBadge />
           <VpnBadge onOpen={() => openSettingsAt('Network')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false) }}

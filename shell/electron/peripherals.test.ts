@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   btError, cupsError, mountedAt, newDevices, parseFcitxProfile, parseInhibitors, parseJobs, parseLpinfo, parseLsblk,
-  parsePowerProfiles, parsePrinterIssues, peripheralsBridge, printerUri, queueName, renderFcitxProfile, udisksError, type FsDeps,
+  parsePowerProfiles, parsePrinterIssues, activeCaptures, peripheralsBridge, printerUri, queueName, renderFcitxProfile, udisksError, type FsDeps,
 } from './peripherals'
 import type { Exec, WithStdin } from './system'
 
@@ -143,5 +143,13 @@ describe('input methods (WSOS-INT-011)', () => {
     expect(parseFcitxProfile(fs.files['/home/u/.config/fcitx5/profile'])).toEqual(['keyboard-us', 'm17n_ta_tamil99'])
     expect(calls).toEqual([['fcitx5-remote', '-r']])
     expect(await b.setInputMethods(['../../evil'])).toEqual({ available: false, reason: 'invalid_argument' })
+  })
+})
+
+describe('screen capture indicator (WSOS-INT-013)', () => {
+  it('counts running portal screen-capture streams only', () => {
+    const node = (name: string, state: string, cls = 'Video/Source') => ({ type: 'PipeWire:Interface:Node', info: { state, props: { 'node.name': name, 'media.class': cls } } })
+    expect(activeCaptures(JSON.stringify([node('xdpw_stream', 'running'), node('xdpw_stream', 'suspended'), node('alsa_output', 'running', 'Audio/Sink'), { type: 'PipeWire:Interface:Link' }]))).toBe(1)
+    expect(activeCaptures('garbage')).toBe(0)
   })
 })

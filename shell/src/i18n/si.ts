@@ -1179,6 +1179,9 @@ const si: Partial<Record<MessageKey, string>> = {
   'polkit.wrong': 'එම මුරපදය පිළිගත්තේ නැත. නැවත උත්සාහ කරන්න.',
   'polkit.checking': 'පරීක්ෂා කරමින්…',
   'polkit.authenticate': 'සත්‍යාපනය කරන්න',
+  // Screen capture indicator (WSOS-INT-013)
+  'capture.active': 'තිරය බෙදා ගනිමින්',
+  'capture.hint': 'යෙදුමක් ඔබේ තිරය පටිගත කරයි හෝ බෙදා ගනී. එය එම යෙදුමෙන් නවත්වන්න.',
 }
 
 export default si

@@ -167,5 +167,16 @@ WORKSUITE_SHELL_BIN="$T/stub/fake-shell" SHELL_RC=3 sh "$BIN/worksuite-polkit-ag
 pk=$!; sleep 1; kill $pk 2>/dev/null; wait $pk 2>/dev/null
 grep -q 'using the fallback agent' "$T/pk.err" && ok "falls back when the shell agent cannot register" || bad "falls back when the shell agent cannot register"
 
+# ---- screen-sharing consent per request (WSOS-INT-013) ----
+CH=$BIN/worksuite-screencast-chooser
+stub zenity 'echo "zenity $*" >> "$LOG"; [ -n "${ZENITY_PICK:-}" ] || exit 1; echo "$ZENITY_PICK"'
+: > "$LOG"
+check "chooser shares the screen the user picked" "$(printf 'eDP-1\nHDMI-A-1\n' | ZENITY_PICK=HDMI-A-1 sh "$CH")" "HDMI-A-1"
+grep -q -- '--column=Screen' "$LOG" && grep -q 'eDP-1 HDMI-A-1' "$LOG" && ok "chooser lists every output" || bad "chooser lists every output"
+printf 'eDP-1\n' | sh "$CH" >/dev/null; check "cancel denies the request" "$?" "1"
+printf 'eDP-1\n' | ZENITY_PICK=evil sh "$CH" >/dev/null; check "unknown answer denies the request" "$?" "1"
+: > "$LOG"; printf '' | ZENITY_PICK=eDP-1 sh "$CH" >/dev/null; check "no outputs: denied without asking" "$?:$(cat "$LOG")" "1:"
+grep -q '^chooser_cmd=/usr/lib/worksuite/worksuite-screencast-chooser$' "$ROOT/services/session/xdg-desktop-portal-wlr/config" && ok "xdpw runs the consent chooser" || bad "xdpw runs the consent chooser"
+
 echo "1..$n"
 exit $fail

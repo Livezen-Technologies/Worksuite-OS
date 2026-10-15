@@ -57,6 +57,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends apparmor apparmor-utils
       - run: tests/security/apparmor.test.sh
       - run: tests/perf/gates.test.sh
+      # Session scripts with stubbed programs: lock, idle, greeter, polkit agent fallback, screen-sharing consent.
+      - run: sh tests/session/session-test.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22

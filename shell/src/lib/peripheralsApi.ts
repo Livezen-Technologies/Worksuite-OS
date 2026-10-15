@@ -28,6 +28,8 @@ export interface PeripheralsApi {
   removePrinter(name: string): Promise<Avail<true>>
   printQueue(): Promise<Avail<{ jobs: PrintJob[]; issues: PrinterIssue[] }>>
   cancelJob(id: string): Promise<Avail<true>>
+  /** Running screen-capture streams (WSOS-INT-013). */
+  screenCapture(): Promise<Avail<number>>
   inputMethods(): Promise<Avail<InputState>>
   setInputMethods(ids: string[]): Promise<Avail<true>>
   syncFailed(): Promise<Reply<FailedChange[]>>

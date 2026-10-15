@@ -1,0 +1,19 @@
+#!/bin/sh
+# Screen-sharing consent (WSOS-INT-013), run by xdg-desktop-portal-wlr for every ScreenCast request
+# (services/session/xdg-desktop-portal-wlr/config, chooser_type=dmenu). The outputs arrive on stdin, one per line; printing
+# one shares it, exiting non-zero denies. Nothing is remembered: the next request asks again. While a stream runs
+# the shell's taskbar shows "Sharing screen".
+set -u
+outputs=$(cat)
+[ -n "$outputs" ] || exit 1
+case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
+    si*) title='තිරය බෙදා ගැනීම'; text='යෙදුමක් ඔබේ තිරය බෙදා ගැනීමට හෝ පටිගත කිරීමට ඉල්ලයි. ඉඩ දීමට තිරයක් තෝරන්න.'; col='තිරය'; okl='බෙදා ගන්න'; nol='ප්‍රතික්ෂේප කරන්න' ;;
+    ta*) title='திரைப் பகிர்வு'; text='ஒரு பயன்பாடு உங்கள் திரையைப் பகிர அல்லது பதிவுசெய்ய கேட்கிறது. அனுமதிக்க ஒரு திரையைத் தேர்ந்தெடுக்கவும்.'; col='திரை'; okl='பகிர்'; nol='மறு' ;;
+    *) title='Share your screen?'; text='An app is asking to share or record your screen. Choose a screen to allow it, or deny.'; col='Screen'; okl='Share'; nol='Deny' ;;
+esac
+# shellcheck disable=SC2086 # one argument per output name (names have no spaces: DP-1, eDP-1, HDMI-A-1)
+choice=$(zenity --list --title="$title" --text="$text" --column="$col" --ok-label="$okl" --cancel-label="$nol" --hide-header $outputs) || exit 1
+for o in $outputs; do
+    [ "$o" = "$choice" ] && { printf '%s\n' "$o"; exit 0; }
+done
+exit 1
