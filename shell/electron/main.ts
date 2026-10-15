@@ -6,6 +6,7 @@ import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broke
 import { deviceInfo, enrollDevice } from './device'
 import { followJobs, packageClient } from './packages'
 import { recoveryHost } from './recovery'
+import { systemBridge } from './system'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
@@ -101,6 +102,22 @@ app.whenReady().then(() => {
   handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:syncStatus', () => syncCall('Status'))
   handle('ws:deviceInfo', () => deviceInfo())
+  // Settings → NetworkManager, BlueZ, PipeWire, UPower, CUPS, wlr-randr, UDisks2 (WSOS-INT-001…006, DSK-006).
+  const sys = systemBridge()
+  handle('ws:sysNetwork', () => sys.network())
+  handle('ws:sysSetWifi', (on) => sys.setWifi(on === 'on'))
+  handle('ws:sysWifiConnect', (ssid, password) => sys.wifiConnect(ssid, password))
+  handle('ws:sysBluetooth', () => sys.bluetooth())
+  handle('ws:sysSetBluetooth', (on) => sys.setBluetooth(on === 'on'))
+  handle('ws:sysBtConnect', (address, on) => sys.btConnect(address, on === 'on'))
+  handle('ws:sysSound', () => sys.sound())
+  handle('ws:sysSetVolume', (p) => sys.setVolume(Number(p)))
+  handle('ws:sysSetMute', (on) => sys.setMute(on === 'on'))
+  handle('ws:sysSetDefaultAudio', (id) => sys.setDefaultAudio(Number(id)))
+  handle('ws:sysBattery', () => sys.battery())
+  handle('ws:sysPrinters', () => sys.printers())
+  handle('ws:sysDisplays', () => sys.displays())
+  handle('ws:sysDisks', () => sys.disks())
   handle('ws:enrollDevice', (serverUrl, code) => enrollDevice(serverUrl, code))
   // App Center (WSOS-APP-001/002): preview before confirmation, then a job whose result arrives as an event.
   const pkg = packageClient()

@@ -50,6 +50,42 @@ export interface WorkSuiteApi {
   recoveryCopyToUsb(): Promise<CloudResult<true>>
   recoveryTerminal(): Promise<CloudResult<true>>
   recoverySaveReport(text: string): Promise<CloudResult<string>>
+  // Settings → host services (WSOS-INT-001…006, DSK-006). `available: false` means the tool/service isn't there.
+  sysNetwork(): Promise<Avail<NetworkState>>
+  sysSetWifi(on: boolean): Promise<Avail<true>>
+  /** The password reaches nmcli on stdin only. */
+  sysWifiConnect(ssid: string, password: string): Promise<{ ok: true } | { ok: false; error: string }>
+  sysBluetooth(): Promise<Avail<BluetoothState>>
+  sysSetBluetooth(on: boolean): Promise<Avail<true>>
+  sysBtConnect(address: string, on: boolean): Promise<Avail<true>>
+  sysSound(): Promise<Avail<SoundState>>
+  sysSetVolume(percent: number): Promise<Avail<true>>
+  sysSetMute(muted: boolean): Promise<Avail<true>>
+  sysSetDefaultAudio(id: number): Promise<Avail<true>>
+  sysBattery(): Promise<Avail<BatteryState>>
+  sysPrinters(): Promise<Avail<Printer[]>>
+  sysDisplays(): Promise<Avail<Display[]>>
+  sysDisks(): Promise<Avail<Drive[]>>
+}
+
+export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
+export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean }
+export interface NetDevice { device: string; type: string; state: string; connection: string | null }
+export interface NetworkState { wifi_enabled: boolean; devices: NetDevice[]; networks: WifiNetwork[] }
+export interface BtDevice { address: string; name: string; connected: boolean }
+export interface BluetoothState { powered: boolean; name: string | null; discoverable: boolean; paired: BtDevice[] }
+export interface AudioDevice { id: number; name: string; is_default: boolean }
+export interface SoundState { volume: number; muted: boolean; outputs: AudioDevice[]; inputs: AudioDevice[] }
+export interface BatteryState { present: boolean; percentage: number | null; state: string; time_to_full_s: number | null; time_to_empty_s: number | null; on_battery: boolean }
+export interface Printer { name: string; state: 'idle' | 'printing' | 'disabled' | 'unknown'; is_default: boolean }
+export interface Display { name: string; description: string; enabled: boolean; width: number | null; height: number | null; refresh: number | null; scale: number | null }
+export interface Drive { model: string; serial: string; device: string }
+
+/** "about 1 h 20 min" from seconds. */
+export function formatDuration(s: number | null): string | null {
+  if (s === null || s <= 0) return null
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60)
+  return h ? `about ${h} h${m ? ` ${m} min` : ''}` : `about ${m} min`
 }
 
 export type RecoveryFeature = 'unlock' | 'repair' | 'snapshots' | 'reinstall' | 'copy_usb' | 'terminal' | 'report_usb'
@@ -263,6 +299,36 @@ const stub: WorkSuiteApi = {
   async recoveryCopyToUsb() { return { ok: false, error: 'unavailable' } },
   async recoveryTerminal() { return { ok: false, error: 'unavailable' } },
   async recoverySaveReport() { return { ok: false, error: 'unavailable' } },
+  // Preview only: simulated host state; `?sim=none` shows every area as unavailable.
+  async sysNetwork() { return stubAvail({ ...stubSys.net, networks: stubSys.net.wifi_enabled ? stubSys.net.networks : [] }) },
+  async sysSetWifi(on) { stubSys.net.wifi_enabled = on; return stubAvail(true as const) },
+  async sysWifiConnect(ssid, password) {
+    await stubWait(700)
+    if (password === 'wrong') return { ok: false, error: 'bad_password' }
+    stubSys.net.networks = stubSys.net.networks.map((n) => ({ ...n, in_use: n.ssid === ssid }))
+    return { ok: true }
+  },
+  async sysBluetooth() { return stubAvail(stubSys.bt) },
+  async sysSetBluetooth(on) { stubSys.bt.powered = on; return stubAvail(true as const) },
+  async sysBtConnect(address, on) { stubSys.bt.paired = stubSys.bt.paired.map((d) => d.address === address ? { ...d, connected: on } : d); return stubAvail(true as const) },
+  async sysSound() { return stubAvail(stubSys.sound) },
+  async sysSetVolume(p) { stubSys.sound.volume = Math.max(0, Math.min(100, Math.round(p))); return stubAvail(true as const) },
+  async sysSetMute(m) { stubSys.sound.muted = m; return stubAvail(true as const) },
+  async sysSetDefaultAudio(id) { stubSys.sound.outputs = stubSys.sound.outputs.map((o) => ({ ...o, is_default: o.id === id })); return stubAvail(true as const) },
+  async sysBattery() { return stubAvail({ present: true, percentage: 74, state: 'charging', time_to_full_s: 4800, time_to_empty_s: null, on_battery: false }) },
+  async sysPrinters() { return stubAvail([{ name: 'HP_LaserJet_M507_Floor3', state: 'idle', is_default: true }] as Printer[]) },
+  async sysDisplays() { return stubAvail([{ name: 'eDP-1', description: 'Built-in display', enabled: true, width: 1920, height: 1200, refresh: 60, scale: 1 }]) },
+  async sysDisks() { return stubAvail([{ model: 'Preview NVMe SSD', serial: 'PREVIEW0001', device: 'nvme0n1' }]) },
+}
+
+function stubAvail<T>(value: T): Avail<T> {
+  return stubSim === 'none' ? { available: false, reason: 'service_unavailable' } : { available: true, value: structuredClone(value) }
+}
+const stubSys: { net: NetworkState; bt: BluetoothState; sound: SoundState } = {
+  net: { wifi_enabled: true, devices: [{ device: 'wlan0', type: 'wifi', state: 'connected', connection: 'Preview-WiFi' }, { device: 'eth0', type: 'ethernet', state: 'unavailable', connection: null }],
+    networks: [{ ssid: 'Preview-WiFi', signal: 82, security: 'WPA2', in_use: true }, { ssid: 'Guest', signal: 54, security: '', in_use: false }] },
+  bt: { powered: false, name: 'preview-laptop', discoverable: false, paired: [{ address: 'AA:BB:CC:DD:EE:01', name: 'Preview keyboard', connected: false }] },
+  sound: { volume: 60, muted: false, outputs: [{ id: 46, name: 'Built-in speakers', is_default: true }, { id: 51, name: 'HDMI output', is_default: false }], inputs: [{ id: 47, name: 'Built-in microphone', is_default: true }] },
 }
 
 // Preview only: `?sim=none` shows the recovery screens as on a host where none of the optional services exist.

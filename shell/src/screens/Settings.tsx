@@ -3,6 +3,8 @@ import { cloudErrorText, os, packageErrorText, policyLines, serverUrlFor, type O
 import type { WindowProps } from './types'
 import CIcon from '../components/CIcon'
 import { AppIcon } from '../components/Logo'
+import { formatDuration, type Avail } from '../lib/os'
+import { loaders, unavailableText, useSystem } from '../lib/useSystem'
 
 const SECTIONS = ['Network', 'Bluetooth', 'Displays', 'Sound', 'Power', 'Printers', 'Apps', 'Accounts', 'Privacy', 'Updates', 'About this device'] as const
 type Section = (typeof SECTIONS)[number]
@@ -41,43 +43,38 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 }
 
 function SimplePanel({ section }: { section: Section }) {
-  const [t, setT] = useState<Record<string, boolean>>({ wifi: true, bt: false, night: false, mute: false, saver: false, loc: false, diag: true })
+  const [t, setT] = useState<Record<string, boolean>>({ night: false, saver: false, loc: false, diag: true })
   const set = (k: string) => (v: boolean) => setT((s) => ({ ...s, [k]: v }))
-  const [vol, setVol] = useState(60)
   const [bright, setBright] = useState(80)
   switch (section) {
     case 'Network':
       return <Panel title="Network"><div className={card}>
-        <Row label="Wi-Fi" help="Connected to LIVEZEN-CORP · WPA2-Enterprise"><Toggle label="Wi-Fi" checked={t.wifi} onChange={set('wifi')} /></Row>
-        <Row label="Ethernet" help="Cable unplugged"><span className="text-[13.5px] text-ws-muted">Disconnected</span></Row>
+        <NetworkRows />
         <Row label="VPN" help="Managed by your organization"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span></Row>
       </div></Panel>
     case 'Bluetooth':
       return <Panel title="Bluetooth"><div className={card}>
-        <Row label="Bluetooth" help={t.bt ? 'Discoverable as LZT-LAP-0142' : 'Off'}><Toggle label="Bluetooth" checked={t.bt} onChange={set('bt')} /></Row>
-        <Row label="Paired devices" help="Logitech MX Keys"><span className="text-[13.5px] text-ws-muted">{t.bt ? 'Connected' : 'Not connected'}</span></Row>
+        <BluetoothRows />
       </div></Panel>
     case 'Displays':
       return <Panel title="Displays"><div className={card}>
-        <Row label="Built-in display" help="1920 × 1200 · 100%"><span className="text-[13.5px]">Primary</span></Row>
+        <DisplayRows />
         <Row label="Brightness"><input aria-label="Brightness" type="range" min={0} max={100} value={bright} onChange={(e) => setBright(+e.target.value)} className="w-48 accent-ws-accent" /></Row>
         <Row label="Night light" help="Warmer colors after sunset"><Toggle label="Night light" checked={t.night} onChange={set('night')} /></Row>
       </div></Panel>
     case 'Sound':
       return <Panel title="Sound"><div className={card}>
-        <Row label="Output" help="Built-in speakers"><input aria-label="Volume" type="range" min={0} max={100} value={vol} onChange={(e) => setVol(+e.target.value)} className="w-48 accent-ws-accent" /></Row>
-        <Row label="Mute"><Toggle label="Mute" checked={t.mute} onChange={set('mute')} /></Row>
-        <Row label="Input" help="Built-in microphone"><span className="text-[13.5px] text-ws-muted">Default</span></Row>
+        <SoundRows />
       </div></Panel>
     case 'Power':
       return <Panel title="Power"><div className={card}>
-        <Row label="Battery" help="Charging · about 1 h 20 min to full"><span className="text-[13.5px]">74%</span></Row>
+        <BatteryRow />
         <Row label="Power saver" help="Reduce background activity"><Toggle label="Power saver" checked={t.saver} onChange={set('saver')} /></Row>
         <Row label="Screen lock" help="Locks after 5 min idle"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">Set by policy</span></Row>
       </div></Panel>
     case 'Printers':
       return <Panel title="Printers"><div className={card}>
-        <Row label="HP LaserJet M507 — Floor 3" help="Network printer · shared by IT"><span className="text-[13.5px]">Default</span></Row>
+        <PrinterRows />
         <Row label="Add a printer" help="Only printers approved by your organization can be added"><button type="button" className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Add…</button></Row>
       </div></Panel>
     case 'Apps':
@@ -335,7 +332,7 @@ export default function Settings({ onClose }: WindowProps) {
               <Updates />
               <aside aria-label="About this device" className="w-[360px] shrink-0"><AboutDevice compact /></aside>
             </> : section === 'About this device' ? (
-              <Panel title="About this device"><div className="max-w-[640px]"><AboutDevice /></div></Panel>
+              <Panel title="About this device"><div className="max-w-[640px]"><AboutDevice /></div><div className={`${card} max-w-[640px]`}><DiskRows /></div></Panel>
             ) : <SimplePanel key={section} section={section} />}
           </main>
         </div>
@@ -450,4 +447,117 @@ function UnsentDialog({ account, unsent, onCancel, onChoose }: { account: CloudA
       </div>
     </div>
   )
+}
+
+// ---- Live host state (WSOS-INT-001…006, DSK-006): data from lib/useSystem, rows reuse the layout above. ----
+const muted = 'text-[13.5px] text-ws-muted'
+
+function AvailRows<T>({ label, state, children }: { label: string; state: Avail<T> | null; children: (v: T) => React.ReactNode }) {
+  if (!state) return <Row label={label}><span className={muted}>Checking…</span></Row>
+  if (!state.available) return <Row label={label} help={unavailableText(state.reason)}><span className={muted}>Unavailable</span></Row>
+  return <>{children(state.value)}</>
+}
+
+function NetworkRows() {
+  const { state, reload } = useSystem(loaders.network, 15_000)
+  const [join, setJoin] = useState<{ ssid: string; password: string; error: string | null; busy: boolean } | null>(null)
+  const connect = async () => {
+    if (!join) return
+    setJoin({ ...join, busy: true, error: null })
+    const r = await os.sysWifiConnect(join.ssid, join.password)
+    if (r.ok) { setJoin(null); void reload() } else setJoin({ ...join, busy: false, password: '', error: r.error === 'bad_password' ? 'Wrong password. Try again.' : 'Couldn’t connect to that network.' })
+  }
+  return <AvailRows label="Wi-Fi" state={state}>{(n) => {
+    const wifi = n.devices.find((d) => d.type === 'wifi')
+    const eth = n.devices.find((d) => d.type === 'ethernet')
+    return <>
+      <Row label="Wi-Fi" help={!n.wifi_enabled ? 'Off' : wifi?.connection ? `Connected to ${wifi.connection}` : 'Not connected'}>
+        <Toggle label="Wi-Fi" checked={n.wifi_enabled} onChange={(v) => void os.sysSetWifi(v).then(reload)} />
+      </Row>
+      {n.wifi_enabled && n.networks.filter((w) => !w.in_use).slice(0, 8).map((w) => (
+        <Row key={w.ssid} label={w.ssid} help={`${w.security || 'Open'} · signal ${w.signal}%`}>
+          {join?.ssid === w.ssid ? (
+            <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void connect() }}>
+              {w.security && <input type="password" aria-label={`Password for ${w.ssid}`} autoFocus value={join.password} onChange={(e) => setJoin({ ...join, password: e.target.value })} className="h-9 w-40 rounded-lg border border-slate-300 px-2 text-sm" />}
+              <button type="submit" disabled={join.busy} className="h-9 rounded-lg bg-ws-accent px-3 text-sm text-white disabled:opacity-50">{join.busy ? 'Connecting…' : 'Connect'}</button>
+              {join.error && <span role="alert" className="text-[12.5px] text-red-600">{join.error}</span>}
+            </form>
+          ) : <button type="button" onClick={() => setJoin({ ssid: w.ssid, password: '', error: null, busy: false })} className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm">Connect…</button>}
+        </Row>
+      ))}
+      {eth && <Row label="Ethernet" help={eth.connection ?? (eth.state === 'unavailable' ? 'Cable unplugged' : eth.state)}><span className={muted}>{eth.state === 'connected' ? 'Connected' : 'Disconnected'}</span></Row>}
+    </>
+  }}</AvailRows>
+}
+
+function BluetoothRows() {
+  const { state, reload } = useSystem(loaders.bluetooth, 15_000)
+  return <AvailRows label="Bluetooth" state={state}>{(b) => <>
+    <Row label="Bluetooth" help={b.powered ? (b.name ? `Visible as ${b.name}` : 'On') : 'Off'}>
+      <Toggle label="Bluetooth" checked={b.powered} onChange={(v) => void os.sysSetBluetooth(v).then(reload)} />
+    </Row>
+    {b.paired.length === 0 && <Row label="Paired devices" help="None"><span className={muted}>—</span></Row>}
+    {b.paired.map((d) => (
+      <Row key={d.address} label={d.name} help={d.connected ? 'Connected' : 'Not connected'}>
+        <button type="button" disabled={!b.powered} onClick={() => void os.sysBtConnect(d.address, !d.connected).then(reload)} className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-3 text-sm disabled:opacity-50">{d.connected ? 'Disconnect' : 'Connect'}</button>
+      </Row>
+    ))}
+  </>}</AvailRows>
+}
+
+function DisplayRows() {
+  const { state } = useSystem(loaders.displays)
+  return <AvailRows label="Displays" state={state}>{(list) => <>{list.map((d, i) => (
+    <Row key={d.name} label={d.description || d.name} help={d.enabled && d.width ? `${d.width} × ${d.height}${d.refresh ? ` · ${d.refresh} Hz` : ''}${d.scale ? ` · ${Math.round(d.scale * 100)}%` : ''}` : 'Off'}>
+      <span className="text-[13.5px]">{i === 0 ? 'Primary' : d.name}</span>
+    </Row>
+  ))}</>}</AvailRows>
+}
+
+function SoundRows() {
+  const { state, reload } = useSystem(loaders.sound)
+  const [vol, setVol] = useState<number | null>(null)
+  return <AvailRows label="Sound" state={state}>{(s) => {
+    const out = s.outputs.find((o) => o.is_default)
+    const input = s.inputs.find((o) => o.is_default)
+    return <>
+      <Row label="Output" help={out?.name ?? 'Default output'}>
+        <input aria-label="Volume" type="range" min={0} max={100} value={vol ?? s.volume} onChange={(e) => { setVol(+e.target.value); void os.sysSetVolume(+e.target.value) }} onPointerUp={() => void reload().then(() => setVol(null))} className="w-48 accent-ws-accent" />
+      </Row>
+      {s.outputs.length > 1 && <Row label="Output device">
+        <select aria-label="Output device" value={out?.id ?? ''} onChange={(e) => void os.sysSetDefaultAudio(+e.target.value).then(reload)} className="h-9 rounded-lg border border-slate-300 bg-ws-surface px-2 text-sm">
+          {s.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+      </Row>}
+      <Row label="Mute"><Toggle label="Mute" checked={s.muted} onChange={(v) => void os.sysSetMute(v).then(reload)} /></Row>
+      <Row label="Input" help={input?.name ?? 'None'}><span className={muted}>Default</span></Row>
+    </>
+  }}</AvailRows>
+}
+
+function BatteryRow() {
+  const { state } = useSystem(loaders.battery, 60_000)
+  return <AvailRows label="Battery" state={state}>{(b) => {
+    const eta = b.state === 'charging' ? formatDuration(b.time_to_full_s) : b.on_battery ? formatDuration(b.time_to_empty_s) : null
+    const what = b.state === 'charging' ? 'Charging' : b.on_battery ? 'On battery' : b.state === 'fully-charged' ? 'Fully charged' : 'Plugged in'
+    return <Row label="Battery" help={eta ? `${what} · ${eta} ${b.state === 'charging' ? 'to full' : 'left'}` : what}><span className="text-[13.5px]">{b.percentage === null ? '—' : `${b.percentage}%`}</span></Row>
+  }}</AvailRows>
+}
+
+function PrinterRows() {
+  const { state } = useSystem(loaders.printers)
+  return <AvailRows label="Printers" state={state}>{(list) => list.length === 0
+    ? <Row label="No printers" help="No printers are set up yet"><span className={muted}>—</span></Row>
+    : <>{list.map((p) => (
+      <Row key={p.name} label={p.name.replace(/_/g, ' ')} help={p.state === 'printing' ? 'Printing' : p.state === 'disabled' ? 'Paused' : 'Ready'}>
+        <span className="text-[13.5px]">{p.is_default ? 'Default' : ''}</span>
+      </Row>
+    ))}</>}</AvailRows>
+}
+
+function DiskRows() {
+  const { state } = useSystem(loaders.disks)
+  return <AvailRows label="Storage" state={state}>{(list) => <>{list.map((d) => (
+    <Row key={d.device} label={d.model || d.device} help={d.serial ? `Serial ${d.serial}` : undefined}><span className={muted}>{d.device}</span></Row>
+  ))}</>}</AvailRows>
 }
