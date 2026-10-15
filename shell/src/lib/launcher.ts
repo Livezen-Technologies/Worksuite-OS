@@ -6,7 +6,7 @@ import { t } from '../i18n'
 export type Kind = 'WorkSuite' | 'Linux app' | 'System'
 
 /** How a tile starts: a desktop entry via gtk-launch, WorkSuite Office (start centre or new document), or a shell screen. */
-export type Launch = { desktop: string } | { office: 'start' | 'docs' | 'sheets' | 'slides' } | { worksuite: DesktopModule } | { screen: 'appcenter' | 'files' }
+export type Launch = { desktop: string } | { office: 'start' | 'docs' | 'sheets' | 'slides' } | { worksuite: DesktopModule } | { screen: 'appcenter' | 'files' | 'monitor' | 'settings' }
 
 /** Modules WorkSuite Desktop opens with `--module=<id>`. */
 export type DesktopModule = 'home' | 'mail' | 'chat' | 'calendar' | 'tasks' | 'files' | 'crm' | 'hr'
@@ -19,7 +19,9 @@ export const DESKTOP_MODULE_FOR: Record<string, DesktopModule> = {
   mail: 'mail', chat: 'chat', calendar: 'calendar', tasks: 'tasks', drive: 'files', files: 'files', crm: 'crm', hr: 'hr',
 }
 
-export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[] }
+export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[]; offline?: OfflineLevel }
+/** Offline level the app declares (WSOS-SYN-009); shown in the launcher. */
+export type OfflineLevel = 'full_offline' | 'cached_read' | 'online_only'
 
 /** Launcher marks for the WorkSuite modules; the .desktop id is worksuite-<module>. */
 const WS_STYLE: Record<string, { name: string; mark: string; bg: string; fg: string; fav?: boolean }> = {
@@ -41,6 +43,7 @@ const OFFICE_STYLE = { bg: '#ffedd5', fg: '#c2410c' }
 const LINUX_FAV = new Set(['firefox-esr', 'firefox', 'org.mozilla.firefox'])
 
 export const APP_CENTER: LauncherApp = { id: 'appcenter', name: 'App Center', mark: 'A', bg: '#2563eb', fg: '#ffffff', kind: 'System', launch: { screen: 'appcenter' }, keywords: ['software', 'install'] }
+export const MONITOR: LauncherApp = { id: 'monitor', get name() { return t('monitor.title') }, mark: '~', bg: '#dcfce7', fg: '#15803d', kind: 'System', launch: { screen: 'monitor' }, keywords: ['task manager', 'processes', 'cpu', 'memory', 'performance'] }
 
 function initials(name: string) {
   const w = name.replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(Boolean)
@@ -55,17 +58,18 @@ function initials(name: string) {
  * desktop: the WorkSuite Desktop entry id when it is installed: its modules open there (`--module=<id>`), the rest
  * in worksuite-app web windows.
  */
-export function buildLauncherApps(webApps: { id: string; name: string }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null): LauncherApp[] {
+export function buildLauncherApps(webApps: { id: string; name: string; offline_level?: OfflineLevel }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null): LauncherApp[] {
   const out: LauncherApp[] = []
   if (desktop) {
     out.push({ id: 'worksuite-desktop', name: 'WorkSuite', mark: 'W', bg: '#2563eb', fg: '#ffffff', kind: 'WorkSuite', fav: true, launch: { worksuite: 'home' }, keywords: ['worksuite', 'home', 'desktop'] })
   }
-  for (const a of webApps ?? FALLBACK_WEB_APPS) {
+  for (const a of (webApps ?? FALLBACK_WEB_APPS) as { id: string; name: string; offline_level?: OfflineLevel }[]) {
     const st = WS_STYLE[a.id]
     const mod = desktop ? DESKTOP_MODULE_FOR[a.id] : undefined
     out.push({
       id: `worksuite-${a.id}`, name: st?.name ?? a.name, mark: st?.mark ?? initials(a.name), bg: st?.bg ?? '#e2e8f0', fg: st?.fg ?? '#1e293b',
       kind: 'WorkSuite', fav: st?.fav, launch: mod ? { worksuite: mod } : { desktop: `worksuite-${a.id}` }, keywords: ['worksuite', a.id],
+      ...(a.offline_level ? { offline: a.offline_level } : {}),
     })
   }
   if (office) {
@@ -85,7 +89,7 @@ export function buildLauncherApps(webApps: { id: string; name: string }[] | null
       keywords: [e.generic_name ?? '', e.comment ?? '', ...e.keywords, ...e.categories].filter(Boolean),
     })
   }
-  out.push(APP_CENTER)
+  out.push(MONITOR, APP_CENTER)
   return out
 }
 
@@ -102,6 +106,34 @@ export function filterApps(apps: LauncherApp[], tab: LauncherTab, query: string)
     if (!q) return a.id !== 'appcenter'
     return a.name.toLowerCase().includes(q) || a.keywords.some((k) => k.toLowerCase().includes(q))
   }).sort((a, b) => (q ? rank(a, q) - rank(b, q) : 0))
+}
+
+const lum = (hex: string) => {
+  const n = parseInt(hex.replace('#', ''), 16)
+  return Number.isFinite(n) ? 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255) : 0
+}
+/** Tile colour on the dark Start menu (G02): the darker of the app's two marks, with white text on it. */
+export function tileColor(a: Pick<LauncherApp, 'bg' | 'fg'>): string {
+  return lum(a.bg) <= lum(a.fg) ? a.bg : a.fg
+}
+
+/** Start menu pins (G02): favourites, then other apps, up to `max`, always ending with App Center and the system monitor. */
+export function startPins(apps: LauncherApp[], max = 12, tail: LauncherApp[] = []): LauncherApp[] {
+  const sys = new Set(['appcenter', 'monitor'])
+  const own = apps.filter((a) => !sys.has(a.id))
+  const end = [...apps.filter((a) => a.id === 'appcenter'), ...tail, ...apps.filter((a) => a.id === 'monitor')]
+  return [...own.filter((a) => a.fav), ...own.filter((a) => !a.fav)].slice(0, Math.max(0, max - end.length)).concat(end)
+}
+
+/** "All apps" (G02): A–Z groups by first letter; digits and symbols under '#'. */
+export function alphaGroups(apps: LauncherApp[]): { letter: string; apps: LauncherApp[] }[] {
+  const by = new Map<string, LauncherApp[]>()
+  for (const a of [...apps].sort((x, y) => x.name.localeCompare(y.name))) {
+    const c = a.name.charAt(0).toLocaleUpperCase()
+    const k = /\p{L}/u.test(c) ? c : '#'
+    by.set(k, [...(by.get(k) ?? []), a])
+  }
+  return [...by.entries()].map(([letter, apps]) => ({ letter, apps }))
 }
 
 const rank = (a: LauncherApp, q: string) => (a.name.toLowerCase().startsWith(q) ? 0 : a.name.toLowerCase().includes(q) ? 1 : 2)

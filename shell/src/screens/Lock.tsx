@@ -78,7 +78,7 @@ export default function Lock({ user, onUnlock, notices = [] }: LockProps) {
             <div key={n.id} className="flex items-center gap-3.5 rounded-[14px] border border-white/[0.12] bg-[rgba(8,20,48,0.55)] px-4 py-3.5 backdrop-blur-[16px]">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] font-bold" style={{ background: n.tone === 'ok' ? '#2E9E6A' : n.tone === 'warn' ? '#B7791F' : '#D9452B' }}><Icon d={n.tone === 'ok' ? P.check : P.alert} size={18} /></span>
               <span className="flex flex-1 flex-col gap-0.5">
-                <span className="text-sm font-semibold">{n.title}</span>
+                <span className="text-sm font-semibold">{n.app ?? n.title}</span>
                 <span className="text-[13px] text-white/70">{t('lock.unlockToRead')}</span>
               </span>
               <span className="text-xs text-white/60">{ageLabel(n.at, now.getTime())}</span>

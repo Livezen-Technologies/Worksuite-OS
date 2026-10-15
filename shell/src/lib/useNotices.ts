@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { os } from './os'
 import { diffStatus, type Notice, type SyncStatus } from './syncNotices'
+import { mergeApp, notificationsApi } from './appNotifications'
 
 export type TimedNotice = Notice & { at: number }
 
@@ -28,6 +29,19 @@ export function useNotices(enabled: boolean) {
     poll()
     const t = setInterval(poll, 15_000)
     return () => clearInterval(t)
+  }, [enabled])
+
+  // App notifications from the shell's org.freedesktop.Notifications server (WSOS-INT-007).
+  useEffect(() => {
+    const api = notificationsApi()
+    if (!enabled || !api) return
+    const apply = (list: Parameters<typeof mergeApp>[1]) => setNotices((all) => {
+      const { next, fresh } = mergeApp(all, list)
+      if (fresh.length) { setUnread((u) => u + fresh.length); setToast(fresh[0]) }
+      return next
+    })
+    void api.list().then(apply).catch(() => {})
+    return api.onChange(apply)
   }, [enabled])
 
   return { notices, setNotices, toast, setToast, unread, setUnread }

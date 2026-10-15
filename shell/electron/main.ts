@@ -25,6 +25,11 @@ import { arrange, displayManager, outputRects, type DisplayState } from './displ
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { startDesktopHost } from './desktopHost'
+import { markShellReady, startMonitorHost } from './monitorHost'
+import { flatpakPermsClient } from './flatpakPerms'
+import { startPeripheralsHost } from './peripherals'
+import { startNotifications } from './notifications'
+import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
 import { externalAllowed, loadGrants, permissionAllowed, shellWebPreferences } from './webSecurity'
@@ -78,6 +83,7 @@ function createWindow() {
   shellContents.add(win.webContents)
   // Perf probe (tests/perf/guest/measure-shell, WSOS-PRF-002/006): process start → first window ready.
   if (process.env.WORKSUITE_PERF === '1') win.once('ready-to-show', () => process.stdout.write(`WORKSUITE_PERF shell_ready_ms ${Math.round(process.uptime() * 1000)}\n`))
+  win.once('ready-to-show', () => markShellReady(Math.round(process.uptime() * 1000)))
   // Renderer probes (launcher first frame, WSOS-PRF-005) report on the console; forwarded only in perf runs.
   if (process.env.WORKSUITE_PERF === '1') win.webContents.on('console-message', (ev) => { if (/^WORKSUITE_PERF [a-z_]+ \d+$/.test(ev.message)) process.stdout.write(`${ev.message}\n`) })
   win.webContents.on('will-navigate', (e) => e.preventDefault())
@@ -92,6 +98,8 @@ function createWindow() {
   void win.loadFile(path.join(__dirname, '../dist/index.html'), mode ? { query: { mode } } : undefined)
 }
 
+// WSOS-INT-011: Sinhala/Tamil typing in the shell and app windows through fcitx5 (Wayland text-input-v3).
+app.commandLine.appendSwitch('enable-wayland-ime')
 // `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
 const appRequest = parseAppArgs(process.argv)
 if (appRequest) {
@@ -130,7 +138,7 @@ app.whenReady().then(() => {
   // Launcher data: the org's WorkSuite web apps (no token leaves the main process) and installed XDG apps.
   handle('ws:webApps', async () => {
     const r = await loadSession((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }))
-    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name }) => ({ id, name })) } : r
+    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name, offline_level }) => ({ id, name, offline_level })) } : r
   })
   handle('ws:installedApps', () => {
     const all = installedApps()
@@ -228,6 +236,9 @@ app.whenReady().then(() => {
   })
   handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:syncStatus', () => syncCall('Status'))
+  // WSOS-SYN-004: rejected changes are shown against their record; retry only when the user asks.
+  handle('ws:syncFailed', () => syncCall('ListFailed'))
+  handle('ws:syncRetry', (mutationId) => syncCall('RetryFailed', { mutation_id: mutationId }))
   handle('ws:deviceInfo', () => deviceInfo())
   // Settings → NetworkManager, BlueZ, PipeWire, UPower, CUPS, wlr-randr, UDisks2 (WSOS-INT-001…006, DSK-006).
   const sys = systemBridge()
@@ -332,6 +343,14 @@ app.whenReady().then(() => {
     return pkg.resetAppPermissions(id)
   })
   handle('ws:appDataRemove', (id) => fpUser.removeAppData(id))
+  // App detail (G09): this user's switches for single declared permissions (flatpak override --user).
+  const fpPerms = flatpakPermsClient(realExec)
+  handle('ws:appPermsUserOff', (id) => fpPerms.userOff(id))
+  handle('ws:appPermSet', async (id, perm, on) => {
+    const d = await pkg.appPermissions(id)
+    if (!d.ok) return d
+    return fpPerms.set(id, perm, on === 'on', (d.value as { permissions?: string[] }).permissions ?? [])
+  })
   handle('ws:pruneRuntimes', () => pkg.pruneRuntimes())
   handle('ws:bundleInspect', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInspect(p) : noFile })
   handle('ws:bundleInstall', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInstall(p) : noFile })
@@ -357,6 +376,13 @@ app.whenReady().then(() => {
     if (!p || !existsSync(p.full)) return { ok: false, error: 'not_found' }
     // Windows programs are never opened or run; the renderer shows why (WSOS-LCH-003).
     if (isWindowsProgram(p.full, fileHead(p.full))) return { ok: false, error: 'windows_program' }
+    // Drive documents open in WorkSuite Office under the server file lock (WSOS-DRV-003, electron/officeLock.ts).
+    const office = root === 'drive' && isOfficeDoc(p.full) ? findOffice(installedApps()) : null
+    const prog = office ? execProgram(office.exec) : null
+    if (office && prog) {
+      const r = await openWithLock(rel, p.full, { syncCall, launch: (f) => { const c = scopeCommand(office.id, [prog, f]); return c ? launchAndWait(c) : Promise.resolve() } })
+      return { ok: true, value: r.outcome }
+    }
     const err = await shell.openPath(p.full)          // default app via XDG (WSOS-DSK-009)
     return err ? { ok: false, error: err } : { ok: true, value: true }
   })
@@ -409,6 +435,12 @@ app.whenReady().then(() => {
   startPanel(handle, broadcast, () => void displays.applySaved())
   // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
   startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
+  // System monitor (G11) and quick settings brightness / power mode (G01).
+  startMonitorHost(handle)
+  // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
+  startPeripheralsHost(handle, app.getPath('home'))
+  // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
+  startNotifications(handle, broadcast)
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
   startPolkitBridge(handle, broadcast)
 })

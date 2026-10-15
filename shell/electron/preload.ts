@@ -111,6 +111,8 @@ contextBridge.exposeInMainWorld('worksuite', {
   localDebInstall: (token: string) => ipcRenderer.invoke('ws:localDebInstall', String(token)),
   appPermissions: (catalogId: string) => ipcRenderer.invoke('ws:appPermissions', String(catalogId)),
   appPermissionsReset: (catalogId: string) => ipcRenderer.invoke('ws:appPermissionsReset', String(catalogId)),
+  appPermsUserOff: (catalogId: string) => ipcRenderer.invoke('ws:appPermsUserOff', String(catalogId)),
+  appPermSet: (catalogId: string, perm: string, on: boolean) => ipcRenderer.invoke('ws:appPermSet', String(catalogId), String(perm), on ? 'on' : 'off'),
   appDataRemove: (catalogId: string) => ipcRenderer.invoke('ws:appDataRemove', String(catalogId)),
   pruneRuntimes: () => ipcRenderer.invoke('ws:pruneRuntimes'),
   bundleInspect: (handle: string) => ipcRenderer.invoke('ws:bundleInspect', String(handle)),
@@ -166,10 +168,52 @@ contextBridge.exposeInMainWorld('worksuiteDesktop', {
   shellRestartSeen: (n: number) => ipcRenderer.invoke('ws:shellRestartSeen', String(Math.max(0, Math.floor(Number(n)) || 0))),
 })
 
+// System monitor (G11) and quick settings brightness / power mode (G01).
+contextBridge.exposeInMainWorld('worksuiteMonitor', {
+  sysBrightness: () => ipcRenderer.invoke('ws:sysBrightness'),
+  sysSetBrightness: (percent: number) => ipcRenderer.invoke('ws:sysSetBrightness', String(percent)),
+  monitorSample: () => ipcRenderer.invoke('ws:monitorSample'),
+  monitorHealth: () => ipcRenderer.invoke('ws:monitorHealth'),
+  monitorStartup: () => ipcRenderer.invoke('ws:monitorStartup'),
+  monitorEnd: (pid: number) => ipcRenderer.invoke('ws:monitorEnd', String(pid)),
+})
+
 // Administrator prompts from the WorkSuite polkit agent — see electron/polkit.ts.
 contextBridge.exposeInMainWorld('worksuitePolkit', {
   state: () => ipcRenderer.invoke('ws:polkitState'),
   respond: (id: string, password: string) => ipcRenderer.invoke('ws:polkitRespond', String(id), String(password)),
   cancel: (id: string) => ipcRenderer.invoke('ws:polkitCancel', String(id)),
   onState: on('ws:polkit'),
+})
+
+// Bluetooth pairing, removable storage, power profiles, printers, input methods, sync errors — see electron/peripherals.ts.
+contextBridge.exposeInMainWorld('worksuitePeripherals', {
+  btScan: () => ipcRenderer.invoke('ws:btScan'),
+  btPair: (address: string) => ipcRenderer.invoke('ws:btPair', String(address)),
+  btRemove: (address: string) => ipcRenderer.invoke('ws:btRemove', String(address)),
+  volumes: () => ipcRenderer.invoke('ws:volumes'),
+  volMount: (device: string) => ipcRenderer.invoke('ws:volMount', String(device)),
+  volUnlock: (device: string, passphrase: string) => ipcRenderer.invoke('ws:volUnlock', String(device), String(passphrase)),
+  volEject: (device: string) => ipcRenderer.invoke('ws:volEject', String(device)),
+  powerProfiles: () => ipcRenderer.invoke('ws:powerProfiles'),
+  setPowerProfile: (name: string) => ipcRenderer.invoke('ws:setPowerProfile', String(name)),
+  inhibitors: () => ipcRenderer.invoke('ws:inhibitors'),
+  findPrinters: () => ipcRenderer.invoke('ws:findPrinters'),
+  addPrinter: (uri: string, name: string) => ipcRenderer.invoke('ws:addPrinter', String(uri), String(name)),
+  removePrinter: (name: string) => ipcRenderer.invoke('ws:removePrinter', String(name)),
+  printQueue: () => ipcRenderer.invoke('ws:printQueue'),
+  cancelJob: (id: string) => ipcRenderer.invoke('ws:cancelJob', String(id)),
+  screenCapture: () => ipcRenderer.invoke('ws:screenCapture'),
+  inputMethods: () => ipcRenderer.invoke('ws:inputMethods'),
+  setInputMethods: (ids: string[]) => ipcRenderer.invoke('ws:setInputMethods', ...(Array.isArray(ids) ? ids.map(String) : [])),
+  syncFailed: () => ipcRenderer.invoke('ws:syncFailed'),
+  syncRetry: (mutationId: string) => ipcRenderer.invoke('ws:syncRetry', String(mutationId)),
+})
+
+// Notifications from apps through the shell's org.freedesktop.Notifications server — see electron/notifications.ts.
+contextBridge.exposeInMainWorld('worksuiteNotifications', {
+  list: () => ipcRenderer.invoke('ws:notifications'),
+  invoke: (id: number, key: string) => ipcRenderer.invoke('ws:notificationInvoke', String(Number(id)), String(key)),
+  dismiss: (id: number) => ipcRenderer.invoke('ws:notificationDismiss', String(Number(id))),
+  onChange: on('ws:notificationsChanged'),
 })

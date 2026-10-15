@@ -2,7 +2,11 @@
 // per-record errors surfaced to the user, WSOS-IDN-006 revoked device, WSOS-SYN-005 sign-in needed).
 import { t } from '../i18n'
 export interface SyncStatus { state: string; pending: number; failed: number; conflicts: number; last_sync: number | null }
-export interface Notice { id: string; tone: 'ok' | 'warn' | 'error'; title: string; body: string }
+export interface Notice {
+  id: string; tone: 'ok' | 'warn' | 'error'; title: string; body: string
+  /** App notifications (WSOS-INT-007): sending app, and buttons for its actions. */
+  app?: string; actions?: { key: string; label: string }[]
+}
 
 
 export function diffStatus(prev: SyncStatus | null, next: SyncStatus): Notice[] {

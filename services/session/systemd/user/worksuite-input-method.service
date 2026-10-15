@@ -1,0 +1,15 @@
+[Unit]
+Description=WorkSuite input methods (fcitx5: Sinhala, Tamil, compose)
+Documentation=https://fcitx-im.org/
+PartOf=worksuite-session.target
+After=worksuite-session.target
+
+[Service]
+# WSOS-INT-011. fcitx5 talks to Labwc through input-method-v2 / text-input-v3; -r replaces a stale instance.
+ExecStart=/usr/bin/fcitx5 -r
+Restart=on-failure
+RestartSec=2s
+Slice=session.slice
+
+[Install]
+WantedBy=worksuite-session.target

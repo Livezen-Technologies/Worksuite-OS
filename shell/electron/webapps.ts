@@ -3,7 +3,10 @@
 
 export const WEB_APP_ID = /^[a-z][a-z0-9_-]{0,63}$/
 
-export interface WebApp { id: string; name: string; web_url: string }
+export interface WebApp { id: string; name: string; web_url: string; offline_level?: OfflineLevel }
+/** WSOS-SYN-009: what each app declares in bootstrap (api-contracts/openapi.yaml). */
+export type OfflineLevel = 'full_offline' | 'cached_read' | 'online_only'
+export const offlineLevel = (v: unknown): OfflineLevel | undefined => (v === 'full_offline' || v === 'cached_read' || v === 'online_only' ? v : undefined)
 
 /** What `worksuite-app <module>` / `worksuite-app worksuite://<module>/<route>` asked for. */
 export interface AppRequest { id: string; link: string | null }
@@ -60,7 +63,8 @@ export function webAppsFrom(bootstrap: unknown, apiBase: string, fallbackIds: st
       const id = typeof a?.id === 'string' ? a.id : ''
       const url = safeUrl(a?.web_url)
       if (!WEB_APP_ID.test(id) || !url || out.some((x) => x.id === id)) continue
-      out.push({ id, name: typeof a.name === 'string' && a.name ? a.name : id, web_url: url.toString() })
+      const level = offlineLevel(a.offline_level)
+      out.push({ id, name: typeof a.name === 'string' && a.name ? a.name : id, web_url: url.toString(), ...(level ? { offline_level: level } : {}) })
     }
     return out
   }

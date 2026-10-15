@@ -17,7 +17,7 @@ export interface WorkSuiteApi {
   /** Open a search result (worksuite:// or file://), or its location. */
   openSearchResult(link: string, where?: 'open' | 'location'): Promise<{ ok: boolean; error?: string }>
   /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
-  webApps(): Promise<CloudResult<{ id: string; name: string }[]>>
+  webApps(): Promise<CloudResult<{ id: string; name: string; offline_level?: 'full_offline' | 'cached_read' | 'online_only' }[]>>
   /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
   installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null }>
   /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
@@ -94,6 +94,9 @@ export interface WorkSuiteApi {
   localDebInstall(token: string): Promise<CloudResult<string>>
   appPermissions(catalogId: string): Promise<CloudResult<AppPermissions>>
   appPermissionsReset(catalogId: string): Promise<CloudResult<string>>
+  /** G09: declared permissions this user switched off, and one switch (flatpak override --user). Optional: older bridges lack them. */
+  appPermsUserOff?(catalogId: string): Promise<CloudResult<string[]>>
+  appPermSet?(catalogId: string, perm: string, on: boolean): Promise<CloudResult<true>>
   appDataRemove(catalogId: string): Promise<CloudResult<boolean>>
   pruneRuntimes(): Promise<CloudResult<string>>
   bundleInspect(handle: string): Promise<CloudResult<BundleInfo>>
@@ -175,6 +178,7 @@ export interface RecoveryInfo {
   luks: RecoveryLuksDevice[]; features: Record<RecoveryFeature, boolean>
 }
 
+import { withAppCenterPreview } from './appcenterPreview'
 import type { DesktopModule } from './launcher'
 import type { HwDevice, HwKind } from '../../electron/hardware'
 import type { LocalUser } from '../../electron/users'
@@ -667,4 +671,4 @@ export function serverUrlFor(mode: 'personal' | 'enterprise', server: string): s
   return /^[a-z]+:\/\//i.test(s) ? s : `https://${s}`
 }
 
-export const os: WorkSuiteApi = (typeof window !== 'undefined' && window.worksuite) || stub
+export const os: WorkSuiteApi = (typeof window !== 'undefined' && window.worksuite) || withAppCenterPreview(stub)

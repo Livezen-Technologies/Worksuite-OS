@@ -167,5 +167,16 @@ grep -q '^ExecStart=/usr/lib/worksuite/shell/worksuite-shell --safe$' "$R" && ok
 grep -q '^Conflicts=worksuite-shell.service$' "$R" && ok "recovery launcher replaces the shell" || bad "recovery launcher replaces the shell"
 grep -q -- '--recovery' "$R" && bad "session launcher is not the boot recovery screens" || ok "session launcher is not the boot recovery screens"
 
+# ---- screen-sharing consent per request (WSOS-INT-013) ----
+CH=$BIN/worksuite-screencast-chooser
+stub zenity 'echo "zenity $*" >> "$LOG"; [ -n "${ZENITY_PICK:-}" ] || exit 1; echo "$ZENITY_PICK"'
+: > "$LOG"
+check "chooser shares the screen the user picked" "$(printf 'eDP-1\nHDMI-A-1\n' | ZENITY_PICK=HDMI-A-1 sh "$CH")" "HDMI-A-1"
+grep -q -- '--column=Screen' "$LOG" && grep -q 'eDP-1 HDMI-A-1' "$LOG" && ok "chooser lists every output" || bad "chooser lists every output"
+printf 'eDP-1\n' | sh "$CH" >/dev/null; check "cancel denies the request" "$?" "1"
+printf 'eDP-1\n' | ZENITY_PICK=evil sh "$CH" >/dev/null; check "unknown answer denies the request" "$?" "1"
+: > "$LOG"; printf '' | ZENITY_PICK=eDP-1 sh "$CH" >/dev/null; check "no outputs: denied without asking" "$?:$(cat "$LOG")" "1:"
+grep -q '^chooser_cmd=/usr/lib/worksuite/worksuite-screencast-chooser$' "$ROOT/services/session/xdg-desktop-portal-wlr/config" && ok "xdpw runs the consent chooser" || bad "xdpw runs the consent chooser"
+
 echo "1..$n"
 exit $fail

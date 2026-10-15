@@ -171,7 +171,7 @@ test('expired commands are not delivered', async () => {
 test('bootstrap lists the org\'s web apps with web_url; links resolve to a web_url', async () => {
   const b = await call('GET', '/desktop/v1/bootstrap', { token: ana });
   const mail = b.body.apps.find((a: { id: string }) => a.id === 'mail');
-  assert.deepEqual(mail, { id: 'mail', name: 'Mail', web_url: 'https://ws.test/apps/mail/' });
+  assert.deepEqual(mail, { id: 'mail', name: 'Mail', offline_level: 'cached_read', web_url: 'https://ws.test/apps/mail/' });
   assert.equal(b.body.apps.length, 9);
   const l = await call('GET', '/desktop/v1/links/resolve?url=' + encodeURIComponent('worksuite://drive/files/42?v=1'), { token: ana });
   assert.deepEqual(l.body, { app_id: 'drive', route: '/files/42', web_url: 'https://ws.test/apps/drive/files/42?v=1' });

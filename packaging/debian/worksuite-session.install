@@ -15,6 +15,9 @@ services/session/pam/worksuite-faillock usr/share/pam-configs/
 services/session/pam/worksuite-faillock-preauth usr/share/pam-configs/
 services/session/pam/worksuite-offline-access usr/share/pam-configs/
 services/session/pam/faillock.conf usr/share/worksuite/
+services/session/fcitx5/profile etc/xdg/fcitx5/
+services/session/bin/worksuite-screencast-chooser usr/lib/worksuite/
+services/session/xdg-desktop-portal-wlr/config etc/xdg/xdg-desktop-portal-wlr/
 services/session/greeter/worksuite_greeter usr/lib/worksuite/greeter/
 services/session/bin/worksuite-autologin usr/sbin/
 services/session/polkit/worksuite_polkit_agent usr/lib/worksuite/polkit/
