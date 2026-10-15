@@ -126,3 +126,16 @@ contextBridge.exposeInMainWorld('worksuitePanel', {
   onTray: on('ws:panelTrayChanged'),
   onLauncher: on('ws:launcher'),
 })
+
+// Default apps, clipboard history, problem report — see electron/desktopHost.ts.
+contextBridge.exposeInMainWorld('worksuiteDesktop', {
+  defaultApps: () => ipcRenderer.invoke('ws:defaultApps'),
+  setDefaultApp: (category: string, id: string) => ipcRenderer.invoke('ws:setDefaultApp', String(category), String(id)),
+  clipboardState: () => ipcRenderer.invoke('ws:clipboardState'),
+  clipboardSetEnabled: (on: boolean) => ipcRenderer.invoke('ws:clipboardSetEnabled', on ? 'on' : 'off'),
+  clipboardClear: () => ipcRenderer.invoke('ws:clipboardClear'),
+  clipboardRemove: (id: number) => ipcRenderer.invoke('ws:clipboardRemove', String(Number(id))),
+  clipboardCopy: (id: number) => ipcRenderer.invoke('ws:clipboardCopy', String(Number(id))),
+  onClipboard: on('ws:clipboardChanged'),
+  problemReport: () => ipcRenderer.invoke('ws:problemReport'),
+})

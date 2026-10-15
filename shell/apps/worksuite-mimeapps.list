@@ -4,3 +4,12 @@
 # worksuite:// goes to WorkSuite Desktop (worksuite.desktop, package worksuite) when it is installed, else to
 # the web app windows (worksuite-url-handler.desktop): XDG takes the first installed entry of the list.
 x-scheme-handler/worksuite=worksuite.desktop;worksuite-url-handler.desktop;
+# Windows programs never run: they open an explanation (WSOS-LCH-003).
+application/x-ms-dos-executable=worksuite-windows-app.desktop;
+application/x-msdownload=worksuite-windows-app.desktop;
+application/vnd.microsoft.portable-executable=worksuite-windows-app.desktop;
+application/x-msi=worksuite-windows-app.desktop;
+application/x-ms-installer=worksuite-windows-app.desktop;
+application/x-ms-shortcut=worksuite-windows-app.desktop;
+application/x-bat=worksuite-windows-app.desktop;
+application/x-msdos-program=worksuite-windows-app.desktop;

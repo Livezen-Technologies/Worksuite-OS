@@ -21,6 +21,8 @@ import { startPanel } from './panelHost'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
+import { startDesktopHost } from './desktopHost'
+import { fileHead, isWindowsProgram } from './winexe'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 const ALLOWED_SCHEMES = new Set(['https:', 'mailto:', 'tel:', 'worksuite:']) // WSOS-SEC-006
@@ -304,6 +306,8 @@ app.whenReady().then(() => {
   handle('ws:filesOpen', async (root, rel) => {
     const p = resolveIn(files, root, rel)
     if (!p || !existsSync(p.full)) return { ok: false, error: 'not_found' }
+    // Windows programs are never opened or run; the renderer shows why (WSOS-LCH-003).
+    if (isWindowsProgram(p.full, fileHead(p.full))) return { ok: false, error: 'windows_program' }
     const err = await shell.openPath(p.full)          // default app via XDG (WSOS-DSK-009)
     return err ? { ok: false, error: err } : { ok: true, value: true }
   })
@@ -337,6 +341,8 @@ app.whenReady().then(() => {
   void displays.applySaved()
   // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
   startPanel(handle, broadcast, () => void displays.applySaved())
+  // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
+  startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
 })
 
 app.on('window-all-closed', () => app.quit())
