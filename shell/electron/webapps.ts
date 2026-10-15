@@ -108,6 +108,20 @@ export function startUrl(app: WebApp, resolvedLink: string | null): string {
   return app.web_url
 }
 
+export type DeviceCredential = () => string | null
+
+/** Headers for a request to an allowed origin: the token, plus X-WS-Device when enrolled. Nothing for other origins. */
+export function appAuthHeaders(url: string, origins: Set<string>, token: string, device: DeviceCredential): Record<string, string> {
+  if (!wantsToken(url, origins)) return {}
+  const d = device()
+  return d ? { Authorization: `Bearer ${token}`, 'X-WS-Device': d } : { Authorization: `Bearer ${token}` }
+}
+
+const authHeaders = (token: string, device?: DeviceCredential): Record<string, string> => {
+  const d = device?.()
+  return d ? { authorization: `Bearer ${token}`, 'x-ws-device': d } : { authorization: `Bearer ${token}` }
+}
+
 /** Server the sign-in should go to: the enrolled org's server, then a previous account's, then WorkSuite Cloud. */
 export function signInTarget(deviceServer: string | null, accounts: { server_url: string }[]): { server_url: string; mode: 'personal' | 'enterprise' } {
   if (deviceServer && safeUrl(deviceServer)) return { server_url: deviceServer, mode: 'enterprise' }
@@ -130,7 +144,7 @@ export interface Session { account: { id: string; server_url: string }; token: s
 export type SessionResult = { ok: true; value: Session } | { ok: false; error: 'not_signed_in' | 'locked' | 'auth_required' | 'offline' | 'device_required' | 'server_error' }
 
 /** Signed-in account → access token (from the broker) → api_base → bootstrap apps. */
-export async function loadSession(broker: Broker, fetchFn: Fetch): Promise<SessionResult> {
+export async function loadSession(broker: Broker, fetchFn: Fetch, device?: DeviceCredential): Promise<SessionResult> {
   const st = await broker('Status')
   if (!st.ok) return { ok: false, error: 'not_signed_in' }
   const accounts = (Array.isArray(st.value) ? st.value : []) as { id: string; server_url: string; state?: string }[]
@@ -146,7 +160,7 @@ export async function loadSession(broker: Broker, fetchFn: Fetch): Promise<Sessi
     const wk = await fetchFn(new URL('/.well-known/worksuite-desktop', server).toString())
     if (wk.ok) { const b = (await wk.json()) as { api_base?: unknown }; if (safeUrl(b.api_base)) apiBase = String(b.api_base) }
     apiBase = apiBase.replace(/\/?$/, '/')
-    const r = await fetchFn(new URL('desktop/v1/bootstrap', apiBase).toString(), { headers: { authorization: `Bearer ${t.value}` } })
+    const r = await fetchFn(new URL('desktop/v1/bootstrap', apiBase).toString(), { headers: authHeaders(t.value, device) })
     const body = await r.json().catch(() => null)
     if (!r.ok) {
       const code = (body as { error?: { code?: string } } | null)?.error?.code
@@ -157,9 +171,9 @@ export async function loadSession(broker: Broker, fetchFn: Fetch): Promise<Sessi
 }
 
 /** worksuite:// link → web_url via /desktop/v1/links/resolve (null if the server can't place it). */
-export async function resolveLink(s: Session, link: string, fetchFn: Fetch): Promise<string | null> {
+export async function resolveLink(s: Session, link: string, fetchFn: Fetch, device?: DeviceCredential): Promise<string | null> {
   try {
-    const r = await fetchFn(new URL(`desktop/v1/links/resolve?url=${encodeURIComponent(link)}`, s.apiBase).toString(), { headers: { authorization: `Bearer ${s.token}` } })
+    const r = await fetchFn(new URL(`desktop/v1/links/resolve?url=${encodeURIComponent(link)}`, s.apiBase).toString(), { headers: authHeaders(s.token, device) })
     if (!r.ok) return null
     const b = (await r.json()) as { web_url?: unknown }
     return safeUrl(b.web_url)?.toString() ?? null
