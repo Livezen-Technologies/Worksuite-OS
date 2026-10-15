@@ -30,6 +30,8 @@ profile worksuite-directory flags=(attach_disconnected) {
   # Greeter domain settings and status markers (WSOS-DIR-002/007).
   /run/worksuite-directory/ rw,
   /run/worksuite-directory/** rw,
+  # Break-glass reason left by the greeter (G04).
+  /run/worksuite/break-glass/reason rw,
   /usr/bin/logger rix,
   # Account tools run inside this profile (ix; the unit has NoNewPrivileges=yes) and may edit only the account files.
   capability chown dac_override dac_read_search fowner fsetid audit_write setuid setgid,

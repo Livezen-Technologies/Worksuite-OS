@@ -10,6 +10,8 @@ import json
 import os
 import pwd
 import re
+import socket
+import time
 
 RUN_DIR = os.environ.get("WORKSUITE_DIRECTORY_RUN", "/run/worksuite-directory")
 DEFAULT_SESSION = ["/usr/bin/worksuite-session"]
@@ -17,6 +19,9 @@ DEFAULT_SESSION = ["/usr/bin/worksuite-session"]
 CHANGE_PREFIX = "\x1bWSCHG\x1f"
 SEP = "\x1f"
 DIRECTORY_UID_MIN = 200_000
+BREAK_GLASS_USER = "wsadmin"  # services/directory/src/directory.ts BREAK_GLASS_USER
+BREAK_GLASS_DIR = os.environ.get("WORKSUITE_BREAK_GLASS_DIR", "/run/worksuite/break-glass")
+DAY = 86_400
 
 _LOCAL = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 _EMAIL = re.compile(r"^[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,63}$")
@@ -175,3 +180,58 @@ def sign_in(greetd, name, password, otp=None, new_password=None, cmd=None, run_d
         return Result(False, "denied" if r.get("error_type") == "auth_error" else "error", messages)
     finally:
         secret = None  # noqa: F841  (drop the reference; Python strings cannot be wiped)
+
+
+# ---- G04: directory status, offline days, break-glass ----
+
+def org_name(cfg):
+    n = cfg.get("org_name")
+    return n.strip()[:80] if isinstance(n, str) and n.strip() else None
+
+
+def directory_reachable(cfg, connect=socket.create_connection, timeout=2.0):
+    """True / False when the device is joined (a TCP connect to the WorkSuite server), None when not joined."""
+    host = cfg.get("server_host")
+    if not isinstance(host, str) or not host:
+        return None
+    name, _, port = host.rpartition(":") if re.search(r":\d+$", host) else (host, "", "443")
+    try:
+        connect((name.strip("[]"), int(port)), timeout=timeout).close()
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def offline_days_left(name, run_dir=RUN_DIR, now=None):
+    """Whole days of offline sign-in left for a cached directory account, or None when nothing is cached."""
+    key = hashlib.sha256(name.encode("utf-8")).hexdigest()
+    try:
+        with open(os.path.join(run_dir, "offline.json"), encoding="utf-8") as f:
+            until = json.load(f).get(key)
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(until, (int, float)):
+        return None
+    left = until / 1000 - (time.time() if now is None else now)
+    return max(0, int(left // DAY))
+
+
+def break_glass_available(getpwnam=pwd.getpwnam):
+    return local_exists(BREAK_GLASS_USER, getpwnam)
+
+
+def save_break_glass_reason(text, directory=BREAK_GLASS_DIR):
+    """Leaves the reason for the directory session hook, which sends it with the audit event. Returns False if empty."""
+    reason = " ".join((text or "").split())[:200]
+    if len(reason) < 5:
+        return False
+    path = os.path.join(directory, "reason")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(reason)
+    return True
+
+
+def initials(display):
+    parts = [p for p in re.split(r"[\s._@-]+", display or "") if p]
+    return "".join(p[0] for p in parts[:2]).upper() or "?"

@@ -514,7 +514,7 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
       const type = str(b, 'type', 32);
       if (type !== 'used' && type !== 'rotated') throw invalid('type', 'used or rotated');
       db.prepare('INSERT OR IGNORE INTO audit (id, principal, type, at, data) VALUES (?, ?, ?, ?, ?)')
-        .run(str(b, 'id', 64), `device:${d.id}`, `break_glass.${type}`, str(b, 'at', 64), JSON.stringify({ username: str(b, 'username', 64) }));
+        .run(str(b, 'id', 64), `device:${d.id}`, `break_glass.${type}`, str(b, 'at', 64), JSON.stringify({ username: str(b, 'username', 64), ...(typeof b.reason === 'string' && b.reason ? { reason: b.reason.slice(0, 200) } : {}) }));
       return { status: 202 };
     });
   });

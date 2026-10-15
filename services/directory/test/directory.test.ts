@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  CHANGE_PREFIX, authenticate, BREAK_GLASS_USER, localGroups, rotate, ServerError, session, UID_BASE,
+  CHANGE_PREFIX, authenticate, BREAK_GLASS_USER, localGroups, offlineUntil, rotate, ServerError, session, UID_BASE,
   type Accounts, type AuditEvent, type CacheEntry, type Deps, type DirectoryUser, type Server,
 } from '../src/directory.ts';
 
@@ -230,4 +230,17 @@ test('WSOS-DIR-009: accounts with a second factor need password + code; offline 
   f.state.online = false;
   assert.equal(await authenticate(f.deps, 'ana@corp.example', PW + '999999'), 'ok_offline');
   assert.equal(await authenticate(f.deps, 'ana@corp.example', 'wrong-pass' + '123456'), 'denied');
+});
+
+test('G04: break-glass reason typed at the greeter goes into the audit event once; offline end per cached account', async () => {
+  const f = fakes();
+  await f.deps.accounts.create(BREAK_GLASS_USER, 999, '');
+  let reason: string | null = 'Directory down,\nrestoring network';
+  f.deps.store.takeBreakGlassReason = () => { const r = reason; reason = null; return r; };
+  await session(f.deps, BREAK_GLASS_USER);
+  assert.equal(f.events.at(-1)!.reason, 'Directory down, restoring network');
+  await session(f.deps, BREAK_GLASS_USER);
+  assert.equal(f.events.at(-1)!.reason, undefined);
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW), 'ok');
+  assert.deepEqual(offlineUntil(f.getCache()), { 'ana@corp.example': f.state.now + 7 * DAY });
 });

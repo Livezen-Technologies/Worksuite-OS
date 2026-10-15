@@ -168,3 +168,48 @@ class IpcTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class G04Tests(unittest.TestCase):
+    def test_reachability_uses_server_host(self):
+        seen = []
+
+        class Sock:
+            def close(self):
+                pass
+
+        def ok(addr, timeout):
+            seen.append(addr)
+            return Sock()
+
+        def down(addr, timeout):
+            raise OSError("unreachable")
+
+        self.assertIsNone(login.directory_reachable({}))
+        self.assertTrue(login.directory_reachable({"server_host": "ws.corp.example"}, connect=ok))
+        self.assertTrue(login.directory_reachable({"server_host": "ws.corp.example:8443"}, connect=ok))
+        self.assertEqual(seen, [("ws.corp.example", 443), ("ws.corp.example", 8443)])
+        self.assertFalse(login.directory_reachable({"server_host": "ws.corp.example"}, connect=down))
+
+    def test_offline_days_left(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(login.offline_days_left("ana@corp.example", d))
+            key = hashlib.sha256(b"ana@corp.example").hexdigest()
+            with open(os.path.join(d, "offline.json"), "w") as f:
+                json.dump({key: (1000 + 6.5 * 86400) * 1000}, f)
+            self.assertEqual(login.offline_days_left("ana@corp.example", d, now=1000), 6)
+            self.assertEqual(login.offline_days_left("ana@corp.example", d, now=1000 + 30 * 86400), 0)
+            self.assertIsNone(login.offline_days_left("bob@corp.example", d))
+
+    def test_break_glass_reason(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertFalse(login.save_break_glass_reason("  ", d))
+            self.assertTrue(login.save_break_glass_reason("Directory down,\n restoring   network", d))
+            with open(os.path.join(d, "reason")) as f:
+                self.assertEqual(f.read(), "Directory down, restoring network")
+
+    def test_initials_and_org(self):
+        self.assertEqual(login.initials("Alex Perera"), "AP")
+        self.assertEqual(login.initials(""), "?")
+        self.assertEqual(login.org_name({"org_name": " Lanka Tea "}), "Lanka Tea")
+        self.assertIsNone(login.org_name({}))
