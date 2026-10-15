@@ -1,0 +1,21 @@
+{
+  "name": "@worksuite-os/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WorkSuite server MVP: OneAuth (OIDC + PKCE), desktop/v1 and desktop/v1/os APIs, signed manifests (api-contracts/openapi.yaml)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "worksuite-server": "./src/main.ts"
+  },
+  "scripts": {
+    "test": "node --no-warnings --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/node": "^22.18.0"
+  }
+}

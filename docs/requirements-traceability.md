@@ -60,3 +60,14 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | GRUB theme, quiet boot | `branding/grub/theme.txt`, `/etc/default/grub.d/worksuite.cfg` | Built; not booted |
 | App icon (hicolor 16–512 + scalable), wallpaper | `branding/icons/`, `branding/wallpaper.svg`, rendered by `branding/render.sh` | Rendered |
 | Installer logo and slideshow | `installer/branding/worksuite/` (concept A logo, 4 slides) | Not rendered (QtQuick.Window missing in container) |
+
+## Server MVP (`services/server`)
+
+| Item | Implementation | Verified |
+|---|---|---|
+| OneAuth sign-in (WSOS-IDN-001..003): OIDC code + PKCE S256, loopback redirects, 15 min access tokens, rotating refresh tokens with reuse detection, revocation | `src/oauth.ts` | E2E with the broker's `discover`/`tokenRequest`/`userinfo` |
+| Device enrollment, signed policy, signed commands, acks, revocation (WSOS-MDM-001..006, WSOS-IDN-005) | `src/api.ts`, `src/admin.ts` | E2E with the real device `Agent` |
+| Idempotent sync mutations, conflicts, cursor paging, tombstone window and 410 (WSOS-SYN-001, -006, -007) | `src/api.ts` | E2E with the sync transport; API tests |
+| Document locks (WSOS-DRV-003) | `files/{id}/lock` | API tests |
+| Signed release manifests (WSOS-AUP-002) | `/os/manifests/{ring}/{arch}.json` | Verified with the package service's `verifyManifest` |
+| Not yet | Federation (AD/LDAP/external OneAuth), resumable diagnostic uploads, admin console, push | — |
