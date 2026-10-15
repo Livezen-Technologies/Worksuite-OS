@@ -1330,6 +1330,13 @@ const si: Partial<Record<MessageKey, string>> = {
   'safe.reportSaved': 'ගැටළු වාර්තාව {file} වෙත සුරකින ලදී. එය ඔබගේ IT කණ්ඩායමට යවන්න.',
   'safe.reportFailed': 'ගැටළු වාර්තාවක් සුරැකිය නොහැකි විය.',
   'safe.logout': 'ඉවත් වන්න',
+  // G12 shell restarted notice
+  'shellRestart.title': 'ගැටළුවකින් පසු ඩෙස්ක්ටොප් එක නැවත ආරම්භ විය',
+  'shellRestart.apps': 'ඔබගේ විවෘත යෙදුම් {count} දිගටම ක්\u200dරියා කළ අතර කිසිවක් නැති නොවීය.',
+  'shellRestart.appsOne': 'ඔබගේ විවෘත යෙදුම දිගටම ක්\u200dරියා කළ අතර කිසිවක් නැති නොවීය.',
+  'shellRestart.appsNone': 'කිසිදු යෙදුමක් විවෘතව නොතිබූ බැවින් කිසිවක් නැති නොවීය.',
+  'shellRestart.appsUnknown': 'යෙදුම් ඩෙස්ක්ටොප් එකෙන් වෙන්ව ක්\u200dරියා කරන බැවින් විවෘත යෙදුම් දිගටම ක්\u200dරියා කළේය.',
+  'shellRestart.report': 'වාර්තාව යවන්න',
 }
 
 export default si

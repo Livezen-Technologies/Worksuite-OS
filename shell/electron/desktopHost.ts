@@ -1,7 +1,7 @@
 // IPC for Settings › Default apps (WSOS-DSK-009), clipboard history (WSOS-DSK-008) and the recovery launcher's
 // "Report problem" (WSOS-SES-005). Registered from main.ts through its sender-checked `handle`.
 import { execFile } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { clipboardHistory, wlClipboardIo } from './clipboard'
 import { defaultApps, setDefaultApp } from './mimeapps'
@@ -20,6 +20,26 @@ export function reportName(now: Date): string {
 export function reportText(journal: string | null, now: Date, version: string): string {
   return [`WorkSuite OS problem report`, `Created: ${now.toISOString()}`, `Shell version: ${version}`, '',
     '--- Recent shell and session log ---', journal?.trim() || '(The log could not be read.)', ''].join('\n')
+}
+
+// ---- "The desktop restarted" notice (G12, WSOS-SES-004) ----
+// systemd counts automatic restarts of worksuite-shell.service (NRestarts); apps live in app-worksuite-*.scope units
+// outside the shell's cgroup, so the ones still running are the ones the restart kept. The count already shown is
+// kept in $XDG_RUNTIME_DIR, which lives for the login session, so the notice appears once per restart.
+export const NRESTARTS_ARGS = ['--user', 'show', 'worksuite-shell.service', '-p', 'NRestarts', '--value']
+export const APP_SCOPES_ARGS = ['--user', 'list-units', '--type=scope', '--state=running', '--no-legend', '--plain', 'app-worksuite-*']
+
+export function parseRestarts(out: string | null): number | null {
+  const m = /^\s*(\d+)\s*$/.exec(out ?? '')
+  return m ? Number(m[1]) : null
+}
+export function countAppScopes(out: string | null): number | null {
+  if (out == null) return null
+  return out.split('\n').filter((l) => /^\s*app-worksuite-\S+\.scope\s/.test(l)).length
+}
+/** Show the notice when the shell restarted more often than the count the user last saw this session. */
+export function restartPending(restarts: number | null, seen: number | null): boolean {
+  return restarts != null && restarts > (seen ?? 0)
 }
 
 export function startDesktopHost(handle: Handle, broadcast: Broadcast, home: string, version: string) {
@@ -48,4 +68,20 @@ export function startDesktopHost(handle: Handle, broadcast: Broadcast, home: str
       } catch { resolve({ ok: false, error: 'write_failed' }) }
     })
   }))
+
+  const runtime = process.env.XDG_RUNTIME_DIR
+  const seenFile = runtime ? path.join(runtime, 'worksuite', 'shell-restarts-seen') : null
+  const systemctl = (args: string[]) => new Promise<string | null>((resolve) =>
+    execFile('systemctl', args, { encoding: 'utf8', timeout: 5000 }, (err, out) => resolve(err ? null : out)))
+  handle('ws:shellRestart', async () => {
+    const restarts = parseRestarts(await systemctl(NRESTARTS_ARGS))
+    let seen: number | null = null
+    try { seen = seenFile ? parseRestarts(readFileSync(seenFile, 'utf8')) : null } catch { /* not shown yet */ }
+    if (!restartPending(restarts, seen)) return { restarted: false, apps: null, restarts }
+    return { restarted: true, apps: countAppScopes(await systemctl(APP_SCOPES_ARGS)), restarts }
+  })
+  handle('ws:shellRestartSeen', (n) => {
+    if (!seenFile || !/^\d+$/.test(n)) return false
+    try { mkdirSync(path.dirname(seenFile), { recursive: true, mode: 0o700 }); writeFileSync(seenFile, n, { mode: 0o600 }); return true } catch { return false }
+  })
 }

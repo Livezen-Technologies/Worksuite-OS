@@ -1356,6 +1356,13 @@ const en = {
   'safe.reportSaved': 'Problem report saved to {file}. Send it to your IT team.',
   'safe.reportFailed': 'Couldn’t save a problem report.',
   'safe.logout': 'Log out',
+  // G12 shell restarted notice
+  'shellRestart.title': 'The desktop restarted after a problem',
+  'shellRestart.apps': 'Your {count} open apps kept running and nothing was lost.',
+  'shellRestart.appsOne': 'Your open app kept running and nothing was lost.',
+  'shellRestart.appsNone': 'No apps were open, so nothing was lost.',
+  'shellRestart.appsUnknown': 'Apps run separately from the desktop, so open apps kept running.',
+  'shellRestart.report': 'Send report',
 } as const
 
 export type MessageKey = keyof typeof en

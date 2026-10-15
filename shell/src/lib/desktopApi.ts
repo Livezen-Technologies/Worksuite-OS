@@ -16,7 +16,11 @@ export interface DesktopApi {
   clipboardCopy(id: number): Promise<boolean>
   onClipboard(cb: (s: ClipState) => void): () => void
   problemReport(): Promise<Result<string>>
+  /** G12: whether systemd restarted the shell since the user last saw the notice, and how many app scopes still run. */
+  shellRestart?(): Promise<ShellRestart>
+  shellRestartSeen?(restarts: number): Promise<boolean>
 }
+export interface ShellRestart { restarted: boolean; apps: number | null; restarts: number | null }
 
 declare global {
   interface Window { worksuiteDesktop?: DesktopApi }

@@ -18,6 +18,7 @@ import { requestSettingsSection } from '../lib/settingsNav'
 import { buildLauncherApps, filterApps, taskbarApps, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
 import GlobalSearch from '../components/GlobalSearch'
+import ShellRestartNotice from '../components/ShellRestartNotice'
 import type { SearchHit } from '../../electron/search'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
@@ -152,6 +153,9 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           <button type="button" aria-label={t('notes.dismiss')} onClick={() => setToast(null)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[#8FA3C8] hover:bg-white/10 hover:text-white"><Icon d={P.close} size={14} /></button>
         </div>
       )}
+
+      {/* G12: the shell was restarted by systemd; apps in their own scopes kept running */}
+      <ShellRestartNotice />
 
       {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
       <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">
