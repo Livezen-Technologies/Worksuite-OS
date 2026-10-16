@@ -27,6 +27,7 @@ services/session/polkit/worksuite_polkit_agent usr/lib/worksuite/polkit/
 services/session/kiosk/worksuite-kiosk-session usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-start usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-ctl usr/lib/worksuite/
+services/session/kiosk/worksuite-kiosk-screen usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-apply usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-signin usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-exit usr/lib/worksuite/
