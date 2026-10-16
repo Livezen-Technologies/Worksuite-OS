@@ -32,8 +32,13 @@ import { archiveJobs, listIn, locate } from './archives'
 import { startAIHost } from './ai'
 import { defaultEnv, driveDir, dropPlan, freeBytes, list, resolveIn, roots } from './files'
 import { eject, jobs as fileJobs, mkdirIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
-import { startPanel } from './panelHost'
+import { startPanel, type PanelHooks } from './panelHost'
+import { captureHost, imageData, runBytes, screenshotFileName, screenshotsDir, wlCopyImage, type CaptureKind, type SnipMode } from './capture'
+import { clipboardAllowed } from './clipboard'
+import { applyShortcuts } from './shortcutsHost'
+import { ACTIVATED_FLAG } from './panel'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
+import type { Layout } from './displays'
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
@@ -83,10 +88,13 @@ const monitors = outputWindows((r) => {
 const appIcons = new IconCache()
 const parseJson = (s: string): unknown => { try { return JSON.parse(s) } catch { return null } }
 
+/** The checked sender of the IPC call being handled (read synchronously in a handler, e.g. ws:edit). */
+let ipcSender: Electron.WebContents | null = null
 function handle(channel: string, fn: (...args: string[]) => unknown) {
   ipcMain.handle(channel, (e, ...args) => {
     if (!validSender(e)) throw new Error('Rejected IPC sender')
-    return fn(...args.map(String))
+    ipcSender = e.sender
+    try { return fn(...args.map(String)) } finally { ipcSender = null }
   })
 }
 
@@ -543,8 +551,10 @@ app.whenReady().then(() => {
     exec: realExec,
     storeFile: path.join(xdgDirs(app.getPath('home')).config, 'worksuite', 'displays.json'),
     spawn: (cmd, args) => { const p = spawn(cmd, args, { stdio: 'ignore' }); p.on('error', () => undefined); return { kill: () => p.kill() } },
-    onChange: (st: DisplayState) => { broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)) },
+    onChange: (st: DisplayState) => { layout = st.layout; broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)) },
   })
+  let layout: Layout | null = null
+  void displays.state().then((r) => { if (r.ok && !layout) layout = r.value.layout })
   handle('ws:displayState', () => displays.state())
   handle('ws:displayApply', (json) => {
     try { const p = JSON.parse(json); return displays.apply(arrange(p.layout, p.sides ?? {})) } catch { return { ok: false, error: 'bad_layout' } }
@@ -554,13 +564,87 @@ app.whenReady().then(() => {
   handle('ws:displayWallpaper', (output, id) => displays.setWallpaper(output, id))
   void displays.applySaved()
   // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
+  const hooks: PanelHooks = {}
   const panelClient = startPanel(handle, broadcast, () => void displays.applySaved(), (full) => {
     // An archive opened from elsewhere (worksuite-open-archive, the default handler): browse it in Files.
     const at = locate(files, full)
     if (at) { broadcast('ws:openArchive', at); win?.show(); win?.focus() }
-  })
+  }, hooks)
+  const home = app.getPath('home')
+  const policies = () => deviceInfo().policies as { screen_capture?: string | null; clipboard_history?: string | null; kiosk?: boolean } | null
+  // The app window with the focus (not the shell's): where Super+V pastes, and whose copies the deny list checks.
+  const focusedWindow = () => panelClient?.windows.find((w) => w.flags & ACTIVATED_FLAG && !['worksuite-shell', 'worksuite', 'electron'].includes(w.appId.toLowerCase())) ?? null
   // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
-  startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
+  startDesktopHost(handle, broadcast, home, app.getVersion(), {
+    focusedApp: () => focusedWindow()?.appId ?? null,
+    allowed: () => clipboardAllowed(policies()),
+    preview: (data) => { try { const img = nativeImage.createFromBuffer(data); if (img.isEmpty()) return null; const s = img.getSize(); return (s.width > 360 || s.height > 240 ? img.resize(s.width / 360 > s.height / 240 ? { width: 360 } : { height: 240 }) : img).toDataURL() } catch { return null } },
+    activate: (h) => panelClient?.activate(h) ?? Promise.resolve(),
+  })
+  // Screenshots and the snipping tool (electron/capture.ts): Shell1.Capture from the Print/Super+Shift+S bindings.
+  const capture = captureHost({
+    run: runBytes, copy: (png) => wlCopyImage(png), policies, broadcast,
+    outputs: () => (layout ? outputRects(layout).map(({ name, x, y, width, height }) => ({ name, x, y, width, height })) : []),
+    lift: (on) => hooks.lift?.('snip', on),
+    dir: () => screenshotsDir(process.env, home),
+    settingsFile: path.join(xdgDirs(home).config, 'worksuite', 'capture.json'),
+  })
+  hooks.capture = (k) => void capture.request(k as CaptureKind)
+  // Open(what) from the key bindings: shell surfaces, or an app (custom shortcuts, Ctrl+Alt+T) in its own scope.
+  // Super+V, Super+. and Super+/ show over a capture of the screen, so they look like they float over the app.
+  hooks.open = (what) => void (async () => {
+    if (what.startsWith('app:')) { const c = appLaunchCommand(what.slice(4)); if (c) await run(...c); return }
+    const previous = focusedWindow()?.handle ?? ''
+    let backdrop: string | null = null
+    if (['clipboard', 'emoji', 'shortcuts'].includes(what) && capture.allowed()) {
+      const primary = layout?.primary
+      const jpg = await runBytes('grim', [...(primary && /^[A-Za-z0-9._-]{1,64}$/.test(primary) ? ['-o', primary] : []), '-t', 'jpeg', '-q', '80', '-'])
+      if (jpg) backdrop = `data:image/jpeg;base64,${jpg.toString('base64')}`
+    }
+    broadcast('ws:shellOpen', { what, previous, backdrop })
+  })()
+  handle('ws:captureAllowed', () => capture.allowed())
+  handle('ws:captureSettings', () => capture.settings())
+  handle('ws:captureSetSettings', (json) => capture.setSettings((parseJson(json) ?? {}) as object))
+  handle('ws:capture', (kind) => (['print', 'save', 'window', 'snip'].includes(kind) ? capture.request(kind as CaptureKind) : false))
+  handle('ws:snipStart', (mode, delay) => capture.start(mode as SnipMode, Number(delay) || 0))
+  handle('ws:snipFrame', (id, output) => capture.frame(Number(id), output))
+  handle('ws:snipDone', (id, dataUrl) => capture.done(Number(id), dataUrl))
+  handle('ws:snipCancel', (id) => capture.cancel(Number(id)))
+  handle('ws:snipImage', (id) => capture.image(Number(id) || 0))
+  handle('ws:snipCopy', (dataUrl) => capture.copyImage(dataUrl))
+  // Save as: the person picks the place (default Pictures/Screenshots) and PNG or JPEG; nothing is written elsewhere.
+  handle('ws:snipSave', async (dataUrl) => {
+    const img = imageData(dataUrl)
+    if (!img || !win) return { ok: false, error: 'invalid_argument' }
+    const dir = screenshotsDir(process.env, home)
+    try { mkdirSync(dir, { recursive: true }) } catch { /* the dialog still opens */ }
+    const d = await dialog.showSaveDialog(win, { defaultPath: path.join(dir, screenshotFileName(new Date(), img.ext)), filters: [img.ext === 'png' ? { name: 'PNG', extensions: ['png'] } : { name: 'JPEG', extensions: ['jpg', 'jpeg'] }] })
+    if (d.canceled || !d.filePath) return { ok: false, error: 'cancelled' }
+    try { writeFileSync(d.filePath, img.data, { mode: 0o644 }) } catch { return { ok: false, error: 'failed' } }
+    return { ok: true, value: d.filePath }
+  })
+  // "Show in Files": the saved file's folder in the shell's own Files, when it is in the home folder.
+  handle('ws:snipReveal', (file) => {
+    const rel = path.relative(home, path.dirname(path.resolve(file)))
+    return rel.startsWith('..') || path.isAbsolute(rel) ? null : { root: 'home', rel, name: path.basename(file) }
+  })
+  // Settings › Keyboard › Shortcuts: the user's block in their Labwc rc.xml; also applied at start from the synced
+  // preferences, so shortcuts follow the person to another computer.
+  const shortcutFiles = { userRc: path.join(xdgDirs(home).config, 'worksuite', 'labwc', 'rc.xml'), systemRc: '/etc/xdg/worksuite/labwc/rc.xml' }
+  handle('ws:shortcutsApply', (json) => applyShortcuts(parseJson(json), shortcutFiles, realExec))
+  setTimeout(() => void syncCall('GetPreference', { object_id: 'shell' }).then((r) => {
+    const sc = r.ok ? (r.value as { shortcuts?: unknown } | null)?.shortcuts : undefined
+    if (sc) void applyShortcuts(sc, shortcutFiles, realExec)
+  }).catch(() => undefined), 3000).unref?.()
+  // Edit commands for the shell's own text fields (right-click menu): the focused field of the asking window.
+  handle('ws:edit', (cmd) => {
+    const wc = ipcSender
+    if (!wc) return false
+    const fn = ({ cut: () => wc.cut(), copy: () => wc.copy(), paste: () => wc.paste(), selectAll: () => wc.selectAll(), undo: () => wc.undo(), redo: () => wc.redo() } as Record<string, () => void>)[String(cmd)]
+    fn?.()
+    return !!fn
+  })
   // Shutdown/restart/sign-out overlay on every display, inhibitors, crashed apps, administrators' diagnostics.
   startSessionHost(handle, broadcast, {
     apps: () => installedApps(), user: os.userInfo().username, readGroup: () => readFileSync('/etc/group', 'utf8'),

@@ -380,5 +380,34 @@ grep -q 'lk.worksuite.power-force' "$ROOT/services/session/polkit/lk.worksuite.p
 grep -qx 'gir1.2-polkit-1.0' "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && grep -A2 '^Package: worksuite-session' "$ROOT/packaging/debian/control" | grep -q 'gir1.2-polkit-1.0' \
   && ok "WorkSuite's polkit agent (PolkitAgent typelib) is installed, not lxpolkit's fallback" || bad "WorkSuite's polkit agent (PolkitAgent typelib) is installed, not lxpolkit's fallback"
 
+# ---- Screenshots, snipping, clipboard history and Windows-style shortcuts (shell/electron/capture.ts, clipboard.ts) ----
+L=$ROOT/live-build/config/package-lists/worksuite.list.chroot
+for p in grim wl-clipboard wtype; do grep -qx "$p" "$L" && ok "image ships $p" || bad "image ships $p"; done
+grep -A3 '^Package: worksuite-shell$' "$ROOT/packaging/debian/control" | grep -q 'wl-clipboard, grim, wtype, libsecret-tools' \
+  && ok "shell depends on grim, wl-clipboard, wtype and secret-tool" || bad "shell depends on grim, wl-clipboard, wtype and secret-tool"
+awk '/^Package: worksuite-desktop$/{p=1} p&&/^Depends:/{d=1} d{print} d&&!/,$/{exit}' "$ROOT/packaging/debian/control" | grep -q 'grim, wl-clipboard, wtype' \
+  && ok "desktop metapackage pulls grim, wl-clipboard and wtype" || bad "desktop metapackage pulls grim, wl-clipboard and wtype"
+RC=$ROOT/services/session/labwc/rc.xml
+for b in 'key="Print"><action name="Execute" command="worksuite-screenshot"/>' 'key="W-Print"><action name="Execute" command="worksuite-screenshot --save"/>' \
+         'key="A-Print"><action name="Execute" command="worksuite-screenshot --window"/>' 'key="W-S-s"><action name="Execute" command="worksuite-screenshot --snip"/>' \
+         'key="W-v"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s clipboard"/>' \
+         'key="W-period">' 'key="W-e">' 'key="W-i">' 'key="W-d">' 'key="W-slash">' 'key="C-S-Escape">' 'key="C-A-Delete">'; do
+  grep -qF "$b" "$RC" && ok "rc.xml binds $b" || bad "rc.xml binds $b"
+done
+python3 -c 'import sys, xml.dom.minidom as m; m.parse(sys.argv[1])' "$RC" && ok "rc.xml is well-formed" || bad "rc.xml is well-formed"
+grep -q '^shell/bin/worksuite-screenshot usr/bin/' "$ROOT/packaging/debian/worksuite-shell.install" && grep -q 'Capture' "$ROOT/shell/dbus/lk.worksuite.Shell1.xml" \
+  && ok "worksuite-screenshot installed; Shell1 has Capture" || bad "worksuite-screenshot installed; Shell1 has Capture"
+D=$ROOT/shell/apps/worksuite-snipping-tool.desktop
+grep -q '^Exec=busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s snip$' "$D" && [ -f "$ROOT/shell/apps/icons/worksuite-snipping-tool.svg" ] \
+  && ok "Snipping Tool desktop entry and icon" || bad "Snipping Tool desktop entry and icon"
+F=$ROOT/services/session/foot/foot.ini
+grep -q '^clipboard-copy=Control+Shift+c Control+Insert' "$F" && grep -q '^clipboard-paste=Control+Shift+v Shift+Insert' "$F" && grep -q '^primary-paste=none' "$F" \
+  && grep -q '^services/session/foot/foot.ini etc/xdg/worksuite/foot/' "$ROOT/packaging/debian/worksuite-session.install" \
+  && grep -q '^XDG_CONFIG_DIRS=/etc/xdg/worksuite:/etc/xdg$' "$ROOT/services/session/labwc/environment" \
+  && ok "foot: Ctrl+Shift+C/V and Ctrl+Insert/Shift+Insert, found through XDG_CONFIG_DIRS" || bad "foot: Ctrl+Shift+C/V and Ctrl+Insert/Shift+Insert, found through XDG_CONFIG_DIRS"
+if command -v foot >/dev/null 2>&1; then
+  XDG_CONFIG_HOME=$T/nofoot XDG_CONFIG_DIRS=$ROOT/services/session foot --check-config >/dev/null 2>&1 && ok "foot accepts foot.ini" || bad "foot accepts foot.ini"
+fi
+
 echo "1..$n"
 exit $fail

@@ -34,6 +34,10 @@ export interface Policy {
   desktop_widgets?: boolean;
   /** WhatsApp (WhatsApp Web window, pinned by default): false = off on the device (Start, taskbar and the window). */
   whatsapp?: boolean;
+  /** Screenshots and the snipping tool: disabled = off on the device (kiosks: always off). */
+  screen_capture?: 'allowed' | 'disabled';
+  /** Clipboard history (Super+V): disabled = off on the device and its list dropped (kiosks: always off). */
+  clipboard_history?: 'allowed' | 'disabled';
   [k: string]: unknown;
 }
 

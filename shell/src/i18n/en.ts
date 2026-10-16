@@ -2,6 +2,7 @@
 // Add a key here first; other locales may lag and fall back to English.
 import { aiEn } from './ai'
 import { widgetsEn } from './widgets'
+import { captureEn } from './capture'
 import { whatsappEn } from './whatsapp'
 import { desktopsEn } from './desktops'
 import { bootuiEn } from './bootui'
@@ -10,6 +11,7 @@ const en = {
   // On-device AI assistant (services/ai): src/i18n/ai.ts
   ...aiEn,
   ...widgetsEn,
+  ...captureEn,
   ...whatsappEn,
   ...desktopsEn,
   ...bootuiEn,
@@ -1563,7 +1565,7 @@ const en = {
   'defapps.cat.spreadsheet': 'Spreadsheets',
   'defapps.cat.presentation': 'Presentations',
   'clip.title': 'Clipboard history',
-  'clip.hint': 'Off by default. When on, text you copy is kept in memory until you sign out. Copies from password fields and password managers are never kept.',
+  'clip.hint': 'Off by default. When on, the text, images and files you copy are kept in memory until you sign out; pinned items are kept, encrypted. Copies from password fields and password managers are never kept.',
   'clip.count': '{count} items',
   'clip.clear': 'Clear history',
   'clip.copy': 'Copy',

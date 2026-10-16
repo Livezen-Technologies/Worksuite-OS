@@ -90,6 +90,12 @@ bzip2
 # the build installs no recommends) and notify-send for scripts and admins (the shell is the notification server).
 foot
 libnotify-bin
+# Screenshots, the snipping overlay and clipboard history (shell/electron/capture.ts, clipboard.ts): grim captures
+# (wlr-screencopy), wl-clipboard copies and watches the clipboard (wlr-data-control), wtype pastes from Super+V; the
+# overlay's selection is drawn by the shell itself (no slurp).
+grim
+wl-clipboard
+wtype
 # Web browser and media player (WorkSuite defaults: shell/apps/worksuite-mimeapps.list)
 firefox-esr
 celluloid

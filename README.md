@@ -41,6 +41,23 @@ object (`widgets`), with a local copy. Signed out: one "Sign in to WorkSuite to 
 `desktop_widgets: false` (admin console › Policy) turns them off; a kiosk never shows them. UI:
 `shell/src/components/DesktopWidgets.tsx`, model `shell/src/lib/widgets.ts`, strings `shell/src/i18n/widgets.ts`.
 
+### Screenshots, clipboard history and keyboard shortcuts
+
+Like Windows 11. **Print Screen** (or **Super+Print**) saves the whole screen to `~/Pictures/Screenshots` and copies it;
+**Super+Shift+S** (or Shift+Print, or the **Snipping Tool** in Start) dims every monitor over a frozen frame with
+Rectangle, Window, Full screen and Freeform modes; **Alt+Print** opens it in Window mode. The snip is copied and a toast
+"Screenshot copied — click to edit" opens the editor (crop, pen, highlighter, eraser, text, arrow, undo/redo, Copy,
+Save as PNG/JPEG, Show in Files). Settings › Keyboard › Shortcuts can make Print Screen open the overlay. Capture is
+grim in the shell (`shell/electron/capture.ts`); nothing is uploaded. **Super+V** opens clipboard history (text,
+images, files; pin, delete, Clear all, search; Enter pastes into the app you were in) and **Super+.** emoji and
+symbols; history is off until turned on in Settings › Clipboard, never records password-manager copies, and keeps
+pinned items encrypted with a key in the login keyring (`shell/electron/clipboard.ts`). **Super+/** shows every
+shortcut; Settings › Keyboard › Shortcuts changes or turns off system shortcuts and adds your own (open an app or run a
+command), with conflicts shown; they are synced (`preferences/shell` → `shortcuts`) and written to your Labwc rc.xml
+(`shell/src/lib/shortcuts.ts`). Text fields in the shell have a right-click Cut/Copy/Paste menu; the terminal (foot)
+copies and pastes with Ctrl+Shift+C/V and Ctrl+Insert/Shift+Insert. Policy `screen_capture: disabled` and
+`clipboard_history: disabled` (admin console › Policy) turn them off; a kiosk never has them.
+
 ### Desktops and Task View
 
 Virtual desktops work like Windows 11. **Super+Tab** (or the Task View button next to Search, or a three-finger swipe

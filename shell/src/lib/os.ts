@@ -334,6 +334,8 @@ export interface DevicePolicies {
   desktop_widgets?: boolean | null; kiosk?: boolean
   /** WhatsApp (WhatsApp Web window): false = off on this device. */
   whatsapp?: boolean | null
+  /** Screenshots and the snipping tool; clipboard history (Super+V). 'disabled' = off; kiosks: always off. */
+  screen_capture?: 'allowed' | 'disabled' | null; clipboard_history?: 'allowed' | 'disabled' | null
 }
 export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
 export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean
@@ -372,6 +374,8 @@ export function policyLines(p: DevicePolicies | null): string[] {
   if (p.bluetooth === false) out.push(t('mdm.btOff'))
   if (p.desktop_widgets === false) out.push(t('mdm.widgetsOff'))
   if (p.whatsapp === false) out.push(t('mdm.whatsappOff'))
+  if (p.screen_capture === 'disabled') out.push(t('mdm.captureOff'))
+  if (p.clipboard_history === 'disabled') out.push(t('mdm.clipboardOff'))
   if (p.ai_assistant === false) out.push(t('mdm.aiOff'))
   else if (p.ai_models?.length) out.push(t('mdm.aiLimited', { count: p.ai_models.length }))
   return out

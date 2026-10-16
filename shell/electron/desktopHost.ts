@@ -3,7 +3,7 @@
 import { execFile } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { clipboardHistory, wlClipboardIo } from './clipboard'
+import { clipboardHistory, encryptedPinStore, secretToolKeys, wlClipboardIo, type ClipDeps } from './clipboard'
 import { defaultApps, setDefaultApp } from './mimeapps'
 import { installedApps } from './xdg'
 import { xdgDirs } from './xdgDirs'
@@ -43,18 +43,43 @@ export function restartPending(restarts: number | null, seen: number | null): bo
   return restarts != null && restarts > (seen ?? 0)
 }
 
-export function startDesktopHost(handle: Handle, broadcast: Broadcast, home: string, version: string) {
+/** Paste into the app that had the focus before Super+V: focus it again, then Ctrl+V (or type the emoji) through
+ *  the virtual keyboard (wtype; Labwc supports zwp_virtual_keyboard_v1). */
+export interface PasteDeps { activate(handle: string): Promise<unknown>; type(args: string[]): Promise<boolean>; sleep?(ms: number): Promise<void> }
+export const CTRL_V = ['-M', 'ctrl', '-k', 'v', '-m', 'ctrl']
+export async function pasteInto(previous: string, keys: string[], d: PasteDeps): Promise<boolean> {
+  const sleep = d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+  await sleep(180)                      // the flyout closes and the shell goes back below the apps
+  if (/^w[0-9a-f]{1,32}$/.test(previous)) { await d.activate(previous); await sleep(120) }
+  return d.type(keys)
+}
+const wtype = (args: string[]) => new Promise<boolean>((resolve) => execFile('wtype', args, { timeout: 5000 }, (err) => resolve(!err)))
+
+export interface DesktopHostDeps extends Pick<ClipDeps, 'focusedApp' | 'allowed' | 'preview'> { activate?(handle: string): Promise<unknown> }
+
+export function startDesktopHost(handle: Handle, broadcast: Broadcast, home: string, version: string, deps: DesktopHostDeps = {}) {
   handle('ws:defaultApps', () => ({ ok: true, value: defaultApps(installedApps()) }))
   handle('ws:setDefaultApp', (category, id) => setDefaultApp(category, id, installedApps()))
 
-  const clip = clipboardHistory(wlClipboardIo(), path.join(xdgDirs(home).config, 'worksuite', 'clipboard.json'))
-  clip.onChange(() => broadcast('ws:clipboardChanged', clip.state()))
+  // Clipboard history (Super+V, Settings › Clipboard): pinned items in an encrypted file next to the setting.
+  const conf = path.join(xdgDirs(home).config, 'worksuite')
+  const clip = clipboardHistory(wlClipboardIo(), path.join(conf, 'clipboard.json'), {
+    focusedApp: deps.focusedApp, allowed: deps.allowed, preview: deps.preview, pins: encryptedPinStore(path.join(conf, 'clipboard-pins.enc'), secretToolKeys()),
+  })
+  clip.onChange((s) => broadcast('ws:clipboardChanged', s))
   clip.start()
+  // Policy can change at any check-in (clipboard_history: disabled).
+  setInterval(() => clip.policyChanged(), 60_000).unref?.()
+  const paste = (previous: string, keys: string[]) => pasteInto(previous, keys, { activate: (h) => deps.activate?.(h) ?? Promise.resolve(), type: wtype })
   handle('ws:clipboardState', () => clip.state())
   handle('ws:clipboardSetEnabled', (on) => { clip.setEnabled(on === 'on'); return clip.state() })
-  handle('ws:clipboardClear', () => { clip.clear(); return clip.state() })
+  handle('ws:clipboardClear', async (all) => { await clip.clear(all === 'all'); return clip.state() })
   handle('ws:clipboardRemove', (id) => { clip.remove(Number(id)); return clip.state() })
+  handle('ws:clipboardPin', (id, on) => { clip.pin(Number(id), on === '1'); return clip.state() })
   handle('ws:clipboardCopy', (id) => clip.copy(Number(id)))
+  handle('ws:clipboardPaste', async (id, previous) => (await clip.copy(Number(id))) && paste(previous, CTRL_V))
+  // Emoji and symbols are typed, so the clipboard keeps what the person copied.
+  handle('ws:clipboardType', (text, previous) => (text && text.length <= 64 ? paste(previous, ['--', text]) : false))
 
   // Saved to the user's Documents (or home) so it can be attached to a support request; nothing is uploaded.
   handle('ws:problemReport', () => new Promise((resolve) => {

@@ -2,6 +2,7 @@
 import type { LocaleReview, MessageKey } from './en'
 import { aiSi } from './ai'
 import { widgetsSi } from './widgets'
+import { captureSi } from './capture'
 import { whatsappSi } from './whatsapp'
 import { desktopsSi } from './desktops'
 import { bootuiSi } from './bootui'
@@ -12,6 +13,7 @@ export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedK
 const si: Partial<Record<MessageKey, string>> = {
   ...aiSi,
   ...widgetsSi,
+  ...captureSi,
   ...whatsappSi,
   ...desktopsSi,
   ...bootuiSi,
@@ -1535,7 +1537,7 @@ const si: Partial<Record<MessageKey, string>> = {
   'defapps.cat.spreadsheet': 'පැතුරුම්පත්',
   'defapps.cat.presentation': 'ඉදිරිපත් කිරීම්',
   'clip.title': 'පසුරු ඉතිහාසය',
-  'clip.hint': 'පෙරනිමියෙන් අක්‍රියයි. සක්‍රිය කළ විට, ඔබ පිටපත් කරන පෙළ ඔබ ඉවත් වන තෙක් මතකයේ තබා ගනී. මුරපද ක්ෂේත්‍ර සහ මුරපද කළමනාකරුවන්ගෙන් පිටපත් කිසිවිටෙක තබා නොගනී.',
+  'clip.hint': 'පෙරනිමියෙන් අක්‍රියයි. සක්‍රිය කළ විට, ඔබ පිටපත් කරන පෙළ, රූප සහ ගොනු ඔබ ඉවත් වන තෙක් මතකයේ තබා ගනී; අමුණා ඇති අයිතම සංකේතනය කර තබා ගනී. මුරපද ක්ෂේත්‍ර සහ මුරපද කළමනාකරුවන්ගෙන් පිටපත් කිසිවිටෙක තබා නොගනී.',
   'clip.count': 'අයිතම {count}',
   'clip.clear': 'ඉතිහාසය මකන්න',
   'clip.copy': 'පිටපත් කරන්න',

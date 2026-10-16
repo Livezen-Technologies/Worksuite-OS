@@ -40,6 +40,10 @@ import type { SearchHit } from '../../electron/search'
 import DesktopWidgets, { useWidgetData } from '../components/DesktopWidgets'
 import { WHATSAPP_APP_ID, whatsappAllowed } from '../../electron/whatsapp'
 import { DEFAULT_LAYOUT, loadLocalLayout, saveLocalLayout, widgetsAllowed, type WidgetLayout } from '../lib/widgets'
+import SnipOverlay from '../components/SnipOverlay'
+import ClipboardFlyout, { type FlyoutTab } from '../components/ClipboardFlyout'
+import ShortcutHelp from '../components/ShortcutHelp'
+import { captureApi, SHELL_OPEN_EVENT, SNIP_EDIT_EVENT, snipState, type Captured, type ShellOpen, type SnipOpen } from '../lib/captureApi'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 
@@ -47,7 +51,7 @@ const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F'
 const SETTINGS_PAGES: [MessageKey, string][] = [
   ['launcher.page.network', 'Network'], ['settings.nav.Bluetooth', 'Bluetooth'], ['launcher.page.displays', 'Display'], ['settings.nav.Sound', 'Sound'],
   ['launcher.page.power', 'Power'], ['settings.nav.Appearance', 'Appearance'], ['launcher.page.accounts', 'Users'], ['launcher.page.privacy', 'Privacy'],
-  ['settings.nav.Updates', 'Updates'], ['launcher.page.shortcuts', 'Keyboard'],
+  ['settings.nav.Updates', 'Updates'], ['launcher.page.shortcuts', 'Shortcuts'], ['launcher.page.clipboard', 'Clipboard'],
 ]
 
 // Recent files: local (XDG recently-used.xbel) then WorkSuite Drive's recent list, through the main-process bridge.
@@ -58,6 +62,8 @@ const TASKBAR = ['worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office'
 
 // Settings as a Start menu tile (G02); it opens the Settings window like the footer button.
 const SETTINGS_TILE: LauncherApp = { id: 'settings', get name() { return t0('launcher.settings') }, mark: '⚙', bg: '#5E739C', fg: '#ffffff', kind: 'System', launch: { screen: 'settings' }, keywords: [] }
+// Snipping Tool as a Start entry (System), like Settings.
+const SNIP_TILE: LauncherApp = { id: 'snipping-tool', get name() { return t0('snip.app') }, mark: '✂', bg: '#0E8FA8', fg: '#ffffff', kind: 'System', launch: { screen: 'snip' }, keywords: ['screenshot', 'snip', 'capture', 'print screen'] }
 const EXT_COLOR: Record<string, string> = { xlsx: '#2E9E6A', ods: '#2E9E6A', csv: '#2E9E6A', docx: '#1F6BFF', odt: '#1F6BFF', doc: '#1F6BFF', pptx: '#D9572B', odp: '#D9572B', pdf: '#D9452B', png: '#7A4FE0', jpg: '#7A4FE0', jpeg: '#7A4FE0', svg: '#7A4FE0' }
 const FOOT_ICONS = { files: 'M3 6h6l2 2h10v11H3z', settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2', lock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z', power: 'M12 3v9M6.3 7.3a8 8 0 1 0 11.4 0' }
 
@@ -79,6 +85,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const [assistant, setAssistant] = useState(false)
   const [assistantReq, setAssistantReq] = useState<AssistantRequest | null>(null)
   useEffect(() => onAssistantRequest((r) => { setLauncher(false); setAssistantReq(r); setAssistant(true) }), [])
+  // Windows-style surfaces (electron/capture.ts, rc.xml → Shell1.Open): the snipping overlay, Super+V / Super+. and the
+  // Super+/ cheat sheet. Super+V and Super+/ come with a capture of the screen to sit on (null inside the shell).
+  const [snip, setSnip] = useState<SnipOpen | null>(null)
+  const [clipPanel, setClipPanel] = useState<{ tab: FlyoutTab; previous: string; backdrop: string | null } | null>(null)
+  const [help, setHelp] = useState<{ backdrop: string | null } | null>(null)
+  const helpShownAt = useRef(0)
   // Task View (Super+Tab, the taskbar button, three fingers up; WSOS-DSK-003). The main process captures the screen
   // and raises the shell first (electron/panelHost.ts); 'taskview' from Shell1 while it is open closes it.
   const [taskView, setTaskView] = useState<TaskViewOpen | null>(null)
@@ -88,6 +100,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     if (a === 'assistant') { setLauncher(false); setAssistant((v) => !v); return }
     if (a === 'notifications') { setTrayOpen((v) => !v); return }
     if (a === 'desktop') { void Promise.all([panel.windows(), panel.workspaces?.() ?? Promise.resolve(undefined)]).then(([w, ws]) => showDesktopTargets(w, ws ?? { supported: false, current: 1, count: 1, windows: {} }).forEach((h) => void panel.minimize(h, true))); return }
+    if (a === 'toggle' && Date.now() - helpShownAt.current < 1500) return   // Super was held for the cheat sheet
     markLauncherRequest(); setLauncher((v) => (a === 'show' ? true : !v))
   }, []))
   // Launcher first frame (WSOS-PRF-005); only forwarded off the console in perf test runs.
@@ -154,10 +167,23 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       else if (e.metaKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setLauncher(false); setAssistant((v) => !v) }
       // Super+Tab with the shell focused (Labwc's binding covers everywhere else).
       else if (e.metaKey && e.key === 'Tab') { e.preventDefault(); void (panel.openTaskView?.() ?? Promise.resolve()) }
-      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }
+      // Windows-style keys with the shell focused (Labwc's bindings cover the apps; the browser preview has only these).
+      else if (e.metaKey && e.shiftKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); void captureApi?.capture('snip') }
+      else if (e.metaKey && (e.key === 'v' || e.key === 'V')) { e.preventDefault(); window.dispatchEvent(new CustomEvent(SHELL_OPEN_EVENT, { detail: { what: 'clipboard', previous: '', backdrop: null } })) }
+      else if (e.metaKey && e.key === '.') { e.preventDefault(); window.dispatchEvent(new CustomEvent(SHELL_OPEN_EVENT, { detail: { what: 'emoji', previous: '', backdrop: null } })) }
+      else if (e.metaKey && e.key === '/') { e.preventDefault(); window.dispatchEvent(new CustomEvent(SHELL_OPEN_EVENT, { detail: { what: 'shortcuts', previous: '', backdrop: null } })) }
+      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) {
+        markLauncherRequest(e.timeStamp); setLauncher((v) => !v)
+        // Holding Super for a second shows the cheat sheet (only while the shell has the keyboard).
+        if (holdTimer) clearTimeout(holdTimer)
+        holdTimer = setTimeout(() => { holdTimer = null; helpShownAt.current = Date.now(); setLauncher(false); setHelp({ backdrop: null }) }, 1000)
+      } else if (holdTimer) { clearTimeout(holdTimer); holdTimer = null }
     }
+    let holdTimer: ReturnType<typeof setTimeout> | null = null
+    const onUp = (e: KeyboardEvent) => { if (holdTimer && (e.key === 'Meta' || e.key === 'OS' || e.key === 'Super')) { clearTimeout(holdTimer); holdTimer = null } }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keyup', onUp)
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onUp); if (holdTimer) clearTimeout(holdTimer) }
   }, [])
 
   const launcherButton = useRef<HTMLButtonElement>(null)
@@ -174,7 +200,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   }, [launcher])
 
   // Start menu list: the org's WorkSuite apps (fallback list when not signed in/offline) and installed XDG apps.
-  const [baseApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
+  const [baseApps, setAllApps] = useState<LauncherApp[]>(() => [...buildLauncherApps(null, null, null), SNIP_TILE])
   // The user's favourites, taskbar pins and order (Shell ENH-01 preferences, synced; WSOS-DSK-001).
   const [prefs, setPrefs] = useState<ShellPrefs>({})
   const [appsCached, setAppsCached] = useState(false)
@@ -222,7 +248,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null), os.shellPrefs().catch(() => null)]).then(([w, i, p]) => {
       if (!live) return
       appsLoaded.current = true   // only once a load lands (a cancelled first run, as in StrictMode, loads again)
-      setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null))
+      setAllApps([...buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null), SNIP_TILE])
       setAppsCached(!!(w?.ok && w.cached))
       if (p?.ok) setPrefs(shellPrefsFrom(p.value))
     })
@@ -247,7 +273,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const hasWindow = Children.toArray(children).length > 0
   useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
-    || flyout || widgetPicker || authOpen || (hasWindow && !behind)
+    || flyout || widgetPicker || authOpen || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
   useEffect(() => { void panel.shellOnTop?.(shellOnTop) }, [shellOnTop, liftSeq])
   useEffect(() => {
     if (!launcher) return
@@ -263,7 +289,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
   const launch = (id: string) => {
     setLauncher(false)
-    const a = id === SETTINGS_TILE.id ? SETTINGS_TILE : allApps.find((x) => x.id === id)
+    const a = id === SETTINGS_TILE.id ? SETTINGS_TILE : id === SNIP_TILE.id ? SNIP_TILE : allApps.find((x) => x.id === id)
     if (!a) return
     if ('screen' in a.launch) openWin(a.launch.screen)
     else if ('office' in a.launch) void os.launchOffice(a.launch.office)
@@ -277,6 +303,39 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const onPrimary = useMemo(() => (primaryOut && display ? (ws: PanelWindow[]) => windowsOnOutput(ws, primaryOut, true, display.layout.outputs.filter((o) => o.enabled).map((o) => o.name)) : undefined), [primaryOut, display])
 
   const openSettingsAt = (section: string) => { requestSettingsSection(section); openWin('settings') }
+  const openSnipEditor = (id: number) => { window.dispatchEvent(new CustomEvent(SNIP_EDIT_EVENT, { detail: id })); openWin('snip') }
+  // Shell1.Open from the key bindings (and the same keys pressed inside the shell).
+  const onShellOpen = useRef<(o: ShellOpen) => void>(() => undefined)
+  onShellOpen.current = (o) => {
+    setLauncher(false)
+    if (o.what === 'files' || o.what === 'settings' || o.what === 'monitor' || o.what === 'snip') { if (o.what === 'snip') window.dispatchEvent(new CustomEvent(SNIP_EDIT_EVENT, { detail: 0 })); openWin(o.what); return }
+    if (o.what === 'a11y') { setA11yOpen(true); return }
+    if (o.what === 'clipboard' || o.what === 'emoji') { setHelp(null); setClipPanel((c) => (c && c.tab === (o.what === 'emoji' ? 'emoji' : 'clipboard') ? null : { tab: o.what === 'emoji' ? 'emoji' : 'clipboard', previous: o.previous, backdrop: o.backdrop })); return }
+    if (o.what === 'shortcuts') { setClipPanel(null); setHelp((h) => (h ? null : { backdrop: o.backdrop })) }
+  }
+  useEffect(() => {
+    const local = (e: Event) => onShellOpen.current((e as CustomEvent<ShellOpen>).detail)
+    window.addEventListener(SHELL_OPEN_EVENT, local)
+    const offs = [
+      captureApi?.onShellOpen((o) => onShellOpen.current(o)),
+      captureApi?.onSnipOpen((o) => { setLauncher(false); setSnip(o) }),
+      captureApi?.onSnipClose(() => { setSnip(null); setTimeout(() => { snipState.fromApp = false }, 2000) }),
+      // A snip started in the Snipping Tool opens there; otherwise a toast says it was copied (or saved) and opens the editor.
+      captureApi?.onCaptured((c: Captured) => {
+        if (c.kind === 'copied' && c.id && snipState.fromApp) { snipState.fromApp = false; openSnipEditorRef.current(c.id); return }
+        const name = c.file ? c.file.split('/').pop() ?? '' : ''
+        const msg = c.kind === 'saved' ? { title: t('snip.savedTitle'), body: t('snip.savedBody', { name }), tone: 'ok' as const }
+          : c.kind === 'copied' ? { title: t('snip.copiedTitle'), body: t('snip.copiedBody'), tone: 'ok' as const }
+            : c.kind === 'blocked' ? { title: t('snip.blockedTitle'), body: t('snip.blockedBody'), tone: 'warn' as const }
+              : { title: t('snip.failedTitle'), body: t('snip.failedBody'), tone: 'error' as const }
+        setToast({ id: c.id ? `snip-${c.id}` : `snip-x${Date.now()}`, ...msg, icon: 'accessories-screenshot' })
+      }),
+      captureApi?.onToastClicked((key) => { const m = /^snip-(\d+)$/.exec(String(key)); if (m) openSnipEditorRef.current(Number(m[1])) }),
+    ]
+    return () => { window.removeEventListener(SHELL_OPEN_EVENT, local); offs.forEach((f) => f?.()) }
+  }, [setToast, t])
+  const openSnipEditorRef = useRef(openSnipEditor)
+  openSnipEditorRef.current = openSnipEditor
   const monitorWallpaper = wallpaperFor(display, primaryOut, BG.desktop)
   const wallpaperOf = (n: number) => desktopWallpaper(desk.wallpapers, desk.ws, n) ?? monitorWallpaper
   const appLookup: AppLookup = (id) => {
@@ -320,7 +379,9 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
         <div role="status" className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] font-bold text-white" style={{ background: TONE_BG[toast.tone] }}><BIcon name={toast.tone === 'ok' ? 'check' : 'alert'} /></span>
           <div className="flex flex-1 flex-col gap-[3px]">
-            <div className="flex justify-between gap-2"><span className="text-sm font-semibold">{toast.title}</span><span className="text-xs text-[#8FA3C8]">{t('notes.now')}</span></div>
+            <div className="flex justify-between gap-2">{/^snip-\d+$/.test(toast.id)
+              ? <button type="button" onClick={() => { const id = Number(toast.id.slice(5)); setToast(null); openSnipEditor(id) }} className="cursor-pointer text-start text-sm font-semibold hover:underline">{toast.title}</button>
+              : <span className="text-sm font-semibold">{toast.title}</span>}<span className="text-xs text-[#8FA3C8]">{t('notes.now')}</span></div>
             <span className="text-[13px] leading-[1.4] text-[#C9D6EE]">{toast.body}</span>
           </div>
           <button type="button" aria-label={t('notes.dismiss')} onClick={() => setToast(null)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[#8FA3C8] hover:bg-white/10 hover:text-white"><Icon d={P.close} size={14} /></button>
@@ -490,6 +551,9 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       <SessionFadeIn />
       {a11yOpen && <A11yPanel className="right-4 bottom-[68px]" onClose={() => setA11yOpen(false)} />}
       {desktopsOn && <DesktopToast ws={desk.ws} />}
+      {snip && <SnipOverlay open={snip} output={primaryOut ?? ''} />}
+      {clipPanel && <ClipboardFlyout tab={clipPanel.tab} previous={clipPanel.previous} backdrop={clipPanel.backdrop} onClose={() => setClipPanel(null)} onOpenSettings={() => openSettingsAt('Clipboard')} />}
+      {help && <ShortcutHelp prefs={prefs.shortcuts} backdrop={help.backdrop} onClose={() => setHelp(null)} onSettings={() => { setHelp(null); openSettingsAt('Shortcuts') }} />}
       {desktopsOn && taskView && (
         <TaskView ws={desk.ws} windows={panelWindows} info={appLookup} wallpaper={wallpaperOf} capture={taskView.capture} onBackground={desk.setWallpaper}
           onClose={(picked) => { if (!picked && taskView.previous) void panel.activate(taskView.previous); setTaskView(null) }} />

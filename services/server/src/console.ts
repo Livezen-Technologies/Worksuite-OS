@@ -75,6 +75,10 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   // WhatsApp (WhatsApp Web in its own window, pinned by default): false removes it from Start and the taskbar and the
   // window shows that the organization turned it off. Kiosk: never shown (the kiosk runs its own app list).
   whatsapp: (v) => typeof v === 'boolean',
+  // Screenshots and the snipping tool (Print Screen, Super+Shift+S): disabled turns them off for every user. Kiosk: always off.
+  screen_capture: (v) => v === 'allowed' || v === 'disabled',
+  // Clipboard history (Super+V): disabled turns it off and drops what was kept. Kiosk: always off.
+  clipboard_history: (v) => v === 'allowed' || v === 'disabled',
   ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 

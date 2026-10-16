@@ -307,6 +307,19 @@ test('whatsapp policy reaches the shell through the status (off, or not set)', a
   v.cleanup();
 });
 
+test('screen capture and clipboard history policies reach the shell through the status (disabled, or not set)', async () => {
+  const w = world({ policy: signedPolicy({ version: 'p1', screen_capture: 'disabled', clipboard_history: 'disabled' }) });
+  await w.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(w.agent.status().policies?.screen_capture, 'disabled');
+  assert.equal(w.agent.status().policies?.clipboard_history, 'disabled');
+  w.cleanup();
+  const v = world({ policy: signedPolicy({ version: 'p2' }) });
+  await v.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(v.agent.status().policies?.screen_capture, null);
+  assert.equal(v.agent.status().policies?.clipboard_history, null);
+  v.cleanup();
+});
+
 test('desktop widgets policy reaches the shell through the status (off, or not set)', async () => {
   const w = world({ policy: signedPolicy({ version: 'p1', desktop_widgets: false }) });
   await w.agent.enroll('https://work.livezentech.com', 'tok-123');

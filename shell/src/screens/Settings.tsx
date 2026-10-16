@@ -21,6 +21,7 @@ import { KeyboardPanel, TouchPanel } from './settings/Touch'
 import { KioskPanel } from './settings/Kiosk'
 import { AIPanel } from './settings/AI'
 import { MultitaskingPanel } from './settings/Multitasking'
+import { ClipboardPanel } from './settings/Clipboard'
 import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
@@ -39,6 +40,7 @@ const NAV = [
   { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
   { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
   { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
+  { id: 'Clipboard', tint: '#0E8FA8', icon: 'M9 4h6v3H9zM7 5H5v16h14V5h-2' },
   { id: 'Power', tint: '#B7791F', icon: 'M13 2L4 14h7l-1 8 9-12h-7z' },
   { id: 'Printers', tint: '#5E739C', icon: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z' },
   { id: 'Default apps', tint: '#0E8FA8', icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 16.5h7M16.5 13v7' },
@@ -56,7 +58,7 @@ export type Section = (typeof NAV)[number]['id']
 const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
 const navLabel = (id: Section) => t(`settings.nav.${id}` as MessageKey)
 // Older names (launcher search, earlier builds) still land somewhere sensible.
-const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking' }
+const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard' }
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
 /** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
@@ -844,15 +846,15 @@ function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (
 }
 
 export default function Settings({ onClose }: WindowProps) {
-  const [section, setSection] = useState<Section>(() => {
-    const s = takeSettingsSection()
-    return isSection(s) ? s : (s && ALIAS[s]) || 'Network'
-  })
+  const first = useMemo(() => takeSettingsSection(), [])
+  const [section, setSection] = useState<Section>(() => (isSection(first) ? first : (first && ALIAS[first]) || 'Network'))
+  // Settings › Keyboard opens on Shortcuts, or on the on-screen keyboard when that was asked for.
+  const [kbTab, setKbTab] = useState<'osk' | 'shortcuts'>(first === 'On-screen keyboard' ? 'osk' : 'shortcuts')
   const [problem, setProblem] = useState<HwDevice | null>(null)
   const [driverCount, setDriverCount] = useState(0)
   const [user, setUser] = useState<{ name: string; role: string } | null>(null)
   const { status } = useOsUpdate()
-  useEffect(() => onSettingsSection((s) => setSection(isSection(s) ? s : ALIAS[s] ?? 'Network')), [])
+  useEffect(() => onSettingsSection((s) => { setSection(isSection(s) ? s : ALIAS[s] ?? 'Network'); setKbTab(s === 'On-screen keyboard' ? 'osk' : 'shortcuts') }), [])
   useEffect(() => {
     void os.hwDriverUpdates().then((r) => setDriverCount(r.ok ? r.value.length : 0)).catch(() => {})
     void os.sysUsers().then((r) => {
@@ -879,7 +881,8 @@ export default function Settings({ onClose }: WindowProps) {
         {section === 'Bluetooth' && <BluetoothPanel />}
         {section === 'Display' && <DisplayPanel />}
         {section === 'Touchscreen & pen' && <TouchPanel />}
-        {section === 'Keyboard' && <KeyboardPanel />}
+        {section === 'Keyboard' && <KeyboardPanel tab={kbTab} />}
+        {section === 'Clipboard' && <ClipboardPanel />}
         {section === 'Appearance' && <AppearancePanel />}
         {section === 'Multitasking' && <MultitaskingPanel />}
         {section === 'Sound' && <SoundPanel />}

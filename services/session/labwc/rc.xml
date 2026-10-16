@@ -103,9 +103,29 @@
     <keybind key="C-A-W-F22"><action name="ForEach"><query identifier="worksuite-shell" omnipresent="yes"/><then><action name="ToggleOmnipresent"/><action name="ToggleAlwaysOnBottom"/></then></action></keybind>
     <keybind key="C-A-W-F21"><action name="ForEach"><query identifier="worksuite-shell"/><then><action name="Raise"/></then></action></keybind>
     <keybind key="C-A-W-F24"><action name="ToggleOmnipresent"/></keybind>
-    <!-- Screenshot through xdg-desktop-portal (shell/electron/screenshot.ts): Print = whole screen, Shift+Print = choose. -->
+    <!-- Screenshots (shell/electron/capture.ts through worksuite-screenshot; xdg-desktop-portal when the shell is not running):
+         Print = whole screen, saved to Pictures/Screenshots and copied (or the snipping overlay, Settings › Keyboard),
+         Super+Print = the same, Alt+Print = a window to the clipboard, Super+Shift+S and Shift+Print = snipping overlay. -->
     <keybind key="Print"><action name="Execute" command="worksuite-screenshot"/></keybind>
-    <keybind key="S-Print"><action name="Execute" command="worksuite-screenshot --interactive"/></keybind>
+    <keybind key="W-Print"><action name="Execute" command="worksuite-screenshot --save"/></keybind>
+    <keybind key="A-Print"><action name="Execute" command="worksuite-screenshot --window"/></keybind>
+    <keybind key="W-S-s"><action name="Execute" command="worksuite-screenshot --snip"/></keybind>
+    <keybind key="S-Print"><action name="Execute" command="worksuite-screenshot --snip"/></keybind>
+    <!-- Like Windows 11 (shell/src/lib/shortcuts.ts lists them all; Settings › Keyboard › Shortcuts changes them in the
+         user's copy): Super+E Files, Super+I Settings, Super+N notifications, Super+D show desktop, Super+V clipboard
+         history, Super+. emoji, Super+U accessibility, Super+/ this list, Ctrl+Shift+Esc and Ctrl+Alt+Del System monitor,
+         Ctrl+Alt+T terminal. -->
+    <keybind key="W-e"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s files"/></keybind>
+    <keybind key="W-i"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s settings"/></keybind>
+    <keybind key="W-n"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 ToggleNotifications"/></keybind>
+    <keybind key="W-d"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 ShowDesktop"/></keybind>
+    <keybind key="W-v"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s clipboard"/></keybind>
+    <keybind key="W-period"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s emoji"/></keybind>
+    <keybind key="W-u"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s a11y"/></keybind>
+    <keybind key="W-slash"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s shortcuts"/></keybind>
+    <keybind key="C-S-Escape"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s monitor"/></keybind>
+    <keybind key="C-A-Delete"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s monitor"/></keybind>
+    <keybind key="C-A-t"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s app:foot"/></keybind>
     <!-- Screen-sharing emergency stop (SRS §7.1): ends every ScreenCast session, also while the screen is locked. -->
     <keybind key="W-S-Escape" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-screencast-stop"/></keybind>
   </keyboard>

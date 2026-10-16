@@ -364,6 +364,7 @@ export class Agent {
         ai_assistant: p.ai_assistant ?? null, ai_models: p.ai_models ?? null,
         desktop_widgets: p.desktop_widgets ?? null,
         whatsapp: p.whatsapp ?? null,
+        screen_capture: p.screen_capture ?? null, clipboard_history: p.clipboard_history ?? null,
         kiosk: this.s.enrolled && activeKiosk(p, this.s.device_id) !== null,
       } : null,
       // Settings › Managed › Kiosk mode (board KioskSettings): what this device's kiosk runs. Never the exit PIN or its verifier.

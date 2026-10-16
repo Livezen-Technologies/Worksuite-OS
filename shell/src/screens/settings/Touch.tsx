@@ -7,6 +7,7 @@ import { DEFAULT_GESTURES, hasTabletSwitch, pens, touchApi, touchScreens, useTou
 import { formatNumber, t, type MessageKey } from '../../i18n'
 import { BigSwitch, H1, Note, Unavail } from './ui'
 import { TouchCalibrate } from './TouchCalibrate'
+import { ShortcutsPanel } from './Shortcuts'
 
 const HAND = 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15'
 const PEN = 'M15 4l5 5L9 20H4v-5zM13 6l5 5'
@@ -176,14 +177,32 @@ function Gestures({ s, set }: { s: TouchSettings; set: (p: Partial<TouchSettings
   )
 }
 
-export function KeyboardPanel() {
+export function KeyboardPanel({ tab: initialTab = 'osk' }: { tab?: 'osk' | 'shortcuts' }) {
+  const [tab, setTab] = useState<'osk' | 'shortcuts'>(initialTab)
+  useEffect(() => setTab(initialTab), [initialTab])
+  return <>
+    <H1>{t('settings.nav.Keyboard')}</H1>
+    <div role="tablist" aria-label={t('settings.nav.Keyboard')} className="flex gap-1 self-start rounded-[10px] bg-[rgba(4,10,26,0.5)] p-1">
+      {(['shortcuts', 'osk'] as const).map((x) => (
+        <button key={x} type="button" role="tab" id={`kb-tab-${x}`} aria-selected={tab === x} aria-controls={`kb-panel-${x}`} onClick={() => setTab(x)}
+          onKeyDown={(e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); const n = x === 'osk' ? 'shortcuts' : 'osk'; setTab(n); document.getElementById(`kb-tab-${n}`)?.focus() } }}
+          tabIndex={tab === x ? 0 : -1}
+          className={`min-h-9 cursor-pointer rounded-lg px-4 text-[13px] ${tab === x ? 'bg-[#1F6BFF] font-semibold text-white' : 'text-[#C9D6EE] hover:bg-white/[0.06]'}`}>{t(x === 'osk' ? 'osk.title' : 'sc.tab')}</button>
+      ))}
+    </div>
+    <div role="tabpanel" id={`kb-panel-${tab}`} aria-labelledby={`kb-tab-${tab}`} className="flex flex-col gap-3.5">
+      {tab === 'osk' ? <OskSettings /> : <ShortcutsPanel />}
+    </div>
+  </>
+}
+
+function OskSettings() {
   const { state, reason, set } = useTouch()
   const s: TouchSettings | null = state?.settings ?? null
   const modes: { id: OskMode; label: string }[] = [{ id: 'off', label: t('common.off') }, { id: 'touch', label: t('osk.touchOnly') }, { id: 'always', label: t('osk.always') }]
   const layouts: { id: 'full' | 'split' | 'floating'; label: string }[] = (['full', 'split', 'floating'] as const).map((id) => ({ id, label: t(`osk.layout.${id}` as MessageKey) }))
   const sizes: { id: OskSize; label: string }[] = (['small', 'medium', 'large'] as const).map((id) => ({ id, label: t(`osk.size.${id}` as MessageKey) }))
   return <>
-    <H1>{t('settings.nav.Keyboard')}</H1>
     {reason ? <Unavail what={t('osk.title')} reason={reason} /> : !s ? <Empty title={t('touch.reading')} /> : <>
       <Hero d={KBD} tint="#7A4FE0" title={t('osk.title')} sub={state?.osk.available || s.osk === 'off' ? t('osk.sub') : t('osk.missing')} />
       <div className={card}>

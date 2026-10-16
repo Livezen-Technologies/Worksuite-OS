@@ -276,6 +276,27 @@ class RcTest(unittest.TestCase):
         self.assertEqual(refresh_rc("", system), system)
         self.assertEqual(refresh_rc(stale, ""), stale)
 
+    def test_refresh_and_rewrite_keep_the_users_shortcuts_inside_keyboard(self):
+        system = RC.replace("<!-- worksuite-touch:begin -->\n  <touch deviceName=\"x\" mapToOutput=\"HDMI-A-1\" />\n<!-- worksuite-touch:end -->\n", "")
+        block = ('    <!-- worksuite-shortcuts:begin (Settings) -->\n'
+                 '    <keybind key="W-n"><action name="None"/></keybind>\n'
+                 '    <keybind key="W-k"><action name="Execute" command="foot"/></keybind>\n'
+                 '    <!-- worksuite-shortcuts:end -->')
+        close = system.rfind("</keyboard>")
+        line = system.rfind("\n", 0, close) + 1
+        user = system[:line] + block + "\n" + system[line:]
+        out = refresh_rc(user, system)
+        self.assertEqual(out.count("worksuite-shortcuts:begin"), 1)
+        self.assertIn(block, out)
+        self.assertLess(out.index("worksuite-shortcuts:begin"), out.index("</keyboard>"))
+        self.assertEqual(refresh_rc(out, system), out)          # stable
+        # a desktops rewrite (the bridge's own change) keeps it too
+        again = rewrite_rc(out, ["One", "Two"], True)
+        self.assertIn(block, again)
+        self.assertIn("<name>Two</name>", again)
+        # none in the user's copy: none after a refresh
+        self.assertNotIn("worksuite-shortcuts", refresh_rc(system, system))
+
     def test_write_rebuilds_a_stale_copy_from_the_system_file(self):
         with tempfile.TemporaryDirectory() as d:
             sysrc, user = Path(d) / "sys.xml", Path(d) / "rc.xml"

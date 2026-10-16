@@ -31,6 +31,11 @@ export const SHELL_XML = `<node name="${SHELL_PATH}">
     <method name="ToggleAssistant"/>
     <!-- Files is the default handler for archives (shell/apps/worksuite-files.desktop): browse this one. -->
     <method name="OpenArchive"><arg name="path" type="s" direction="in"/></method>
+    <!-- Windows-style shortcuts (rc.xml, src/lib/shortcuts.ts): files, settings, monitor, a11y, clipboard (Super+V),
+         emoji (Super+.), shortcuts (Super+/), snip (the Snipping Tool app) or app:<desktop id> (custom shortcuts). -->
+    <method name="Open"><arg name="what" type="s" direction="in"/></method>
+    <!-- worksuite-screenshot (Print, Super+Print, Alt+Print, Super+Shift+S): print, save, window or snip (electron/capture.ts). -->
+    <method name="Capture"><arg name="kind" type="s" direction="in"/></method>
   </interface>
 </node>`
 
@@ -86,7 +91,14 @@ export interface PanelEvents {
   /** OpenArchive(path) from worksuite-open-archive. */
   openArchive?(path: string): void
   workspaces?(w: Workspaces): void
+  /** Open(what) and Capture(kind) from the Windows-style key bindings. */
+  open?(what: string): void
+  capture?(kind: string): void
 }
+/** What Open(what) accepts: shell surfaces, or app:<desktop id> for custom shortcuts. */
+export const OPEN_TARGETS = ['files', 'settings', 'monitor', 'a11y', 'clipboard', 'emoji', 'shortcuts', 'snip']
+export const validOpen = (w: string) => OPEN_TARGETS.includes(w) || /^app:[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/.test(w)
+export const CAPTURE_KINDS = ['print', 'save', 'window', 'snip']
 
 const HANDLE = /^w[0-9a-f]{1,32}$/
 const strings = (v: unknown, ok: (s: string) => boolean, max: number) => (Array.isArray(v) ? v.map(String).filter(ok).slice(0, max) : [])
@@ -156,6 +168,14 @@ export class PanelClient {
     const shellAction = ({ ToggleLauncher: 'toggle', ShowLauncher: 'show', ToggleNotifications: 'notifications', ShowDesktop: 'desktop', ToggleAssistant: 'assistant', ToggleTaskView: 'taskview' } as const)[msg.member as 'ToggleLauncher']
     if (msg.interface === SHELL && shellAction) {
       this.events.launcher(shellAction)
+      this.bus.send(Message.newMethodReturn(msg, '', []))
+      return true
+    }
+    if (msg.interface === SHELL && (msg.member === 'Open' || msg.member === 'Capture') && msg.signature === 's') {
+      const arg = String(msg.body?.[0] ?? '')
+      const ok = msg.member === 'Open' ? validOpen(arg) : CAPTURE_KINDS.includes(arg)
+      if (!ok) { this.bus.send(Message.newError(msg as unknown as string, 'org.freedesktop.DBus.Error.InvalidArgs', `unknown ${msg.member === 'Open' ? 'target' : 'kind'}`)); return true }
+      if (msg.member === 'Open') this.events.open?.(arg); else this.events.capture?.(arg)
       this.bus.send(Message.newMethodReturn(msg, '', []))
       return true
     }

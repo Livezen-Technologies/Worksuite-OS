@@ -18,6 +18,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync,
 import path from 'node:path'
 import { realExec, type Avail, type Exec } from './system'
 import { xdgDirs } from './xdgDirs'
+import { extractShortcutsBlock, mergeShortcutsBlock } from '../src/lib/shortcuts'
 
 // ---------- devices ----------
 export type DevKind = 'touchscreen' | 'tablet' | 'tablet-pad' | 'switch'
@@ -210,14 +211,16 @@ export function mergeRcXml(rc: string, block: string): string {
 const DESKTOPS = /<desktops\b[^>]*\/>|<desktops\b[^>]*>[\s\S]*?<\/desktops>/
 const SWITCHER = /<windowSwitcher\b[^>]*?\/?>/
 /** The Wayland bridge keeps the desktops (count, names) and Alt+Tab's scope in the user's rc.xml
- *  (native/wayland-bridge/worksuite_bridge/workspace.py): a rewrite from the system file carries them over. */
+ *  (native/wayland-bridge/worksuite_bridge/workspace.py), and Settings › Keyboard › Shortcuts its block of key
+ *  bindings (src/lib/shortcuts.ts): a rewrite from the system file carries them over. */
 export function carryDesktops(previous: string, next: string): string {
   let out = next
   for (const re of [DESKTOPS, SWITCHER]) {
     const old = previous.match(re)?.[0]
     if (old && re.test(out)) out = out.replace(re, () => old)
   }
-  return out
+  const keys = extractShortcutsBlock(previous)
+  return keys ? mergeShortcutsBlock(out, keys) : out
 }
 
 // ---------- on-screen keyboard ----------

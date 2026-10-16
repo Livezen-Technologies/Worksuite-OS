@@ -1,12 +1,14 @@
-// Screenshot shortcut (WSOS-DSK-011): Print / Shift+Print in Labwc run `worksuite-screenshot [--interactive]`, which
-// asks xdg-desktop-portal (org.freedesktop.portal.Screenshot, backed by xdg-desktop-portal-wlr per
-// services/session/portals/worksuite-portals.conf) for a screenshot and copies the result into
-// ~/Pictures/Screenshots. Going through the portal keeps the compositor's screen-capture permission in one place.
+// Screenshot shortcuts (WSOS-DSK-011): Labwc runs `worksuite-screenshot [--save|--window|--snip]` on Print, Super+Print,
+// Alt+Print and Super+Shift+S. It hands the request to the shell (lk.worksuite.Shell1.Capture, electron/capture.ts),
+// which captures, copies, saves and shows the snipping overlay. When the shell does not answer (it is restarting, or a
+// session without it) the screenshot comes from xdg-desktop-portal (org.freedesktop.portal.Screenshot, backed by
+// xdg-desktop-portal-wlr per services/session/portals/worksuite-portals.conf) and is copied into ~/Pictures/Screenshots.
 import { copyFileSync, mkdirSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dbus from 'dbus-next'
+import { screenshotFileName, type CaptureKind } from './capture'
 
 const { Message, Variant } = dbus
 const PORTAL = 'org.freedesktop.portal.Desktop'
@@ -19,9 +21,22 @@ export function requestPath(uniqueName: string, token: string): string {
   return `/org/freedesktop/portal/desktop/request/${uniqueName.replace(/^:/, '').replace(/\./g, '_')}/${token}`
 }
 
-export function screenshotName(now: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `Screenshot ${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}-${p(now.getMinutes())}-${p(now.getSeconds())}.png`
+/** Same names as the shell's own screenshots (capture.ts). */
+export const screenshotName = (now: Date) => screenshotFileName(now)
+
+/** The shortcut's request: Print = 'print', --save (Super+Print), --window (Alt+Print), --snip / --interactive. */
+export function cliKind(argv: string[]): CaptureKind {
+  if (argv.includes('--snip') || argv.includes('--interactive')) return 'snip'
+  if (argv.includes('--window')) return 'window'
+  if (argv.includes('--save')) return 'save'
+  return 'print'
+}
+
+/** Hands the request to the shell; false when it does not answer (then the portal takes the screenshot). */
+export async function viaShell(bus: Bus, kind: CaptureKind, timeoutMs = 3000): Promise<boolean> {
+  const call = bus.call(new Message({ destination: 'lk.worksuite.Shell1', path: '/lk/worksuite/Shell1', interface: 'lk.worksuite.Shell1', member: 'Capture', signature: 's', body: [kind] }))
+  const timer = new Promise<null>((r) => setTimeout(() => r(null), timeoutMs))
+  try { return (await Promise.race([call, timer])) !== null } catch { return false }
 }
 
 export type ShotResult = { ok: true; file: string } | { ok: false; error: 'cancelled' | 'failed' | 'no_portal' }
@@ -67,10 +82,13 @@ export function picturesDir(env: NodeJS.ProcessEnv = process.env): string {
   return env.XDG_PICTURES_DIR || path.join(env.HOME || '/', 'Pictures')
 }
 
-// CLI: worksuite-screenshot [--interactive]
+// CLI: worksuite-screenshot [--save|--window|--snip|--interactive]
 if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   const bus = dbus.sessionBus()
-  void takeScreenshot(bus, process.argv.includes('--interactive'), picturesDir()).then((r) => {
+  const kind = cliKind(process.argv.slice(2))
+  void viaShell(bus, kind).then(async (handled) => {
+    if (handled) { bus.disconnect(); return }
+    const r = await takeScreenshot(bus, kind === 'snip' || kind === 'window', picturesDir())
     if (r.ok) process.stdout.write(`${r.file}\n`)
     else process.stderr.write(`worksuite-screenshot: ${r.error}\n`)
     bus.disconnect()

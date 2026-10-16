@@ -2,6 +2,7 @@
 // 'preferences/shell' object so they follow the user and work offline. Unknown or bad data falls back to defaults.
 import { normaliseLayout, type WidgetLayout } from './widgets'
 import { desktopPrefsFrom, type DesktopPrefs } from './desktopPrefs'
+import { shortcutPrefsFrom, type ShortcutPrefs } from './shortcuts'
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/
 const MAX = 64
@@ -9,8 +10,9 @@ const MAX = 64
 /** Where the Start button and app icons sit on the taskbar (Settings › Appearance); centre by default. */
 export type TaskbarAlign = 'center' | 'left'
 
-/** widgets: the desktop widgets' layout (lib/widgets.ts), saved alongside the pins. taskbarAlign: see TaskbarAlign. */
-export interface ShellPrefs { favorites?: string[]; taskbar?: string[]; order?: string[]; widgets?: WidgetLayout; taskbarAlign?: TaskbarAlign; desktops?: DesktopPrefs }
+/** widgets: the desktop widgets' layout (lib/widgets.ts), saved alongside the pins. taskbarAlign: see TaskbarAlign.
+ *  shortcuts: Settings › Keyboard › Shortcuts (lib/shortcuts.ts), written to the user's Labwc rc.xml on every computer. */
+export interface ShellPrefs { favorites?: string[]; taskbar?: string[]; order?: string[]; widgets?: WidgetLayout; taskbarAlign?: TaskbarAlign; desktops?: DesktopPrefs; shortcuts?: ShortcutPrefs }
 
 const ids = (v: unknown): string[] | undefined =>
   Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && ID.test(x)))].slice(0, MAX) : undefined
@@ -25,6 +27,8 @@ export function shellPrefsFrom(v: unknown): ShellPrefs {
   if (o.taskbarAlign === 'center' || o.taskbarAlign === 'left') out.taskbarAlign = o.taskbarAlign
   const d = desktopPrefsFrom(o.desktops)
   if (d) out.desktops = d
+  const k = shortcutPrefsFrom(o.shortcuts)
+  if (k) out.shortcuts = k
   return out
 }
 

@@ -1,4 +1,4 @@
-export type WindowApp = 'files' | 'appcenter' | 'settings' | 'monitor'
+export type WindowApp = 'files' | 'appcenter' | 'settings' | 'monitor' | 'snip'
 
 export interface GreeterProps { onSignIn: (user: string) => void }
 export interface LockProps { user: string; name?: string; onUnlock: () => void; notices?: { id: string; title: string; at: number; tone: 'ok' | 'warn' | 'error'; app?: string }[] }

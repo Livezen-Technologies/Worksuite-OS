@@ -7,7 +7,7 @@ import { WHATSAPP_APP_ID } from '../../electron/whatsapp'
 export type Kind = 'WorkSuite' | 'Linux app' | 'System'
 
 /** How a tile starts: a desktop entry via gtk-launch, WorkSuite Office (start centre or new document), or a shell screen. */
-export type Launch = { desktop: string } | { office: 'start' | 'docs' | 'sheets' | 'slides' } | { worksuite: DesktopModule } | { screen: 'appcenter' | 'files' | 'monitor' | 'settings' }
+export type Launch = { desktop: string } | { office: 'start' | 'docs' | 'sheets' | 'slides' } | { worksuite: DesktopModule } | { screen: 'appcenter' | 'files' | 'monitor' | 'settings' | 'snip' }
 
 /** Modules WorkSuite Desktop opens with `--module=<id>`. */
 export type DesktopModule = 'home' | 'mail' | 'chat' | 'calendar' | 'tasks' | 'files' | 'crm' | 'hr'

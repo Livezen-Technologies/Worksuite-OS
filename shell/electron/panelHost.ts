@@ -4,7 +4,10 @@ import { ACTIVATED_FLAG, MAX_DESKTOPS, PanelClient, type PanelWindow } from './p
 
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 
-export function startPanel(handle: Handle, send: (channel: string, payload: unknown) => void, outputsChanged: () => void = () => undefined, openArchive: (path: string) => void = () => undefined): PanelClient | null {
+/** Open/Capture from Shell1 (Windows-style key bindings), and the lift for others (the snipping overlay) once it exists. */
+export interface PanelHooks { open?(what: string): void; capture?(kind: string): void; lift?: (reason: string, on: boolean) => Promise<void> }
+
+export function startPanel(handle: Handle, send: (channel: string, payload: unknown) => void, outputsChanged: () => void = () => undefined, openArchive: (path: string) => void = () => undefined, hooks: PanelHooks = {}): PanelClient | null {
   let client: PanelClient | null = null
   try {
     const bus = dbus.sessionBus()
@@ -16,6 +19,8 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
       outputs: outputsChanged,
       openArchive,
       workspaces: (w) => send('ws:panelWorkspacesChanged', w),
+      open: (w) => hooks.open?.(w),
+      capture: (k) => hooks.capture?.(k),
     })
     void client.start().catch(() => undefined)
   } catch {
@@ -25,6 +30,7 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
   const none = { ok: false, error: 'bridge_unavailable' }
   // An app got the focus while the shell was over the apps: the shell went back below; the renderer closes its menus.
   const lift: ReturnType<typeof shellLift> = shellLift(c, () => send('ws:shellBehind', null))
+  hooks.lift = (reason, on) => lift.set(reason, on)
   const tv = taskViewHost(c, send, lift)
   // Anything else of the shell's own open over the apps (launcher, Settings, Files, power menu…): see shellLift.
   // Sent when the set of open things changes or a shell window is opened again: each "on" raises the shell again.
@@ -112,7 +118,7 @@ export function shellLift(c: LiftClient | null, behind: () => void = () => undef
       const before = focusedApp
       focusedApp = app
       // Task View moves and picks windows itself (the bridge focuses a window to move it) and closes itself.
-      if (before === null || !app || app === before || (!reasons.size && !lifted) || reasons.has('taskview')) return
+      if (before === null || !app || app === before || (!reasons.size && !lifted) || reasons.has('taskview') || reasons.has('snip')) return
       reasons.clear()
       again = false
       void kick()

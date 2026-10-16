@@ -2,6 +2,7 @@
 import type { LocaleReview, MessageKey } from './en'
 import { aiTa } from './ai'
 import { widgetsTa } from './widgets'
+import { captureTa } from './capture'
 import { whatsappTa } from './whatsapp'
 import { desktopsTa } from './desktops'
 import { bootuiTa } from './bootui'
@@ -12,6 +13,7 @@ export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedK
 const ta: Partial<Record<MessageKey, string>> = {
   ...aiTa,
   ...widgetsTa,
+  ...captureTa,
   ...whatsappTa,
   ...desktopsTa,
   ...bootuiTa,
@@ -1535,7 +1537,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'defapps.cat.spreadsheet': 'விரிதாள்கள்',
   'defapps.cat.presentation': 'விளக்கக்காட்சிகள்',
   'clip.title': 'கிளிப்போர்டு வரலாறு',
-  'clip.hint': 'இயல்பாக முடக்கப்பட்டுள்ளது. இயக்கியதும், நீங்கள் நகலெடுக்கும் உரை வெளியேறும் வரை நினைவகத்தில் வைக்கப்படும். கடவுச்சொல் புலங்கள், கடவுச்சொல் மேலாளர்களிலிருந்து நகலெடுத்தவை ஒருபோதும் வைக்கப்படாது.',
+  'clip.hint': 'இயல்பாக முடக்கப்பட்டுள்ளது. இயக்கியதும், நீங்கள் நகலெடுக்கும் உரை, படங்கள், கோப்புகள் வெளியேறும் வரை நினைவகத்தில் வைக்கப்படும்; பொருத்தப்பட்டவை குறியாக்கப்பட்டு வைக்கப்படும். கடவுச்சொல் புலங்கள், கடவுச்சொல் மேலாளர்களிலிருந்து நகலெடுத்தவை ஒருபோதும் வைக்கப்படாது.',
   'clip.count': '{count} உருப்படிகள்',
   'clip.clear': 'வரலாற்றை அழி',
   'clip.copy': 'நகலெடு',

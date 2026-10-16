@@ -255,6 +255,7 @@ const views = {
         ai_assistant: f.ai_assistant.value === '' ? null : f.ai_assistant.value === 'true', ai_models: list('ai_models').length ? list('ai_models') : null,
         desktop_widgets: f.desktop_widgets.value === '' ? null : f.desktop_widgets.value === 'true',
         whatsapp: f.whatsapp.value === '' ? null : f.whatsapp.value === 'true',
+        screen_capture: f.screen_capture.value || null, clipboard_history: f.clipboard_history.value || null,
         app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
     } },
       h('div', { class: 'row' }, h('label', {}, 'Update ring', sel('update_ring', [['stable', 'Stable'], ['pilot', 'Pilot'], ['development', 'Development']])),
@@ -273,6 +274,8 @@ const views = {
         h('label', {}, 'AI models allowed (catalog IDs; empty = all)', h('textarea', { name: 'ai_models' }, (p.ai_models || []).join('\n')))),
       h('div', { class: 'row' }, h('label', {}, 'Desktop widgets (WorkSuite Home on the desktop)', sel('desktop_widgets', [['true', 'Allowed'], ['false', 'Off']])),
         h('label', {}, 'WhatsApp (WhatsApp Web app, pinned by default)', sel('whatsapp', [['true', 'Allowed'], ['false', 'Off']]))),
+      h('div', { class: 'row' }, h('label', {}, 'Screenshots and screen snipping', sel('screen_capture', [['allowed', 'Allowed'], ['disabled', 'Off']])),
+        h('label', {}, 'Clipboard history (Super+V)', sel('clipboard_history', [['allowed', 'Allowed'], ['disabled', 'Off']]))),
       h('label', {}, 'Update mirror (https, optional)', h('input', { name: 'update_mirror', value: p.update_mirror || '' })),
       h('label', {}, 'Allowed apps (catalog IDs, one per line)', h('textarea', { name: 'app_allowlist' }, (p.app_allowlist || []).join('\n'))),
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),

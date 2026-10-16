@@ -23,7 +23,7 @@ const btn = 'cursor-pointer disabled:cursor-default'
 const iconBtn = `${btn} flex h-[34px] w-[34px] items-center justify-center rounded-lg hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent`
 
 /** archive: an archive opened with Files from elsewhere (the default handler for archive types); n changes per request. */
-export default function Files({ onClose, archive }: WindowProps & { archive?: { root: string; rel: string; n: number } | null }) {
+export default function Files({ onClose, archive, folder }: WindowProps & { archive?: { root: string; rel: string; n: number } | null; folder?: { root: string; rel: string; n: number } | null }) {
   const [places, setPlaces] = useState<FilePlaces | null>(null)
   const [hist, setHist] = useState<{ list: Place[]; i: number }>({ list: [START_PLACE], i: 0 })
   const place = hist.list[hist.i]
@@ -62,6 +62,8 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
   const dir = place.kind === 'dir' ? place : null
   const arc = place.kind === 'archive' ? place : null
   useEffect(() => { if (archive) go({ kind: 'archive', root: archive.root, rel: archive.rel, inner: '' }) }, [archive?.n]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A folder to show (the Snipping Tool's "Show in Files").
+  useEffect(() => { if (folder) go({ kind: 'dir', root: folder.root, rel: folder.rel }) }, [folder?.n]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!arc) setArcPw(null) }, [arc?.root, arc?.rel]) // eslint-disable-line react-hooks/exhaustive-deps
   const cloud = dir?.root === 'drive'
 

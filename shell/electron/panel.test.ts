@@ -106,6 +106,23 @@ describe('panel client', () => {
     expect(f.method(new Message({ type: 1, serial: 10, sender: ':1.2', path: SHELL_PATH, interface: SHELL, member: 'OpenArchive', signature: 'u', body: [1] }))).toBe(false)
   })
 
+  it('Open and Capture from the Windows-style key bindings, with their arguments checked', async () => {
+    const f = fakeBus({})
+    const open = vi.fn(), capture = vi.fn()
+    await new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn(), open, capture }).start()
+    const call = (member: string, arg: string, serial: number) => f.method(new Message({ type: 1, serial, sender: ':1.2', path: SHELL_PATH, interface: SHELL, member, signature: 's', body: [arg] }))
+    expect(call('Open', 'clipboard', 1)).toBe(true)
+    expect(call('Open', 'app:org.gnome.Calculator', 2)).toBe(true)
+    expect(call('Capture', 'window', 3)).toBe(true)
+    expect(open.mock.calls).toEqual([['clipboard'], ['app:org.gnome.Calculator']])
+    expect(capture.mock.calls).toEqual([['window']])
+    expect(call('Open', 'app:../../bin/sh', 4)).toBe(true)
+    expect(call('Capture', 'everything', 5)).toBe(true)
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(capture).toHaveBeenCalledTimes(1)
+    expect(f.sent.slice(-2).map((m) => m.errorName)).toEqual(['org.freedesktop.DBus.Error.InvalidArgs', 'org.freedesktop.DBus.Error.InvalidArgs'])
+  })
+
   it('ignores malformed rows', () => {
     expect(rowsToWindows([['a'], 'x', ['h', 'app', 't', 'o', 2]])).toEqual([{ handle: 'h', appId: 'app', title: 't', output: 'o', flags: 2 }])
     expect(rowsToWindows(undefined)).toEqual([])

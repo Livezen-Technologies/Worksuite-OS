@@ -327,11 +327,29 @@ def _set_switcher(rc: str, switcher_all: bool) -> str:
 TOUCH_BEGIN = "<!-- worksuite-touch:begin"
 TOUCH_END = "<!-- worksuite-touch:end -->"
 _TOUCH = re.compile(re.escape(TOUCH_BEGIN) + r".*?" + re.escape(TOUCH_END) + r"\n?", re.S)
+# Settings › Keyboard › Shortcuts (shell/src/lib/shortcuts.ts): the user's key bindings, a block at the end of <keyboard>.
+SHORTCUTS_BEGIN = "<!-- worksuite-shortcuts:begin"
+SHORTCUTS_END = "<!-- worksuite-shortcuts:end -->"
+_SHORTCUTS = re.compile(r"[ \t]*" + re.escape(SHORTCUTS_BEGIN) + r".*?" + re.escape(SHORTCUTS_END) + r"\n?", re.S)
+
+
+def _put_shortcuts(rc: str, block: str) -> str:
+    """rc.xml with the shortcuts block (and no other) as the last thing in <keyboard>, where its bindings win."""
+    rc = _SHORTCUTS.sub("", rc)
+    close = rc.rfind("</keyboard>")
+    block = block.rstrip("\n") + "\n"
+    if close < 0:
+        end = rc.rfind("</labwc_config>")
+        kb = f"  <keyboard>\n{block}  </keyboard>\n"
+        return rc[:end] + kb + rc[end:] if end >= 0 else rc.rstrip("\n") + "\n" + kb
+    line = rc.rfind("\n", 0, close) + 1
+    return rc[:line] + block + rc[line:]
 
 
 def refresh_rc(user: str, system: str) -> str:
     """The user's rc.xml rebuilt from the system file, keeping only what belongs to the user: the desktops (count and
-    names), Alt+Tab's scope and the touchscreen block of Settings › Touchscreen & pen (shell/electron/touch.ts). So a
+    names), Alt+Tab's scope, the touchscreen block of Settings › Touchscreen & pen (shell/electron/touch.ts) and the
+    key bindings of Settings › Keyboard › Shortcuts (shell/src/lib/shortcuts.ts). So a
     copy written by an older version picks up the current window rules and key bindings (the shell's always-on-bottom
     rule, the Task View binding) instead of keeping stale ones."""
     if not system.strip():
@@ -351,6 +369,9 @@ def refresh_rc(user: str, system: str) -> str:
         close = out.rfind("</labwc_config>")
         block = touch.group(0).rstrip("\n") + "\n"
         out = out[:close] + block + out[close:] if close >= 0 else out.rstrip("\n") + "\n" + block
+    keys = _SHORTCUTS.search(user)
+    if keys:
+        out = _put_shortcuts(out, keys.group(0))
     return out
 
 
