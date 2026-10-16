@@ -181,7 +181,8 @@ fun show_entry(label_s, value_s) {
   prompt.sprite.SetOpacity(1); entry.sprite.SetOpacity(1); field.sprite.SetOpacity(1);
 }
 fun display_password_callback(prompt_s, bullets) {
-  if (prompt_s == "") prompt_s = "Enter the passphrase to unlock this disk";
+  # cryptsetup asks "Please unlock disk luks-<uuid>": show plain words, not the mapping name.
+  if (prompt_s == "" || prompt_s.SubString(0, 18) == "Please unlock disk") prompt_s = "Enter the passphrase to unlock this disk";
   dots = "";
   for (i = 0; i < bullets; i++) dots += "●";
   show_entry(prompt_s, dots);
