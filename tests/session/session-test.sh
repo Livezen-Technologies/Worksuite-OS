@@ -88,6 +88,10 @@ kill "$(cat "$T/run/worksuite-lock.guard/pid")" 2>/dev/null; sleep 0.3; rm -rf "
 sleep 30 & labwc=$!; echo $labwc >> "$T/pids"
 LABWC_PID=$labwc sh "$BIN/worksuite-session" --logout
 grep -q "systemctl --user stop gnome-keyring-daemon.service" "$LOG" && ok "logout stops the locked keyring daemon (next sign-in unlocks a fresh one)" || bad "logout stops the locked keyring daemon (next sign-in unlocks a fresh one)"
+# … after the session's apps (a Secret Service call from one would start it again, locked), and never its socket.
+kr=$(grep -n "stop gnome-keyring-daemon.service" "$LOG" | cut -d: -f1 | head -n 1); tg=$(grep -n "stop graphical-session.target" "$LOG" | cut -d: -f1 | head -n 1)
+[ -n "$kr" ] && [ -n "$tg" ] && [ "$kr" -gt "$tg" ] && ! grep -q "gnome-keyring-daemon.socket" "$LOG" \
+  && ok "keyring daemon stopped after the session's apps, its socket kept" || bad "keyring daemon stopped after the session's apps, its socket kept"
 sleep 0.1
 for want in "systemctl --user stop worksuite-sync.service" "systemctl --user stop worksuite-credentials.service" \
             "org.freedesktop.Secret.Service.Lock" "systemctl --user stop worksuite-session.target" "systemctl --user unset-environment"; do

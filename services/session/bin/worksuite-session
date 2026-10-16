@@ -34,12 +34,14 @@ cleanup() {
     systemctl --user stop worksuite-credentials.service 2>/dev/null   # drops in-memory access tokens
     dbus-send --session --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets \
         org.freedesktop.Secret.Service.Lock array:objpath:/org/freedesktop/secrets/collection/login >/dev/null 2>&1
-    # A user manager that outlives the session (another login on a VT, lingering) kept this locked daemon, and the next
-    # sign-in's PAM-started daemon could not take over: apps then asked to unlock the login keyring (WSOS-INT-009).
-    # Stopping it lets the next sign-in start and unlock a fresh one with the password.
-    systemctl --user stop gnome-keyring-daemon.service 2>/dev/null
     systemctl --user stop worksuite-session.target 2>/dev/null
     systemctl --user stop graphical-session.target 2>/dev/null
+    # A user manager that outlives the session (another login on a VT, lingering) kept this locked daemon, and the next
+    # sign-in's PAM-started daemon could not take over: apps then asked to unlock the login keyring (WSOS-INT-009).
+    # Stopping it lets the next sign-in start and unlock a fresh one with the password. Only after the session's apps
+    # are gone: a Secret Service call from one of them would start it again, locked (D-Bus activation, --start).
+    # Its socket unit stays, so the next sign-in's PAM module starts the daemon through it.
+    systemctl --user stop gnome-keyring-daemon.service 2>/dev/null
     # shellcheck disable=SC2086
     systemctl --user unset-environment $VARS
     log "session cleaned up"
