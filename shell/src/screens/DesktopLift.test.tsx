@@ -60,3 +60,28 @@ it('hands a toast to worksuite-toasts (over the apps) and does not draw it in it
   expect(setToast).toHaveBeenCalledWith(null)
   expect(host.textContent).not.toContain('Download finished')
 })
+
+it('goes behind an app that took the focus: menus close, a shell window waits until opened again', async () => {
+  const onTop = vi.spyOn(panel, 'shellOnTop')
+  let behind: () => void = () => undefined
+  panel.onShellBehind = (cb) => { behind = cb; return () => { behind = () => undefined } }
+  try {
+    host = document.createElement('div'); document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => { root!.render(<Host open />) })
+    await settle()
+    expect(onTop).toHaveBeenLastCalledWith(true)
+    const start = host.querySelector<HTMLButtonElement>('button[aria-label="Open launcher"]')!
+    await act(async () => { start.click() })
+    await settle()
+    await act(async () => { behind() })        // Firefox clicked in the taskbar
+    await settle()
+    expect(onTop).toHaveBeenLastCalledWith(false)
+    expect(host.querySelector('input[type="search"], [role="dialog"][aria-label*="aunch"]')).toBeNull()
+    await act(async () => { start.click() })  // the launcher again: over the apps again
+    await settle()
+    expect(onTop).toHaveBeenLastCalledWith(true)
+  } finally {
+    delete panel.onShellBehind
+  }
+})

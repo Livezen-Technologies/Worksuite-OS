@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from .model import ACTIVATED, NotFound, NotSupported, Window, WindowRegistry
+from .model import ACTIVATED, MINIMIZED, NotFound, NotSupported, Window, WindowRegistry
 
 MAX_WORKSPACES = 16
 NAME_MAX = 40
@@ -72,6 +72,7 @@ class WorkspaceTracker:
         # Windows as they got focus, newest last: SendToDesktop moves the window that had focus, and Labwc may focus
         # another one before the binding's event reaches the bridge.
         self.focus_log: list[tuple[str, float]] = []
+        self.last_focus: dict[str, float] = {}  # every window's last focus (the most recent one is on top in Labwc)
         # Moves the bridge made itself: their bindings report too, and those echoes are ignored.
         self.expect: list[tuple[int, float]] = []
         self.listeners: list[Callable[[], None]] = []
@@ -98,6 +99,7 @@ class WorkspaceTracker:
             self.active.pop(w.handle, None)
             self.sticky.discard(w.handle)
             self.focus_log = [f for f in self.focus_log if f[0] != w.handle]
+            self.last_focus.pop(w.handle, None)
             if self.of.pop(w.handle, None) is not None:
                 self._changed()
         if kind in ("added", "changed"):
@@ -106,11 +108,26 @@ class WorkspaceTracker:
             self.active[w.handle] = now_active
             if became:
                 self.focus_log = (self.focus_log + [(w.handle, self.clock())])[-8:]
+                self.last_focus[w.handle] = self.clock()
                 if w.handle not in self.sticky and w.app_id.lower() not in OWN_APP_IDS \
                         and self.of.get(w.handle, self.current) != self.current:
                     # Labwc goes to the desktop of a window that gets focus (activated from the panel, or by an app).
                     self.current = self.of[w.handle]
                     self._changed()
+
+    def top_app(self, n: int) -> Window | None:
+        """The app window (not the shell's, not minimized) on desktop n, or on every desktop, focused most recently."""
+        best: tuple[float, int] | None = None
+        pick = None
+        for i, w in enumerate(self.registry.list()):
+            if w.app_id.lower() in OWN_APP_IDS or w.flags & MINIMIZED:
+                continue
+            if w.handle not in self.sticky and self.of.get(w.handle, self.current) != n:
+                continue
+            key = (self.last_focus.get(w.handle, -1.0), i)   # never focused: the newest window
+            if best is None or key > best:
+                best, pick = key, w
+        return pick
 
     def check(self, n: int) -> int:
         if not isinstance(n, int) or not 1 <= n <= self.count:
@@ -200,9 +217,15 @@ def _run(argv: list[str]) -> int:
 
 
 OMNI_KEY = "F24"
-# Lifts the shell out of Labwc's always-on-bottom layer, over the apps of the desktop shown and on every desktop (Task
-# View), and back: one binding toggles both, so the two states stay paired (rc.xml's shell window rule).
+# Lift the shell's windows out of Labwc's always-on-bottom layer, over the apps and on every desktop (its launcher,
+# notification centre, Files, Task View…), and put them back. Both bindings use ForEach with a query on the shell's
+# app_id, so they act on the shell's windows whatever has the keyboard focus, and both are idempotent: "omnipresent"
+# marks a lifted shell window (the lift sets it together with leaving always-on-bottom), so lifting a lifted shell only
+# raises it again and lowering a lowered one does nothing. (A focus-dependent toggle could act on the app window when
+# the focus had not moved yet, and two toggles in a row put the shell back where it was.)
 LIFT_KEY = "F23"
+LOWER_KEY = "F22"
+SHELL_QUERY = 'identifier="worksuite-shell"'
 
 
 class LabwcKeys:
@@ -240,9 +263,11 @@ class LabwcKeys:
         time.sleep(self.settle_s)
         self._send(self.argv(OMNI_KEY, False))
 
-    def toggle_lift(self) -> None:
-        time.sleep(self.settle_s)
+    def lift(self) -> None:
         self._send(self.argv(LIFT_KEY, False))
+
+    def lower(self) -> None:
+        self._send(self.argv(LOWER_KEY, False))
 
 
 # ---- rc.xml ---------------------------------------------------------------------------------------------------
@@ -378,7 +403,7 @@ class Desktops:
         self.blocking = blocking or self._executor
         self.reload_settle_s = reload_settle_s
         self.lock = asyncio.Lock()
-        self.lifted: set[str] = set()  # shell windows lifted over the apps (Task View)
+        self.lifted: set[str] = set()  # shell windows lifted over the apps (launcher, Task View, …)
         tracker.added.append(self._new_window)
         tracker.registry.listeners.append(lambda kind, w: self.lifted.discard(w.handle) if kind == "removed" else None)
 
@@ -532,19 +557,28 @@ class Desktops:
             ws._changed()
 
     async def set_shell_raised(self, handle: str, on: bool) -> None:
-        """Task View: the shell's window over the apps (on every desktop while open), then back below them."""
+        """The shell's windows over the apps (on every desktop) while something of the shell's is open, then back below
+        them. Raising always raises (and focuses) again, also when already lifted: an app may have been put over it.
+        Lowering gives the focus to the app the person used last on the desktop shown."""
         async with self.lock:
             w = self.ws.registry.get(handle)
             if w.app_id.lower() not in OWN_APP_IDS:
                 raise NotFound(f"{handle!r} is not a shell window")
-            if (handle in self.lifted) == bool(on):
-                return
-            self.activate(w)
-            await self.blocking(self.keys.toggle_lift)
             if on:
+                await self.blocking(self.keys.lift)
+                self.activate(w)   # keyboard focus for the launcher's search, Task View's keys…
                 self.lifted.add(handle)
             else:
+                await self.blocking(self.keys.lower)
                 self.lifted.discard(handle)
+                self.focus_top_app()
+
+    def focus_top_app(self, n: int | None = None) -> Window | None:
+        """Focus the window the person used last on desktop n (default: the one shown), if any is open there."""
+        w = self.ws.top_app(self.ws.current if n is None else n)
+        if w is not None and not w.flags & ACTIVATED:
+            self.activate(w)
+        return w
 
     def _new_window(self, w: Window) -> None:
         if w.app_id in self.ws.sticky_apps:
@@ -575,6 +609,9 @@ def rc_bindings(count: int = MAX_WORKSPACES) -> str:
         lines.append(f'    <keybind key="C-A-W-F{n}"><action name="GoToDesktop" to="{n}"/><action name="Execute" command="{ev} goto {n}"/></keybind>')
     for n in range(1, count + 1):
         lines.append(f'    <keybind key="C-A-S-W-F{n}"><action name="SendToDesktop" to="{n}" follow="no"/><action name="Execute" command="{ev} move {n}"/></keybind>')
-    lines.append(f'    <keybind key="C-A-W-{LIFT_KEY}"><action name="ToggleAlwaysOnBottom"/><action name="ToggleOmnipresent"/></keybind>')
+    lines.append(f'    <keybind key="C-A-W-{LIFT_KEY}"><action name="ForEach"><query {SHELL_QUERY} omnipresent="no"/><then><action name="ToggleAlwaysOnBottom"/>'
+                 f'<action name="ToggleOmnipresent"/></then></action><action name="ForEach"><query {SHELL_QUERY}/><then><action name="Raise"/></then></action></keybind>')
+    lines.append(f'    <keybind key="C-A-W-{LOWER_KEY}"><action name="ForEach"><query {SHELL_QUERY} omnipresent="yes"/><then><action name="ToggleOmnipresent"/>'
+                 f'<action name="ToggleAlwaysOnBottom"/></then></action></keybind>')
     lines.append(f'    <keybind key="C-A-W-{OMNI_KEY}"><action name="ToggleOmnipresent"/></keybind>')
     return "\n".join(lines)

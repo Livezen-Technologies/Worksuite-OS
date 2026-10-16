@@ -10,7 +10,7 @@ from dbus_next.aio import MessageBus
 
 from worksuite_bridge.access import AccessPolicy
 from worksuite_bridge.capture import OutputCapture
-from worksuite_bridge.model import ACTIVATED, NotFound, NotSupported, Output, WindowRegistry
+from worksuite_bridge.model import ACTIVATED, MINIMIZED, NotFound, NotSupported, Output, WindowRegistry
 from worksuite_bridge.service import BRIDGE_IFACE, BRIDGE_PATH, EVENTS_IFACE, EVENTS_PATH, Bridge
 from worksuite_bridge.workspace import (MAX_WORKSPACES, Desktops, LabwcConfig, LabwcKeys, WorkspaceTracker, clean_name,
                                         desktops_element, parse_desktops, refresh_rc, rewrite_rc)
@@ -206,18 +206,35 @@ class ControllerTest(unittest.IsolatedAsyncioTestCase):
     async def test_task_view_lifts_the_shell_and_puts_it_back(self):
         shell = self.r.reg.add("shell", "worksuite-shell", "WorkSuite")
         app = self.r.place({"a": 1})["a"]
+        self.r.reg.update("a", flags=ACTIVATED)
+        self.r.reg.update("a", flags=0)
         await self.r.d.set_shell_raised(shell.handle, True)
-        self.assertEqual(self.r.keys_sent, ["F23"])
-        self.assertEqual(self.r.activated[-1], shell.handle)   # the binding acts on the focused window
-        await self.r.d.set_shell_raised(shell.handle, True)    # already lifted: nothing sent (the toggle stays paired)
-        await self.r.d.set_shell_raised(shell.handle, False)
-        await self.r.d.set_shell_raised(shell.handle, False)
+        self.assertEqual(self.r.keys_sent, ["F23"])             # the binding finds the shell itself (ForEach)
+        self.assertEqual(self.r.activated[-1], shell.handle)    # then the shell gets the keyboard
+        await self.r.d.set_shell_raised(shell.handle, True)     # again: raised again (an app may have gone over it)
         self.assertEqual(self.r.keys_sent, ["F23", "F23"])
-        with self.assertRaises(NotFound):                      # only the shell's own windows
+        await self.r.d.set_shell_raised(shell.handle, False)
+        self.assertEqual(self.r.keys_sent, ["F23", "F23", "F22"])
+        self.assertEqual(self.r.activated[-1], app)              # the app used last gets the focus back
+        await self.r.d.set_shell_raised(shell.handle, False)    # idempotent bindings: sending again is harmless
+        self.assertEqual(self.r.keys_sent[-1], "F22")
+        with self.assertRaises(NotFound):                       # only the shell's own windows
             await self.r.d.set_shell_raised(app, True)
         await self.r.d.set_shell_raised(shell.handle, True)
-        self.r.reg.remove("shell")                             # a closed window forgets its state
+        self.r.reg.remove("shell")                              # a closed window forgets its state
         self.assertEqual(self.r.d.lifted, set())
+
+    def test_top_app_is_the_one_used_last_on_that_desktop(self):
+        h = self.r.place({"a": 1, "b": 1, "c": 2})
+        self.r.reg.add("shell", "worksuite-shell", "WorkSuite")
+        self.assertEqual(self.r.ws.top_app(1).handle, h["b"])   # none focused yet: the newest
+        self.r.reg.update("a", flags=ACTIVATED)
+        self.r.reg.update("a", flags=0)
+        self.assertEqual(self.r.ws.top_app(1).handle, h["a"])
+        self.assertEqual(self.r.ws.top_app(2).handle, h["c"])
+        self.r.reg.update("a", flags=MINIMIZED)
+        self.assertEqual(self.r.ws.top_app(1).handle, h["b"])
+        self.assertIsNone(self.r.ws.top_app(3))
 
     def test_focusing_the_shell_does_not_change_the_desktop(self):
         shell = self.r.reg.add("shell", "worksuite-shell", "WorkSuite")   # added on desktop 1, always on bottom
@@ -369,6 +386,9 @@ class DesktopsDbusTest(unittest.IsolatedAsyncioTestCase):
         r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "SetShellRaised", "sb", [shell.handle, True])
         self.assertEqual(r.message_type, MessageType.METHOD_RETURN, r.body)
         self.assertEqual(self.bridge.desktops.lifted, {shell.handle})
+        r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "SetShellRaised", "sb", [shell.handle, False])
+        self.assertEqual(r.message_type, MessageType.METHOD_RETURN, r.body)
+        self.assertEqual(self.bridge.desktops.lifted, set())
         r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "SetShellRaised", "sb", [w.handle, True])
         self.assertEqual(r.error_name, "lk.worksuite.WaylandBridge1.Error.NotFound")
 

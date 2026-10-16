@@ -232,9 +232,21 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   // The shell's window sits below every app (always on bottom, Labwc rc.xml). While something of its own is open over
   // them (launcher, a shell window such as Settings or Files, quick settings, notifications, power menu, the sign-out
   // overlay…) it is lifted over the apps, and put back below them once all of it is closed (electron/panelHost.ts).
+  // An app the person turned to (taskbar, launcher, a notification) takes the focus: the main process has put the shell
+  // below the apps, so its menus close and its windows (Files, Settings…) stay open behind the app until they are
+  // opened again from the taskbar or the launcher, which lifts the shell again (liftSeq: also when nothing changed here).
+  const [behind, setBehind] = useState(false)
+  const [liftSeq, setLiftSeq] = useState(0)
+  const openWin = (screen: Parameters<typeof onOpen>[0]) => { setBehind(false); setLiftSeq((n) => n + 1); onOpen(screen) }
+  useEffect(() => panel.onShellBehind?.(() => {
+    setLauncher(false); setA11yOpen(false); setAssistant(false); setQsOpen(false); setPowerOpen(false); setTrayOpen(false)
+    setFlyout(false); setWidgetPicker(false); setBehind(true)
+  }), [])
+  const hasWindow = Children.toArray(children).length > 0
+  useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
-    || flyout || widgetPicker || Children.toArray(children).length > 0
-  useEffect(() => { void panel.shellOnTop?.(shellOnTop) }, [shellOnTop])
+    || flyout || widgetPicker || (hasWindow && !behind)
+  useEffect(() => { void panel.shellOnTop?.(shellOnTop) }, [shellOnTop, liftSeq])
   useEffect(() => {
     if (!launcher) return
     let live = true
@@ -251,7 +263,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     setLauncher(false)
     const a = id === SETTINGS_TILE.id ? SETTINGS_TILE : allApps.find((x) => x.id === id)
     if (!a) return
-    if ('screen' in a.launch) onOpen(a.launch.screen)
+    if ('screen' in a.launch) openWin(a.launch.screen)
     else if ('office' in a.launch) void os.launchOffice(a.launch.office)
     else if ('worksuite' in a.launch) void os.launchWorkSuite(a.launch.worksuite)
     else void os.launchApp(a.launch.desktop)
@@ -262,7 +274,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const primaryOut = display?.layout.primary ?? null
   const onPrimary = useMemo(() => (primaryOut && display ? (ws: PanelWindow[]) => windowsOnOutput(ws, primaryOut, true, display.layout.outputs.filter((o) => o.enabled).map((o) => o.name)) : undefined), [primaryOut, display])
 
-  const openSettingsAt = (section: string) => { requestSettingsSection(section); onOpen('settings') }
+  const openSettingsAt = (section: string) => { requestSettingsSection(section); openWin('settings') }
   const monitorWallpaper = wallpaperFor(display, primaryOut, BG.desktop)
   const wallpaperOf = (n: number) => desktopWallpaper(desk.wallpapers, desk.ws, n) ?? monitorWallpaper
   const appLookup: AppLookup = (id) => {
@@ -361,7 +373,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
                   <div className="h-px shrink-0 bg-[rgba(127,178,255,0.1)]" />
                   <div className="flex items-center justify-between">
                     <h2 className="m-0 text-sm font-semibold">{t('launcher.recommended')}</h2>
-                    <button type="button" onClick={() => { setLauncher(false); onOpen('files') }} className="cursor-pointer text-xs text-[#7FB2FF] hover:text-[#B8D4FF]">{t('launcher.more')}</button>
+                    <button type="button" onClick={() => { setLauncher(false); openWin('files') }} className="cursor-pointer text-xs text-[#7FB2FF] hover:text-[#B8D4FF]">{t('launcher.more')}</button>
                   </div>
                   {recent.length ? (
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1">
@@ -401,7 +413,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
                 <span className="flex flex-col"><span className="text-[13px] font-semibold">{name}</span><span className="text-[11px] text-[#8FA3C8]">{device?.org_name ?? user}</span></span>
               </button>
               <span className="ml-auto flex gap-1.5">
-                {([['files', t('files.title'), () => { setLauncher(false); onOpen('files') }], ['settings', t('launcher.settings'), () => { setLauncher(false); onOpen('settings') }],
+                {([['files', t('files.title'), () => { setLauncher(false); openWin('files') }], ['settings', t('launcher.settings'), () => { setLauncher(false); openWin('settings') }],
                   ['lock', t('quick.lock'), () => { setLauncher(false); onLock() }], ['power', t('launcher.powerMenu'), () => { setLauncher(false); setPowerOpen(true) }]] as const).map(([k, label, run]) => (
                   <button key={k} type="button" aria-label={label} title={label} aria-haspopup={k === 'power' ? 'menu' : undefined} onClick={run}
                     className="flex size-[38px] cursor-pointer items-center justify-center rounded-[10px] bg-white/[0.05] hover:bg-white/[0.12]"><Icon d={[FOOT_ICONS[k]]} size={18} stroke="#C9D6EE" /></button>
@@ -416,7 +428,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
       {qsOpen && (
         <QuickPanel state={quick} refresh={refreshQuick} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} onClose={() => setQsOpen(false)}
-          onSettings={() => { setQsOpen(false); onOpen('settings') }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
+          onSettings={() => { setQsOpen(false); openWin('settings') }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
       )}
 
       {/* Taskbar (canvas G01/G02, "Centered" is the default style in Taskbar · styles): 52 px, edge-attached glass bar.
@@ -444,7 +456,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
         </div>
         <div data-testid="taskbar-end" className={`flex shrink-0 items-center justify-end gap-1.5 ${centered ? 'flex-[1_0_0]' : 'ms-auto'}`}>
           {managed && (
-            <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? t('panel.managedBy', { org: device.org_name }) : undefined}
+            <button type="button" onClick={() => openWin('settings')} title={device?.org_name ? t('panel.managedBy', { org: device.org_name }) : undefined}
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
           <TrayItems />

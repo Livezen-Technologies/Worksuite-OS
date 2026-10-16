@@ -16,7 +16,7 @@ from dbus_next.aio import MessageBus
 from dbus_next.errors import DBusError
 
 from .access import AccessPolicy
-from .model import OPERATIONS, AccessDenied, Backend, BridgeError, NotFound, NotSupported, Window, WindowRegistry
+from .model import ACTIVATED, OPERATIONS, AccessDenied, Backend, BridgeError, NotFound, NotSupported, Window, WindowRegistry
 from .capture import OutputCapture
 from .workspace import Desktops, LabwcConfig, LabwcKeys, WorkspaceTracker, clean_name
 
@@ -260,6 +260,10 @@ class Bridge:
         n = ws.check(int(m.body[0]))
         await asyncio.get_running_loop().run_in_executor(None, self.keys.go, n)  # type: ignore[union-attr]
         ws.event("goto", n)
+        # The app used last on that desktop gets the focus (Labwc leaves it on the shell when the shell had it), unless
+        # the shell is over the apps (Task View switching desktops keeps the keyboard).
+        if self.desktops is not None and not self.desktops.lifted and "activate" in self.backend.supported_operations():
+            self.desktops.focus_top_app(n)
         return "", []
 
     async def _move_to_workspace(self, m: Message) -> tuple[str, list[Any]]:
@@ -268,9 +272,13 @@ class Bridge:
         w = self.registry.get(handle)
         self._need("activate")
         # SendToDesktop acts on the focused window: focus it first, then send the bridge-only binding.
+        focused = next((x for x in self.registry.list() if x.flags & ACTIVATED), None)
         self.backend.activate(w.native, "")
         ws.moved(handle, n)
         await asyncio.get_running_loop().run_in_executor(None, self.keys.send_focused, n)  # type: ignore[union-attr]
+        # Give the focus back (Task View keeps the keyboard; the moved window is on another desktop now).
+        if focused is not None and focused.handle != handle and focused.handle in {x.handle for x in self.registry.list()}:
+            self.backend.activate(focused.native, "")
         return "", []
 
     async def _workspace_event(self, m: Message) -> tuple[str, list[Any]]:
@@ -345,6 +353,7 @@ class Bridge:
 
     async def _shell_raised(self, m: Message) -> tuple[str, list[Any]]:
         self._need("activate")
+        log.info("shell %s", "lifted over the apps" if m.body[1] else "back below the apps")
         await self._need_desktops().set_shell_raised(str(m.body[0]), bool(m.body[1]))
         return "", []
 

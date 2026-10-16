@@ -51,6 +51,8 @@ export interface PanelApi {
   /** Something of the shell's own is open over the apps (launcher, Settings…): lift its window over them while it is. */
   shellOnTop?(on: boolean): Promise<unknown>
   onTaskView?(cb: (o: TaskViewOpen) => void): () => void
+  /** An app window got the focus while the shell was over the apps; the shell is below them again. */
+  onShellBehind?(cb: () => void): () => void
 }
 
 /** Taskbar shows the windows of the current workspace; windows the bridge has not placed count as current. */

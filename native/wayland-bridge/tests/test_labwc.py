@@ -281,11 +281,20 @@ class ShellStackingTest(unittest.TestCase):
             subprocess.run(["wlrctl", "toplevel", "focus", "app_id:worksuite-shell"], env=self.env, check=False, timeout=10)
             time.sleep(0.5)
             self.wait_for(640, 360, self.RED)
-            self.bridge_key("F23")                           # Task View: the shell over the apps …
-            self.wait_for(640, 360, self.BLUE)
-            self.bridge_key("F2")                            # … on any desktop it switches to
-            self.wait_for(640, 360, self.BLUE)
-            self.bridge_key("F23")                           # closed: below the apps again
-            self.wait_for(640, 360, self.GREEN)
-            self.bridge_key("F1")
-            self.wait_for(640, 360, self.RED)
+            subprocess.run(["wlrctl", "toplevel", "focus", "app_id:ws-app"], env=self.env, check=False, timeout=10)
+            time.sleep(0.5)
+        # The lift and the lowering act on the shell's windows whatever has the focus (here the app: the old toggle on
+        # the focused window put the APP always on bottom), and both are idempotent.
+        self.bridge_key("F23")                               # launcher / Task View: the shell over the apps …
+        self.wait_for(640, 360, self.BLUE)
+        self.bridge_key("F23")                               # … lifting again keeps it there
+        self.wait_for(640, 360, self.BLUE)
+        self.bridge_key("F2")                                # … on any desktop it switches to
+        self.wait_for(640, 360, self.BLUE)
+        self.bridge_key("F22")                               # closed: below the apps again
+        self.wait_for(640, 360, self.GREEN)
+        self.bridge_key("F22")                               # lowering twice changes nothing
+        self.wait_for(640, 360, self.GREEN)
+        self.bridge_key("F1")
+        self.wait_for(640, 360, self.RED)
+        self.wait_for(10, 400, self.BLUE)

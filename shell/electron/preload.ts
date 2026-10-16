@@ -199,6 +199,7 @@ contextBridge.exposeInMainWorld('worksuitePanel', {
   taskViewState: (open: boolean) => ipcRenderer.invoke('ws:panelTaskView', open ? '1' : '0'),
   shellOnTop: (on: boolean) => ipcRenderer.invoke('ws:panelShellOnTop', on ? '1' : '0'),
   onTaskView: on('ws:taskView'),
+  onShellBehind: on('ws:shellBehind'),
 })
 
 // On-device AI assistant — see electron/ai.ts and services/ai. Answers stream back as onEvent.

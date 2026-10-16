@@ -1,6 +1,6 @@
 // Wires the panel client (electron/panel.ts) to IPC. Without a session bus or bridge the taskbar shows pinned apps only.
 import dbus from 'dbus-next'
-import { ACTIVATED_FLAG, MAX_DESKTOPS, PanelClient } from './panel'
+import { ACTIVATED_FLAG, MAX_DESKTOPS, PanelClient, type PanelWindow } from './panel'
 
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 
@@ -10,7 +10,7 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
     const bus = dbus.sessionBus()
     bus.on('error', () => { /* bus gone: keep the shell running */ })
     client = new PanelClient(bus as never, {
-      windows: (w) => send('ws:panelWindowsChanged', w),
+      windows: (w) => { send('ws:panelWindowsChanged', w); lift.windowsChanged(w) },
       tray: (t) => send('ws:panelTrayChanged', t),
       launcher: (a) => { if (a === 'taskview') void tv.open(); else send('ws:launcher', a) },
       outputs: outputsChanged,
@@ -23,10 +23,12 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
   }
   const c = client
   const none = { ok: false, error: 'bridge_unavailable' }
-  const lift = shellLift(c)
+  // An app got the focus while the shell was over the apps: the shell went back below; the renderer closes its menus.
+  const lift: ReturnType<typeof shellLift> = shellLift(c, () => send('ws:shellBehind', null))
   const tv = taskViewHost(c, send, lift)
   // Anything else of the shell's own open over the apps (launcher, Settings, Files, power menu…): see shellLift.
-  handle('ws:panelShellOnTop', (on) => { void lift.set('overlay', on === '1'); return true })
+  // Sent when the set of open things changes or a shell window is opened again: each "on" raises the shell again.
+  handle('ws:panelShellOnTop', (on) => { void lift.set('overlay', on === '1', true); return true })
   handle('ws:panelTaskView', (open) => {
     if (open === 'open') void tv.open(true)
     else tv.state(open === '1')
@@ -63,16 +65,24 @@ type TaskViewClient = LiftClient & Pick<PanelClient, 'windows' | 'workspaces' | 
 /** The shell's full-screen window is always on bottom (Labwc rc.xml), below every app. While something of the shell's
  *  own is open over the apps (Task View, the launcher, Settings, Files, the power menu…) it is lifted over them, on
  *  every desktop, and put back down once nothing is open, so it can never stay over the apps. Reasons are counted
- *  separately; requests are applied one at a time, the last state wins. */
-export function shellLift(c: LiftClient | null) {
+ *  separately; requests are applied one at a time, the last state wins.
+ *
+ *  Each request to show something raises the shell again, also when it is already lifted (the bridge's lift is
+ *  idempotent): an app may have gone over it in between. And when an app window gets the focus while the shell is up
+ *  (clicked in the taskbar, opened from the launcher, raised by a notification), the shell goes back below the apps at
+ *  once and `behind` tells the renderer, which closes its menus: nothing of the shell's stays "open" under an app. */
+export function shellLift(c: LiftClient | null, behind: () => void = () => undefined) {
   const reasons = new Set<string>()
   let lifted = ''          // the handle lifted now
+  let again = false        // raise again although lifted
   let busy: Promise<void> | null = null
+  let focusedApp: string | null = null
   async function apply() {
     for (;;) {
       const want = reasons.size > 0
-      if (want === !!lifted || !c) return
+      if (!c || !(want ? !lifted || again : !!lifted)) return
       if (want) {
+        again = false
         const own = c.shellWindow()
         if (!own) return
         const r = await c.setShellRaised(own.handle, true)
@@ -91,13 +101,27 @@ export function shellLift(c: LiftClient | null) {
     return busy
   }
   return {
-    set(reason: string, on: boolean): Promise<void> {
-      if (on) reasons.add(reason); else reasons.delete(reason)
+    /** raise: lift again although lifted (default: when this reason is new). */
+    set(reason: string, on: boolean, raise = !reasons.has(reason)): Promise<void> {
+      if (on) { reasons.add(reason); again ||= raise } else reasons.delete(reason)
       return kick()
+    },
+    /** The bridge's window list changed: an app window that newly has the focus puts the shell below the apps. */
+    windowsChanged(windows: PanelWindow[]) {
+      const app = windows.find((w) => w.flags & ACTIVATED_FLAG && !SHELL_IDS.has(w.appId.toLowerCase()))?.handle ?? ''
+      const before = focusedApp
+      focusedApp = app
+      // Task View moves and picks windows itself (the bridge focuses a window to move it) and closes itself.
+      if (before === null || !app || app === before || (!reasons.size && !lifted) || reasons.has('taskview')) return
+      reasons.clear()
+      again = false
+      void kick()
+      behind()
     },
     get lifted() { return lifted },
   }
 }
+const SHELL_IDS = new Set(['worksuite-shell', 'worksuite', 'electron'])
 
 /** Task View (Super+Tab, the taskbar button, three fingers up): the output is captured first, while the apps are still
  *  on screen, then the shell's window is lifted over them; closing Task View puts it back down, also when it closes

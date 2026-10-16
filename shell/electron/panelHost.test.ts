@@ -55,12 +55,14 @@ describe('the shell is lifted over the apps only while something of its own is o
   it('lifts once for several reasons and lowers when the last one closes', async () => {
     const c = client(), lift = shellLift(c as never)
     await lift.set('overlay', true)
-    await lift.set('taskview', true)
+    await lift.set('overlay', true, false)
     expect(c.setShellRaised.mock.calls).toEqual([['sh', true]])
+    await lift.set('taskview', true)                // something new opened: raised again (an app may be over it)
+    expect(c.setShellRaised.mock.calls).toEqual([['sh', true], ['sh', true]])
     await lift.set('overlay', false)
     expect(lift.lifted).toBe('sh')
     await lift.set('taskview', false)
-    expect(c.setShellRaised.mock.calls).toEqual([['sh', true], ['sh', false]])
+    expect(c.setShellRaised.mock.calls).toEqual([['sh', true], ['sh', true], ['sh', false]])
     expect(lift.lifted).toBe('')
   })
 
@@ -84,9 +86,44 @@ describe('the shell is lifted over the apps only while something of its own is o
     await tv.open()
     tv.state(true)
     tv.state(false)
-    await lift.set('overlay', true)
-    expect(c.setShellRaised.mock.calls).toEqual([['sh', true]])
+    await lift.set('overlay', true, false)
+    expect(c.setShellRaised.mock.calls).toEqual([['sh', true], ['sh', true]])   // Task View opening raised it again
     await lift.set('overlay', false)
+    expect(c.setShellRaised.mock.calls).toEqual([['sh', true], ['sh', true], ['sh', false]])
+  })
+
+  it('an app that gets the focus puts the shell below the apps and tells the renderer', async () => {
+    const c = client(), behind = vi.fn(), lift = shellLift(c as never, behind)
+    const w = (active: string) => [{ handle: 'app', appId: 'firefox', title: 'F', output: '', flags: active === 'app' ? 1 : 0 },
+      { handle: 'app2', appId: 'foot', title: 'T', output: '', flags: active === 'app2' ? 1 : 0 },
+      { handle: 'sh', appId: 'worksuite-shell', title: 'WorkSuite', output: '', flags: active === 'sh' ? 1 : 0 }]
+    lift.windowsChanged(w('app'))                     // the first list only sets the baseline
+    await lift.set('overlay', true)                    // the launcher opens over Firefox
+    lift.windowsChanged(w('app'))                     // (the shell's focus has not arrived yet: nothing happens)
+    expect(behind).not.toHaveBeenCalled()
+    lift.windowsChanged(w('sh'))
+    lift.windowsChanged(w('app'))                     // Firefox clicked in the taskbar
+    await new Promise((r) => setTimeout(r, 0))
+    expect(behind).toHaveBeenCalledTimes(1)
     expect(c.setShellRaised.mock.calls).toEqual([['sh', true], ['sh', false]])
+    expect(lift.lifted).toBe('')
+    lift.windowsChanged(w('app2'))                    // nothing lifted: focus changes between apps do nothing
+    expect(behind).toHaveBeenCalledTimes(1)
+    await lift.set('overlay', true)                    // Files opened again from the taskbar: lifted again
+    expect(c.setShellRaised.mock.calls.at(-1)).toEqual(['sh', true])
+  })
+})
+
+describe('Task View keeps the shell lifted while the bridge focuses windows to move them', () => {
+  it('ignores app focus while Task View is open', async () => {
+    const c = client(), behind = vi.fn(), lift = shellLift(c as never, behind)
+    const w = (active: string) => [{ handle: 'app', appId: 'firefox', title: 'F', output: '', flags: active === 'app' ? 1 : 0 },
+      { handle: 'sh', appId: 'worksuite-shell', title: 'WorkSuite', output: '', flags: active === 'sh' ? 1 : 0 }]
+    lift.windowsChanged(w('sh'))
+    await lift.set('taskview', true)
+    lift.windowsChanged(w('app'))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(behind).not.toHaveBeenCalled()
+    expect(lift.lifted).toBe('sh')
   })
 })
