@@ -74,7 +74,7 @@ jobs:
       HAS_DESKTOP_SOURCE: ${{ secrets.WORKSUITE_DESKTOP_TOKEN != '' || secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_DESKTOP_URL != '' }}
     steps:
       - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gh live-build debootstrap debhelper dpkg-dev fakeroot build-essential dbus-daemon ${{ matrix.qemu }} xorriso squashfs-tools mtools dosfstools
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -194,7 +194,7 @@ jobs:
       - if: env.HAS_TOKEN == 'true'
         run: apt-get update && apt-get install -y --no-install-recommends ca-certificates git gnupg apt-utils dpkg-dev xz-utils nodejs
       - if: env.HAS_TOKEN == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - if: env.HAS_TOKEN == 'true'
         uses: actions/download-artifact@v4
         with:
