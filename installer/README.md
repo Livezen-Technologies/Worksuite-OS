@@ -19,3 +19,12 @@ Two WorkSuite modules, installed next to the stock ones in `/usr/lib/<multiarch>
   Crockford base32 characters), adds it with `cryptsetup luksAddKey` to every LUKS partition the partition module
   created, unlocking with the user's passphrase; both secrets go through 0600 files on /run, never argv. The key is
   never written to the target disk. Tests: `python3 -m unittest discover -s modules/worksuiterecovery/tests`.
+
+## Disk layout and the passphrase prompt
+
+Encrypted installs get the ESP, an unencrypted `/boot` (ext4, 1 GiB: kernel and initramfs only) and the root in
+LUKS2 (argon2id; the recovery key in its own key slot). GRUB reads `/boot` without asking (`GRUB_ENABLE_CRYPTODISK=n`,
+menu hidden), and the initramfs asks for the passphrase once, in the WorkSuite splash's password field: no text
+console at any point. An unencrypted `/boot` is the Debian and Ubuntu default; Secure Boot with signed kernels covers
+its integrity.
+

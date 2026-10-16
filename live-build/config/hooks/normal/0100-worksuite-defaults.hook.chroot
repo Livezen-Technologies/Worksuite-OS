@@ -30,6 +30,11 @@ grep -q pam_faillock.so /etc/pam.d/common-auth || { echo "pam_faillock is not en
 grep -q pam_gnome_keyring.so /etc/pam.d/common-auth && grep -q pam_gnome_keyring.so /etc/pam.d/common-session || { echo "pam_gnome_keyring is not enabled" >&2; exit 1; }
 # Boot splash: the WorkSuite Plymouth theme, with the DRM/framebuffer drivers in the initramfs (WSOS-BOOT splash).
 plymouth-set-default-theme worksuite
+# No "Loading Linux …" / "Loading initial ramdisk …" text from GRUB before the splash.
+if [ -f /etc/grub.d/10_linux ]; then
+  sed -i '/echo.*\$(echo "\$message" | grub_quote)/d' /etc/grub.d/10_linux
+  ! grep -q 'echo "\$message" | grub_quote' /etc/grub.d/10_linux || { echo "GRUB loading messages still in 10_linux" >&2; exit 1; }
+fi
 # The splash from the first frame, and kept until the greeter takes the screen: no console text in between.
 mkdir -p /etc/plymouth
 printf '[Daemon]\nTheme=worksuite\nShowDelay=0\nDeviceTimeout=8\n' > /etc/plymouth/plymouthd.conf

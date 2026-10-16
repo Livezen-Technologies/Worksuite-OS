@@ -601,6 +601,10 @@
       <translation>EFI පද්ධතිය</translation>
     </message>
     <message>
+      <source>Startup files</source>
+      <translation>ආරම්භක ගොනු</translation>
+    </message>
+    <message>
       <source>STEP 2 · DISK</source>
       <translation>පියවර 2 · තැටිය</translation>
     </message>

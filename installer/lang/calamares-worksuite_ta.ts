@@ -601,6 +601,10 @@
       <translation>EFI முறைமை</translation>
     </message>
     <message>
+      <source>Startup files</source>
+      <translation>தொடக்கக் கோப்புகள்</translation>
+    </message>
+    <message>
       <source>STEP 2 · DISK</source>
       <translation>படி 2 · வட்டு</translation>
     </message>

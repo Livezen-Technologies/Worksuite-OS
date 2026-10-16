@@ -320,6 +320,12 @@ segmentsOf( QAbstractItemModel* model, bool after )
             s.kind = QStringLiteral( "efi" );
             s.text = tr( "EFI system" ) + QStringLiteral( " · " ) + WsStyle::sizeText( s.size ) + QStringLiteral( " · FAT32" );
         }
+        else if ( after && mount == QLatin1String( "/boot" ) )
+        {
+            // Unencrypted /boot of an encrypted install (partition.conf): kernel and initramfs only.
+            s.kind = QStringLiteral( "other" );
+            s.text = tr( "Startup files" ) + QStringLiteral( " · " ) + WsStyle::sizeText( s.size ) + QStringLiteral( " · ext4" );
+        }
         else if ( after && mount == QLatin1String( "/" ) )
         {
             s.kind = QStringLiteral( "root" );

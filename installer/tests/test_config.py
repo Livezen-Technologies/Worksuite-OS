@@ -140,6 +140,9 @@ class BootSplashTest(unittest.TestCase):
         for quiet in ("loglevel=3", "systemd.show_status=false", "rd.udev.log_level=3", "vt.global_cursor_default=0"):
             self.assertIn(quiet, grub)
         self.assertIn("GRUB_TIMEOUT_STYLE=hidden", grub)
+        self.assertIn("GRUB_TIMEOUT=0", grub)
+        self.assertIn("GRUB_ENABLE_CRYPTODISK=n", grub)
+        self.assertIn("GRUB_TERMINAL_OUTPUT=gfxterm", grub)
         self.assertIn("GRUB_GFXPAYLOAD_LINUX=keep", grub)
         self.assertEqual(load(MODULES / "grubcfg.conf")["kernel_params"], ["quiet"])
 
@@ -219,3 +222,15 @@ class PageIndexTest(unittest.TestCase):
             m = re.search(r"^\s*stepIndex: (\d+)", qml.read_text(), re.M)
             if m:
                 self.assertEqual(shown.index(qml.stem), int(m.group(1)), qml.name)
+
+
+class BootPartitionTest(unittest.TestCase):
+    def test_boot_is_unencrypted_root_in_luks2(self):
+        conf = load(ROOT / "modules" / "partition.conf")
+        self.assertEqual(conf["luksGeneration"], "luks2")
+        layout = {p["mountPoint"]: p for p in conf["partitionLayout"]}
+        self.assertTrue(layout["/boot"]["noEncrypt"])
+        self.assertEqual(layout["/boot"]["filesystem"], "ext4")
+        self.assertFalse(layout["/"].get("noEncrypt", False))
+        hook = (ROOT.parent / "live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot").read_text()
+        self.assertIn("/etc/grub.d/10_linux", hook)
