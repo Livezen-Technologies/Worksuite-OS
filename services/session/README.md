@@ -14,6 +14,10 @@ Session file, launcher and systemd user units (SRS §4, WSOS-SES-001…006).
 | `pam/worksuite-faillock*`, `pam/worksuite-offline-access` | `/usr/share/pam-configs/` (enabled by `pam-auth-update` in postinst) |
 | `pam/faillock.conf` | `/usr/share/worksuite/`, copied to `/etc/worksuite/faillock.conf` when missing |
 | `tmpfiles/worksuite-session.conf` | `/usr/lib/tmpfiles.d/` |
+| `kiosk/worksuite-kiosk-{session,start,ctl,apply,signin,exit}` | `/usr/lib/worksuite/` (kiosk mode) |
+| `kiosk/worksuite_kiosk.py` | `/usr/lib/worksuite/kiosk/` |
+| `kiosk/polkit/lk.worksuite.kiosk.policy` | `/usr/share/polkit-1/actions/` |
+| `pam/worksuite-kiosk-signin` | `/usr/share/pam-configs/` |
 
 Flow: greeter → `worksuite-session` (clears stale env, runs Labwc) → Labwc `autostart` → `worksuite-session --ready`
 imports `WAYLAND_DISPLAY`, `DISPLAY` (if XWayland), `XDG_CURRENT_DESKTOP=WorkSuite:wlroots` into systemd and the
@@ -47,3 +51,17 @@ sign-ins (WSOS-AUTH-004): pam_faillock in common-auth/common-account with `conf=
 (WSOS-AUTH-003): pam_nologin refuses sign-in while `/etc/worksuite/offline-access-expired` exists (device agent).
 
 Tests: `sh tests/session/session-test.sh` (stubbed gtklock, swayidle, systemctl, zenity, gtkgreet).
+
+## Kiosk mode (WSOS-AUTH-002, SRS §2.3)
+
+Set by the admin in the console (policy `kiosk`, per device). The device agent writes `/etc/worksuite/kiosk.json`,
+`/etc/worksuite/kiosk/session.env`, the locked Labwc config `/etc/worksuite/kiosk/labwc/` and the 0600 exit-PIN
+verifier, then runs `worksuite-kiosk-apply enable USER` through systemd-run: locked kiosk account, greetd autologin
+(`worksuite-autologin --kiosk`), no gettys on other VTs, Ctrl+Alt+Del masked. At sign-in `worksuite-session` hands the
+kiosk account to `worksuite-kiosk-session` (Labwc with only the exit binding, Ctrl+Alt+Shift+K; XKB `srvrkeys:none`;
+app data wiped at start and end) → `worksuite-kiosk-start` (polkit agent, on-screen keyboard hook `worksuite-osk`,
+swayidle idle reset, the kiosk app `shell/dist-electron/kiosk.cjs` restarted when it exits). Exit: Ctrl+Alt+Shift+K
+or five taps top-left → exit prompt → `pkexec worksuite-kiosk-exit --pin` (PIN on stdin, verifier, 5 tries per
+15 min) or `--admin` (polkit auth_admin) → the kiosk session ends and the greeter shows; `worksuite-kiosk-signin`
+(PAM, greetd only) lets just the kiosk account and administrators sign in there. Tests: `tests/session/kiosk-test.sh`,
+`python3 -m unittest discover -s services/session/kiosk -t services/session/kiosk`.

@@ -16,6 +16,9 @@ export interface Policy {
   /** WSOS-AUTH-004: pam_faillock deny (failed sign-ins before lockout) and unlock_time (0 = until an admin resets). */
   login_failures_max?: number;
   login_lockout_s?: number;
+  /** Device PIN sign-in: false = off (verify and set refused by worksuite-signin); minimum PIN length 4–12. */
+  allow_pin?: boolean;
+  pin_min_length?: number;
   app_allowlist?: string[];
   approved_remotes?: string[];
   /** WSOS-WIPE-006 (P2): local WorkSuite data wipe after this many days without a policy check-in. */

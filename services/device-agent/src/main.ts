@@ -2,6 +2,7 @@
 //   worksuite-device-agent                      run the daemon (systemd)
 //   worksuite-device-agent enroll --server URL  enrollment token on stdin (never on the command line); polkit via pkexec
 //   worksuite-device-agent status | refresh
+import { publicPolicy } from './kiosk.ts';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { chmodSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
@@ -33,7 +34,7 @@ async function daemon() {
 
   // /run is empty after boot: republish what user services and Settings read.
   host.publishCredential(state.state.enrolled ? state.state.credential ?? null : null);
-  host.publishPolicy(state.state.enrolled ? state.state.policy ?? null : null);
+  host.publishPolicy(state.state.enrolled && state.state.policy ? publicPolicy(state.state.policy) : null);
   agent.publishStatus();
   // Policy settings are re-applied at every start, so a local edit or a missed change does not persist.
   void agent.enforce();

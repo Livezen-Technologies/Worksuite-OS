@@ -25,7 +25,7 @@ ProtectSystem=strict
 ReadWritePaths=/var/lib/worksuite-device-agent /run/worksuite-device-agent /var/log/worksuite /home
 # Managed WireGuard VPN keyfile (WSOS-INT-001); "-" = fine if NetworkManager isn't installed.
 ReadWritePaths=-/etc/NetworkManager/system-connections
-# Policy enforcement (src/enforce.ts ENFORCED_PATHS): lock/faillock/offline files, USB storage modprobe and udev rules.
+# Policy enforcement (src/enforce.ts ENFORCED_PATHS): lock/faillock/offline files (and signin-policy.conf), USB storage modprobe and udev rules.
 # test/unit.test.ts checks every path the agent writes is covered here and in the AppArmor profile.
 ConfigurationDirectory=worksuite
 ConfigurationDirectoryMode=0755

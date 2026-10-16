@@ -1,0 +1,6 @@
+Name: WorkSuite: after a sign-in as root (greeter, polkit), count wrong PINs from zero again (with worksuite-signin-pin)
+Default: no
+Priority: 0
+Auth-Type: Additional
+Auth-Final:
+	optional	pam_exec.so quiet /usr/lib/worksuite/worksuite-signin pam-reset

@@ -156,11 +156,14 @@ test('policy: validated, versioned, signed, and active devices are nudged', asyn
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { lock_timeout_max_s: 30 } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { login_failures_max: 1 } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { bluetooth: 'off' } } })).status, 400);
-  const r = await call('PUT', 'policy', { cookie: alice, body: { policy: { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00', offline_access_days: null, lock_timeout_max_s: 600, login_failures_max: 5, login_lockout_s: 900 } } });
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { allow_pin: 'yes' } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { pin_min_length: 3 } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { pin_min_length: 13 } } })).status, 400);
+  const r = await call('PUT', 'policy', { cookie: alice, body: { policy: { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00', offline_access_days: null, lock_timeout_max_s: 600, login_failures_max: 5, login_lockout_s: 900, allow_pin: false, pin_min_length: 8 } } });
   assert.equal(r.status, 200);
   assert.ok(r.body.devices_notified >= 1);
   const p = await call('GET', 'policy', { cookie: alice });
-  assert.deepEqual(p.body.policy, { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00', lock_timeout_max_s: 600, login_failures_max: 5, login_lockout_s: 900 });
+  assert.deepEqual(p.body.policy, { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00', lock_timeout_max_s: 600, login_failures_max: 5, login_lockout_s: 900, allow_pin: false, pin_min_length: 8 });
 });
 
 test('disabling a user ends their tokens; admins cannot disable themselves', async () => {

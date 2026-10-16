@@ -59,6 +59,9 @@ gir1.2-gtk-4.0
 pcscd
 opensc
 libpam-pkcs11
+# Device sign-in with a FIDO2 security key (pam_u2f, pamu2fcfg; Settings > Users > Security key)
+libpam-u2f
+pamu2fcfg
 # Archives in Files (shell/electron/archives.ts): 7zip for zip and 7z (AES-256); Debian's 7zip has no RAR codec
 # (non-free), so RAR is read by libarchive (bsdtar); tar with gzip, xz, bzip2 and zstd; zip/unzip for scripts.
 7zip

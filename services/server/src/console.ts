@@ -10,6 +10,7 @@ import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { checkPassword } from './oauth.ts';
 import { approvalsNeeded, checkApproval, requirePermission } from './approvals.ts';
 import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
+import { normalizeKiosk, redactKiosk, type KioskPolicy } from './kiosk.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
 const SESSION_TTL = 8 * 3_600_000;
@@ -48,6 +49,9 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   bluetooth: (v) => typeof v === 'boolean',
   login_failures_max: (v) => Number.isInteger(v) && (v as number) >= 3 && (v as number) <= 20,
   login_lockout_s: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 86_400,
+  // Device PIN sign-in (Settings > Users): false turns it off on the device; minimum digits 4–12.
+  allow_pin: (v) => typeof v === 'boolean',
+  pin_min_length: (v) => Number.isInteger(v) && (v as number) >= 4 && (v as number) <= 12,
   app_allowlist: (v) => Array.isArray(v) && v.length <= 1000 && v.every((x) => typeof x === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(x)),
   approved_remotes: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && x.length <= 200),
   offline_wipe_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 365,
@@ -65,11 +69,13 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   user_vpn: (v) => v === 'allow' || v === 'block',
 };
 
-export function validatePolicy(body: unknown): Record<string, unknown> {
+export function validatePolicy(body: unknown, current?: Record<string, unknown> | null): Record<string, unknown> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid('policy', 'must be an object');
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(body)) {
     if (v === null || v === '' || k === 'version' || k === 'signature') continue;   // cleared fields are omitted
+    // Kiosk mode: nested, and its exit PIN becomes a verifier (src/kiosk.ts).
+    if (k === 'kiosk') { out[k] = normalizeKiosk(v, current?.kiosk as KioskPolicy | undefined); continue; }
     const check = POLICY_FIELDS[k];
     if (!check) throw invalid(k, 'unknown policy field');
     if (!check(v)) throw invalid(k, 'invalid value');
@@ -185,13 +191,16 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const d = db.prepare('SELECT id, hostname, arch, tpm_backed, revoked, enrolled_at, last_seen, heartbeat, ownership, wiped_at FROM devices WHERE id = ?').get(ctx.params.id) as Record<string, unknown>;
     const commands = (db.prepare('SELECT id, envelope, state, reason, updated FROM commands WHERE device_id = ? ORDER BY rowid DESC LIMIT 50').all(ctx.params.id) as { id: string; envelope: string; state: string; reason: string | null; updated: number }[])
       .map((c) => { const e = json<{ command: string; issued_at: string; expires_at: string }>(c.envelope); return { id: c.id, command: e.command, issued_at: e.issued_at, expires_at: e.expires_at, state: c.state, reason: c.reason, updated: c.updated, observed: observedCommand(c.state, e.expires_at, Date.now()) }; });
-    const requestedPolicy = (db.prepare('SELECT version FROM policies WHERE org_id = ?').get(a.org_id) as { version: number } | undefined)?.version ?? null;
+    const policyRow = db.prepare('SELECT version, body FROM policies WHERE org_id = ?').get(a.org_id) as { version: number; body: string } | undefined;
+    const requestedPolicy = policyRow?.version ?? null;
+    const kiosk = json<{ kiosk?: KioskPolicy }>(policyRow?.body ?? null)?.kiosk;
     const inv = db.prepare('SELECT body, at FROM inventory WHERE device_id = ?').get(ctx.params.id) as { body: string; at: number } | undefined;
     const invBody = json<{ hardware?: unknown; software?: unknown[] }>(inv?.body ?? null);
     const updates = (db.prepare('SELECT body, at FROM update_results WHERE device_id = ? ORDER BY id DESC LIMIT 20').all(ctx.params.id) as { body: string; at: number }[])
       .map((u) => ({ ...json<Record<string, unknown>>(u.body), at: u.at }));
     send(ctx, 200, {
       ...d, tpm_backed: !!d.tpm_backed, revoked: !!d.revoked, heartbeat: json(d.heartbeat as string | null), commands, updates,
+      kiosk: kiosk?.enabled && kiosk.devices?.includes(ctx.params.id) ? { user: kiosk.user, app: kiosk.app } : null,
       policy: observedPolicy(requestedPolicy, json<{ policy_version?: unknown }>(d.heartbeat as string | null)?.policy_version),
       inventory: inv ? { at: inv.at, hardware: invBody?.hardware ?? null, software_count: invBody?.software?.length ?? 0 } : null,
       break_glass_escrowed: !!db.prepare('SELECT 1 FROM break_glass WHERE device_id = ?').get(ctx.params.id),
@@ -350,11 +359,14 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
   r.on('GET', '/admin/api/policy', (ctx) => {
     const a = admin(ctx);
     const row = db.prepare('SELECT version, body FROM policies WHERE org_id = ?').get(a.org_id) as { version: number; body: string } | undefined;
-    send(ctx, 200, { version: row?.version ?? 0, policy: json(row?.body ?? null) ?? {} });
+    const policy = json<Record<string, unknown>>(row?.body ?? null) ?? {};
+    if (policy.kiosk) policy.kiosk = redactKiosk(policy.kiosk as KioskPolicy);
+    send(ctx, 200, { version: row?.version ?? 0, policy });
   });
   r.on('PUT', '/admin/api/policy', async (ctx) => {
     const a = admin(ctx);
-    const p = validatePolicy((await body(ctx)).policy);
+    const cur = db.prepare('SELECT body FROM policies WHERE org_id = ?').get(a.org_id) as { body: string } | undefined;
+    const p = validatePolicy((await body(ctx)).policy, json(cur?.body ?? null));
     const version = setPolicy(db, a.org_id, p);
     // Devices pick it up on their hourly refresh; nudge the active ones now.
     const ids = db.prepare('SELECT id FROM devices WHERE org_id = ? AND revoked = 0').all(a.org_id) as { id: string }[];

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Set up a passkey</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button:focus-visible,input:focus-visible{outline:2px solid #18D4F0;outline-offset:2px} @keyframes pulse{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.5);opacity:0}}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(ellipse 70% 60% at 30% 10%, #1A3F8A 0%, #0A1A3D 55%, #050E24 100%); display: flex; align-items: center; justify-content: center; position: relative">
+<div style="width: 560px; box-sizing: border-box; padding: 32px 36px; border-radius: 22px; background: rgba(14,32,72,0.72); border: 1px solid rgba(127,178,255,0.18); box-shadow: 0 30px 80px rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 20px; width: 640px">
+<div style="display: flex; align-items: center; gap: 14px"><span style="width: 48px; height: 48px; border-radius: 14px; background: rgba(31,107,255,0.2); display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM10.5 9.5L20 19M16 15l2-2M18 17l2-2"></path></svg></span><div style="display: flex; flex-direction: column; gap: 3px"><h1 style="margin: 0; font-size: 22px; font-weight: 700">{{title}}</h1><span style="font-size: 13px; color: #8FA3C8">alex@worksuitecloud.com · WorkSuite OS and WorkSuite Cloud</span></div></div>
+<div style="display: flex; gap: 6px"><sc-for list="{{prog}}" as="p" hint-placeholder-count="3"><span style="flex: 1; height: 4px; border-radius: 2px; background: {{p}}"></span></sc-for></div>
+<sc-if value="{{s0}}" hint-placeholder-val="{{true}}">
+<div role="radiogroup" aria-label="Where to save the passkey" style="display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{opts}}" as="o" hint-placeholder-count="3"><button role="radio" aria-checked="{{o.on}}" onClick="{{o.pick}}" style="all: unset; display: flex; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 12px; border: 1px solid {{o.bd}}; background: {{o.bg}}; cursor: pointer"><span style="width: 18px; height: 18px; border-radius: 50%; border: 2px solid {{o.bd}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{o.dot}}"></span></span><span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">{{o.name}}</span><span style="font-size: 12px; color: #8FA3C8">{{o.desc}}</span></span><span style="font-size: 11px; color: #5FD39A">{{o.tag}}</span></button></sc-for>
+</div>
+</sc-if>
+<sc-if value="{{s1}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; gap: 28px; align-items: center; padding: 12px 4px">
+<div style="position: relative; width: 140px; height: 140px; flex: none; display: flex; align-items: center; justify-content: center"><span style="position: absolute; inset: 20px; border-radius: 50%; border: 2px solid #18D4F0; animation: pulse 1.6s ease-out infinite"></span><span style="width: 96px; height: 96px; border-radius: 50%; background: rgba(24,212,240,0.14); display: flex; align-items: center; justify-content: center"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="{{waitIcon}}"></path></svg></span></div>
+<div style="display: flex; flex-direction: column; gap: 8px"><span style="font-size: 18px; font-weight: 600">{{waitTitle}}</span><span style="font-size: 14px; color: #C9D6EE; line-height: 1.5">{{waitDesc}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8">Waiting for authenticator…</span></div>
+</div>
+</sc-if>
+<sc-if value="{{s2}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 12px; background: rgba(95,211,154,0.1); border: 1px solid rgba(95,211,154,0.4)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5FD39A" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg><span style="font-size: 14px">Passkey saved to <strong>{{where}}</strong></span></div>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #C9D6EE">Name<input value="{{keyName}}" style="height: 42px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit"></label>
+<span style="font-size: 12px; color: #8FA3C8">Next time, tap “Passkey” on the lock screen or WorkSuite Cloud sign-in. No password to type.</span>
+</div>
+</sc-if>
+<div style="display: flex; justify-content: space-between; padding-top: 16px; border-top: 1px solid rgba(127,178,255,0.12)">
+<button onClick="{{back}}" style="all: unset; padding: 11px 18px; font-size: 14px; color: #8FA3C8; cursor: pointer">{{backLabel}}</button>
+<button onClick="{{next}}" style="all: unset; padding: 11px 26px; border-radius: 10px; font-size: 14px; font-weight: 600; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">{{nextLabel}}</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p){super(p);this.state={step:0,pick:0};}
+  renderVals(){
+    const {step,pick}=this.state;
+    const O=[['This computer','Stored in the TPM, unlocked with your PIN','Recommended','Use your PIN to confirm','Enter the PIN for this computer when asked.','M5 10h14v10H5zM8 10V7a4 4 0 0 1 8 0v3','This computer (TPM)'],
+             ['Security key','YubiKey or any FIDO2 key over USB or NFC','','Touch your security key','Insert the key, then touch the gold contact when it blinks.','M9 3h6v8H9zM7 11h10v10H7zM12 15v2','Security key'],
+             ['Phone or tablet','Scan a QR code with a phone that supports passkeys','','Scan with your phone','Open the camera, scan the code and approve with your phone’s lock.','M7 3h10v18H7zM11 18h2','your phone']];
+    const o=O[pick];
+    return {s0:step===0,s1:step===1,s2:step===2,
+      title:['Create a passkey','Confirm it’s you','Passkey created'][step],
+      prog:[0,1,2].map(i=>i<=step?'#1F6BFF':'rgba(127,178,255,0.15)'),
+      opts:O.map((x,i)=>({name:x[0],desc:x[1],tag:x[2],on:i===pick,bd:i===pick?'#1F6BFF':'rgba(127,178,255,0.18)',bg:i===pick?'rgba(31,107,255,0.12)':'transparent',dot:i===pick?'#1F6BFF':'transparent',pick:()=>this.setState({pick:i})})),
+      waitTitle:o[3],waitDesc:o[4],waitIcon:o[5],where:o[6],keyName:'Alex’s '+(pick===0?'WorkSuite laptop':pick===1?'security key':'phone'),
+      backLabel:step===0?'Cancel':'Back', nextLabel:['Continue','Simulate approval','Done'][step],
+      back:()=>this.setState({step:Math.max(0,step-1)}), next:()=>this.setState({step:step===2?0:step+1})};
+  }
+}
+</script>
+</body>
+</html>

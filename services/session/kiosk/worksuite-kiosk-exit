@@ -1,0 +1,71 @@
+#!/usr/bin/python3 -I
+"""worksuite-kiosk-exit --pin | --admin   (root, through pkexec from the kiosk app)
+
+Leaves kiosk mode for this boot: ends the kiosk account's session so greetd shows the greeter, where (in kiosk mode)
+only administrators can sign in. The next boot starts the kiosk again.
+  --pin    polkit allows the active session without a password (lk.worksuite.kiosk.exit-pin); the PIN is read from
+           stdin and checked against the policy's verifier, rate limited.
+  --admin  polkit asks for an administrator's password first (lk.worksuite.kiosk.exit-admin, auth_admin, not kept).
+Exit codes: 0 done, 2 usage/not a kiosk session, 3 wrong PIN, 4 too many attempts, 5 PIN not allowed by policy.
+"""
+import os
+import pwd
+import subprocess
+import sys
+
+sys.path.insert(0, "/usr/lib/worksuite/kiosk")
+import worksuite_kiosk as k  # noqa: E402
+
+ENV = os.environ.get("WORKSUITE_KIOSK_ENV", "/etc/worksuite/kiosk/session.env")
+VERIFIER = os.environ.get("WORKSUITE_KIOSK_VERIFIER", "/etc/worksuite/kiosk-exit.verifier")
+THROTTLE = os.environ.get("WORKSUITE_KIOSK_THROTTLE", "/var/lib/worksuite-kiosk/exit-failures.json")
+
+
+def log(msg):
+    subprocess.run(["logger", "-p", "authpriv.notice", "-t", "worksuite-kiosk", "--", msg], check=False)
+
+
+def main(argv):
+    mode = argv[1] if len(argv) == 2 else ""
+    if mode not in ("--pin", "--admin"):
+        print("usage: worksuite-kiosk-exit --pin | --admin", file=sys.stderr)
+        return 2
+    env = k.read_env(ENV)
+    try:
+        caller = pwd.getpwuid(int(os.environ["PKEXEC_UID"]))
+    except (KeyError, ValueError):
+        return 2
+    if not env.get("KIOSK_USER") or caller.pw_name != env["KIOSK_USER"]:
+        print("worksuite-kiosk-exit: not the kiosk session", file=sys.stderr)
+        return 2
+    if mode == "--pin":
+        if env.get("KIOSK_EXIT_PIN") != "1":
+            return 5
+        throttle = k.Throttle(THROTTLE)
+        if throttle.locked():
+            log("kiosk exit PIN refused: too many attempts")
+            return 4
+        pin = sys.stdin.readline(64).strip()
+        try:
+            with open(VERIFIER) as f:
+                verifier = f.read()
+        except OSError:
+            return 5
+        if not k.verify_pin(pin, verifier):
+            throttle.fail()
+            log("kiosk exit: wrong PIN")
+            return 3
+        throttle.clear()
+    log("kiosk exit by %s" % ("exit PIN" if mode == "--pin" else "administrator"))
+    run = "/run/user/%d/worksuite-kiosk" % caller.pw_uid
+    try:
+        with open(os.path.join(run, "exiting"), "w"):
+            pass   # the kiosk app supervisor stops restarting the app
+    except OSError:
+        pass
+    subprocess.run(["loginctl", "terminate-user", str(caller.pw_uid)], check=False)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

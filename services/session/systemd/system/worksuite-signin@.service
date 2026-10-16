@@ -1,0 +1,27 @@
+[Unit]
+Description=WorkSuite PIN check (one connection)
+CollectMode=inactive-or-failed
+
+[Service]
+ExecStart=/usr/lib/worksuite/worksuite-signin serve
+StandardInput=socket
+StandardOutput=null
+StandardError=journal
+# The PIN verifiers and the public method index; the one-shot "signed in with a PIN" markers in /run.
+StateDirectory=worksuite/signin
+StateDirectoryMode=0755
+RuntimeDirectory=worksuite-signin
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallFilter=@system-service
+MemoryMax=256M

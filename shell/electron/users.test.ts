@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { localUsers, parseUsers } from './users'
+import { checkOwnPassword, localUsers, parseUsers } from './users'
 
 describe('local users', () => {
   it('keeps people and marks admins', () => {
@@ -11,5 +11,25 @@ describe('local users', () => {
   })
   it('is unavailable without /etc/passwd', () => {
     expect(localUsers('/nonexistent-root')).toEqual({ available: false, reason: 'service_unavailable' })
+  })
+})
+
+describe('checkOwnPassword', () => {
+  const fake = (code: number, seen: Buffer[]) => (() => {
+    const { EventEmitter } = require('node:events') as typeof import('node:events')
+    const p: any = new EventEmitter()
+    p.stdin = { on() {}, end(b: Buffer) { seen.push(b); setImmediate(() => p.emit('close', code)) } }
+    return p
+  })
+  it('passes the password on stdin, NUL-terminated, and accepts exit 0', async () => {
+    const seen: Buffer[] = []
+    const me = require('node:os').userInfo().username
+    expect(await checkOwnPassword(me, 'pw', '/x', fake(0, seen) as any)).toEqual({ ok: true })
+    expect(seen[0].toString()).toBe('pw\0')
+  })
+  it('rejects a wrong password and another account', async () => {
+    const me = require('node:os').userInfo().username
+    expect((await checkOwnPassword(me, 'pw', '/x', fake(7, []) as any)).ok).toBe(false)
+    expect((await checkOwnPassword('someone-else-xyz', 'pw', '/x', fake(0, []) as any)).ok).toBe(false)
   })
 })

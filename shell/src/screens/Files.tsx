@@ -1,6 +1,7 @@
 // Files (§7.2, boards FMSide and FM1–FM6): real folders through the Electron bridge, WorkSuite Drive with sync states
 // from the sync service, Recent (recently-used.xbel), Starred, freedesktop.org Trash, search, copy/move jobs, and
 // archives: Compress…, Extract here / to a folder, and Open archive (read-only browsing, files/archive.tsx).
+import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { formatBytes, os, type FileEntry, type FileHit, type FileJob, type FilePlaces, type TrashItem } from '../lib/os'
@@ -405,12 +406,10 @@ function JobPanel({ job, onClose }: { job: FileJob; onClose: () => void }) {
       <div className="flex justify-between gap-2 text-[13px]">
         <span className="truncate font-semibold" title={title}>{title}</span>
         <span className="shrink-0" style={{ color: job.state === 'failed' ? '#FF8A7A' : C.muted }}>
-          {paused ? t('files.job.paused') : job.state === 'done' ? t('files.job.done') : job.state === 'cancelled' ? t('files.job.cancelled') : `${pct}%`}
+          {paused ? t('files.job.paused') : job.state === 'done' ? t('files.job.done') : job.state === 'cancelled' ? t('files.job.cancelled') : <CountUp value={pct} />}
         </span>
       </div>
-      <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={title} className="h-[5px] overflow-hidden rounded-[3px]" style={{ background: 'rgba(127,178,255,0.15)' }}>
-        <div className="h-full transition-[width]" style={{ width: `${pct}%`, background: paused ? '#FFB98A' : C.blue }} />
-      </div>
+      <AnimatedProgress value={archive && !job.total && !job.bytes_total ? null : pct} label={title} height={5} tone={paused ? 'paused' : job.state === 'failed' ? 'error' : job.state === 'done' ? 'success' : 'default'} />
       <span className="font-mono text-[11px]" style={{ color: job.state === 'failed' ? '#FFB4A8' : C.muted }}>
         {job.state === 'failed' ? (archive ? archiveError(job.error) : t('files.job.failed'))
           : (archive && !job.total ? `${formatBytes(job.bytes_done)} / ${formatBytes(job.bytes_total || null)}` : t('files.job.progress', { done: formatNumber(job.done), total: formatNumber(job.total), bytes: formatBytes(job.bytes_done), bytesTotal: formatBytes(job.bytes_total) })) + (paused ? ` · ${t('files.job.waiting')}` : '')}

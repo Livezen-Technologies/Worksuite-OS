@@ -1,0 +1,54 @@
+#!/bin/sh
+# worksuite-kiosk-apply enable USER | disable     (root; /usr/lib/worksuite/worksuite-kiosk-apply)
+#
+# Kiosk mode (WSOS-AUTH-002): the machine-wide part the device agent cannot do from its sandbox. The agent runs this
+# through systemd-run after writing /etc/worksuite/kiosk/session.env from the signed policy (services/device-agent/src/kiosk.ts).
+#   enable   the kiosk account exists (created locked: no password, not an administrator), greetd signs it in
+#            automatically (worksuite-autologin --kiosk), no getty on other VTs, Ctrl+Alt+Del does nothing.
+#   disable  undoes all of that except the account itself.
+set -eu
+ENV=${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}
+LOGIND=${WORKSUITE_KIOSK_LOGIND:-/etc/systemd/logind.conf.d/worksuite-kiosk.conf}
+SYSTEMCONF=${WORKSUITE_KIOSK_SYSTEMCONF:-/etc/systemd/system.conf.d/worksuite-kiosk.conf}
+AUTOLOGIN=${WORKSUITE_AUTOLOGIN:-/usr/sbin/worksuite-autologin}
+
+die() { echo "worksuite-kiosk-apply: $*" >&2; logger -p authpriv.warning -t worksuite-kiosk -- "$*" 2>/dev/null || true; exit 2; }
+write() {  # path content
+    mkdir -p "$(dirname "$1")"; printf '%s' "$2" > "$1.tmp"; chmod 0644 "$1.tmp"; mv "$1.tmp" "$1"
+}
+
+case "${1:-}" in
+  enable)
+    user=${2:-}
+    printf '%s' "$user" | grep -Eqx '[a-z_][a-z0-9_.@-]{0,63}' || die "invalid user name"
+    [ "$user" != root ] && [ "$user" != wsadmin ] || die "refusing $user"
+    [ "$(sed -n 's/^KIOSK_USER=//p' "$ENV" 2>/dev/null | head -n 1)" = "$user" ] || die "the device policy does not name $user"
+    if ! getent passwd "$user" >/dev/null; then
+        # Locked password: nobody can sign in as the kiosk account at the greeter, only greetd's autologin.
+        useradd --create-home --shell /bin/sh --comment "WorkSuite kiosk" --user-group "$user"
+        passwd --lock "$user" >/dev/null
+    fi
+    if id -nG "$user" | tr ' ' '\n' | grep -qx sudo; then die "an administrator account cannot be the kiosk account"; fi
+    "$AUTOLOGIN" enable --kiosk "$user" >/dev/null
+    write "$LOGIND" "# Kiosk mode (worksuite-kiosk-apply): no login prompt on other virtual terminals.
+[Login]
+NAutoVTs=0
+ReserveVT=0
+"
+    write "$SYSTEMCONF" "# Kiosk mode (worksuite-kiosk-apply): Ctrl+Alt+Del, pressed once or repeatedly, does nothing.
+[Manager]
+CtrlAltDelBurstAction=none
+"
+    systemctl mask --quiet ctrl-alt-del.target 2>/dev/null || true
+    systemctl daemon-reexec 2>/dev/null || true
+    logger -p authpriv.notice -t worksuite-kiosk -- "kiosk mode enabled for $user" 2>/dev/null || true
+    echo "enabled: $user" ;;
+  disable)
+    "$AUTOLOGIN" disable >/dev/null
+    rm -f "$LOGIND" "$SYSTEMCONF"
+    systemctl unmask --quiet ctrl-alt-del.target 2>/dev/null || true
+    systemctl daemon-reexec 2>/dev/null || true
+    logger -p authpriv.notice -t worksuite-kiosk -- "kiosk mode disabled" 2>/dev/null || true
+    echo disabled ;;
+  *) echo "usage: worksuite-kiosk-apply enable USER | disable" >&2; exit 2 ;;
+esac
