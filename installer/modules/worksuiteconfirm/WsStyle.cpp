@@ -32,7 +32,7 @@
 
 namespace
 {
-// extract.py collects tr("…") from this file under the context "WsStyle".
+// extract.py collects the tr() strings of this file under the context "WsStyle".
 QString
 tr( const char* s )
 {
@@ -101,6 +101,12 @@ icon( const QString& kind, const QColor& color, int size )
         {
             path.arcTo( QRectF( 8, 3, 8, 8 ), 180, -120 );
         }
+    }
+    else if ( kind == QLatin1String( "disk" ) )
+    {
+        // <rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="17" cy="12" r="1"/>
+        path.addRoundedRect( QRectF( 3, 6, 18, 12 ), 2, 2 );
+        path.addEllipse( QPointF( 17, 12 ), 1, 1 );
     }
     else if ( kind == QLatin1String( "warn" ) )
     {
@@ -363,7 +369,9 @@ public:
         QVariant v = QIdentityProxyModel::data( index, role );
         if ( role == Qt::DisplayRole )
         {
-            return v.toString().replace( QStringLiteral( " - " ), QStringLiteral( " · " ) );
+            QString t = v.toString().replace( QStringLiteral( " - " ), QStringLiteral( " · " ) );
+            const int paren = t.lastIndexOf( QStringLiteral( " (/dev/" ) );
+            return paren > 0 ? t.left( paren ) : t;
         }
         return v;
     }
@@ -479,30 +487,38 @@ private:
         l->setContentsMargins( 0, 0, 0, 0 );
         l->setSpacing( 22 );
 
-        auto* head = new QHBoxLayout;
-        head->setSpacing( 24 );
         auto* titles = new QVBoxLayout;
         titles->setSpacing( 6 );
         titles->addWidget( label( QStringLiteral( "wsEyebrow" ), tr( "STEP 2 · DISK" ) ) );
         titles->addWidget( label( QStringLiteral( "wsTitle" ), tr( "Where should WorkSuite go?" ) ) );
-        head->addLayout( titles, 1 );
-        auto* dev = new QVBoxLayout;
-        dev->setSpacing( 6 );
-        auto* devLabel = label( QStringLiteral( "wsFieldLabel" ), tr( "Storage device" ) );
-        dev->addWidget( devLabel );
+        auto* sub = label( QStringLiteral( "wsSubtitle" ),
+                           tr( "WorkSuite OS uses the whole disk. Check that this is the right one." ) );
+        sub->setWordWrap( true );
+        titles->addWidget( sub );
+        l->addLayout( titles );
+
+        // The disk card (design: Inst3Disk): icon, the disk, its node. The stock device list stays the control,
+        // borderless inside the card, so a computer with several disks can still choose.
+        auto* devCard = new QFrame;
+        devCard->setObjectName( QStringLiteral( "wsDevCard" ) );
+        auto* dl = new QHBoxLayout( devCard );
+        dl->setContentsMargins( 16, 0, 16, 0 );
+        dl->setSpacing( 14 );
+        devCard->setFixedHeight( 52 );
+        dl->addWidget( iconLabel( QStringLiteral( "disk" ), QColor( "#C9D6EE" ), 22 ) );
         if ( m_drives )
         {
-            m_drives->setParent( w );
+            m_drives->setParent( devCard );
             m_drives->setObjectName( QStringLiteral( "wsDeviceCombo" ) );
-            m_drives->setFixedWidth( 360 );
-            devLabel->setBuddy( m_drives );
-            dev->addWidget( m_drives );
+            m_drives->setAccessibleName( tr( "Storage device" ) );
+            m_drives->setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Fixed );
+            dl->addWidget( m_drives, 1 );
             m_drives->show();
+            m_node = label( QStringLiteral( "wsDevNode" ) );
+            dl->addWidget( m_node );
+            QObject::connect( m_drives, qOverload< int >( &QComboBox::currentIndexChanged ), this, [ this ] { refreshDevice(); } );
         }
-        head->addLayout( dev );
-        head->setAlignment( dev, Qt::AlignBottom );
-        head->setAlignment( titles, Qt::AlignBottom );
-        l->addLayout( head );
+        l->addWidget( devCard );
 
         // Erase disk: the one installation type (WSOS-INS: erase-only), shown selected.
         auto* card = new QFrame;
@@ -526,19 +542,6 @@ private:
         texts->addWidget( desc );
         cl->addLayout( texts, 1 );
         l->addWidget( card );
-
-        auto* row = new QGridLayout;
-        row->setHorizontalSpacing( 12 );
-        row->setVerticalSpacing( 6 );
-        row->setColumnStretch( 0, 1 );
-        row->setColumnStretch( 1, 1 );
-        auto* swapLabel = label( QStringLiteral( "wsFieldLabel" ), tr( "Swap" ) );
-        row->addWidget( swapLabel, 0, 0 );
-        m_swapRow = row;
-        m_swapLabel = swapLabel;
-        row->addWidget( label( QStringLiteral( "wsFieldLabel" ), tr( "File system" ) ), 0, 1 );
-        row->addWidget( label( QStringLiteral( "wsFsBox" ), QStringLiteral( "ext4" ) ), 1, 1 );
-        l->addLayout( row );
 
         auto* preview = new QFrame;
         preview->setObjectName( QStringLiteral( "wsPreview" ) );
@@ -727,14 +730,7 @@ private:
                     m_swap = w->findChild< QComboBox* >();
                 }
             }
-            if ( m_swap && m_swapRow )
-            {
-                m_swap->setParent( m_disk );
-                m_swap->setObjectName( QStringLiteral( "wsSwapCombo" ) );
-                m_swapLabel->setBuddy( m_swap );
-                m_swapRow->addWidget( m_swap, 1, 0 );
-                m_swap->show();
-            }
+            // The Swap list stays with the stock widgets (hidden): partition.conf's default swap choice applies.
         }
         if ( m_erase && !m_erase->isChecked() )
         {
@@ -751,6 +747,32 @@ private:
             m_drives->setCurrentIndex( current );
             m_drives->blockSignals( blocked );
             m_drives->setIconSize( QSize( 0, 0 ) );
+        }
+        refreshDevice();
+    }
+
+    // The node beside the disk name ("/dev/vda"); the drop-down arrow only when there is a choice.
+    void refreshDevice()
+    {
+        if ( !m_drives || !m_node )
+        {
+            return;
+        }
+        QString node;
+        if ( auto* proxy = qobject_cast< QIdentityProxyModel* >( m_drives->model() ) )
+        {
+            const QString src = proxy->sourceModel()->index( m_drives->currentIndex(), 0 ).data().toString();
+            const int at = src.lastIndexOf( QStringLiteral( "(/dev/" ) );
+            node = at >= 0 ? src.mid( at + 1 ).chopped( src.endsWith( QLatin1Char( ')' ) ) ? 1 : 0 ) : QString();
+        }
+        m_node->setText( node );
+        const bool choice = m_drives->count() > 1;
+        const QVariant was = m_drives->property( "wsChoice" );
+        if ( !was.isValid() || was.toBool() != choice )
+        {
+            m_drives->setProperty( "wsChoice", choice );
+            m_drives->setEnabled( choice );
+            repolish( m_drives );
         }
     }
 
@@ -939,8 +961,7 @@ private:
     QWidget* m_page;
     QPointer< QComboBox > m_drives, m_swap;
     QPointer< QRadioButton > m_erase;
-    QGridLayout* m_swapRow = nullptr;
-    QLabel* m_swapLabel = nullptr;
+    QLabel* m_node = nullptr;
     QPointer< QCheckBox > m_encrypt;
     QPointer< QLineEdit > m_pass, m_confirm;
     QPointer< QWidget > m_beforeFrame, m_afterFrame;
@@ -1012,13 +1033,15 @@ buildCard( QDialog* d, const DialogKind& kind, bool large )
         delete old;   // the widgets stay; they are placed again below
     }
     auto* outer = new QVBoxLayout( d );
-    outer->setContentsMargins( 40, 24, 40, 56 );   // room for the shadow (0 30px 80px)
+    // Room for the shadow: DialogCancel 0 30px 80px rgba(0,0,0,0.6), DialogKit 0 24px 60px rgba(0,0,0,0.5).
+    outer->setContentsMargins( 40, 24, 40, 56 );
+    d->setProperty( "wsLarge", large );
     auto* card = new QFrame( d );
     card->setObjectName( QStringLiteral( "wsDlgCard" ) );
     auto* shadow = new QGraphicsDropShadowEffect( card );
-    shadow->setBlurRadius( 70 );
-    shadow->setOffset( 0, 26 );
-    shadow->setColor( QColor( 0, 0, 0, 140 ) );
+    shadow->setBlurRadius( large ? 80 : 60 );
+    shadow->setOffset( 0, large ? 30 : 24 );
+    shadow->setColor( QColor( 0, 0, 0, large ? 153 : 128 ) );
     card->setGraphicsEffect( shadow );
     outer->addWidget( card );
     auto* cl = new QVBoxLayout( card );
@@ -1027,24 +1050,26 @@ buildCard( QDialog* d, const DialogKind& kind, bool large )
     auto* body = new QFrame;
     body->setObjectName( QStringLiteral( "wsDlgBody" ) );
     auto* bl = new QHBoxLayout( body );
-    bl->setContentsMargins( 28, 28, 28, 22 );
-    bl->setSpacing( 18 );
+    bl->setContentsMargins( large ? 28 : 24, large ? 28 : 24, large ? 28 : 24, large ? 22 : 20 );
+    bl->setSpacing( large ? 18 : 16 );
     auto* badge = new QLabel;
     badge->setObjectName( QStringLiteral( "wsDlgBadge" ) );
     badge->setProperty( "kind", QString::fromLatin1( kind.name ) );
+    badge->setProperty( "large", large );
     const int bs = large ? 48 : 44;
     badge->setFixedSize( bs, bs );
     badge->setAlignment( Qt::AlignCenter );
     badge->setPixmap( icon( QString::fromLatin1( kind.icon ), kind.color, large ? 26 : 24 ) );
     bl->addWidget( badge, 0, Qt::AlignTop );
     auto* texts = new QVBoxLayout;
-    texts->setSpacing( 8 );
+    texts->setSpacing( large ? 8 : 6 );
     bl->addLayout( texts, 1 );
     cl->addWidget( body );
     auto* band = new QFrame;
     band->setObjectName( QStringLiteral( "wsDlgButtons" ) );
     auto* btn = new QHBoxLayout( band );
-    btn->setContentsMargins( 20, 16, 20, 16 );
+    btn->setContentsMargins( large ? 20 : 18, large ? 16 : 14, large ? 20 : 18, large ? 16 : 14 );
+    band->setProperty( "large", large );
     btn->setSpacing( 10 );
     btn->addStretch();
     cl->addWidget( band );
@@ -1086,15 +1111,49 @@ dimBehind( QWidget* d )
     d->setProperty( "wsDim", QVariant::fromValue( static_cast< QObject* >( dim ) ) );
 }
 
+// QMessageBox fixes its own size again whenever its style or contents change (updateSize); this puts the design's back.
+class SizeGuard : public QObject
+{
+public:
+    using QObject::QObject;
+    QSize target;
+
+protected:
+    bool eventFilter( QObject* o, QEvent* e ) override
+    {
+        if ( e->type() == QEvent::Resize && target.isValid() && static_cast< QWidget* >( o )->size() != target )
+        {
+            auto* d = static_cast< QWidget* >( o );
+            QTimer::singleShot( 0, d, [ d, this ] {
+                if ( d->size() != target )
+                {
+                    d->setFixedSize( target );
+                }
+            } );
+        }
+        return false;
+    }
+};
+
 void
 fitDialog( QDialog* d )
 {
-    // QMessageBox fixes its size from its own layout rules in showEvent; set the design's width afterwards.
+    // Set the design's width once the dialog's own showEvent has sized it, and keep it.
     QTimer::singleShot( 0, d, [ d ] {
-        const int w = 460 + 80;
+        // DialogCancel's card is 460 px; DialogKit's cards are a column of its two-column grid, 576 px.
+        const int w = ( d->property( "wsLarge" ).toBool() ? 460 : 576 ) + 80;
+        auto* guard = static_cast< SizeGuard* >( d->findChild< QObject* >( QStringLiteral( "wsSizeGuard" ), Qt::FindDirectChildrenOnly ) );
+        if ( !guard )
+        {
+            guard = new SizeGuard( d );
+            guard->setObjectName( QStringLiteral( "wsSizeGuard" ) );
+            d->installEventFilter( guard );
+        }
+        guard->target = QSize();
         d->setMinimumSize( 0, 0 );
         d->setMaximumSize( QWIDGETSIZE_MAX, QWIDGETSIZE_MAX );
         const int h = d->layout()->hasHeightForWidth() ? d->layout()->totalHeightForWidth( w ) : d->layout()->sizeHint().height();
+        guard->target = QSize( w, h );
         d->setFixedSize( w, h );
         if ( auto* p = d->parentWidget() ? d->parentWidget()->window() : nullptr )
         {
@@ -1103,10 +1162,51 @@ fitDialog( QDialog* d )
     } );
 }
 
+// A card button that clicks a dialog's own (hidden) button: the dialog's result and signals stay its own.
+QPushButton*
+proxyButton( QDialog* d, const Card& c, QAbstractButton* real, const QString& text, const char* role, bool isDefault )
+{
+    auto* b = new QPushButton( text );
+    b->setCursor( Qt::PointingHandCursor );
+    setRole( b, role );
+    b->setAutoDefault( false );
+    b->setDefault( isDefault );
+    QPointer< QAbstractButton > target( real );
+    QObject::connect( b, &QPushButton::clicked, d, [ target ] {
+        if ( target )
+        {
+            target->click();
+        }
+    } );
+    c.buttons->addWidget( b );
+    if ( isDefault )
+    {
+        b->setFocus();
+    }
+    return b;
+}
+
+// Hides a message box's own widgets (icon, labels, button box, check box): now and after its showEvent re-shows them.
+void
+hideStock( QMessageBox* mb, QWidget* card )
+{
+    auto hide = [ mb, card ] {
+        for ( auto* w : mb->findChildren< QWidget* >( QString(), Qt::FindDirectChildrenOnly ) )
+        {
+            if ( w != card && !w->isWindow() )
+            {
+                w->hide();
+            }
+        }
+    };
+    hide();
+    QTimer::singleShot( 0, mb, hide );
+}
+
 void
 styleMessageBox( QMessageBox* mb )
 {
-    const auto kind = kindOf( mb->icon() );
+    auto kind = kindOf( mb->icon() );
     QString title = plainTitle( mb->windowTitle() );
     QString text = mb->text();
     QList< QAbstractButton* > buttons = mb->buttons();
@@ -1119,6 +1219,7 @@ styleMessageBox( QMessageBox* mb )
     if ( cancel )
     {
         large = true;
+        kind = { "warn", QColor( "#FFB98A" ), "warning" };   // DialogCancel: the warning badge
         title = tr( "Quit the installer?" );
         text = stateValue( "installFailed", false ).toBool()
             ? tr( "The installation did not finish. You can start again any time from the boot menu." )
@@ -1126,58 +1227,41 @@ styleMessageBox( QMessageBox* mb )
                   "the boot menu." );
     }
 
-    auto* iconL = mb->findChild< QLabel* >( QStringLiteral( "qt_msgboxex_icon_label" ) );
-    auto* textL = mb->findChild< QLabel* >( QStringLiteral( "qt_msgbox_label" ) );
+    // QMessageBox lays out, re-wraps and re-parents its own label and buttons whenever it shows (Qt 6.8), so they
+    // stay where it keeps them, hidden; the card shows copies, and its buttons click the real ones.
     auto* infoL = mb->findChild< QLabel* >( QStringLiteral( "qt_msgbox_informativelabel" ) );
-    auto* box = mb->findChild< QDialogButtonBox* >( QStringLiteral( "qt_msgbox_buttonbox" ) );
+    const QString info = cancel || !infoL ? QString() : infoL->text();
     Card c = buildCard( mb, kind, large );
-    if ( iconL )
-    {
-        iconL->hide();
-    }
+    hideStock( mb, c.card );
     auto* t = label( QStringLiteral( "wsDlgTitle" ), title );
     t->setProperty( "large", large );
     t->setWordWrap( true );
     c.texts->addWidget( t );
-    if ( textL )
+    for ( const QString& body : { text, info } )
     {
-        textL->setObjectName( QStringLiteral( "wsDlgText" ) );
-        textL->setText( text );
-        textL->setWordWrap( true );
-        textL->setMinimumWidth( 0 );
-        textL->setMaximumWidth( QWIDGETSIZE_MAX );
-        textL->setParent( c.card );
-        c.texts->addWidget( textL );
-        textL->show();
+        if ( body.isEmpty() )
+        {
+            continue;
+        }
+        auto* b = label( QStringLiteral( "wsDlgText" ), body );
+        b->setTextFormat( Qt::AutoText );
+        b->setWordWrap( true );
+        b->setTextInteractionFlags( Qt::TextSelectableByMouse );
+        c.texts->addWidget( b );
     }
-    if ( infoL && !infoL->text().isEmpty() )
-    {
-        infoL->setObjectName( QStringLiteral( "wsDlgText" ) );
-        infoL->setParent( c.card );
-        c.texts->addWidget( infoL );
-        infoL->show();
-    }
-    if ( box )
-    {
-        box->hide();
-    }
-    if ( cancel )
+
+    QList< QPair< QAbstractButton*, QString > > order;   // the real button and the design's label for it
+    QAbstractButton* primaryButton = nullptr;
+    if ( cancel && mb->button( QMessageBox::No ) && mb->button( QMessageBox::Yes ) )
     {
         // Keep installing (the safe default, primary) then Quit installer (destructive outline).
-        auto* no = mb->button( QMessageBox::No );
-        auto* yes = mb->button( QMessageBox::Yes );
-        if ( no && yes )
-        {
-            no->setText( tr( "Keep installing" ) );
-            yes->setText( tr( "Quit installer" ) );
-            buttons = { no, yes };
-            setRole( no, "primary" );
-            setRole( yes, "danger" );
-        }
+        order = { { mb->button( QMessageBox::No ), tr( "Keep installing" ) },
+                  { mb->button( QMessageBox::Yes ), tr( "Quit installer" ) } };
+        primaryButton = mb->button( QMessageBox::No );
     }
     else
     {
-        // Secondary actions on the left, the primary (default, else the accepting) one last.
+        // Secondary actions first, the primary (default, else the accepting) one last.
         if ( !primary )
         {
             for ( auto* b : buttons )
@@ -1194,20 +1278,24 @@ styleMessageBox( QMessageBox* mb )
             primary = buttons.last();
         }
         buttons.removeAll( primary );
-        buttons.append( primary );
+        if ( primary )
+        {
+            buttons.append( primary );
+        }
         for ( auto* b : buttons )
         {
-            setRole( b, b == primary ? "primary" : "secondary" );
+            order.append( { b, b->text().remove( QLatin1Char( '&' ) ) } );
         }
+        primaryButton = primary;
     }
-    for ( auto* b : buttons )
+    for ( const auto& [ real, text ] : order )
     {
-        if ( b )
-        {
-            b->setParent( c.card );
-            c.buttons->addWidget( b );
-            b->show();
-        }
+        const bool isPrimary = real == primaryButton;
+        // DialogKit: a warning's primary goes ahead despite it (#D9452B); DialogCancel's Quit is the outlined danger.
+        const char* role = isPrimary ? ( mb->icon() == QMessageBox::Warning && !cancel ? "caution" : "primary" )
+            : cancel                 ? "danger"
+                                     : "secondary";
+        proxyButton( mb, c, real, text, role, isPrimary );
     }
 }
 
@@ -1254,7 +1342,10 @@ styleErrorDialog( QDialog* d )
     {
         details->setObjectName( QStringLiteral( "wsDlgCode" ) );
         details->setParent( c.card );
-        details->setMaximumHeight( 120 );
+        // DialogKit's code line: as tall as its text, at most 120 px.
+        details->document()->setDocumentMargin( 0 );
+        details->setVerticalScrollBarPolicy( Qt::ScrollBarAsNeeded );
+        details->setFixedHeight( qMin( 120, int( details->document()->size().height() ) + 14 ) );
         c.texts->addWidget( details );
         details->setVisible( showDetails );
     }
@@ -1272,6 +1363,7 @@ styleErrorDialog( QDialog* d )
     }
     if ( box )
     {
+        // As message boxes: the box keeps its buttons (hidden), the card shows ones that click them.
         QList< QAbstractButton* > buttons = box->buttons();
         QAbstractButton* primary = nullptr;
         for ( auto* b : buttons )
@@ -1287,13 +1379,13 @@ styleErrorDialog( QDialog* d )
             primary = buttons.last();
         }
         buttons.removeAll( primary );
-        buttons.append( primary );
+        if ( primary )
+        {
+            buttons.append( primary );
+        }
         for ( auto* b : buttons )
         {
-            setRole( b, b == primary ? "primary" : "secondary" );
-            b->setParent( c.card );
-            c.buttons->addWidget( b );
-            b->show();
+            proxyButton( d, c, b, b->text().remove( QLatin1Char( '&' ) ), b == primary ? "primary" : "secondary", b == primary );
         }
         box->hide();
     }

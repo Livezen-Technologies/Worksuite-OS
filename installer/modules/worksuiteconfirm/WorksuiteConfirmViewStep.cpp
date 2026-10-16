@@ -209,7 +209,8 @@ public:
         if ( o->isWidgetType() )
         {
             auto* w = static_cast< QWidget* >( o );
-            if ( e->type() == QEvent::Polish && w->isWindow() )
+            // A message box's window exists before its first Polish; its title is set in its constructor, earlier.
+            if ( ( e->type() == QEvent::Polish || e->type() == QEvent::WindowTitleChange ) && w->isWindow() )
             {
                 WsStyle::prepareDialog( w );
             }
