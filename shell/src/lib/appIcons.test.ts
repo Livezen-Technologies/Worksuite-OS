@@ -73,3 +73,11 @@ describe('taskbar alignment preference', () => {
     expect(taskbarAlign({ taskbarAlign: 'center' })).toBe('center')
   })
 })
+
+describe('taskbar window matching', () => {
+  it('a WorkSuite app window joins its worksuite-<module> pin', async () => {
+    const { matchesApp } = await import('./panel')
+    expect(matchesApp('worksuite-mail', 'lk.worksuite.mail')).toBe(true)
+    expect(matchesApp('worksuite-mail', 'lk.worksuite.chat')).toBe(false)
+  })
+})

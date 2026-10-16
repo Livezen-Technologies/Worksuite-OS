@@ -6,6 +6,8 @@ export interface Notice {
   id: string; tone: 'ok' | 'warn' | 'error'; title: string; body: string
   /** App notifications (WSOS-INT-007): sending app, and buttons for its actions. */
   app?: string; actions?: { key: string; label: string }[]
+  /** The sending app's icon (theme name or icon path), shown instead of the tone mark when it resolves. */
+  icon?: string
   /** Progress (0–100) an app notification carries in its "value" hint. */
   value?: number
 }

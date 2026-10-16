@@ -176,10 +176,10 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   useEffect(() => {
     // On start, then again each time the launcher opens (sign-in, installs and org changes show up).
     if (!launcher && appsLoaded.current) return
-    appsLoaded.current = true
     let live = true
     void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null), os.shellPrefs().catch(() => null)]).then(([w, i, p]) => {
       if (!live) return
+      appsLoaded.current = true   // only once a load lands (a cancelled first run, as in StrictMode, loads again)
       setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null))
       setAppsCached(!!(w?.ok && w.cached))
       if (p?.ok) setPrefs(shellPrefsFrom(p.value))
@@ -388,7 +388,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setQsOpen(false) }}
             className="flex size-9 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
           <QuickTray state={quick} open={qsOpen} onToggle={() => { setQsOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setA11yOpen(false) }} />
-          <time dateTime={now.toISOString()} className="flex flex-col items-end px-2 text-xs leading-[1.25]"><span>{time}</span><span className="text-[#8FA3C8]">{shortDate}</span></time>
+          <time dateTime={now.toISOString()} className="flex flex-col items-end whitespace-nowrap px-2 text-xs leading-[1.25]"><span>{time}</span><span className="text-[#8FA3C8]">{shortDate}</span></time>
           <button type="button" aria-label={unread > 0 ? `${t('notes.title')}, ${t('panel.newCount', { count: unread })}` : t('notes.title')} aria-expanded={trayOpen} aria-controls="ws-notifications"
             onClick={() => { setTrayOpen((v) => !v); setUnread(0); setPowerOpen(false); setQsOpen(false) }}
             className={`relative flex size-9 cursor-pointer items-center justify-center rounded-[10px] ${trayOpen ? 'bg-white/20' : 'hover:bg-white/10'}`}>

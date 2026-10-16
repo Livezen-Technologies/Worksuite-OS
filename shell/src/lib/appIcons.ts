@@ -1,6 +1,7 @@
 // Theme icons for installed apps (desktop entries' Icon=), fetched from the main process in batches and cached for
 // the session. A name with no icon resolves to null, and the caller draws the letter mark instead.
 import { useEffect, useState } from 'react'
+import { os } from './os'
 
 type Entry = string | null
 const cache = new Map<string, Entry>()
@@ -21,7 +22,7 @@ function flush() {
     g.names.push(q.name)
     groups.set(`${q.size}:${q.scale}`, g)
   }
-  const api = globalThis.window?.worksuite?.appIcons
+  const api = globalThis.window?.worksuite?.appIcons ?? os.appIcons?.bind(os)
   for (const g of groups.values()) {
     const done = (r: Record<string, string | null> | null) => {
       for (const n of g.names) {
