@@ -14,13 +14,24 @@ export function AppNoticeActions({ notice, onDone }: { notice: Notice; onDone: (
     <div className="mt-1 flex flex-wrap items-center gap-1.5">
       <span className="mr-auto text-[11px] text-[#8FA3C8]">{notice.app}</span>
       {/* Open: the notification's default action; the shell also brings the app's window forward. */}
-      <button type="button" className={btn} onClick={() => { void api.invoke(id, 'default'); onDone() }}>{t('common.open')}</button>
+      <button type="button" className={btn} onClick={() => openAppNotice(notice, onDone)}>{t('common.open')}</button>
       {(notice.actions ?? []).filter((a) => a.key !== 'default').map((a) => (
         <button key={a.key} type="button" className={btn} onClick={() => { void api.invoke(id, a.key); onDone() }}>{a.label}</button>
       ))}
       <button type="button" className={btn} onClick={() => { void api.dismiss(id); onDone() }}>{t('common.dismiss')}</button>
     </div>
   )
+}
+
+/** Open an app notification (click on the card, Enter on its text, or Open): its default action, and the shell
+ *  raises the sender's window. False for notices that are not an app's. */
+export function openAppNotice(notice: Notice, onDone: () => void): boolean {
+  const id = appIdOf(notice)
+  const api = notificationsApi()
+  if (id === null || !api) return false
+  void api.invoke(id, 'default')
+  onDone()
+  return true
 }
 
 /** "Clear all" also closes the apps' notifications on the server, so they get NotificationClosed. */

@@ -110,3 +110,19 @@ describe('clicking a notification focuses the sender', () => {
     expect(invoked).toEqual([`${b}:reply`, `${a}:default`])
   })
 })
+
+describe('clicking a notification without a desktop-entry hint', () => {
+  it('matches app_name to an installed entry\'s Name= and uses its id or StartupWMClass', async () => {
+    const { windowForNotification } = await import('./notifications')
+    const wins = [{ handle: 'w1', appId: 'lk.worksuite.whatsapp' }, { handle: 'w2', appId: 'worksuite-meet' }, { handle: 'w3', appId: 'Thunderbird' }]
+    const entries = [
+      { id: 'lk.worksuite.whatsapp', name: 'WhatsApp', wm_class: 'lk.worksuite.whatsapp' },
+      { id: 'worksuite-meet', name: 'WorkSuite Meet', wm_class: 'worksuite-meet' },
+      { id: 'net.thunderbird.Thunderbird', name: 'Thunderbird Mail', wm_class: 'thunderbird' },
+    ]
+    expect(windowForNotification({ app: 'WhatsApp' }, wins, entries)?.handle).toBe('w1')
+    expect(windowForNotification({ app: 'WorkSuite Meet' }, wins, entries)?.handle).toBe('w2')
+    expect(windowForNotification({ app: 'thunderbird mail' }, wins, entries)?.handle).toBe('w3')
+    expect(windowForNotification({ app: 'Signal' }, wins, entries)).toBeUndefined()
+  })
+})

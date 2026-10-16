@@ -9,6 +9,9 @@ export const WHATSAPP_URL = 'https://web.whatsapp.com/'
 /** Its own persistent session: stays linked (QR) across restarts and never shares cookies with WorkSuite's partitions. */
 export const WHATSAPP_PARTITION = 'persist:whatsapp'
 
+/** Process identity (see appProcessNames): app_name "WhatsApp", desktop-entry lk.worksuite.whatsapp. */
+export const WHATSAPP_NAMES = { name: 'WhatsApp', desktop: 'lk.worksuite.whatsapp.desktop', wmClass: 'lk.worksuite.whatsapp' } as const
+
 /** Hosts the window may load: WhatsApp's own domains (web, static, media mmg/pps, …), https only. */
 export function whatsappHost(url: string): boolean {
   let u: URL

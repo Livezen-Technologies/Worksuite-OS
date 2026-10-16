@@ -78,6 +78,14 @@ export function allowedOrigins(app: WebApp): Set<string> {
   return new Set([new URL(app.web_url).origin])
 }
 
+/**
+ * Process identity of an app window, set before 'ready': the name Chromium's libnotify path sends as app_name, and
+ * the desktop file name (setDesktopName → CHROME_DESKTOP) it sends as the desktop-entry hint and Wayland uses as app_id.
+ */
+export function appProcessNames(id: string, title?: string): { name: string; desktop: string; wmClass: string } {
+  return { name: `WorkSuite ${title ?? id}`, desktop: `worksuite-${id}.desktop`, wmClass: `worksuite-${id}` }
+}
+
 export type NavDecision = 'allow' | 'external' | 'deny'
 
 /** In-window for the allowed origins; https/mailto/tel elsewhere goes to the default browser; everything else is blocked. */
