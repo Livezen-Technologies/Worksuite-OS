@@ -7,9 +7,9 @@ import { app, BrowserWindow, desktopCapturer, session, shell } from 'electron'
 import os from 'node:os'
 import path from 'node:path'
 import { brokerCall } from './broker'
-import { deviceInfo } from './device'
+import { deviceCredential, deviceInfo } from './device'
 import {
-  allowedOrigins, linkRequest, loadSession, navDecision, resolveLink, screenShareAllowed, signInTarget, startUrl, wantsToken,
+  allowedOrigins, appAuthHeaders, linkRequest, loadSession, navDecision, resolveLink, screenShareAllowed, signInTarget, startUrl, wantsToken,
   type AppRequest, type Fetch, type Session, type WebApp,
 } from './webapps'
 import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
@@ -104,7 +104,7 @@ ${action ? `<button id="b">${esc(action)}</button><script>document.getElementByI
     if (!win) return
     const name = TITLE[r.id] ?? r.id
     win.setTitle(`WorkSuite ${name}`)
-    const res = await loadSession(broker, fetchFn)
+    const res = await loadSession(broker, fetchFn, () => deviceCredential())
     if (!res.ok) {
       current = null
       const msg: Record<string, [string, string, string | null]> = {
@@ -127,8 +127,10 @@ ${action ? `<button id="b">${esc(action)}</button><script>document.getElementByI
     const origins = allowedOrigins(target)
     const patterns = [...origins].map((o) => `${o}/*`)
     ses.webRequest.onBeforeSendHeaders({ urls: patterns }, (details, cb) => {
-      if (!wantsToken(details.url, allowedOrigins(current?.app ?? target))) return cb({ requestHeaders: details.requestHeaders })
-      void freshToken().then((t) => cb({ requestHeaders: { ...details.requestHeaders, Authorization: `Bearer ${t}` } }))
+      const allowed = allowedOrigins(current?.app ?? target)
+      if (!wantsToken(details.url, allowed)) return cb({ requestHeaders: details.requestHeaders })
+      // X-WS-Device is read fresh per request (revocation takes effect immediately) and is set here in the main process only.
+      void freshToken().then((t) => cb({ requestHeaders: { ...details.requestHeaders, ...appAuthHeaders(details.url, allowed, t, () => deviceCredential()) } }))
     })
     // Camera/microphone/notifications/clipboard for the module's own origin only (Meet, Chat); nothing else.
     const OK = new Set(['media', 'notifications', 'clipboard-sanitized-write', 'fullscreen'])
@@ -148,7 +150,7 @@ ${action ? `<button id="b">${esc(action)}</button><script>document.getElementByI
       win = makeWindow(res.value.account.id)
       old.destroy()
     }
-    const link = r.link ? await resolveLink(res.value, r.link, fetchFn) : null
+    const link = r.link ? await resolveLink(res.value, r.link, fetchFn, () => deviceCredential()) : null
     void win.loadURL(startUrl(target, link))
   }
 

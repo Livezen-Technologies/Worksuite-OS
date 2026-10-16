@@ -44,6 +44,7 @@ fun refresh_callback() {
   ring.angle += 0.0898;                                  # one turn per 1.4 s at Plymouth's 50 Hz refresh
   if (ring.angle > 6.2832) ring.angle -= 6.2832;
   ring.arc.SetImage(ring.arc_image.Rotate(ring.angle));
+  if (bar.original) step_bar();
 }
 Plymouth.SetRefreshRate(50);
 Plymouth.SetRefreshFunction(refresh_callback);
@@ -83,11 +84,26 @@ fun set_phase(p) {
     last_phase = p;
   }
 }
+# The fill eases toward the reported progress on every 50 Hz frame instead of jumping (the board's fill is a
+# plain gradient of the current width: no shimmer or sweep; only the ring is animated, 1.4 s linear).
+bar.target = 0;
+bar.shown = -1;
+bar.w = 4;
 fun set_bar(progress) {
-  w = Math.Int(420 * progress);
-  if (w < 4) w = 4;
-  if (w > 420) w = 420;
-  bar.sprite.SetImage(bar.original.Scale(w, 4));
+  t = 420 * progress;
+  if (t < 4) t = 4;
+  if (t > 420) t = 420;
+  bar.target = t;
+}
+fun step_bar() {
+  d = bar.target - bar.w;
+  if (d > 0.5 || d < -0.5) bar.w += d * 0.12;           # ~0.35 s ease-out to the new value
+  else bar.w = bar.target;
+  w = Math.Int(bar.w + 0.5);
+  if (w != bar.shown) {
+    bar.sprite.SetImage(bar.original.Scale(w, 4));
+    bar.shown = w;
+  }
 }
 
 fun progress_callback(duration, progress) {
