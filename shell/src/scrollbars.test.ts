@@ -17,3 +17,10 @@ describe('focus ring', () => {
     expect(css).toContain('[data-high-contrast] :focus-visible:not([tabindex="-1"])')
   })
 })
+
+describe('password fields in rounded containers (lock, greeter)', () => {
+  const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8')
+  it('draw no dark halo box on the bare input', () => {
+    expect(css).toContain(':is(input, textarea, select).outline-none:focus-visible { box-shadow: none; }')
+  })
+})

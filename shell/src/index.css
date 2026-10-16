@@ -44,6 +44,10 @@
   /* Headings and regions focused by script (tabIndex -1, e.g. each first-run step's title for screen readers) are not
      controls: no ring. Keyboard focus on every control stays visible. */
   [tabindex="-1"]:focus-visible { outline: none; box-shadow: none; }
+  /* A field inside a styled container (lock screen, greeter, search) gets its ring on the container (rule below):
+     no dark halo on the bare input, which showed as a black box inside the rounded field. Autofill keeps it clear. */
+  :is(input, textarea, select).outline-none:focus-visible { box-shadow: none; }
+  input.outline-none:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px transparent inset; transition: background-color 9999s; -webkit-text-fill-color: currentColor; }
   /* Borderless text fields and radios that drop their own outline (outline-none) ring their field box instead,
      so focus is never invisible (WSOS-ACC-002; shell/src/a11y.keyboard.test.tsx checks every outline-none). */
   :where(label, div, form):has(> :is(input, textarea, select).outline-none:focus-visible) { outline: 2px solid #7FB2FF; outline-offset: 2px; }
