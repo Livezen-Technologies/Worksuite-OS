@@ -3,6 +3,7 @@
 // overlay surface, top-right on the active output; this host feeds it one JSON line per toast and hears back
 // "click <key>" / "closed <key>". Without it (exit 69: no gtk4-layer-shell) the renderer keeps its in-window toast.
 import { spawn } from 'node:child_process'
+import { iconEnv, lookupIcon } from './icons'
 
 export const WORKSUITE_TOASTS = '/usr/lib/worksuite/worksuite-toasts'
 
@@ -28,7 +29,12 @@ const realSpawn: ToastSpawn = () => {
 
 const KEY = /^[A-Za-z0-9._:-]{1,64}$/
 
-export function toastHost(onClick: (key: string) => void, spawnFn: ToastSpawn = realSpawn, restartMs = 2000) {
+// The helper never looks up theme icon names (a missing theme icon shows GTK's missing-image icon): names are
+// resolved here, with the shell's own icon lookup, to a file inside an icon directory, or dropped.
+export type IconResolve = (v: string) => string | null
+const realResolve: IconResolve = (v) => { try { return lookupIcon(v, 40, 1, iconEnv()) } catch { return null } }
+
+export function toastHost(onClick: (key: string) => void, spawnFn: ToastSpawn = realSpawn, restartMs = 2000, resolveIcon: IconResolve = realResolve) {
   let proc: ToastProc | null = null
   let unavailable = false
   let crashes = 0
@@ -50,7 +56,7 @@ export function toastHost(onClick: (key: string) => void, spawnFn: ToastSpawn = 
     available: () => { start(); return !unavailable && !!proc },
     show(t: ToastMsg): boolean {
       if (!KEY.test(t.key)) return false
-      send({ op: 'show', key: t.key, title: String(t.title ?? '').slice(0, 200), body: String(t.body ?? '').slice(0, 400), tone: t.tone ?? 'ok', icon: t.icon ?? '', sticky: !!t.sticky })
+      send({ op: 'show', key: t.key, title: String(t.title ?? '').slice(0, 200), body: String(t.body ?? '').slice(0, 400), tone: t.tone ?? 'ok', icon: (t.icon && resolveIcon(t.icon)) || '', sticky: !!t.sticky })
       return !unavailable
     },
     hide(key: string) { if (KEY.test(key) && proc) proc.write(`${JSON.stringify({ op: 'hide', key })}\n`) },

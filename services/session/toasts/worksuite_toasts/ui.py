@@ -70,7 +70,8 @@ class ToastWindow(Gtk.ApplicationWindow):
     def _card(self, t: Toast) -> Gtk.Widget:
         row = Gtk.Box(spacing=12)
         row.add_css_class("card")
-        mark = Gtk.Image.new_from_file(t.icon) if t.icon.startswith("/") else Gtk.Image.new_from_icon_name(t.icon) if t.icon else None
+        # Only files: the shell resolves icon names (no theme lookups here, see tests/test_osk.py).
+        mark = Gtk.Image.new_from_file(t.icon) if t.icon.startswith("/") else None
         if mark is not None:
             mark.set_pixel_size(40)
         else:

@@ -12,15 +12,17 @@ function fake(code: number | null = null) {
 describe('toasts over the apps (worksuite-toasts)', () => {
   it('sends one JSON line per toast and reports clicks by key', () => {
     const f = fake(), clicks: string[] = []
-    const h = toastHost((k) => clicks.push(k), () => f.p)
+    const h = toastHost((k) => clicks.push(k), () => f.p, 2000, (v) => v === 'firefox-esr' ? '/usr/share/icons/hicolor/48x48/apps/firefox-esr.png' : null)
     expect(h.available()).toBe(true)
     expect(h.show({ key: 'app-7', title: 'Firefox', body: 'Done', icon: 'firefox-esr' })).toBe(true)
-    expect(JSON.parse(f.lines[0])).toEqual({ op: 'show', key: 'app-7', title: 'Firefox', body: 'Done', tone: 'ok', icon: 'firefox-esr', sticky: false })
+    expect(JSON.parse(f.lines[0])).toEqual({ op: 'show', key: 'app-7', title: 'Firefox', body: 'Done', tone: 'ok', icon: '/usr/share/icons/hicolor/48x48/apps/firefox-esr.png', sticky: false })
     h.hide('app-7')
     expect(JSON.parse(f.lines[1])).toEqual({ op: 'hide', key: 'app-7' })
     f.say('click app-7'); f.say('closed app-7'); f.say('click ../x y')
     expect(clicks).toEqual(['app-7'])
     expect(h.show({ key: 'bad key', title: 'x' })).toBe(false)
+    h.show({ key: 'app-8', title: 'Signal', icon: 'signal-desktop' })
+    expect(JSON.parse(f.lines[2]).icon).toBe('')   // a name with no icon file is dropped, never looked up by the helper
   })
 
   it('is unavailable without layer-shell (exit 69), so the shell keeps its own toast', () => {
