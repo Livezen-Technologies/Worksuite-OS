@@ -118,7 +118,12 @@ if (appRequest) {
   else app.quit()
 } else startShell()
 
+/** The shell's Wayland app_id is "worksuite-shell": Labwc's window rule (services/session/labwc/rc.xml) puts it on every
+ *  workspace by that id. Without it Electron's default id matched no rule and workspaces 2-4 were black. */
+export const SHELL_APP_ID = 'worksuite-shell'
 function startShell() {
+;(app as unknown as { setDesktopName?: (n: string) => void }).setDesktopName?.(`${SHELL_APP_ID}.desktop`)
+app.commandLine.appendSwitch('class', SHELL_APP_ID)
 app.whenReady().then(() => {
   // Web permissions denied by default; the shell's own session never gets any (WSOS-SEC-003).
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))

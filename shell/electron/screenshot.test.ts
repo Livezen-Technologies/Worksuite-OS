@@ -84,3 +84,13 @@ describe('Labwc key bindings (WSOS-DSK-011)', () => {
     expect(rc).toMatch(/<desktops number="4"/)
   })
 })
+
+describe('shell on every workspace', () => {
+  it('Labwc rule for the shell app_id makes it omnipresent, and main sets that app_id', () => {
+    const rc = readFileSync(path.join(__dirname, '../../services/session/labwc/rc.xml'), 'utf8')
+    expect(rc).toMatch(/<windowRule identifier="worksuite-shell"[^>]*>\s*<action name="ToggleOmnipresent"\/>/)
+    const main = readFileSync(path.join(__dirname, 'main.ts'), 'utf8')
+    expect(main).toContain("SHELL_APP_ID = 'worksuite-shell'")
+    expect(main).toContain('setDesktopName?.(`${SHELL_APP_ID}.desktop`)')
+  })
+})

@@ -59,6 +59,10 @@
   </keyboard>
   <windowRules>
     <!-- The shell's own windows are normal toplevels; never fullscreen-as-desktop (§5.1 decision gate). -->
-    <windowRule identifier="worksuite-shell" serverDecoration="yes"/>
+    <!-- The shell (desktop, panel, launcher) is on every workspace: without this, switching to workspace 2-4 showed a black
+         screen with no panel (labwc's root menu on click). Actions in a rule run when the window maps. -->
+    <windowRule identifier="worksuite-shell" serverDecoration="yes">
+      <action name="ToggleOmnipresent"/>
+    </windowRule>
   </windowRules>
 </labwc_config>
