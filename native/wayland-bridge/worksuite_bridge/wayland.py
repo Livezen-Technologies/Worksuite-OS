@@ -86,11 +86,21 @@ class WaylandBackend(Backend):
         self.display.disconnect()
 
     def attach(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
         loop.add_reader(self.display.get_fd(), self._readable)
         self.display.flush()
 
     def _readable(self) -> None:
-        if self.display.dispatch(block=True) == -1:
+        # pywayland raises (EPIPE) instead of returning -1 once the compositor is gone. asyncio only logs an exception
+        # from a reader and calls it again at once: the bridge spun at full CPU writing tracebacks until stopped.
+        try:
+            lost = self.display.dispatch(block=True) == -1
+        except RuntimeError:
+            lost = True
+        if lost:
+            loop = getattr(self, "_loop", None)
+            if loop is not None:
+                loop.remove_reader(self.display.get_fd())
             raise SystemExit("Wayland connection lost")
         self.display.flush()
 
