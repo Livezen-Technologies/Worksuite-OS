@@ -12,6 +12,9 @@ override_dh_auto_build:
 	# The package service's one runtime dependency (dbus-next) is vendored from its lockfile.
 	cd services/package-service && npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
 	find services/package-service/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore \) -delete
+	# The device agent serves lk.worksuite.DeviceAgent1 with the same dbus-next (WSOS-ARC-002).
+	cd services/device-agent && npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
+	find services/device-agent/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore \) -delete
 	# Shell: renderer + Electron main, and the Electron runtime for this architecture.
 	cd shell && npm ci --no-audit --no-fund && npm run build
 	# Calamares view module (installer/modules/worksuiteconfirm).

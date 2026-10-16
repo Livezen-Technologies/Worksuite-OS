@@ -12,7 +12,8 @@
       <allow_inactive>no</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
-    <!-- Enrollment from first-run or Settings runs the CLI through pkexec: "worksuite-device-agent enroll", server URL as an option, token on stdin. -->
+    <!-- Checked by lk.worksuite.DeviceAgent1.Enroll (first-run, Settings). The admin CLI may still run
+         "worksuite-device-agent enroll" through pkexec: server URL as an option, token on stdin. -->
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/worksuite-device-agent</annotate>
   </action>
 </policyconfig>

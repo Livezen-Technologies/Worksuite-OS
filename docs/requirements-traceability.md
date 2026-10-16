@@ -169,7 +169,7 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 
 | Requirement | Implementation | Verified |
 |---|---|---|
-| WSOS-ARC-001 Electron main as user, no root command runner | `shell/electron/main.ts` (one `ipcMain.handle` behind `validSender`, `execFile` arrays), sandboxed windows, user unit `worksuite-shell.service`; the only elevation is `pkexec /usr/bin/worksuite-device-agent enroll` | `shell/electron/boundary.test.ts` |
+| WSOS-ARC-001 Electron main as user, no root command runner | `shell/electron/main.ts` (one `ipcMain.handle` behind `validSender`, `execFile` arrays), sandboxed windows, user unit `worksuite-shell.service`; enrollment is the D-Bus method `lk.worksuite.DeviceAgent1.Enroll` (polkit `lk.worksuite.device.enroll`); the remaining elevations are the named pkexec helpers for sign-in methods and kiosk exit | `shell/electron/boundary.test.ts` |
 | WSOS-ARC-003 native apps are compositor windows | `gtk-launch` in its own scope (`xdg.ts`, `session.ts`), labwc; no BrowserView/WebContentsView/webview/reparenting | `shell/electron/boundary.test.ts` |
 | WSOS-ARC-004 desktop with remote services unreachable | shell loads `dist/index.html` from disk, CSP `'self'` only; CI boot test runs with `-nic none` | `boundary.test.ts`, `tests/vm/boot-test.sh` |
 | WSOS-UPD-001 post-update health check | `services/package-service/src/coordinator.ts` (`health`: `dpkg --audit`, installed version = manifest, `healthCheck` env: failed WorkSuite units in `main.ts`); failure skips reboot, runs repair, reports `health_failures` for a signed rollback directive | `test/coordinator.test.ts` |

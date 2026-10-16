@@ -26,7 +26,7 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
     }
   })
 
-  it('elevates only through the named, polkit-guarded helpers (enrollment; sign-in methods)', () => {
+  it('elevates only through the named, polkit-guarded helpers (sign-in methods, kiosk exit); enrollment is a D-Bus method', () => {
     const elevations: string[] = []
     for (const [f, s] of all) {
       expect(s, f).not.toMatch(/['"`](sudo|doas|su|runuser|setpriv)['"`]\s*,/)
@@ -35,7 +35,9 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
       expect(s, f).not.toMatch(/['"`]pkexec['"`]\s*,\s*\[\s*[^'\s]/)
     }
     // kioskMain.ts: leaving kiosk mode (PIN or administrator password, polkit lk.worksuite.kiosk.exit-*).
-    expect(elevations.sort()).toEqual(['device.ts:/usr/bin/worksuite-device-agent', 'kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit', 'signin.ts:/usr/lib/worksuite/worksuite-signin'])
+    // Enrollment is lk.worksuite.DeviceAgent1.Enroll (polkit lk.worksuite.device.enroll, WSOS-ARC-002), not pkexec.
+    expect(all.find(([f]) => f === 'device.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.DeviceAgent1'\)\.Enroll\(/)
+    expect(elevations.sort()).toEqual(['kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit', 'signin.ts:/usr/lib/worksuite/worksuite-signin'])
   })
 
   it('every IPC handler goes through the sender check', () => {

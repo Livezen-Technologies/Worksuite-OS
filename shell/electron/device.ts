@@ -1,5 +1,5 @@
-// Device agent integration for the shell: status for Settings > About this device and enrollment via pkexec.
-import { spawn } from 'node:child_process'
+// Device agent integration for the shell: status for Settings > About this device and enrollment over lk.worksuite.DeviceAgent1.
+import dbus from 'dbus-next'
 import { readFileSync } from 'node:fs'
 import os from 'node:os'
 
@@ -51,35 +51,36 @@ function agentInfo(statusPath: string) {
   }
 }
 
+/** One D-Bus call to lk.worksuite.DeviceAgent1.Enroll: the device id, or the D-Bus error name and message. */
+export type EnrollCall = (serverUrl: string, token: string) => Promise<{ ok: true; id: string } | { ok: false; name: string; message: string }>
+
+/** The real call on the system bus; polkit (lk.worksuite.device.enroll, auth_admin) asks for an administrator. */
+export const busEnroll: EnrollCall = async (serverUrl, token) => {
+  const bus = dbus.systemBus()
+  try {
+    const obj = await bus.getProxyObject('lk.worksuite.DeviceAgent1', '/lk/worksuite/DeviceAgent1')
+    const id = await obj.getInterface('lk.worksuite.DeviceAgent1').Enroll(serverUrl, token)
+    return { ok: true, id: String(id) }
+  } catch (e) {
+    const err = e as { type?: string; text?: string; message?: string }
+    return { ok: false, name: err.type ?? 'org.freedesktop.DBus.Error.Failed', message: err.text ?? err.message ?? '' }
+  } finally { bus.disconnect() }
+}
+
 /**
- * Device enrollment (§9.3) runs the agent CLI as root through pkexec (polkit action lk.worksuite.device.enroll,
- * admin auth). Fixed arguments; the enrollment code goes on stdin, never into argv or logs.
+ * Device enrollment (§9.3) is the named D-Bus method lk.worksuite.DeviceAgent1.Enroll behind the polkit action
+ * lk.worksuite.device.enroll (WSOS-ARC-002). The enrollment code is a D-Bus argument: never in argv or logs.
  */
-export function enrollDevice(serverUrl: string, code: string, statusPath = STATUS_PATH): Promise<{ ok: true; value: { device_id: string; org_name: string | null } } | { ok: false; error: string }> {
+export async function enrollDevice(serverUrl: string, code: string, statusPath = STATUS_PATH, call: EnrollCall = busEnroll): Promise<{ ok: true; value: { device_id: string; org_name: string | null } } | { ok: false; error: string }> {
   let url: URL
-  try { url = new URL(serverUrl) } catch { return Promise.resolve({ ok: false, error: 'insecure_url' }) }
-  if (url.protocol !== 'https:') return Promise.resolve({ ok: false, error: 'insecure_url' })
+  try { url = new URL(serverUrl) } catch { return { ok: false, error: 'insecure_url' } }
+  if (url.protocol !== 'https:') return { ok: false, error: 'insecure_url' }
   const token = code.trim()
-  if (!/^[A-Za-z0-9-]{4,128}$/.test(token)) return Promise.resolve({ ok: false, error: 'invalid_code' })
-  return new Promise((resolve) => {
-    const child = spawn('pkexec', ['/usr/bin/worksuite-device-agent', 'enroll', '--server', url.toString()], { stdio: ['pipe', 'pipe', 'pipe'] })
-    let out = '', err = ''
-    child.stdout.on('data', (d) => { out += d })
-    child.stderr.on('data', (d) => { err += d })
-    child.on('error', () => resolve({ ok: false, error: 'agent_unavailable' }))
-    child.on('close', (status) => {
-      // pkexec: 126 = authentication dismissed or failed, 127 = not authorized.
-      if (status === 126 || status === 127) return resolve({ ok: false, error: 'auth_cancelled' })
-      const info = deviceInfo(statusPath)
-      if (status === 0 || /ALREADY_ENROLLED/.test(err)) {
-        let id = ''
-        try { id = String(JSON.parse(out)) } catch { /* already enrolled: no id printed */ }
-        return resolve({ ok: true, value: { device_id: id, org_name: info.org_name } })
-      }
-      if (/not running/.test(err)) return resolve({ ok: false, error: 'agent_unavailable' })
-      if (/INSECURE_URL/.test(err)) return resolve({ ok: false, error: 'insecure_url' })
-      resolve({ ok: false, error: 'enrollment_rejected' })
-    })
-    child.stdin.end(token + '\n')
-  })
+  if (!/^[A-Za-z0-9-]{4,128}$/.test(token)) return { ok: false, error: 'invalid_code' }
+  const r = await call(url.toString(), token).catch(() => ({ ok: false as const, name: 'org.freedesktop.DBus.Error.ServiceUnknown', message: '' }))
+  if (r.ok || r.message === 'ALREADY_ENROLLED') return { ok: true, value: { device_id: r.ok ? r.id : '', org_name: deviceInfo(statusPath).org_name } }
+  if (r.name === 'lk.worksuite.Error.NotAuthorized') return { ok: false, error: 'auth_cancelled' }
+  if (/ServiceUnknown|NameHasNoOwner|NoReply|Disconnected|AccessDenied/.test(r.name)) return { ok: false, error: 'agent_unavailable' }
+  if (r.message === 'INSECURE_URL') return { ok: false, error: 'insecure_url' }
+  return { ok: false, error: 'enrollment_rejected' }
 }

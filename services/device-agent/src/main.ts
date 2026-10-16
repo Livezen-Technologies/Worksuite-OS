@@ -11,6 +11,7 @@ import { Agent } from './agent.ts';
 import { httpApi } from './api.ts';
 import { DEFAULT_PATHS, linuxHost } from './host.ts';
 import { StateFile } from './state.ts';
+import { serveBus } from './dbus.ts';
 
 const KEY_DIR = '/usr/share/worksuite/keys/device-commands';   // from worksuite-archive-keyring
 const SOCKET = join(DEFAULT_PATHS.runtimeDir, 'control.sock');
@@ -68,6 +69,15 @@ async function daemon() {
   });
   rmSync(SOCKET, { force: true });
   server.listen(SOCKET, () => chmodSync(SOCKET, 0o600));   // root only; pkexec runs the CLI as root
+
+  // lk.worksuite.DeviceAgent1 (WSOS-ARC-002): what Settings and first-run call, each privileged method behind polkit.
+  // The root-only socket stays for the admin CLI. No bus (rescue shell) just means no D-Bus API.
+  await serveBus({
+    status: () => agent.status(),
+    effectivePolicy: () => (state.state.enrolled && state.state.policy ? publicPolicy(state.state.policy) : null),
+    enroll: (url, token) => serial(() => agent.enroll(url, token)),
+    refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); },
+  }).catch((e) => host.audit('dbus_unavailable', { error: String(e?.message ?? e) }));
 
   const jitter = (ms: number) => ms + Math.floor(Math.random() * ms * 0.2);
   const every = (ms: number, what: string, fn: () => Promise<unknown>) => {
