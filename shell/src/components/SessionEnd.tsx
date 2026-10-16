@@ -11,6 +11,8 @@ import { ANYWAY, BLOCKED_TITLE, CLOSE_TIMEOUT_MS, SUB, TITLE, appWindows, blocke
 import { t } from '../i18n'
 
 const BG = '#040A1A'
+/** How long a forced restart/shutdown may wait for polkit before the dialog comes back. */
+export const FORCE_TIMEOUT_MS = 45_000
 
 /** The splash's mark (branding/plymouth/mark.svg) in its spinning ring. */
 function RingMark() {
@@ -87,8 +89,15 @@ export function SessionEnd({ action, onCancel, onLogout = () => os.logout(), nam
     await new Promise((r) => setTimeout(r, 600))   // let the bar finish before systemd's splash takes over
     if (action === 'logout') { await onLogout(); return }
     if (force && inhibited.current) {
-      const r = await sessionApi.powerForce(action)
-      if (!r.ok) { done.current = false; setError(errorMessage(r.error, 'generic')); setBlocked([]); return }
+      // polkit asks for an administrator here; if that prompt is dismissed or never answered, come back to the
+      // dialog instead of leaving the overlay on screen (systemd has not started shutting down).
+      const r = await Promise.race([sessionApi.powerForce(action), new Promise<{ ok: false; error: string }>((res) => setTimeout(() => res({ ok: false, error: 'timeout' }), FORCE_TIMEOUT_MS))])
+      if (!r.ok) {
+        done.current = false
+        setError(errorMessage(r.error === 'timeout' ? 'not_authorized' : r.error, 'generic'))
+        const s: EndState = { action, phase: 'blocked', progress: closeProgress(total.current, left.current.length) }
+        setState(s); publish(s); setBlocked(blockers(left.current, [], nameOf).length ? blockers(left.current, [], nameOf) : [])
+      }
       return
     }
     await os.power(action)

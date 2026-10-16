@@ -130,6 +130,25 @@ describe('SessionEnd overlay', () => {
     expect(api.powerForce).toHaveBeenCalledWith('shutdown')
   })
 
+  it('an unanswered administrator prompt brings the dialog back instead of a stuck overlay', async () => {
+    const { api } = session({
+      inhibitors: vi.fn(async () => ({ ok: true as const, value: [{ what: 'shutdown', who: 'Docs', why: '', mode: 'block', uid: 1000, pid: 7 }] })),
+      powerForce: vi.fn(() => new Promise<never>(() => {})),
+    })
+    panel([])
+    await render(<SessionEnd action="restart" onCancel={() => {}} />)
+    await tick(800)
+    const anyway = [...host!.querySelectorAll('button')].find((b) => b.textContent === 'Restart anyway')!
+    await act(async () => anyway.click())
+    await tick(700)
+    expect(api.powerForce).toHaveBeenCalledWith('restart')
+    expect(host!.querySelector('[role="alertdialog"]')).toBeNull()
+    await tick(45_100)
+    const dlg = host!.querySelector('[role="alertdialog"]')!
+    expect(dlg.textContent).toContain('An administrator needs to allow this.')
+    expect([...dlg.querySelectorAll('button')].some((b) => b.textContent === 'Cancel')).toBe(true)
+  })
+
   it('apps that keep their windows open are listed after the timeout', async () => {
     session()
     panel([win('a', 'org.gnome.TextEditor', 'notes.txt')], 'none')

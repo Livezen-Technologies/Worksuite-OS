@@ -86,7 +86,7 @@ export default function App() {
     case 'active':
       if (firstRun) return <FirstRun userName={realName || displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
       return (
-        <Desktop user={user} fullName={realName || undefined} onLock={() => { void requestLock(() => os.lock(), () => send('lock')) }} onLogout={() => { void os.logout(); send('logout') }} onOpen={setWin} notes={notes}>
+        <Desktop user={user} fullName={realName || undefined} onLock={() => { void requestLock(() => os.lock(), () => send('lock')) }} onLogout={() => { void os.logout(); if (!(window as { worksuite?: unknown }).worksuite) send('logout') /* Electron: the session ends; never the preview greeter */ }} onOpen={setWin} notes={notes}>
           {win === 'files' && <Files archive={archive} onClose={() => { setWin(null); setArchive(null) }} />}
           {win === 'appcenter' && <AppCenter onClose={() => setWin(null)} />}
           {win === 'settings' && <Settings onClose={() => setWin(null)} />}
