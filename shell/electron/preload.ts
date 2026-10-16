@@ -120,6 +120,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   signinSetDefault: (method: string) => ipcRenderer.invoke('ws:signinSetDefault', String(method)),
   cloudAccounts: () => ipcRenderer.invoke('ws:cloudAccounts'),
   pkgRepair: () => ipcRenderer.invoke('ws:pkgRepair'),
+  pkgState: () => ipcRenderer.invoke('ws:pkgState'),
   pkgCatalog: () => ipcRenderer.invoke('ws:pkgCatalog'),
   pickFile: (kind: string) => ipcRenderer.invoke('ws:pickFile', String(kind)),
   localDebPreview: (handle: string) => ipcRenderer.invoke('ws:localDebPreview', String(handle)),

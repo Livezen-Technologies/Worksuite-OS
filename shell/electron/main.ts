@@ -293,6 +293,7 @@ app.whenReady().then(() => {
   handle('ws:signinKeyRemove', (id) => signin.keyRemove(id))
   handle('ws:signinSetDefault', (m) => ['password', 'pin', 'key'].includes(m) ? signin.setDefault(m as SignInMethod) : { ok: false, error: 'bad_method' })
   handle('ws:pkgRepair', () => pkg.repair())
+  handle('ws:pkgState', () => pkg.serviceState())
   handle('ws:pkgCatalog', () => pkg.catalog())
   // Files for local installs come only from the user's own choice in a file dialog: the renderer gets an opaque
   // handle, never the ability to name a path (WSOS-APT-005, WSOS-AIM-001, WSOS-AUP-010).

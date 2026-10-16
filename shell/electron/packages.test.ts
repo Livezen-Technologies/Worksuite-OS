@@ -154,3 +154,13 @@ describe('AppImage client', () => {
     for (const r of await Promise.all([a.approve('../x'), a.remove('x'), a.import('/x/a.exe'), a.update('0123456789abcdef', 'rel.AppImage')])) expect(r.ok).toBe(false)
   })
 })
+
+describe('WSOS-APT-006 service state', () => {
+  it('reads the State property without polkit and passes only known values', async () => {
+    const f = fakeExec({ stdout: '{"type":"s","data":"interrupted"}' })
+    expect(await packageClient(f.exec).serviceState()).toEqual({ ok: true, value: 'interrupted' })
+    expect(f.calls[0]).toEqual(['busctl', '--system', '--json=short', 'get-property', 'lk.worksuite.PackageService1', '/lk/worksuite/PackageService1', 'lk.worksuite.PackageService1', 'State'])
+    expect(await packageClient(fakeExec({ stdout: '{"type":"s","data":"weird"}' }).exec).serviceState()).toEqual({ ok: false, error: 'failed' })
+    expect(await packageClient(fakeExec({ code: 1, stderr: 'Failed: ServiceUnknown' }).exec).serviceState()).toEqual({ ok: false, error: 'service_unavailable' })
+  })
+})

@@ -84,6 +84,7 @@ export function UpdatesPanel() {
   ]
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
+      <RepairBanner />
       {/* SetUpdates board hero: tinted by state */}
       <div className="flex items-center gap-5 rounded-[18px] border px-6 py-[22px]" style={{ background: hero.bg, borderColor: hero.border }} aria-live="polite">
         <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-2xl" style={{ background: hero.icon }}>
@@ -139,6 +140,40 @@ export function UpdatesPanel() {
         </div>
       </div>
       {schedule && <RestartDialog onClose={() => setSchedule(false)} />}
+    </div>
+  )
+}
+
+/** WSOS-APT-006: an interrupted package change (dpkg --audit) is shown here with an audited Repair action. */
+export function RepairBanner() {
+  const [state, setState] = useState<'idle' | 'busy' | 'interrupted' | null>(null)
+  const [job, setJob] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null)
+  const load = () => void os.pkgState().then((r) => setState(r.ok ? r.value : null)).catch(() => setState(null))
+  useEffect(load, [])
+  useEffect(() => os.onPkgJob((e) => {
+    if (e.kind !== 'finished' || e.job !== job) return
+    setJob(null)
+    setMsg(e.result === 'success' ? { text: t('upd.repair.done') } : { text: packageErrorText(e.error ?? 'failed'), error: true })
+    load()
+  }), [job])
+  const repair = async () => {
+    setMsg(null)
+    const r = await os.pkgRepair()
+    if (r.ok) setJob(r.value); else setMsg({ text: packageErrorText(r.error), error: true })
+  }
+  if (state !== 'interrupted' && !msg) return null
+  return (
+    <div role="alert" className="flex items-center gap-4 rounded-[14px] border border-[rgba(245,158,11,0.45)] bg-[rgba(245,158,11,0.12)] px-5 py-3.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-sm font-semibold">{state === 'interrupted' ? t('upd.repair.title') : t('upd.repair.doneTitle')}</span>
+        <span className={`text-[13px] ${msg?.error ? 'text-[#FCA5A5]' : 'text-[#C9D6EE]'}`}>{msg?.text ?? t('upd.repair.text')}</span>
+      </div>
+      {state === 'interrupted' && (
+        <button type="button" disabled={!!job} onClick={() => void repair()} className="cursor-pointer rounded-[9px] bg-[#F59E0B] px-3.5 py-[9px] text-[13px] font-semibold text-[#1F1300] disabled:cursor-default disabled:opacity-60">
+          {job ? t('upd.repair.running') : t('upd.repair.action')}
+        </button>
+      )}
     </div>
   )
 }

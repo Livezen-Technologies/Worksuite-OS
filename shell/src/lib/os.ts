@@ -104,6 +104,8 @@ export interface WorkSuiteApi {
   signinSetDefault(method: SignInMethod): Promise<SigninResult>
   /** Package repair (§9.2): finishes interrupted dpkg/apt changes; result arrives through onPkgJob. */
   pkgRepair(): Promise<CloudResult<string>>
+  /** WSOS-APT-006: package service state; 'interrupted' means an interrupted dpkg run needs Repair. */
+  pkgState(): Promise<CloudResult<'idle' | 'busy' | 'interrupted'>>
   /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
   pkgCatalog(): Promise<CloudResult<AppCatalog>>
   /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
@@ -535,6 +537,7 @@ const stub: WorkSuiteApi = {
   async signinSetDefault(method) { previewSignin.default = method; return { ok: true } },
   async sysUsers() { return stubAvail({ current: 'preview', users: [{ login: 'preview', name: 'Preview User', uid: 1000, admin: true }, { login: 'second', name: 'Second User', uid: 1001, admin: false }] }) },
   async pkgRepair() { return stubJob('repair', 'repair') },
+  async pkgState() { return { ok: false, error: 'service_unavailable' } },
   // Browser preview: there is no package service or server here, so these answer honestly instead of inventing apps.
   async pkgCatalog() { return { ok: true, value: { state: 'not_enrolled', arch: 'amd64', items: [], error: 'Preview mode: no package service, so there is no app catalog.' } } },
   async pickFile() { return { ok: false, error: 'service_unavailable' } },
