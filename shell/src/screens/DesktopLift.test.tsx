@@ -20,7 +20,7 @@ afterEach(() => { act(() => root?.unmount()); host?.remove(); vi.restoreAllMocks
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)) })
 
 function Host({ open }: { open: boolean }) {
-  const notes = useNotices()
+  const notes = useNotices(false)
   return <Desktop user="alex" onLock={() => {}} onLogout={() => {}} onOpen={() => {}} notes={notes}>{open ? <div>Settings</div> : null}</Desktop>
 }
 
