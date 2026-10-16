@@ -47,6 +47,11 @@ wireplumber
 upower
 cups-client
 wlr-randr
+# Touchscreen, pen and touch mode (shell/electron/touch.ts): device listing and tablet-mode switch events,
+# auto-rotate (monitor-sensor), and the on-screen keyboard (virtual-keyboard + layer-shell under Labwc)
+libinput-tools
+iio-sensor-proxy
+wvkbd
 # WorkSuite greeter (WSOS-AUTH-001; the build installs no recommends)
 python3-gi
 gir1.2-gtk-4.0

@@ -7,6 +7,8 @@ import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
 import { RunningApps, TrayItems, UpdateBadge, VpnBadge, useLauncherKey } from '../components/PanelItems'
 import { QuickPanel, QuickTray, useQuickState } from '../components/QuickSettings'
+import { OskButton } from '../components/TouchItems'
+import { useTouchMode } from '../lib/touch'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
 import type { PanelWindow } from '../lib/panel'
 import A11yPanel from '../components/A11yPanel'
@@ -55,6 +57,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   const t = useT()
   const now = useClock()
   const [launcher, setLauncher] = useState(false)
+  useTouchMode() // :root[data-touch] sizing and the on-screen keyboard on text-field focus
   const [a11yOpen, setA11yOpen] = useState(false)
   // Super key from Labwc arrives over lk.worksuite.Shell1 (WSOS-DSK-011).
   useLauncherKey(useCallback((a: 'toggle' | 'show') => { markLauncherRequest(); setLauncher((v) => (a === 'show' ? true : !v)) }, []))
@@ -212,7 +215,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
               </div>
               {!allView ? (
                 <>
-                  <div className="grid grid-cols-6 gap-x-1.5 gap-y-1">
+                  <div className="ws-pins grid grid-cols-6 gap-x-1.5 gap-y-1">
                     {pins.map((a) => (
                       <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] rounded-xl px-1 py-2.5 hover:bg-white/[0.07] focus-visible:bg-white/[0.07]">
                         <span aria-hidden="true" className="flex size-11 items-center justify-center rounded-xl text-base font-bold text-white shadow-[0_6px_14px_rgba(0,0,0,0.25)]" style={{ background: tileColor(a) }}>{a.mark}</span>
@@ -279,7 +282,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           onSettings={() => { setQsOpen(false); onOpen('settings') }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
       )}
 
-      <nav aria-label={t('panel.taskbar')} className="absolute inset-x-0 bottom-0 z-40 box-border flex h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px]">
+      <nav aria-label={t('panel.taskbar')} className="ws-taskbar absolute inset-x-0 bottom-0 z-40 box-border flex h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px]">
         <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
           className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
         <button type="button" onClick={() => setLauncher(true)} className="box-border hidden h-9 w-[200px] cursor-text items-center gap-2 rounded-[9px] bg-white/[0.06] px-3 text-[13px] text-[#8FA3C8] hover:bg-white/10 md:flex">
@@ -296,6 +299,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           <CaptureBadge />
           <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
+          <OskButton />
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setQsOpen(false) }}
             className="flex size-9 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
           <QuickTray state={quick} open={qsOpen} onToggle={() => { setQsOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setA11yOpen(false) }} />

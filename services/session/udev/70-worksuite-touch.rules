@@ -1,0 +1,5 @@
+# WorkSuite touch mode (shell/electron/touch.ts): the signed-in seat user may read the convertible's tablet-mode
+# switch and pens/stylus tablets (libinput debug-events), so the shell can switch to touch mode when the screen is
+# folded and show pen pressure in Settings. Keyboards and pointers are not included.
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_TABLET}=="1", TAG+="uaccess"

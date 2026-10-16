@@ -28,6 +28,7 @@ import { startDesktopHost } from './desktopHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
+import { startTouchHost } from './touch'
 import { startNotifications } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
@@ -440,6 +441,7 @@ app.whenReady().then(() => {
   startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
+  startTouchHost(handle, broadcast, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
   startNotifications(handle, broadcast)
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).

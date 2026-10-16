@@ -218,3 +218,13 @@ contextBridge.exposeInMainWorld('worksuiteNotifications', {
   dismiss: (id: number) => ipcRenderer.invoke('ws:notificationDismiss', String(Number(id))),
   onChange: on('ws:notificationsChanged'),
 })
+
+// Touchscreen, pen, touch mode and the on-screen keyboard — see electron/touch.ts.
+contextBridge.exposeInMainWorld('worksuiteTouch', {
+  state: () => ipcRenderer.invoke('ws:touchState'),
+  set: (patch: unknown) => ipcRenderer.invoke('ws:touchSet', JSON.stringify(patch)),
+  osk: (show: boolean) => ipcRenderer.invoke('ws:oskShow', show ? '1' : '0'),
+  penTest: (on: boolean) => ipcRenderer.invoke('ws:penTest', on ? '1' : '0'),
+  onChange: on('ws:touchChanged'),
+  onPen: on('ws:penEvent'),
+})
