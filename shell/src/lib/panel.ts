@@ -8,6 +8,9 @@ export type PanelResult = { ok: true; value: true } | { ok: false; error: string
 /** Labwc desktops via the bridge (WSOS-DSK-003). */
 export interface Workspaces { supported: boolean; current: number; count: number; windows: Record<string, number> }
 
+/** lk.worksuite.Shell1 calls: Super key (toggle/show) and touch gestures (notifications, desktop). */
+export type ShellAction = 'toggle' | 'show' | 'notifications' | 'desktop'
+
 export const ACTIVATED = 1
 export const MINIMIZED = 2
 
@@ -21,7 +24,7 @@ export interface PanelApi {
   onWindows(cb: (w: PanelWindow[]) => void): () => void
   onTray(cb: (t: TrayItem[]) => void): () => void
   /** Super key via lk.worksuite.Shell1. */
-  onLauncher(cb: (action: 'toggle' | 'show') => void): () => void
+  onLauncher(cb: (action: ShellAction) => void): () => void
   workspaces?(): Promise<Workspaces>
   activateWorkspace?(n: number): Promise<PanelResult>
   moveToWorkspace?(handle: string, n: number): Promise<PanelResult>
@@ -29,6 +32,11 @@ export interface PanelApi {
 }
 
 /** Taskbar shows the windows of the current workspace; windows the bridge has not placed count as current. */
+/** Show desktop (three-finger swipe down): minimise every visible window on the current workspace. */
+export function showDesktopTargets(windows: PanelWindow[], ws: Workspaces): string[] {
+  return onWorkspace(windows, ws).filter((w) => !(w.flags & MINIMIZED) && !['worksuite', 'worksuite-shell', 'electron'].includes(w.appId.toLowerCase())).map((w) => w.handle)
+}
+
 export function onWorkspace(windows: PanelWindow[], ws: Workspaces): PanelWindow[] {
   if (!ws.supported) return windows
   return windows.filter((w) => (ws.windows[w.handle] ?? ws.current) === ws.current)

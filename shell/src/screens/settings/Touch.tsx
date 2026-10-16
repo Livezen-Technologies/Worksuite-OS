@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Svg, card, chip, field, rowLine, sectionLabel } from '../../components/Dk'
 import { Empty } from '../Hardware'
-import { hasTabletSwitch, pens, touchApi, touchScreens, useTouch, type OskMode, type OskSize, type PenEvent, type TabletMode, type TouchSettings } from '../../lib/touch'
+import { DEFAULT_GESTURES, hasTabletSwitch, pens, touchApi, touchScreens, useTouch, type OskMode, type OskSize, type PenEvent, type TabletMode, type TouchSettings, type GestureSettings } from '../../lib/touch'
 import { formatNumber, t, type MessageKey } from '../../i18n'
 import { BigSwitch, H1, Note, Unavail } from './ui'
 import { TouchCalibrate } from './TouchCalibrate'
@@ -112,6 +112,7 @@ export function TouchPanel() {
         </div>
       </section>
     </>}
+    {!!screens.length && s.touchEnabled && <Gestures s={s} set={set} />}
     <section aria-label={t('touch.tabletMode')} className="flex flex-col gap-2">
       <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('touch.tabletMode')}</h2>
       <div className={card}>
@@ -135,6 +136,43 @@ export function TouchPanel() {
     </section>
     <Note>{t('touch.calibrationNote')}</Note>
   </>
+}
+
+/** Board SetTouch › Gestures: edge swipes, three-finger swipes (worksuite-gestures) and the long-press delay. */
+function Gestures({ s, set }: { s: TouchSettings; set: (p: Partial<TouchSettings>) => unknown }) {
+  const g: GestureSettings = s.gestures ?? DEFAULT_GESTURES
+  const hold = s.longPressMs ?? 600
+  const put = (patch: Partial<GestureSettings>) => void set({ gestures: { ...g, ...patch } })
+  const rows: { k: keyof GestureSettings; f: string; what: MessageKey; opts: string[]; edge: boolean }[] = [
+    { k: 'edgeBottom', f: '1 ↑', what: 'touch.g.edgeBottom', opts: ['launcher', 'off'], edge: true },
+    { k: 'edgeRight', f: '1 ←', what: 'touch.g.edgeRight', opts: ['notifications', 'off'], edge: true },
+    { k: 'edgeLeft', f: '1 →', what: 'touch.g.edgeLeft', opts: ['switch-apps', 'off'], edge: true },
+    { k: 'threeHorizontal', f: '3 ↔', what: 'touch.g.threeHorizontal', opts: ['workspaces', 'switch-apps', 'off'], edge: false },
+    { k: 'threeDown', f: '3 ↓', what: 'touch.g.threeDown', opts: ['desktop', 'off'], edge: false },
+  ]
+  return (
+    <section aria-label={t('touch.g.title')} className="flex flex-col gap-2">
+      <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('touch.g.title')}</h2>
+      <div className={card}>
+        <Row title={t('touch.g.enable')} sub={t('touch.g.enableSub')}><BigSwitch label={t('touch.g.enable')} checked={g.enabled} onChange={(v) => put({ enabled: v })} /></Row>
+        {g.enabled && <Row title={t('touch.g.edges')} sub={t('touch.g.edgesSub')}><BigSwitch label={t('touch.g.edges')} checked={g.edgeSwipes} onChange={(v) => put({ edgeSwipes: v })} /></Row>}
+        {g.enabled && rows.filter((r) => !r.edge || g.edgeSwipes).map((r) => (
+          <Row key={r.k} title={<span className="flex items-center gap-2"><span className="w-9 font-mono text-[11px] text-[#18D4F0]" aria-hidden="true">{r.f}</span>{t(r.what)}</span>}>
+            <select aria-label={t(r.what)} value={g[r.k] as string} className={field} onChange={(e) => put({ [r.k]: e.target.value } as Partial<GestureSettings>)}>
+              {r.opts.map((o) => <option key={o} value={o}>{t(`touch.g.a.${o}` as MessageKey)}</option>)}
+            </select>
+          </Row>
+        ))}
+        <Row title={t('touch.g.hold')} sub={t('touch.g.holdSub')}>
+          <span className="flex items-center gap-3">
+            <input type="range" min={300} max={1200} step={50} value={hold} aria-label={t('touch.g.hold')} aria-valuetext={t('touch.g.ms', { n: formatNumber(hold) })}
+              onChange={(e) => void set({ longPressMs: Number(e.target.value) })} className="w-40 accent-[#1F6BFF]" />
+            <span className="w-16 font-mono text-xs text-[#C9D6EE]">{t('touch.g.ms', { n: formatNumber(hold) })}</span>
+          </span>
+        </Row>
+      </div>
+    </section>
+  )
 }
 
 export function KeyboardPanel() {

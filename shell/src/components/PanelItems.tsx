@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
-import { clickAction, onWorkspace, panel, taskbarEntries, updateBadge, type PanelWindow, type TrayItem, type Workspaces } from '../lib/panel'
+import { clickAction, onWorkspace, panel, taskbarEntries, updateBadge, type PanelWindow, type ShellAction, type TrayItem, type Workspaces } from '../lib/panel'
 import { os, type OsUpdateStatus, type VpnState } from '../lib/os'
 import { activeVpn, vpnErrorText } from '../lib/vpn'
 import { useT } from '../i18n'
@@ -54,7 +54,7 @@ export function WorkspaceSwitcher() {
 }
 
 /** Super key through lk.worksuite.Shell1 (Labwc keybinding). */
-export function useLauncherKey(onAction: (a: 'toggle' | 'show') => void): void {
+export function useLauncherKey(onAction: (a: ShellAction) => void): void {
   useEffect(() => panel.onLauncher(onAction), [onAction])
 }
 

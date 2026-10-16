@@ -8,7 +8,12 @@ export interface InputDev { name: string; node: string; kinds: DevKind[]; tablet
 export type OskMode = 'off' | 'touch' | 'always'
 export type TabletMode = 'auto' | 'on' | 'off'
 export type OskSize = 'small' | 'medium' | 'large'
-export interface TouchSettings { touchEnabled: boolean; mapToOutput: Record<string, string>; tabletMode: TabletMode; rotationLock: boolean; osk: OskMode; oskSize: OskSize; calibration: Record<string, number[]> }
+export interface GestureSettings {
+  enabled: boolean; edgeSwipes: boolean; edgeBottom: 'launcher' | 'off'; edgeRight: 'notifications' | 'off'; edgeLeft: 'switch-apps' | 'off'
+  threeHorizontal: 'workspaces' | 'switch-apps' | 'off'; threeDown: 'desktop' | 'off'
+}
+export const DEFAULT_GESTURES: GestureSettings = { enabled: true, edgeSwipes: true, edgeBottom: 'launcher', edgeRight: 'notifications', edgeLeft: 'switch-apps', threeHorizontal: 'workspaces', threeDown: 'desktop' }
+export interface TouchSettings { touchEnabled: boolean; mapToOutput: Record<string, string>; tabletMode: TabletMode; rotationLock: boolean; osk: OskMode; oskSize: OskSize; calibration: Record<string, number[]>; gestures?: GestureSettings; longPressMs?: number }
 export interface TouchState {
   devices: InputDev[]; settings: TouchSettings; tabletSwitch: boolean; touchMode: boolean
   orientation: string | null; hasAccelerometer: boolean; osk: { available: boolean; visible: boolean }; outputs: string[]
@@ -41,10 +46,40 @@ export function isTextField(el: Element | null): boolean {
   if (el instanceof HTMLInputElement) return !el.readOnly && !el.disabled && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'file', 'color', 'hidden', 'image'].includes(el.type)
   return (el as HTMLElement).isContentEditable === true
 }
+/**
+ * Touch and hold → right-click on the shell's own surfaces (Settings › Touchscreen & pen › Long-press delay): after
+ * `ms` without moving more than 10 px, a contextmenu event goes to the element under the finger. Returns the remover.
+ */
+export function installLongPress(root: HTMLElement | Document, ms: number): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let start: { x: number; y: number } | null = null
+  const cancel = () => { if (timer) clearTimeout(timer); timer = null; start = null }
+  const down = (e: Event) => {
+    const te = e as TouchEvent
+    if (te.touches.length !== 1) { cancel(); return }
+    const p = te.touches[0]
+    start = { x: p.clientX, y: p.clientY }
+    const target = e.target as Element
+    timer = setTimeout(() => {
+      timer = null
+      if (start) target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: start.x, clientY: start.y }))
+    }, ms)
+  }
+  const move = (e: Event) => {
+    const p = (e as TouchEvent).touches[0]
+    if (start && p && Math.hypot(p.clientX - start.x, p.clientY - start.y) > 10) cancel()
+  }
+  root.addEventListener('touchstart', down, { passive: true })
+  root.addEventListener('touchmove', move, { passive: true })
+  root.addEventListener('touchend', cancel)
+  root.addEventListener('touchcancel', cancel)
+  return () => { cancel(); root.removeEventListener('touchstart', down); root.removeEventListener('touchmove', move); root.removeEventListener('touchend', cancel); root.removeEventListener('touchcancel', cancel) }
+}
+
 export const oskWanted = (s: TouchSettings, touchMode: boolean) => s.osk === 'always' || (s.osk === 'touch' && touchMode)
 
 // ---------- preview stub (?touch=1) ----------
-const DEFAULTS: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium', calibration: {} }
+const DEFAULTS: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium', calibration: {}, gestures: { ...DEFAULT_GESTURES }, longPressMs: 600 }
 function stubApi(): TouchApi {
   const subs = new Set<(s: unknown) => void>()
   const st: TouchState = {
@@ -111,5 +146,8 @@ export function useTouchMode(): TouchState | null {
     document.addEventListener('focusout', blur)
     return () => { document.removeEventListener('focusin', focus); document.removeEventListener('focusout', blur) }
   }, [state?.settings.osk, state?.touchMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  const hold = state?.settings.longPressMs ?? 600
+  const touchOn = !!state && state.devices.some((d) => d.kinds.includes('touchscreen')) && state.settings.touchEnabled
+  useEffect(() => (touchOn ? installLongPress(document, hold) : undefined), [touchOn, hold])
   return state
 }

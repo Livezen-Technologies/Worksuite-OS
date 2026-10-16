@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  DEFAULT_TOUCH, hasTabletModeBit, labwcTouchBlock, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
+  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, labwcTouchBlock, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
   parseOrientation, parsePenLine, parseSwitchLine, parseUdevProps, saveTouch, touchBridge, touchModeOn, type Spawn,
 } from './touch'
 import type { Exec } from './system'
@@ -137,5 +137,21 @@ describe('Labwc config writer', () => {
     expect(calls).toContain('wlr-randr --output eDP-1 --transform 90')
     expect(b.osk(true)).toEqual({ available: true, value: true })
     expect(spawned).toContain('kill wvkbd-mobintl SIGUSR2')
+    // Gestures: the daemon runs with a touchscreen, re-reads its file on a change and stops when turned off.
+    const gfile = path.join(home, '.config', 'worksuite', 'gestures.json')
+    expect(spawned).toContain('/usr/lib/worksuite/worksuite-gestures')
+    expect(JSON.parse(readFileSync(gfile, 'utf8')).edgeBottom).toBe('launcher')
+    await b.set(JSON.stringify({ touchEnabled: true, gestures: { ...DEFAULT_GESTURES, threeHorizontal: 'switch-apps' }, longPressMs: 800 }))
+    expect(JSON.parse(readFileSync(gfile, 'utf8')).threeHorizontal).toBe('switch-apps')
+    await b.set(JSON.stringify({ longPressMs: 900 }))
+    expect(spawned).toContain('kill /usr/lib/worksuite/worksuite-gestures SIGHUP')
+    await b.set(JSON.stringify({ gestures: { ...DEFAULT_GESTURES, enabled: false } }))
+    expect(spawned).toContain('kill /usr/lib/worksuite/worksuite-gestures SIGTERM')
+  })
+  it('gesture settings: only known choices, long-press delay 300–1200 ms', () => {
+    const n = normalizeTouch({ gestures: { edgeBottom: 'off', threeHorizontal: 'rm -rf', edgeSwipes: false }, longPressMs: 5000 })
+    expect(n.gestures).toEqual({ ...DEFAULT_GESTURES, edgeBottom: 'off', edgeSwipes: false })
+    expect(n.longPressMs).toBe(600)
+    expect(normalizeTouch({ longPressMs: 900 }).longPressMs).toBe(900)
   })
 })
