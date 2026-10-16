@@ -27,6 +27,9 @@ export interface Policy {
   vpn_required?: boolean;
   /** WSOS-INT-001: block = user-imported VPN profiles are removed and Settings offers no import. */
   user_vpn?: 'allow' | 'block';
+  /** On-device AI assistant (services/ai): false = off for everyone; ai_models = the catalog ids allowed. */
+  ai_assistant?: boolean;
+  ai_models?: string[];
   [k: string]: unknown;
 }
 

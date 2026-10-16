@@ -67,6 +67,9 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   // Managed WireGuard VPN (WSOS-INT-001): connection must be up (always-on); user-imported VPNs allowed or removed.
   vpn_required: (v) => typeof v === 'boolean',
   user_vpn: (v) => v === 'allow' || v === 'block',
+  // On-device AI assistant (services/ai): off for every user, and the catalog models users may download and run.
+  ai_assistant: (v) => typeof v === 'boolean',
+  ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 
 export function validatePolicy(body: unknown, current?: Record<string, unknown> | null): Record<string, unknown> {

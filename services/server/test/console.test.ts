@@ -159,6 +159,10 @@ test('policy: validated, versioned, signed, and active devices are nudged', asyn
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { allow_pin: 'yes' } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { pin_min_length: 3 } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { pin_min_length: 13 } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { ai_assistant: 'no' } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { ai_models: ['../../etc/passwd'] } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { ai_models: 'qwen3.5-2b-q4' } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { ai_assistant: true, ai_models: ['qwen3.5-2b-q4', 'qwen3.5-4b-q4'] } } })).status, 200);
   const r = await call('PUT', 'policy', { cookie: alice, body: { policy: { update_mode: 'notify', usb_storage: 'block', bluetooth: false, maintenance_window: '02:00-04:00', offline_access_days: null, lock_timeout_max_s: 600, login_failures_max: 5, login_lockout_s: 900, allow_pin: false, pin_min_length: 8 } } });
   assert.equal(r.status, 200);
   assert.ok(r.body.devices_notified >= 1);

@@ -64,7 +64,7 @@ profile worksuite-device-agent flags=(attach_disconnected) {
   /run/cryptsetup/** rwk,
   # Policy enforcement files (services/device-agent/src/enforce.ts ENFORCED_PATHS), written via <path>.tmp + rename.
   /etc/worksuite/ rw,
-  /etc/worksuite/{lock-policy.conf,faillock.conf,signin-policy.conf,offline-access-expired}{,.tmp} rw,
+  /etc/worksuite/{lock-policy.conf,faillock.conf,signin-policy.conf,offline-access-expired,ai-policy.json}{,.tmp} rw,
   # Kiosk mode (services/device-agent/src/kiosk.ts KIOSK_PATHS); the account/greetd part runs as its own unit.
   /etc/worksuite/{kiosk.json,kiosk-exit.verifier}{,.tmp} rw,
   /etc/worksuite/kiosk/ rw,

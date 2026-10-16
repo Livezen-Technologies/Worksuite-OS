@@ -259,6 +259,11 @@ test('policy enforcement: USB storage, Bluetooth, lock timeout and faillock map 
   assert.match(pinOff.files[ENFORCED_PATHS.signinPolicy]!, /^PIN_MIN_LENGTH=8$/m);
   assert.match(policyEnforcement({ version: 'p', signature: 'x', pin_min_length: 99 }).files[ENFORCED_PATHS.signinPolicy]!, /^PIN_MIN_LENGTH=6$/m);
   assert.equal(policyEnforcement({ version: 'p', signature: 'x', allow_pin: 'no' as unknown as boolean, pin_min_length: '4\nALLOW_PIN=1' as unknown as number }).files[ENFORCED_PATHS.signinPolicy], signinPolicyConf(true, 6));
+  // On-device AI (services/ai): no file unless the policy sets it; off; an allow-list with only well-formed ids.
+  assert.equal(none.files[ENFORCED_PATHS.aiPolicy], null);
+  assert.equal(ro.files[ENFORCED_PATHS.aiPolicy], null);
+  assert.deepEqual(JSON.parse(policyEnforcement({ version: 'p', signature: 'x', ai_assistant: false }).files[ENFORCED_PATHS.aiPolicy]!), { enabled: false, models: null });
+  assert.deepEqual(JSON.parse(policyEnforcement({ version: 'p', signature: 'x', ai_models: ['qwen3.5-2b-q4', '../x', 'A'] }).files[ENFORCED_PATHS.aiPolicy]!), { enabled: true, models: ['qwen3.5-2b-q4'] });
   // Only integers ever reach the lock file that worksuite-idle reads.
   assert.equal(policyEnforcement({ version: 'p', signature: 'x', lock_timeout_max_s: '60; rm -rf /' as unknown as number }).files[ENFORCED_PATHS.lockPolicy], null);
 });
