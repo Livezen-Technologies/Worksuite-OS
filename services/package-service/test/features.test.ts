@@ -17,7 +17,7 @@ function world(script: Script = () => undefined, over: Partial<Env> = {}) {
   const env: Env = {
     runner: { async run(cmd, args) { calls.push([cmd, ...args].join(' ')); return { code: 0, stdout: '', stderr: '', ...script(cmd, args) }; } },
     policy: () => null, sources: () => GOOD_SOURCES, power: () => ({ ac: true, battery: 90 }), freeBytes: () => 50e9,
-    audit: (e, f) => { audit.push([e, f]); }, spool: tmp('ws-spool-'), sleep: async () => {}, ...over,
+    audit: (e, f) => { audit.push([e, f]); }, spool: tmp('ws-spool-'), sleep: async () => {}, unprivileged: { uid: 65534, gid: 65534, chown: () => {} }, ...over,
   };
   const svc = new PackageService(env);
   const done = (id: number) => new Promise<Job>((resolve) => {
@@ -94,7 +94,9 @@ test('catalog: unmanaged, unreachable and refused are explicit empty states', as
 // ---------------- local .deb (WSOS-APT-005) ----------------
 
 const FIELDS = 'Package: hello\nVersion: 2.10-3\nArchitecture: amd64\nMaintainer: Example Org <pkg@example.org>\nDescription: says hello\n';
-const debScript = (over: Script = () => undefined): Script => (cmd, args) => {
+const debScript = (over: Script = () => undefined): Script => (cmd0, args0) => {
+  // WSOS-SEC-005: dpkg-deb runs under setpriv; look through it.
+  const [cmd, args] = cmd0 === 'setpriv' ? [args0[args0.indexOf('--') + 1], args0.slice(args0.indexOf('--') + 2)] : [cmd0, args0];
   const o = over(cmd, args); if (o) return o;
   if (cmd === 'dpkg-deb') return { stdout: FIELDS };
   if (cmd === 'dpkg' && args[0] === '--print-architecture') return { stdout: 'amd64\n' };
@@ -269,3 +271,18 @@ test('update download retries and keeps partial files; never cleans the apt cach
   assert.ok(!down.calls.some((c) => c.includes('full-upgrade') && c.startsWith('apt-get -y -q -o Dpkg')), 'nothing applied without a complete download');
 });
 
+
+test('WSOS-SEC-005: a user .deb is parsed as nobody, without capabilities, from a private copy', async () => {
+  const w = world(debScript());
+  const file = debFile();
+  await w.svc.previewLocalDeb(uid, file);
+  const parse = w.calls.find((c) => c.includes('dpkg-deb'))!;
+  assert.match(parse, /^setpriv --reuid=65534 --regid=65534 --clear-groups --no-new-privs --inh-caps=-all --bounding-set=-all -- dpkg-deb --field /);
+  assert.ok(!parse.includes(file), 'not the user\'s own file');
+  assert.ok(!parse.includes(w.env.spool!), 'not the root spool copy either');
+  assert.ok(!w.calls.some((c) => c.startsWith('dpkg-deb')), 'never dpkg-deb as root');
+  // A file that fails to parse unprivileged never reaches apt.
+  const bad = world(debScript((c) => (c === 'dpkg-deb' ? { code: 2, stdout: '' } : undefined)));
+  await assert.rejects(bad.svc.previewLocalDeb(uid, debFile()), { code: 'InvalidArgs' });
+  assert.ok(!bad.calls.some((c) => c.startsWith('apt-get')));
+});
