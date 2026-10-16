@@ -242,6 +242,14 @@
       <translation>පිරිසිදු කරමින්</translation>
     </message>
     <message>
+      <source>Less than a minute left</source>
+      <translation>මිනිත්තුවකට වඩා අඩු කාලයක් ඉතිරිය</translation>
+    </message>
+    <message>
+      <source>About %1 min left</source>
+      <translation>මිනිත්තු %1 ක් පමණ ඉතිරිය</translation>
+    </message>
+    <message>
       <source>STEP 6 · COPY FILES</source>
       <translation>පියවර 6 · ගොනු පිටපත් කිරීම</translation>
     </message>
@@ -274,32 +282,32 @@
       <translation>පද්ධති රූපය දිග හරිමින්</translation>
     </message>
     <message>
-      <source>Progress and the file being copied are shown at the bottom of the window.</source>
-      <translation>ප්‍රගතිය සහ පිටපත් වන ගොනුව කවුළුවේ පහළින් පෙන්වයි.</translation>
+      <source> of %1</source>
+      <translation> / %1</translation>
+    </message>
+    <message>
+      <source>Files copied</source>
+      <translation>පිටපත් කළ ගොනු</translation>
+    </message>
+    <message>
+      <source>Packages</source>
+      <translation>පැකේජ</translation>
+    </message>
+    <message>
+      <source>%1 / %2</source>
+      <translation>%1 / %2</translation>
     </message>
     <message>
       <source>Elapsed</source>
       <translation>ගතවූ කාලය</translation>
     </message>
     <message>
-      <source>Encryption</source>
-      <translation>සංකේතනය</translation>
+      <source>Hide details</source>
+      <translation>විස්තර සඟවන්න</translation>
     </message>
     <message>
-      <source>On</source>
-      <translation>ක්‍රියාත්මකයි</translation>
-    </message>
-    <message>
-      <source>Off</source>
-      <translation>අක්‍රියයි</translation>
-    </message>
-    <message>
-      <source>Stage</source>
-      <translation>අදියර</translation>
-    </message>
-    <message>
-      <source>1 of 2</source>
-      <translation>2 න් 1</translation>
+      <source>Show details</source>
+      <translation>විස්තර පෙන්වන්න</translation>
     </message>
     <message>
       <source>Do not turn off your computer</source>
