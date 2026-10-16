@@ -5,5 +5,7 @@
     <!-- Super key (services/session/labwc/rc.xml): open or close the launcher. -->
     <method name="ToggleLauncher"/>
     <method name="ShowLauncher"/>
+    <!-- Files is the default handler for archives (shell/apps/worksuite-files.desktop): browse this one. -->
+    <method name="OpenArchive"><arg name="path" type="s" direction="in"/></method>
   </interface>
 </node>
