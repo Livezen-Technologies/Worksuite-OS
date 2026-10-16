@@ -1,10 +1,12 @@
 // Sinhala (සිංහල) — draft translation, to be reviewed by a native speaker before release (SRS §11.5, P2).
 import type { LocaleReview, MessageKey } from './en'
+import { aiSi } from './ai'
 
 /** Machine-drafted: not yet reviewed by a native Sinhala speaker. See docs/i18n/README.md before changing. */
 export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedKeys: {} }
 
 const si: Partial<Record<MessageKey, string>> = {
+  ...aiSi,
   'panel.taskbar': 'කාර්ය තීරුව',
   'panel.openLauncher': 'දියත්කරනය විවෘත කරන්න',
   'panel.running': '{name}, ධාවනය වෙමින්',

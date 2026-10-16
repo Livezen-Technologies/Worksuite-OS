@@ -20,6 +20,10 @@
     <keybind key="Super_L" onRelease="yes">
       <action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 ToggleLauncher"/>
     </keybind>
+    <!-- Super+A opens the on-device AI assistant (services/ai). Not Super+Space: fcitx5 switches input-method groups with it. -->
+    <keybind key="W-a">
+      <action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 ToggleAssistant"/>
+    </keybind>
     <keybind key="A-Tab"><action name="NextWindow"/></keybind>
     <keybind key="W-l">
       <action name="Execute" command="loginctl lock-session"/>

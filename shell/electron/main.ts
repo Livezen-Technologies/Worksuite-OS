@@ -1,5 +1,5 @@
 import { findBundles } from './bundles'
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
 
 // Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
 const DRAG_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4nGNgoCaQz/7/nxiM1wBCYNSAUQNGigEUZSZyAAAnXe3wcJ4r8wAAAABJRU5ErkJggg=='
@@ -25,6 +25,7 @@ import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, install
 import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { archiveJobs, listIn, locate } from './archives'
+import { startAIHost } from './ai'
 import { defaultEnv, driveDir, dropPlan, freeBytes, list, resolveIn, roots } from './files'
 import { eject, jobs as fileJobs, mkdirIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel } from './panelHost'
@@ -427,6 +428,8 @@ app.whenReady().then(() => {
   for (const ch of ['ws:recoverySnapshots', 'ws:recoveryRestore', 'ws:recoveryCopyToUsb', 'ws:recoveryTerminal', 'ws:recoverySaveReport']) handle(ch, () => rec.unavailable())
   // Files: real folders plus Drive sync states from the sync service.
   const files = defaultEnv(async (dir) => { const r = await syncCall('FileStates', { dir }); return r.ok && Array.isArray(r.value) ? r.value as { name: string; state: string }[] : null })
+  // On-device AI assistant (services/ai): Settings › AI, the assistant panel and its context actions.
+  startAIHost(handle, broadcast, files, { readClipboard: () => clipboard.readText() })
   handle('ws:filesRoots', () => ({ roots: roots(files).map(({ id, label }) => ({ id, label })), drive_exists: existsSync(driveDir(files.home)) }))
   handle('ws:filesList', (root, rel) => list(files, root, rel))
   handle('ws:filesOpen', async (root, rel) => {

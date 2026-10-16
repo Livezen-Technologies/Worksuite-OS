@@ -18,8 +18,8 @@ export interface PanelApi {
   trayActivate(key: string, x: number, y: number): Promise<PanelResult>
   onWindows(cb: (w: PanelWindow[]) => void): () => void
   onTray(cb: (t: TrayItem[]) => void): () => void
-  /** Super key via lk.worksuite.Shell1. */
-  onLauncher(cb: (action: 'toggle' | 'show') => void): () => void
+  /** Super key (and Super+A for the AI assistant) via lk.worksuite.Shell1. */
+  onLauncher(cb: (action: 'toggle' | 'show' | 'assistant') => void): () => void
 }
 
 declare global {

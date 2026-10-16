@@ -20,7 +20,7 @@ export function usePanelWindows(): PanelWindow[] {
 }
 
 /** Super key through lk.worksuite.Shell1 (Labwc keybinding). */
-export function useLauncherKey(onAction: (a: 'toggle' | 'show') => void): void {
+export function useLauncherKey(onAction: (a: 'toggle' | 'show' | 'assistant') => void): void {
   useEffect(() => panel.onLauncher(onAction), [onAction])
 }
 

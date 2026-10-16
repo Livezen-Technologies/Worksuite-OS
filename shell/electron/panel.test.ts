@@ -92,6 +92,9 @@ describe('panel client', () => {
     expect(launcher).toHaveBeenCalledWith('toggle')
     expect(f.sent).toHaveLength(1)
     expect(f.method(new Message({ type: 1, serial: 8, sender: ':1.2', path: '/other', interface: SHELL, member: 'ToggleLauncher' }))).toBe(false)
+    // Super+A: the AI assistant.
+    expect(f.method(new Message({ type: 1, serial: 9, sender: ':1.2', path: SHELL_PATH, interface: SHELL, member: 'ToggleAssistant' }))).toBe(true)
+    expect(launcher).toHaveBeenLastCalledWith('assistant')
   })
 
   it('opens an archive in Files through Shell1.OpenArchive', async () => {

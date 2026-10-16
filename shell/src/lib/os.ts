@@ -317,6 +317,8 @@ export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
   lock_timeout_max_s: number | null; offline_access_days: number | null; usb_storage: string | null; bluetooth: boolean | null
   app_allowlist_size: number
+  /** On-device AI assistant (services/ai): false = off for everyone; ai_models = catalog ids allowed. */
+  ai_assistant?: boolean | null; ai_models?: string[] | null
 }
 export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
 export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean }
@@ -351,6 +353,8 @@ export function policyLines(p: DevicePolicies | null): string[] {
   if (p.usb_storage === 'block') out.push(t('mdm.usbBlocked'))
   else if (p.usb_storage === 'read_only') out.push(t('mdm.usbRO'))
   if (p.bluetooth === false) out.push(t('mdm.btOff'))
+  if (p.ai_assistant === false) out.push(t('mdm.aiOff'))
+  else if (p.ai_models?.length) out.push(t('mdm.aiLimited', { count: p.ai_models.length }))
   return out
 }
 

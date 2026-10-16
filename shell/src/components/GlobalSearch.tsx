@@ -15,6 +15,8 @@ export interface GlobalSearchProps {
   settings: { label: string; section: string }[]
   onLaunchApp(id: string): void
   onOpenSettings(section: string): void
+  /** "Ask AI": opens the on-device assistant with the query (absent: no entry). */
+  onAskAI?(query: string): void
   onClose(): void
 }
 
@@ -24,7 +26,7 @@ const STATE_LABEL: Record<string, MessageKey> = {
   offline: 'search.state.offline', timeout: 'search.state.timeout', error: 'search.state.error',
 }
 
-export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchApp, onOpenSettings, onClose }: GlobalSearchProps) {
+export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchApp, onOpenSettings, onAskAI, onClose }: GlobalSearchProps) {
   const t = useT()
   const input = useRef<HTMLInputElement>(null)
   const [cat, setCat] = useState<Category>('all')
@@ -51,7 +53,7 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
   const q = query.trim().toLowerCase()
   const localHits = useMemo(() => local.filter((h) => h.title.toLowerCase().includes(q)), [local, q])
   const signedIn = !!sources?.some((s) => s.state === 'ok')
-  const groups = useMemo(() => buildGroups({ apps, settings, local: localHits, hits: loading ? null : hits, query }, signedIn), [apps, settings, localHits, hits, loading, query, signedIn])
+  const groups = useMemo(() => buildGroups({ apps, settings, local: localHits, hits: loading ? null : hits, query }, signedIn, !!onAskAI), [apps, settings, localHits, hits, loading, query, signedIn, onAskAI])
   const cats = categories(groups)
   const shown = visible(groups, cats.some((c) => c.id === cat) ? cat : 'all')
   const items = flat(shown)
@@ -63,6 +65,7 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
     if (!it) return
     if (it.kind === 'app') { onLaunchApp(it.app.id); return }
     if (it.kind === 'setting') { onOpenSettings(it.section); return }
+    if (it.kind === 'ai') { onAskAI?.(query.trim()); return }
     if (it.kind === 'more') { void os.openSearchResult(`worksuite://search?q=${encodeURIComponent(query.trim())}`); onClose(); return }
     void os.openSearchResult(it.hit.link, where); onClose()
   }
@@ -83,8 +86,8 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
   const actions: [MessageKey, string][] = !selected ? [] : selected.kind === 'hit'
     ? [['search.action.open', 'Enter'], ['search.action.location', 'Ctrl Enter'], ...(selected.hit.source === 'local' ? [['search.action.copyPath', 'Ctrl C'] as [MessageKey, string]] : [])]
     : [['search.action.open', 'Enter']]
-  const label = (it: Item) => it.kind === 'app' ? it.app.name : it.kind === 'setting' ? it.label : it.kind === 'more' ? t('search.more', { q: query.trim() }) : it.hit.title
-  const detail = (it: Item) => it.kind === 'app' ? t(`launcher.kind.${it.app.kind}` as MessageKey) : it.kind === 'setting' ? t('search.inSettings') : it.kind === 'more' ? t('search.moreHint') : (it.hit.subtitle ?? '')
+  const label = (it: Item) => it.kind === 'app' ? it.app.name : it.kind === 'setting' ? it.label : it.kind === 'more' ? t('search.more', { q: query.trim() }) : it.kind === 'ai' ? t('search.askAI', { q: query.trim() }) : it.hit.title
+  const detail = (it: Item) => it.kind === 'app' ? t(`launcher.kind.${it.app.kind}` as MessageKey) : it.kind === 'setting' ? t('search.inSettings') : it.kind === 'more' ? t('search.moreHint') : it.kind === 'ai' ? t('search.askAIHint') : (it.hit.subtitle ?? '')
 
   let k = 0
   return (
@@ -135,7 +138,7 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
           {!loading && notes.map((s) => (
             <p key={s.source} role="status" className="m-0 px-3 py-2 text-xs text-[#8FA3C8]">{t('search.sourceState', { source: t(SOURCE_LABEL[s.source]), state: t(STATE_LABEL[s.state]) })}</p>
           ))}
-          {!loading && items.length === 0 && (
+          {!loading && items.every((x) => x.kind === 'ai') && (
             <div className="px-5 py-[60px] text-center text-sm text-[#8FA3C8]">{t('search.empty', { q: query.trim() })}</div>
           )}
         </div>

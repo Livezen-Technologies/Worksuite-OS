@@ -24,6 +24,8 @@ import { applyShellPrefs, shellPrefsFrom, taskbarPins, toggleFavorite, type Shel
 import { alphaGroups, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
 import GlobalSearch from '../components/GlobalSearch'
+import Assistant, { AI_ICON } from '../components/Assistant'
+import { onAssistantRequest, type AssistantRequest } from '../lib/assistantNav'
 import ShellRestartNotice from '../components/ShellRestartNotice'
 import AuthPrompt from '../components/AuthPrompt'
 import type { SearchHit } from '../../electron/search'
@@ -61,7 +63,15 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   useTouchMode() // :root[data-touch] sizing and the on-screen keyboard on text-field focus
   const [a11yOpen, setA11yOpen] = useState(false)
   // Super key from Labwc arrives over lk.worksuite.Shell1 (WSOS-DSK-011).
-  useLauncherKey(useCallback((a: 'toggle' | 'show') => { markLauncherRequest(); setLauncher((v) => (a === 'show' ? true : !v)) }, []))
+  // The on-device AI assistant (services/ai): Super+A (rc.xml → Shell1.ToggleAssistant), the taskbar button, "Ask AI"
+  // in search and "Explain with AI" in Files.
+  const [assistant, setAssistant] = useState(false)
+  const [assistantReq, setAssistantReq] = useState<AssistantRequest | null>(null)
+  useLauncherKey(useCallback((a: 'toggle' | 'show' | 'assistant') => {
+    if (a === 'assistant') { setLauncher(false); setAssistant((v) => !v); return }
+    markLauncherRequest(); setLauncher((v) => (a === 'show' ? true : !v))
+  }, []))
+  useEffect(() => onAssistantRequest((r) => { setLauncher(false); setAssistantReq(r); setAssistant(true) }), [])
   // Launcher first frame (WSOS-PRF-005); only forwarded off the console in perf test runs.
   useEffect(() => { if (launcher) void reportLauncherFirstFrame() }, [launcher])
   const [allView, setAllView] = useState(false)
@@ -96,6 +106,8 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false); setQsOpen(false) }
+      // Super+A inside the shell's own window (the compositor binding covers everywhere else).
+      else if (e.metaKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setLauncher(false); setAssistant((v) => !v) }
       else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }
     }
     window.addEventListener('keydown', onKey)
@@ -208,7 +220,8 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
       {launcher && q && (
         <div className="absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-start justify-center bg-[rgba(2,6,16,0.45)] px-4 pt-[90px] backdrop-blur-[6px]" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
           <GlobalSearch query={query} onQuery={setQuery} apps={apps} settings={settingsHits} onLaunchApp={launch}
-            onOpenSettings={(s) => { setLauncher(false); openSettingsAt(s) }} onClose={() => setLauncher(false)} />
+            onOpenSettings={(s) => { setLauncher(false); openSettingsAt(s) }} onClose={() => setLauncher(false)}
+            onAskAI={(text) => { setLauncher(false); setAssistantReq({ kind: 'ask', text }); setAssistant(true) }} />
         </div>
       )}
       {launcher && !q && (
@@ -291,6 +304,8 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
         </div>
       )}
 
+      {assistant && <Assistant onClose={() => setAssistant(false)} onOpenSettings={() => { setAssistant(false); openSettingsAt('AI') }} request={assistantReq} onRequestHandled={() => setAssistantReq(null)} />}
+
       {qsOpen && (
         <QuickPanel state={quick} refresh={refreshQuick} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} onClose={() => setQsOpen(false)}
           onSettings={() => { setQsOpen(false); onOpen('settings') }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
@@ -314,6 +329,8 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
           <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <OskButton />
+          <button type="button" aria-label={t('ai.open')} title={t('ai.openHint')} aria-expanded={assistant} aria-controls="ws-assistant" onClick={() => { setAssistant((v) => !v); setLauncher(false) }}
+            className={`flex size-9 cursor-pointer items-center justify-center rounded-[10px] ${assistant ? 'bg-[rgba(31,107,255,0.4)]' : 'hover:bg-white/10'}`}><Icon d={[AI_ICON]} size={18} /></button>
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setQsOpen(false) }}
             className="flex size-9 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
           <QuickTray state={quick} open={qsOpen} onToggle={() => { setQsOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setA11yOpen(false) }} />

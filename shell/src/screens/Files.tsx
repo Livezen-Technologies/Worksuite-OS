@@ -7,6 +7,7 @@ import type { WindowProps } from './types'
 import { formatBytes, os, type FileEntry, type FileHit, type FileJob, type FilePlaces, type TrashItem } from '../lib/os'
 import { formatDate, formatDecimal, formatNumber, messages, t } from '../i18n'
 import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place } from './files/parts'
+import { requestAssistant } from '../lib/assistantNav'
 import { ArchiveView, CompressDialog, LargeDialog, PasswordDialog, archiveError, archiveKind, stemOf } from './files/archive'
 import { ConflictDialog, DeleteDialog, JobErrorCard, JobsChip, JobsWindow, Toasts, finishedToast, useFileJobs, type Toast } from './files/ops'
 
@@ -340,6 +341,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
             const names = targets(menu.name), one = menu.name ? byName(menu.name) : undefined
             setMenu(null)
             if (a === 'open' && one) open(one)
+            else if (a === 'explainAI' && one) requestAssistant({ kind: 'file', root: dir.root, rel: relOf(one.name) })
             else if (a === 'cut' || a === 'copy') setClip({ op: a === 'cut' ? 'move' : 'copy', root: dir.root, rels: names.map(relOf) })
             else if (a === 'paste') paste()
             else if (a === 'duplicate') { const to: Place = { ...dir }; void act(() => os.filesPaste('duplicate', dir.root, names.map(relOf), dir.root, dir.rel)).then((r) => started(r, to)) }
@@ -408,7 +410,8 @@ function Preview({ entry, dirLabel, cloud, onOpen }: { entry: FileEntry | undefi
 }
 
 // FM3 right-click menu.
-type MenuAction = 'open' | 'cut' | 'copy' | 'paste' | 'duplicate' | 'rename' | 'star' | 'compress' | 'openArchive' | 'extractHere' | 'extractTo' | 'properties' | 'trash' | 'mkdir'
+const AI_SPARK = 'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z'
+type MenuAction = 'open' | 'explainAI' | 'cut' | 'copy' | 'paste' | 'duplicate' | 'rename' | 'star' | 'compress' | 'openArchive' | 'extractHere' | 'extractTo' | 'properties' | 'trash' | 'mkdir'
 function ContextMenu({ menu, entry, starred, canPaste, multi, onPick }: { menu: Menu; entry: FileEntry | undefined; starred: boolean; canPaste: boolean; multi: boolean; onPick: (a: MenuAction) => void }) {
   type It = [MenuAction | null, string, string, string, boolean?, string?] | null
   // Archives: open (browse) and extract, for a single archive.
@@ -417,7 +420,9 @@ function ContextMenu({ menu, entry, starred, canPaste, multi, onPick }: { menu: 
     ['extractTo', t('files.arc.extractTo', { name: stemOf(entry.name) }), P.folder, '', !entry.local], null,
   ] : []
   const items: It[] = entry ? [...archive,
-    ['open', t('files.open'), P.open, 'Enter', !entry.dir && !entry.local], [null, t('files.openWith'), P.chevron, '', true, t('files.openWithNone')], null,
+    ['open', t('files.open'), P.open, 'Enter', !entry.dir && !entry.local], [null, t('files.openWith'), P.chevron, '', true, t('files.openWithNone')],
+    // The on-device AI assistant reads this file (text only, size-capped in electron/ai.ts) only when this is chosen.
+    ['explainAI', t('files.explainAI'), AI_SPARK, '', entry.dir || multi || !entry.local], null,
     ['cut', t('files.cut'), P.cut, 'Ctrl X', !entry.local], ['copy', t('files.copy'), P.copy, 'Ctrl C', !entry.local], ['duplicate', t('files.duplicate'), P.duplicate, '', !entry.local], null,
     ['rename', t('files.rename'), P.rename, 'F2', !entry.local], ['star', starred ? t('files.unstar') : t('files.star'), P.star, '', !entry.local], [null, t('files.share'), P.share, '', true, t('files.shareNone')], ['compress', t('files.compressMore'), P.compress, '', !entry.local], null,
     ['properties', t('files.properties'), P.info, ''], ['trash', t('files.moveToTrash'), P.trash, 'Del', !entry.local],

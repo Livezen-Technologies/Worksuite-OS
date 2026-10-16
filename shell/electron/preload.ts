@@ -180,6 +180,28 @@ contextBridge.exposeInMainWorld('worksuitePanel', {
   onLauncher: on('ws:launcher'),
 })
 
+// On-device AI assistant — see electron/ai.ts and services/ai. Answers stream back as onEvent.
+contextBridge.exposeInMainWorld('worksuiteAI', {
+  status: () => ipcRenderer.invoke('ws:aiStatus'),
+  models: () => ipcRenderer.invoke('ws:aiModels'),
+  refresh: () => ipcRenderer.invoke('ws:aiRefresh'),
+  install: (id: string) => ipcRenderer.invoke('ws:aiInstall', String(id)),
+  cancel: (id: string, discard: boolean) => ipcRenderer.invoke('ws:aiCancel', String(id), discard ? '1' : '0'),
+  remove: (id: string) => ipcRenderer.invoke('ws:aiRemove', String(id)),
+  setDefault: (id: string) => ipcRenderer.invoke('ws:aiSetDefault', String(id)),
+  check: (id: string) => ipcRenderer.invoke('ws:aiCheck', String(id)),
+  test: (id: string) => ipcRenderer.invoke('ws:aiTest', String(id)),
+  restart: () => ipcRenderer.invoke('ws:aiRestart'),
+  setSettings: (patch: unknown) => ipcRenderer.invoke('ws:aiSetSettings', JSON.stringify(patch ?? {})),
+  ask: (req: unknown) => ipcRenderer.invoke('ws:aiAsk', JSON.stringify(req ?? {})),
+  cancelAsk: (id: string) => ipcRenderer.invoke('ws:aiCancelAsk', String(id)),
+  selection: () => ipcRenderer.invoke('ws:aiSelection'),
+  clipboard: () => ipcRenderer.invoke('ws:aiClipboard'),
+  readFile: (root: string, rel: string) => ipcRenderer.invoke('ws:aiReadFile', String(root), String(rel)),
+  onEvent: on('ws:aiEvent'),
+  onChanged: on('ws:aiChanged'),
+})
+
 // Default apps, clipboard history, problem report — see electron/desktopHost.ts.
 contextBridge.exposeInMainWorld('worksuiteDesktop', {
   defaultApps: () => ipcRenderer.invoke('ws:defaultApps'),
