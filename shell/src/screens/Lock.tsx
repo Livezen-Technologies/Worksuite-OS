@@ -8,7 +8,7 @@ import { formatDate, t } from '../i18n'
 
 // Lock board: date, big clock, notification previews (content hidden), "Press any key or click to unlock".
 // Any key or click reveals the password field; unlocking always needs the password.
-export default function Lock({ user, onUnlock, notices = [] }: LockProps) {
+export default function Lock({ user, name: realName, onUnlock, notices = [] }: LockProps) {
   const now = useANow()
   const [asking, setAsking] = useState(false)
   const [password, setPassword] = useState('')
@@ -16,7 +16,7 @@ export default function Lock({ user, onUnlock, notices = [] }: LockProps) {
   const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLInputElement>(null)
   const display = user ? user.replace(/^.*\\/, '').replace(/@.*$/, '') : t('lock.user')
-  const name = display.charAt(0).toUpperCase() + display.slice(1)
+  const name = realName || display.charAt(0).toUpperCase() + display.slice(1)
   const day = formatDate(now, { weekday: 'long', day: 'numeric', month: 'long' }).replace(',', '')
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 // Settings › Users: people with accounts on this computer, from /etc/passwd and /etc/group (read-only).
+import { spawn, type ChildProcess } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -20,4 +21,24 @@ export function localUsers(root = '/'): Avail<{ current: string; users: LocalUse
   const passwd = read('etc/passwd')
   if (!passwd) return { available: false, reason: 'service_unavailable' }
   return { available: true, value: { current: os.userInfo().username, users: parseUsers(passwd, read('etc/group') ?? '') } }
+}
+
+/**
+ * Lock screen unlock: checks the password of the signed-in user only, through pam_unix's setgid helper
+ * (unix_chkpwd checks the caller's own account and nobody else's). The password goes on stdin, never argv.
+ */
+export function checkOwnPassword(user: string, password: string, helper = '/usr/sbin/unix_chkpwd',
+  run: (cmd: string, args: string[]) => ChildProcess = (c, a) => spawn(c, a, { stdio: ['pipe', 'ignore', 'ignore'] })): Promise<{ ok: boolean; message?: string }> {
+  const me = os.userInfo().username
+  const login = user.replace(/^.*\\/, '').replace(/@.*$/, '')
+  if (!password) return Promise.resolve({ ok: false, message: 'Enter your password.' })
+  if (login && login !== me) return Promise.resolve({ ok: false, message: 'Only the signed-in user can unlock this session.' })
+  return new Promise((resolve) => {
+    let p: ChildProcess
+    try { p = run(helper, [me, 'nonull']) } catch { resolve({ ok: false }); return }
+    p.on('error', () => resolve({ ok: false }))
+    p.on('close', (code) => resolve(code === 0 ? { ok: true } : { ok: false }))
+    p.stdin?.on('error', () => {})
+    p.stdin?.end(Buffer.concat([Buffer.from(password, 'utf8'), Buffer.from([0])]))
+  })
 }

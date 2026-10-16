@@ -10,7 +10,7 @@ import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broke
 import { deviceCredential, deviceInfo, enrollDevice } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
 import { listDevices } from './hardware'
-import { localUsers } from './users'
+import { checkOwnPassword, localUsers } from './users'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
 import { loadSession, parseAppArgs, resolveLink } from './webapps'
@@ -117,7 +117,8 @@ app.whenReady().then(() => {
   // Administrator grants for exact HTTPS origins of WorkSuite apps (/etc/worksuite/web-permissions.json).
   const webGrants = loadGrants()
 
-  handle('ws:authenticate', async () => ({ ok: false, message: 'Authentication is handled by the greeter (greetd/PAM).' }))
+  // Sign-in is greetd/PAM's; the shell only re-checks the signed-in user's own password to unlock its lock screen.
+  handle('ws:authenticate', (user, password) => checkOwnPassword(user, password))
   handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
   handle('ws:logout', () => run(...logoutCommand()))
   handle('ws:power', (action) => {
