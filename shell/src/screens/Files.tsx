@@ -177,7 +177,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
                 </button>
               ))}
             </div>}
-            {dir && view === 'grid' && <button type="button" onClick={() => setAsk({ kind: 'mkdir' })} title={t('files.newFolder')} className={`${btn} flex h-[34px] items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold`} style={{ background: C.blue }}>{`+ ${t('files.new')}`}</button>}
+            {dir && view === 'grid' && <button type="button" onClick={() => setAsk({ kind: 'mkdir' })} title={t('files.newFolder')} className={`${btn} flex h-[34px] items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold`} style={{ background: C.blue, color: '#FFFFFF' }}>{`+ ${t('files.new')}`}</button>}
           </>}
           {!search && <button type="button" aria-label={t('files.close')} onClick={onClose} className={`${iconBtn} ${dir ? '' : arc ? 'ml-auto' : 'ml-1'}`} style={{ color: C.muted }}><Svg d={P.close} /></button>}
         </header>

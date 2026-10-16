@@ -28,13 +28,13 @@ export function Svg({ d, size = 16, stroke = 'currentColor', width = 2, fill = '
 // File kinds by extension: badge colour (board palette) and the kind name.
 const KINDS: [string[], string, MessageKey | null][] = [
   [['doc', 'docx', 'odt', 'rtf', 'txt'], '#1F6BFF', 'files.kind.doc'],
-  [['xls', 'xlsx', 'ods', 'csv'], '#2E9E6A', 'files.kind.sheet'],
-  [['pdf'], '#D9452B', 'files.kind.pdf'],
+  [['xls', 'xlsx', 'ods', 'csv'], '#1A7F55', 'files.kind.sheet'],
+  [['pdf'], '#B42318', 'files.kind.pdf'],
   [['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'], '#7A4FE0', 'files.kind.image'],
-  [['ppt', 'pptx', 'odp'], '#D9572B', 'files.kind.slides'],
+  [['ppt', 'pptx', 'odp'], '#C2410C', 'files.kind.slides'],
   [['md'], '#5E739C', 'files.kind.md'],
-  [['mp4', 'mkv', 'webm', 'mov', 'avi'], '#D9572B', 'files.kind.video'],
-  [['mp3', 'ogg', 'flac', 'wav', 'm4a'], '#B7791F', 'files.kind.audio'],
+  [['mp4', 'mkv', 'webm', 'mov', 'avi'], '#C2410C', 'files.kind.video'],
+  [['mp3', 'ogg', 'flac', 'wav', 'm4a'], '#8F5D12', 'files.kind.audio'],
   [['zip', 'tar', 'gz', 'xz', '7z', 'bz2', 'zst', 'rar', 'tgz', 'txz'], '#5E739C', 'files.kind.archive'],
 ]
 export function kindOf(name: string, dir: boolean) {
@@ -95,7 +95,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
       </div>
       {sections.map(([name, items]) => (
         <div key={name} className="flex flex-col gap-px">
-          <span className="px-2.5 pb-1.5 text-[11px] tracking-[0.08em] uppercase" style={{ color: C.dim }}>{name}</span>
+          <span className="px-2.5 pb-1.5 text-[11px] tracking-[0.08em] uppercase" style={{ color: C.muted }}>{name}</span>
           {items.map((n) => {
             const on = is(n.to) || (n.key !== 'home' && place.kind === 'dir' && n.to.kind === 'dir' && n.to.root === place.root && n.to.rel !== '' && place.rel.startsWith(n.to.rel + '/'))
               || (place.kind === 'dir' && n.to.kind === 'dir' && n.to.rel === '' && n.to.root !== 'home' && n.to.root === place.root)
@@ -106,7 +106,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
                   style={{ color: on ? '#FFFFFF' : C.soft, fontWeight: on ? 600 : 400 }}>
                   <Svg d={n.icon} stroke={on ? C.cyan : C.muted} />
                   <span className="truncate">{n.label}</span>
-                  {n.meta && <span className="ml-auto text-[11px]" style={{ color: C.dim }}>{n.meta}</span>}
+                  {n.meta && <span className="ml-auto text-[11px]" style={{ color: C.muted }}>{n.meta}</span>}
                 </button>
                 {n.eject && <button type="button" aria-label={t('files.eject', { name: n.label })} title={t('files.eject', { name: n.label })} onClick={n.eject} className="mr-1 cursor-pointer rounded px-1.5 text-[11px] hover:bg-white/10" style={{ color: C.dim }}>{'⏏'}</button>}
               </div>

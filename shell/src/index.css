@@ -30,6 +30,9 @@
   body { font-family: var(--font-sans); color: var(--color-ws-ink); background: var(--color-ws-night); }
   /* Visible focus on every control (WSOS-ACC): blue ring with a dark halo so it shows on light and dark surfaces. */
   :focus-visible { outline: 2px solid #7FB2FF; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(2, 6, 23, 0.85); }
+  /* Borderless text fields and radios that drop their own outline (outline-none) ring their field box instead,
+     so focus is never invisible (WSOS-ACC-002; shell/src/a11y.keyboard.test.tsx checks every outline-none). */
+  :where(label, div, form):has(> :is(input, textarea, select).outline-none:focus-visible) { outline: 2px solid #7FB2FF; outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation: none !important; }
   }
@@ -89,6 +92,7 @@
 [data-high-contrast] svg [stroke]:not([stroke="none"]) { stroke: currentColor !important; }
 [data-high-contrast] ::placeholder { color: #d4d4d4 !important; }
 [data-high-contrast] :focus-visible { outline: 3px solid #ffd400 !important; outline-offset: 2px !important; }
+[data-high-contrast] :has(> :is(input, textarea, select).outline-none:focus-visible) { outline: 3px solid #ffd400 !important; outline-offset: 2px !important; }
 [data-high-contrast] :disabled { color: #d4d4d4 !important; border-style: dashed !important; }
 @keyframes ws-rise { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
 .ws-rise { animation: ws-rise 0.2s ease-out; }

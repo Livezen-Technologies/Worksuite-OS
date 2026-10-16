@@ -231,7 +231,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                   <div className="ws-pins grid grid-cols-6 gap-x-1.5 gap-y-1">
                     {pins.map((a) => (
                       <button key={a.id} type="button" onClick={() => launch(a.id)} onContextMenu={(e) => { if (a.id === SETTINGS_TILE.id) return; e.preventDefault(); toggleFav(a.id) }} aria-description={a.fav ? t('launcher.unpinHint') : t('launcher.pinHint')} className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] rounded-xl px-1 py-2.5 hover:bg-white/[0.07] focus-visible:bg-white/[0.07]">
-                        <span aria-hidden="true" className="flex size-11 items-center justify-center rounded-xl text-base font-bold text-white shadow-[0_6px_14px_rgba(0,0,0,0.25)]" style={{ background: tileColor(a) }}>{a.mark}</span>
+                        <span aria-hidden="true" className="ws-mark flex size-11 items-center justify-center whitespace-nowrap rounded-xl leading-none font-bold text-white shadow-[0_6px_14px_rgba(0,0,0,0.25)]" style={{ background: tileColor(a), fontSize: 16 }}>{a.mark}</span>
                         <span className="max-w-full truncate text-xs">{a.name}</span>
                       </button>
                     ))}
@@ -262,7 +262,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                       <span aria-hidden="true" className="px-2.5 pt-2 pb-1 text-xs font-bold text-[#18D4F0]">{g.letter}</span>
                       {g.apps.map((a) => (
                         <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex cursor-pointer items-center gap-3 rounded-[9px] px-2.5 py-[7px] text-left hover:bg-white/[0.07]">
-                          <span aria-hidden="true" className="flex size-[30px] items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: tileColor(a) }}>{a.mark}</span>
+                          <span aria-hidden="true" className="ws-mark flex size-[30px] items-center justify-center whitespace-nowrap rounded-lg leading-none font-bold text-white" style={{ fontSize: 12, background: tileColor(a) }}>{a.mark}</span>
                           <span className="text-[13px]">{a.name}</span>
                           <span className="ml-auto text-[11px] text-[#8FA3C8]">{a.kind === 'WorkSuite' ? '' : t(`launcher.kind.${a.kind}` as MessageKey)}</span>
                         </button>

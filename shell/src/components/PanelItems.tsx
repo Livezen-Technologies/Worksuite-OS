@@ -56,7 +56,8 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
         return (
           <button key={e.id} type="button" aria-label={label} aria-pressed={e.running ? e.active : undefined} title={e.title || a.name} onClick={() => click(e.id)}
             className={`relative flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${e.active ? 'bg-white/10' : 'hover:bg-white/10'}`}>
-            <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-[7px] text-[11px] font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
+            {/* The mark is an icon drawn by CSS (not text), so the button's name is the app's name alone (WCAG 2.5.3). */}
+            <span aria-hidden="true" data-mark={a.mark} className="ws-mark flex size-7 items-center justify-center whitespace-nowrap rounded-[7px] leading-none font-bold before:content-[attr(data-mark)]" style={{ background: a.bg, color: a.fg, fontSize: 11 }} />
             {e.running && <span aria-hidden="true" className={`absolute bottom-[2px] h-[3px] rounded-sm bg-[#18D4F0] ${e.active ? 'w-3.5' : 'w-1.5'}`} />}
           </button>
         )
@@ -82,7 +83,7 @@ export function TrayItems() {
         <button key={i.key} type="button" aria-label={i.title || i.id} title={i.title || i.id}
           onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); void panel.trayActivate(i.key, r.left + r.width / 2, r.top) }}
           className={`flex size-8 cursor-pointer items-center justify-center rounded-lg text-[11px] font-semibold uppercase hover:bg-white/10 ${i.status === 'NeedsAttention' ? 'text-[#FFD27A]' : 'text-[#C9D6EE]'}`}>
-          <span aria-hidden="true">{(i.title || i.id || '?').slice(0, 2)}</span>
+          <span aria-hidden="true" data-mark={(i.title || i.id || '?').slice(0, 2)} className="whitespace-nowrap leading-none before:content-[attr(data-mark)]" />
         </button>
       ))}
     </div>

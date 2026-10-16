@@ -87,3 +87,12 @@ describe('contrast audit', () => {
     expect(contrast('#d4d4d4', '#000000')).toBeGreaterThan(7)   // placeholders, disabled
   })
 })
+
+describe('Files type badges (WSOS-ACC-004, found by scripts/a11y-browser.mjs)', () => {
+  it('white badge text is at least 4.5:1 on every kind colour', async () => {
+    const { kindOf } = await import('../screens/files/parts')
+    for (const n of ['a.docx', 'a.xlsx', 'a.pdf', 'a.png', 'a.pptx', 'a.md', 'a.mp4', 'a.mp3', 'a.zip', 'a.bin']) {
+      expect(contrast('#FFFFFF', kindOf(n, false).color), n).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+})
