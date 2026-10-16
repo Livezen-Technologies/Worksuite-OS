@@ -7,6 +7,9 @@ After=worksuite-session.target
 [Service]
 Type=simple
 # Control service only: llama.cpp runs in worksuite-ai-engine.service, which has no network.
+# The sandbox's read-write directories must exist before the service starts ("+": outside the sandbox). The user
+# tmpfiles.d file did not run before it on a first sign-in, and the service then failed every start.
+ExecStartPre=+/bin/mkdir -p -m 0700 %h/.local/share/worksuite %t/worksuite
 ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/ai/src/main.ts
 Restart=on-failure
 RestartSec=5s

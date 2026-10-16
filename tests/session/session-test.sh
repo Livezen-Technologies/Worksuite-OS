@@ -239,6 +239,7 @@ awk '/^Package: worksuite-session$/{p=1} p&&/^Depends:/{print; exit}' "$ROOT/pac
 grep -q '^ReadWritePaths=-%h/.local/share/worksuite -%t/worksuite$' "$ROOT/services/ai/systemd/worksuite-ai.service" \
   && grep -q '^d %h/.local/share/worksuite ' "$ROOT/services/ai/systemd/user-tmpfiles.d/worksuite-ai.conf" \
   && grep -q 'user-tmpfiles.d/worksuite-ai.conf usr/share/user-tmpfiles.d/' "$ROOT/packaging/debian/worksuite-ai.install" \
+  && grep -q '^ExecStartPre=+/bin/mkdir -p -m 0700 %h/.local/share/worksuite %t/worksuite$' "$ROOT/services/ai/systemd/worksuite-ai.service" \
   && ok "worksuite-ai: data dirs created by user tmpfiles, optional in the sandbox" || bad "worksuite-ai: data dirs created by user tmpfiles, optional in the sandbox"
 
 # ---- no console text: the session's output goes to the journal, never the VT ----
