@@ -1,6 +1,7 @@
 """End-to-end against a headless Labwc: a real foot window appears, is minimized, activated and closed.
 Skipped when labwc/foot or the generated protocol bindings are missing."""
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -265,6 +266,13 @@ class ShellStackingTest(unittest.TestCase):
             time.sleep(0.1)
         self.fail(f"pixel ({x},{y}) is {got}, expected {colour}")
 
+    @property
+    def labwc_08(self):
+        """Labwc >= 0.8 has the omnipresent window query (older ones ignore it); the bridge does not rely on it."""
+        out = subprocess.run(["labwc", "--version"], capture_output=True, text=True).stdout
+        m = re.search(r"(\d+)\.(\d+)", out)
+        return bool(m) and (int(m.group(1)), int(m.group(2))) >= (0, 8)
+
     def test_apps_stay_above_the_shell_on_every_desktop(self):
         self.foot("worksuite-shell", "0000ff", "--fullscreen")
         self.wait_for(10, 400, self.BLUE)
@@ -287,14 +295,18 @@ class ShellStackingTest(unittest.TestCase):
         # the focused window put the APP always on bottom), and both are idempotent.
         self.bridge_key("F23")                               # launcher / Task View: the shell over the apps …
         self.wait_for(640, 360, self.BLUE)
-        self.bridge_key("F23")                               # … lifting again keeps it there
+        self.bridge_key("F21")                               # … raising again keeps it there
         self.wait_for(640, 360, self.BLUE)
+        if self.labwc_08:
+            self.bridge_key("F23")                           # Labwc 0.8: the lift itself is idempotent too
+            self.wait_for(640, 360, self.BLUE)
         self.bridge_key("F2")                                # … on any desktop it switches to
         self.wait_for(640, 360, self.BLUE)
         self.bridge_key("F22")                               # closed: below the apps again
         self.wait_for(640, 360, self.GREEN)
-        self.bridge_key("F22")                               # lowering twice changes nothing
-        self.wait_for(640, 360, self.GREEN)
+        if self.labwc_08:
+            self.bridge_key("F22")                           # lowering twice changes nothing
+            self.wait_for(640, 360, self.GREEN)
         self.bridge_key("F1")
         self.wait_for(640, 360, self.RED)
         self.wait_for(10, 400, self.BLUE)

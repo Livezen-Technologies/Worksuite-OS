@@ -223,8 +223,11 @@ OMNI_KEY = "F24"
 # marks a lifted shell window (the lift sets it together with leaving always-on-bottom), so lifting a lifted shell only
 # raises it again and lowering a lowered one does nothing. (A focus-dependent toggle could act on the app window when
 # the focus had not moved yet, and two toggles in a row put the shell back where it was.)
+# Labwc < 0.8 ignores the omnipresent query (it would toggle again), so the bridge also keeps the state and sends the
+# lift only to a lowered shell; RAISE_KEY (raise only) brings a lifted shell back over an app.
 LIFT_KEY = "F23"
 LOWER_KEY = "F22"
+RAISE_KEY = "F21"
 SHELL_QUERY = 'identifier="worksuite-shell"'
 
 
@@ -268,6 +271,9 @@ class LabwcKeys:
 
     def lower(self) -> None:
         self._send(self.argv(LOWER_KEY, False))
+
+    def raise_shell(self) -> None:
+        self._send(self.argv(RAISE_KEY, False))
 
 
 # ---- rc.xml ---------------------------------------------------------------------------------------------------
@@ -565,11 +571,12 @@ class Desktops:
             if w.app_id.lower() not in OWN_APP_IDS:
                 raise NotFound(f"{handle!r} is not a shell window")
             if on:
-                await self.blocking(self.keys.lift)
+                await self.blocking(self.keys.raise_shell if handle in self.lifted else self.keys.lift)
                 self.activate(w)   # keyboard focus for the launcher's search, Task View's keys…
                 self.lifted.add(handle)
             else:
-                await self.blocking(self.keys.lower)
+                if handle in self.lifted:
+                    await self.blocking(self.keys.lower)
                 self.lifted.discard(handle)
                 self.focus_top_app()
 
@@ -613,5 +620,6 @@ def rc_bindings(count: int = MAX_WORKSPACES) -> str:
                  f'<action name="ToggleOmnipresent"/></then></action><action name="ForEach"><query {SHELL_QUERY}/><then><action name="Raise"/></then></action></keybind>')
     lines.append(f'    <keybind key="C-A-W-{LOWER_KEY}"><action name="ForEach"><query {SHELL_QUERY} omnipresent="yes"/><then><action name="ToggleOmnipresent"/>'
                  f'<action name="ToggleAlwaysOnBottom"/></then></action></keybind>')
+    lines.append(f'    <keybind key="C-A-W-{RAISE_KEY}"><action name="ForEach"><query {SHELL_QUERY}/><then><action name="Raise"/></then></action></keybind>')
     lines.append(f'    <keybind key="C-A-W-{OMNI_KEY}"><action name="ToggleOmnipresent"/></keybind>')
     return "\n".join(lines)

@@ -212,12 +212,12 @@ class ControllerTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.r.keys_sent, ["F23"])             # the binding finds the shell itself (ForEach)
         self.assertEqual(self.r.activated[-1], shell.handle)    # then the shell gets the keyboard
         await self.r.d.set_shell_raised(shell.handle, True)     # again: raised again (an app may have gone over it)
-        self.assertEqual(self.r.keys_sent, ["F23", "F23"])
+        self.assertEqual(self.r.keys_sent, ["F23", "F21"])
         await self.r.d.set_shell_raised(shell.handle, False)
-        self.assertEqual(self.r.keys_sent, ["F23", "F23", "F22"])
+        self.assertEqual(self.r.keys_sent, ["F23", "F21", "F22"])
         self.assertEqual(self.r.activated[-1], app)              # the app used last gets the focus back
-        await self.r.d.set_shell_raised(shell.handle, False)    # idempotent bindings: sending again is harmless
-        self.assertEqual(self.r.keys_sent[-1], "F22")
+        await self.r.d.set_shell_raised(shell.handle, False)    # already below: nothing sent
+        self.assertEqual(self.r.keys_sent, ["F23", "F21", "F22"])
         with self.assertRaises(NotFound):                       # only the shell's own windows
             await self.r.d.set_shell_raised(app, True)
         await self.r.d.set_shell_raised(shell.handle, True)
