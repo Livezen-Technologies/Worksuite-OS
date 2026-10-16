@@ -158,6 +158,10 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
 
   // Keyboard: Enter, F2, Delete, Ctrl+X/C/V (FM3 shortcuts).
   const mainRef = useRef<HTMLDivElement>(null)
+  // Keyboard shortcuts (Ctrl+A/C/V, Delete…) need focus inside Files: it opens focused, and a click on empty space
+  // focuses it again (Ctrl+A otherwise selected the page's text).
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { rootRef.current?.focus() }, [])
   const onKey = (ev: React.KeyboardEvent) => {
     if (!dir || ask || search || (ev.target as HTMLElement).tagName === 'INPUT') return
     const one = sel.length === 1 ? byName(sel[0]) : undefined
@@ -179,7 +183,8 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
   const selected = sel.length === 1 ? byName(sel[0]) : undefined
 
   return (
-    <div role="dialog" aria-modal="false" aria-label={t('files.title')} className="fixed inset-0 z-50 flex font-sans" style={{ background: C.page, color: C.text }} onKeyDown={onKey}>
+    <div ref={rootRef} tabIndex={-1} role="dialog" aria-modal="false" aria-label={t('files.title')} className="fixed inset-0 z-50 flex select-none font-sans" style={{ background: C.page, color: C.text }} onKeyDown={onKey}
+      onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('button, input, textarea, select, a, [tabindex]:not([tabindex="-1"])')) rootRef.current?.focus() }}>
       <FilesSide place={place} places={places} drive={driveState ? DRIVE_META[driveState as keyof typeof DRIVE_META] ?? driveState : null} onGo={go}
         onEject={(id, label) => void os.filesEject(id).then((r) => { if (!r.ok) setNotice(t('files.ejectFailed', { name: label })); else go({ kind: 'dir', root: 'home', rel: '' }); reload() })} />
       <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col" onClick={() => setMenu(null)}

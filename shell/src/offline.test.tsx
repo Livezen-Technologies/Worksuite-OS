@@ -79,6 +79,14 @@ describe('desktop with all remote services unreachable (WSOS-ARC-004)', () => {
     }
   })
 
+  it('Files opens focused, so Ctrl+A selects files instead of the page text', async () => {
+    const el = await render(<Files onClose={() => {}} />)
+    const dlg = el.querySelector('[role="dialog"][aria-label]') as HTMLElement
+    expect(document.activeElement).toBe(dlg)
+    expect(dlg.className).toContain('select-none')
+    act(() => root?.unmount()); host?.remove(); root = null
+  })
+
   it('the renderer itself never tried to reach a remote host', () => {
     // Relative paths are the dev preview's own stubs (same origin); a remote host would be an absolute URL.
     expect(net.filter((u) => /^(https?|wss?):/i.test(u))).toEqual([])
