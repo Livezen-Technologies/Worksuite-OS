@@ -6,6 +6,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { realExec, realWithStdin, type Avail, type Exec, type WithStdin } from './system'
 import { parseBtDevices } from './system'
+import { xdgDirs } from './xdgDirs'
 
 // ---------- Bluetooth ----------
 export interface BtFound { address: string; name: string }
@@ -214,7 +215,7 @@ const realFs: FsDeps = {
 }
 
 export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin: WithStdin = realWithStdin, fs: FsDeps = realFs) {
-  const userProfile = join(home, '.config', 'fcitx5', 'profile')
+  const userProfile = join(xdgDirs(home).config, 'fcitx5', 'profile')
   return {
     // Bluetooth (WSOS-INT-003)
     async btScan(): Promise<Avail<BtFound[]>> {

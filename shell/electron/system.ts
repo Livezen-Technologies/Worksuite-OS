@@ -9,6 +9,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { certFileName, openvpnNeedsCredentials, ovpnConnectionName, parseOvpn, parseVpnData, renderOvpnForImport, safeRelativeRef } from './openvpn'
 import { parseConnectivity, type Connectivity } from './connectivity'
+import { xdgDirs } from './xdgDirs'
 
 export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
 export type Exec = (cmd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string; missing?: boolean }>
@@ -276,7 +277,7 @@ export interface VpnDeps {
 
 /** ~/.local/share/worksuite/vpn/<connection name>/: readable by the user and root (NetworkManager) only. */
 export function certDirFor(home: string, connName: string): string {
-  return join(home, '.local', 'share', 'worksuite', 'vpn', connName.replace(/[^A-Za-z0-9 _.()-]/g, '_').replace(/^\.+/, '_'))
+  return join(xdgDirs(home).data, 'worksuite', 'vpn', connName.replace(/[^A-Za-z0-9 _.()-]/g, '_').replace(/^\.+/, '_'))
 }
 
 export interface OvpnImportFiles { readRef(relPath: string): Buffer | null }

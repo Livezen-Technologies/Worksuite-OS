@@ -38,6 +38,7 @@ import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
 import { externalAllowed, loadGrants, permissionAllowed, shellWebPreferences } from './webSecurity'
+import { xdgDirs } from './xdgDirs'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 // URL scheme allow-list, renderer prefs and per-origin permission grants: ./webSecurity (WSOS-SEC-001/003/006).
@@ -186,7 +187,7 @@ app.whenReady().then(() => {
     const home = app.getPath('home')
     let local: ReturnType<typeof localRecentHits> = []
     try {
-      const xbel = path.join(process.env.XDG_DATA_HOME || path.join(home, '.local/share'), 'recently-used.xbel')
+      const xbel = path.join(xdgDirs(home).data, 'recently-used.xbel')
       local = localRecentHits(parseXbel(readFileSync(xbel, 'utf8')).filter((r) => existsSync(r.path)), home)
     } catch { /* no history yet */ }
     const cloud = await searcher.recent().catch(() => ({ state: 'offline' as const, hits: [] }))
@@ -470,7 +471,7 @@ app.whenReady().then(() => {
   // and re-applied at login and on hotplug, which also re-plans the per-monitor windows (DSK-005/007).
   const displays = displayManager({
     exec: realExec,
-    storeFile: path.join(app.getPath('home'), '.config', 'worksuite', 'displays.json'),
+    storeFile: path.join(xdgDirs(app.getPath('home')).config, 'worksuite', 'displays.json'),
     spawn: (cmd, args) => { const p = spawn(cmd, args, { stdio: 'ignore' }); p.on('error', () => undefined); return { kill: () => p.kill() } },
     onChange: (st: DisplayState) => { broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)) },
   })

@@ -6,6 +6,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statfsSync
 import { copyFile, lstat, mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { resolveIn, roots, type FileEnv } from './files'
+import { xdgDirs } from './xdgDirs'
 
 type Reply<T> = { ok: true; value: T } | { ok: false; error: string }
 type Env = Pick<FileEnv, 'home' | 'user'>
@@ -50,7 +51,7 @@ export function places(env: Env) {
 }
 
 // ---- Starred ----
-const starFile = (env: Env) => path.join(env.home, '.config', 'worksuite', 'starred.json')
+const starFile = (env: Env) => path.join(xdgDirs(env.home).config, 'worksuite', 'starred.json')
 export function starred(env: Env): string[] {
   try { const v = JSON.parse(readFileSync(starFile(env), 'utf8')); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [] } catch { return [] }
 }
@@ -80,7 +81,7 @@ export function starredHits(env: Env): Hit[] {
 // ---- Recent (XDG recently-used.xbel, written by GTK/Qt apps) ----
 export function recent(env: Env, limit = 60): Hit[] {
   let xml = ''
-  try { xml = readFileSync(path.join(env.home, '.local', 'share', 'recently-used.xbel'), 'utf8') } catch { return [] }
+  try { xml = readFileSync(path.join(xdgDirs(env.home).data, 'recently-used.xbel'), 'utf8') } catch { return [] }
   const out: { hit: Hit; t: number }[] = []
   const seen = new Set<string>()
   for (const m of xml.matchAll(/<bookmark\b([^>]*)>/g)) {
@@ -150,7 +151,7 @@ export async function renameIn(env: Env, root: string, rel: string, name: string
 }
 
 // ---- freedesktop.org Trash ($XDG_DATA_HOME/Trash) ----
-const trashDir = (env: Env) => path.join(env.home, '.local', 'share', 'Trash')
+const trashDir = (env: Env) => path.join(xdgDirs(env.home).data, 'Trash')
 const pad = (n: number) => String(n).padStart(2, '0')
 const trashDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 

@@ -16,6 +16,7 @@ import { spawn } from 'node:child_process'
 import { lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { realExec, type Avail, type Exec } from './system'
+import { xdgDirs } from './xdgDirs'
 
 // ---------- devices ----------
 export type DevKind = 'touchscreen' | 'tablet' | 'tablet-pad' | 'switch'
@@ -205,8 +206,8 @@ const realSpawn: Spawn = (cmd, args) => {
 }
 
 export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn = realSpawn, sysLabwc = '/etc/xdg/worksuite/labwc') {
-  const file = path.join(home, '.config', 'worksuite', 'touch.json')
-  const labwcDir = path.join(home, '.config', 'worksuite', 'labwc')
+  const file = path.join(xdgDirs(home).config, 'worksuite', 'touch.json')
+  const labwcDir = path.join(xdgDirs(home).config, 'worksuite', 'labwc')
   const st: TouchState = { devices: [], settings: loadTouch(file), tabletSwitch: false, touchMode: false, orientation: null, hasAccelerometer: false, osk: { available: false, visible: false }, outputs: [] }
   let listener: (s: TouchState) => void = () => {}
   let osk: Proc | null = null
@@ -260,7 +261,7 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
   function startOsk() {
     if (osk) return
     let methods: string[] = []
-    try { methods = readFileSync(path.join(home, '.config', 'fcitx5', 'profile'), 'utf8').split('\n').map((l) => /^Name=(.+)$/.exec(l.trim())?.[1] ?? '').filter(Boolean) } catch { /* default layout */ }
+    try { methods = readFileSync(path.join(xdgDirs(home).config, 'fcitx5', 'profile'), 'utf8').split('\n').map((l) => /^Name=(.+)$/.exec(l.trim())?.[1] ?? '').filter(Boolean) } catch { /* default layout */ }
     osk = spawnFn('wvkbd-mobintl', oskArgs(st.settings, methods))
     st.osk = { available: !!osk, visible: false }
     osk?.onExit(() => { osk = null; st.osk = { available: false, visible: false }; emit() })

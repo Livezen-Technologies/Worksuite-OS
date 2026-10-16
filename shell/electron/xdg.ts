@@ -1,6 +1,7 @@
 // Installed applications from XDG desktop entries (Desktop Entry Specification), for the launcher.
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { xdgDirs } from './xdgDirs'
 
 export interface DesktopEntry {
   /** Desktop file id (basename without .desktop), what gtk-launch takes. */
@@ -60,7 +61,7 @@ export function toEntry(id: string, kv: Record<string, string>, desktops: string
 
 /** $XDG_DATA_HOME/applications first, then $XDG_DATA_DIRS; the first directory holding an id wins. */
 export function applicationDirs(env: NodeJS.ProcessEnv = process.env): string[] {
-  const home = env.XDG_DATA_HOME || path.join(env.HOME || '/', '.local/share')
+  const home = xdgDirs(env.HOME || '/', env).data
   const dirs = (env.XDG_DATA_DIRS || '/usr/local/share:/usr/share').split(':').filter(Boolean)
   return [home, ...dirs].map((d) => path.join(d, 'applications'))
 }

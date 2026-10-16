@@ -67,6 +67,8 @@ jobs:
       - run: sh tests/session/kiosk-test.sh
       # Device PIN / security-key PAM profiles, daemon and packaging (runs the helper unit tests too).
       - run: sh tests/session/signin-pam-test.sh
+      # File-system layout (SRS §11.6-b): packaged paths, XDG base directories for user state.
+      - run: sh tests/session/fs-layout-test.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22
