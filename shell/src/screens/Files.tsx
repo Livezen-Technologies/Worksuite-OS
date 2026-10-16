@@ -5,7 +5,7 @@ import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { formatBytes, os, type FileEntry, type FileHit, type FileJob, type FilePlaces, type TrashItem } from '../lib/os'
-import { formatDate, formatNumber, messages, t } from '../i18n'
+import { formatDate, formatDecimal, formatNumber, messages, t } from '../i18n'
 import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place } from './files/parts'
 import { ArchiveView, CompressDialog, LargeDialog, PasswordDialog, archiveError, archiveKind, stemOf } from './files/archive'
 
@@ -487,7 +487,7 @@ function SearchView({ search, setSearch, found, openHit }: { search: { q: string
       </div>
       <div className="flex flex-1 flex-col gap-1.5 overflow-auto px-6 py-4">
         {found && q && <span className="mb-1 text-xs" style={{ color: C.muted }}>
-          {t('files.search.results', { count: formatNumber(found.hits.length), secs: (found.ms / 1000).toFixed(2) })}{found.truncated ? ` · ${t('files.search.more', { count: formatNumber(found.hits.length) })}` : ''}
+          {t('files.search.results', { count: formatNumber(found.hits.length), secs: formatDecimal(found.ms / 1000, 2) })}{found.truncated ? ` · ${t('files.search.more', { count: formatNumber(found.hits.length) })}` : ''}
         </span>}
         {found && q && found.hits.length === 0 && <p className="text-sm" style={{ color: C.muted }}>{t('files.search.none', { q: search.q.trim() })}</p>}
         {q && found?.hits.map((h, i) => <HitRow key={h.root + h.rel} h={h} q={q} first={i === 0} onOpen={() => openHit(h)} />)}

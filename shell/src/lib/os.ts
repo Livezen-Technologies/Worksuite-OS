@@ -268,7 +268,7 @@ export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; p
 export function formatBytes(n: number | null): string {
   if (n == null) return '—'
   const a = Math.abs(n)
-  const s = a >= 1e9 ? `${formatNumber(Number((a / 1e9).toFixed(1)))} GB` : a >= 1e6 ? `${formatNumber(Math.round(a / 1e6))} MB` : `${formatNumber(Math.max(1, Math.round(a / 1e3)))} kB`
+  const s = a >= 1e9 ? `${formatDecimal(a / 1e9, 1)} GB` : a >= 1e6 ? `${formatNumber(Math.round(a / 1e6))} MB` : `${formatNumber(Math.max(1, Math.round(a / 1e3)))} kB`
   return n < 0 ? t('bytes.freed', { size: s }) : s
 }
 
@@ -286,7 +286,7 @@ export function packageErrorText(code: string): string {
 
 import type { SyncStatus } from './syncNotices'
 import type { CheckId, CheckResult, SnapshotInfo } from './recovery'
-import { formatNumber, t } from '../i18n'
+import { formatDecimal, formatNumber, t } from '../i18n'
 
 export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null

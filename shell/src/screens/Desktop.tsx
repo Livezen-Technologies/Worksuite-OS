@@ -15,7 +15,7 @@ import A11yPanel from '../components/A11yPanel'
 import NotifDock, { MOON } from '../components/NotifDock'
 import { CaptureBadge } from '../components/CaptureBadge'
 import { useDnd } from '../lib/dnd'
-import { localeTag, t as t0, useT } from '../i18n'
+import { formatTime, localeTag, t as t0, useT } from '../i18n'
 import { UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
@@ -76,7 +76,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   const searchRef = useRef<HTMLInputElement>(null)
   const name = displayName(user) || user
 
-  const time = now.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit', hour12: false })
+  const time = formatTime(now)
   const longDate = now.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })
   const shortDate = now.toLocaleDateString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
 
