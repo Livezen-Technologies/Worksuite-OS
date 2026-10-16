@@ -49,7 +49,7 @@ printf '#!/bin/sh\necho app-run >> "$LOG"\nexit 1\n' > "$T/app"; chmod +x "$T/ap
 KIOSK_IDLE_RESET_S=300 KIOSK_OSK=1 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" WORKSUITE_KIOSK_RESTART_DELAY=0 WORKSUITE_KIOSK_MAX_RESTARTS=3 sh "$K/worksuite-kiosk-start"
 sleep 0.2
 check "crashed app restarted" "$(grep -c '^app-run$' "$LOG")" 3
-grep -q "^swayidle -w timeout 300 $T/lib/worksuite-kiosk-ctl reset$" "$LOG" && ok "idle reset after the policy's time" || bad "idle reset after the policy's time"
+grep -q "^swayidle -w timeout 285 $T/lib/worksuite-kiosk-ctl warn resume $T/lib/worksuite-kiosk-ctl active timeout 300 $T/lib/worksuite-kiosk-ctl reset$" "$LOG" && ok "idle reset after the policy's time, warned 15 s before" || bad "idle reset after the policy's time, warned 15 s before"
 grep -q '^osk --kiosk$' "$LOG" && ok "on-screen keyboard hook started" || bad "on-screen keyboard hook started"
 : > "$LOG"; rm "$T/lib/worksuite-osk"; stub wvkbd-mobintl 'echo "wvkbd $*" >> "$LOG"'
 KIOSK_OSK=1 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" WORKSUITE_KIOSK_RESTART_DELAY=0 WORKSUITE_KIOSK_MAX_RESTARTS=1 sh "$K/worksuite-kiosk-start"
@@ -64,10 +64,12 @@ check "no restart once leaving kiosk mode" "$(grep -c '^app-run$' "$LOG")" 0
 rm -f "$T/run/worksuite-kiosk/exiting"
 
 # ---- worksuite-kiosk-ctl ----
-sh -c 'trap "echo USR1 >> \"$LOG\"" USR1; trap "echo USR2 >> \"$LOG\"" USR2; i=0; while [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done' & P=$!
+sh -c 'trap "echo USR1 >> \"$LOG\"" USR1; trap "echo USR2 >> \"$LOG\"" USR2; trap "echo HUP >> \"$LOG\"" HUP; i=0; while [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done' & P=$!
 sleep 0.2; echo "$P" > "$T/run/worksuite-kiosk/app.pid"
 : > "$LOG"; sh "$K/worksuite-kiosk-ctl" exit-prompt; sleep 0.3; sh "$K/worksuite-kiosk-ctl" reset; sleep 0.3
 check "ctl signals the kiosk app (USR1 exit prompt, USR2 reset)" "$(tr '\n' ' ' < "$LOG")" "USR1 USR2 "
+: > "$LOG"; XDG_RUNTIME_DIR="$T/run" sh "$K/worksuite-kiosk-ctl" warn; sleep 0.3
+check "ctl warn: idle file and HUP" "$(cat "$T/run/worksuite-kiosk/idle") $(tr '\n' ' ' < "$LOG")" "warn HUP "
 echo '1; reboot' > "$T/run/worksuite-kiosk/app.pid"
 sh "$K/worksuite-kiosk-ctl" reset 2>/dev/null && bad "ctl refuses a bad pid file" || ok "ctl refuses a bad pid file"
 kill "$P" 2>/dev/null

@@ -5,7 +5,9 @@
 //   module/app    the WorkSuite module or installed app runs as a child process, restarted (with back-off) if it exits;
 //                 idle reset stops it, clears the kiosk account's app data and starts it again.
 // SIGUSR1 (worksuite-kiosk-ctl exit-prompt, the Labwc Ctrl+Alt+Shift+K binding) or five taps in the top-left corner
-// show the exit prompt; SIGUSR2 (swayidle, worksuite-kiosk-ctl reset) resets.
+// show the exit prompt; SIGUSR2 (swayidle, worksuite-kiosk-ctl reset) resets; SIGHUP (worksuite-kiosk-ctl warn | active)
+// shows or hides the "Still there?" screen 15 s before an idle reset. The status pages (board KioskStates: starting,
+// restarting after a crash, offline, unavailable, still there?) are the shell's KioskStatus screen.
 import { app, BrowserWindow, ipcMain, screen, session, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -32,6 +34,8 @@ if (!app.requestSingleInstanceLock()) app.exit(0)
 
 let main: BrowserWindow | null = null
 let exitWin: BrowserWindow | null = null
+let idleWin: BrowserWindow | null = null
+let restartWin: BrowserWindow | null = null
 let child: ChildProcess | null = null
 let generation = 0
 let failures = 0
@@ -40,10 +44,35 @@ let leaving = false
 /** Whole display, also where the compositor ignores the fullscreen request. */
 const full = () => ({ ...screen.getPrimaryDisplay().bounds })
 
-function statusWindow(state: 'starting' | 'unavailable'): BrowserWindow {
+type StatusState = 'starting' | 'unavailable' | 'restarting' | 'offline' | 'idle'
+const statusQuery = (state: StatusState, extra: Record<string, string> = {}) => ({ query: { mode: 'kiosk-status', state, ...extra } })
+
+function statusWindow(state: StatusState, extra: Record<string, string> = {}, onTop = false): BrowserWindow {
   const w = new BrowserWindow({ ...full(), kiosk: true, fullscreen: true, frame: false, backgroundColor: '#0A1A3D', webPreferences: shellWebPreferences(path.join(__dirname, 'kioskPreload.cjs')) })
-  void w.loadFile(INDEX, { query: { mode: 'kiosk-status', state } })
+  if (onTop) w.setAlwaysOnTop(true, 'screen-saver')
+  w.webContents.on('will-navigate', (e) => e.preventDefault())
+  w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  w.webContents.on('before-input-event', (e, input) => { if (isExitGesture(input)) { e.preventDefault(); showExitPrompt() } else if (blockedKey(input)) e.preventDefault() })
+  void w.loadFile(INDEX, statusQuery(state, extra))
   return w
+}
+
+/** "Restarting the app" over the screen while a crashed app comes back (after `ms`). */
+function showRestarting(ms: number) {
+  if (leaving) return
+  restartWin?.destroy()
+  restartWin = statusWindow('restarting', { attempt: String(failures), secs: String(Math.max(1, Math.round(ms / 1000))) }, true)
+  restartWin.on('closed', () => { restartWin = null })
+}
+const hideRestarting = (afterMs = 0) => setTimeout(() => { restartWin?.destroy(); restartWin = null }, afterMs)
+
+/** "Still there?" 15 s before an idle reset; any touch or key (swayidle's resume) takes it away. */
+function idleWarning(show: boolean) {
+  if (!show || leaving) { idleWin?.destroy(); idleWin = null; return }
+  if (idleWin && !idleWin.isDestroyed()) return
+  idleWin = statusWindow('idle', { secs: '15' }, true)
+  idleWin.webContents.on('input-event', (_e, input) => { if (['mouseDown', 'touchStart', 'keyDown', 'gestureTap'].includes(input.type)) idleWarning(false) })
+  idleWin.on('closed', () => { idleWin = null })
 }
 
 /** Every web contents of the kiosk: no new windows, no devtools, blocked shortcuts, exit gesture. */
@@ -83,12 +112,16 @@ function webKiosk(c: KioskConfig & { app: { type: 'url'; url: string } }) {
   w.removeMenu()
   lockDown(w.webContents, allowed)
   // A crashed or hung page is replaced with a fresh one; an unreachable start page is retried.
-  w.webContents.on('render-process-gone', () => setTimeout(() => replaceWeb(), restartDelay(++failures)))
+  w.webContents.on('render-process-gone', () => { const ms = restartDelay(++failures); showRestarting(ms); setTimeout(() => { replaceWeb(); hideRestarting(1500) }, ms) })
   w.on('unresponsive', () => setTimeout(() => { if (main === w && !w.isDestroyed()) replaceWeb() }, 10_000))
   w.webContents.on('did-fail-load', (_e, code, _d, url, isMain) => {
     if (!isMain || code === -3 || ownPage(url)) return   // -3: aborted (our own block)
-    void w.loadFile(INDEX, { query: { mode: 'kiosk-status', state: 'unavailable' } })
-    setTimeout(() => { if (main === w && !w.isDestroyed()) void w.loadURL(c.app.url) }, restartDelay(++failures))
+    const ms = restartDelay(++failures)
+    // -100…-199: connection errors (no network, DNS, refused, timed out): "Offline", naming the host and the retry.
+    let host = ''
+    try { host = new URL(c.app.url).host } catch { /* keep empty */ }
+    void w.loadFile(INDEX, code <= -100 && code > -200 ? statusQuery('offline', { host, secs: String(Math.round(ms / 1000)) }) : statusQuery('unavailable'))
+    setTimeout(() => { if (main === w && !w.isDestroyed()) void w.loadURL(c.app.url) }, ms)
   })
   w.webContents.on('did-finish-load', () => { if (allowed(w.webContents.getURL())) failures = 0 })
   void w.loadURL(c.app.url)
@@ -141,7 +174,9 @@ function startNative() {
     child = null
     if (leaving) return
     failures = Date.now() - started > 60_000 ? 1 : failures + 1
-    setTimeout(startNative, restartDelay(failures))
+    const ms = restartDelay(failures)
+    showRestarting(ms)
+    setTimeout(() => { startNative(); hideRestarting(2500) }, ms)
   })
   child.on('error', () => {})
 }
@@ -149,6 +184,7 @@ function startNative() {
 function reset() {
   if (!cfg || leaving) return
   exitWin?.destroy(); exitWin = null
+  idleWarning(false)
   if (cfg.app.type === 'url') { replaceWeb(); return }
   failures = 0
   const c = child
@@ -196,6 +232,11 @@ app.whenReady().then(() => {
   writeFileSync(path.join(RUN, 'app.pid'), String(process.pid))
   process.on('SIGUSR1', () => showExitPrompt())
   process.on('SIGUSR2', () => reset())
+  process.on('SIGHUP', () => {
+    let v = ''
+    try { v = readFileSync(path.join(RUN, 'idle'), 'utf8').trim() } catch { /* nothing asked */ }
+    idleWarning(v === 'warn')
+  })
 
   ipcMain.on('kiosk:gesture', (e) => { if (main && e.sender === main.webContents) showExitPrompt() })
   ipcMain.handle('kiosk:info', (e) => (fromPrompt(e) ? { exitPin: cfg?.exit_pin === true } : null))

@@ -1942,6 +1942,17 @@ const en = {
   'kiosk.starting': "Starting…",
   'kiosk.unavailableTitle': "This kiosk will be back shortly",
   'kiosk.unavailableBody': "The app could not be reached. It is tried again automatically.",
+  'kiosk.st.idleTitle': 'Still there?',
+  'kiosk.st.idleBody': 'Tap anywhere to keep going. Starting over in {n} s so the next person gets a fresh screen.',
+  'kiosk.st.idleMeta': 'Idle reset · your information is cleared',
+  'kiosk.st.restartTitle': 'Restarting the app',
+  'kiosk.st.restartBody': 'Something went wrong, so it is reopening. This takes a few seconds.',
+  'kiosk.st.restartMeta': 'Automatic restart',
+  'kiosk.st.restartMetaN': 'Automatic restart · attempt {n}',
+  'kiosk.st.offlineTitle': 'Offline',
+  'kiosk.st.offlineBody': 'Can’t reach {host}. Trying again in {n} s. Please ask a member of staff for help.',
+  'kiosk.st.offlineBodyNoHost': 'Can’t reach the network. Trying again in {n} s. Please ask a member of staff for help.',
+  'kiosk.st.offlineMeta': 'Web kiosk · network lost',
 } as const
 
 export type MessageKey = keyof typeof en

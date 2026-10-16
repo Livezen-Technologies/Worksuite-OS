@@ -1,10 +1,12 @@
 #!/bin/sh
-# worksuite-kiosk-ctl exit-prompt | reset    (kiosk session; Labwc's exit gesture and swayidle call it)
-# Signals the kiosk app (shell/electron/kioskMain.ts): SIGUSR1 shows the exit prompt, SIGUSR2 resets the app.
+# worksuite-kiosk-ctl exit-prompt | reset | warn | active    (kiosk session; Labwc's exit gesture and swayidle call it)
+# Signals the kiosk app (shell/electron/kioskMain.ts): SIGUSR1 shows the exit prompt, SIGUSR2 resets the app, SIGHUP
+# shows or hides the "Still there?" screen, as written to $RUN/idle (warn | active).
 PID=$(cat "${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk/app.pid" 2>/dev/null)
 case "$PID" in ''|*[!0-9]*) echo "worksuite-kiosk-ctl: kiosk app not running" >&2; exit 1 ;; esac
 case "${1:-}" in
   exit-prompt) kill -USR1 "$PID" ;;
   reset) kill -USR2 "$PID" ;;
-  *) echo "usage: worksuite-kiosk-ctl exit-prompt | reset" >&2; exit 2 ;;
+  warn|active) printf '%s\n' "$1" > "${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk/idle" && kill -HUP "$PID" ;;
+  *) echo "usage: worksuite-kiosk-ctl exit-prompt | reset | warn | active" >&2; exit 2 ;;
 esac

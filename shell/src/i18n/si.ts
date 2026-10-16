@@ -1916,6 +1916,17 @@ const si: Partial<Record<MessageKey, string>> = {
   'kiosk.starting': "ආරම්භ කරමින්…",
   'kiosk.unavailableTitle': "මෙම කියෝස්කය ඉක්මනින් නැවත ලැබේ",
   'kiosk.unavailableBody': "යෙදුමට ළඟා විය නොහැකි විය. එය ස්වයංක්‍රීයව නැවත උත්සාහ කෙරේ.",
+  'kiosk.st.idleTitle': 'තවමත් සිටිනවාද?',
+  'kiosk.st.idleBody': 'දිගටම කරගෙන යාමට ඕනෑම තැනක තට්ටු කරන්න. ඊළඟ පුද්ගලයාට නැවුම් තිරයක් ලැබෙන පරිදි තත්පර {n} කින් නැවත ආරම්භ වේ.',
+  'kiosk.st.idleMeta': 'නිෂ්ක්\u200dරීය යළි සැකසීම · ඔබේ තොරතුරු මකා දැමේ',
+  'kiosk.st.restartTitle': 'යෙදුම යළි ආරම්භ වෙමින්',
+  'kiosk.st.restartBody': 'යමක් වැරදුණු නිසා එය නැවත විවෘත වෙමින් පවතී. මෙයට තත්පර කිහිපයක් ගතවේ.',
+  'kiosk.st.restartMeta': 'ස්වයංක්\u200dරීය යළි ආරම්භය',
+  'kiosk.st.restartMetaN': 'ස්වයංක්\u200dරීය යළි ආරම්භය · උත්සාහය {n}',
+  'kiosk.st.offlineTitle': 'නොබැඳි',
+  'kiosk.st.offlineBody': '{host} වෙත ළඟා විය නොහැක. තත්පර {n} කින් නැවත උත්සාහ කරයි. කරුණාකර කාර්ය මණ්ඩලයේ සාමාජිකයෙකුගෙන් උදව් ඉල්ලන්න.',
+  'kiosk.st.offlineBodyNoHost': 'ජාලයට ළඟා විය නොහැක. තත්පර {n} කින් නැවත උත්සාහ කරයි. කරුණාකර කාර්ය මණ්ඩලයේ සාමාජිකයෙකුගෙන් උදව් ඉල්ලන්න.',
+  'kiosk.st.offlineMeta': 'වෙබ් කියොස්කය · ජාලය නැති විය',
 }
 
 export default si

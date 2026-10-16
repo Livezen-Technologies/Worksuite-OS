@@ -19,8 +19,12 @@ if [ "${KIOSK_OSK:-0}" = 1 ]; then
     fi
 fi
 
-# Idle reset: after the policy's idle time the app is reset to a clean state (worksuite-kiosk-ctl reset).
-if [ "${KIOSK_IDLE_RESET_S:-0}" -gt 0 ] 2>/dev/null; then
+# Idle reset: after the policy's idle time the app is reset to a clean state (worksuite-kiosk-ctl reset). From 30 s up,
+# a "Still there?" screen (board KioskStates) comes 15 s before, and goes again on any touch or key.
+if [ "${KIOSK_IDLE_RESET_S:-0}" -ge 30 ] 2>/dev/null; then
+    swayidle -w timeout $((KIOSK_IDLE_RESET_S - 15)) "$LIB/worksuite-kiosk-ctl warn" resume "$LIB/worksuite-kiosk-ctl active" \
+        timeout "$KIOSK_IDLE_RESET_S" "$LIB/worksuite-kiosk-ctl reset" &
+elif [ "${KIOSK_IDLE_RESET_S:-0}" -gt 0 ] 2>/dev/null; then
     swayidle -w timeout "$KIOSK_IDLE_RESET_S" "$LIB/worksuite-kiosk-ctl reset" &
 fi
 
