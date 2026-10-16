@@ -126,7 +126,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
       ))}
       <div role="group" aria-label={t('files.storageLabel')} className="mt-auto flex flex-col gap-2 rounded-[10px] px-2.5 py-3" style={{ background: C.card }}>
         {disk ? <>
-          <div className="flex justify-between text-xs"><span>{diskName(disk)}</span><span style={{ color: C.muted }}>{t('files.storage', { used: formatBytes(disk.used), total: formatBytes(disk.total) })}</span></div>
+          <div className="flex flex-col gap-0.5 text-xs"><span className="truncate" title={diskName(disk)}>{diskName(disk)}</span><span style={{ color: C.muted }}>{t('files.storage', { used: formatBytes(disk.used), total: formatBytes(disk.total) })}</span></div>
           <AnimatedProgress value={Math.round((disk.used / Math.max(1, disk.total)) * 100)} label={t('files.storageLabel')} height={5} shimmer={false} />
         </> : <span className="text-xs" style={{ color: C.muted }}>{t('files.storageUnknown')}</span>}
       </div>
