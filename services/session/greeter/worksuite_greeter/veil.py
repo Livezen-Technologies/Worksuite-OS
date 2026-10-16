@@ -46,6 +46,13 @@ def ease_out(p):
     return 1 - (1 - p) ** 3
 
 
+def boot_handoff(path=None):
+    """True for the first greeter since greetd started (it clears the mark, greetd.service): its veil continues the
+    boot splash. A greeter after sign-out finds the mark from the earlier one; its veil says nothing ("Booting…"
+    there was wrong)."""
+    return not os.path.exists(path or READY)
+
+
 def mark_ready(path=None):
     """Tells greeter-handoff that the first frame is on screen (it then lets Plymouth go)."""
     path = path or READY

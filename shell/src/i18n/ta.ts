@@ -877,6 +877,8 @@ const ta: Partial<Record<MessageKey, string>> = {
   'rec.menu.terminalHint': 'மேம்பட்டது: கைமுறைப் பழுதுபார்ப்புக்கான root shell.',
   'rec.menu.label': 'மீட்பு மெனு',
   'rec.menu.title': 'தொடக்கத்தில் ஏதோ தவறு நடந்தது',
+  'rec.menu.titleManual': 'WorkSuite மீட்பு',
+  'rec.menu.chooseManual': 'நீங்கள் செய்ய விரும்புவதைத் தேர்ந்தெடுக்கவும்.',
   'rec.menu.failures': 'WorkSuite OS தொடர்ந்து {count} முறை சரியாகத் தொடங்கவில்லை.',
   'rec.menu.failed': 'WorkSuite OS சரியாகத் தொடங்கவில்லை.',
   'rec.menu.choose': 'அதை எப்படிச் சரிசெய்ய விரும்புகிறீர்கள் எனத் தேர்ந்தெடுக.',

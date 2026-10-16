@@ -1219,6 +1219,8 @@ const en = {
   'rec.menu.terminal': 'Terminal',
   'rec.menu.terminalHint': 'Advanced: a root shell for manual repair.',
   'rec.menu.title': 'Something went wrong at startup',
+  'rec.menu.titleManual': 'WorkSuite Recovery',
+  'rec.menu.chooseManual': 'Choose what you’d like to do.',
   'rec.menu.unlock': 'Unlock disk with recovery key',
   'rec.menu.unlockHint': 'Use if you forgot your disk passphrase.',
   'rec.menu.unlocked': 'Your disk is already unlocked.',

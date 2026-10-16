@@ -312,6 +312,7 @@ contextBridge.exposeInMainWorld('worksuiteTouch', {
   state: () => ipcRenderer.invoke('ws:touchState'),
   set: (patch: unknown) => ipcRenderer.invoke('ws:touchSet', JSON.stringify(patch)),
   osk: (show: boolean, purpose = 0, hints = 0) => ipcRenderer.invoke('ws:oskShow', show ? '1' : '0', String(Number(purpose) | 0), String(Number(hints) | 0)),
+  oskToggle: () => ipcRenderer.invoke('ws:oskToggle'),
   penTest: (on: boolean) => ipcRenderer.invoke('ws:penTest', on ? '1' : '0'),
   onChange: on('ws:touchChanged'),
   onPen: on('ws:penEvent'),

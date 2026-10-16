@@ -44,6 +44,12 @@ describe('recovery host', () => {
     expect(info.features).toMatchObject({ unlock: true, repair: true, snapshots: false, reinstall: true })
   })
 
+  it('knows when Recovery was chosen in the boot menu', async () => {
+    const read = (p: string) => (p === '/proc/cmdline' ? 'BOOT_IMAGE=/vmlinuz root=UUID=x ro systemd.unit=worksuite-recovery.target worksuite.recovery=1 quiet splash' : 'VERSION_ID="1.1"\n')
+    expect((await recoveryHost(pkg, fakeHost({}, { read }).host).info()).manual).toBe(true)
+    expect((await recoveryHost(pkg, fakeHost().host).info()).manual).toBe(false)
+  })
+
   it('runs read-only checks', async () => {
     const ro = fakeHost({ findmnt: { stdout: 'ext4 ro,relatime\n' } })
     expect((await recoveryHost(pkg, ro.host).check('disk')).status).toBe('problem')

@@ -35,6 +35,7 @@ export default function Menu({ info, onOpen }: { info: RecoveryInfo | null; onOp
   }
 
   const failures = info?.failures
+  const manual = !!info?.manual && !failures
   const facts = [info?.os_version, info?.disk, info?.firmware].filter(Boolean).join(' · ')
 
   return (
@@ -42,9 +43,10 @@ export default function Menu({ info, onOpen }: { info: RecoveryInfo | null; onOp
       <Header logo right={facts ? <span className={`${mono} text-xs text-[#8FA3C8]`}>{facts}</span> : null} />
       <div className="flex flex-col gap-7 px-[120px] pb-24 pt-11 max-[900px]:px-6">
         <div className="flex flex-col gap-2">
-          <h1 className="m-0 text-[32px] font-bold tracking-[-0.02em]">{tr('rec.menu.title')}</h1>
+          {/* Chosen in the boot menu: a neutral heading, nothing "went wrong". */}
+          <h1 className="m-0 text-[32px] font-bold tracking-[-0.02em]">{manual ? tr('rec.menu.titleManual') : tr('rec.menu.title')}</h1>
           <p className="m-0 text-[15px] text-[#8FA3C8]">
-            {failures ? tr('rec.menu.failures', { count: failures }) : tr('rec.menu.failed')} {tr('rec.menu.choose')}
+            {manual ? tr('rec.menu.chooseManual') : <>{failures ? tr('rec.menu.failures', { count: failures }) : tr('rec.menu.failed')} {tr('rec.menu.choose')}</>}
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3.5 max-[900px]:grid-cols-1">

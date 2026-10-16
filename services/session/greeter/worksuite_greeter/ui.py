@@ -326,7 +326,10 @@ class Screen(Gtk.Overlay):
         self.base = Gtk.Overlay(css_classes=["screen"], hexpand=True, vexpand=True)
         self.set_child(self.base)
         self.content = None
-        self.veil = Veil(title=_("Booting…"), sub=_("Getting your workspace ready."), phase=_("Starting desktop"))
+        if veil.boot_handoff():
+            self.veil = Veil(title=_("Booting…"), sub=_("Getting your workspace ready."), phase=_("Starting desktop"))
+        else:   # after sign-out: the plain dark veil, no boot text
+            self.veil = Veil(show_column=False)
         self.add_overlay(self.veil)
         if content is not None:
             self.set_content(content)

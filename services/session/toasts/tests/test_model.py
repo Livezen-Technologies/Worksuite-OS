@@ -35,3 +35,9 @@ class StackTest(unittest.TestCase):
         self.assertFalse(s.hide("new"))
         self.assertEqual([x.key for x in s.clear()], ["k1", "k2"])
         self.assertEqual(s.items, [])
+
+
+class TimingTest(unittest.TestCase):
+    def test_toasts_stay_six_seconds(self):
+        from worksuite_toasts.model import TIMEOUT_MS
+        self.assertEqual(TIMEOUT_MS, 6000)

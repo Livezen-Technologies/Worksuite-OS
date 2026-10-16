@@ -220,6 +220,8 @@ export interface RecoveryInfo {
   os_version: string | null; disk: string | null; firmware: 'EFI' | 'BIOS'
   /** Shell restarts counted by systemd before recovery opened; null when unknown. */
   failures: number | null
+  /** Entered by hand from the boot menu (electron/recovery.ts). */
+  manual?: boolean
   luks: RecoveryLuksDevice[]; features: Record<RecoveryFeature, boolean>
 }
 

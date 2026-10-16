@@ -180,6 +180,17 @@ describe('WorkSuite keyboard (worksuite-osk)', () => {
     expect(b.osk(false)).toEqual({ available: true, value: false })
     expect(lines.slice(-2)).toEqual(['show 6 8\n', 'hide\n'])
   })
+  it('the taskbar button toggles in the keyboard, which knows whether it closed itself', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))
+    const lines: string[] = []
+    const sp: Spawn = () => ({ kill: () => {}, onLine: () => {}, onExit: () => {} })
+    const b = touchBridge(home, async () => ({ code: 1, stdout: '', stderr: '' }), sp, home, () => true, (_s, l) => lines.push(l))
+    await b.start()
+    b.osk(true)          // shown, then closed with the keyboard's own key (the shell does not hear about it)
+    b.oskToggle()
+    b.oskToggle()
+    expect(lines.slice(-2)).toEqual(['toggle\n', 'toggle\n'])
+  })
   it('falls back to wvkbd at once when worksuite-osk cannot run (Settings never says "not installed")', async () => {
     const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))
     const spawned: string[] = []

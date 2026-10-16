@@ -877,6 +877,8 @@ const si: Partial<Record<MessageKey, string>> = {
   'rec.menu.terminalHint': 'උසස්: අතින් අලුත්වැඩියාව සඳහා root shell එකක්.',
   'rec.menu.label': 'ප්‍රතිසාධන මෙනුව',
   'rec.menu.title': 'ආරම්භයේදී යමක් වැරදී ගියේය',
+  'rec.menu.titleManual': 'WorkSuite ප්‍රතිසාධනය',
+  'rec.menu.chooseManual': 'ඔබට කිරීමට අවශ්‍ය දේ තෝරන්න.',
   'rec.menu.failures': 'WorkSuite OS අඛණ්ඩව {count} වතාවක් නිවැරදිව ආරම්භ නොවීය.',
   'rec.menu.failed': 'WorkSuite OS නිවැරදිව ආරම්භ නොවීය.',
   'rec.menu.choose': 'ඔබ එය නිවැරදි කිරීමට කැමති ආකාරය තෝරන්න.',

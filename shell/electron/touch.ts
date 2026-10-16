@@ -505,6 +505,17 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
       setOskVisible(show); emit()
       return { available: true, value: show }
     },
+    /** Taskbar button: the keyboard's own state decides (it can hide itself with its own key, which the shell does not
+     *  hear about, so "hide because we think it is shown" left the button dead after the keyboard closed itself). */
+    oskToggle(): Avail<boolean> {
+      if (st.settings.osk === 'off') return { available: false, reason: 'osk_off' }
+      startOsk()
+      if (!osk) return { available: false, reason: 'osk_missing' }
+      if (!oskIsOurs) return this.osk(!st.osk.visible)
+      oskSend('toggle\n')
+      st.osk.visible = !st.osk.visible; emit()
+      return { available: true, value: st.osk.visible }
+    },
     /** Pen test: streams tablet tool events until stopped. */
     penTest(on: boolean, cb: (e: PenEvent) => void): Avail<true> {
       pen?.kill(); pen = null
@@ -525,6 +536,7 @@ export function startTouchHost(handle: Handle, broadcast: (ch: string, p: unknow
   handle('ws:touchState', () => b.state())
   handle('ws:touchSet', (json) => b.set(json))
   handle('ws:oskShow', (on, purpose, hints) => b.osk(on === '1', Number(purpose) || 0, Number(hints) || 0))
+  handle('ws:oskToggle', () => b.oskToggle())
   handle('ws:penTest', (on) => b.penTest(on === '1', (e) => broadcast('ws:penEvent', e)))
   void b.start()
   return b

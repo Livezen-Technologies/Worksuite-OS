@@ -24,6 +24,8 @@ export interface TouchApi {
   state(): Promise<Avail<TouchState>>
   set(patch: Partial<TouchSettings>): Promise<Avail<TouchState>>
   osk(show: boolean, purpose?: number, hints?: number): Promise<Avail<boolean>>
+  /** The taskbar button: show if hidden, hide if shown, as the keyboard itself sees it. */
+  oskToggle?(): Promise<Avail<boolean>>
   penTest(on: boolean): Promise<Avail<true>>
   onChange(cb: (s: unknown) => void): () => void
   onPen(cb: (e: unknown) => void): () => void
@@ -120,6 +122,7 @@ function stubApi(): TouchApi {
     async state() { return { available: true, value: structuredClone(st) } },
     async set(p) { st.settings = { ...st.settings, ...p }; sync(); return { available: true, value: structuredClone(st) } },
     async osk(show) { st.osk.visible = show; sync(); return { available: true, value: show } },
+    async oskToggle() { st.osk.visible = !st.osk.visible; sync(); return { available: true, value: st.osk.visible } },
     async penTest() { return { available: true, value: true } },
     onChange(cb) { subs.add(cb); return () => { subs.delete(cb) } },
     onPen() { return () => {} },

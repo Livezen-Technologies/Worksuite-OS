@@ -45,6 +45,9 @@ import ClipboardFlyout, { type FlyoutTab } from '../components/ClipboardFlyout'
 import ShortcutHelp from '../components/ShortcutHelp'
 import { captureApi, SHELL_OPEN_EVENT, SNIP_EDIT_EVENT, snipState, type Captured, type ShellOpen, type SnipOpen } from '../lib/captureApi'
 
+/** How long a pop-up toast stays (services/session/toasts TIMEOUT_MS is the same). */
+export const TOAST_MS = 6000
+
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 
 // Settings pages the search finds, with the Settings section each opens.
@@ -132,7 +135,10 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const longDate = now.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })
   const shortDate = now.toLocaleDateString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
 
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t) }, [toast, setToast])
+  // A toast drawn here stays TOAST_MS, and as long as the pointer is over it (like worksuite-toasts).
+  const [toastHover, setToastHover] = useState(false)
+  useEffect(() => { if (!toast || toastHover) return; const t = setTimeout(() => setToast(null), TOAST_MS); return () => clearTimeout(t) }, [toast, toastHover, setToast])
+  useEffect(() => { if (!toast) setToastHover(false) }, [toast])
   // Toasts go to worksuite-toasts when it runs: a layer-shell surface over the apps (this window is below them). If it
   // turns out not to run, the toast stays here and later ones are drawn here too.
   const [externalToasts, setExternalToasts] = useState(false)
@@ -399,7 +405,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       {Children.toArray(children).length > 0 && <div className="absolute inset-x-0 top-0 bottom-[52px] z-10 px-6 pt-5 pb-5">{children}</div>}
 
       {toast && !dnd && !trayOpen && !externalToasts && (
-        <div role="status" className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+        <div role="status" onMouseEnter={() => setToastHover(true)} onMouseLeave={() => setToastHover(false)} className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] font-bold text-white" style={{ background: TONE_BG[toast.tone] }}><BIcon name={toast.tone === 'ok' ? 'check' : 'alert'} /></span>
           <div className="flex flex-1 flex-col gap-[3px]">
             <div className="flex justify-between gap-2">{/^snip-\d+$/.test(toast.id)

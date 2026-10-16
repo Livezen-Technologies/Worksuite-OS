@@ -56,6 +56,13 @@ class ToastWindow(Gtk.ApplicationWindow):
         self.set_child(self.box)
         self.stack = Stack()
         self.timers: dict[str, int] = {}
+        # Hover keeps the toasts: their timers stop while the pointer is over them and start again (full time) when
+        # it leaves. On the window, which outlives the cards render() rebuilds.
+        self.hovered = False
+        hover = Gtk.EventControllerMotion()
+        hover.connect("enter", lambda *_a: self._hover(True))
+        hover.connect("leave", lambda *_a: self._hover(False))
+        self.add_controller(hover)
 
     def render(self) -> None:
         while (c := self.box.get_first_child()) is not None:
@@ -113,6 +120,17 @@ class ToastWindow(Gtk.ApplicationWindow):
         self._untime(key)
         self.render()
 
+    def _hover(self, on: bool) -> None:
+        self.hovered = on
+        for t in self.stack.items:
+            self._untime(t.key)
+            if not on and not t.sticky:
+                self._time(t.key)
+
+    def _time(self, key: str) -> None:
+        if not self.hovered:
+            self.timers[key] = GLib.timeout_add(TIMEOUT_MS, self._expire, key)
+
     def _untime(self, key: str) -> None:
         if key in self.timers:
             GLib.source_remove(self.timers.pop(key))
@@ -126,7 +144,7 @@ class ToastWindow(Gtk.ApplicationWindow):
                 self._untime(d.key)
                 emit(f"closed {d.key}")
             if not t.sticky:
-                self.timers[t.key] = GLib.timeout_add(TIMEOUT_MS, self._expire, t.key)
+                self._time(t.key)
         elif op == "hide":
             self.stack.hide(str(arg))
             self._untime(str(arg))

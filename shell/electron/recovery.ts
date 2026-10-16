@@ -38,6 +38,8 @@ export interface LuksDevice { device: string; name: string; label: string | null
 export type Feature = 'unlock' | 'repair' | 'snapshots' | 'reinstall' | 'copy_usb' | 'terminal' | 'report_usb'
 export interface RecoveryInfo {
   os_version: string | null; disk: string | null; firmware: 'EFI' | 'BIOS'; failures: number | null
+  /** Chosen by hand (GRUB's "WorkSuite Recovery": worksuite.recovery=1), not reached after a failed start. */
+  manual?: boolean
   luks: LuksDevice[]; features: Record<Feature, boolean>
 }
 
@@ -105,6 +107,7 @@ export function recoveryHost(pkg: PackageProbe, host: Host = realHost) {
         disk: rootDisk(nodes),
         firmware: host.exists('/sys/firmware/efi') ? 'EFI' : 'BIOS',
         failures: Number.isFinite(restarts) && restarts > 0 ? restarts : null,
+        manual: /(^|\s)worksuite\.recovery=1(\s|$)/.test(host.read('/proc/cmdline') ?? ''),
         luks: luksDevices(nodes),
         features: { unlock: host.exists(UDISKSCTL), repair: true, snapshots: false, reinstall: host.exists(REINSTALL) && RECOVERY_IMAGES.some((p) => host.exists(p)), copy_usb: false, terminal: false, report_usb: false },
       }
