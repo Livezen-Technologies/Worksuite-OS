@@ -106,6 +106,10 @@ export interface WorkSuiteApi {
   pkgRepair(): Promise<CloudResult<string>>
   /** WSOS-APT-006: package service state; 'interrupted' means an interrupted dpkg run needs Repair. */
   pkgState(): Promise<CloudResult<'idle' | 'busy' | 'interrupted'>>
+  /** §11.6-d Report a problem: collect (nothing leaves the computer), then save or send only the sections kept. */
+  reportCollect(): Promise<CloudResult<ProblemReport>>
+  reportSave(id: string, keep: string[], description: string): Promise<CloudResult<string>>
+  reportSend(id: string, keep: string[], description: string): Promise<CloudResult<string>>
   /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
   pkgCatalog(): Promise<CloudResult<AppCatalog>>
   /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
@@ -265,6 +269,8 @@ export interface ArchiveEntry { path: string; type: 'file' | 'dir' | 'symlink' |
 export interface ArchiveListing { kind: string; entries: ArchiveEntry[]; encrypted: boolean; total: number | null; packed: number }
 /** state: Drive sync state (WSOS-DRV-002), "folder", "local" outside Drive, or "unknown" when sync isn't running. */
 export interface FileEntry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean; items?: number | null }
+export type ReportSectionId = 'system' | 'services' | 'session_services' | 'session_log' | 'system_log' | 'packages'
+export interface ProblemReport { id: string; created_at: string; sections: { id: ReportSectionId; text: string; available: boolean }[] }
 export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
 
 export function formatBytes(n: number | null): string {
@@ -538,6 +544,10 @@ const stub: WorkSuiteApi = {
   async sysUsers() { return stubAvail({ current: 'preview', users: [{ login: 'preview', name: 'Preview User', uid: 1000, admin: true }, { login: 'second', name: 'Second User', uid: 1001, admin: false }] }) },
   async pkgRepair() { return stubJob('repair', 'repair') },
   async pkgState() { return { ok: false, error: 'service_unavailable' } },
+  // Browser preview: no system to read, so no report (never sample logs).
+  async reportCollect() { return { ok: false, error: 'service_unavailable' } },
+  async reportSave() { return { ok: false, error: 'service_unavailable' } },
+  async reportSend() { return { ok: false, error: 'service_unavailable' } },
   // Browser preview: there is no package service or server here, so these answer honestly instead of inventing apps.
   async pkgCatalog() { return { ok: true, value: { state: 'not_enrolled', arch: 'amd64', items: [], error: 'Preview mode: no package service, so there is no app catalog.' } } },
   async pickFile() { return { ok: false, error: 'service_unavailable' } },

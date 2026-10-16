@@ -506,6 +506,32 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     send(ctx, 200, loginReply(user, dir, d.id));
   });
 
+  // §11.6-d Report a problem: a report the user reviewed in Settings › About, sent to their own organization.
+  const REPORT_SECTIONS = new Set(['system', 'services', 'session_services', 'session_log', 'system_log', 'packages']);
+  r.on('POST', '/desktop/v1/problem-reports', async (ctx) => {
+    const { user, device } = userCtx(db, ctx);
+    await idempotent(db, ctx, `user:${user.id}`, ctx.header('idempotency-key'), async () => {
+      const b = obj(await ctx.body());
+      const id = str(b, 'id', 64);
+      if (!/^[A-Za-z0-9-]{8,64}$/.test(id)) throw invalid('id');
+      const description = typeof b.description === 'string' ? b.description.slice(0, 2000) : '';
+      if (!Array.isArray(b.sections) || b.sections.length > REPORT_SECTIONS.size) throw invalid('sections');
+      let total = 0;
+      const sections = (b.sections as unknown[]).map((x) => {
+        const s = obj(x, 'sections[]');
+        const sid = str(s, 'id', 32);
+        if (!REPORT_SECTIONS.has(sid)) throw invalid('sections[].id');
+        const text = typeof s.text === 'string' ? s.text : '';
+        total += text.length;
+        if (text.length > 70_000 || total > 400_000) throw invalid('sections[].text', 'too large');
+        return { id: sid, text };
+      });
+      db.prepare('INSERT OR IGNORE INTO problem_reports (id, org_id, user_id, device_id, body, at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id, user.org_id, user.id, device?.id ?? null, JSON.stringify({ description, sections }), Date.now());
+      return { status: 202 };
+    });
+  });
+
   // WSOS-SEC-008: privileged package changes on the device (package-service audit log, forwarded by the device agent).
   r.on('POST', '/desktop/v1/os/audit', async (ctx) => {
     const d = deviceFromHeader(db, ctx, true);

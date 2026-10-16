@@ -469,6 +469,39 @@ paths:
         '202': { description: Accepted }
         default: { $ref: '#/components/responses/Error' }
 
+  /desktop/v1/problem-reports:
+    post:
+      tags: [os]
+      summary: Problem report the user reviewed and chose to send (SRS §11.6-d)
+      description: |
+        Built in Settings › About › Report a problem. Only the sections the user kept are sent; the shell redacts
+        tokens, passwords, keys and email addresses first. Bearer token of the user; X-WS-Device when enrolled.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, sections]
+              properties:
+                id: { type: string, pattern: '^[A-Za-z0-9-]{8,64}$' }
+                created_at: { type: string, format: date-time }
+                description: { type: string, maxLength: 2000 }
+                sections:
+                  type: array
+                  maxItems: 6
+                  items:
+                    type: object
+                    required: [id, text]
+                    properties:
+                      id: { type: string, enum: [system, services, session_services, session_log, system_log, packages] }
+                      text: { type: string, maxLength: 70000 }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+
   /desktop/v1/os/audit:
     post:
       tags: [os]

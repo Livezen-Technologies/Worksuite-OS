@@ -14,6 +14,7 @@ import { VpnPanel } from './settings/Vpn'
 import { PowerPanel, PrintersPanel } from './settings/Devices'
 import { BigSwitch } from './settings/ui'
 import { SignInOptions } from './settings/SignIn'
+import { ReportProblem } from './settings/ReportProblem'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
 import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
@@ -568,6 +569,7 @@ function AboutPanel() {
         ))}
       </div>
     </div>
+    <ReportProblem />
   </>
 }
 

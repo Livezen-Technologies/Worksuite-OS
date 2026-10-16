@@ -224,3 +224,15 @@ test('search, file search and recent files cover only the caller\'s records', as
   assert.equal((await call('GET', '/desktop/v1/search?q=', { token: ana })).status, 400);
   assert.equal((await call('GET', '/desktop/v1/search?q=x')).status, 401);
 });
+
+test('§11.6-d problem reports: stored for the user\'s org with the device, unknown sections refused', async () => {
+  const d = await enroll();
+  const post = (body: unknown) => call('POST', '/desktop/v1/problem-reports', { token: ana, device: d.credential, idem: randomUUID(), body });
+  assert.equal((await post({ id: 'rep-00001', description: 'Wi-Fi drops', sections: [{ id: 'system', text: 'OS: WorkSuite OS' }] })).status, 202);
+  assert.equal((await post({ id: 'rep-00002', sections: [{ id: 'shadow', text: 'x' }] })).status, 400);
+  assert.equal((await post({ id: 'rep-00003', sections: [{ id: 'system', text: 'x'.repeat(80_000) }] })).status, 400);
+  assert.equal((await call('POST', '/desktop/v1/problem-reports', { device: d.credential, idem: randomUUID(), body: { id: 'rep-00004', sections: [] } })).status, 401);
+  const row = db.prepare('SELECT device_id, body FROM problem_reports WHERE id = ?').get('rep-00001') as { device_id: string; body: string };
+  assert.equal(row.device_id, d.device_id);
+  assert.equal(JSON.parse(row.body).description, 'Wi-Fi drops');
+});

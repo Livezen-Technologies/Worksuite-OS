@@ -1,7 +1,7 @@
 import { findBundles } from './bundles'
 import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile, spawn } from 'node:child_process'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
@@ -27,6 +27,7 @@ import { startPanel } from './panelHost'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
+import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
@@ -310,6 +311,29 @@ app.whenReady().then(() => {
     const handleId = `${kind}:${picked.size + 1}:${Date.now()}`
     picked.set(handleId, r.filePaths[0])
     return { ok: true, value: { handle: handleId, name: path.basename(r.filePaths[0]) } }
+  })
+  // §11.6-d Report a problem: collected only when asked, reviewed by the person, then saved or sent.
+  const reports = new Map<string, ProblemReport>()
+  handle('ws:reportCollect', async () => {
+    const r = await collectReport({ exec: realExec, readFile: (p) => { try { return readFileSync(p, 'utf8') } catch { return null } }, home: app.getPath('home') })
+    reports.clear(); reports.set(r.id, r)
+    return { ok: true, value: r }
+  })
+  const finalOf = (id: string, keep: string, desc: string) => { const r = reports.get(id); return r ? finalReport(r, keep.split(',').filter(Boolean), desc) : null }
+  handle('ws:reportSave', async (id, keep, desc) => {
+    const f = finalOf(id, keep, desc)
+    if (!f || !win) return { ok: false, error: 'invalid_argument' }
+    const d = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('documents'), `worksuite-problem-report-${f.created_at.slice(0, 10)}.txt`) })
+    if (d.canceled || !d.filePath) return { ok: false, error: 'cancelled' }
+    try { writeFileSync(d.filePath, reportText(f), { mode: 0o600 }) } catch { return { ok: false, error: 'failed' } }
+    return { ok: true, value: d.filePath }
+  })
+  handle('ws:reportSend', async (id, keep, desc) => {
+    const f = finalOf(id, keep, desc)
+    if (!f) return { ok: false, error: 'invalid_argument' }
+    const s = await loadSession(brokerFn, (url, init) => fetch(url, { headers: init?.headers }), () => deviceCredential())
+    const r = await sendReport(f, s.ok ? s.value : null, (url, init) => fetch(url, init), deviceCredential())
+    return r.ok ? { ok: true, value: f.id } : (!s.ok && s.error !== 'not_signed_in' ? { ok: false, error: s.error } : r)
   })
   const pickedPath = (h: string, kind: string) => (h.startsWith(`${kind}:`) ? picked.get(h) ?? null : null)
   const noFile = { ok: false, error: 'invalid_argument' }
