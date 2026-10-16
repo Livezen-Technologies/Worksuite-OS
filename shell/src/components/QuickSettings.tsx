@@ -6,6 +6,7 @@ import { formatDuration, os, type BatteryState, type BluetoothState, type Networ
 import { monitorApi, type Backlight } from '../lib/monitorApi'
 import { peripheralsApi, type PowerProfiles } from '../lib/peripheralsApi'
 import { formatNumber, t, type MessageKey } from '../i18n'
+import { useTouch } from '../lib/touch'
 
 const D = {
   wifi: 'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0',
@@ -81,6 +82,7 @@ export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, on
   onSettings: () => void; onLock: () => void; onPower: () => void; onClose: () => void
 }) {
   const { net, bt, sound, battery, light, mode } = state
+  const touch = useTouch()
   const ref = useRef<HTMLDivElement>(null)
   const [vol, setVol] = useState<number | null>(null)
   const [bri, setBri] = useState<number | null>(null)
@@ -109,6 +111,9 @@ export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, on
     { id: 'mode', title: t('qs.powerMode'), d: D.bolt, on: false, disabled: !mode || mode.profiles.length < 2,
       sub: mode ? (PROFILE_KEY[mode.active] ? t(PROFILE_KEY[mode.active]) : mode.active) : t('common.unavailable'),
       click: () => act(peripheralsApi()?.setPowerProfile(nextMode(mode!)) ?? Promise.resolve()) },
+    // Touch (tablet) mode, Settings › Touchscreen & pen: a manual switch that overrides the convertible's hinge.
+    ...(touch.state ? [{ id: 'tablet', title: t('qs.touchMode'), d: 'M6 2h12v20H6zM11 18h2', on: touch.state.touchMode, disabled: false,
+      sub: touch.state.touchMode ? t('common.on') : t('common.off'), click: () => void touch.set({ tabletMode: touch.state!.touchMode ? 'off' : 'on' }) }] : []),
   ]
   const batt = batteryText(battery)
   const foot = 'flex size-8 cursor-pointer items-center justify-center rounded-lg bg-white/[0.08] hover:bg-white/[0.16]'

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { Coordinator, manifestUrl, type CoordinatorEnv } from '../src/coordinator.ts';
+import { Coordinator, DEFAULT_HOST, manifestUrl, updateHost, type CoordinatorEnv } from '../src/coordinator.ts';
+import { rewriteSources } from '../src/main.ts';
 import { PackageService } from '../src/service.ts';
 import { canonical, type Manifest } from '../src/updates.ts';
 
@@ -9,7 +10,7 @@ const keys = generateKeyPairSync('ed25519');
 const signed = (m: Record<string, unknown>, key = keys.privateKey) => ({ ...m, signature: `r1:${sign(null, Buffer.from(canonical(m)), key).toString('base64')}` });
 const base = { release_id: 'os-1.0.2', version: '1.0.2', min_version: '1.0.0', ring: 'stable', arch: 'amd64', rollout_percent: 100, state: 'active' };
 
-function world(opts: { manifest?: unknown; policy?: ReturnType<CoordinatorEnv['policy']>; idle?: boolean; installed?: string; reboot?: boolean; aptFails?: boolean; health?: string[]; dpkgAudit?: string; badVersion?: boolean; downloadFails?: number } = {}) {
+function world(opts: { manifest?: unknown; policy?: ReturnType<CoordinatorEnv['policy']>; idle?: boolean; installed?: string; reboot?: boolean; aptFails?: boolean; health?: string[]; dpkgAudit?: string; badVersion?: boolean; downloadFails?: number; config?: ReturnType<NonNullable<CoordinatorEnv['config']>> } = {}) {
   let dlFails = opts.downloadFails ?? 0;
   const log: string[] = [];
   const reports: Record<string, unknown>[] = [];
@@ -39,7 +40,8 @@ function world(opts: { manifest?: unknown; policy?: ReturnType<CoordinatorEnv['p
     deviceKey: () => 'machine-1',
     idle: async () => opts.idle ?? true,
     metered: async () => false,
-    setSuite: (s) => log.push(`suite ${s}`),
+    setSuite: (s, repo) => log.push(`suite ${s}`, `repo ${repo}`),
+    config: () => opts.config ?? null,
     load: () => store,
     save: (s) => { store = s; },
     report: async (r) => { reports.push(r); },
@@ -175,4 +177,48 @@ test('an emergency release is flagged critical, and an install after a dropped d
   assert.deepEqual(seen, [true]);
   assert.equal(w.c.status.state, 'up_to_date');
   assert.equal(w.c.status.resumed, false);
+});
+
+test('the default update host is the WorkSuite Update Center, with its APT repo', async () => {
+  assert.equal(DEFAULT_HOST, 'https://download.worksuitecloud.com');
+  const w = world();
+  await w.c.check();
+  assert.ok(w.log.includes('GET https://download.worksuitecloud.com/os/manifests/stable/amd64.json'));
+  assert.ok(w.log.includes('repo https://download.worksuitecloud.com/os/apt'));
+  assert.equal(w.c.status.update_host, DEFAULT_HOST);
+});
+
+test('/etc/worksuite/updates.json sets host, ring and mode; an enrolled policy overrides it', async () => {
+  const local = { update_host: 'https://updates.example.org/ignored/path', update_ring: 'development' as const, update_mode: 'notify' as const };
+  const w = world({ config: local, manifest: signed({ ...base, ring: 'development' }) });
+  const d = await w.c.check();
+  assert.ok(w.log.includes('GET https://updates.example.org/os/manifests/development/amd64.json'));
+  assert.ok(w.log.includes('suite trixie-dev'));
+  assert.deepEqual(d, { action: 'wait', reason: 'waiting_for_user' });
+  const o = world({ config: local, policy: { update_ring: 'pilot', update_mirror: 'https://mirror.org.example', update_mode: 'automatic' }, manifest: signed({ ...base, ring: 'pilot' }) });
+  await o.c.check();
+  assert.ok(o.log.includes('GET https://mirror.org.example/os/manifests/pilot/amd64.json'));
+  assert.ok(o.log.includes('repo https://mirror.org.example/os/apt'));
+  assert.equal(o.c.status.state, 'up_to_date');   // automatic install ran
+});
+
+test('an insecure or malformed host falls back to the Update Center', () => {
+  assert.equal(updateHost('http://evil.example', 'not a url', undefined), DEFAULT_HOST);
+  assert.equal(updateHost('', 'https://u:p@x.example', 'https://ok.example:8443/x'), 'https://ok.example:8443');
+});
+
+test('security releases install automatically even in notify mode; feature releases wait', async () => {
+  const sec = world({ policy: { update_mode: 'notify' }, manifest: signed({ ...base, security: true }) });
+  assert.deepEqual(await sec.c.check(), { action: 'install', reason: 'security' });
+  const feat = world({ policy: { update_mode: 'notify' } });
+  assert.deepEqual(await feat.c.check(), { action: 'wait', reason: 'waiting_for_user' });
+});
+
+test('worksuite.sources follows the ring and host, keeping Signed-By', () => {
+  const src = 'Types: deb\nURIs: https://download.worksuitecloud.com/os/apt\nSuites: trixie-stable\nComponents: main\nSigned-By: /usr/share/keyrings/worksuite-archive-keyring.gpg\n';
+  const out = rewriteSources(src, 'trixie-pilot', 'https://mirror.example/os/apt');
+  assert.match(out, /^URIs: https:\/\/mirror.example\/os\/apt$/m);
+  assert.match(out, /^Suites: trixie-pilot$/m);
+  assert.match(out, /^Signed-By: \/usr\/share\/keyrings\/worksuite-archive-keyring.gpg$/m);
+  assert.equal(rewriteSources(src, 'trixie-dev', 'http://x/os/apt; rm'), src.replace('trixie-stable', 'trixie-dev'));
 });

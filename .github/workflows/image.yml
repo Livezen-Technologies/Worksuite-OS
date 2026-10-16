@@ -3,6 +3,7 @@ name: Image
 # Builds the .debs and the live ISO for amd64 and arm64 from the same commit (WSOS-ARM-001) inside Debian trixie,
 # with WorkSuite Office, boots each ISO in QEMU (UEFI: OVMF / AAVMF, WSOS-ARM-008), checks the boot marker and
 # uploads the ISO, its SHA256 and an SPDX SBOM (WSOS-SEC-011). Tags v* also attach them to a GitHub release.
+# Tags v* also publish to the WorkSuite Update Center when UPDATE_CENTER_TOKEN is set (job update-center below).
 # A second, test-only "-perf" image runs the perf/reliability probes and must pass the CI gates in
 # tests/perf/gates.tsv (WSOS-PRF-001…005, REL-001/002, ARM-007).
 # arm64 builds natively on GitHub's arm64 runners (no cross live-build). Hosted runners have no KVM, so QEMU runs
@@ -121,6 +122,8 @@ jobs:
             [ $release = 1 ] && echo "::warning::No WorkSuite Desktop deb (worksuite-Linux); the image's start menu uses web app windows"
             export WORKSUITE_DESKTOP_OPTIONAL=1
           fi
+          # Point the image's APT source at the Update Center's OS repository once its archive keyring is packaged.
+          [ -f packaging/keyring/worksuite-archive-keyring.gpg ] && export WORKSUITE_REPO=1
           WORKSUITE_RELEASE=$release live-build/build.sh
       - name: Name the ISO
         id: iso
@@ -168,3 +171,61 @@ jobs:
           gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
             gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "WorkSuite OS $TAG" --generate-notes
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber $files
+
+  # Optional: publish the tag to the WorkSuite Update Center (Livezen-Technologies/worksite-download, §18) so devices
+  # update from it. Runs only when the UPDATE_CENTER_TOKEN secret is set: an Update Center API client of kind CI with
+  # os.publish ("<client_id>.<secret>"). Variables: UPDATE_CENTER_URL (default https://download.worksuitecloud.com),
+  # UPDATE_CENTER_RING (development | pilot; default development; stable only by promotion in the Update Center),
+  # UPDATE_CENTER_RELEASE_TYPE (feature | security | emergency; default feature), UPDATE_CENTER_MIN_VERSION.
+  # The APT repository is signed here with the archive key: secret WORKSUITE_ARCHIVE_GPG_KEY (ASCII-armoured private
+  # key from tools/repo/keygen.sh) and optional WORKSUITE_KEY_PASSPHRASE. Without the key only the ISOs are published.
+  update-center:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: image
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie
+    env:
+      HAS_TOKEN: ${{ secrets.UPDATE_CENTER_TOKEN != '' }}
+      HAS_ARCHIVE_KEY: ${{ secrets.WORKSUITE_ARCHIVE_GPG_KEY != '' }}
+    steps:
+      - if: env.HAS_TOKEN != 'true'
+        run: echo "::notice::UPDATE_CENTER_TOKEN not set; not publishing to the Update Center"
+      - if: env.HAS_TOKEN == 'true'
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates git gnupg apt-utils dpkg-dev xz-utils nodejs
+      - if: env.HAS_TOKEN == 'true'
+        uses: actions/checkout@v4
+      - if: env.HAS_TOKEN == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: worksuite-os-*
+          path: dist
+      - name: Build and sign the APT suite
+        if: env.HAS_TOKEN == 'true' && env.HAS_ARCHIVE_KEY == 'true'
+        env:
+          WORKSUITE_ARCHIVE_GPG_KEY: ${{ secrets.WORKSUITE_ARCHIVE_GPG_KEY }}
+          WORKSUITE_KEY_PASSPHRASE: ${{ secrets.WORKSUITE_KEY_PASSPHRASE }}
+          RING: ${{ vars.UPDATE_CENTER_RING || 'development' }}
+        run: |
+          export GNUPGHOME=$(mktemp -d)
+          printf '%s\n' "$WORKSUITE_ARCHIVE_GPG_KEY" | gpg --batch --import
+          case "$RING" in development|canary) suite=trixie-dev ;; pilot|beta) suite=trixie-pilot ;; *) echo "ring must be development or pilot" >&2; exit 1 ;; esac
+          debs=$(find dist -name '*.deb' | sort -u)
+          tools/repo/publish.sh apt-repo "$suite" $debs
+          gpg --batch --export > apt-repo/worksuite-archive-keyring.gpg
+          tar -C apt-repo -czf apt-repo.tar.gz dists pool worksuite-archive-keyring.gpg
+          rm -rf "$GNUPGHOME"
+      - name: Publish to the Update Center
+        if: env.HAS_TOKEN == 'true'
+        env:
+          UPDATE_CENTER_TOKEN: ${{ secrets.UPDATE_CENTER_TOKEN }}
+          UC_URL: ${{ vars.UPDATE_CENTER_URL || 'https://download.worksuitecloud.com' }}
+          RING: ${{ vars.UPDATE_CENTER_RING || 'development' }}
+          TYPE: ${{ vars.UPDATE_CENTER_RELEASE_TYPE || 'feature' }}
+          MIN_VERSION: ${{ vars.UPDATE_CENTER_MIN_VERSION }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -- --version "$TAG" --ring "$RING" --type "$TYPE" --dist dist
+          [ -n "$MIN_VERSION" ] && set -- "$@" --min-version "$MIN_VERSION"
+          [ -f apt-repo.tar.gz ] && set -- "$@" --apt apt-repo.tar.gz
+          node tools/release/publish-update-center.mjs "$@"

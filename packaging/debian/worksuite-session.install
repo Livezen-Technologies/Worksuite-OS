@@ -24,3 +24,4 @@ services/session/greeter/worksuite_greeter usr/lib/worksuite/greeter/
 services/session/greeter/gtkgreet.css usr/share/worksuite/
 services/session/bin/worksuite-autologin usr/sbin/
 services/session/polkit/worksuite_polkit_agent usr/lib/worksuite/polkit/
+services/session/udev/70-worksuite-touch.rules usr/lib/udev/rules.d/

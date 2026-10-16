@@ -20,6 +20,8 @@ export const SHELL_XML = `<node name="${SHELL_PATH}">
     <!-- Super key (services/session/labwc/rc.xml): open or close the launcher. -->
     <method name="ToggleLauncher"/>
     <method name="ShowLauncher"/>
+    <!-- Files is the default handler for archives (shell/apps/worksuite-files.desktop): browse this one. -->
+    <method name="OpenArchive"><arg name="path" type="s" direction="in"/></method>
   </interface>
 </node>`
 
@@ -61,6 +63,8 @@ export interface PanelEvents {
   launcher(action: 'toggle' | 'show'): void
   /** A monitor was plugged, unplugged or reconfigured (bridge OutputsChanged, WSOS-DSK-007). */
   outputs?(): void
+  /** OpenArchive(path) from worksuite-open-archive. */
+  openArchive?(path: string): void
 }
 
 export class PanelClient {
@@ -104,6 +108,11 @@ export class PanelClient {
     if (msg.path !== SHELL_PATH) return false
     if (msg.interface === SHELL && (msg.member === 'ToggleLauncher' || msg.member === 'ShowLauncher')) {
       this.events.launcher(msg.member === 'ToggleLauncher' ? 'toggle' : 'show')
+      this.bus.send(Message.newMethodReturn(msg, '', []))
+      return true
+    }
+    if (msg.interface === SHELL && msg.member === 'OpenArchive' && msg.signature === 's') {
+      this.events.openArchive?.(String(msg.body?.[0] ?? ''))
       this.bus.send(Message.newMethodReturn(msg, '', []))
       return true
     }

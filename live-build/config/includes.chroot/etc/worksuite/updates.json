@@ -1,0 +1,5 @@
+{
+  "update_host": "https://download.worksuitecloud.com",
+  "update_ring": "stable",
+  "update_mode": "automatic"
+}
