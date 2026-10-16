@@ -22,7 +22,7 @@ import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { archiveJobs, listIn, locate } from './archives'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
-import { eject, jobs as fileJobs, mkdirIn, places, recent, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
+import { eject, jobs as fileJobs, mkdirIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel } from './panelHost'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import { outputWindows } from './outputWindows'
@@ -448,6 +448,7 @@ app.whenReady().then(() => {
   handle('ws:filesMkdir', (root, rel, name) => mkdirIn(files, root, rel, name))
   handle('ws:filesRename', (root, rel, name) => renameIn(files, root, rel, name))
   handle('ws:filesTrash', (root, rels) => trash(files, root, strs(rels)))
+  handle('ws:filesDelete', (root, rels) => removeIn(files, root, strs(rels)))
   handle('ws:filesTrashList', () => trashList(files))
   handle('ws:filesTrashRestore', (ids) => trashRestore(files, strs(ids)))
   handle('ws:filesTrashDelete', (ids) => trashDelete(files, ids === 'all' ? 'all' : strs(ids)))
@@ -497,7 +498,9 @@ app.whenReady().then(() => {
   startPeripheralsHost(handle, app.getPath('home'))
   startTouchHost(handle, broadcast, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
-  startNotifications(handle, broadcast)
+  const notices = startNotifications(handle, broadcast)
+  // Files' "Notify me when done" (FO1): a notice in the shell's own notification centre, text only.
+  handle('ws:filesNotify', (summary, body) => notices.notify('Files', 0, String(summary).slice(0, 200), String(body).slice(0, 400), [], 1))
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
   startPolkitBridge(handle, broadcast)
 })

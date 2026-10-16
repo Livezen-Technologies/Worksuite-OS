@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kiosk · system states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button{font-family:inherit} button:focus-visible{outline:2px solid #18D4F0;outline-offset:2px}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 40px 50px; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: linear-gradient(160deg, #12306B, #050E24); display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr 1fr; gap: 22px">
+<div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: .08em">KIOSK · SYSTEM STATES</span><span style="font-size: 14px; color: #8FA3C8">Shown full-screen on the kiosk; never exposes the desktop</span></div>
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="4">
+<div style="border-radius: 18px; background: {{c.bg}}; border: 1px solid rgba(127,178,255,0.15); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 20px; color: {{c.fg}}">
+<span style="font-size: 40px">{{c.i}}</span><span style="font-size: 20px; font-weight: 700">{{c.t}}</span><span style="font-size: 14px; opacity: .75; max-width: 380px; line-height: 1.5">{{c.d}}</span>
+<div style="width: 220px; height: 5px; border-radius: 3px; background: rgba(127,178,255,0.2); overflow: hidden; visibility: {{c.bar}}"><div style="width: {{c.w}}; height: 100%; background: #1F6BFF"></div></div>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; opacity: .5">{{c.m}}</span>
+</div>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals(){
+    const C=[['👋','Still there?','Tap anywhere to keep going. Starting over in 15 s so the next person gets a fresh screen.','#F4F7FC','#0A1A3D','visible','70%','idle reset'],
+      ['↻','Restarting the app','Something went wrong, so it is reopening. This takes a few seconds.','#10244F','#E8EEFA','visible','40%','auto-restart · crash 1 of 3 today'],
+      ['📡','Offline','Can’t reach [Company].worksuitecloud.com. Retrying every 30 s. Please ask at the front desk.','#10244F','#E8EEFA','hidden','0','web kiosk · network lost'],
+      ['🌙','Screen off until 07:00','Updates install tonight. Tap to wake for 1 minute.','#050E24','#C9D6EE','hidden','0','scheduled · 22:00–07:00']];
+    return {cards:C.map(c=>({i:c[0],t:c[1],d:c[2],bg:c[3],fg:c[4],bar:c[5],w:c[6],m:c[7]}))};
+  }
+}
+</script>
+</body>
+</html>

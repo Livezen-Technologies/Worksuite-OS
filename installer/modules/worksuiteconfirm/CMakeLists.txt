@@ -14,6 +14,7 @@ calamares_add_plugin(worksuiteconfirm
     EXPORT_MACRO PLUGINDLLEXPORT_PRO
     SOURCES
         WorksuiteConfirmViewStep.cpp
+        WsStyle.cpp
     SHARED_LIB
 )
 # The QML focus fix (WorksuiteConfirmViewStep.cpp, QmlFocus) moves Qt's focus window into the embedded QML page

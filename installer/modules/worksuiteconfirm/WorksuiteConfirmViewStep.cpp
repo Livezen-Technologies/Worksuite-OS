@@ -1,4 +1,5 @@
 #include "WorksuiteConfirmViewStep.h"
+#include "WsStyle.h"
 
 #include "Branding.h"
 #include "GlobalStorage.h"
@@ -202,6 +203,31 @@ public:
                     m_forwarding = false;
                     return true;
                 }
+            }
+        }
+        // Stock Calamares widgets restyled toward the design (WsStyle.cpp): the partition page and dialogs.
+        if ( o->isWidgetType() )
+        {
+            auto* w = static_cast< QWidget* >( o );
+            // A message box's window exists before its first Polish; its title is set in its constructor, earlier.
+            if ( ( e->type() == QEvent::Polish || e->type() == QEvent::WindowTitleChange ) && w->isWindow() )
+            {
+                WsStyle::prepareDialog( w );
+            }
+            else if ( e->type() == QEvent::Show )
+            {
+                if ( w->objectName() == QLatin1String( "ChoicePage" ) )
+                {
+                    WsStyle::styleChoicePage( w );
+                }
+                else if ( w->isWindow() )
+                {
+                    WsStyle::styleDialog( w );
+                }
+            }
+            else if ( e->type() == QEvent::Hide && w->isWindow() )
+            {
+                WsStyle::dialogHidden( w );
             }
         }
         // The install page draws its own progress card (show.qml): hide Calamares' bar, log button and status line.

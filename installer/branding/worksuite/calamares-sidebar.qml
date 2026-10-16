@@ -42,11 +42,11 @@ Rectangle {
     readonly property int stepIndex: ViewManager.currentStepIndex
     readonly property var position: stepIndex >= 0 && stepIndex < stepOf.length ? stepOf[stepIndex] : [0, 0]
     readonly property int current: position[0]
-    // The account page reports its own sub-step; the partition page is one page for Disk and Encryption: once its
-    // Encrypt box is ticked, Disk is done and Encryption is the current sub-step.
+    // Pages with sub-steps of their own report which one is showing: the account page (QML) and the partition page
+    // (Disk, then Encryption; laid out by worksuiteconfirm over the stock widget page).
     // The install is one Calamares step for Copy files and Configure system: past unpacking, Configure is current.
     readonly property bool configuring: phase !== "" && phase !== "prepare" && phase !== "copy"
-    readonly property int currentSub: current === 2 ? pageSub : current === 1 && encrypt ? 1
+    readonly property int currentSub: current === 1 || current === 2 ? pageSub
                                       : current === 5 && position[1] === 0 && configuring ? 1 : position[1]
 
     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1F7FB2FF" }   // rgba(127,178,255,0.12)

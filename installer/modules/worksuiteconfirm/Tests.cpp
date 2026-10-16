@@ -1,4 +1,5 @@
 #include "WorksuiteConfirmViewStep.h"
+#include "WsStyle.h"
 
 #include <QtTest/QtTest>
 
@@ -58,6 +59,22 @@ private slots:
         QCOMPARE( WorksuiteConfirmViewStep::dialogStyleSheet( sheet ),
                   QString( "QDialog QPushButton, QDialog QToolButton { padding: 8px; }\n"
                            "QMessageBox QLabel { color: #fff; }\nQDialog { background: #000; }\n" ) );
+    }
+    // The Encryption sub-step's strength meter scores as the design (S2bEncryption) does.
+    void passphraseScore()
+    {
+        QCOMPARE( WsStyle::passphraseScore( QString() ), 0 );
+        QCOMPARE( WsStyle::passphraseScore( "short" ), 0 );
+        QCOMPARE( WsStyle::passphraseScore( "abcdefgh" ), 1 );
+        QCOMPARE( WsStyle::passphraseScore( "abcdefgh1" ), 2 );
+        QCOMPARE( WsStyle::passphraseScore( "abcdefghijk1" ), 3 );
+        QCOMPARE( WsStyle::passphraseScore( "correct-horse-42" ), 4 );
+    }
+    void sizeText()
+    {
+        QCOMPARE( WsStyle::sizeText( 512ll * 1024 * 1024 ), QStringLiteral( "512 MiB" ) );
+        QCOMPARE( WsStyle::sizeText( 40ll * 1024 * 1024 * 1024 ), QStringLiteral( "40.00 GiB" ) );
+        QCOMPARE( WsStyle::sizeText( qint64( 39.5 * 1024 * 1024 * 1024 ) ), QStringLiteral( "39.50 GiB" ) );
     }
 };
 

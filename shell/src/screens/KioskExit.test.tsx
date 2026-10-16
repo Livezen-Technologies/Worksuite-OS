@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import KioskExit from './KioskExit'
+import KioskExit, { KioskStatus, kioskStatusFrom } from './KioskExit'
 import type { KioskApi } from '../lib/kioskApi'
 import { t } from '../i18n'
 
@@ -67,5 +67,27 @@ describe('KioskExit', () => {
     const h = await mount(api)
     await act(async () => button(h, t('kiosk.cancel')).click())
     expect(api.cancel).toHaveBeenCalled()
+  })
+})
+
+describe('kiosk status screens (board KioskStates)', () => {
+  it('reads only known states and clean values from the query', () => {
+    expect(kioskStatusFrom(new URLSearchParams('state=offline&host=work.example.com<script>&secs=8'))).toEqual({ state: 'offline', host: 'work.example.comscript', secs: 8, attempt: 0 })
+    expect(kioskStatusFrom(new URLSearchParams('state=evil&secs=-1'))).toMatchObject({ state: 'starting', secs: 0 })
+  })
+  it('shows the idle warning, restart and offline states', async () => {
+    const { createRoot } = await import('react-dom/client')
+    const { act } = await import('react')
+    for (const [props, text] of [
+      [{ state: 'idle' as const, secs: 15 }, 'Starting over in 15 s'],
+      [{ state: 'restarting' as const, attempt: 2 }, 'attempt 2'],
+      [{ state: 'offline' as const, host: 'work.example.com', secs: 8 }, 'Can’t reach work.example.com. Trying again in 8 s'],
+    ] as const) {
+      const el = document.createElement('div'); document.body.append(el)
+      const r = createRoot(el)
+      act(() => r.render(<KioskStatus {...props} />))
+      expect(el.textContent).toContain(text)
+      act(() => r.unmount()); el.remove()
+    }
   })
 })

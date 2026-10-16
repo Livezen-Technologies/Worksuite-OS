@@ -26,6 +26,7 @@ QPlainTextEdit, QTextEdit { padding: 10px 14px; }
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 1px solid #7FB2FF; }
 QLineEdit[echoMode="2"] { lineedit-password-character: 9679; }
 QComboBox::drop-down { border: none; width: 36px; }
+QComboBox::down-arrow { image: url(/usr/share/calamares/branding/worksuite/chevron.svg); width: 12px; height: 12px; }
 QComboBox QAbstractItemView {
     background: #0E2048; border: 1px solid rgba(127, 178, 255, 0.2); selection-background-color: #1F6BFF; outline: 0;
 }
@@ -97,8 +98,6 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 QScrollArea { border: none; background: transparent; }
 QToolTip { background: #0E2048; color: #E8EEFA; border: 1px solid rgba(127, 178, 255, 0.25); padding: 6px 8px; }
 
-/* The partition page's encryption row is a fixed-height strip: smaller passphrase fields so they aren't clipped. */
-EncryptWidget QLineEdit { min-height: 30px; padding: 0 10px; border-radius: 8px; }
 
 /* Calamares fixes the QML sidebar's width (12 lines of text, at most 190 px) and the QML footer's height (at most
    64 px; CalamaresWindow.cpp). A minimum above a fixed size wins, so only minimums are set: Qt styles each panel
@@ -107,31 +106,72 @@ EncryptWidget QLineEdit { min-height: 30px; padding: 0 10px; border-radius: 8px;
 #mainApp > QQuickWidget[maximumHeight="16777215"] { min-width: 260px; }
 #mainApp > QQuickWidget { min-height: 80px; }
 
-/* Partition page (design: Installation type · erase disk). Stock Calamares widgets, styled toward the design. */
-#ChoicePage QScrollArea, #ChoicePage #scrollAreaWidgetContents { background: transparent; border: none; }
-#ChoicePage #m_drivesLabel, #ChoicePage #m_previewBeforeLabel { color: #8FA3C8; font-size: 13px; }
-#ChoicePage #m_previewAfterLabel { color: #E8EEFA; font-size: 13px; font-weight: 600; }
-#ChoicePage #m_messageLabel { color: #8FA3C8; font-size: 13px; }
-#ChoicePage #hLine { color: rgba(127, 178, 255, 0.12); max-height: 1px; }
-#m_encryptCheckBox { font-size: 15px; font-weight: 600; }
-#partitionLabel { color: #C9D6EE; font-size: 12px; }
+/* Partition page (design: Installer sub-steps › 2 · Disk, 2 · Encryption). worksuiteconfirm (WsStyle.cpp) lays the
+   page out over the stock ChoicePage and names its parts; the device and swap lists and the passphrase fields are
+   the stock ones, so the partitioning behaviour is Calamares' own. */
+#ChoicePage { background: qradialgradient(cx:0.7, cy:0, radius:0.8, fx:0.7, fy:0, stop:0 #12306B, stop:0.75 #0A1A3D); }
+#wsDiskPage, #wsDiskPage QWidget { background: transparent; }
+#wsDiskPage QComboBox { min-height: 42px; padding: 0 12px; border: 1px solid rgba(127, 178, 255, 0.25); }
+#wsDiskPage QLineEdit { min-height: 42px; border: 1px solid rgba(127, 178, 255, 0.25); }
+#wsDiskPage QLineEdit:focus, #wsDiskPage QComboBox:focus { border-color: #7FB2FF; }
+#wsDiskPage QLineEdit[wsState="bad"] { border-color: #FF8A7A; }
+#wsDiskPage QLineEdit[wsState="good"] { border-color: #5FD39A; }
+#wsDiskPage #wsDevCard { background: rgba(14, 32, 72, 0.6); border: 1px solid rgba(127, 178, 255, 0.16); border-radius: 12px; }
+#wsDiskPage #wsDeviceCombo { min-height: 0; padding: 0; border: none; background: transparent; color: #E8EEFA; font-size: 15px; font-weight: 500; }
+#wsDiskPage #wsDeviceCombo:disabled { color: #E8EEFA; }
+#wsDiskPage #wsDeviceCombo[wsChoice="false"]::drop-down { width: 0; border: none; }
+#wsDiskPage #wsDeviceCombo[wsChoice="false"]::down-arrow { image: none; width: 0; }
+#wsDevNode { color: #8FA3C8; font-family: "IBM Plex Mono"; font-size: 12px; }
+#wsEraseCard { background: rgba(255, 159, 90, 0.08); border: 1px solid #FF9F5A; border-radius: 12px; }
+#wsCardTitle { font-size: 15px; font-weight: 600; }
+#wsCardText { color: #C9D6EE; font-size: 13px; }
+#wsCardHint { color: #8FA3C8; font-size: 13px; }
+#wsDiskPage #wsPreview, #wsDiskPage #wsPassCard { background: rgba(14, 32, 72, 0.6); border: 1px solid rgba(127, 178, 255, 0.14); border-radius: 14px; }
+#wsBeforeLabel { color: #8FA3C8; font-size: 13px; }
+#wsAfterLabel { font-size: 13px; font-weight: 600; }
+#wsCaption { color: #8FA3C8; font-size: 12px; }
+#wsLegend { color: #C9D6EE; font-size: 12px; }
+#wsDiskPage #wsChoiceCard { text-align: left; padding: 0; background: rgba(14, 32, 72, 0.6); border: 1px solid rgba(127, 178, 255, 0.16); border-radius: 12px; }
+#wsDiskPage #wsChoiceCard:checked { background: rgba(31, 107, 255, 0.12); border-color: #1F6BFF; }
+#wsDiskPage #wsChoiceCard:focus { border-color: #7FB2FF; }
+#wsPassMsg { color: #8FA3C8; font-size: 13px; }
+#wsPassMsg[wsState="bad"] { color: #FF8A7A; }
+#wsPassMsg[wsState="good"] { color: #5FD39A; }
+#wsPassStrength { color: #8FA3C8; font-size: 13px; }
+#wsDiskPage #wsWarnBox { background: rgba(255, 159, 90, 0.08); border: 1px solid rgba(255, 159, 90, 0.3); border-radius: 12px; }
+#wsWarnText { color: #C9D6EE; font-size: 13px; }
 
 /* Install step: the bar and status line Calamares puts under the slideshow, lined up with the page content. */
 #exec-progress { margin: 0 56px; }
 #exec-message { color: #8FA3C8; font-family: "IBM Plex Mono"; font-size: 12px; margin: 6px 56px 18px; }
 
-/* Message boxes (design: Message boxes): raised navy card, primary button blue. */
-/* A message box is a top-level window: rounded corners would leave square ones behind, so it keeps the border only.
-   Qt names its parts: the icon tile (qt_msgboxex_icon_label) and the text (qt_msgbox_label). */
-QMessageBox { background: #0F2350; border: 1px solid rgba(127, 178, 255, 0.2); }
-QMessageBox QLabel { color: #C9D6EE; font-size: 14px; }
-QMessageBox #qt_msgbox_label { min-width: 340px; max-width: 420px; line-height: 150%; }
-QMessageBox #qt_msgboxex_icon_label { background: rgba(255, 159, 90, 0.14); border-radius: 14px; min-width: 48px; min-height: 48px; max-width: 48px; max-height: 48px; qproperty-alignment: AlignCenter; }
-QMessageBox QPushButton { min-width: 96px; padding: 11px 20px; font-size: 14px; }
-/* Calamares makes the safe answer the default (Cancel installation? defaults to No): the other one is the
-   destructive action, drawn as the design's red outline. */
-QMessageBox[icon="Question"] QPushButton:!default { color: #FFB4A8; border: 1px solid rgba(255, 138, 122, 0.4); }
-QMessageBox QPushButton:default { background: #1F6BFF; color: #FFFFFF; border: none; }
+/* Message boxes and the error dialog (design: Dialog kit, Quit dialog). worksuiteconfirm (WsStyle.cpp) rebuilds them
+   as a card on a frameless, translucent window: badge, title and text, then the buttons in a darker band.
+   Every selector names QDialog: the plugin gives the application these rules too, for dialogs without a parent. */
+QDialog[wsStyled="true"] { background: transparent; border: none; }
+QDialog #wsDlgCard { background: #0F2350; border: 1px solid rgba(127, 178, 255, 0.2); border-radius: 18px; }
+QDialog #wsDlgBody { background: transparent; border: none; }
+QDialog #wsDlgButtons { background: rgba(4, 10, 26, 0.35); border: none; border-top: 1px solid rgba(127, 178, 255, 0.12); border-bottom-left-radius: 18px; border-bottom-right-radius: 18px; }
+QDialog #wsDlgBadge { border-radius: 12px; background: rgba(31, 107, 255, 0.16); }
+QDialog #wsDlgBadge[kind="error"] { background: rgba(255, 138, 122, 0.14); }
+QDialog #wsDlgBadge[kind="warning"] { background: rgba(255, 159, 90, 0.14); }
+QDialog #wsDlgBadge[large="true"] { border-radius: 14px; }
+QDialog #wsDlgBadge[kind="info"] { background: rgba(95, 211, 154, 0.14); }
+QDialog #wsDlgTitle { color: #E8EEFA; font-size: 17px; font-weight: 700; background: transparent; }
+QDialog #wsDlgTitle[large="true"] { font-size: 19px; }
+QDialog #wsDlgText { color: #C9D6EE; font-size: 14px; background: transparent; }
+QDialog #wsDlgCode { font-family: "IBM Plex Mono"; font-size: 12px; color: #8FA3C8; background: rgba(4, 10, 26, 0.5); border: none; border-radius: 6px; padding: 6px 10px; }
+QDialog QPushButton[wsRole] { min-width: 0; padding: 10px 18px; border-radius: 10px; font-size: 14px; }
+QDialog[wsLarge="true"] QPushButton[wsRole] { padding: 11px 20px; }
+QDialog QPushButton[wsRole="primary"] { background: #1F6BFF; color: #FFFFFF; border: none; font-weight: 600; }
+QDialog QPushButton[wsRole="primary"]:hover { background: #3A7DFF; }
+QDialog QPushButton[wsRole="caution"] { background: #D9452B; color: #FFFFFF; border: none; font-weight: 600; }
+QDialog QPushButton[wsRole="caution"]:hover { background: #E5583F; }
+QDialog QPushButton[wsRole="secondary"] { background: transparent; color: #E8EEFA; border: 1px solid rgba(127, 178, 255, 0.25); font-weight: 500; }
+QDialog QPushButton[wsRole="danger"] { background: transparent; color: #FFB4A8; border: 1px solid rgba(255, 138, 122, 0.4); font-weight: 500; }
+QDialog QPushButton[wsRole="danger"]:hover { background: rgba(255, 138, 122, 0.08); }
+QDialog QPushButton[wsRole]:focus { border: 2px solid #7FB2FF; }
+QDialog QPushButton[wsRole="primary"]:focus, QDialog QPushButton[wsRole="caution"]:focus { border: none; }
 QDialogButtonBox { background: transparent; }
 
 /* Confirm disk and Recovery key (design: Installer sub-steps › 5 · Confirm disk, 6 · Recovery key);
@@ -165,3 +205,4 @@ QDialogButtonBox { background: transparent; }
 QDialog { background: #0F2350; color: #E8EEFA; }
 QDialog QLabel { color: #C9D6EE; }
 QDialog QAbstractScrollArea, QDialog QAbstractScrollArea > QWidget { background: #081634; color: #C9D6EE; border: 1px solid rgba(127, 178, 255, 0.16); border-radius: 10px; }
+QDialog #wsDlgCode > QWidget { background: transparent; border: none; }

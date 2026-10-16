@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings · Touch screen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button{font-family:inherit} button:focus-visible{outline:2px solid #18D4F0;outline-offset:2px} @keyframes ripple{0%{transform:scale(.4);opacity:.9}100%{transform:scale(1.8);opacity:0}}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Touch screen" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 26px 36px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 16px"><h1 style="margin: 0; font-size: 24px; font-weight: 700; flex: 1">Touch screen</h1><button style="all: unset; padding: 9px 16px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); font-size: 13px; cursor: pointer">Calibrate…</button><button style="all: unset; padding: 9px 16px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); font-size: 13px; cursor: pointer">Test gestures</button></div>
+<div style="display: flex; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 14px; background: rgba(14,32,72,0.7); border: 1px solid rgba(127,178,255,0.12)">
+<span style="width: 44px; height: 44px; border-radius: 12px; background: rgba(14,143,168,0.25); display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5a2 2 0 0 1 4 0v6l4.5 1a2 2 0 0 1 1.5 2.3L18 20H9.5L6 15a1.6 1.6 0 0 1 2.6-1.8L9 14"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">ELAN Touchscreen <span style="font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px; background: rgba(95,211,154,0.16); color: #5FD39A">Working</span></span><span style="font-size: 12px; color: #8FA3C8">10-point multitouch · pen supported · HID over I²C</span></span>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #8FA3C8">Mapped to display<select style="height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 13px"><option>Built-in · 2560×1600</option><option>DELL U2723QE</option></select></label>
+<button role="switch" aria-checked="{{on}}" aria-label="Touch input" onClick="{{toggleOn}}" style="all: unset; width: 44px; height: 26px; border-radius: 13px; background: {{onTrack}}; position: relative; cursor: pointer"><span style="position: absolute; top: 3px; left: {{onKnob}}; width: 20px; height: 20px; border-radius: 50%; background: #FFF"></span></button>
+</div>
+<section style="display: flex; flex-direction: column; gap: 10px"><h2 style="margin: 0; font-size: 14px; font-weight: 600; color: #C9D6EE">Touch mode</h2>
+<div role="radiogroup" aria-label="Touch mode" style="display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px">
+<sc-for list="{{modes}}" as="m" hint-placeholder-count="3"><button role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" style="all: unset; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; border: 1px solid {{m.bd}}; background: {{m.bg}}; cursor: pointer">
+<span aria-hidden="true" style="height: 74px; border-radius: 8px; background: #071330; position: relative; overflow: hidden; display: block"><span style="position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); height: {{m.dockH}}; width: {{m.dockW}}; border-radius: 6px; background: rgba(127,178,255,0.35)"></span><span style="position: absolute; left: 10px; top: 10px; width: {{m.tile}}; height: {{m.tile}}; border-radius: 4px; background: #1F6BFF"></span><span style="position: absolute; left: calc(10px + {{m.tile}} + 6px); top: 10px; width: {{m.tile}}; height: {{m.tile}}; border-radius: 4px; background: #18D4F0"></span></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">{{m.name}}</span><span style="font-size: 12px; color: #8FA3C8; line-height: 1.4">{{m.desc}}</span></span></button></sc-for>
+</div></section>
+<div style="display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; min-height: 0">
+<section style="display: flex; flex-direction: column; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<sc-for list="{{opts}}" as="o" hint-placeholder-count="5"><div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid rgba(127,178,255,0.07)"><span style="flex: 1; display: flex; flex-direction: column; gap: 1px"><span style="font-size: 13px; font-weight: 500">{{o.name}}</span><span style="font-size: 11px; color: #8FA3C8">{{o.desc}}</span></span><button role="switch" aria-checked="{{o.on}}" aria-label="{{o.name}}" onClick="{{o.toggle}}" style="all: unset; width: 38px; height: 22px; border-radius: 11px; background: {{o.track}}; position: relative; cursor: pointer; flex: none"><span style="position: absolute; top: 3px; left: {{o.knob}}; width: 16px; height: 16px; border-radius: 50%; background: #FFF"></span></button></div></sc-for>
+</section>
+<section style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<span style="font-size: 13px; font-weight: 600">Gestures</span>
+<sc-for list="{{gestures}}" as="g" hint-placeholder-count="5"><div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><span style="width: 34px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #18D4F0">{{g.f}}</span><span style="flex: 1">{{g.what}}</span><select aria-label="{{g.what}}" style="height: 28px; padding: 0 8px; border-radius: 7px; border: 1px solid rgba(127,178,255,0.2); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 12px"><option>{{g.act}}</option><option>Off</option></select></div></sc-for>
+<div style="display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 12px; color: #8FA3C8"><span>Long-press for right-click</span><input type="range" min="300" max="1200" value="600" aria-label="Long-press delay" style="flex: 1; accent-color: #1F6BFF"><span style="font-family: 'IBM Plex Mono', monospace">600 ms</span></div>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p){super(p);this.state={on:true,mode:0,o:[1,1,0,1,1]};}
+  renderVals(){
+    const {on,mode,o}=this.state, sw=v=>({track:v?'#1F6BFF':'rgba(127,178,255,0.25)'});
+    const M=[['Automatic','Touch mode when the keyboard is detached or folded back','40px','64%','10px'],['Always touch','Bigger targets, app grid, on-screen keyboard','60px','88%','22px'],['Desktop','Classic panel; touch still works as a pointer','30px','96%','8px']];
+    const O=[['On-screen keyboard','Opens when you tap a text field without a keyboard'],['Palm rejection','Ignore touches while the pen is near'],['Show touch points','Circles where you touch · for demos'],['Edge swipes','Swipe from screen edges for system actions'],['Haptic and sound feedback','On supported devices']];
+    return {on,onTrack:on?'#1F6BFF':'rgba(127,178,255,0.25)',onKnob:on?'21px':'3px',toggleOn:()=>this.setState({on:!on}),
+      modes:M.map((m,i)=>({name:m[0],desc:m[1],tile:m[4]==='22px'?'26px':'16px',dockW:m[3],dockH:m[4],on:i===mode,bd:i===mode?'#1F6BFF':'rgba(127,178,255,0.15)',bg:i===mode?'rgba(31,107,255,0.12)':'rgba(14,32,72,0.5)',pick:()=>this.setState({mode:i})})),
+      opts:O.map((x,i)=>({name:x[0],desc:x[1],on:!!o[i],track:o[i]?'#1F6BFF':'rgba(127,178,255,0.25)',knob:o[i]?'19px':'3px',toggle:()=>{const n=o.slice();n[i]=n[i]?0:1;this.setState({o:n});}})),
+      gestures:[['1 ↑','Swipe up from bottom edge','Open app grid'],['1 ←','Swipe in from right edge','Notification dock'],['1 →','Swipe in from left edge','Switch apps'],['3 ↓','Three-finger swipe down','Show desktop'],['2 ⇲','Pinch','Zoom']].map(g=>({f:g[0],what:g[1],act:g[2]}))};
+  }
+}
+</script>
+</body>
+</html>

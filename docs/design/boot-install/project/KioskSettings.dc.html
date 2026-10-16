@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings · Kiosk mode</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button{font-family:inherit} button:focus-visible{outline:2px solid #18D4F0;outline-offset:2px}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Managed" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 26px 36px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 14px"><div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #8FA3C8">Managed › Kiosk mode</span><h1 style="margin: 0; font-size: 24px; font-weight: 700">Kiosk mode</h1></div><button style="all: unset; padding: 9px 16px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); font-size: 13px; cursor: pointer">Preview</button><button onClick="{{toggle}}" style="all: unset; padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; background: {{ctaBg}}; cursor: pointer">{{cta}}</button></div>
+<div style="display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-radius: 12px; background: {{bannerBg}}; border: 1px solid {{bannerBd}}; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{dot}}"></span><span style="flex: 1">{{banner}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8">user: kiosk · no password</span></div>
+<section style="display: flex; flex-direction: column; gap: 8px"><h2 style="margin: 0; font-size: 14px; font-weight: 600; color: #C9D6EE">What runs</h2>
+<div role="radiogroup" aria-label="Kiosk type" style="display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px">
+<sc-for list="{{types}}" as="t" hint-placeholder-count="3"><button role="radio" aria-checked="{{t.on}}" onClick="{{t.pick}}" style="all: unset; display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; border: 1px solid {{t.bd}}; background: {{t.bg}}; cursor: pointer"><span style="font-size: 20px">{{t.i}}</span><span style="font-size: 14px; font-weight: 600">{{t.n}}</span><span style="font-size: 12px; color: #8FA3C8; line-height: 1.4">{{t.d}}</span></button></sc-for>
+</div></section>
+<div style="display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; min-height: 0">
+<section style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #8FA3C8">{{srcLabel}}<input value="{{src}}" style="height: 38px; box-sizing: border-box; padding: 0 12px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 13px"></label>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #8FA3C8">Allowed sites<input value="*.worksuitecloud.com, [Company domain]" style="height: 38px; box-sizing: border-box; padding: 0 12px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 13px"></label>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #8FA3C8">Reset session after idle<select style="height: 36px; padding: 0 10px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 13px"><option>2 minutes</option><option>5 minutes</option><option>Never</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #8FA3C8">Orientation<select style="height: 36px; padding: 0 10px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 13px"><option>Landscape</option><option>Portrait</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #8FA3C8">Screen off<select style="height: 36px; padding: 0 10px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 13px"><option>22:00 – 07:00</option><option>Never</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #8FA3C8">Exit gesture<select style="height: 36px; padding: 0 10px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 13px"><option>5 taps top-right + admin PIN</option><option>Ctrl+Alt+K + admin PIN</option></select></label>
+</div>
+</section>
+<section style="display: flex; flex-direction: column; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)">
+<sc-for list="{{locks}}" as="o" hint-placeholder-count="6"><div style="display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-bottom: 1px solid rgba(127,178,255,0.07)"><span style="flex: 1; display: flex; flex-direction: column; gap: 1px"><span style="font-size: 13px; font-weight: 500">{{o.n}}</span><span style="font-size: 11px; color: #8FA3C8">{{o.d}}</span></span><button role="switch" aria-checked="{{o.on}}" aria-label="{{o.n}}" onClick="{{o.t}}" style="all: unset; width: 38px; height: 22px; border-radius: 11px; background: {{o.track}}; position: relative; cursor: pointer; flex: none"><span style="position: absolute; top: 3px; left: {{o.knob}}; width: 16px; height: 16px; border-radius: 50%; background: #FFF"></span></button></div></sc-for>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p){super(p);this.state={on:false,type:1,l:[1,1,1,1,0,1]};}
+  renderVals(){
+    const {on,type,l}=this.state;
+    const T=[['▣','Single app','One installed app, full screen. Crashes restart it.','App','WorkSuite Check-in'],['🌐','Web kiosk','WorkSuite Browser locked to one site with no address bar.','Start page','https://[Company].worksuitecloud.com/reception'],['▦','Digital signage','Loops a playlist of slides or video. No touch input.','Playlist','Lobby screens · 8 items']];
+    const L=[['Block system keys','Alt+Tab, Super, Ctrl+Alt+Del, F-keys'],['Hide panel and notifications','Nothing but the app on screen'],['On-screen keyboard','Used on touch kiosks'],['Wipe data on sign-out','Cookies, downloads and history cleared'],['Allow USB storage','Off blocks drives and phones'],['Auto-update at night','Applies updates during screen-off hours']];
+    const t=T[type];
+    return {cta:on?'Stop kiosk':'Start kiosk',ctaBg:on?'#E5484D':'#1F6BFF',toggle:()=>this.setState({on:!on}),
+      banner:on?'Kiosk is running. It starts automatically at boot. Exit with the admin PIN.':'Kiosk is off. This device signs in normally.',
+      bannerBg:on?'rgba(95,211,154,0.1)':'rgba(127,178,255,0.08)',bannerBd:on?'rgba(95,211,154,0.4)':'rgba(127,178,255,0.15)',dot:on?'#5FD39A':'#5E739C',
+      types:T.map((x,i)=>({i:x[0],n:x[1],d:x[2],on:i===type,bd:i===type?'#1F6BFF':'rgba(127,178,255,0.15)',bg:i===type?'rgba(31,107,255,0.12)':'rgba(14,32,72,0.5)',pick:()=>this.setState({type:i})})),
+      srcLabel:t[3],src:t[4],
+      locks:L.map((x,i)=>({n:x[0],d:x[1],on:!!l[i],track:l[i]?'#1F6BFF':'rgba(127,178,255,0.25)',knob:l[i]?'19px':'3px',t:()=>{const n=l.slice();n[i]=n[i]?0:1;this.setState({l:n});}}))};
+  }
+}
+</script>
+</body>
+</html>

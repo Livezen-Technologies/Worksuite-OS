@@ -1,13 +1,14 @@
 // Files (§7.2, boards FMSide and FM1–FM6): real folders through the Electron bridge, WorkSuite Drive with sync states
 // from the sync service, Recent (recently-used.xbel), Starred, freedesktop.org Trash, search, copy/move jobs, and
 // archives: Compress…, Extract here / to a folder, and Open archive (read-only browsing, files/archive.tsx).
-import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
+// File operations (FO1–FO4: progress window, conflicts, delete confirmation, toasts and errors) are in files/ops.tsx.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { formatBytes, os, type FileEntry, type FileHit, type FileJob, type FilePlaces, type TrashItem } from '../lib/os'
 import { formatDate, formatNumber, messages, t } from '../i18n'
 import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place } from './files/parts'
 import { ArchiveView, CompressDialog, LargeDialog, PasswordDialog, archiveError, archiveKind, stemOf } from './files/archive'
+import { ConflictDialog, DeleteDialog, JobErrorCard, JobsChip, JobsWindow, Toasts, finishedToast, useFileJobs, type Toast } from './files/ops'
 
 const SYNC_LABEL = messages({ synced: 'files.sync.synced', syncing: 'files.sync.syncing', pending: 'files.sync.pending', conflict: 'files.sync.conflict', 'online-only': 'files.sync.online', error: 'files.sync.error', unknown: 'files.sync.unknown' })
 const SYNC_DOT: Record<string, string> = { synced: '#4ADE80', syncing: C.link, pending: C.muted, conflict: '#FFB98A', 'online-only': '#C4B5FD', error: '#FF8A7A', unknown: C.dim }
@@ -15,7 +16,7 @@ const DRIVE_META = messages({ idle: 'files.drive.synced', syncing: 'files.drive.
 
 type Clip = { op: 'copy' | 'move'; root: string; rels: string[] }
 type Menu = { x: number; y: number; name: string | null }
-type Ask = { kind: 'mkdir' } | { kind: 'rename'; name: string } | { kind: 'empty' } | null
+type Ask = { kind: 'mkdir' } | { kind: 'rename'; name: string } | { kind: 'empty' } | { kind: 'delete'; names: string[]; permanent: boolean } | null
 
 const btn = 'cursor-pointer disabled:cursor-default'
 const iconBtn = `${btn} flex h-[34px] w-[34px] items-center justify-center rounded-lg hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent`
@@ -38,7 +39,14 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
   const [clip, setClip] = useState<Clip | null>(null)
   const [ask, setAsk] = useState<Ask>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [job, setJob] = useState<FileJob | null>(null)
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const toastSeq = useRef(0)
+  const toast = useCallback((x: Omit<Toast, 'id'>) => setToasts((l) => [...l.slice(-2), { ...x, id: ++toastSeq.current }]), [])
+  const dropToast = useCallback((id: number) => setToasts((l) => l.filter((x) => x.id !== id)), [])
+  // Where each copy/move job writes, so its toast can open that folder.
+  const jobDest = useRef<Record<string, Place>>({})
+  const [jobsOpen, setJobsOpen] = useState(true)
+  const [notifyDone, setNotifyDone] = useState(false)
   const [search, setSearch] = useState<{ q: string; kind: string; days: number } | null>(null)
   const [found, setFound] = useState<{ hits: FileHit[]; ms: number; truncated: boolean } | null>(null)
   const [tick, setTick] = useState(0)
@@ -58,7 +66,16 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
 
   useEffect(() => { void os.filesPlaces().then(setPlaces); void os.filesStatus('drive').then((s) => setDriveState(s.drive ? s.drive.service_state : 'off')) }, [tick])
   useEffect(() => { void os.filesStarred().then((s) => setStars(s.keys)) }, [tick])
-  useEffect(() => os.onFilesJob((e) => { setJob(e); if (e.state === 'done') reload() }), [reload])
+  const { jobs } = useFileJobs((e) => {
+    reload()
+    const msg = finishedToast(e)
+    if (!msg) return
+    const to = jobDest.current[e.id]
+    toast({ ...msg, action: to && e.state === 'done' ? { label: t('files.ops.openFolder'), run: () => go(to) } : undefined })
+    if (notifyDone && e.state !== 'failed' && !document.hasFocus()) void os.filesNotify(msg.text, '')
+  })
+  const job = jobs.find((j) => j.state === 'conflict' || j.state === 'password' || j.state === 'confirm' || j.state === 'error') ?? null
+  const started = (r: { ok: boolean; value?: unknown }, to: Place) => { if (r.ok && typeof r.value === 'string') { jobDest.current[r.value] = to; setJobsOpen(true) } }
 
   useEffect(() => {
     setError(null)
@@ -106,8 +123,26 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
     reload()
     return r
   }
-  const paste = () => { if (clip && dir) { void act(() => os.filesPaste(clip.op, clip.root, clip.rels, dir.root, dir.rel)); if (clip.op === 'move') setClip(null) } }
-  const toTrash = (names: string[]) => { if (dir && names.length) { void act(() => os.filesTrash(dir.root, names.map(relOf))); setSel([]) } }
+  const paste = () => { if (clip && dir) { const to: Place = { ...dir }; void act(() => os.filesPaste(clip.op, clip.root, clip.rels, dir.root, dir.rel)).then((r) => started(r, to)); if (clip.op === 'move') setClip(null) } }
+  // FO3: Delete asks first (Trash, or permanently with Shift+Delete); FO4: the toast offers Undo for the Trash.
+  const askDelete = (names: string[], permanent: boolean) => { if (dir && names.length) setAsk({ kind: 'delete', names, permanent }) }
+  const doDelete = async (names: string[], permanent: boolean) => {
+    if (!dir) return
+    setAsk(null); setSel([])
+    if (permanent) {
+      const r = await os.filesDelete(dir.root, names.map(relOf))
+      if (r.ok) toast({ kind: 'trash', text: r.value === 1 ? t('files.ops.toastDeletedOne') : t('files.ops.toastDeleted', { count: formatNumber(r.value) }) })
+      else setNotice(r.error === 'permission' ? t('files.err.permShort') : r.error === 'busy' ? t('files.err.busyShort') : t('files.err.generic'))
+    } else {
+      const r = await os.filesTrash(dir.root, names.map(relOf))
+      if (r.ok) {
+        const ids = r.value.ids
+        toast({ kind: 'trash', text: names.length === 1 ? t('files.ops.toastTrashedOne', { name: names[0] }) : t('files.ops.toastTrashed', { count: formatNumber(r.value.count) }),
+          action: { label: t('files.ops.undo'), run: () => void os.filesTrashRestore(ids).then((x) => { if (x.ok && x.value.skipped) setNotice(t('files.trash.skipped', { count: x.value.skipped })); reload() }) } })
+      } else setNotice(t('files.err.generic'))
+    }
+    reload()
+  }
   const star = (name: string) => { if (!dir) return; const on = !stars.includes(`${dir.root}:${relOf(name)}`); void os.filesStar(dir.root, relOf(name), on).then((r) => { if (r.ok) setStars(r.value) }) }
 
   // Keyboard: Enter, F2, Delete, Ctrl+X/C/V (FM3 shortcuts).
@@ -118,7 +153,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
     if (ev.key === 'Escape') { if (menu) setMenu(null); else onClose() }
     else if (ev.key === 'Enter' && one) open(one)
     else if (ev.key === 'F2' && one) setAsk({ kind: 'rename', name: one.name })
-    else if (ev.key === 'Delete' && sel.length) toTrash(sel)
+    else if (ev.key === 'Delete' && sel.length) askDelete(sel, ev.shiftKey)
     else if (ev.ctrlKey && (ev.key === 'c' || ev.key === 'x') && sel.length) setClip({ op: ev.key === 'c' ? 'copy' : 'move', root: dir.root, rels: sel.map(relOf) })
     else if (ev.ctrlKey && ev.key === 'v') paste()
     else if (ev.ctrlKey && ev.key === 'a') setSel(shown.map((e) => e.name))
@@ -293,18 +328,19 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
             if (a === 'open' && one) open(one)
             else if (a === 'cut' || a === 'copy') setClip({ op: a === 'cut' ? 'move' : 'copy', root: dir.root, rels: names.map(relOf) })
             else if (a === 'paste') paste()
-            else if (a === 'duplicate') void act(() => os.filesPaste('duplicate', dir.root, names.map(relOf), dir.root, dir.rel))
+            else if (a === 'duplicate') { const to: Place = { ...dir }; void act(() => os.filesPaste('duplicate', dir.root, names.map(relOf), dir.root, dir.rel)).then((r) => started(r, to)) }
             else if (a === 'rename' && one) setAsk({ kind: 'rename', name: one.name })
             else if (a === 'star' && one) star(one.name)
             else if (a === 'compress') setCompressing(names)
             else if (a === 'openArchive' && one) open(one)
             else if ((a === 'extractHere' || a === 'extractTo') && one) extract(dir.root, relOf(one.name), a === 'extractHere' ? 'here' : 'folder')
             else if (a === 'properties' && one) { setView('list'); setSel([one.name]) }
-            else if (a === 'trash') toTrash(names)
+            else if (a === 'trash') askDelete(names, false)
             else if (a === 'mkdir') setAsk({ kind: 'mkdir' })
           }} />}
 
-        {job && <JobPanel job={job} onClose={() => setJob(null)} />}
+        {!!jobs.length && !jobsOpen && <JobsChip jobs={jobs} onOpen={() => setJobsOpen(true)} />}
+        <Toasts toasts={toasts} dismiss={dropToast} />
         {notice && (
           <div role="status" className="absolute bottom-11 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-xl px-4 py-2.5 text-[13px]" style={{ background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)' }}>
             {notice}<button type="button" onClick={() => setNotice(null)} className={btn} style={{ color: C.link }}>{t('common.dismiss')}</button>
@@ -312,12 +348,16 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
         )}
       </main>
 
-      {job?.state === 'conflict' && job.conflict && <ConflictDialog job={job} />}
+      {!!jobs.length && jobsOpen && !job && <JobsWindow jobs={jobs} notify={notifyDone} setNotify={setNotifyDone} onMinimize={() => setJobsOpen(false)} />}
+      {job?.state === 'conflict' && job.conflict && <ConflictDialog key={`${job.id}:${job.conflict.index ?? job.conflict.name}`} job={job} />}
+      {job?.state === 'error' && <JobErrorCard key={`${job.id}:${job.error}:${job.error_name}`} job={job} />}
+      {ask?.kind === 'delete' && dir && <DeleteDialog items={ask.names.map((n) => byName(n) ?? { name: n, dir: false, size: null, modified: null, state: 'local', local: true })} permanent={ask.permanent} canTrash
+        onCancel={() => setAsk(null)} onConfirm={(perm) => void doDelete(ask.names, perm)} />}
       {job?.state === 'password' && <PasswordDialog key={`${job.id}:${job.ask?.wrong}`} name={job.name ?? ''} wrong={!!job.ask?.wrong} onCancel={() => void os.filesArchivePassword(job.id, null)} onSubmit={(pw) => void os.filesArchivePassword(job.id, pw)} />}
       {job?.state === 'confirm' && <LargeDialog job={job} />}
       {compressing && dir && <CompressDialog names={compressing} onCancel={() => setCompressing(null)}
         onSubmit={(o) => { setCompressing(null); arcJob(os.filesCompress(dir.root, compressing.map(relOf), o)) }} />}
-      {ask && dir && ask.kind !== 'empty' && <NameDialog title={ask.kind === 'mkdir' ? t('files.newFolder') : t('files.renameTitle', { name: ask.name })} initial={ask.kind === 'rename' ? ask.name : ''}
+      {ask && dir && (ask.kind === 'mkdir' || ask.kind === 'rename') && <NameDialog title={ask.kind === 'mkdir' ? t('files.newFolder') : t('files.renameTitle', { name: ask.name })} initial={ask.kind === 'rename' ? ask.name : ''}
         action={ask.kind === 'mkdir' ? t('files.create') : t('files.rename')} onCancel={() => setAsk(null)}
         onSubmit={async (name) => {
           const r = ask.kind === 'mkdir' ? await os.filesMkdir(dir.root, dir.rel, name) : await os.filesRename(dir.root, relOf(ask.name), name)
@@ -388,81 +428,6 @@ function ContextMenu({ menu, entry, starred, canPaste, multi, onPick }: { menu: 
           <span className="font-mono text-[11px]" style={{ color: C.dim }}>{it[3]}</span>
         </button>
       ))}
-    </div>
-  )
-}
-
-// FM4 progress card: copy / move, compress and extract jobs, with Cancel while they run.
-function JobPanel({ job, onClose }: { job: FileJob; onClose: () => void }) {
-  const pct = job.bytes_total ? Math.min(100, Math.round((job.bytes_done / job.bytes_total) * 100)) : job.total ? Math.round((job.done / job.total) * 100) : 0
-  const paused = job.state === 'conflict' || job.state === 'password' || job.state === 'confirm'
-  const finished = job.state === 'done' || job.state === 'failed' || job.state === 'cancelled'
-  const archive = job.op === 'compress' || job.op === 'extract'
-  useEffect(() => { if (job.state === 'done') { const id = setTimeout(onClose, 4000); return () => clearTimeout(id) } }, [job.state, onClose])
-  const title = job.op === 'compress' ? t('files.job.compressing', { name: job.name ?? '' }) : job.op === 'extract' ? t('files.job.extracting', { name: job.name ?? '', dest: job.dest })
-    : t(job.op === 'move' ? 'files.job.moving' : 'files.job.copying', { count: formatNumber(job.total), dest: job.dest })
-  return (
-    <div role="status" className="absolute right-4 bottom-11 z-40 box-border flex w-[360px] flex-col gap-2 rounded-[14px] px-4 py-3.5" style={{ background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)' }}>
-      <div className="flex justify-between gap-2 text-[13px]">
-        <span className="truncate font-semibold" title={title}>{title}</span>
-        <span className="shrink-0" style={{ color: job.state === 'failed' ? '#FF8A7A' : C.muted }}>
-          {paused ? t('files.job.paused') : job.state === 'done' ? t('files.job.done') : job.state === 'cancelled' ? t('files.job.cancelled') : <CountUp value={pct} />}
-        </span>
-      </div>
-      <AnimatedProgress value={archive && !job.total && !job.bytes_total ? null : pct} label={title} height={5} tone={paused ? 'paused' : job.state === 'failed' ? 'error' : job.state === 'done' ? 'success' : 'default'} />
-      <span className="font-mono text-[11px]" style={{ color: job.state === 'failed' ? '#FFB4A8' : C.muted }}>
-        {job.state === 'failed' ? (archive ? archiveError(job.error) : t('files.job.failed'))
-          : (archive && !job.total ? `${formatBytes(job.bytes_done)} / ${formatBytes(job.bytes_total || null)}` : t('files.job.progress', { done: formatNumber(job.done), total: formatNumber(job.total), bytes: formatBytes(job.bytes_done), bytesTotal: formatBytes(job.bytes_total) })) + (paused ? ` · ${t('files.job.waiting')}` : '')}
-      </span>
-      {finished ? <button type="button" onClick={onClose} className="self-end text-xs" style={{ color: C.link }}>{t('common.dismiss')}</button>
-        : <button type="button" onClick={() => void os.filesResolve(job.id, 'cancel', false)} className="self-end text-xs" style={{ color: C.link }}>{t('files.job.cancel')}</button>}
-    </div>
-  )
-}
-
-const stampWhen = (ms: number) => { const d = day(ms); return `${d}, ${formatDate(ms, { hour: '2-digit', minute: '2-digit' })}` }
-
-// FM4 "already exists" dialog.
-function ConflictDialog({ job }: { job: FileJob }) {
-  const c = job.conflict!
-  const [all, setAll] = useState(false)
-  const newer = c.incoming.modified > c.existing.modified
-  const send = (r: 'replace' | 'skip' | 'keep' | 'cancel') => void os.filesResolve(job.id, r, all)
-  const cards = [
-    { tag: job.op === 'extract' ? t('files.cf.fromArchive') : job.op === 'compress' ? t('files.cf.newArchive') : newer ? t('files.cf.incomingNewer') : t('files.cf.incoming'), s: c.incoming, border: C.blue, tagColor: C.link },
-    { tag: t('files.cf.existing', { dest: job.dest }), s: c.existing, border: 'rgba(127,178,255,0.14)', tagColor: C.muted },
-  ]
-  const k = kindOf(c.name, false)
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(2,6,16,0.5)' }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="cf-t" className="box-border w-[560px] overflow-hidden rounded-[18px]" style={{ background: '#0F2350', border: '1px solid rgba(127,178,255,0.2)', boxShadow: '0 30px 80px rgba(0,0,0,0.6)', color: C.text }}>
-        <div className="flex flex-col gap-1.5 px-6 pt-[22px] pb-2">
-          <h2 id="cf-t" className="m-0 text-[19px] font-bold">{t('files.cf.title', { name: c.name })}</h2>
-          <p className="m-0 text-sm" style={{ color: C.muted }}>{t('files.cf.body', { dest: job.dest })}</p>
-        </div>
-        <div className="grid grid-cols-2 gap-3 px-6 py-3">
-          {cards.map((x) => (
-            <div key={x.tag} className="flex gap-3 rounded-xl p-3.5" style={{ background: 'rgba(4,10,26,0.45)', border: `1px solid ${x.border}` }}>
-              <span className="flex h-12 w-10 flex-none items-center justify-center rounded-md font-mono text-[9px] font-bold" style={{ background: k.color }}>{k.ext}</span>
-              <span className="flex min-w-0 flex-col gap-[3px] text-xs">
-                <span className="truncate text-[11px] font-semibold tracking-[0.06em] uppercase" style={{ color: x.tagColor }}>{x.tag}</span>
-                <span>{stampWhen(x.s.modified)}</span><span style={{ color: C.muted }}>{formatBytes(x.s.size)}</span>
-              </span>
-            </div>
-          ))}
-        </div>
-        {c.remaining > 0 && <label className="flex items-center gap-2.5 px-6 pt-1 pb-[18px] text-[13px]" style={{ color: C.soft }}>
-          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} className="size-4" style={{ accentColor: C.blue }} />{t('files.cf.all', { count: formatNumber(c.remaining) })}
-        </label>}
-        <div className="flex justify-between gap-2.5 px-[18px] py-3.5" style={{ background: 'rgba(4,10,26,0.35)', borderTop: `1px solid ${C.line}` }}>
-          <button type="button" onClick={() => send('cancel')} className={`${btn} rounded-[10px] px-3.5 py-2.5 text-sm`} style={{ color: C.muted }}>{job.op === 'copy' || job.op === 'move' ? t('files.cf.cancel') : t('files.cf.cancelJob')}</button>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => send('skip')} className={`${btn} rounded-[10px] px-4 py-2.5 text-sm font-medium`} style={{ border: '1px solid rgba(127,178,255,0.25)' }}>{t('files.cf.skip')}</button>
-            <button type="button" onClick={() => send('keep')} className={`${btn} rounded-[10px] px-4 py-2.5 text-sm font-medium`} style={{ border: '1px solid rgba(127,178,255,0.25)' }}>{t('files.cf.keep')}</button>
-            <button type="button" autoFocus onClick={() => send('replace')} className={`${btn} rounded-[10px] px-[18px] py-2.5 text-sm font-semibold`} style={{ background: C.blue }}>{t('files.cf.replace')}</button>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
