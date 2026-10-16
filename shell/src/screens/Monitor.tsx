@@ -125,7 +125,7 @@ export default function Monitor({ onClose }: WindowProps) {
 
   return (
     <div role="dialog" aria-modal="false" aria-label={t('monitor.title')} className="fixed inset-x-0 top-0 bottom-[52px] z-50 flex flex-col gap-4 overflow-hidden px-8 py-[26px] font-sans"
-      style={{ color: C.ink, background: 'radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)' }}>
+      style={{ color: C.ink, background: 'radial-gradient(ellipse 80% 50% at 80% 0%, var(--ws-g-glow) 0%, var(--ws-g-page) 60%)' }}>
       <div className="flex items-center gap-3">
         <h1 className="m-0 text-2xl font-bold">{t('monitor.title')}</h1>
         <div role="tablist" aria-label={t('monitor.title')} className="ml-5 flex overflow-hidden rounded-[9px] border border-[rgba(127,178,255,0.2)] text-[13px]">{TABS.map(tabBtn)}</div>

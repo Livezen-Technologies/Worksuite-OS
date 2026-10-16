@@ -266,7 +266,7 @@ export default function AppCenter({ onClose }: WindowProps) {
         {catalog && <div className="mt-auto px-2.5 pt-4 text-[11px] leading-normal" style={{ color: C.dim }}>{catalog.state === 'ok' ? t('appc.orgApproved') : t('appc.noCatalog')} {t('appc.device', { arch: catalog.arch })}</div>}
       </nav>
 
-      <main className="relative flex min-w-0 flex-1 flex-col gap-[18px] overflow-auto px-7 py-[22px]" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)' }}>
+      <main className="relative flex min-w-0 flex-1 flex-col gap-[18px] overflow-auto px-7 py-[22px]" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, var(--ws-g-glow) 0%, var(--ws-g-page) 60%)' }}>
         <button type="button" aria-label={t('common.close')} onClick={onClose} className="absolute top-[22px] right-5 z-10 flex size-10 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10" style={{ color: C.soft }}><Svg d="M6 6l12 12M18 6L6 18" size={16} /></button>
         {notice && (
           <div role="status" className="mr-12 flex items-center gap-3 rounded-xl px-4 py-2.5 text-[13px]" style={{ background: notice.error ? 'rgba(255,138,122,0.12)' : 'rgba(95,211,154,0.12)', color: notice.error ? '#FFB4A8' : '#BFF0D6' }}>

@@ -4,8 +4,9 @@ import { formatBytes, type FileEntry, type FilePlaces } from '../../lib/os'
 import { formatDate, t, type MessageKey } from '../../i18n'
 
 export const C = {
-  page: '#0A1A3D', side: '#071330', bar: '#0C1E46', card: 'rgba(14,32,72,0.6)', line: 'rgba(127,178,255,0.12)',
-  text: '#E8EEFA', soft: '#C9D6EE', muted: '#8FA3C8', dim: '#5E739C', blue: '#1F6BFF', cyan: '#18D4F0', link: '#7FB2FF',
+  // Theme variables (index.css --ws-g-*): dark values by default, light ones under Settings › Appearance › Light.
+  page: 'var(--ws-g-page)', side: 'var(--ws-g-side)', bar: 'var(--ws-g-bar)', card: 'var(--ws-g-card)', line: 'var(--ws-g-line)',
+  text: 'var(--ws-g-ink)', soft: 'var(--ws-g-soft)', muted: 'var(--ws-g-muted)', dim: 'var(--ws-g-dim)', blue: '#1F6BFF', cyan: 'var(--ws-g-cyan)', link: 'var(--ws-g-link)',
 }
 
 export const P = {
@@ -43,7 +44,7 @@ export function kindOf(name: string, dir: boolean) {
   const k = KINDS.find((k) => k[0].includes(x))
   return { ext: (x || '—').toUpperCase().slice(0, 4), badge: (x || '—').toUpperCase().slice(0, 4), color: k?.[1] ?? '#5E739C', label: k?.[2] ? t(k[2]) : t('files.file'), image: k?.[2] === 'files.kind.image' }
 }
-export const thumbBg = (image: boolean) => (image ? 'linear-gradient(135deg,#1F4FB0,#18D4F0)' : 'rgba(4,10,26,0.5)')
+export const thumbBg = (image: boolean) => (image ? 'linear-gradient(135deg,#1F4FB0,#18D4F0)' : 'var(--ws-g-field)')
 const FOLDER_COLORS = ['#1F6BFF', '#2E9E6A', '#B7791F', '#5E739C', '#7A4FE0', '#D9572B']
 export const folderColor = (i: number) => FOLDER_COLORS[i % FOLDER_COLORS.length]
 
@@ -103,7 +104,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
               <div key={n.key} className="flex items-center rounded-lg" style={{ background: on ? 'rgba(31,107,255,0.2)' : 'transparent' }}>
                 <button type="button" aria-current={on ? 'page' : undefined} onClick={() => onGo(n.to)}
                   className="flex min-w-0 grow cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] hover:bg-white/5"
-                  style={{ color: on ? '#FFFFFF' : C.soft, fontWeight: on ? 600 : 400 }}>
+                  style={{ color: on ? 'var(--ws-g-strong)' : C.soft, fontWeight: on ? 600 : 400 }}>
                   <Svg d={n.icon} stroke={on ? C.cyan : C.muted} />
                   <span className="truncate">{n.label}</span>
                   {n.meta && <span className="ml-auto text-[11px]" style={{ color: C.muted }}>{n.meta}</span>}
@@ -127,7 +128,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
 export function Modal({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(2,6,16,0.5)' }}>
-      <div role="dialog" aria-modal="true" aria-label={label} className={`box-border flex ${wide ? 'w-[500px]' : 'w-[440px]'} flex-col gap-4 rounded-[18px] p-6`} style={{ background: '#0F2350', border: '1px solid rgba(127,178,255,0.2)', boxShadow: '0 30px 80px rgba(0,0,0,0.6)', color: C.text }}>
+      <div role="dialog" aria-modal="true" aria-label={label} className={`box-border flex ${wide ? 'w-[500px]' : 'w-[440px]'} flex-col gap-4 rounded-[18px] p-6`} style={{ background: 'var(--ws-g-dialog)', border: '1px solid rgba(127,178,255,0.2)', boxShadow: '0 30px 80px rgba(0,0,0,0.6)', color: C.text }}>
         {children}
       </div>
     </div>

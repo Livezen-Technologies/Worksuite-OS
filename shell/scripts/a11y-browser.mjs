@@ -36,6 +36,9 @@ const MODES = [
   { name: '100', a11y: { highContrast: false, reducedMotion: false, textScale: 1 } },
   { name: '200', a11y: { highContrast: false, reducedMotion: false, textScale: 2 } },
   { name: 'hc-200-rm', a11y: { highContrast: true, reducedMotion: true, textScale: 2 } },
+  // Settings › Appearance › Light (WSOS-DSK-014): contrast must hold in the light theme too.
+  { name: 'light', a11y: { highContrast: false, reducedMotion: false, textScale: 1 }, theme: 'Light' },
+  { name: 'light-200', a11y: { highContrast: false, reducedMotion: false, textScale: 2 }, theme: 'Light' },
 ]
 
 const findings = []
@@ -43,7 +46,10 @@ const browser = await chromium.launch()
 for (const [screen, go] of Object.entries(SCREENS)) {
   for (const m of MODES) {
     const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 }, bypassCSP: true, reducedMotion: m.a11y.reducedMotion ? 'reduce' : 'no-preference' })
-    await ctx.addInitScript((a) => { localStorage.setItem('ws.a11y', JSON.stringify(a)); localStorage.setItem('ws.firstRunDone', '1'); localStorage.setItem('ws.locale', 'en') }, m.a11y)
+    await ctx.addInitScript(([a, theme]) => {
+      localStorage.setItem('ws.a11y', JSON.stringify(a)); localStorage.setItem('ws.firstRunDone', '1'); localStorage.setItem('ws.locale', 'en')
+      localStorage.setItem('ws.appearance', JSON.stringify({ theme: theme ?? 'Dark', accent: 'Blue' }))
+    }, [m.a11y, m.theme])
     const p = await ctx.newPage()
     await p.goto(BASE)
     await p.waitForSelector('#root > *')

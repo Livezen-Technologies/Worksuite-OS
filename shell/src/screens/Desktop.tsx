@@ -173,7 +173,8 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
   return (
     <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: wallpaperFor(display, primaryOut, BG.desktop) }}>
-      <div className="absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
+      {/* On the wallpaper: keeps its light text in the light theme (ws-dark-zone). */}
+      <div className="ws-dark-zone absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
         <div className="text-sm text-[#8FA3C8]">{longDate}</div>
         <div className="text-[44px] font-light tracking-[-1px]">{time}</div>
       </div>

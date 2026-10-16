@@ -37,6 +37,7 @@ const ROOTS = ['src', 'electron']
 const ALLOW: Record<string, RegExp> = {
   'src/lib/power.ts': /toFixed/,          // SVG stroke-dasharray, not text
   'src/lib/monitorApi.ts': /toFixed/,     // SVG polyline points, not text
+  'src/lib/lightTheme.ts': /toFixed/,     // CSS colour values, not text
   'electron/fileops.ts': /trashDate/,     // FreeDesktop trash DeletionDate (machine format)
   'src/screens/Installer.tsx': /Intl\.DateTimeFormat\(\)\.resolvedOptions/, // reads the system time zone
 }

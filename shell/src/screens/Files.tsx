@@ -140,7 +140,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
         {/* Header: FM1/FM2 toolbar, FM5 search bar, FM6 trash actions */}
         <header className="box-border flex h-[60px] shrink-0 items-center gap-2.5 px-5" style={{ borderBottom: `1px solid ${C.line}`, background: C.bar }}>
           {search && dir ? <>
-            <label className="box-border flex h-[38px] flex-1 items-center gap-2.5 rounded-[10px] px-3.5 text-sm" style={{ background: 'rgba(4,10,26,0.6)', border: `1px solid ${C.blue}` }}>
+            <label className="box-border flex h-[38px] flex-1 items-center gap-2.5 rounded-[10px] px-3.5 text-sm" style={{ background: 'var(--ws-g-field)', border: `1px solid ${C.blue}` }}>
               <Svg d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" stroke={C.link} width={2.2} />
               <input autoFocus type="text" value={search.q} onChange={(e) => setSearch({ ...search, q: e.target.value })} aria-label={t('files.search.label')}
                 onKeyDown={(e) => { if (e.key === 'Escape') setSearch(null) }} className="min-w-0 grow border-0 bg-transparent text-sm outline-none" style={{ color: C.text, background: 'transparent' }} />
@@ -166,14 +166,14 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
               )) : <span className="font-semibold text-white">{folderName(place)}</span>}
             </nav>
             {dir && <button type="button" onClick={() => setSearch({ q: '', kind: 'any', days: 0 })} className={`${btn} ml-auto box-border flex h-[34px] w-[240px] items-center gap-2 rounded-lg px-3 text-[13px]`}
-              style={{ background: 'rgba(4,10,26,0.5)', border: '1px solid rgba(127,178,255,0.14)', color: C.muted }}>
+              style={{ background: 'var(--ws-g-field)', border: '1px solid rgba(127,178,255,0.14)', color: C.muted }}>
               <Svg d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" size={14} stroke={C.muted} width={2.2} /><span className="truncate">{t('files.search.placeholder', { folder: folderName(place) })}</span>
             </button>}
             {dir && <div className="flex overflow-hidden rounded-lg" style={{ border: '1px solid rgba(127,178,255,0.18)' }}>
               {(['grid', 'list'] as const).map((v) => (
                 <button key={v} type="button" aria-label={v === 'grid' ? t('files.gridView') : t('files.listView')} aria-pressed={view === v} onClick={() => setView(v)}
                   className={`${btn} flex h-8 w-[34px] items-center justify-center`} style={{ background: view === v ? 'rgba(31,107,255,0.25)' : 'transparent' }}>
-                  <Svg d={v === 'grid' ? P.grid : P.list} size={14} stroke={view === v ? '#FFFFFF' : C.muted} width={2.2} />
+                  <Svg d={v === 'grid' ? P.grid : P.list} size={14} stroke={view === v ? 'var(--ws-g-strong)' : C.muted} width={2.2} />
                 </button>
               ))}
             </div>}
@@ -209,7 +209,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
           : error ? <p className="p-6 text-sm" style={{ color: '#FF8A7A' }}>{error}</p>
           : !entries ? <p className="p-6 text-sm" style={{ color: C.muted }}>{t('common.loading')}</p>
           : view === 'grid' ? (
-            <div className="flex flex-1 flex-col gap-3.5 overflow-auto px-6 py-[22px]" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, #102A5E 0%, #0A1A3D 60%)' }}
+            <div className="flex flex-1 flex-col gap-3.5 overflow-auto px-6 py-[22px]" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, var(--ws-g-glow) 0%, var(--ws-g-page) 60%)' }}
               onContextMenu={(ev) => { ev.preventDefault(); setMenu({ x: ev.clientX, y: ev.clientY, name: null }) }} onClick={(ev) => { if (ev.target === ev.currentTarget) setSel([]) }}>
               {rows.length === 0 && <p className="text-sm" style={{ color: C.muted }}>{t('files.empty')}</p>}
               {folders.length > 0 && <><span className="text-xs" style={{ color: C.muted }}>{t('files.foldersSection')}</span>
@@ -230,7 +230,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
                     return (
                       <button key={f.name} type="button" onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)} onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
                         aria-pressed={on} title={!f.local ? t('files.onlineOnly') : undefined} className={`${btn} flex flex-col gap-2 rounded-xl p-2.5 text-left`}
-                        style={{ background: on ? 'rgba(31,107,255,0.18)' : 'rgba(14,32,72,0.5)', border: `1px solid ${on ? C.blue : 'rgba(127,178,255,0.1)'}`, opacity: f.local ? 1 : 0.7 }}>
+                        style={{ background: on ? 'rgba(31,107,255,0.18)' : 'var(--ws-g-card)', border: `1px solid ${on ? C.blue : 'var(--ws-g-line)'}`, opacity: f.local ? 1 : 0.7 }}>
                         <span className="flex h-24 items-center justify-center rounded-lg" style={{ background: thumbBg(k.image) }}>
                           <span className="rounded-[5px] px-[7px] py-[3px] font-mono text-[11px] font-semibold text-white" style={{ background: k.color }}>{k.ext}</span>
                         </span>
@@ -306,7 +306,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
 
         {job && <JobPanel job={job} onClose={() => setJob(null)} />}
         {notice && (
-          <div role="status" className="absolute bottom-11 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-xl px-4 py-2.5 text-[13px]" style={{ background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)' }}>
+          <div role="status" className="absolute bottom-11 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-xl px-4 py-2.5 text-[13px]" style={{ background: 'var(--ws-g-menu)', border: '1px solid rgba(127,178,255,0.22)' }}>
             {notice}<button type="button" onClick={() => setNotice(null)} className={btn} style={{ color: C.link }}>{t('common.dismiss')}</button>
           </div>
         )}
@@ -378,7 +378,7 @@ function ContextMenu({ menu, entry, starred, canPaste, multi, onPick }: { menu: 
         const i = all.indexOf(document.activeElement as HTMLButtonElement)
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); all[(i + (e.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus() }
       }}
-      className="fixed z-[60] box-border flex w-[260px] flex-col rounded-xl p-1.5" style={{ left: x, top: y, background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 20px 50px rgba(0,0,0,0.55)' }}>
+      className="fixed z-[60] box-border flex w-[260px] flex-col rounded-xl p-1.5" style={{ left: x, top: y, background: 'var(--ws-g-menu)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 20px 50px rgba(0,0,0,0.55)' }}>
       {items.map((it, i) => it === null ? <div key={i} className="mx-1.5 my-1 h-px" style={{ background: C.line }} /> : (
         <button key={i} type="button" role="menuitem" disabled={it[4] || !it[0]} title={it[5]} onClick={() => it[0] && onPick(it[0])}
           className="flex cursor-pointer items-center gap-3 rounded-[7px] px-2.5 py-2 text-left text-[13px] outline-none hover:bg-[rgba(31,107,255,0.25)] focus:bg-[rgba(31,107,255,0.25)] disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
@@ -402,7 +402,7 @@ function JobPanel({ job, onClose }: { job: FileJob; onClose: () => void }) {
   const title = job.op === 'compress' ? t('files.job.compressing', { name: job.name ?? '' }) : job.op === 'extract' ? t('files.job.extracting', { name: job.name ?? '', dest: job.dest })
     : t(job.op === 'move' ? 'files.job.moving' : 'files.job.copying', { count: formatNumber(job.total), dest: job.dest })
   return (
-    <div role="status" className="absolute right-4 bottom-11 z-40 box-border flex w-[360px] flex-col gap-2 rounded-[14px] px-4 py-3.5" style={{ background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)' }}>
+    <div role="status" className="absolute right-4 bottom-11 z-40 box-border flex w-[360px] flex-col gap-2 rounded-[14px] px-4 py-3.5" style={{ background: 'var(--ws-g-menu)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)' }}>
       <div className="flex justify-between gap-2 text-[13px]">
         <span className="truncate font-semibold" title={title}>{title}</span>
         <span className="shrink-0" style={{ color: job.state === 'failed' ? '#FF8A7A' : C.muted }}>
@@ -430,19 +430,19 @@ function ConflictDialog({ job }: { job: FileJob }) {
   const send = (r: 'replace' | 'skip' | 'keep' | 'cancel') => void os.filesResolve(job.id, r, all)
   const cards = [
     { tag: job.op === 'extract' ? t('files.cf.fromArchive') : job.op === 'compress' ? t('files.cf.newArchive') : newer ? t('files.cf.incomingNewer') : t('files.cf.incoming'), s: c.incoming, border: C.blue, tagColor: C.link },
-    { tag: t('files.cf.existing', { dest: job.dest }), s: c.existing, border: 'rgba(127,178,255,0.14)', tagColor: C.muted },
+    { tag: t('files.cf.existing', { dest: job.dest }), s: c.existing, border: 'var(--ws-g-line)', tagColor: C.muted },
   ]
   const k = kindOf(c.name, false)
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(2,6,16,0.5)' }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="cf-t" className="box-border w-[560px] overflow-hidden rounded-[18px]" style={{ background: '#0F2350', border: '1px solid rgba(127,178,255,0.2)', boxShadow: '0 30px 80px rgba(0,0,0,0.6)', color: C.text }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="cf-t" className="box-border w-[560px] overflow-hidden rounded-[18px]" style={{ background: 'var(--ws-g-dialog)', border: '1px solid rgba(127,178,255,0.2)', boxShadow: '0 30px 80px rgba(0,0,0,0.6)', color: C.text }}>
         <div className="flex flex-col gap-1.5 px-6 pt-[22px] pb-2">
           <h2 id="cf-t" className="m-0 text-[19px] font-bold">{t('files.cf.title', { name: c.name })}</h2>
           <p className="m-0 text-sm" style={{ color: C.muted }}>{t('files.cf.body', { dest: job.dest })}</p>
         </div>
         <div className="grid grid-cols-2 gap-3 px-6 py-3">
           {cards.map((x) => (
-            <div key={x.tag} className="flex gap-3 rounded-xl p-3.5" style={{ background: 'rgba(4,10,26,0.45)', border: `1px solid ${x.border}` }}>
+            <div key={x.tag} className="flex gap-3 rounded-xl p-3.5" style={{ background: 'var(--ws-g-field)', border: `1px solid ${x.border}` }}>
               <span className="flex h-12 w-10 flex-none items-center justify-center rounded-md font-mono text-[9px] font-bold" style={{ background: k.color }}>{k.ext}</span>
               <span className="flex min-w-0 flex-col gap-[3px] text-xs">
                 <span className="truncate text-[11px] font-semibold tracking-[0.06em] uppercase" style={{ color: x.tagColor }}>{x.tag}</span>
@@ -454,7 +454,7 @@ function ConflictDialog({ job }: { job: FileJob }) {
         {c.remaining > 0 && <label className="flex items-center gap-2.5 px-6 pt-1 pb-[18px] text-[13px]" style={{ color: C.soft }}>
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} className="size-4" style={{ accentColor: C.blue }} />{t('files.cf.all', { count: formatNumber(c.remaining) })}
         </label>}
-        <div className="flex justify-between gap-2.5 px-[18px] py-3.5" style={{ background: 'rgba(4,10,26,0.35)', borderTop: `1px solid ${C.line}` }}>
+        <div className="flex justify-between gap-2.5 px-[18px] py-3.5" style={{ background: 'var(--ws-g-field)', borderTop: `1px solid ${C.line}` }}>
           <button type="button" onClick={() => send('cancel')} className={`${btn} rounded-[10px] px-3.5 py-2.5 text-sm`} style={{ color: C.muted }}>{job.op === 'copy' || job.op === 'move' ? t('files.cf.cancel') : t('files.cf.cancelJob')}</button>
           <div className="flex gap-2">
             <button type="button" onClick={() => send('skip')} className={`${btn} rounded-[10px] px-4 py-2.5 text-sm font-medium`} style={{ border: '1px solid rgba(127,178,255,0.25)' }}>{t('files.cf.skip')}</button>
@@ -482,7 +482,7 @@ function SearchView({ search, setSearch, found, openHit }: { search: { q: string
       <div role="group" aria-label={t('files.search.filters')} className="flex gap-2 px-6 py-3.5" style={{ borderBottom: '1px solid rgba(127,178,255,0.1)' }}>
         {chips.map((c) => (
           <button key={c.label} type="button" aria-pressed={c.on} disabled={!c.click} title={c.title} onClick={c.click}
-            className={`${btn} rounded-full px-3 py-1.5 text-xs disabled:opacity-40`} style={{ border: `1px solid ${c.on ? C.blue : 'rgba(127,178,255,0.2)'}`, background: c.on ? 'rgba(31,107,255,0.2)' : 'transparent' }}>{c.label}</button>
+            className={`${btn} rounded-full px-3 py-1.5 text-xs disabled:opacity-40`} style={{ border: `1px solid ${c.on ? C.blue : 'var(--ws-g-line)'}`, background: c.on ? 'rgba(31,107,255,0.2)' : 'transparent' }}>{c.label}</button>
         ))}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 overflow-auto px-6 py-4">
@@ -569,7 +569,7 @@ function NameDialog({ title, initial, action, onCancel, onSubmit }: { title: str
       <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (ok) void onSubmit(name.trim()).then(setErr) }}>
         <label className="flex flex-col gap-1.5 text-xs" style={{ color: C.muted }}>{t('files.nameLabel')}
           <input ref={ref} value={name} onChange={(e) => { setName(e.target.value); setErr(null) }} onKeyDown={(e) => { if (e.key === 'Escape') onCancel() }}
-            className="h-10 rounded-lg px-3 text-sm outline-none" style={{ background: 'rgba(4,10,26,0.6)', border: `1px solid ${err ? '#FF8A7A' : C.blue}`, color: C.text }} />
+            className="h-10 rounded-lg px-3 text-sm outline-none" style={{ background: 'var(--ws-g-field)', border: `1px solid ${err ? '#FF8A7A' : C.blue}`, color: C.text }} />
         </label>
         {err && <p role="alert" className="m-0 text-[13px]" style={{ color: '#FFB4A8' }}>{err}</p>}
         <div className="flex justify-end gap-2">
