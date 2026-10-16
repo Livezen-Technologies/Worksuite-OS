@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('worksuite', {
   lockSettings: () => ipcRenderer.invoke('ws:lockSettings'),
   setLockTimeout: (seconds: number) => ipcRenderer.invoke('ws:setLockTimeout', String(seconds)),
   webApps: () => ipcRenderer.invoke('ws:webApps'),
+  shellPrefs: () => ipcRenderer.invoke('ws:shellPrefs'),
+  setShellPrefs: (prefs: unknown) => ipcRenderer.invoke('ws:setShellPrefs', prefs),
   installedApps: () => ipcRenderer.invoke('ws:installedApps'),
   launchOffice: (kind: string) => ipcRenderer.invoke('ws:launchOffice', String(kind)),
   launchWorkSuite: (module: string) => ipcRenderer.invoke('ws:launchWorkSuite', String(module)),

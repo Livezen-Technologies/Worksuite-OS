@@ -1,7 +1,7 @@
 import { findBundles } from './bundles'
 import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile, spawn } from 'node:child_process'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
@@ -15,7 +15,8 @@ import { checkOwnPassword, localUsers } from './users'
 import { ask, signinHost, type SignInMethod } from './signin'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
-import { loadSession, parseAppArgs, resolveLink } from './webapps'
+import { shellPrefsFrom } from '../src/lib/shellPrefs'
+import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
 import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge } from './system'
@@ -149,8 +150,12 @@ app.whenReady().then(() => {
   handle('ws:setLockTimeout', (s) => writeLockTimeout(lock, Number(s)))
   // Launcher data: the org's WorkSuite web apps (no token leaves the main process) and installed XDG apps.
   handle('ws:webApps', async () => {
-    const r = await loadSession((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }))
-    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name, offline_level }) => ({ id, name, offline_level })) } : r
+    // Cached per account in the user's cache dir so the launcher keeps the org's list offline (WSOS-DSK-001).
+    const file = path.join(app.getPath('home'), '.cache', 'worksuite', 'launcher-apps.json')
+    return launcherApps((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }), {
+      read: () => (existsSync(file) ? readFileSync(file, 'utf8') : null),
+      write: (text) => { mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 }); writeFileSync(file, text, { mode: 0o600 }) },
+    })
   })
   handle('ws:installedApps', () => {
     const all = installedApps()
@@ -248,6 +253,9 @@ app.whenReady().then(() => {
   })
   handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:syncStatus', () => syncCall('Status'))
+  // Shell ENH-01 preferences (favourites, taskbar pins, order): the user's synced 'preferences/shell' object.
+  handle('ws:shellPrefs', () => syncCall('GetPreference', { object_id: 'shell' }))
+  handle('ws:setShellPrefs', (prefs) => syncCall('SetPreference', { object_id: 'shell', data: shellPrefsFrom(prefs) }))
   // WSOS-SYN-004: rejected changes are shown against their record; retry only when the user asks.
   handle('ws:syncFailed', () => syncCall('ListFailed'))
   handle('ws:syncRetry', (mutationId) => syncCall('RetryFailed', { mutation_id: mutationId }))

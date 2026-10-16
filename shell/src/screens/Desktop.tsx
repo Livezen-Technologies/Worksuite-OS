@@ -20,6 +20,7 @@ import { UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
 import { markLauncherRequest, reportLauncherFirstFrame } from '../lib/perfProbe'
+import { applyShellPrefs, shellPrefsFrom, taskbarPins, toggleFavorite, type ShellPrefs } from '../lib/shellPrefs'
 import { alphaGroups, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
 import GlobalSearch from '../components/GlobalSearch'
@@ -115,15 +116,27 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   }, [launcher])
 
   // Start menu list: the org's WorkSuite apps (fallback list when not signed in/offline) and installed XDG apps.
-  const [allApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
+  const [baseApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
+  // The user's favourites, taskbar pins and order (Shell ENH-01 preferences, synced; WSOS-DSK-001).
+  const [prefs, setPrefs] = useState<ShellPrefs>({})
+  const [appsCached, setAppsCached] = useState(false)
+  const allApps = useMemo(() => applyShellPrefs(baseApps, prefs), [baseApps, prefs])
+  const toggleFav = (id: string) => {
+    const next = toggleFavorite(prefs, allApps, id)
+    setPrefs(next)
+    void os.setShellPrefs(next).catch(() => undefined)
+  }
   const appsLoaded = useRef(false)
   useEffect(() => {
     // On start, then again each time the launcher opens (sign-in, installs and org changes show up).
     if (!launcher && appsLoaded.current) return
     appsLoaded.current = true
     let live = true
-    void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null)]).then(([w, i]) => {
-      if (live) setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null))
+    void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null), os.shellPrefs().catch(() => null)]).then(([w, i, p]) => {
+      if (!live) return
+      setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null))
+      setAppsCached(!!(w?.ok && w.cached))
+      if (p?.ok) setPrefs(shellPrefsFrom(p.value))
     })
     return () => { live = false }
   }, [launcher])
@@ -149,7 +162,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
     else if ('worksuite' in a.launch) void os.launchWorkSuite(a.launch.worksuite)
     else void os.launchApp(a.launch.desktop)
   }
-  const taskbar = taskbarApps(allApps, TASKBAR)
+  const taskbar = taskbarApps(allApps, taskbarPins(prefs, TASKBAR))
   // This window is the primary monitor's desktop; other monitors have their own (OutputDesktop, WSOS-DSK-005).
   const display = useDisplayState()
   const primaryOut = display?.layout.primary ?? null
@@ -208,7 +221,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                 <span aria-hidden="true" className="rounded border border-[#3D5280] px-1.5 py-0.5 font-mono text-[10px]">Super</span>
               </label>
               <div className="flex items-center justify-between">
-                <h2 className="m-0 text-sm font-semibold">{allView ? t('launcher.tab.all') : t('launcher.pinned')}</h2>
+                <h2 className="m-0 text-sm font-semibold">{allView ? t('launcher.tab.all') : t('launcher.pinned')}{appsCached && <span className="ml-2 text-xs font-normal text-[#8FA3C8]">{t('launcher.cachedList')}</span>}</h2>
                 <button type="button" onClick={() => setAllView((v) => !v)} className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/[0.07] px-3 py-[5px] text-xs hover:bg-white/[0.12]">
                   {allView ? t('common.back') : t('launcher.tab.all')}<Icon d={[allView ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6']} size={12} width={2.4} stroke="#C9D6EE" />
                 </button>
@@ -217,7 +230,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                 <>
                   <div className="ws-pins grid grid-cols-6 gap-x-1.5 gap-y-1">
                     {pins.map((a) => (
-                      <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] rounded-xl px-1 py-2.5 hover:bg-white/[0.07] focus-visible:bg-white/[0.07]">
+                      <button key={a.id} type="button" onClick={() => launch(a.id)} onContextMenu={(e) => { if (a.id === SETTINGS_TILE.id) return; e.preventDefault(); toggleFav(a.id) }} aria-description={a.fav ? t('launcher.unpinHint') : t('launcher.pinHint')} className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] rounded-xl px-1 py-2.5 hover:bg-white/[0.07] focus-visible:bg-white/[0.07]">
                         <span aria-hidden="true" className="flex size-11 items-center justify-center rounded-xl text-base font-bold text-white shadow-[0_6px_14px_rgba(0,0,0,0.25)]" style={{ background: tileColor(a) }}>{a.mark}</span>
                         <span className="max-w-full truncate text-xs">{a.name}</span>
                       </button>

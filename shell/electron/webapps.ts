@@ -170,6 +170,52 @@ export async function loadSession(broker: Broker, fetchFn: Fetch, device?: Devic
   } catch { return { ok: false, error: 'offline' } }
 }
 
+/** The org's app list as the launcher sees it; no URLs or tokens (WSOS-DSK-001). */
+export type LauncherWebApp = { id: string; name: string; offline_level?: OfflineLevel }
+export interface AppListCache { read(): string | null; write(text: string): void }
+
+/** Cache text for the org app list of one account. */
+export function appCacheText(accountId: string, apps: WebApp[]): string {
+  return JSON.stringify({ v: 1, account_id: accountId, apps: apps.map(({ id, name, offline_level }) => ({ id, name, ...(offline_level ? { offline_level } : {}) })) })
+}
+
+/** The cached list for this account, or null (other account, bad file). Entries are re-validated. */
+export function cachedApps(text: string | null, accountId: string): LauncherWebApp[] | null {
+  if (!text) return null
+  try {
+    const o = JSON.parse(text) as { v?: unknown; account_id?: unknown; apps?: unknown }
+    if (o.v !== 1 || o.account_id !== accountId || !Array.isArray(o.apps)) return null
+    const out: LauncherWebApp[] = []
+    for (const a of o.apps as Record<string, unknown>[]) {
+      if (!a || typeof a.id !== 'string' || !WEB_APP_ID.test(a.id)) continue
+      const level = offlineLevel(a.offline_level)
+      out.push({ id: a.id, name: typeof a.name === 'string' && a.name ? a.name.slice(0, 80) : a.id, ...(level ? { offline_level: level } : {}) })
+    }
+    return out
+  } catch { return null }
+}
+
+/**
+ * Launcher list: live from bootstrap (and cached for the account), or, when the server can't be reached, the
+ * last list this account saw, marked `cached` so the launcher can say so.
+ */
+export async function launcherApps(broker: Broker, fetchFn: Fetch, cache: AppListCache, device?: DeviceCredential):
+  Promise<{ ok: true; value: LauncherWebApp[]; cached?: true } | Extract<SessionResult, { ok: false }>> {
+  const r = await loadSession(broker, fetchFn, device)
+  if (r.ok) {
+    try { cache.write(appCacheText(r.value.account.id, r.value.apps)) } catch { /* read-only home: live list still shown */ }
+    return { ok: true, value: r.value.apps.map(({ id, name, offline_level }) => ({ id, name, ...(offline_level ? { offline_level } : {}) })) }
+  }
+  if (r.error !== 'offline' && r.error !== 'server_error') return r
+  const st = await broker('Status')
+  const accounts = (st.ok && Array.isArray(st.value) ? st.value : []) as { id: string; state?: string }[]
+  const acct = accounts.find((a) => a.state === 'signed_in') ?? accounts[0]
+  let text: string | null = null
+  try { text = cache.read() } catch { /* no cache */ }
+  const apps = acct ? cachedApps(text, acct.id) : null
+  return apps ? { ok: true, value: apps, cached: true } : r
+}
+
 /** worksuite:// link → web_url via /desktop/v1/links/resolve (null if the server can't place it). */
 export async function resolveLink(s: Session, link: string, fetchFn: Fetch, device?: DeviceCredential): Promise<string | null> {
   try {
