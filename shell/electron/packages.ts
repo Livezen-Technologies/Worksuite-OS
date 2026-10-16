@@ -1,6 +1,8 @@
 // App Center → lk.worksuite.PackageService1 on the system bus. busctl/gdbus with fixed arguments; polkit prompts
 // for admin rights through the session's polkit agent (interactive authorization).
 import { execFile, spawn } from 'node:child_process'
+import { lstatSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
 
 export const NAME = 'lk.worksuite.PackageService1'
 export const PATH = '/lk/worksuite/PackageService1'
@@ -70,10 +72,95 @@ export function packageClient(exec: Exec = realExec) {
       const r = await call(exec, 'InstallUpdateNow', '', [])
       return r.ok ? { ok: true, value: true } : r
     },
+    /** WSOS-APT-006: the service's State property ('interrupted' = dpkg was interrupted and needs Repair). No polkit. */
+    async serviceState(): Promise<Reply<'idle' | 'busy' | 'interrupted'>> {
+      const r = await exec('busctl', ['--system', '--json=short', 'get-property', NAME, PATH, NAME, 'State'])
+      if (r.code !== 0) return { ok: false, error: failure(r.stderr) }
+      try {
+        const v = (JSON.parse(r.stdout) as { data?: unknown }).data
+        return v === 'idle' || v === 'busy' || v === 'interrupted' ? { ok: true, value: v } : { ok: false, error: 'failed' }
+      } catch { return { ok: false, error: 'failed' } }
+    },
+    /** Repair (§9.2): dpkg --configure -a, then apt-get -f install; polkit lk.worksuite.repair. */
+    async repair(): Promise<Reply<string>> {
+      const r = await call(exec, 'Repair', '', [])
+      return r.ok ? { ok: true, value: String(r.value[0]) } : r
+    },
     async applyUpdate(): Promise<Reply<string>> {
       const r = await call(exec, 'ApplyUpdate', 'sa{sv}', ['', '0'])
       return r.ok ? { ok: true, value: String(r.value[0]) } : r
     },
+    /** App Center catalog from the server through the package service (WSOS-APP-001). */
+    catalog: (): Promise<Reply<unknown>> => jsonCall(exec, 'GetCatalog', '', []),
+    // Local .deb (WSOS-APT-005): preview stages and checks; install needs the preview token and an admin password.
+    localDebPreview: (path: string): Promise<Reply<unknown>> => (ABS.test(path) && path.endsWith('.deb') ? jsonCall(exec, 'PreviewLocalDeb', 's', [path]) : bad()),
+    localDebInstall: (token: string): Promise<Reply<string>> => (/^[0-9a-f]{64}$/.test(token) ? jobCall(exec, 'InstallLocalDeb', 's', [token]) : bad()),
+    // Flatpak (WSOS-FLP-003/004): system side.
+    appPermissions: (catalogId: string): Promise<Reply<unknown>> => (FLATPAK_ID.test(catalogId) ? jsonCall(exec, 'GetAppPermissions', 's', [catalogId]) : bad()),
+    resetAppPermissions: (catalogId: string): Promise<Reply<string>> => (FLATPAK_ID.test(catalogId) ? jobCall(exec, 'ResetAppPermissions', 's', [catalogId]) : bad()),
+    pruneRuntimes: (): Promise<Reply<string>> => jobCall(exec, 'PruneRuntimes', '', []),
+    // Offline .wsupdate bundles (WSOS-AUP-010).
+    bundleInspect: (path: string): Promise<Reply<unknown>> => (ABS.test(path) && path.endsWith('.wsupdate') ? jsonCall(exec, 'InspectBundle', 's', [path]) : bad()),
+    bundleInstall: (path: string): Promise<Reply<string>> => (ABS.test(path) && path.endsWith('.wsupdate') ? jobCall(exec, 'InstallBundle', 's', [path]) : bad()),
+  }
+}
+
+const ABS = /^\/[^\0\n]{1,4000}$/
+const FLATPAK_ID = /^flatpak:[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}$/
+const bad = async <T>(): Promise<Reply<T>> => ({ ok: false, error: 'invalid_argument' })
+async function jsonCall(exec: Exec, member: string, sig: string, args: string[]): Promise<Reply<unknown>> {
+  const r = await call(exec, member, sig, args)
+  if (!r.ok) return r
+  try { return { ok: true, value: JSON.parse(String(r.value[0])) } } catch { return { ok: false, error: 'failed' } }
+}
+async function jobCall(exec: Exec, member: string, sig: string, args: string[]): Promise<Reply<string>> {
+  const r = await call(exec, member, sig, args)
+  return r.ok ? { ok: true, value: String(r.value[0]) } : r
+}
+
+/** Per-user Flatpak state the root service must not touch (WSOS-FLP-003): the portal permission store, user
+ *  overrides and ~/.var/app/<id>. Runs as the logged-in user. */
+export function flatpakUserClient(exec: Exec = realExec, home = process.env.HOME ?? '') {
+  const appId = (catalogId: string) => (FLATPAK_ID.test(catalogId) ? catalogId.slice('flatpak:'.length) : null)
+  return {
+    async resetUserPermissions(catalogId: string): Promise<Reply<true>> {
+      const id = appId(catalogId)
+      if (!id) return bad()
+      const a = await exec('flatpak', ['permission-reset', id])
+      const b = await exec('flatpak', ['override', '--user', '--reset', id])
+      return a.code === 0 && b.code === 0 ? { ok: true, value: true } : { ok: false, error: (a.stderr || b.stderr).trim().split('\n')[0] || 'failed' }
+    },
+    /** Delete ~/.var/app/<id> (settings, cache and files the app keeps for itself). Never follows a link. */
+    removeAppData(catalogId: string): Reply<boolean> {
+      const id = appId(catalogId)
+      if (!id || !home.startsWith('/')) return { ok: false, error: 'invalid_argument' }
+      const dir = join(home, '.var', 'app', id)
+      let st
+      try { st = lstatSync(dir) } catch { return { ok: true, value: false } }
+      if (!st.isDirectory() || st.isSymbolicLink()) return { ok: false, error: 'invalid_argument' }
+      rmSync(dir, { recursive: true, force: true })
+      return { ok: true, value: true }
+    },
+  }
+}
+
+/** worksuite-appimage (per-user AppImage manager in the package service, WSOS-AIM-001…004) with fixed arguments. */
+export function appimageClient(exec: Exec = realExec, bin = '/usr/bin/worksuite-appimage') {
+  const ID = /^[0-9a-f]{16}$/
+  const run = async (args: string[]): Promise<Reply<unknown>> => {
+    const r = await exec(bin, args)
+    try {
+      const out = JSON.parse(r.stdout.trim().split('\n').pop() ?? '') as { ok: boolean; value?: unknown; code?: string; error?: string }
+      return out.ok ? { ok: true, value: out.value } : { ok: false, error: out.error ?? out.code ?? 'failed' }
+    } catch { return { ok: false, error: /ENOENT|not found/i.test(r.stderr) ? 'service_unavailable' : 'failed' } }
+  }
+  return {
+    list: () => run(['list']),
+    import: (path: string, origin = '') => (ABS.test(path) && /\.appimage$/i.test(path) && !/[\r\n]/.test(origin) ? run(['import', path, '--origin', origin]) : bad()),
+    approve: (id: string) => (ID.test(id) ? run(['approve', id]) : bad()),
+    remove: (id: string) => (ID.test(id) ? run(['remove', id]) : bad()),
+    update: (id: string, path: string) => (ID.test(id) && ABS.test(path) && /\.appimage$/i.test(path) ? run(['update', id, path]) : bad()),
+    launch: (id: string) => (ID.test(id) ? run(['run', id]) : bad()),
   }
 }
 

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Login – choose user</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #FFFFFF; background: radial-gradient(circle at 78% 22%, rgba(24,212,240,0.22) 0%, transparent 38%), radial-gradient(circle at 18% 80%, rgba(31,107,255,0.35) 0%, transparent 45%), linear-gradient(160deg, #0B2254 0%, #061029 60%, #030816 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px">
+<div style="position: absolute; top: 28px; left: 40px; right: 40px; display: flex; justify-content: space-between; font-size: 14px; color: rgba(255,255,255,0.85)">
+<span>Thu 15 Oct · 18:07</span>
+<span>English (US)</span>
+</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 600">Who's signing in?</h1>
+<div style="display: flex; gap: 28px">
+<sc-for list="{{users}}" as="u" hint-placeholder-count="4">
+<a href="Login.dc.html" style="width: 168px; box-sizing: border-box; padding: 24px 12px 20px; border-radius: 18px; background: {{u.bg}}; border: 1px solid {{u.border}}; display: flex; flex-direction: column; align-items: center; gap: 14px; color: #FFFFFF; text-decoration: none">
+<span style="width: 96px; height: 96px; border-radius: 50%; background: {{u.color}}; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 600">{{u.initials}}</span>
+<span style="font-size: 16px; font-weight: 600">{{u.name}}</span>
+<span style="font-size: 12px; color: rgba(255,255,255,0.65)">{{u.note}}</span>
+</a>
+</sc-for>
+</div>
+<div style="position: absolute; bottom: 32px; right: 40px; display: flex; gap: 10px">
+<button aria-label="Accessibility" style="all: unset; width: 44px; height: 44px; border-radius: 12px; background: rgba(8,20,48,0.5); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="4.5" r="1.5"></circle><path d="M5 8l7 1.5L19 8"></path><path d="M12 9.5v5l-3 6"></path><path d="M12 14.5l3 6"></path></svg></button>
+<button aria-label="Power options" style="all: unset; width: 44px; height: 44px; border-radius: 12px; background: rgba(8,20,48,0.5); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"></path><path d="M6.3 7.3a8 8 0 1 0 11.4 0"></path></svg></button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const U = [['[Your Name]','YN','linear-gradient(135deg,#1F6BFF,#18D4F0)','Last signed in today',true],['[User 2]','U2','linear-gradient(135deg,#7A4FE0,#E0559B)','Signed in',false],['Guest','G','rgba(255,255,255,0.18)','No password',false],['Other user','+','rgba(255,255,255,0.08)','Enter username',false]];
+    const users = U.map(u => ({ name: u[0], initials: u[1], color: u[2], note: u[3],
+      bg: u[4] ? 'rgba(31,107,255,0.2)' : 'rgba(8,20,48,0.45)', border: u[4] ? 'rgba(127,178,255,0.6)' : 'rgba(255,255,255,0.1)' }));
+    return { users };
+  }
+}
+</script>
+</body>
+</html>

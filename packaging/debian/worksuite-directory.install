@@ -1,0 +1,13 @@
+services/directory/src usr/lib/worksuite/directory/
+services/directory/package.json usr/lib/worksuite/directory/
+services/directory/bin/worksuite-pam-directory usr/libexec/worksuite/
+services/directory/pam/worksuite-directory usr/share/pam-configs/
+services/directory/systemd/worksuite-breakglass-rotate.service usr/lib/systemd/system/
+services/directory/systemd/worksuite-breakglass-rotate.timer usr/lib/systemd/system/
+services/directory/systemd/worksuite-directory-greeter.service usr/lib/systemd/system/
+services/directory/systemd/worksuite-directory-greeter.timer usr/lib/systemd/system/
+services/directory/README.md usr/share/doc/worksuite-directory/
+security/apparmor/worksuite-directory etc/apparmor.d/
+services/directory/smartcard/worksuite-smartcard usr/share/pam-configs/
+services/directory/smartcard/pam_pkcs11.conf usr/share/worksuite/smartcard/
+services/directory/smartcard/worksuite-smartcard-setup usr/sbin/

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite Drive
+GenericName=Drive
+Comment=Files and folders in WorkSuite Drive
+Exec=worksuite-app drive
+TryExec=worksuite-app
+Icon=worksuite-drive
+Terminal=false
+Categories=Office;Network;
+Keywords=worksuite;files;storage;cloud;
+StartupNotify=true
+StartupWMClass=worksuite-drive

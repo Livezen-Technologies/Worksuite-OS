@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { InstallerProps } from './types'
 import CIcon from '../components/CIcon'
 import { LogoMark } from '../components/Logo'
+import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 
 const STEPS = ['Language', 'Keyboard', 'Time zone', 'Disk', 'Encryption', 'Account', 'Install', 'Done'] as const
 const DISKS = [
@@ -188,10 +189,8 @@ export default function Installer({ onDone }: InstallerProps) {
 
           {step === 6 && (
             <div className="flex flex-col gap-3" aria-live="polite">
-              <div className="h-2.5 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label="Install progress" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
-                <div className="h-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />
-              </div>
-              <div className="text-sm text-slate-700">{progress}% · {LOG[Math.min(LOG.length - 1, Math.floor(progress / (100 / LOG.length)))]}</div>
+              <AnimatedProgress value={progress} label="Install progress" height={10} trackColor="#E2E8F0" tone={progress >= 100 ? 'success' : 'default'} />
+              <div className="text-sm text-slate-700"><CountUp value={progress} /> · {LOG[Math.min(LOG.length - 1, Math.floor(progress / (100 / LOG.length)))]}</div>
             </div>
           )}
 

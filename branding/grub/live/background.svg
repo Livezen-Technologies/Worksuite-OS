@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <!-- WorkSuite OS boot menu (design: canvas "WorkSuite OS Boot & Install", Boot menu). GRUB draws the selection,
+       the row images (icons/*.png) and the countdown on top; coordinates match live-theme/theme.txt. -->
+  <defs>
+    <radialGradient id="bg" cx="640" cy="240" r="896" gradientUnits="userSpaceOnUse" gradientTransform="translate(640 240) scale(1 0.786) translate(-640 -240)">
+      <stop offset="0" stop-color="#12306B"/><stop offset="0.55" stop-color="#0A1A3D"/><stop offset="1" stop-color="#060E22"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="24" stdDeviation="30" flood-color="#000" flood-opacity="0.45"/></filter>
+  </defs>
+  <rect width="1280" height="800" fill="url(#bg)"/>
+  <g transform="translate(604 96) scale(1.2)">
+    <rect x="20" y="0" width="40" height="40" rx="3" fill="#1F6BFF"/><rect x="20" y="20" width="20" height="20" fill="#0A1A3D"/>
+    <rect x="0" y="20" width="20" height="20" rx="3" fill="#18D4F0"/><rect x="20" y="40" width="20" height="20" rx="3" fill="#18D4F0"/>
+  </g>
+  <text x="640" y="232" text-anchor="middle" font-family="IBM Plex Sans" font-weight="700" font-size="44" letter-spacing="-0.88" fill="#E8EEFA">WorkSuite OS</text>
+  <text x="640" y="262" text-anchor="middle" font-family="IBM Plex Mono" font-size="13" fill="#8FA3C8">1.0 <tspan fill="#3D5280">/</tspan> amd64 <tspan fill="#3D5280">/</tspan> built @DATE@</text>
+  <rect x="380" y="284" width="520" height="220" rx="16" fill="#0E2048" fill-opacity="0.72" stroke="#7FB2FF" stroke-opacity="0.16" filter="url(#shadow)"/>
+  <rect x="402" y="427.5" width="476" height="1" fill="#7FB2FF" fill-opacity="0.12"/>
+  <g transform="translate(461 527)" fill="none" stroke="#5FD39A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 1l5.3 2v4c0 3.3-2.3 5.3-5.3 6-3-.7-5.3-2.7-5.3-6V3z" transform="scale(1.2)"/><path d="M6 8l1.4 1.4 2.7-2.7" transform="scale(1.2)"/>
+  </g>
+  <text x="485" y="543" font-family="IBM Plex Sans" font-size="13" fill="#8FA3C8">Nothing on your disk changes until you confirm in the installer.</text>
+  <rect y="736" width="1280" height="64" fill="#040A1A" fill-opacity="0.5"/>
+  <rect y="736" width="1280" height="1" fill="#7FB2FF" fill-opacity="0.1"/>
+  <g font-family="IBM Plex Sans" font-size="13" fill="#8FA3C8">
+    <rect x="322.5" y="757.5" width="38" height="21" rx="5" fill="none" stroke="#3D5280"/><text x="341.5" y="772" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">↑ ↓</text><text x="368" y="772">Select</text>
+    <rect x="444.5" y="757.5" width="46" height="21" rx="5" fill="none" stroke="#3D5280"/><text x="467.5" y="772" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">Enter</text><text x="498" y="772">Start</text>
+    <rect x="570.5" y="757.5" width="22" height="21" rx="5" fill="none" stroke="#3D5280"/><text x="581.5" y="772" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">E</text><text x="600" y="772">Edit entry</text>
+    <rect x="698.5" y="757.5" width="22" height="21" rx="5" fill="none" stroke="#3D5280"/><text x="709.5" y="772" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#C9D6EE">C</text><text x="728" y="772">Command line</text>
+  </g>
+</svg>

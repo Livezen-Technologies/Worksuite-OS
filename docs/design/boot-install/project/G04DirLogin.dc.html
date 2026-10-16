@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Directory sign-in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #FFFFFF; background: radial-gradient(circle at 78% 22%, rgba(24,212,240,0.22) 0%, transparent 38%), radial-gradient(circle at 18% 80%, rgba(31,107,255,0.35) 0%, transparent 45%), linear-gradient(160deg, #0B2254 0%, #061029 60%, #030816 100%); display: flex; align-items: center; justify-content: center">
+<div style="position: absolute; top: 28px; left: 40px; right: 40px; display: flex; justify-content: space-between; font-size: 14px; color: rgba(255,255,255,0.85)">
+<span style="display: flex; align-items: center; gap: 8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h.01M15 10h.01M9 14h.01M15 14h.01"></path></svg>[Company] · managed device</span>
+<span style="display: flex; align-items: center; gap: 8px; color: {{netColor}}"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{netColor}}"></span>{{net}}</span>
+</div>
+<div style="width: 420px; box-sizing: border-box; padding: 32px; border-radius: 20px; background: rgba(8,20,48,0.72); border: 1px solid {{cardBorder}}; backdrop-filter: blur(16px); display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+<span style="width: 72px; height: 72px; border-radius: 50%; background: {{avatarBg}}; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 600">{{avatar}}</span>
+<h1 style="margin: 4px 0 0; font-size: 22px; font-weight: 700">{{title}}</h1>
+<span style="font-size: 13px; color: rgba(255,255,255,0.7); text-align: center; line-height: 1.45">{{sub}}</span>
+</div>
+<sc-if value="{{isDir}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="du" style="font-size: 12px; color: #C9D6EE">Work email or username</label>
+<input id="du" value="alex@[company].com" style="height: 46px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); background: rgba(4,10,26,0.6); color: #FFFFFF; font: inherit">
+</div>
+</sc-if>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="dp" style="font-size: 12px; color: #C9D6EE">{{pwLabel}}</label>
+<input id="dp" type="password" style="height: 46px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); background: rgba(4,10,26,0.6); color: #FFFFFF; font: inherit">
+</div>
+<sc-if value="{{isBreak}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="dr" style="font-size: 12px; color: #C9D6EE">Reason (sent to the audit log)</label>
+<input id="dr" value="Directory down, restoring network" style="height: 46px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); background: rgba(4,10,26,0.6); color: #FFFFFF; font: inherit">
+</div>
+</sc-if>
+<sc-if value="{{note}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; background: {{noteBg}}; border: 1px solid {{noteBorder}}; font-size: 12px; color: #E8EEFA; line-height: 1.45">{{note}}</div>
+</sc-if>
+<button style="all: unset; text-align: center; padding: 13px 0; border-radius: 12px; font-size: 15px; font-weight: 600; background: {{ctaBg}}; cursor: pointer">{{cta}}</button>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><a href="#">{{linkA}}</a><a href="#">{{linkB}}</a></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["directory","cached","break-glass"],"default":"directory"},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const m = this.props.mode ?? 'directory';
+    const M = {
+      'directory': { title: 'Sign in to [Company]', sub: 'Use your company directory account.', avatar: '?', avatarBg: 'rgba(255,255,255,0.15)', pwLabel: 'Password', cta: 'Sign in', ctaBg: '#1F6BFF', net: 'Directory reachable', netColor: '#5FD39A', note: '', linkA: 'Forgot password?', linkB: 'Other sign-in options', cardBorder: 'rgba(255,255,255,0.14)' },
+      'cached': { title: 'Alex Perera', sub: 'Can’t reach the company directory. Signing in with the password cached on this device.', avatar: 'AP', avatarBg: 'linear-gradient(135deg,#1F6BFF,#18D4F0)', pwLabel: 'Your last-used password', cta: 'Sign in offline', ctaBg: '#1F6BFF', net: 'Offline · directory unreachable', netColor: '#FFB98A', note: 'Offline sign-in allowed for 6 more days. Connect to the company network before then to keep access.', noteBg: 'rgba(255,159,90,0.1)', noteBorder: 'rgba(255,159,90,0.35)', linkA: 'Use a different account', linkB: 'Break-glass admin', cardBorder: 'rgba(255,159,90,0.35)' },
+      'break-glass': { title: 'Emergency admin access', sub: 'For IT only, when directory sign-in is impossible.', avatar: '!', avatarBg: 'rgba(255,138,122,0.25)', pwLabel: 'One-time break-glass code', cta: 'Unlock as local admin', ctaBg: '#D9452B', net: 'Offline · directory unreachable', netColor: '#FFB98A', note: 'This sign-in is recorded and reported to [Company] IT. The code expires after one use and the session ends in 60 minutes.', noteBg: 'rgba(255,138,122,0.1)', noteBorder: 'rgba(255,138,122,0.4)', linkA: 'Back to normal sign-in', linkB: 'How do I get a code?', cardBorder: 'rgba(255,138,122,0.45)' }
+    }[m];
+    return Object.assign({}, M, { isDir: m === 'directory', isBreak: m === 'break-glass' });
+  }
+}
+</script>
+</body>
+</html>

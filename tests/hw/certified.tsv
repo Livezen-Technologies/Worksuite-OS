@@ -1,0 +1,5 @@
+# Certified hardware list (WSOS-ARM-003, also used for x86). A machine is listed as `certified` only when every gate in
+# tests/hw/gates.tsv for its arch is `pass`, with the probe log kept under evidence. `candidate` rows are being qualified
+# and are not certified. The ARM list starts small: no ARM machine has passed yet, so none is certified.
+# arch   vendor   model   firmware   status   uefi   gpu   wifi   suspend   audio   storage   evidence
+arm64	QEMU	virt (AAVMF)	UEFI	ci-reference	pass	n/a	n/a	n/a	n/a	pass	tests/vm/boot-test.sh (CI only; not a certification)

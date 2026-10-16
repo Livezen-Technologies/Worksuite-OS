@@ -13,6 +13,24 @@
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
   </action>
+  <action id="lk.worksuite.package.install-local">
+    <description>Install a software package from a file</description>
+    <message>Authentication is required to install software from a package file that does not come from an approved repository</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+  <action id="lk.worksuite.package.add-remote">
+    <description>Add a software source</description>
+    <message>Authentication is required to add a Flatpak software source</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
   <action id="lk.worksuite.update.apply">
     <description>Apply system updates</description>
     <message>Authentication is required to install system updates</message>

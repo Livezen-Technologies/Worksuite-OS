@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Device setup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(circle at 78% 22%, rgba(24,212,240,0.3) 0%, transparent 38%), radial-gradient(circle at 18% 80%, rgba(31,107,255,0.45) 0%, transparent 45%), linear-gradient(160deg, #0E2A66 0%, #071330 60%, #040A1A 100%)">
+<div role="dialog" aria-labelledby="hs-t" style="width: 640px; box-sizing: border-box; border-radius: 20px; background: #0F2350; border: 1px solid rgba(127,178,255,0.2); box-shadow: 0 30px 80px rgba(0,0,0,0.6); overflow: hidden">
+<div style="padding: 24px 28px; display: flex; gap: 18px; align-items: center; border-bottom: 1px solid rgba(127,178,255,0.12)">
+<span style="width: 64px; height: 64px; border-radius: 16px; background: rgba(31,107,255,0.18); display: flex; align-items: center; justify-content: center; flex: none"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="10" r="6"></circle><circle cx="12" cy="10" r="2.5"></circle><path d="M8 20h8M12 16v4"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #18D4F0; letter-spacing: 0.08em">NEW DEVICE · USB</span>
+<h2 id="hs-t" style="margin: 0; font-size: 21px; font-weight: 700">Set up Logitech Webcam C920</h2>
+<span style="font-size: 13px; color: #8FA3C8">It works now with basic features. Pick a driver to unlock the rest.</span>
+</div>
+</div>
+<div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{opts}}" as="o" hint-placeholder-count="3">
+<label style="display: flex; gap: 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid {{o.border}}; background: {{o.bg}}; cursor: pointer">
+<input type="radio" name="drv" checked="{{o.on}}" onChange="{{o.pick}}" style="margin: 2px 0 0; width: 18px; height: 18px; accent-color: #1F6BFF">
+<span style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+<span style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600">{{o.title}}<sc-if value="{{o.tag}}" hint-placeholder-val="{{false}}"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 5px; background: {{o.tagBg}}; color: {{o.tagColor}}">{{o.tag}}</span></sc-if></span>
+<span style="font-size: 13px; color: #8FA3C8">{{o.desc}}</span>
+</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8">{{o.size}}</span>
+</label>
+</sc-for>
+<label style="display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 13px; color: #C9D6EE"><input type="checkbox" checked style="width: 16px; height: 16px; accent-color: #1F6BFF">Keep this driver updated automatically</label>
+</div>
+<div style="padding: 14px 20px; background: rgba(4,10,26,0.35); border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: space-between">
+<a href="#" style="font-size: 13px">Install from file…</a>
+<div style="display: flex; gap: 10px">
+<button style="all: unset; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Not now</button>
+<button style="all: unset; padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; cursor: pointer">{{cta}}</button>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { pick: 0 }; }
+  renderVals() {
+    const O = [
+      ['WorkSuite driver','Open source · autofocus, 1080p, built-in mic · signed','4 MB','RECOMMENDED','rgba(95,211,154,0.16)','#5FD39A','Install driver'],
+      ['Logitech driver','From the manufacturer · adds face tracking and the Logitech app','62 MB','PROPRIETARY','rgba(255,159,90,0.16)','#FFB98A','Install driver'],
+      ['Basic only','Use the generic driver already working · 720p, no autofocus','—','','','','Keep basic']
+    ];
+    const cur = this.state.pick;
+    return { cta: O[cur][6], opts: O.map((o, i) => ({ title: o[0], desc: o[1], size: o[2], tag: o[3], tagBg: o[4], tagColor: o[5], on: i === cur,
+      border: i === cur ? '#1F6BFF' : 'rgba(127,178,255,0.14)', bg: i === cur ? 'rgba(31,107,255,0.12)' : 'transparent', pick: () => this.setState({ pick: i }) })) };
+  }
+}
+</script>
+</body>
+</html>

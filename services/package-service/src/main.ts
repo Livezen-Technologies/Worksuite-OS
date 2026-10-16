@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import dbus from 'dbus-next';
 import { busAuthority, loadIntrospection, NAME, serve } from './dbus.ts';
 import { PackageService, type DevicePolicy, type Env, type RunResult } from './service.ts';
-import { Coordinator, type CoordinatorEnv } from './coordinator.ts';
+import { Coordinator, LOCAL_CONFIG, updateHost, type CoordinatorEnv } from './coordinator.ts';
+import { loadCatalog } from './catalog.ts';
 
 const POLICY = '/run/worksuite-device-agent/policy.json';
 const AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';
@@ -37,6 +38,14 @@ export const linuxEnv: Env = {
     const d = '/etc/apt/sources.list.d';
     if (existsSync(d)) for (const f of readdirSync(d)) if (/\.(list|sources)$/.test(f)) files.push([join(d, f), readOr(join(d, f))]);
     return files;
+  },
+  // The Update Center the coordinator uses (policy update_mirror > /etc/worksuite/updates.json > default) is an approved
+  // APT source too, so pointing worksuite.sources at it doesn't lock APT.
+  updateHosts: () => {
+    let local: { update_host?: string } = {};
+    try { local = JSON.parse(readFileSync('/etc/worksuite/updates.json', 'utf8')); } catch { /* defaults */ }
+    const p = linuxEnv.policy() as { update_mirror?: string } | null;
+    return [new URL(updateHost(p?.update_mirror, local.update_host)).host];
   },
   power: () => {
     const base = '/sys/class/power_supply';
@@ -70,6 +79,15 @@ function loadKeys(dir: string): (id: string) => KeyObject | undefined {
 const busctlGet = (args: string[]) => new Promise<string>((resolve) => execFile('busctl', ['--system', 'get-property', ...args], { timeout: 5000 }, (_e, out) => resolve(String(out ?? '').trim())));
 const pkgVersion = (name: string) => { try { return execFileSync('dpkg-query', ['-W', '-f=${Version}', name], { encoding: 'utf8' }).trim() || 'unknown'; } catch { return 'unknown'; } };
 
+const UPDATE_STATUS_DIR = '/run/worksuite-package-service';
+
+/** Point worksuite.sources (deb822) at `repo` (an https …/os/apt URL) and `suite`; keeps Signed-By. */
+export function rewriteSources(text: string, suite: string, repo?: string): string {
+  let next = text.replace(/^Suites:.*$/m, `Suites: ${suite}`);
+  if (repo && /^https:\/\/[A-Za-z0-9.-]+(:\d+)?\/[A-Za-z0-9._/-]*$/.test(repo)) next = next.replace(/^URIs:.*$/m, `URIs: ${repo}`);
+  return next;
+}
+
 export function coordinatorEnv(): CoordinatorEnv {
   return {
     async fetchJson(url) {
@@ -86,11 +104,22 @@ export function coordinatorEnv(): CoordinatorEnv {
     idle: async () => (await busctlGet(['org.freedesktop.login1', '/org/freedesktop/login1', 'org.freedesktop.login1.Manager', 'IdleHint'])) === 'b true',
     // NetworkManager Metered: 1 = yes, 3 = guess-yes.
     metered: async () => /^u [13]$/.test(await busctlGet(['org.freedesktop.NetworkManager', '/org/freedesktop/NetworkManager', 'org.freedesktop.NetworkManager', 'Metered'])),
-    setSuite(suite) {
+    config: () => { try { return JSON.parse(readFileSync(LOCAL_CONFIG, 'utf8')); } catch { return null; } },
+    setSuite(suite, repo) {
       if (!existsSync(WORKSUITE_SOURCES)) return;
       const text = readFileSync(WORKSUITE_SOURCES, 'utf8');
-      const next = text.replace(/^Suites:.*$/m, `Suites: ${suite}`);
+      const next = rewriteSources(text, suite, repo);
       if (next !== text) { writeFileSync(WORKSUITE_SOURCES + '.tmp', next, { mode: 0o644 }); renameSync(WORKSUITE_SOURCES + '.tmp', WORKSUITE_SOURCES); }
+    },
+    // WSOS-UPD-001: the WorkSuite system units must still be active after an update.
+    async healthCheck() {
+      const units = ['worksuite-package-service.service', 'worksuite-device-agent.service', 'greetd.service'];
+      const failed: string[] = [];
+      for (const u of units) {
+        const r = await linuxEnv.runner.run('systemctl', ['is-failed', '--quiet', u]);
+        if (r.code === 0) failed.push(`unit_failed:${u}`);
+      }
+      return failed;
     },
     load: () => { try { return JSON.parse(readFileSync(STATE, 'utf8')); } catch { return { deferrals: {} }; } },
     save: (s) => { mkdirSync('/var/lib/worksuite-package-service', { recursive: true }); writeFileSync(STATE + '.tmp', JSON.stringify(s), { mode: 0o600 }); renameSync(STATE + '.tmp', STATE); },
@@ -109,19 +138,52 @@ export function coordinatorEnv(): CoordinatorEnv {
     },
     reboot: () => new Promise((resolve) => execFile('systemctl', ['reboot'], () => resolve())),
     now: () => Date.now(),
+    // WSOS-AUP-012: signed licence for this device (managed devices only).
+    async licence() {
+      const e = enrollment();
+      return e ? getJson(new URL('/desktop/v1/os/licence', `https://${e.host}`).toString(), { 'x-ws-device': e.token }) : null;
+    },
+    deviceId: () => enrollment()?.deviceId ?? null,
     audit: linuxEnv.audit,
   };
 }
 
+const ARCH = process.arch === 'arm64' ? 'arm64' : 'amd64';
+
+/** Enrolled server and device credential from the device agent; null when unmanaged. */
+function enrollment(): { host: string; token: string; deviceId: string | null } | null {
+  let st: { server?: string; device_id?: string } = {};
+  try { st = JSON.parse(readFileSync(AGENT_STATUS, 'utf8')); } catch { return null; }
+  const token = readOr(DEVICE_TOKEN);
+  return st.server && token ? { host: st.server, token, deviceId: st.device_id ?? null } : null;
+}
+
+async function getJson(url: string, headers: Record<string, string> = {}) {
+  const r = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(30_000), headers: { ...headers, 'x-request-id': randomUUID() } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
 async function main() {
-  const svc = new PackageService(linuxEnv);
+  const releaseKeys = loadKeys(RELEASE_KEYS);
+  const svc = new PackageService({ ...linuxEnv, release: { keys: releaseKeys, arch: ARCH, installed: () => pkgVersion('worksuite-desktop') } });
   await svc.detectInterrupted();          // WSOS-APT-006: surfaced as State=interrupted for the shell
   const bus = dbus.systemBus();
   const coordinator = new Coordinator(coordinatorEnv(), svc);
-  serve(bus, svc, busAuthority(bus), loadIntrospection(XML), coordinator);
+  // WSOS-MDM-001: the device agent reports the coordinator's state in its heartbeat and inventory.
+  coordinator.on('status', (st) => {
+    try {
+      mkdirSync(UPDATE_STATUS_DIR, { recursive: true, mode: 0o755 });
+      writeFileSync(UPDATE_STATUS_DIR + '/update-status.json.tmp', JSON.stringify(st), { mode: 0o644 });
+      renameSync(UPDATE_STATUS_DIR + '/update-status.json.tmp', UPDATE_STATUS_DIR + '/update-status.json');
+    } catch { /* status is informational */ }
+  });
+  serve(bus, svc, busAuthority(bus), loadIntrospection(XML), coordinator, {
+    catalog: () => loadCatalog({ server: enrollment, fetchJson: getJson, arch: ARCH, policy: linuxEnv.policy, runner: linuxEnv.runner, now: Date.now }),
+  });
   coordinator.start();
   await bus.requestName(NAME, dbus.NameFlag.DO_NOT_QUEUE);
   linuxEnv.audit('started', { state: svc.state() });
 }
 
-if (import.meta.main) main().catch((e) => { process.stderr.write(`${e?.stack ?? e}\n`); process.exit(1); });
+if (import.meta.main) main().catch((e) => { process.stdout.write(JSON.stringify({ ts: new Date().toISOString(), service: 'worksuite-package-service', level: 'error', event: 'fatal', error: String(e?.stack ?? e) }) + '\n'); process.exit(1); });

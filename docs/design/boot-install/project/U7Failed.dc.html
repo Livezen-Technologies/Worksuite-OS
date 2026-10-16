@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Update failed, rolled back</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; background: radial-gradient(ellipse 60% 50% at 50% 35%, #2A1A2E 0%, #071330 60%, #040A1A 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px">
+<div style="width: 88px; height: 88px; border-radius: 50%; background: rgba(255,159,90,0.14); box-shadow: 0 0 0 10px rgba(255,159,90,0.05); display: flex; align-items: center; justify-content: center">
+<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#FFB98A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4M3 4v5h5"></path></svg>
+</div>
+<h1 style="margin: 10px 0 0; font-size: 32px; font-weight: 700; letter-spacing: -0.02em">The update couldn't finish</h1>
+<p style="margin: 0; font-size: 16px; color: #C9D6EE; text-align: center; max-width: 560px; line-height: 1.5">We restored WorkSuite OS 1.0 from the snapshot taken before updating. Your files and apps are exactly as you left them.</p>
+<div style="margin-top: 8px; width: 560px; box-sizing: border-box; border-radius: 14px; background: rgba(14,32,72,0.7); border: 1px solid rgba(127,178,255,0.16); overflow: hidden">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+<div style="display: flex; justify-content: space-between; padding: 12px 18px; border-top: {{r.border}}; font-size: 13px"><span style="color: #8FA3C8">{{r.k}}</span><span style="font-family: 'IBM Plex Mono', monospace; color: #E8EEFA">{{r.v}}</span></div>
+</sc-for>
+</div>
+<div style="margin-top: 14px; display: flex; gap: 12px">
+<button style="all: unset; padding: 12px 22px; border-radius: 10px; font-size: 15px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Save report to USB</button>
+<button style="all: unset; padding: 12px 22px; border-radius: 10px; font-size: 15px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Try again tonight</button>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Continue to desktop</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const R = [['Current version','1.0 (restored)'],['Failed at','Updating drivers · 81%'],['Error','WS-UPD-0x1F · driver signature mismatch']];
+    return { rows: R.map((r, i) => ({ k: r[0], v: r[1], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })) };
+  }
+}
+</script>
+</body>
+</html>

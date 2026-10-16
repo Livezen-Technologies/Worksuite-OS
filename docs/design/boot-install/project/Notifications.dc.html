@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Notification center</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(circle at 78% 22%, rgba(24,212,240,0.3) 0%, transparent 38%), radial-gradient(circle at 18% 80%, rgba(31,107,255,0.45) 0%, transparent 45%), linear-gradient(160deg, #0E2A66 0%, #071330 60%, #040A1A 100%)">
+
+<div role="status" style="position: absolute; left: 24px; top: 24px; width: 380px; box-sizing: border-box; padding: 16px; border-radius: 16px; background: rgba(10,24,56,0.94); border: 1px solid rgba(127,178,255,0.2); box-shadow: 0 20px 50px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; gap: 12px">
+<span style="width: 40px; height: 40px; border-radius: 10px; background: #7A4FE0; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #FFFFFF; flex: none">C</span>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+<div style="display: flex; justify-content: space-between"><span style="font-size: 14px; font-weight: 600">[Teammate] · Design team</span><span style="font-size: 12px; color: #8FA3C8">now</span></div>
+<span style="font-size: 13px; color: #C9D6EE; line-height: 1.4">Can you share the installer screens before the 6:30 review?</span>
+</div>
+</div>
+<div style="display: flex; gap: 8px">
+<input aria-label="Reply" placeholder="Reply…" style="flex: 1; min-width: 0; height: 36px; box-sizing: border-box; padding: 0 12px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.2); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 13px">
+<button style="all: unset; padding: 0 14px; height: 36px; border-radius: 9px; background: #1F6BFF; font-size: 13px; font-weight: 600; color: #FFFFFF; display: flex; align-items: center; cursor: pointer">Send</button>
+</div>
+</div>
+<span style="position: absolute; left: 24px; top: 200px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: rgba(255,255,255,0.5)">↑ toast, auto-hides after 5 s</span>
+
+<aside aria-label="Notifications" style="position: absolute; top: 12px; right: 12px; bottom: 68px; width: 400px; box-sizing: border-box; padding: 18px; border-radius: 20px; background: rgba(10,24,56,0.94); border: 1px solid rgba(127,178,255,0.18); box-shadow: 0 24px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 14px">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{quick}}" as="q" hint-placeholder-count="6">
+<button aria-pressed="{{q.on}}" style="all: unset; box-sizing: border-box; padding: 12px; border-radius: 12px; background: {{q.bg}}; display: flex; flex-direction: column; gap: 8px; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{q.stroke}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{q.icon}}"></path></svg>
+<span style="font-size: 12px; font-weight: 500; color: {{q.color}}">{{q.label}}</span>
+</button>
+</sc-for>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 600">Notifications</h2>
+<button style="all: unset; font-size: 13px; color: #7FB2FF; cursor: pointer">Clear all</button>
+</div>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 8px; overflow: hidden">
+<sc-for list="{{notes}}" as="n" hint-placeholder-count="5">
+<div style="display: flex; gap: 12px; padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(127,178,255,0.1)">
+<span style="width: 34px; height: 34px; border-radius: 9px; background: {{n.color}}; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: #FFFFFF; flex: none">{{n.initial}}</span>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+<div style="display: flex; justify-content: space-between"><span style="font-size: 13px; font-weight: 600">{{n.title}}</span><span style="font-size: 11px; color: #8FA3C8">{{n.time}}</span></div>
+<span style="font-size: 13px; color: #C9D6EE; line-height: 1.4">{{n.body}}</span>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid rgba(127,178,255,0.12)">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9D6EE" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2"></path></svg>
+<input type="range" aria-label="Brightness" value="70" style="flex: 1; accent-color: #1F6BFF">
+</div>
+</aside>
+
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: 56px; box-sizing: border-box; padding: 0 16px; background: rgba(6,14,34,0.82); border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; gap: 8px">
+<span style="width: 40px; height: 40px; border-radius: 10px; background: rgba(31,107,255,0.25); display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 60 60" aria-hidden="true"><rect x="20" y="0" width="40" height="40" rx="4" fill="#1F6BFF"></rect><rect x="20" y="20" width="20" height="20" fill="#0A1A3D"></rect><rect x="0" y="20" width="20" height="20" rx="4" fill="#18D4F0"></rect><rect x="20" y="40" width="20" height="20" rx="4" fill="#18D4F0"></rect></svg></span>
+<span style="margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.12); font-size: 13px">18:11
+<span style="min-width: 20px; height: 20px; border-radius: 10px; background: #1F6BFF; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700">5</span></span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const Q = [['Wi-Fi','M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0',true],['Bluetooth','M7 7l10 10-5 5V2l5 5L7 17',true],['Do not disturb','M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z',false],['Night light','M12 3v2M12 19v2M5 12H3M21 12h-2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',false],['Airplane','M2 13l9-3V4a1 1 0 0 1 2 0v6l9 3v2l-9-2v5l3 2v1l-4-1-4 1v-1l3-2v-5l-9 2z',false],['Screenshot','M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3',false]];
+    const quick = Q.map(q => ({ label: q[0], icon: q[1], on: q[2], bg: q[2] ? '#1F6BFF' : 'rgba(255,255,255,0.06)', stroke: q[2] ? '#FFFFFF' : '#C9D6EE', color: q[2] ? '#FFFFFF' : '#E8EEFA' }));
+    const N = [['Mail','#D9572B','3 new messages','Weekly report, Invoice #[NUMBER], and 1 more','5m'],['System update','#1F6BFF','WorkSuite OS 1.0.1 ready','Restart to finish installing security fixes.','20m'],['Calendar','#0E8FA8','Design review at 18:30','In 19 minutes · Room 3','25m'],['Drive','#B7791F','Sync complete','128 files are up to date.','1h'],['Battery','#2E9E6A','Fully charged','You can unplug your charger.','2h']];
+    const notes = N.map(n => ({ title: n[0] + ' · ' + n[2], color: n[1], initial: n[0][0], body: n[3], time: n[4] }));
+    return { quick, notes };
+  }
+}
+</script>
+</body>
+</html>

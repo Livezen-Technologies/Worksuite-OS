@@ -3,17 +3,36 @@
 set -eu
 # WSOS-SEC-010: no SSH server.
 if dpkg -s openssh-server >/dev/null 2>&1; then echo "openssh-server must not be installed" >&2; exit 1; fi
-# WSOS-AUTH-001/002: greetd with the WorkSuite session as default; no autologin.
+# WSOS-AUTH-001/002: greetd with the WorkSuite session as default; no autologin. The greeter wrapper shows the
+# abnormal-session notice before gtkgreet (WSOS-SES-006).
 mkdir -p /etc/greetd
 cat > /etc/greetd/config.toml <<'CONF'
 [terminal]
 vt = 7
 [default_session]
-command = "cage -s -- gtkgreet -c /usr/bin/worksuite-session"
+command = "worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-session"
 user = "_greetd"
 CONF
 systemctl enable greetd.service worksuite-device-agent.service worksuite-package-service.service worksuite-boot-marker.service
 systemctl set-default graphical.target
+# Seat access through logind (pam_systemd gives the active session the seat). seatd, when present, is tried first by
+# libseat and only admits the video group, which locked out the greeter (_greetd) and every user: no display at all.
+if [ -e /usr/lib/systemd/system/seatd.service ]; then systemctl disable seatd.service >/dev/null 2>&1 || true; systemctl mask seatd.service; fi
+# Smart-card sign-in is off by default (worksuite-smartcard-setup); libpam-pkcs11's card event manager fails
+# without a reader and is not needed for pam_pkcs11 sign-in, so it stays disabled.
+if [ -e /usr/lib/systemd/system/pkcs11-eventmgr.service ]; then systemctl disable pkcs11-eventmgr.service >/dev/null 2>&1 || true; fi
 # WSOS-INS-007: no machine-id baked into the image.
 : > /etc/machine-id
 rm -f /var/lib/dbus/machine-id
+# WSOS-AUTH-004: the pam_faillock profiles from worksuite-session must be active.
+grep -q pam_faillock.so /etc/pam.d/common-auth || { echo "pam_faillock is not enabled in common-auth" >&2; exit 1; }
+# WSOS-INT-009: the sign-in password unlocks the login keyring (libpam-gnome-keyring's pam-auth-update profile).
+grep -q pam_gnome_keyring.so /etc/pam.d/common-auth && grep -q pam_gnome_keyring.so /etc/pam.d/common-session || { echo "pam_gnome_keyring is not enabled" >&2; exit 1; }
+# Boot splash: the WorkSuite Plymouth theme, with the DRM/framebuffer drivers in the initramfs (WSOS-BOOT splash).
+plymouth-set-default-theme worksuite
+grep -qx 'FRAMEBUFFER=y' /etc/initramfs-tools/conf.d/worksuite-splash || { echo "initramfs splash config missing" >&2; exit 1; }
+[ -x /usr/share/initramfs-tools/hooks/worksuite-plymouth-fonts ] || { echo "splash font initramfs hook missing" >&2; exit 1; }
+# The same splash on shutdown and restart: plymouth ships these statically wanted by poweroff/reboot.target.
+for t in poweroff reboot; do
+  [ -e /usr/lib/systemd/system/$t.target.wants/plymouth-$t.service ] || { echo "plymouth-$t.service not wanted by $t.target" >&2; exit 1; }
+done

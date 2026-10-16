@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+  # pam_faillock reads its thresholds from here (WSOS-AUTH-004); the device agent rewrites it from policy. Never
+  # overwritten once present, and it must exist before the PAM profiles name it.
+  install -d -m 0755 /etc/worksuite
+  [ -e /etc/worksuite/faillock.conf ] || install -m 0644 /usr/share/worksuite/faillock.conf /etc/worksuite/faillock.conf
+  # Device PIN / security-key sign-in (Settings > Users): verifiers stay root-only; the PIN and u2f PAM profiles are
+  # "Default: no" and worksuite-signin turns them on only once someone sets a PIN or adds a key.
+  install -d -m 0755 /var/lib/worksuite /var/lib/worksuite/signin
+  install -d -m 0700 /var/lib/worksuite/signin/pin
+  pam-auth-update --package
+  if [ -d /run/systemd/system ]; then systemctl enable --now worksuite-signin.socket >/dev/null 2>&1 || true; fi
+  if command -v systemd-tmpfiles >/dev/null 2>&1; then systemd-tmpfiles --create /usr/lib/tmpfiles.d/worksuite-session.conf || true; fi
+fi
+#DEBHELPER#
+exit 0

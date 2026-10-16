@@ -1,0 +1,3 @@
+#!/bin/sh
+# pam_exec target (see /usr/share/pam-configs/worksuite-directory). The password arrives on stdin only.
+exec /usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/directory/src/main.ts "$@"

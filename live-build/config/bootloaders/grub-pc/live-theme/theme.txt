@@ -1,51 +1,47 @@
+# WorkSuite OS live boot menu, 1280x800 (design: "WorkSuite OS Boot & Install" › Boot menu).
+# splash.png and icons/*.png are rendered by branding/grub/live/render.sh at build time; the artwork is centred
+# (padding scale) so these offsets from the centre hold at any resolution.
 desktop-image: "../splash.png"
-title-color: "#ffffff"
-title-font: "Unifont Regular 16"
-title-text: "Live Boot Menu with GRUB"
-message-font: "Unifont Regular 16"
+desktop-image-scale-method: "padding"
+desktop-color: "#060E22"
+title-text: ""
+message-font: "IBM Plex Sans Regular 16"
+message-color: "#E8EEFA"
 terminal-font: "Unifont Regular 16"
 
-#help bar at the bottom
-+ label {
-        top = 100%-50
-        left = 0
-        width = 100%
-        height = 20
-        text = "@KEYMAP_SHORT@"
-        align = "center"
-        color = "#ffffff"
-	font = "Unifont Regular 16"
-}
-
-#boot menu
+# Each row is an image (icon, title, subtitle); GRUB draws the blue selection pill behind it. The pill is
+# icon_width + 95 px wide (GRUB), so 400 gives the design's ~500. Entry titles are only the right-hand hint
+# ("Enter", "›") drawn after the image.
 + boot_menu {
-        left = 10%
-        width = 80%
-        top = 52%
-        height = 48%-80
-        item_color = "#a8a8a8"
-	item_font = "Unifont Regular 16"
-        selected_item_color= "#ffffff"
-	selected_item_font = "Unifont Regular 16"
-        item_height = 16
+        left = 50%-250
+        top = 50%-106
+        width = 500
+        height = 190
+        icon_width = 400
+        icon_height = 44
+        item_icon_space = 0
+        item_height = 44
         item_padding = 0
-        item_spacing = 4
-	icon_width = 0
-	icon_heigh = 0
-	item_icon_space = 0
+        item_spacing = 24
+        item_font = "IBM Plex Mono Regular 13"
+        item_color = "#8FA3C8"
+        selected_item_font = "IBM Plex Mono Regular 13"
+        selected_item_color = "#FFFFFF"
+        selected_item_pixmap_style = "select_*.png"
+        scrollbar = false
 }
 
-#progress bar
+# Countdown at the end of the footer: the bar is footer-coloured, only its text shows ("Auto-start in 10s").
 + progress_bar {
         id = "__timeout__"
-        left = 15%
-        top = 100%-80
-        height = 16
-        width = 70%
-        font = "Unifont Regular 16"
-        text_color = "#000000"
-        fg_color = "#ffffff"
-        bg_color = "#a8a8a8"
-        border_color = "#ffffff"
-        text = "@TIMEOUT_NOTIFICATION_LONG@"
+        left = 50%+173
+        top = 50%+357
+        width = 140
+        height = 20
+        font = "IBM Plex Mono Regular 13"
+        text_color = "#C9D6EE"
+        fg_color = "#050C22"
+        bg_color = "#050C22"
+        border_color = "#050C22"
+        text = "Auto-start in %ds"
 }

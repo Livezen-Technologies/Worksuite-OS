@@ -1,0 +1,140 @@
+#!/bin/sh
+# Reinstall WorkSuite OS from the recovery image (SRS §9.2-R6). Installed as /usr/libexec/worksuite/worksuite-reinstall,
+# run as root (pkexec) from the recovery Reset screen.
+#
+#   worksuite-reinstall --mode keep  --disk NAME [--target DEV | --target-dir DIR] [--source SQUASHFS] [--no-bootloader]
+#   worksuite-reinstall --mode erase --disk NAME --confirm NAME
+#
+# keep   Reimages the system in place from the squashfs: every top-level entry of the root file system is replaced
+#        except /home and lost+found. Accounts, host name, fstab/crypttab (so the /home LV or partition and its LUKS
+#        still unlock and mount) and saved networks are carried over. A separate /home is never opened, mounted,
+#        formatted or written; /home inside the root file system is never touched. Nothing is erased.
+# erase  Needs the disk name typed again (--confirm must equal --disk), then hands over to the installer's erase flow
+#        (Calamares), which asks for the same typed confirmation before partitioning.
+#
+# keep runs only from the recovery image or the live ISO: it refuses to reimage the root file system it is running on.
+# Exit codes: 0 done, 2 usage, 3 confirmation mismatch, 4 no recovery image, 5 no installed system found, 6 failed,
+#             7 target is the running system.
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+mode='' disk='' confirm='' target='' target_dir='' source='' bootloader=1
+die() { printf 'worksuite-reinstall: %s\n' "$2" >&2; exit "$1"; }
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --mode) mode=${2:-}; shift 2 ;;
+        --disk) disk=${2:-}; shift 2 ;;
+        --confirm) confirm=${2:-}; shift 2 ;;
+        --target) target=${2:-}; shift 2 ;;
+        --target-dir) target_dir=${2:-}; shift 2 ;;
+        --source) source=${2:-}; shift 2 ;;
+        --no-bootloader) bootloader=0; shift ;;
+        *) die 2 "unknown argument: $1" ;;
+    esac
+done
+[ -n "$disk" ] || die 2 "--disk is required"
+case "$disk" in *[!A-Za-z0-9._-]*) die 2 "bad disk name" ;; esac
+
+case "$mode" in
+    erase)
+        # Typed confirmation, checked here as well as in the screen: an erase never starts without it.
+        [ "$confirm" = "$disk" ] || die 3 "confirmation does not match the disk name"
+        exec "${WORKSUITE_INSTALLER:-calamares}" ;;
+    keep) ;;
+    *) die 2 "--mode must be keep or erase" ;;
+esac
+
+# ---- keep my files ----
+if [ -z "$source" ]; then
+    for s in /run/live/medium/live/filesystem.squashfs /usr/share/worksuite/recovery/filesystem.squashfs; do
+        [ -f "$s" ] && { source=$s; break; }
+    done
+fi
+[ -n "$source" ] && [ -f "$source" ] || die 4 "no recovery image"
+
+work=$(mktemp -d /tmp/worksuite-reinstall.XXXXXX)
+mounted='' binds=''
+cleanup() {
+    for m in dev/pts dev proc sys; do [ -n "$binds" ] && umount "$binds/$m" 2>/dev/null || true; done
+    [ -n "$mounted" ] && umount "$mounted" 2>/dev/null || true
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+is_worksuite() { grep -qs '^ID="\{0,1\}worksuite' "$1/etc/os-release" && [ -f "$1/etc/fstab" ]; }
+
+if [ -n "$target_dir" ]; then
+    root=$target_dir
+else
+    if [ -z "$target" ]; then
+        # The installed root: a file system on this disk (also inside an unlocked LUKS volume) holding WorkSuite.
+        # blkid reads the superblock itself (lsblk's FSTYPE needs udev, absent in some recovery environments).
+        for dev in $(lsblk -nrpo PATH "/dev/$disk"); do
+            case "$(blkid -o value -s TYPE "$dev" 2>/dev/null)" in ext4|btrfs|xfs) ;; *) continue ;; esac
+            mkdir -p "$work/probe"
+            if mount -o ro "$dev" "$work/probe" 2>/dev/null; then
+                is_worksuite "$work/probe" && target=$dev
+                umount "$work/probe"
+            fi
+            [ -n "$target" ] && break
+        done
+    fi
+    [ -n "$target" ] || die 5 "no installed WorkSuite system on /dev/$disk"
+    mkdir -p "$work/root"
+    mount "$target" "$work/root" || die 6 "cannot mount $target"
+    mounted=$work/root
+    root=$work/root
+fi
+[ "$(cd "$root" && pwd -P)" != / ] || die 7 "the target is the running system"
+if [ -n "$target" ]; then
+    running=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+    [ -z "$running" ] || [ "$(readlink -f "$running")" != "$(readlink -f "$target")" ] || die 7 "the target is the running system"
+fi
+is_worksuite "$root" || die 5 "target is not a WorkSuite system"
+
+# Where /home lives. A separate home device must not be the device being reimaged.
+home_spec=$(awk '$1 !~ /^#/ && $2 == "/home" {print $1; exit}' "$root/etc/fstab")
+if [ -n "$home_spec" ] && [ -n "$target" ]; then
+    home_dev=$(findfs "$home_spec" 2>/dev/null || echo "$home_spec")
+    [ "$(readlink -f "$home_dev")" != "$(readlink -f "$target")" ] || die 6 "/home is on the target device"
+fi
+echo "home: ${home_spec:-inside the root file system} (kept)"
+
+# Carry over identity and the mounts that bring /home back.
+keep_files="etc/fstab etc/crypttab etc/hostname etc/hosts etc/passwd etc/shadow etc/group etc/gshadow etc/subuid etc/subgid
+etc/machine-id etc/locale.conf etc/default/locale etc/timezone etc/localtime etc/NetworkManager/system-connections
+etc/worksuite/device var/lib/worksuite/device"
+mkdir -p "$work/keep"
+for f in $keep_files; do
+    if [ -e "$root/$f" ] || [ -L "$root/$f" ]; then
+        mkdir -p "$work/keep/$(dirname "$f")"
+        cp -a "$root/$f" "$work/keep/$f"
+    fi
+done
+
+# Remove the old system, never home.
+for e in "$root"/* "$root"/.[!.]* "$root"/..?*; do
+    [ -e "$e" ] || [ -L "$e" ] || continue
+    case "${e##*/}" in home|lost+found) continue ;; esac
+    rm -rf --one-file-system "$e"
+done
+
+# New system from the image, every top-level entry except home.
+entries=$(unsquashfs -l "$source" | sed -n 's#^squashfs-root/\([^/]*\)$#\1#p' | grep -vx -e home -e lost+found || true)
+[ -n "$entries" ] || die 6 "recovery image is empty"
+# shellcheck disable=SC2086 # one argument per top-level entry (no spaces in root entries)
+unsquashfs -q -n -f -d "$root" "$source" $entries >/dev/null || die 6 "unpacking the recovery image failed"
+mkdir -p "$root/home"
+
+cp -a "$work/keep/." "$root/"
+mkdir -p "$root/etc/worksuite"
+date -u +%Y-%m-%dT%H:%M:%SZ > "$root/etc/worksuite/reinstalled"
+
+if [ "$bootloader" = 1 ]; then
+    binds=$root
+    for m in dev dev/pts proc sys; do mount --bind "/$m" "$root/$m"; done
+    chroot "$root" update-initramfs -u -k all || die 6 "initramfs update failed"
+    chroot "$root" update-grub || die 6 "boot menu update failed"
+fi
+sync
+echo "reinstalled; home kept"

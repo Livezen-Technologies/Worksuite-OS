@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recovery – unlock disk</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; position: relative; background: radial-gradient(ellipse 70% 50% at 50% 0%, #0E2A55 0%, #061029 60%, #030816 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA">
+<header style="height: 64px; box-sizing: border-box; padding: 0 40px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(127,178,255,0.1)">
+<button aria-label="Back to recovery menu" style="all: unset; width: 36px; height: 36px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.2); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9D6EE" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></button>
+<span style="font-size: 16px; font-weight: 600">WorkSuite Recovery</span>
+</header>
+<div style="display: flex; flex-direction: column; align-items: center; padding-top: 70px; gap: 22px">
+<div style="width: 80px; height: 80px; border-radius: 22px; background: rgba(31,107,255,0.18); display: flex; align-items: center; justify-content: center">
+<svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="15" r="4"></circle><path d="M11 12l9-9M17 6l3 3"></path></svg>
+</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 700">Unlock your disk</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8; text-align: center; max-width: 520px; line-height: 1.5">Enter the 48-character recovery key you saved during installation. Dashes are added for you.</p>
+<div style="display: grid; grid-template-columns: repeat(4, 110px); gap: 10px; margin-top: 8px">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="8">
+<input aria-label="{{g.label}}" value="{{g.value}}" maxlength="6" style="height: 48px; box-sizing: border-box; text-align: center; border-radius: 10px; border: 1px solid {{g.border}}; background: rgba(4,10,26,0.6); color: #E8EEFA; font-family: 'IBM Plex Mono', monospace; font-size: 17px; letter-spacing: 0.08em">
+</sc-for>
+</div>
+<span style="font-size: 13px; color: #8FA3C8">Disk: vda2 · WorkSuite (LUKS2) · 39.5 GiB</span>
+<div style="display: flex; gap: 12px; margin-top: 10px">
+<button style="all: unset; padding: 12px 22px; border-radius: 10px; font-size: 15px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Use passphrase instead</button>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Unlock</button>
+</div>
+<a href="#" style="font-size: 13px; margin-top: 4px">Where do I find my recovery key?</a>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const filled = 5;
+    return { groups: [0,1,2,3,4,5,6,7].map(i => ({ label: 'Recovery key group ' + (i + 1), value: i < filled ? 'XXXXXX' : '',
+      border: i === filled ? '#1F6BFF' : 'rgba(127,178,255,0.2)' })) };
+  }
+}
+</script>
+</body>
+</html>

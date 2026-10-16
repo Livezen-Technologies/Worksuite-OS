@@ -1,0 +1,4 @@
+#!/bin/sh
+# Screenshot through xdg-desktop-portal (WSOS-DSK-011). Labwc runs it on Print (whole screen) and Shift+Print
+# (--interactive). Saves to ~/Pictures/Screenshots; see shell/electron/screenshot.ts.
+ELECTRON_RUN_AS_NODE=1 exec /usr/lib/worksuite/shell/electron/electron /usr/lib/worksuite/shell/dist-electron/screenshot.cjs "$@"

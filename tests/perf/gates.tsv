@@ -1,0 +1,42 @@
+# Performance and reliability gates (SRS §16: WSOS-PRF-001…006, REL-001/002; ARM-007 keeps separate ARM rows).
+# profile          metric                        op  limit   need      requirement
+# hw-*: reference hardware, the SRS numbers. ci-*-tcg: GitHub-hosted QEMU without KVM (software CPU emulation,
+# roughly 5-10x slower), so time limits are wide: they catch regressions, they do not certify PRF numbers.
+# need=required fails the gate when the metric is missing; optional only checks it when reported.
+hw-amd64           boot_to_greeter_s             <=  30      required  WSOS-PRF-001
+hw-amd64           shell_ready_ms                <=  5000    required  WSOS-PRF-002
+hw-amd64           idle_mem_mib                  <=  1536    required  WSOS-PRF-003
+hw-amd64           idle_cpu_pct                  <   2       required  WSOS-PRF-004
+hw-amd64           app_launch_ms                 <=  2000    optional  WSOS-PRF-005
+hw-amd64           launcher_first_frame_ms       <=  200     optional  WSOS-PRF-005
+hw-amd64           login_cycles_failed           ==  0       required  WSOS-REL-001
+hw-amd64           login_sessions_leaked         ==  0       required  WSOS-REL-001
+hw-amd64           login_failed_units_new        ==  0       required  WSOS-REL-001
+hw-amd64           suspend_cycles_failed         ==  0       required  WSOS-REL-002
+hw-amd64           suspend_unlocked_after_resume ==  0       required  WSOS-REL-002
+hw-amd64           electron_kill_apps_lost       ==  0       required  WSOS-REL-004
+hw-arm64           boot_to_greeter_s             <=  45      required  WSOS-ARM-007
+hw-arm64           shell_ready_ms                <=  8000    required  WSOS-ARM-007
+hw-arm64           idle_mem_mib                  <=  1536    required  WSOS-ARM-007
+hw-arm64           idle_cpu_pct                  <   3       required  WSOS-ARM-007
+hw-arm64           app_launch_ms                 <=  3000    optional  WSOS-ARM-007
+hw-arm64           login_cycles_failed           ==  0       required  WSOS-REL-001
+hw-arm64           login_sessions_leaked         ==  0       required  WSOS-REL-001
+hw-arm64           suspend_cycles_failed         ==  0       required  WSOS-REL-002
+hw-arm64           electron_kill_apps_lost       ==  0       required  WSOS-REL-004
+ci-amd64-tcg       boot_to_greeter_s             <=  600     required  WSOS-PRF-001 (CI regression bound)
+ci-amd64-tcg       idle_mem_mib                  <=  1536    required  WSOS-PRF-003
+ci-amd64-tcg       idle_cpu_pct                  <   25      required  WSOS-PRF-004 (CI regression bound)
+ci-amd64-tcg       shell_ready_ms                <=  60000   optional  WSOS-PRF-002 (CI regression bound)
+ci-amd64-tcg       login_cycles_failed           ==  0       required  WSOS-REL-001
+ci-amd64-tcg       login_sessions_leaked         ==  0       required  WSOS-REL-001
+ci-amd64-tcg       login_failed_units_new        ==  0       required  WSOS-REL-001
+ci-amd64-tcg       login_mem_growth_mib          <=  64      optional  WSOS-REL-001
+ci-amd64-tcg       suspend_cycles_failed         ==  0       optional  WSOS-REL-002
+ci-amd64-tcg       electron_kill_apps_lost       ==  0       required  WSOS-REL-004
+ci-arm64-tcg       boot_to_greeter_s             <=  1500    required  WSOS-ARM-007 (CI regression bound)
+ci-arm64-tcg       idle_mem_mib                  <=  1536    required  WSOS-ARM-007
+ci-arm64-tcg       idle_cpu_pct                  <   40      required  WSOS-ARM-007 (CI regression bound)
+ci-arm64-tcg       shell_ready_ms                <=  120000  optional  WSOS-ARM-007 (CI regression bound)
+ci-arm64-tcg       login_cycles_failed           ==  0       required  WSOS-REL-001
+ci-arm64-tcg       login_sessions_leaked         ==  0       required  WSOS-REL-001

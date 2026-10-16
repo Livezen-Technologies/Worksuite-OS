@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lock screen PIN sign-in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button:focus-visible,input:focus-visible{outline:2px solid #18D4F0;outline-offset:2px} @keyframes pulse{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.5);opacity:0}}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(ellipse 70% 60% at 30% 10%, #1A3F8A 0%, #0A1A3D 55%, #050E24 100%); display: flex; align-items: center; justify-content: center; position: relative; flex-direction: column; gap: 22px">
+<div style="position: absolute; top: 28px; left: 0; right: 0; text-align: center; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 64px; font-weight: 300; letter-spacing: -.03em">9:41</span><span style="font-size: 15px; color: #C9D6EE">Friday, 16 October</span></div>
+<span style="width: 96px; height: 96px; border-radius: 50%; background: linear-gradient(135deg, #1F6BFF, #18D4F0); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 600; margin-top: 90px">A</span>
+<span style="font-size: 22px; font-weight: 600">Alex</span>
+<sc-if value="{{isPin}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px; width: 300px; height: 48px; box-sizing: border-box; padding: 0 16px; border-radius: 12px; background: rgba(4,10,26,0.55); border: 1px solid {{bd}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8FA3C8" stroke-width="2" aria-hidden="true"><path d="M5 10h14v10H5zM8 10V7a4 4 0 0 1 8 0v3"></path></svg><input type="password" inputmode="numeric" aria-label="PIN" placeholder="PIN" value="{{pin}}" onInput="{{type}}" style="flex: 1; background: transparent; border: none; color: #E8EEFA; font: inherit; font-size: 18px; letter-spacing: .3em; outline: none"></div>
+<span style="height: 18px; font-size: 13px; color: {{msgCol}}">{{msg}}</span>
+</div>
+</sc-if>
+<sc-if value="{{isPk}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 10px"><div style="position: relative; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center"><span style="position: absolute; inset: 0; border-radius: 50%; border: 2px solid #18D4F0; animation: pulse 1.6s ease-out infinite"></span><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM10.5 9.5L20 19M16 15l2-2M18 17l2-2"></path></svg></div><span style="font-size: 14px; color: #C9D6EE">Touch your security key or confirm on your phone</span></div>
+</sc-if>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px"><span style="font-size: 12px; color: #8FA3C8">Sign-in options</span>
+<div role="radiogroup" aria-label="Sign-in method" style="display: flex; gap: 8px"><sc-for list="{{ms}}" as="m" hint-placeholder-count="3"><button role="radio" aria-checked="{{m.on}}" aria-label="{{m.label}}" title="{{m.label}}" onClick="{{m.pick}}" style="all: unset; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: {{m.bg}}; border: 1px solid {{m.bd}}; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E8EEFA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="{{m.icon}}"></path></svg></button></sc-for></div>
+<button style="all: unset; margin-top: 4px; font-size: 13px; color: #7FB2FF; cursor: pointer">I forgot my PIN</button></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p){super(p);this.state={m:'PIN',pin:'',tries:0};}
+  renderVals(){
+    const {m,pin,tries}=this.state;
+    const M=[['PIN','M5 10h14v10H5zM8 10V7a4 4 0 0 1 8 0v3'],['Passkey','M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM10.5 9.5L20 19M16 15l2-2'],['Password','M4 12h2M9 12h2M14 12h2M19 12h1']];
+    const type=e=>{const v=e.target.value.replace(/\D/g,'').slice(0,6); if(v.length===6&&v!=='482915') return this.setState({pin:'',tries:tries+1}); this.setState({pin:v});};
+    const left=5-tries, ok=pin==='482915';
+    return {isPin:m!=='Passkey',isPk:m==='Passkey',pin,type,
+      bd:ok?'#5FD39A':tries?'#FF8A7A':'rgba(127,178,255,0.3)',
+      msg:ok?'✓ Unlocking…':tries?(left>0?'Incorrect PIN · '+left+' tries left':'Too many tries · use your password'):'Signs in automatically after 6 digits',
+      msgCol:ok?'#5FD39A':tries?'#FF8A7A':'#8FA3C8',
+      ms:M.map(([l,i])=>({label:l,icon:i,on:l===m,bg:l===m?'rgba(31,107,255,0.35)':'rgba(14,32,72,0.6)',bd:l===m?'#1F6BFF':'rgba(127,178,255,0.18)',pick:()=>this.setState({m:l,pin:''})}))};
+  }
+}
+</script>
+</body>
+</html>

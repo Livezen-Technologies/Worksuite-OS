@@ -6,3 +6,5 @@ services/package-service/systemd/worksuite-package-service.service usr/lib/syste
 services/package-service/src usr/lib/worksuite/package-service/
 services/package-service/package.json usr/lib/worksuite/package-service/
 services/package-service/node_modules usr/lib/worksuite/package-service/
+services/package-service/bin/worksuite-appimage usr/bin/
+security/apparmor/worksuite-package-service etc/apparmor.d/

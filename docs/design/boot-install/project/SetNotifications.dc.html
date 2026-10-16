@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Notifications</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Notifications" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 26px 36px; display: flex; flex-direction: column; gap: 14px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Notifications</h1>
+
+<div style="display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 16px; background: {{dndBg}}; border: 1px solid {{dndBorder}}">
+<span style="width: 44px; height: 44px; border-radius: 12px; background: {{dndIcon}}; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 16px; font-weight: 600">Do not disturb</span><span style="font-size: 12px; color: #C9D6EE">{{dndText}}</span></span>
+<button onClick="{{toggleDnd}}" aria-pressed="{{dnd}}" aria-label="Do not disturb" style="all: unset; width: 50px; height: 30px; border-radius: 15px; background: {{dndTrack}}; position: relative; cursor: pointer"><span style="position: absolute; top: 3px; left: {{dndKnob}}; width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF"></span></button>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{general}}" as="g" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 13px 14px; border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12)"><span style="font-size: 12px; color: #8FA3C8">{{g.k}}</span><span style="font-size: 14px; font-weight: 500">{{g.v}}</span></div>
+</sc-for>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; font-weight: 600">Apps</span><span style="font-size: 11px; color: #8FA3C8">Sorted by most recent</span></div>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px 90px 60px; gap: 10px; padding: 9px 16px; font-size: 11px; color: #8FA3C8; border-bottom: 1px solid rgba(127,178,255,0.1)"><span>App</span><span>Banners</span><span>Lock screen</span><span>Sound</span><span></span></div>
+<sc-for list="{{apps}}" as="a" hint-placeholder-count="6">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px 90px 60px; gap: 10px; align-items: center; padding: 10px 16px; border-top: {{a.border}}; font-size: 13px">
+<span style="display: flex; align-items: center; gap: 10px"><span style="width: 28px; height: 28px; border-radius: 7px; background: {{a.c}}; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px">{{a.i}}</span><span style="display: flex; flex-direction: column"><span>{{a.n}}</span><span style="font-size: 11px; color: #8FA3C8">{{a.d}}</span></span></span>
+<span style="color: {{a.bc}}">{{a.b}}</span><span style="color: #C9D6EE">{{a.l}}</span><span style="color: #C9D6EE">{{a.s}}</span>
+<button onClick="{{a.toggle}}" aria-pressed="{{a.on}}" aria-label="Allow {{a.n}} notifications" style="all: unset; width: 40px; height: 24px; border-radius: 12px; background: {{a.track}}; position: relative; cursor: pointer"><span style="position: absolute; top: 3px; left: {{a.knob}}; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF"></span></button>
+</div>
+</sc-for>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { dnd: false, off: { Browser: true } }; }
+  renderVals() {
+    const { dnd, off } = this.state;
+    const A = [['Chat','C','#7A4FE0','12 today','Banners','Names only','Ping'],['Mail','M','#D9572B','8 today','Banners','Names only','Off'],['Calendar','31','#D9452B','3 today','Alerts','Full','Chime'],['System updates','U','#1F6BFF','Required by IT','Alerts','Full','Chime',1],['App Center','A','#1F6BFF','1 today','Banners','Hidden','Off'],['Browser','B','#B7791F','Sites asking: 2','Banners','Hidden','Off']];
+    const apps = A.map((a, i) => { const on = !off[a[0]]; return { n: a[0], i: a[1], c: a[2], d: a[3], b: on ? a[4] : 'Off', bc: on ? '#E8EEFA' : '#5E739C', l: a[5], s: a[6], on,
+      track: on ? '#1F6BFF' : 'rgba(127,178,255,0.25)', knob: on ? '19px' : '3px', border: i ? '1px solid rgba(127,178,255,0.1)' : 'none',
+      toggle: () => { if (a[7]) return; this.setState({ off: Object.assign({}, off, { [a[0]]: on }) }); } }; });
+    return { dnd, apps, toggleDnd: () => this.setState({ dnd: !dnd }),
+      dndText: dnd ? 'On until 07:00 · calls and alarms still come through' : 'Scheduled every night 22:00–07:00',
+      dndBg: dnd ? 'rgba(122,79,224,0.18)' : 'rgba(14,32,72,0.7)', dndBorder: dnd ? 'rgba(185,160,255,0.5)' : 'rgba(127,178,255,0.14)',
+      dndIcon: dnd ? '#7A4FE0' : 'rgba(127,178,255,0.2)', dndTrack: dnd ? '#7A4FE0' : 'rgba(127,178,255,0.25)', dndKnob: dnd ? '23px' : '3px',
+      general: [['On lock screen','App names only'],['Banner position','Top right · 5 s'],['Badge count on panel','On']].map(g => ({ k: g[0], v: g[1] })) };
+  }
+}
+</script>
+</body>
+</html>

@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS orgs (
   id INTEGER PRIMARY KEY, name TEXT NOT NULL,
   require_device INTEGER NOT NULL DEFAULT 0,
   modules TEXT NOT NULL,            -- JSON [{key, offline?, data_type?}]
-  directory TEXT NOT NULL DEFAULT '{"type":"oneauth","offline_login_days":7}'
+  directory TEXT NOT NULL DEFAULT '{"type":"oneauth","offline_login_days":7}',
+  web_apps TEXT                     -- JSON [key] of enabled WorkSuite web apps; NULL = all of DEFAULT_WEB_APPS
 );
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL REFERENCES orgs(id),
@@ -54,10 +55,22 @@ CREATE TABLE IF NOT EXISTS audit (id TEXT NOT NULL, principal TEXT NOT NULL, typ
 CREATE TABLE IF NOT EXISTS inventory (device_id TEXT PRIMARY KEY, body TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS update_results (id INTEGER PRIMARY KEY, device_id TEXT NOT NULL, body TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS diagnostics (id INTEGER PRIMARY KEY, device_id TEXT NOT NULL, body TEXT NOT NULL, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS problem_reports (id TEXT PRIMARY KEY, org_id INTEGER NOT NULL, user_id INTEGER NOT NULL, device_id TEXT, body TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS break_glass (device_id TEXT PRIMARY KEY, body TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS releases (ring TEXT NOT NULL, arch TEXT NOT NULL, manifest TEXT NOT NULL, PRIMARY KEY (ring, arch));
 CREATE TABLE IF NOT EXISTS catalog (id TEXT PRIMARY KEY, item TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS apps (id TEXT PRIMARY KEY, item TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS admin_sessions (hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS wipe_requests (
+  id TEXT PRIMARY KEY, org_id INTEGER NOT NULL, device_id TEXT NOT NULL, scope TEXT NOT NULL, reason TEXT NOT NULL,
+  requested_by INTEGER NOT NULL, requested_at INTEGER NOT NULL, approved_by INTEGER, approved_at INTEGER, command_id TEXT, cancelled INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS admin_log (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, user_id INTEGER NOT NULL, action TEXT NOT NULL, detail TEXT, at INTEGER NOT NULL);
+-- Managed WireGuard VPN (src/vpn.ts): org gateway settings and each device's public key + tunnel address.
+CREATE TABLE IF NOT EXISTS vpn_settings (org_id INTEGER PRIMARY KEY, version INTEGER NOT NULL, body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS vpn_peers (
+  device_id TEXT PRIMARY KEY, org_id INTEGER NOT NULL, public_key TEXT NOT NULL UNIQUE, address TEXT, updated INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS signing_keys (key_id TEXT PRIMARY KEY, private_pem TEXT NOT NULL, public_pem TEXT NOT NULL, created INTEGER NOT NULL);
 `;
 
@@ -70,9 +83,41 @@ export const DEFAULT_MODULES = [
   { key: 'billing', offline: 'online_only', data_type: 'authoritative' },
 ];
 
+/** WorkSuite web apps the desktop can open in an app window; each is served at <web base>/<id>/. */
+// offline_level: what each app declares to the desktop (WSOS-SYN-009); the launcher shows it.
+export const DEFAULT_WEB_APPS: { id: string; name: string; offline_level: 'full_offline' | 'cached_read' | 'online_only' }[] = [
+  { id: 'mail', name: 'Mail', offline_level: 'cached_read' }, { id: 'calendar', name: 'Calendar', offline_level: 'cached_read' }, { id: 'chat', name: 'Chat', offline_level: 'online_only' },
+  { id: 'drive', name: 'Drive', offline_level: 'full_offline' }, { id: 'tasks', name: 'Tasks', offline_level: 'full_offline' }, { id: 'projects', name: 'Projects', offline_level: 'cached_read' },
+  { id: 'crm', name: 'CRM', offline_level: 'cached_read' }, { id: 'meet', name: 'Meet', offline_level: 'online_only' },
+  { id: 'pdf-studio', name: 'PDF Studio', offline_level: 'cached_read' },
+];
+
 export function openDb(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec(SCHEMA);
+  // Additive migrations for databases created by earlier versions.
+  const cols = (db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name);
+  if (!cols.includes('role')) db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+  // Fine-grained admin permissions, e.g. desktop.releases.manage (WSOS-AUP-013).
+  if (!cols.includes('permissions')) db.exec("ALTER TABLE users ADD COLUMN permissions TEXT NOT NULL DEFAULT '[]'");
+  // CoreLicenseService state per organization (WSOS-AUP-012): {edition, state, entitlements, grace_until}.
+  const orgCols = (db.prepare('PRAGMA table_info(orgs)').all() as { name: string }[]).map((c) => c.name);
+  if (!orgCols.includes('licence')) db.exec('ALTER TABLE orgs ADD COLUMN licence TEXT');
+  if (!orgCols.includes('web_apps')) db.exec('ALTER TABLE orgs ADD COLUMN web_apps TEXT');
+  // Directory sign-in: TOTP second factor, password expiry / change-at-next-login, OS login codes (WSOS-DIR-007/008/009).
+  if (!cols.includes('totp_secret')) db.exec('ALTER TABLE users ADD COLUMN totp_secret TEXT');
+  if (!cols.includes('pw_changed_at')) db.exec('ALTER TABLE users ADD COLUMN pw_changed_at INTEGER');
+  if (!cols.includes('must_change_pw')) db.exec('ALTER TABLE users ADD COLUMN must_change_pw INTEGER NOT NULL DEFAULT 0');
+  db.exec('CREATE TABLE IF NOT EXISTS totp_used (user_id INTEGER PRIMARY KEY, last_counter INTEGER NOT NULL)');
+  db.exec('CREATE TABLE IF NOT EXISTS login_codes (hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, device_id TEXT NOT NULL, expires INTEGER NOT NULL)');
+  // Wipe results and device marking (WSOS-WIPE-001/008).
+  const devCols = (db.prepare('PRAGMA table_info(devices)').all() as { name: string }[]).map((c) => c.name);
+  if (!devCols.includes('ownership')) db.exec("ALTER TABLE devices ADD COLUMN ownership TEXT NOT NULL DEFAULT 'corporate'");
+  if (!devCols.includes('wiped_at')) db.exec('ALTER TABLE devices ADD COLUMN wiped_at INTEGER');
+  const wipeCols = (db.prepare('PRAGMA table_info(wipe_requests)').all() as { name: string }[]).map((c) => c.name);
+  if (!wipeCols.includes('result')) db.exec('ALTER TABLE wipe_requests ADD COLUMN result TEXT');
+  if (!wipeCols.includes('result_at')) db.exec('ALTER TABLE wipe_requests ADD COLUMN result_at INTEGER');
+  db.exec('CREATE TABLE IF NOT EXISTS release_log (id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL, at INTEGER NOT NULL)');
   return db;
 }
 

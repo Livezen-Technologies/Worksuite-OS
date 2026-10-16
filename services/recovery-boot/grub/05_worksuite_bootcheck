@@ -1,0 +1,34 @@
+#!/bin/sh
+# /etc/grub.d/05_worksuite_bootcheck — G13 "Boot options" (failed-start fallback).
+# Every start GRUB writes worksuite_boot_ok=0 to grubenv; worksuite-boot-ok.service sets it back to 1 once the
+# system reached its default target. If GRUB finds 0, the last start never got there: it selects the previous
+# kernel (the entry 42_worksuite_recovery adds), shortens the countdown to 8 s and loads the theme with the banner.
+# grubenv can't be written on LUKS, LVM or btrfs /boot (GRUB only reads those); then the check is skipped.
+# Test hook: WORKSUITE_BOOT_DIR (default /boot).
+set -e
+boot=${WORKSUITE_BOOT_DIR:-/boot}
+theme=${GRUB_THEME:-/usr/share/grub/themes/worksuite/theme.txt}
+kernels=$(for k in "$boot"/vmlinuz-*; do
+  [ -f "$k" ] || continue
+  v=${k#"$boot"/vmlinuz-}
+  [ -f "$boot/initrd.img-$v" ] && echo "$v"
+done | sort -V | tac || true)
+previous=$(echo "$kernels" | sed -n 2p)
+[ -n "$previous" ] || exit 0
+writable=true
+if command -v grub-probe >/dev/null && [ -z "${WORKSUITE_BOOT_DIR:-}" ]; then
+  case "$(grub-probe --target=abstraction "$boot/grub" 2>/dev/null) $(grub-probe --target=fs "$boot/grub" 2>/dev/null)" in
+    *cryptodisk*|*lvm*|*diskfilter*|*btrfs*|*zfs*) writable=false ;;
+  esac
+fi
+[ "$writable" = true ] || exit 0
+cat <<EOF
+if [ "\${worksuite_boot_ok}" = "0" ]; then
+  set default="worksuite-previous-$previous"
+  set timeout=8
+  set timeout_style=menu
+  set theme="${theme%theme.txt}theme-failed.txt"
+fi
+set worksuite_boot_ok=0
+save_env worksuite_boot_ok
+EOF

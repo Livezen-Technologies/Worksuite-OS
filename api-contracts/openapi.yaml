@@ -50,7 +50,24 @@ paths:
       tags: [existing]
       summary: User, org, modules and settings at login
       responses:
-        '200': { description: Bootstrap, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '200':
+          description: Bootstrap
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  user: { type: object }
+                  org: { type: object }
+                  modules: { type: array, items: { type: object } }
+                  apps:
+                    description: >-
+                      WorkSuite web apps enabled for the org. The desktop shows these in its launcher and opens
+                      web_url in a dedicated app window (worksuite-app); navigation stays on web_url's origin.
+                    type: array
+                    items: { $ref: '#/components/schemas/WebApp' }
+                  settings: { type: object }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/apps:
@@ -93,7 +110,60 @@ paths:
       summary: Resolve worksuite:// links
       parameters: [ { name: url, in: query, required: true, schema: { type: string } } ]
       responses:
-        '200': { description: Target, content: { application/json: { schema: { type: object, properties: { app_id: { type: string }, route: { type: string } } } } } }
+        '200': { description: Target, content: { application/json: { schema: { type: object, properties: { app_id: { type: string }, route: { type: string }, web_url: { type: string, format: uri, nullable: true, description: 'URL the app window opens; null when the org has no such web app' } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/search:
+    get:
+      tags: [search]
+      summary: Search WorkSuite records the caller may open (launcher global search, WSOS-LCH)
+      description: |
+        Results are scoped server-side to what the signed-in user can open; clients must not cache them across accounts.
+        Platform mapping: GET /api/search/global?q=&types= (worksuite app/Modules/Search/Config/Routes.php,
+        GlobalSearchController::query), whose data.results[].items[] {id,title,subtitle,route,at,score} become results
+        with type from the group key and link worksuite://<module><route>.
+      security: [ { bearer: [] } ]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { name: types, in: query, required: false, description: 'Comma-separated: mail, contact, crm, task, chat, event, note, project, document', schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses:
+        '200':
+          description: Results, best first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [query, results]
+                properties:
+                  query: { type: string }
+                  state: { type: string, enum: [ready, building], description: 'building: the index is incomplete, so an empty answer is not "nothing there"' }
+                  results: { type: array, items: { $ref: '#/components/schemas/SearchResult' } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/files/search:
+    get:
+      tags: [search]
+      summary: Search Drive files the caller may open
+      description: 'Platform mapping: GET /api/files/search?q=&limit= (worksuite app/Modules/Files/Config/Routes.php, FilesController::search; data.files[]).'
+      security: [ { bearer: [] } ]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses:
+        '200': { description: 'Files, best first', content: { application/json: { schema: { type: object, required: [files], properties: { query: { type: string }, files: { type: array, items: { $ref: '#/components/schemas/DriveFile' } } } } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/files/recent:
+    get:
+      tags: [search]
+      summary: The caller's recently opened Drive files, newest first
+      description: 'Platform mapping: GET /api/drive/list?view=recent (worksuite app/Modules/Files/Config/Routes.php, DriveController::list over file_recents).'
+      security: [ { bearer: [] } ]
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses:
+        '200': { description: Recent files, content: { application/json: { schema: { type: object, required: [files], properties: { files: { type: array, items: { $ref: '#/components/schemas/DriveFile' } } } } } } }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/audit:
@@ -136,6 +206,7 @@ paths:
                 tpm_backed: { type: boolean }
                 arch: { $ref: '#/components/schemas/Arch' }
                 hostname: { type: string }
+                wg_public_key: { $ref: '#/components/schemas/WireGuardKey', description: 'Optional: the device''s WireGuard public key for the managed VPN (never the private key)' }
       responses:
         '201': { description: Device credential, content: { application/json: { schema: { type: object, required: [device_id, credential], properties: { device_id: { type: string }, credential: { type: string } } } } } }
         default: { $ref: '#/components/responses/Error' }
@@ -284,6 +355,70 @@ paths:
                     properties: { items: { type: array, items: { $ref: '#/components/schemas/CatalogItem' } } }
         default: { $ref: '#/components/responses/Error' }
 
+  /desktop/v1/os/licence:
+    get:
+      tags: [os]
+      summary: Signed, device-bound licence state for update entitlement gating (WSOS-AUP-012)
+      description: >
+        Signed with the release key ("<key_id>:<base64 Ed25519>" over the canonical JSON without the signature), valid
+        for 7 days. Feature releases whose manifest names an entitlement install only with state active and that
+        entitlement; security releases continue during grace. No licence on record answers state expired.
+      responses:
+        '200':
+          description: Licence
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_id, edition, state, entitlements, issued_at, valid_until, signature]
+                properties:
+                  device_id: { type: string }
+                  edition: { type: string }
+                  state: { type: string, enum: [active, grace, expired] }
+                  entitlements: { type: array, items: { type: string } }
+                  grace_until: { type: [string, 'null'], format: date-time }
+                  issued_at: { type: string, format: date-time }
+                  valid_until: { type: string, format: date-time }
+                  signature: { type: string }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/vpn:
+    get:
+      tags: [os]
+      summary: Signed per-device WireGuard config for the organization's managed VPN (WSOS-INT-001)
+      description: >
+        The organization holds the gateway endpoint, its public key, the address pool, allowed IPs, DNS and the
+        always-on / kill-switch flags; each device gets its own tunnel address. Signed like policies ("<key_id>:<base64
+        Ed25519>" over the canonical JSON without the signature). Never contains a private key: the device generates its
+        own keypair and registers only the public key (devices/register wg_public_key, or PUT os/vpn/peer). No VPN for
+        the organization answers enabled false (signed), and the device removes its managed connection.
+      security: [ { device: [] } ]
+      responses:
+        '200': { description: Config, content: { application/json: { schema: { $ref: '#/components/schemas/VpnConfig' } } } }
+        '409': { description: 'VPN_PEER_KEY_REQUIRED (register a public key first; also after an admin rotates the key) or VPN_POOL_EXHAUSTED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/vpn/peer:
+    put:
+      tags: [os]
+      summary: Register or rotate the device's WireGuard public key; returns the new signed config
+      security: [ { device: [] } ]
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [public_key]
+              additionalProperties: false
+              properties:
+                public_key: { $ref: '#/components/schemas/WireGuardKey' }
+      responses:
+        '200': { description: Config, content: { application/json: { schema: { $ref: '#/components/schemas/VpnConfig' } } } }
+        '409': { description: VPN_KEY_IN_USE (key registered to another device) or VPN_POOL_EXHAUSTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        default: { $ref: '#/components/responses/Error' }
+
   /desktop/v1/os/inventory:
     post:
       tags: [os]
@@ -334,6 +469,72 @@ paths:
         '202': { description: Accepted }
         default: { $ref: '#/components/responses/Error' }
 
+  /desktop/v1/problem-reports:
+    post:
+      tags: [os]
+      summary: Problem report the user reviewed and chose to send (SRS §11.6-d)
+      description: |
+        Built in Settings › About › Report a problem. Only the sections the user kept are sent; the shell redacts
+        tokens, passwords, keys and email addresses first. Bearer token of the user; X-WS-Device when enrolled.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, sections]
+              properties:
+                id: { type: string, pattern: '^[A-Za-z0-9-]{8,64}$' }
+                created_at: { type: string, format: date-time }
+                description: { type: string, maxLength: 2000 }
+                sections:
+                  type: array
+                  maxItems: 6
+                  items:
+                    type: object
+                    required: [id, text]
+                    properties:
+                      id: { type: string, enum: [system, services, session_services, session_log, system_log, packages] }
+                      text: { type: string, maxLength: 70000 }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/audit:
+    post:
+      tags: [os]
+      summary: Privileged package changes made on the device (WSOS-SEC-008)
+      description: |
+        Sent by the device agent from the package service's local audit log. `type` is `package.<event>`; ids are
+        stable per log line, so a resend is ignored. At most 500 events, `data` at most 4 KiB each.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                    required: [id, type, at]
+                    properties:
+                      id: { type: string, maxLength: 64 }
+                      type: { type: string, pattern: '^package\\.[a-z_]{1,64}$' }
+                      at: { type: string, format: date-time }
+                      data: { type: object }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+
   /desktop/v1/os/diagnostics:
     post:
       tags: [os]
@@ -369,6 +570,60 @@ paths:
                   domain: { type: string }
                   offline_login_days: { type: integer, default: 7 }
                   group_role_map: { type: object, additionalProperties: { type: string, enum: [administrator, standard, kiosk] } }
+                  escrow_public_key: { type: string, description: PEM RSA public key the break-glass password is encrypted to (RSA-OAEP-256) }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/directory/authenticate:
+    post:
+      tags: [os]
+      summary: Verify a directory password for OS sign-in (WSOS-DIR-002/005/009); device credential required
+      description: Called by the OS PAM helper only. The reply carries no password material; the device derives its own offline verifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, maxLength: 320 }
+                password: { type: string, maxLength: 1024, writeOnly: true }
+      responses:
+        '200':
+          description: Verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username: { type: string }
+                  user_id: { type: integer, description: Stable id; the OS derives the local UID from it (WSOS-DIR-003) }
+                  name: { type: string }
+                  groups: { type: array, items: { type: string } }
+                  offline_login_days: { type: integer }
+        '401': { description: INVALID_CREDENTIALS }
+        '403': { description: ACCOUNT_DISABLED, DEVICE_REQUIRED or DEVICE_REVOKED }
+        default: { $ref: '#/components/responses/Error' }
+
+  /desktop/v1/os/break-glass/events:
+    post:
+      tags: [os]
+      summary: Audit a break-glass admin use or rotation (WSOS-DIR-010)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, type, username, at]
+              properties:
+                id: { type: string }
+                type: { type: string, enum: [used, rotated] }
+                username: { type: string }
+                at: { type: string, format: date-time }
+      responses:
+        '202': { description: Recorded }
         default: { $ref: '#/components/responses/Error' }
 
   /desktop/v1/os/break-glass:
@@ -426,6 +681,77 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
+    SearchResult:
+      type: object
+      required: [id, type, title, link]
+      properties:
+        id: { type: string }
+        type: { type: string, description: 'mail, contact, crm, task, chat, event, note, project, document' }
+        title: { type: string }
+        subtitle: { type: string, nullable: true }
+        link: { type: string, description: 'worksuite:// deep link, resolved with links/resolve' }
+        at: { type: string, format: date-time, nullable: true }
+        score: { type: number }
+    DriveFile:
+      type: object
+      required: [id, name, link]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ext: { type: string }
+        folder: { type: string, nullable: true }
+        size: { type: integer, nullable: true }
+        modified: { type: string, format: date-time, nullable: true }
+        link: { type: string, description: 'worksuite://files/... deep link' }
+        score: { type: number }
+    WebApp:
+      type: object
+      required: [id, name, web_url]
+      properties:
+        id: { type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$', description: 'Module key; the desktop entry is worksuite-<id>.desktop' }
+        name: { type: string }
+        web_url: { type: string, format: uri, description: 'https URL of the module''s web app (<web base>/<id>/)' }
+        offline_level: { type: string, enum: [full_offline, cached_read, online_only], description: 'Offline level the app declares (WSOS-SYN-009); shown in the desktop launcher' }
+    WireGuardKey:
+      type: string
+      pattern: '^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw480]=$'
+      description: WireGuard Curve25519 public key, base64 of 32 bytes (wg pubkey form)
+
+    VpnConfig:
+      type: object
+      required: [device_id, enabled, version, issued_at, signature]
+      description: >
+        Managed WireGuard VPN for one device (WSOS-INT-001). The device applies it as the NetworkManager system
+        connection "WorkSuite VPN" (type wireguard, root-only keyfile with its own private key); always_on or policy
+        vpn_required → autoconnect; kill_switch → nftables drops non-tunnel traffic except the WireGuard handshake to the
+        endpoint, DHCP and neighbour discovery. Revocation, wipe or enabled false → the connection and kill switch are removed.
+      properties:
+        device_id: { type: string }
+        enabled: { type: boolean }
+        version: { type: string, description: Organization VPN settings version }
+        issued_at: { type: string, format: date-time }
+        device_public_key: { $ref: '#/components/schemas/WireGuardKey' }
+        interface:
+          type: object
+          required: [address, dns, dns_search]
+          properties:
+            address: { type: array, items: { type: string }, description: 'Tunnel address(es), CIDR, e.g. 10.70.0.2/32' }
+            dns: { type: array, items: { type: string } }
+            dns_search: { type: array, items: { type: string } }
+            mtu: { type: integer, minimum: 1280, maximum: 1500 }
+        peer:
+          type: object
+          required: [public_key, endpoint, allowed_ips]
+          properties:
+            public_key: { $ref: '#/components/schemas/WireGuardKey' }
+            endpoint: { type: string, description: 'host:port of the gateway' }
+            allowed_ips: { type: array, items: { type: string }, description: '0.0.0.0/0 = full tunnel' }
+            persistent_keepalive: { type: integer }
+        always_on: { type: boolean }
+        kill_switch: { type: boolean, description: Only offered with a full tunnel }
+        key_rotation_days: { type: integer, description: The device generates a new keypair this often and registers the public key }
+        signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) without this field' }
+
     Error:
       type: object
       required: [error]
@@ -465,7 +791,10 @@ components:
     ReleaseManifest:
       description: >
         Signed OS release manifest per ring and arch, served at
-        https://download.worksuitecloud.com/os/manifests/{ring}/{arch}.json (or the policy's update_mirror).
+        https://download.worksuitecloud.com/os/manifests/{ring}/{arch}.json by the WorkSuite Update Center
+        (Livezen-Technologies/worksite-download, which signs it with its release key through its signing service),
+        or the policy's update_mirror / update_host in /etc/worksuite/updates.json. Optional fields security, critical,
+        mandatory come from the Update Center's release type (security, emergency); state from pause / pull.
         Devices check 15 min after boot and every 6 h (WSOS-AUP-001).
       type: object
       required: [release_id, version, min_version, ring, arch, signature]
@@ -487,6 +816,12 @@ components:
           properties:
             from_version: { type: string }
             reason: { type: string }
+        entitlement: { type: string, description: Edition entitlement a feature release needs (WSOS-AUP-012); absent = every device }
+        bundle:
+          type: object
+          description: Only in offline .wsupdate bundles (WSOS-AUP-010) - every package in pool/ with its size and SHA-256
+          properties:
+            files: { type: array, items: { type: object, required: [name, sha256, size], properties: { name: { type: string }, sha256: { type: string }, size: { type: integer } } } }
         signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the manifest without this field' }
 
     Policy:
@@ -497,14 +832,40 @@ components:
         update_ring: { $ref: '#/components/schemas/Ring' }
         update_mode: { type: string, enum: [automatic, notify, manual] }
         maintenance_window: { type: string }
-        lock_timeout_max_s: { type: integer }
-        offline_access_days: { type: integer }
-        usb_storage: { type: string, enum: [allow, read_only, block] }
-        bluetooth: { type: boolean }
+        lock_timeout_max_s: { type: integer, minimum: 60, maximum: 86400, description: 'WSOS-LOCK-003 longest idle time before the screen locks; users choose any shorter time, never "never". Device: /etc/worksuite/lock-policy.conf → worksuite-idle' }
+        offline_access_days: { type: integer, minimum: 0, maximum: 365, description: 'WSOS-AUTH-003/DIR-005 days without a check-in after which sessions lock and local sign-in is refused until the device checks in (pam_nologin); absent or 0 = no limit' }
+        usb_storage: { type: string, enum: [allow, read_only, block], description: 'WSOS-INT-004 USB mass storage: block = drivers not loaded and disks hidden from UDisks2; read_only = disks set read-only by udev before mounting' }
+        bluetooth: { type: boolean, description: 'WSOS-INT-003 false = bluetooth.service masked and radios rfkill-blocked; true or absent = allowed' }
+        login_failures_max: { type: integer, minimum: 3, maximum: 20, description: 'WSOS-AUTH-004 pam_faillock deny (default 5)' }
+        login_lockout_s: { type: integer, minimum: 0, maximum: 86400, description: 'WSOS-AUTH-004 pam_faillock unlock_time; 0 = until reset by an administrator (default 600)' }
+        allow_pin: { type: boolean, description: 'Device PIN sign-in (Settings > Users). false = PINs are refused at sign-in and cannot be set; absent = allowed. Device: /etc/worksuite/signin-policy.conf' }
+        pin_min_length: { type: integer, minimum: 4, maximum: 12, description: 'Shortest device PIN accepted when one is set (default 6; PINs are digits, at most 12)' }
         app_allowlist: { type: array, items: { type: string } }
         approved_remotes: { type: array, items: { type: string } }
         offline_wipe_days: { type: integer, description: WSOS-WIPE-006 offline kill timer; absent = off }
         update_mirror: { type: string, description: 'WSOS-AUP-009 enterprise mirror (https) for manifests; WorkSuite signatures still required' }
+        vpn_required: { type: boolean, description: 'WSOS-INT-001 the managed VPN connects at boot and reconnects (always-on) even if the VPN config does not ask for it' }
+        user_vpn: { type: string, enum: [allow, block], description: 'WSOS-INT-001 block = Settings offers no VPN import and the agent removes every VPN profile except the managed one; absent = allow' }
+        kiosk:
+          type: object
+          description: 'WSOS-AUTH-002 / SRS §2.3 kiosk mode for the listed devices (services/server/src/kiosk.ts). The admin sends exit_pin once; the server stores and signs only exit_pin_verifier (scrypt), and the admin API returns exit_pin_set instead.'
+          required: [enabled]
+          properties:
+            enabled: { type: boolean }
+            user: { type: string, description: 'local kiosk account; not root or wsadmin' }
+            devices: { type: array, items: { type: string } }
+            app:
+              oneOf:
+                - { type: object, required: [type, url], properties: { type: { const: url }, url: { type: string, format: uri, description: https only } } }
+                - { type: object, required: [type, id], properties: { type: { const: module }, id: { type: string, enum: [home, mail, chat, calendar, tasks, files, crm, hr] } } }
+                - { type: object, required: [type, id], properties: { type: { const: desktop }, id: { type: string, description: '.desktop file id' } } }
+            allowed_urls: { type: array, maxItems: 100, items: { type: string, description: 'https://host[:port][/path-prefix], host may start with *.' } }
+            idle_reset_minutes: { type: integer, minimum: 0, maximum: 1440, description: '0 = never' }
+            show_on_screen_keyboard: { type: boolean }
+            allow_exit_pin: { type: boolean }
+            exit_pin: { type: string, writeOnly: true, pattern: '^\\d{6,12}$' }
+            exit_pin_set: { type: boolean, readOnly: true }
+            exit_pin_verifier: { type: string, description: 'in the signed device policy only' }
         signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the policy without this field' }
 
     CatalogItem:
@@ -518,6 +879,9 @@ components:
         required: { type: boolean }
         blocked: { type: boolean }
         sha256: { type: string, description: AppImage integrity }
+        category: { type: string }
+        summary: { type: string }
+        publisher: { type: string }
 
     CommandEnvelope:
       type: object

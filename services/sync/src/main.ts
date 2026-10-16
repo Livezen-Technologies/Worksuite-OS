@@ -11,6 +11,8 @@ import { SyncService } from './service.ts';
 import { brokerTokens, serveControl } from './control.ts';
 import { fetchTransport } from './transport.ts';
 import type { DataType } from './policy.ts';
+import { checkStorage, readCrypttab } from './storage.ts';
+import { FileLocks, fetchLockCall } from './locks.ts';
 
 export interface SyncConfig {
   account: { id: string; server_url: string; org_id: string; user_id: string; mode: 'personal' | 'enterprise' };
@@ -72,6 +74,13 @@ async function main() {
   }
   const cfg = JSON.parse(readFileSync(configPath, 'utf8')) as SyncConfig;
 
+  // WSOS-SYN-010: with LUKS enabled, refuse to keep WorkSuite data outside the encrypted volume.
+  const storage = checkStorage(stateDir, readCrypttab());
+  if (!storage.ok) {
+    log('storage_unencrypted', { dir: stateDir });
+    process.exit(0);
+  }
+
   const exported = checkIntegrity(dbPath, stateDir);
   if (exported) log('database_rebuilt', { outbox_export: exported });
 
@@ -83,18 +92,18 @@ async function main() {
   if (!db.prepare('SELECT 1 FROM accounts WHERE id=?').get(a.id))
     store.addAccount({ id: a.id, serverUrl: a.server_url, orgId: a.org_id, userId: a.user_id, mode: a.mode });
 
-  const engine = new SyncEngine({
-    db, typeOf,
-    transport: fetchTransport(a.server_url, deviceCredential(cfg.device_credential_path ?? DEVICE_CREDENTIAL_PATH)),
-    tokens: brokerTokens(join(runtimeDir, 'credentials.sock'), a.id),
-  });
+  const tokens = brokerTokens(join(runtimeDir, 'credentials.sock'), a.id);
+  const devCred = deviceCredential(cfg.device_credential_path ?? DEVICE_CREDENTIAL_PATH);
+  const engine = new SyncEngine({ db, typeOf, transport: fetchTransport(a.server_url, devCred), tokens });
+  const locks = new FileLocks({ db, call: fetchLockCall(a.server_url, devCred), tokens });
   const svc = new SyncService({ db, engine, store, streams: cfg.streams, intervalMs: cfg.interval_ms, log });
   const docs = join(home, 'Documents');
-  const control = serveControl(join(runtimeDir, 'sync.sock'), svc, existsSync(docs) ? docs : home);
+  const control = serveControl(join(runtimeDir, 'sync.sock'), svc, existsSync(docs) ? docs : home, locks);
 
   const shutdown = async (signal: string) => {
     log('stopping', { signal });
     control.close();
+    await locks.releaseAll();
     await svc.stop();
     process.exit(0);
   };

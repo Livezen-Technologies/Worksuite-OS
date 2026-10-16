@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WorkSuite Calendar
+GenericName=Calendar
+Comment=Schedules, meetings and shared calendars
+Exec=worksuite-app calendar
+TryExec=worksuite-app
+Icon=worksuite-calendar
+Terminal=false
+Categories=Office;Calendar;
+Keywords=worksuite;calendar;events;schedule;
+StartupNotify=true
+StartupWMClass=worksuite-calendar

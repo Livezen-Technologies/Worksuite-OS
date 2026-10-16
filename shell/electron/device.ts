@@ -5,16 +5,47 @@ import os from 'node:os'
 
 export const STATUS_PATH = '/run/worksuite-device-agent/status.json'
 
+export const DEVICE_TOKEN_PATH = '/run/worksuite-device-agent/device-token'
+
+/**
+ * The device credential for X-WS-Device, or null when the device isn't enrolled (no device in the agent's status, or no
+ * token file). Read fresh on every call so a revoked/unenrolled device stops sending it at once. Main process only.
+ */
+export function deviceCredential(statusPath = STATUS_PATH, tokenPath = DEVICE_TOKEN_PATH): string | null {
+  try {
+    if (!JSON.parse(readFileSync(statusPath, 'utf8'))?.device) return null
+    return readFileSync(tokenPath, 'utf8').trim() || null
+  } catch { return null }
+}
+
+export const PROVISIONING_PATH = '/etc/worksuite/provisioning.json'
+
+/**
+ * WSOS-IDN-004: OEM / installer provisioning (root-owned, e.g. {"require_enrollment": true, "server": "https://..."}).
+ * When enrollment is required, first-run setup cannot be skipped and needs a connection to enroll.
+ */
+export function provisioning(path = PROVISIONING_PATH): { require_enrollment: boolean; server: string | null } {
+  try {
+    const p = JSON.parse(readFileSync(path, 'utf8'))
+    const server = typeof p.server === 'string' && /^https:\/\//.test(p.server) ? p.server : null
+    return { require_enrollment: p.require_enrollment === true, server }
+  } catch { return { require_enrollment: false, server: null } }
+}
+
 /** Device agent status file (0644, written by worksuite-device-agent); local facts if the agent isn't running. */
-export function deviceInfo(statusPath = STATUS_PATH) {
+export function deviceInfo(statusPath = STATUS_PATH, provisioningPath = PROVISIONING_PATH) {
+  return { ...agentInfo(statusPath), provisioning: provisioning(provisioningPath) }
+}
+
+function agentInfo(statusPath: string) {
   try {
     const st = JSON.parse(readFileSync(statusPath, 'utf8'))
-    return { agent: true, device: st.device ?? null, managed: !!st.managed, org_name: st.org_name ?? null, server: st.server ?? null, last_check_in: st.last_check_in ?? null, policies: st.policies ?? null }
+    return { agent: true, device: st.device ?? null, managed: !!st.managed, org_name: st.org_name ?? null, server: st.server ?? null, last_check_in: st.last_check_in ?? null, policies: st.policies ?? null, kiosk: st.kiosk ?? null }
   } catch {
     let osVersion = 'unknown'
     try { osVersion = /^PRETTY_NAME="?([^"\n]*)/m.exec(readFileSync('/etc/os-release', 'utf8'))?.[1] ?? osVersion } catch { /* keep unknown */ }
     return {
-      agent: false, managed: false, org_name: null, server: null, last_check_in: null, policies: null,
+      agent: false, managed: false, org_name: null, server: null, last_check_in: null, policies: null, kiosk: null,
       device: { hostname: os.hostname(), os_version: osVersion, arch: process.arch === 'arm64' ? 'arm64' : 'amd64', kernel_version: os.release(), encrypted: null },
     }
   }

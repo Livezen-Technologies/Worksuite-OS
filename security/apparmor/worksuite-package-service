@@ -1,0 +1,49 @@
+# AppArmor profile for worksuite-package-service (WSOS-SEC-009). Applied by the unit (AppArmorProfile=).
+# The service itself is confined; apt-get, dpkg and flatpak run maintainer scripts and so leave confinement (Ux) —
+# the service only ever starts them with fixed argument vectors (WSOS-SEC-007).
+abi <abi/4.0>,
+include <tunables/global>
+
+profile worksuite-package-service flags=(attach_disconnected) {
+  include <abstractions/base>
+  include <abstractions/nameservice>
+  include <abstractions/ssl_certs>
+  include <abstractions/openssl>
+
+  capability dac_override dac_read_search fowner chown setuid setgid kill,
+  network inet stream,
+  network inet6 stream,
+  network unix stream,
+  dbus (send, receive, bind) bus=system,
+  unix (create, connect, send, receive) type=stream,
+
+  /{usr/,}bin/{sh,dash} ix,
+  /usr/bin/worksuite-node rix,
+  /usr/lib/worksuite/shell/electron/electron mrix,
+  /usr/lib/worksuite/shell/electron/** mr,
+  /usr/lib/worksuite/package-service/** r,
+  /usr/share/worksuite/** r,
+  /usr/share/dbus-1/interfaces/** r,
+  /etc/** r,
+  @{PROC}/** r,
+  /sys/class/power_supply/ r,
+  /sys/devices/** r,
+  /sys/class/power_supply/** r,
+  /dev/shm/** rwk,
+  /tmp/** rwk,
+
+  owner /var/lib/worksuite-package-service/ rw,
+  owner /var/lib/worksuite-package-service/** rwk,
+  /var/log/worksuite/ rw,
+  /var/log/worksuite/** rwk,
+  /run/worksuite-device-agent/policy.json r,
+  /run/reboot-required r,
+  /var/lib/dpkg/** r,
+  /var/lib/apt/** r,
+
+  /usr/bin/test rix,
+  /usr/bin/{apt-get,apt-cache,dpkg,dpkg-query,flatpak} Ux,
+
+  deny /home/** rwx,
+  deny /root/** rwx,
+}

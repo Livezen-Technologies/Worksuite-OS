@@ -4,9 +4,13 @@ import { execFile } from 'node:child_process';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, hostname, release, totalmem } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { Host } from './agent.ts';
+import { lookup } from 'node:dns/promises';
+import { ENFORCED_PATHS, type Enforcement } from './enforce.ts';
+import { KILLSWITCH_TABLE, parseNmConnections, renderKillSwitch, renderNmConnection, VPN_CONNECTION_UUID, VPN_KEYFILE, wgKeyPair, wgPublicKey } from './vpn.ts';
 import type { Policy } from './state.ts';
+import { collectHardware, readUpdateStatus } from './inventory.ts';
 
 export interface HostPaths { stateDir: string; runtimeDir: string; auditLog: string }
 
@@ -102,7 +106,7 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
         os_version: readOr('/etc/worksuite-release', osr.PRETTY_NAME ?? 'unknown'),
         shell_version: await run('dpkg-query', ['-W', '-f=${Version}', 'worksuite-shell']).catch(() => 'unknown'),
         kernel_version: release(),
-        update_status: readOr('/var/lib/worksuite-update/status', 'unknown'),
+        update_status: readUpdateStatus()?.state ?? 'unknown',
       };
     },
 
@@ -110,11 +114,14 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
       const pkgs = await run('dpkg-query', ['-W', '-f=${Package}\t${Version}\t${Architecture}\n']).catch(() => '');
       const flatpaks = await run('flatpak', ['list', '--app', '--columns=application,version,origin']).catch(() => '');
       return {
+        // WSOS-MDM-001: hardware, OS/shell/kernel versions and update status alongside the software lists.
         hardware: {
-          vendor: readOr('/sys/class/dmi/id/sys_vendor'), model: readOr('/sys/class/dmi/id/product_name'),
+          ...collectHardware(),
           cpu: cpus()[0]?.model ?? '', cores: cpus().length, memory_bytes: totalmem(),
           tpm: existsSync('/dev/tpmrm0'), encrypted: (await luksDevices().catch(() => [])).length > 0,
         },
+        versions: await this.facts(),
+        update: readUpdateStatus(),
         packages: pkgs.split('\n').filter(Boolean).map((l) => { const [name, version, arch] = l.split('\t'); return { source: 'apt', name, version, arch }; }),
         flatpaks: flatpaks.split('\n').filter(Boolean).map((l) => { const [name, version, origin] = l.split('\t'); return { source: 'flatpak', name, version, origin }; }),
       };
@@ -131,6 +138,62 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
     publishStatus(status) { writePublic(join(paths.runtimeDir, 'status.json'), JSON.stringify(status, null, 2)); },
 
     async lockAllSessions() { await run('loginctl', ['lock-sessions']); },
+
+    async applyEnforcement(e: Enforcement) {
+      const changed = new Set<string>();
+      for (const [path, content] of Object.entries(e.files)) {
+        let now: string | null = null;
+        try { now = readFileSync(path, 'utf8'); } catch { /* absent */ }
+        if (content === null) { if (now !== null) { rmSync(path, { force: true }); changed.add(path); } continue; }
+        if (now === content) continue;
+        mkdirSync(dirname(path), { recursive: true, mode: 0o755 });
+        writePublic(path, content);
+        changed.add(path);
+      }
+      // Kiosk exit PIN verifier: root-only (worksuite-kiosk-exit reads it as root).
+      for (const [path, content] of Object.entries(e.secret_files ?? {})) {
+        let now: string | null = null;
+        try { now = readFileSync(path, 'utf8'); } catch { /* absent */ }
+        if (content === null) { if (now !== null) rmSync(path, { force: true }); continue; }
+        if (now === content) continue;
+        writeFileSync(path + '.tmp', content, { mode: 0o600 });
+        renameSync(path + '.tmp', path);
+      }
+      // Kiosk account, greetd autologin, Ctrl+Alt+Del and logind VTs live outside the agent's sandbox: the root helper
+      // runs as its own transient unit (fixed argv; the user name was validated in kiosk.ts).
+      if (changed.has(ENFORCED_PATHS.sessionEnv)) {
+        const args = e.kiosk_user ? ['enable', e.kiosk_user] : ['disable'];
+        try {
+          await run('systemd-run', ['--quiet', '--wait', '--collect', '--unit=worksuite-kiosk-apply', '--', '/usr/lib/worksuite/worksuite-kiosk-apply', ...args]);
+        } catch (err) {
+          rmSync(ENFORCED_PATHS.sessionEnv, { force: true });   // rewritten (and the helper retried) at the next enforcement
+          throw err;
+        }
+      }
+      if (changed.has(ENFORCED_PATHS.usbUdev) || changed.has(ENFORCED_PATHS.usbModprobe)) {
+        await run('udevadm', ['control', '--reload']).catch(() => {});
+        // Re-evaluate disks already plugged in: read-only is applied, ignored disks drop out of UDisks2.
+        await run('udevadm', ['trigger', '--subsystem-match=block', '--action=change']).catch(() => {});
+        if (e.usb_storage === 'block') await run('modprobe', ['-r', 'uas', 'usb_storage']).catch(() => {});   // busy → stays until unplugged
+      }
+      // Bluetooth: only undo what the agent did, so a user's own airplane mode is left alone.
+      const marker = join(paths.stateDir, 'bluetooth-blocked');
+      if (e.bluetooth === 'block') {
+        writeFileSync(marker, '');
+        await run('systemctl', ['mask', '--now', 'bluetooth.service']).catch(() => {});
+        await run('rfkill', ['block', 'bluetooth']).catch(() => {});
+      } else if (existsSync(marker)) {
+        await run('systemctl', ['unmask', 'bluetooth.service']);
+        await run('systemctl', ['start', 'bluetooth.service']).catch(() => {});
+        await run('rfkill', ['unblock', 'bluetooth']).catch(() => {});
+        rmSync(marker, { force: true });
+      }
+    },
+
+    setOfflineAccessBlock(notice) {
+      if (notice) { mkdirSync(dirname(ENFORCED_PATHS.offlineExpired), { recursive: true, mode: 0o755 }); writePublic(ENFORCED_PATHS.offlineExpired, notice); }
+      else rmSync(ENFORCED_PATHS.offlineExpired, { force: true });
+    },
 
     async installApproved(catalogId) {
       const [source, name] = splitCatalogId(catalogId);
@@ -157,6 +220,7 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
 
     async isFullyEncrypted() {
       const src = (await run('findmnt', ['-n', '-o', 'SOURCE', '/'])).trim();
+      if (!src.startsWith('/dev/')) return false;   // overlay (live ISO), tmpfs, network roots: not a LUKS disk
       const j = JSON.parse(await run('lsblk', ['-J', '-s', '-p', '-o', 'PATH,FSTYPE', src])) as { blockdevices: { fstype: string | null; children?: unknown[] }[] };
       const any = (ns: { fstype: string | null; children?: unknown[] }[]): boolean => ns.some((n) => n.fstype === 'crypto_LUKS' || (n.children ? any(n.children as typeof ns) : false));
       return any(j.blockdevices);
@@ -182,6 +246,66 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
       for (const f of readdirSync(paths.stateDir)) if (f.startsWith('luks-header')) rmSync(join(paths.stateDir, f), { force: true });
       audit('full_device_wiped', { devices: devs.length });
       await run('systemctl', ['reboot']);
+    },
+
+    async wgPublicKey(rotate) {
+      // The private key stays in the 0700 state dir and in NetworkManager's root-only keyfile; it is never sent.
+      const p = join(paths.stateDir, 'wireguard.key');
+      if (!rotate && existsSync(p)) return wgPublicKey(readFileSync(p, 'utf8').trim());
+      const k = wgKeyPair();
+      writeFileSync(p + '.tmp', k.privateKey + '\n', { mode: 0o600 });
+      renameSync(p + '.tmp', p);
+      return k.publicKey;
+    },
+
+    forgetWgKey() { rmSync(join(paths.stateDir, 'wireguard.key'), { force: true }); },
+
+    async applyVpn(plan) {
+      if (!plan) {
+        if (existsSync(VPN_KEYFILE)) {
+          await run('nmcli', ['connection', 'delete', 'uuid', VPN_CONNECTION_UUID]).catch(() => {});
+          rmSync(VPN_KEYFILE, { force: true });
+        }
+        await run('nft', ['delete', 'table', 'inet', KILLSWITCH_TABLE]).catch(() => {});   // absent → fine
+        rmSync(join(paths.runtimeDir, 'vpn-killswitch.nft'), { force: true });   // the shell reads its presence (captive portal)
+        return;
+      }
+      const priv = readFileSync(join(paths.stateDir, 'wireguard.key'), 'utf8').trim();
+      const content = renderNmConnection(plan, priv);
+      let cur: string | null = null;
+      try { cur = readFileSync(VPN_KEYFILE, 'utf8'); } catch { /* absent */ }
+      if (cur !== content) {
+        mkdirSync(dirname(VPN_KEYFILE), { recursive: true, mode: 0o755 });
+        writeFileSync(VPN_KEYFILE + '.tmp', content, { mode: 0o600 });   // NM loads only root-owned 0600 keyfiles
+        renameSync(VPN_KEYFILE + '.tmp', VPN_KEYFILE);
+        await run('nmcli', ['connection', 'load', VPN_KEYFILE]);
+      }
+      // Kill switch before connecting, so traffic never leaves outside the tunnel while it comes up.
+      if (plan.kill_switch) {
+        let ips: string[] = [];
+        try { ips = (await lookup(plan.endpoint.host, { all: true })).map((a) => a.address); } catch { /* DNS blocked or down */ }
+        const rules = join(paths.runtimeDir, 'vpn-killswitch.nft');
+        if (ips.length) { writeFileSync(rules, renderKillSwitch(ips, plan.endpoint.port), { mode: 0o600 }); await run('nft', ['-f', rules]); }
+        else audit('vpn_killswitch_unresolved', { endpoint: plan.endpoint.host });   // rules already loaded stay in force
+      } else {
+        await run('nft', ['delete', 'table', 'inet', KILLSWITCH_TABLE]).catch(() => {});
+        rmSync(join(paths.runtimeDir, 'vpn-killswitch.nft'), { force: true });
+      }
+      if (plan.autoconnect) {
+        const active = await run('nmcli', ['-t', '-f', 'UUID', 'connection', 'show', '--active']).catch(() => '');
+        if (!active.split('\n').includes(VPN_CONNECTION_UUID)) {
+          await run('nmcli', ['--wait', '30', 'connection', 'up', 'uuid', VPN_CONNECTION_UUID]).catch((e: Error) => audit('vpn_connect_failed', { error: e.message }));
+        }
+      }
+    },
+
+    async vpnConnections() {
+      return parseNmConnections(await run('nmcli', ['-t', '-f', 'NAME,UUID,TYPE,ACTIVE', 'connection', 'show']));
+    },
+
+    async removeConnection(uuid) {
+      if (!/^[0-9a-f-]{36}$/i.test(uuid)) throw new Error('BAD_UUID');
+      await run('nmcli', ['connection', 'delete', 'uuid', uuid]);
     },
 
     audit,

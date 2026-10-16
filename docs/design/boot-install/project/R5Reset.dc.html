@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recovery – reinstall</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; position: relative; background: radial-gradient(ellipse 70% 50% at 50% 0%, #0E2A55 0%, #061029 60%, #030816 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA">
+<header style="height: 64px; box-sizing: border-box; padding: 0 40px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(127,178,255,0.1)">
+<button aria-label="Back to recovery menu" style="all: unset; width: 36px; height: 36px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.2); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9D6EE" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></button>
+<span style="font-size: 16px; font-weight: 600">WorkSuite Recovery</span>
+</header>
+<div style="padding: 40px 160px 0; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h1 style="margin: 0; font-size: 30px; font-weight: 700">Reinstall WorkSuite OS</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">Installs fresh system files from the recovery partition. No internet needed.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+<label style="display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 14px; border: 1px solid #1F6BFF; background: rgba(31,107,255,0.12); cursor: pointer">
+<span style="display: flex; align-items: center; gap: 12px"><input type="radio" name="mode" checked style="width: 18px; height: 18px; accent-color: #1F6BFF"><span style="font-size: 17px; font-weight: 600">Keep my files</span></span>
+<ul style="margin: 0; padding: 0 0 0 30px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #C9D6EE">
+<li>Your account, documents and settings stay</li>
+<li>Apps from the App Center reinstall automatically</li>
+<li>Takes about 15 minutes</li>
+</ul>
+</label>
+<label style="display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 14px; border: 1px solid rgba(255,138,122,0.35); background: rgba(14,32,72,0.5); cursor: pointer">
+<span style="display: flex; align-items: center; gap: 12px"><input type="radio" name="mode" style="width: 18px; height: 18px; accent-color: #D9452B"><span style="font-size: 17px; font-weight: 600">Erase everything</span></span>
+<ul style="margin: 0; padding: 0 0 0 30px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #C9D6EE">
+<li style="color: #FFB4A8">Deletes all accounts and files on vda</li>
+<li>Back to the first-time setup</li>
+<li>Use before selling or giving away</li>
+</ul>
+</label>
+</div>
+<div style="padding: 16px 18px; border-radius: 12px; background: rgba(14,32,72,0.5); border: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; gap: 14px">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 3h6v6H9zM6 9h12v12H6z"></path></svg>
+<span style="flex: 1; font-size: 14px">Back up first? Copy your files to a USB drive before reinstalling.</span>
+<button style="all: unset; padding: 9px 16px; border-radius: 9px; border: 1px solid rgba(127,178,255,0.25); font-size: 13px; font-weight: 500; cursor: pointer">Copy files to USB</button>
+</div>
+</div>
+<footer style="position: absolute; left: 0; right: 0; bottom: 0; height: 80px; box-sizing: border-box; padding: 0 160px; border-top: 1px solid rgba(127,178,255,0.1); display: flex; align-items: center; justify-content: flex-end; gap: 12px">
+<button style="all: unset; padding: 12px 22px; border-radius: 10px; font-size: 15px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Cancel</button>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Reinstall and keep files</button>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

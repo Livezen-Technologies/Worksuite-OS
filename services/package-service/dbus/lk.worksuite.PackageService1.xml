@@ -53,6 +53,53 @@
     <method name="DeferUpdate"><arg name="deferred" type="b" direction="out"/></method>
     <!-- polkit: lk.worksuite.update.apply. -->
     <method name="InstallUpdateNow"/>
+    <!-- No authorization: read-only. App Center catalog (WSOS-APP-001/003, WSOS-ARM-005) from the enrolled server's
+         desktop/v1/os/catalog with the device credential. JSON {state: ok | not_enrolled | unreachable | error, arch,
+         items: [{id, source, name, arches, installed, available, blocked_reason, ...}], error?}. Never sample data. -->
+    <method name="GetCatalog"><arg name="catalog_json" type="s" direction="out"/></method>
+    <!-- WSOS-APT-005 local .deb. Preview (no authorization): the file must be a regular file owned by the caller; it is
+         copied into a root-owned spool and checked (control fields, arch, policy allowlist/allow_local_debs, apt
+         dependency simulation, critical set). Returns JSON {package, version, architecture, publisher,
+         publisher_verified:false, description, plan, disk_bytes, token}. Install takes the token (SHA-256 of the
+         staged copy) and needs polkit lk.worksuite.package.install-local (administrator password every time). -->
+    <method name="PreviewLocalDeb">
+      <arg name="path" type="s" direction="in"/>
+      <arg name="preview_json" type="s" direction="out"/>
+    </method>
+    <method name="InstallLocalDeb">
+      <arg name="token" type="s" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+    <!-- WSOS-FLP-003: declared permissions and system overrides (read-only); reset drops system overrides
+         (polkit lk.worksuite.package.install). Per-user overrides and app data are reset by the shell as the user. -->
+    <method name="GetAppPermissions">
+      <arg name="catalog_id" type="s" direction="in"/>
+      <arg name="permissions_json" type="s" direction="out"/>
+    </method>
+    <method name="ResetAppPermissions">
+      <arg name="catalog_id" type="s" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+    <!-- WSOS-FLP-004: flatpak uninstall unused (only runtimes no installed app needs). polkit lk.worksuite.package.install. -->
+    <method name="PruneRuntimes"><arg name="job" type="o" direction="out"/></method>
+    <!-- WSOS-FLP-001. polkit: lk.worksuite.package.add-remote (auth_admin). NotAuthorized unless device policy lists the
+         name in approved_remotes and the same https .flatpakrepo URL in flatpak_remotes. -->
+    <method name="AddRemote">
+      <arg name="name" type="s" direction="in"/>
+      <arg name="flatpakrepo_url" type="s" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+    <!-- WSOS-AUP-010 offline .wsupdate bundle from removable media or the caller's home. Inspect (read-only) verifies the
+         release-key signature and every package's SHA-256; Install (polkit lk.worksuite.update.apply) re-verifies
+         after copying to a root-owned directory and installs with apt (no downloads). -->
+    <method name="InspectBundle">
+      <arg name="path" type="s" direction="in"/>
+      <arg name="bundle_json" type="s" direction="out"/>
+    </method>
+    <method name="InstallBundle">
+      <arg name="path" type="s" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
     <signal name="UpdateStatusChanged"><arg name="status_json" type="s"/></signal>
     <property name="State" type="s" access="read"/>           <!-- idle | busy | interrupted -->
     <property name="RebootRequired" type="b" access="read"/>

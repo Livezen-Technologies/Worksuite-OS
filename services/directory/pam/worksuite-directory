@@ -1,0 +1,14 @@
+Name: WorkSuite directory sign-in (WSOS-DIR-002/004/009/010)
+Default: yes
+Priority: 300
+Auth-Type: Primary
+Auth:
+	[success=end default=ignore]	pam_exec.so quiet expose_authtok /usr/libexec/worksuite/worksuite-pam-directory auth
+Auth-Initial:
+	[success=end default=ignore]	pam_exec.so quiet expose_authtok /usr/libexec/worksuite/worksuite-pam-directory auth
+Session-Type: Additional
+Session-Interactive-Only: yes
+Session:
+	optional	pam_mkhomedir.so umask=0077
+	[success=1 default=ignore]	pam_succeed_if.so quiet user != wsadmin
+	optional	pam_exec.so quiet type=open_session /usr/libexec/worksuite/worksuite-pam-directory session

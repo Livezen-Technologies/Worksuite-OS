@@ -1,0 +1,8 @@
+Name: WorkSuite smart-card sign-in (WSOS-DIR-011, P3; off unless enabled)
+Default: no
+Priority: 310
+Auth-Type: Primary
+Auth:
+	[success=end default=ignore]	pam_pkcs11.so card_only
+Auth-Initial:
+	[success=end default=ignore]	pam_pkcs11.so card_only

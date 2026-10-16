@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart the idle locker with the current lock timeout
+PartOf=worksuite-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --user try-restart worksuite-idle.service

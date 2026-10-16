@@ -1,13 +1,39 @@
 # worksuite-wayland-bridge
 
-Native user service (`worksuite-wayland-bridge.service`, D-Bus `lk.worksuite.WaylandBridge1`) that observes
-`wlr-foreign-toplevel-management-unstable-v1` / `ext-foreign-toplevel-list-v1` and `wl_output`/`xdg-output`
-from Labwc and exposes restricted window operations to the shell and panel. Interface: `lk.worksuite.WaylandBridge1.xml`.
+User service (`worksuite-wayland-bridge.service`, `Type=dbus`, name `lk.worksuite.WaylandBridge1`) that binds
+`zwlr_foreign_toplevel_manager_v1` and `wl_output` on Labwc and exposes restricted window operations to the
+WorkSuite shell's panel. Python 3 with `python3-pywayland` and `python3-dbus-next` (both in Debian trixie);
+architecture-independent, so the same package serves amd64 and arm64 (WSOS-ARM-004).
 
-- WSOS-SHL-001: probe protocol versions at bind; `SupportedOperations` reflects them; anything else → `Error.NotSupported`.
-- WSOS-SHL-002: `ActivateWindow` forwards the xdg-activation token; without a valid token Labwc's focus-stealing prevention applies.
-- WSOS-SHL-003: handles are opaque random strings, never reused; unknown/closed handle → `Error.NotFound`, no crash.
-- WSOS-SHL-004: caller verified via `GetConnectionCredentials` (UID = session UID and `/proc/<pid>/exe` is the
-  installed shell or panel binary); otherwise `AccessDenied`.
+| Path | |
+|---|---|
+| `lk.worksuite.WaylandBridge1.xml` | window list, activate, close, minimize, outputs, signals |
+| `lk.worksuite.Tray1.xml` | tray items for the panel (the bridge is also `org.kde.StatusNotifierWatcher` and the host) |
+| `protocols/` | vendored `wlr-foreign-toplevel-management-unstable-v1.xml`, `wlr-layer-shell-unstable-v1.xml` (v4) and `xdg-shell.xml` (test client) |
+| `worksuite_bridge/` | `model.py` handles/flags/errors, `access.py` caller check, `service.py` D-Bus, `wayland.py` Labwc, `layer.py` panel edge reservation |
+| `bin/worksuite-wayland-bridge` | entry point, installed to `/usr/libexec/worksuite/` |
+| `tests/` | unit, D-Bus contract (private bus), headless Labwc + foot, and the shell's panel client against the bridge |
 
-Native code (C or Rust) is not yet in this repo. Arm64 and amd64 builds are required (WSOS-ARM-004).
+`make protocols` generates the pywayland bindings into `worksuite_bridge/protocol/` (needs `wayland.xml` from
+`libwayland-dev`); `make test` runs everything (the Labwc and Node tests skip when those tools are missing).
+
+- WSOS-SHL-001: `SupportedOperations` lists what the bound protocol offers; anything else → `Error.NotSupported`
+  (no `zwlr_foreign_toplevel_manager_v1` → nothing is supported, every call fails cleanly).
+- WSOS-SHL-002: `ActivateWindow` takes an xdg-activation token, but wlr-foreign-toplevel cannot carry it: Labwc
+  treats the request as coming from the panel. Only verified shell callers get this far.
+- WSOS-SHL-003: handles are random (`w` + 16 hex digits) and never reused; unknown/closed → `Error.NotFound`.
+- WSOS-SHL-004: the caller's UID and PID come from `GetConnectionCredentials`; the UID must be the session's and
+  `/proc/<pid>/exe` the installed shell (`/usr/lib/worksuite/shell/electron/electron`); otherwise `AccessDenied`.
+  Window signals are unicast to subscribed, verified callers only. `WORKSUITE_BRIDGE_ALLOWED_EXES` (unit
+  environment) adds binaries, e.g. a future native panel.
+- WSOS-DSK-005/007: for every output the bridge maps a transparent, input-less `zwlr_layer_surface_v1` on the
+  bottom layer, anchored to the bottom edge with an exclusive zone of `WORKSUITE_PANEL_HEIGHT` logical pixels
+  (default 56, the taskbar's height; 0 disables). Labwc then keeps maximised windows above the taskbar on each
+  monitor, at any scale. Hot-plugged outputs get a reservation, unplugged ones drop theirs; Labwc moves windows
+  off a removed output and the bridge relists them on their new output, then emits `OutputsChanged`. Chosen
+  over rc.xml `<margin>`, which is static and cannot follow hotplug. The headless Labwc test runs two outputs
+  (`WLR_HEADLESS_OUTPUTS=2`), checks each usable area with a probe layer surface, rescales and unplugs one with
+  `wlr-randr`, and places a fullscreen window per output with `xdg_toplevel.set_fullscreen(output)` (what
+  Chromium sends for the shell's per-monitor windows).
+- `ListWindows` returns `a(ssssu)` — handle, app_id, title, output, flags (activated 1, minimized 2, maximized 4,
+  fullscreen 8). The earlier draft declared `a(sssu)`, one field short of the documented five.

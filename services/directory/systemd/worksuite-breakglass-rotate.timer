@@ -1,0 +1,10 @@
+[Unit]
+Description=Rotate the WorkSuite break-glass admin password after boot and every 30 days
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30d
+Persistent=true
+
+[Install]
+WantedBy=timers.target

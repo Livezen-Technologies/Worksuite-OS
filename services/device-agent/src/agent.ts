@@ -2,7 +2,14 @@
 import { verify, type KeyObject } from 'node:crypto';
 import { ApiError, type DeviceApi } from './api.ts';
 import { canonical, validateCommand, type CommandEnvelope, type CommandName } from './commands.ts';
+import { offlineAccessExpired, offlineNotice, policyEnforcement, type Enforcement } from './enforce.ts';
+import { activeKiosk, publicPolicy } from './kiosk.ts';
+
+function kioskSummary(k: ReturnType<typeof activeKiosk>) {
+  return k ? { user: k.user, app: k.app, allowed_urls: k.allowed_urls, idle_reset_minutes: k.idle_reset_minutes, show_on_screen_keyboard: k.show_on_screen_keyboard, exit_pin: k.verifier !== null } : null;
+}
 import type { AgentState, Policy, StateFile } from './state.ts';
+import { rotationDue, userVpnsToRemove, vpnPlan, type NmConnection, type VpnConfig, type VpnPlan } from './vpn.ts';
 
 export interface Host {
   generateDeviceKey(): Promise<{ publicKeyPem: string; tpmBacked: boolean }>;
@@ -14,6 +21,10 @@ export interface Host {
   publishPolicy(policy: Policy | null): void;
   publishStatus(status: Record<string, unknown>): void;
   lockAllSessions(): Promise<void>;
+  /** Writes/removes the policy files and flips USB storage and Bluetooth (WSOS-MDM-002). Idempotent. */
+  applyEnforcement(e: Enforcement): Promise<void>;
+  /** Notice text → local sign-in refused with it (pam_nologin); null → allowed again. */
+  setOfflineAccessBlock(notice: string | null): void;
   installApproved(catalogId: string): Promise<void>;
   scheduleUpdate(): Promise<void>;
   scheduleReboot(window: string | undefined): Promise<void>;
@@ -24,6 +35,18 @@ export interface Host {
   /** Destroys every LUKS key slot and header backup, then reboots to the installer. Does not return on success. */
   cryptoErase(): Promise<void>;
   audit(event: string, fields?: Record<string, unknown>): void;
+  /** WireGuard keypair in the 0700 state dir; returns the public key, creating one if needed. rotate → new keypair. */
+  wgPublicKey(rotate: boolean): Promise<string>;
+  /** Deletes the WireGuard private key (unenrolment, wipe). */
+  forgetWgKey(): void;
+  /**
+   * Managed VPN as a NetworkManager system connection (keyfile 0600, private key from the state dir), connected when
+   * plan.autoconnect, plus the nftables kill switch. null removes the connection and the kill switch. Idempotent.
+   */
+  applyVpn(plan: VpnPlan | null): Promise<void>;
+  /** VPN-type profiles NetworkManager knows (wireguard and plugin VPNs). */
+  vpnConnections(): Promise<NmConnection[]>;
+  removeConnection(uuid: string): Promise<void>;
 }
 
 export interface AgentOptions {
@@ -61,9 +84,11 @@ export class Agent {
     if (url.protocol !== 'https:') throw new Error('INSECURE_URL');
     const key = await this.o.host.generateDeviceKey();
     const facts = await this.o.host.facts();
-    const r = await this.o.api.register(url.toString(), enrollmentToken, { public_key: key.publicKeyPem, tpm_backed: key.tpmBacked, arch: facts.arch, hostname: facts.hostname });
+    // A fresh WireGuard keypair per enrolment; only its public half goes to the server (managed VPN).
+    const wg = await this.o.host.wgPublicKey(true).catch(() => undefined);
+    const r = await this.o.api.register(url.toString(), enrollmentToken, { public_key: key.publicKeyPem, tpm_backed: key.tpmBacked, arch: facts.arch, hostname: facts.hostname, ...(wg ? { wg_public_key: wg } : {}) });
     this.o.state.update((s) => {
-      Object.assign(s, { enrolled: true, wiped: false, device_id: r.device_id, credential: r.credential, server_url: url.toString(), org_name: r.org_name, enrolled_at: this.o.now() });
+      Object.assign(s, { enrolled: true, wiped: false, device_id: r.device_id, credential: r.credential, server_url: url.toString(), org_name: r.org_name, enrolled_at: this.o.now(), vpn: undefined, vpn_key_created_at: wg ? this.o.now() : undefined });
     });
     this.o.host.publishCredential(r.credential);
     this.o.host.audit('enrolled', { device_id: r.device_id, server: url.host, tpm_backed: key.tpmBacked });
@@ -78,9 +103,98 @@ export class Agent {
     const p = await this.o.api.policy();
     if (!this.verifyPolicy(p)) { this.o.host.audit('policy_rejected', { version: p?.version }); throw new Error('POLICY_SIGNATURE'); }
     this.o.state.update((s) => { s.policy = p; s.last_check_in = this.o.now(); });
-    this.o.host.publishPolicy(p);
+    this.o.host.publishPolicy(publicPolicy(p));
+    // The VPN config travels with the policy refresh; a failure keeps the last verified config in force.
+    await this.refreshVpn().catch((e) => this.o.host.audit('vpn_refresh_failed', { error: e instanceof Error ? e.message : String(e) }));
+    await this.enforce();
     this.publishStatus();
     return p;
+  }
+
+  /** Applies the current policy to the machine; an unmanaged device gets every restriction removed. */
+  async enforce(): Promise<void> {
+    const p = this.s.enrolled ? this.s.policy ?? null : null;
+    try {
+      await this.o.host.applyEnforcement(policyEnforcement(p, this.s.device_id));
+      this.o.host.audit('policy_enforced', { version: p?.version ?? null, usb_storage: p?.usb_storage ?? 'allow', bluetooth: p?.bluetooth ?? true, lock_timeout_max_s: p?.lock_timeout_max_s ?? null });
+    } catch (e) {
+      this.o.host.audit('policy_enforce_failed', { version: p?.version ?? null, error: e instanceof Error ? e.message : String(e) });
+    }
+    await this.enforceVpn(p);
+    if (!this.s.enrolled && this.s.offline_access_expired) this.setOfflineBlock(false);
+  }
+
+  private setOfflineBlock(expired: boolean) {
+    const days = this.s.policy?.offline_access_days ?? 0;
+    this.o.host.setOfflineAccessBlock(expired ? offlineNotice(this.s.org_name, days) : null);
+    this.o.state.update((s) => { s.offline_access_expired = expired; });
+    this.o.host.audit(expired ? 'offline_access_expired' : 'offline_access_restored', { days });
+  }
+
+  /** WSOS-AUTH-003 / WSOS-DIR-005: no check-in for the offline access period → lock now, refuse new sign-ins. */
+  private async offlineAccessCheck() {
+    if (this.s.offline_access_expired || !offlineAccessExpired(this.s.policy, this.s.last_check_in, this.o.now())) return;
+    this.setOfflineBlock(true);
+    await this.o.host.lockAllSessions().catch(() => {});
+  }
+
+  /**
+   * Fetch, verify and store the managed-VPN config. The device makes its own keypair: on VPN_PEER_KEY_REQUIRED (first
+   * use, or an admin rotated the key) and when key_rotation_days has passed it generates a new one and registers only
+   * the public key. A config that is unsigned, for another device, or for a key this device does not hold is rejected.
+   */
+  async refreshVpn(): Promise<VpnConfig | undefined> {
+    if (!this.s.enrolled) return undefined;
+    const register = async (rotate: boolean) => {
+      const pub = await this.o.host.wgPublicKey(rotate);
+      if (rotate || !this.s.vpn_key_created_at) {
+        this.o.state.update((s) => { s.vpn_key_created_at = this.o.now(); });
+        this.o.host.audit('vpn_key_generated', { public_key: pub });
+      }
+      return this.o.api.vpnPeer(pub);
+    };
+    let cfg: VpnConfig;
+    try { cfg = await this.o.api.vpn(); } catch (e) {
+      if (!(e instanceof ApiError && e.code === 'VPN_PEER_KEY_REQUIRED')) throw e;
+      // New keypair only if the server had accepted our current key and then forgot it (admin rotation). Otherwise
+      // (first use, or a server that ignored the key sent at registration) register the key we already hold.
+      const held = this.s.vpn_key_created_at ? await this.o.host.wgPublicKey(false) : undefined;
+      cfg = await register(!!held && this.s.vpn?.enabled === true && this.s.vpn.device_public_key === held);
+    }
+    if (this.verifyVpn(cfg) && cfg.enabled) {
+      if (rotationDue(cfg, this.s.vpn_key_created_at, this.o.now())) cfg = await register(true);
+      // The server has a different key than ours (e.g. the key file was lost): re-register the key we hold.
+      else if (cfg.device_public_key !== await this.o.host.wgPublicKey(false)) cfg = await this.o.api.vpnPeer(await this.o.host.wgPublicKey(false));
+    }
+    if (!this.verifyVpn(cfg)) { this.o.host.audit('vpn_config_rejected', { version: cfg?.version }); throw new Error('VPN_SIGNATURE'); }
+    if (cfg.enabled && cfg.device_public_key !== await this.o.host.wgPublicKey(false)) throw new Error('VPN_KEY_MISMATCH');
+    this.o.state.update((s) => { s.vpn = cfg; });
+    return cfg;
+  }
+
+  verifyVpn(c: VpnConfig): boolean {
+    return !!c && typeof c.enabled === 'boolean' && c.device_id === this.s.device_id && this.verifyPolicy(c as unknown as Policy);
+  }
+
+  /** Managed connection, kill switch and the user-VPN rule. Unenrolled → everything WorkSuite added is removed. */
+  private async enforceVpn(p: Policy | null) {
+    const h = this.o.host;
+    try {
+      const plan = vpnPlan(this.s.enrolled ? this.s.vpn : null, p);
+      await h.applyVpn(plan);
+      h.audit('vpn_enforced', { managed: !!plan, version: plan?.config.version ?? null, autoconnect: plan?.autoconnect ?? false, kill_switch: plan?.kill_switch ?? false });
+      if (p?.vpn_required && !plan) h.audit('vpn_required_without_config', {});
+    } catch (e) {
+      h.audit('vpn_enforce_failed', { error: e instanceof Error ? e.message : String(e) });
+    }
+    try {
+      for (const c of userVpnsToRemove(await h.vpnConnections(), p)) {
+        await h.removeConnection(c.uuid);
+        h.audit('user_vpn_removed', { name: c.name, type: c.type });
+      }
+    } catch (e) {
+      h.audit('user_vpn_enforce_failed', { error: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   verifyPolicy(p: Policy): boolean {
@@ -101,14 +215,16 @@ export class Agent {
       const res = await this.o.api.heartbeat({
         os_version: f.os_version, shell_version: f.shell_version, kernel_version: f.kernel_version,
         policy_version: this.s.policy?.version ?? '', update_status: f.update_status,
-        observed: { policy_version: this.s.policy?.version ?? null, encrypted: await this.o.host.isFullyEncrypted() },
+        // Unknown encryption (e.g. an overlay root on the live ISO) reports false; it must never block the check-in.
+        observed: { policy_version: this.s.policy?.version ?? null, encrypted: await this.o.host.isFullyEncrypted().catch(() => false) },
       });
       await this.refreshFacts();
       this.o.state.update((s) => { s.last_check_in = this.o.now(); });
+      if (this.s.offline_access_expired) this.setOfflineBlock(false);
       for (const c of res.commands ?? []) await this.handle(c);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'DEVICE_REVOKED') return this.unenrollLocally('revoked');
-      if (e instanceof ApiError && e.status === 0) return this.offlineKillTimer();
+      if (e instanceof ApiError && e.status === 0) { await this.offlineAccessCheck(); return this.offlineKillTimer(); }
       throw e;
     } finally {
       this.publishStatus();
@@ -199,11 +315,17 @@ export class Agent {
 
   private unenrollLocally(reason: 'revoked' | 'wiped') {
     this.o.state.update((s) => {
-      Object.assign(s, { enrolled: false, credential: undefined, policy: undefined, wiped: reason === 'wiped' || s.wiped });
+      Object.assign(s, { enrolled: false, credential: undefined, policy: undefined, vpn: undefined, vpn_key_created_at: undefined, wiped: reason === 'wiped' || s.wiped });
     });
+    // Revoked or wiped: the VPN key is useless (the server dropped the peer) and must not outlive the enrolment.
+    void this.o.host.applyVpn(null).catch(() => {}).finally(() => this.o.host.forgetWgKey());
     this.o.host.publishCredential(null);
     this.o.host.publishPolicy(null);
+    // WSOS-IDN-007: revocation ends managed sync and policy, never the local accounts: an offline-period block from
+    // the old policy no longer applies.
+    if (this.s.offline_access_expired) this.setOfflineBlock(false);
     this.o.host.audit('unenrolled', { reason });
+    void this.enforce();
   }
 
   private async ack(id: string, state: string, reason?: string) {
@@ -230,12 +352,25 @@ export class Agent {
       device_id: this.s.device_id ?? null,
       last_check_in: this.s.last_check_in ?? null,
       wiped: this.s.wiped ?? false,
+      offline_access_expired: this.s.offline_access_expired ?? false,
       policies: p ? {
         version: p.version, update_ring: p.update_ring ?? null, update_mode: p.update_mode ?? null,
         maintenance_window: p.maintenance_window ?? null, lock_timeout_max_s: p.lock_timeout_max_s ?? null,
         offline_access_days: p.offline_access_days ?? null, usb_storage: p.usb_storage ?? null, bluetooth: p.bluetooth ?? null,
+        login_failures_max: p.login_failures_max ?? null, login_lockout_s: p.login_lockout_s ?? null,
+        allow_pin: p.allow_pin ?? null, pin_min_length: p.pin_min_length ?? null,
         app_allowlist_size: p.app_allowlist?.length ?? 0,
+        vpn_required: p.vpn_required ?? null, user_vpn: p.user_vpn ?? null,
+        kiosk: this.s.enrolled && activeKiosk(p, this.s.device_id) !== null,
       } : null,
+      // Settings › Managed › Kiosk mode (board KioskSettings): what this device's kiosk runs. Never the exit PIN or its verifier.
+      kiosk: this.s.enrolled ? kioskSummary(activeKiosk(p, this.s.device_id)) : null,
+      // Managed VPN as configured (connection state itself comes from NetworkManager in Settings).
+      vpn: this.s.enrolled && this.s.vpn?.enabled ? {
+        name: 'WorkSuite VPN', endpoint: this.s.vpn.peer?.endpoint ?? null, address: this.s.vpn.interface?.address ?? [],
+        always_on: this.s.vpn.always_on === true || p?.vpn_required === true, kill_switch: this.s.vpn.kill_switch === true,
+      } : null,
+      user_vpn_allowed: p?.user_vpn !== 'block',
       can_wipe_data: this.s.enrolled,
       can_wipe_device: this.s.enrolled,
     };

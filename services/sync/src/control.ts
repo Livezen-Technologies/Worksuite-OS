@@ -4,11 +4,12 @@ import { chmodSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { SyncService } from './service.ts';
 import type { TokenProvider } from './transport.ts';
+import type { FileLocks } from './locks.ts';
 
 type Request = { id?: unknown; method: string; params?: Record<string, unknown> };
 
 /** Serve lk.worksuite.Sync1-equivalent methods for the shell: Status, ListFailed, RetryFailed, SyncNow, Unsent, ExportUnsent, Forget, FileStates, DriveSummary. */
-export function serveControl(path: string, svc: SyncService, exportDir = '.'): Server {
+export function serveControl(path: string, svc: SyncService, exportDir = '.', locks: FileLocks | null = null): Server {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   rmSync(path, { force: true });
   const server = createServer((sock) => {
@@ -20,7 +21,9 @@ export function serveControl(path: string, svc: SyncService, exportDir = '.'): S
       let nl: number;
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-        sock.write(JSON.stringify(await dispatch(svc, line, exportDir)) + '\n');
+        let res: unknown;
+        try { res = await dispatch(svc, line, exportDir, locks); } catch { res = { error: 'internal_error' }; }
+        if (!sock.destroyed) sock.write(JSON.stringify(res) + '\n');
       }
     });
     sock.on('error', () => {});
@@ -29,10 +32,13 @@ export function serveControl(path: string, svc: SyncService, exportDir = '.'): S
   return server;
 }
 
-async function dispatch(svc: SyncService, line: string, exportDir: string) {
+async function dispatch(svc: SyncService, line: string, exportDir: string, locks: FileLocks | null = null) {
   let req: Request;
   try { req = JSON.parse(line); } catch { return { error: 'bad_request' }; }
-  const id = req.id ?? null;
+  // §13.1 malicious IPC: anything but a plain object with a string method is refused, never dereferenced.
+  if (!req || typeof req !== 'object' || Array.isArray(req) || typeof req.method !== 'string') return { error: 'bad_request' };
+  if (req.params !== undefined && (req.params === null || typeof req.params !== 'object' || Array.isArray(req.params))) return { id: null, error: 'invalid_argument' };
+  const id = typeof req.id === 'number' || typeof req.id === 'string' ? req.id : null;
   switch (req.method) {
     case 'Status': return { id, result: svc.status() };
     case 'DriveSummary': return { id, result: svc.driveSummary() };
@@ -42,6 +48,14 @@ async function dispatch(svc: SyncService, line: string, exportDir: string) {
       return { id, result: svc.fileStates(dir) };
     }
     case 'ListFailed': return { id, result: svc.listFailed() };
+    // WSOS-DRV-003: Office holds the server lock on a Drive document while it is open.
+    case 'LockFile':
+    case 'UnlockFile': {
+      const p = req.params?.path;
+      if (typeof p !== 'string' || p.length === 0 || p.length > 4096 || p.startsWith('/') || p.split('/').some((s) => s === '..' || s === '.')) return { id, error: 'invalid_argument' };
+      if (!locks) return { id, error: 'unavailable' };
+      return { id, result: req.method === 'LockFile' ? await locks.lock(p) : await locks.unlock(p) };
+    }
     case 'SyncNow': void svc.syncNow(); return { id, result: true };
     case 'RetryFailed': {
       const m = req.params?.mutation_id;

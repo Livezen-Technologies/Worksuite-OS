@@ -45,17 +45,37 @@ case "${1:-}" in
     --ready)  ready ;;
     --logout) cleanup; [ -n "${LABWC_PID:-}" ] && kill -TERM "$LABWC_PID" ;;
     "")
+        # Kiosk mode (device policy, WSOS-AUTH-002): the kiosk account gets the kiosk session, never the full shell.
+        kiosk=$(sed -n 's/^KIOSK_USER=//p' "${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}" 2>/dev/null | head -n 1)
+        if [ -n "$kiosk" ] && [ "$kiosk" = "$(id -un)" ]; then exec "${WORKSUITE_KIOSK_SESSION:-/usr/lib/worksuite/worksuite-kiosk-session}"; fi
         # Clear stale variables from a previous session before starting.
         # shellcheck disable=SC2086
         systemctl --user unset-environment $VARS 2>/dev/null
         export XDG_CURRENT_DESKTOP=WorkSuite:wlroots XDG_SESSION_TYPE=wayland
-        labwc -C /etc/xdg/worksuite/labwc
+        . "${WORKSUITE_WLR_ENV:-/usr/lib/worksuite/wlr-env}"
+        # Per-user Labwc config dir: the system files, linked, except rc.xml once Settings › Touchscreen & pen has
+        # written its own copy (shell/electron/touch.ts adds the touch block to the system rc.xml).
+        SYSCONF=/etc/xdg/worksuite/labwc
+        CONF=${XDG_CONFIG_HOME:-$HOME/.config}/worksuite/labwc
+        if mkdir -p "$CONF" 2>/dev/null; then
+            for f in "$SYSCONF"/*; do
+                [ -e "$f" ] || continue
+                n=$(basename "$f")
+                [ "$n" = rc.xml ] && [ -f "$CONF/rc.xml" ] && [ ! -L "$CONF/rc.xml" ] && continue
+                ln -sfn "$f" "$CONF/$n"
+            done
+        else
+            CONF=$SYSCONF
+        fi
+        labwc -C "$CONF"
         rc=$?
         cleanup
         # WSOS-SES-006: unexpected compositor exit → greeter shows a notice on next display.
         if [ "$rc" -ne 0 ]; then
             mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/worksuite"
             echo "compositor-exit $rc $(date -u +%FT%TZ)" > "${XDG_STATE_HOME:-$HOME/.local/state}/worksuite/last-session-abnormal"
+            # Read (and removed) by the greeter wrapper, /usr/lib/worksuite/worksuite-greeter.
+            echo "compositor-exit $rc" > "${WORKSUITE_NOTICE_DIR:-/run/worksuite/session-notice}/uid-$(id -u)" 2>/dev/null || true
         fi
         exit "$rc"
         ;;

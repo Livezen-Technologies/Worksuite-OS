@@ -10,6 +10,10 @@ import * as admin from '../src/admin.ts';
 import { purgeTombstones, TOMBSTONE_WINDOW } from '../src/api.ts';
 import { openDb } from '../src/db.ts';
 import { createHandler } from '../src/main.ts';
+import { setLogSink } from '../src/log.ts';
+
+const logLines: string[] = [];
+setLogSink((l) => { logLines.push(l); });
 import { issueTokens } from '../src/oauth.ts';
 
 let dir: string, server: Server, base: string, db: ReturnType<typeof openDb>;
@@ -133,10 +137,122 @@ test('device reports and escrow are stored; required fields are validated', asyn
   assert.equal(hb.status, 400);
 });
 
+test('directory authenticate is device-bound, refuses disabled accounts; break-glass use is audited', async () => {
+  const d = await enroll();
+  const auth = (username: string, password: string, device = d.credential) =>
+    call('POST', '/desktop/v1/os/directory/authenticate', { device, body: { username, password } });
+  assert.equal((await call('POST', '/desktop/v1/os/directory/authenticate', { body: { username: 'ana@a.test', password: 'password-123' } })).status, 403);
+  const ok = await auth('Ana@A.test', 'password-123');
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.username, 'ana@a.test');
+  assert.deepEqual(ok.body.groups, ['worksuite-users']);
+  assert.equal(ok.body.offline_login_days, 7);
+  assert.equal(JSON.stringify(ok.body).includes('password'), false);
+  assert.equal((await auth('ana@a.test', 'wrong-password')).body.error.code, 'INVALID_CREDENTIALS');
+  assert.equal((await auth('nobody@a.test', 'password-123')).status, 401);
+  // A device of another organization cannot verify this org's users.
+  const strictDev = await enroll(strictOrg);
+  assert.equal((await auth('ana@a.test', 'password-123', strictDev.credential)).status, 401);
+  const gone = admin.addUser(db, org, 'gone@a.test', 'Gone', 'password-123');
+  db.prepare('UPDATE users SET disabled = 1 WHERE id = ?').run(gone);
+  assert.equal((await auth('gone@a.test', 'password-123')).body.error.code, 'ACCOUNT_DISABLED');
+  const ev = (type: string) => call('POST', '/desktop/v1/os/break-glass/events', { device: d.credential, idem: randomUUID(),
+    body: { id: randomUUID(), type, username: 'wsadmin', at: new Date().toISOString() } });
+  assert.equal((await ev('used')).status, 202);
+  assert.equal((await ev('bogus')).status, 400);
+  const rows = db.prepare('SELECT type FROM audit WHERE principal = ?').all(`device:${d.device_id}`) as { type: string }[];
+  assert.deepEqual(rows.map((r) => r.type), ['break_glass.used']);
+});
+
+test('WSOS-SEC-008: device package-change audit events are stored against the device, retries are ignored', async () => {
+  const d = await enroll();
+  const post = (events: unknown) => call('POST', '/desktop/v1/os/audit', { device: d.credential, idem: randomUUID(), body: { events } });
+  const ev = { id: 'pkg-1', type: 'package.installed', at: '2026-10-16T10:00:00.000Z', data: { caller: 1000, source: 'flatpak', name: 'org.gnome.Calculator' } };
+  assert.equal((await post([ev])).status, 202);
+  assert.equal((await post([ev])).status, 202);
+  assert.equal((await post([{ ...ev, id: 'x', type: 'directory.password_changed' }])).status, 400);
+  assert.equal((await post([{ ...ev, id: 'y', at: 'yesterday' }])).status, 400);
+  assert.equal((await post([])).status, 400);
+  assert.equal((await call('POST', '/desktop/v1/os/audit', { idem: randomUUID(), body: { events: [ev] } })).status, 403);
+  const rows = db.prepare('SELECT type, data FROM audit WHERE principal = ? AND type LIKE ?').all(`device:${d.device_id}`, 'package.%') as { type: string; data: string }[];
+  assert.equal(rows.length, 1);
+  assert.equal(JSON.parse(rows[0].data).name, 'org.gnome.Calculator');
+});
+
 test('expired commands are not delivered', async () => {
   const d = await enroll();
   const id = admin.issueCommand(db, d.device_id, 'RefreshPolicy');
   db.prepare('UPDATE commands SET expires = ? WHERE id = ?').run(Date.now() - 1, id);
   const hb = await call('POST', '/desktop/v1/devices/heartbeat', { device: d.credential, body: { os_version: '1', shell_version: '1', kernel_version: '6', policy_version: '0' } });
   assert.deepEqual(hb.body, { commands: [] });
+});
+
+test('bootstrap lists the org\'s web apps with web_url; links resolve to a web_url', async () => {
+  const b = await call('GET', '/desktop/v1/bootstrap', { token: ana });
+  const mail = b.body.apps.find((a: { id: string }) => a.id === 'mail');
+  assert.deepEqual(mail, { id: 'mail', name: 'Mail', offline_level: 'cached_read', web_url: 'https://ws.test/apps/mail/' });
+  assert.equal(b.body.apps.length, 9);
+  const l = await call('GET', '/desktop/v1/links/resolve?url=' + encodeURIComponent('worksuite://drive/files/42?v=1'), { token: ana });
+  assert.deepEqual(l.body, { app_id: 'drive', route: '/files/42', web_url: 'https://ws.test/apps/drive/files/42?v=1' });
+  admin.setWebApps(db, org, ['mail', 'chat']);
+  const b2 = await call('GET', '/desktop/v1/bootstrap', { token: ana });
+  assert.deepEqual(b2.body.apps.map((a: { id: string }) => a.id), ['mail', 'chat']);
+  const l2 = await call('GET', '/desktop/v1/links/resolve?url=' + encodeURIComponent('worksuite://drive/x'), { token: ana });
+  assert.equal(l2.body.web_url, null);
+  assert.throws(() => admin.setWebApps(db, org, ['nope']));
+  admin.setWebApps(db, org, null);
+});
+
+test('search, file search and recent files cover only the caller\'s records', async () => {
+  const put = (token: string, module: string, object_id: string, payload: unknown) => call('POST', '/desktop/v1/sync/mutations', {
+    token, idem: randomUUID(), body: { batch_id: randomUUID(), mutations: [{ mutation_id: randomUUID(), module, object_id, operation: 'create', base_revision: null, payload }] },
+  });
+  await put(ana, 'mail', 'm1', { subject: 'Budget review', from: 'Kamal' });
+  await put(ana, 'contacts', 'c1', { name: 'Budget Office', email: 'b@a.test' });
+  await put(ana, 'files', 'f1', { name: 'Budget 2026.xlsx', folder: 'Finance', size: 2048 });
+  await put(ben, 'mail', 'm9', { subject: 'Budget secret' });
+  const s = await call('GET', '/desktop/v1/search?q=budget', { token: ana });
+  assert.equal(s.status, 200);
+  assert.deepEqual(s.body.results.map((r: { id: string }) => r.id).sort(), ['contacts:c1', 'mail:m1']);
+  const m = s.body.results.find((r: { id: string }) => r.id === 'mail:m1');
+  assert.equal(m.type, 'mail'); assert.equal(m.link, 'worksuite://mail/m1'); assert.equal(m.subtitle, 'Kamal');
+  const typed = await call('GET', '/desktop/v1/search?q=budget&types=contact', { token: ana });
+  assert.deepEqual(typed.body.results.map((r: { type: string }) => r.type), ['contact']);
+  const f = await call('GET', '/desktop/v1/files/search?q=budget', { token: ana });
+  assert.equal(f.body.files.length, 1);
+  assert.equal(f.body.files[0].ext, 'xlsx'); assert.equal(f.body.files[0].folder, 'Finance');
+  const recent = await call('GET', '/desktop/v1/files/recent', { token: ana });
+  assert.deepEqual(recent.body.files.map((x: { id: string }) => x.id), ['files:f1']);
+  const benS = await call('GET', '/desktop/v1/search?q=budget', { token: ben });
+  assert.deepEqual(benS.body.results.map((r: { id: string }) => r.id), ['mail:m9']);
+  assert.equal((await call('GET', '/desktop/v1/search?q=', { token: ana })).status, 400);
+  assert.equal((await call('GET', '/desktop/v1/search?q=x')).status, 401);
+});
+
+test('§11.6-d problem reports: stored for the user\'s org with the device, unknown sections refused', async () => {
+  const d = await enroll();
+  const post = (body: unknown) => call('POST', '/desktop/v1/problem-reports', { token: ana, device: d.credential, idem: randomUUID(), body });
+  assert.equal((await post({ id: 'rep-00001', description: 'Wi-Fi drops', sections: [{ id: 'system', text: 'OS: WorkSuite OS' }] })).status, 202);
+  assert.equal((await post({ id: 'rep-00002', sections: [{ id: 'shadow', text: 'x' }] })).status, 400);
+  assert.equal((await post({ id: 'rep-00003', sections: [{ id: 'system', text: 'x'.repeat(80_000) }] })).status, 400);
+  assert.equal((await call('POST', '/desktop/v1/problem-reports', { device: d.credential, idem: randomUUID(), body: { id: 'rep-00004', sections: [] } })).status, 401);
+  const row = db.prepare('SELECT device_id, body FROM problem_reports WHERE id = ?').get('rep-00001') as { device_id: string; body: string };
+  assert.equal(row.device_id, d.device_id);
+  assert.equal(JSON.parse(row.body).description, 'Wi-Fi drops');
+});
+
+test('§11.6-c structured logs: one JSON line per request with the caller\'s request id, no query string', async () => {
+  logLines.length = 0;
+  const rid = 'req-' + randomUUID();
+  await fetch(new URL('/desktop/v1/bootstrap?access_token=secret', base), { headers: { 'x-request-id': rid, authorization: 'Bearer nope' } });
+  await new Promise((r) => setTimeout(r, 20));
+  const lines = logLines.map((l) => JSON.parse(l));
+  const req = lines.find((l) => l.request_id === rid);
+  assert.ok(req, 'request logged');
+  assert.equal(req.service, 'worksuite-server');
+  assert.equal(req.event, 'request');
+  assert.equal(req.path, '/desktop/v1/bootstrap');
+  assert.equal(req.status, 401);
+  assert.ok(typeof req.ts === 'string' && typeof req.ms === 'number' && req.level === 'info');
+  assert.ok(!logLines.join('\n').includes('secret') && !logLines.join('\n').includes('nope'));
 });

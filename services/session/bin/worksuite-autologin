@@ -1,0 +1,59 @@
+#!/bin/sh
+# worksuite-autologin enable --kiosk|--personal USER | disable | status   (root)
+#
+# WSOS-AUTH-002: automatic sign-in is off by default. It is turned on only by an explicit configuration:
+#   --personal  an unmanaged (not enrolled) personal device, for a standard (non-administrator) account;
+#   --kiosk     a managed device whose signed policy sets "kiosk_autologin_user" to this account.
+# It writes greetd's [initial_session] (the WorkSuite session as USER); `disable` removes it.
+set -eu
+CONF=${WORKSUITE_GREETD_CONF:-/etc/greetd/config.toml}
+AGENT_STATE=${WORKSUITE_AGENT_STATE:-/var/lib/worksuite-device-agent/state.json}
+SESSION=/usr/bin/worksuite-session
+
+die() { echo "worksuite-autologin: $*" >&2; exit 2; }
+
+strip() {  # config without any [initial_session] table
+    awk 'BEGIN{skip=0} /^\[/{skip=($0=="[initial_session]")} !skip' "$CONF"
+}
+
+enrolled() { [ -f "$AGENT_STATE" ] && grep -q '"enrolled"[[:space:]]*:[[:space:]]*true' "$AGENT_STATE"; }
+
+policy_kiosk_user() {  # kiosk_autologin_user from the device's signed policy (stored by the device agent)
+    # Kiosk mode policy: the agent writes the kiosk account for this device here (services/device-agent/src/kiosk.ts).
+    k=$(sed -n 's/^KIOSK_USER=\([a-z_][a-z0-9_.@-]*\)$/\1/p' "${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}" 2>/dev/null | head -n 1)
+    if [ -n "$k" ]; then echo "$k"; return 0; fi
+    [ -f "$AGENT_STATE" ] || return 0
+    sed -n 's/.*"kiosk_autologin_user"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$AGENT_STATE" | head -n 1
+}
+
+case "${1:-}" in
+  status)
+    if grep -q '^\[initial_session\]' "$CONF" 2>/dev/null; then
+        echo "enabled: $(awk '/^\[initial_session\]/{f=1} f && /^user *=/{gsub(/.*= *"|"/,""); print; exit}' "$CONF")"
+    else
+        echo disabled
+    fi ;;
+  disable)
+    tmp=$(mktemp "$CONF.XXXXXX"); strip > "$tmp"; chmod 0644 "$tmp"; mv "$tmp" "$CONF"
+    echo disabled ;;
+  enable)
+    mode=${2:-}; user=${3:-}
+    printf '%s' "$user" | grep -Eq '^[a-z_][a-z0-9_.@-]{0,63}$' || die "invalid user name"
+    getent passwd "$user" >/dev/null || die "no such user: $user"
+    [ "$user" != root ] && [ "$user" != wsadmin ] || die "refusing $user"
+    case "$mode" in
+      --personal)
+        enrolled && die "this device is managed; automatic sign-in needs the kiosk policy"
+        if id -nG "$user" | tr ' ' '\n' | grep -qx sudo; then die "administrators cannot sign in automatically"; fi ;;
+      --kiosk)
+        enrolled || die "kiosk mode needs a managed device"
+        [ "$(policy_kiosk_user)" = "$user" ] || die "policy does not name $user as the kiosk account" ;;
+      *) die "choose --kiosk or --personal" ;;
+    esac
+    tmp=$(mktemp "$CONF.XXXXXX")
+    { strip; printf '\n[initial_session]\ncommand = "%s"\nuser = "%s"\n' "$SESSION" "$user"; } > "$tmp"
+    chmod 0644 "$tmp"; mv "$tmp" "$CONF"
+    logger -p authpriv.notice -t worksuite-autologin -- "automatic sign-in enabled for $user (${mode#--})" 2>/dev/null || true
+    echo "enabled: $user" ;;
+  *) echo "usage: worksuite-autologin enable --kiosk|--personal USER | disable | status" >&2; exit 2 ;;
+esac

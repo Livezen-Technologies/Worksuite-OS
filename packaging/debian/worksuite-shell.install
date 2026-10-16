@@ -3,4 +3,13 @@ shell/dist-electron usr/lib/worksuite/shell/
 shell/package.json usr/lib/worksuite/shell/
 shell/node_modules/electron/dist/* usr/lib/worksuite/shell/electron/
 shell/bin/worksuite-shell usr/lib/worksuite/shell/
+shell/bin/worksuite-windows-app usr/lib/worksuite/shell/
+shell/bin/worksuite-open-archive usr/lib/worksuite/shell/
 shell/bin/worksuite-node usr/bin/
+shell/bin/worksuite-screenshot usr/bin/
+security/apparmor/worksuite-shell etc/apparmor.d/
+shell/bin/worksuite-app usr/bin/
+shell/apps/*.desktop usr/share/applications/
+shell/apps/worksuite-mimeapps.list usr/share/applications/
+shell/apps/icons/*.svg usr/share/icons/hicolor/scalable/apps/
+shell/dbus/lk.worksuite.Shell1.xml usr/share/dbus-1/interfaces/

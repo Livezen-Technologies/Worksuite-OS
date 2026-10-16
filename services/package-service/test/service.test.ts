@@ -164,3 +164,10 @@ test('CheckUpdates lists APT packages and Flatpak apps with updates', async () =
   const u = await w.svc.checkUpdates();
   assert.deepEqual({ apt: u.apt, flatpak: u.flatpak, packages: u.packages, flatpaks: u.flatpaks }, { apt: 2, flatpak: 1, packages: ['firefox-esr', 'libc6'], flatpaks: ['org.gimp.GIMP'] });
 });
+
+test('the configured Update Center or organisation mirror is an approved https APT source', () => {
+  const src = 'Types: deb\nURIs: https://updates.example.org/os/apt\nSuites: trixie-stable\nComponents: main\nSigned-By: /usr/share/keyrings/worksuite-archive-keyring.gpg\n';
+  assert.match(checkSources(src, 'worksuite.sources').join(), /not an approved source/);
+  assert.deepEqual(checkSources(src, 'worksuite.sources', ['updates.example.org']), []);
+  assert.match(checkSources(src.replace('https:', 'http:'), 'worksuite.sources', ['updates.example.org']).join(), /not an approved source/);
+});

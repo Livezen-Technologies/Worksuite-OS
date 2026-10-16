@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Installer – Language</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="Sidebar" step="1" sub="1" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 80% 60% at 70% 0%, #12306B 0%, #0A1A3D 60%)">
+<div style="flex: 1; padding: 40px 56px 0; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: 0.08em">STEP 1 · LANGUAGE</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em">Choose your language</h1>
+<p style="margin: 0; font-size: 15px; color: #8FA3C8">Used for the installer and your new system.</p>
+</div>
+<div style="display: flex; gap: 12px">
+<label style="flex: 1; display: flex; gap: 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid #1F6BFF; background: rgba(31,107,255,0.12); cursor: pointer">
+<input type="radio" name="mode" checked style="margin: 2px 0 0; width: 18px; height: 18px; accent-color: #1F6BFF">
+<span style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 600">Express install</span><span style="font-size: 13px; color: #8FA3C8">Sensible defaults. Keyboard and time zone are detected for you.</span></span>
+</label>
+<label style="flex: 1; display: flex; gap: 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(127,178,255,0.16); background: rgba(14,32,72,0.6); cursor: pointer">
+<input type="radio" name="mode" style="margin: 2px 0 0; width: 18px; height: 18px; accent-color: #1F6BFF">
+<span style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 600">Custom install</span><span style="font-size: 13px; color: #8FA3C8">Choose keyboard, time zone and every other setting yourself.</span></span>
+</label>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<input aria-label="Search languages" placeholder="Search languages" style="box-sizing: border-box; height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.2); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 14px">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{langs}}" as="l" hint-placeholder-count="12">
+<button style="all: unset; display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 10px; font-size: 14px; background: {{l.bg}}; border: 1px solid {{l.border}}; color: {{l.color}}; cursor: pointer"><span>{{l.name}}</span><span style="font-size: 13px; opacity: 0.75">{{l.native}}</span></button>
+</sc-for>
+</div>
+</div>
+</div>
+<footer style="height: 80px; box-sizing: border-box; padding: 0 56px; border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: space-between">
+<button style="all: unset; padding: 12px 16px; font-size: 15px; color: #8FA3C8; cursor: pointer">Quit installer</button>
+<div style="display: flex; gap: 12px">
+<button style="all: unset; padding: 12px 24px; border-radius: 10px; font-size: 15px; font-weight: 500; color: #8FA3C8; border: 1px solid rgba(127,178,255,0.15)" disabled>Back</button>
+<button style="all: unset; padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Continue</button>
+</div>
+</footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const L = [['English (US)','English'],['English (UK)','English'],['Sinhala','සිංහල'],['Tamil','தமிழ்'],['Hindi','हिन्दी'],['Deutsch','German'],['Français','French'],['Español','Spanish'],['Português','Portuguese'],['日本語','Japanese'],['中文','Chinese'],['العربية','Arabic']];
+    const langs = L.map((l, i) => ({ name: l[0], native: l[1], bg: i === 0 ? '#1F6BFF' : 'rgba(14,32,72,0.6)', border: i === 0 ? '#1F6BFF' : 'rgba(127,178,255,0.14)', color: '#FFFFFF' }));
+    return { langs };
+  }
+}
+</script>
+</body>
+</html>

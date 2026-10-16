@@ -20,10 +20,17 @@ class RecoveryKeyTests(unittest.TestCase):
         self.calls = []
 
         def fake_run(argv, **_):
-            old, new = argv[4], argv[6]
-            self.calls.append({"argv": argv, "old": open(old).read(), "new": open(new).read(),
-                               "mode": oct(os.stat(new).st_mode & 0o777)})
+            if argv[1] == "isLuks":
+                return types.SimpleNamespace(returncode=0 if self.luks2 else 1, stderr="")
+            i = argv.index("--key-file")
+            files = argv[i + 1:]
+            call = {"argv": argv, "cmd": argv[1], "device": files[1], "old": open(files[0]).read()}
+            if len(files) > 2:
+                call["new"] = open(files[2]).read()
+                call["mode"] = oct(os.stat(files[2]).st_mode & 0o777)
+            self.calls.append(call)
             return types.SimpleNamespace(returncode=self.code, stderr="No key available with this passphrase.")
+        self.luks2 = True
         self.code = 0
         self.orig = main.add_key.__defaults__
         main.add_key.__defaults__ = (fake_run,)
@@ -49,12 +56,26 @@ class RecoveryKeyTests(unittest.TestCase):
             {"device": "/dev/nvme0n1p1", "mountPoint": "/boot/efi"},
         ]
         self.assertIsNone(main.run())
-        self.assertEqual([c["argv"][5] for c in self.calls], ["/dev/nvme0n1p2", "/dev/nvme0n1p3"])
-        self.assertTrue(all(c["argv"][:4] == ["cryptsetup", "luksAddKey", "--batch-mode", "--key-file"] for c in self.calls))
-        self.assertEqual({c["new"] for c in self.calls}, {gs[main.GS_KEY]}, "same key on every partition")
+        adds = [c for c in self.calls if c["cmd"] == "luksAddKey"]
+        self.assertEqual([c["device"] for c in adds], ["/dev/nvme0n1p2", "/dev/nvme0n1p3"])
+        self.assertEqual({c["new"] for c in adds}, {gs[main.GS_KEY]}, "same key on every partition")
         self.assertTrue(all(c["old"] == "correct horse" for c in self.calls))
-        self.assertTrue(all(c["mode"] == "0o600" for c in self.calls))
+        self.assertTrue(all(c["mode"] == "0o600" for c in adds))
         self.assertTrue(all("correct horse" not in " ".join(c["argv"]) for c in self.calls), "no secret in argv")
+        self.assertTrue(all(gs[main.GS_KEY] not in " ".join(c["argv"]) for c in self.calls), "no key in argv")
+
+    def test_luks2_slots_use_pbkdf2_for_grub(self):
+        gs["partitions"] = [{"device": "/dev/vda2", "luksPassphrase": "pw", "mountPoint": "/"}]
+        self.assertIsNone(main.run())
+        self.assertEqual([c["cmd"] for c in self.calls], ["luksConvertKey", "luksAddKey"])
+        self.assertTrue(all(c["argv"][c["argv"].index("--pbkdf") + 1] == "pbkdf2" for c in self.calls))
+
+    def test_luks1_only_adds_the_key(self):
+        self.luks2 = False
+        gs["partitions"] = [{"device": "/dev/vda2", "luksPassphrase": "pw", "mountPoint": "/"}]
+        self.assertIsNone(main.run())
+        self.assertEqual([c["cmd"] for c in self.calls], ["luksAddKey"])
+        self.assertNotIn("--pbkdf", self.calls[0]["argv"])
 
     def test_failure_is_reported_and_no_key_is_shown(self):
         self.code = 2

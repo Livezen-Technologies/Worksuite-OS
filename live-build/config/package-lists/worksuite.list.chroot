@@ -3,14 +3,75 @@ worksuite-desktop
 # Installer (live only; Calamares removes itself from the installed system)
 calamares
 calamares-settings-worksuite
+# Tools Calamares' modules run (only recommended, and the build installs no recommends): unpackfs needs unsquashfs
+# and rsync, bootloader needs efibootmgr, and the signed GRUB for Secure Boot behind shim.
+squashfs-tools
+rsync
+efibootmgr
+#if ARCHITECTURES amd64
+grub-efi-amd64-signed
+#endif
+#if ARCHITECTURES arm64
+grub-efi-arm64-signed
+#endif
 worksuite-branding
 # Hardware / boot
 grub-efi
 shim-signed
 cryptsetup
+# File systems the installer creates: FAT32 for the EFI partition (kpmcore runs mkfs.fat)
+dosfstools
+mtools
 cryptsetup-initramfs
+# update-initramfs hooks: keyboard map for the passphrase prompt, and the zstd compressor (initramfs-tools default)
+console-setup
+zstd
 tpm2-tools
 firmware-linux-free
 plymouth
+# Scripts for the installer's language list and the desktop (Sinhala, Tamil, Devanagari, Arabic, ...)
+fonts-noto-core
 # Recovery (§9.2)
 dialog
+udisks2
+# Settings bridge CLIs (shell/electron/system.ts): nmcli, bluetoothctl, wpctl, upower, lpstat, wlr-randr, udisksctl
+network-manager
+# WireGuard VPN (WSOS-INT-001): NetworkManager's built-in wireguard type (kernel module is in-tree); wg(8) for
+# diagnostics; nft for the managed VPN kill switch (services/device-agent/src/vpn.ts)
+wireguard-tools
+nftables
+# OpenVPN profiles imported in Settings › Network › VPN (shell/electron/openvpn.ts)
+network-manager-openvpn
+bluez
+wireplumber
+upower
+cups-client
+wlr-randr
+# Touchscreen, pen and touch mode (shell/electron/touch.ts): device listing and tablet-mode switch events,
+# auto-rotate (monitor-sensor), and the on-screen keyboard (virtual-keyboard + layer-shell under Labwc)
+libinput-tools
+iio-sensor-proxy
+wvkbd
+# WorkSuite greeter (WSOS-AUTH-001; the build installs no recommends)
+python3-gi
+gir1.2-gtk-4.0
+# Smart-card sign-in, off until enabled (WSOS-DIR-011)
+pcscd
+opensc
+libpam-pkcs11
+# Device sign-in with a FIDO2 security key (pam_u2f, pamu2fcfg; Settings > Users > Security key)
+libpam-u2f
+pamu2fcfg
+# Archives in Files (shell/electron/archives.ts): 7zip for zip and 7z (AES-256); Debian's 7zip has no RAR codec
+# (non-free), so RAR is read by libarchive (bsdtar); tar with gzip, xz, bzip2 and zstd; zip/unzip for scripts.
+7zip
+libarchive-tools
+zip
+unzip
+xz-utils
+bzip2
+# Web browser and media player (WorkSuite defaults: shell/apps/worksuite-mimeapps.list)
+firefox-esr
+celluloid
+gstreamer1.0-plugins-good
+gstreamer1.0-libav

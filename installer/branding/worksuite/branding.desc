@@ -1,18 +1,21 @@
 ---
+# Calamares loads this branding's translations from lang/calamares-<componentName>_<language>.qm
+# (calamares-worksuite_si.qm, calamares-worksuite_ta.qm), compiled from installer/lang/*.ts by installer/lang/build.sh.
+# Qt falls back from a regional id to the language (ta_IN → ta), so one file per language covers both.
 componentName: worksuite
 welcomeStyleCalamares: false
-welcomeExpandingLogo: true
-windowExpanding: normal
+welcomeExpandingLogo: false
+windowExpanding: fullscreen
 windowSize: 900px,620px
 windowPlacement: center
-sidebar: widget
-navigation: widget
+sidebar: qml
+navigation: qml
 
 strings:
   productName: WorkSuite OS
   shortProductName: WorkSuite
-  version: 1.0
-  shortVersion: 1.0
+  version: "1.0"
+  shortVersion: "1.0"
   versionedName: WorkSuite OS 1.0
   shortVersionedName: WorkSuite 1.0
   bootloaderEntryName: WorkSuite
@@ -29,7 +32,7 @@ slideshow: "show.qml"
 slideshowAPI: 2
 
 style:
-  SidebarBackground: "#0f172a"
-  SidebarText: "#f8fafc"
-  SidebarTextCurrent: "#ffffff"
-  SidebarBackgroundCurrent: "#2563eb"
+  SidebarBackground: "#071330"
+  SidebarText: "#E8EEFA"
+  SidebarTextCurrent: "#FFFFFF"
+  SidebarBackgroundCurrent: "#1F6BFF"

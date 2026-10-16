@@ -31,8 +31,11 @@ Errors (`lk.worksuite.Error.*`): `NotAuthorized`, `NotInCatalog`, `InvalidArgs`,
 
 ## Update coordinator (`src/updates.ts`, `src/coordinator.ts`)
 
-Checks 15 min after boot and every 6 h (WSOS-AUP-001) at `https://download.worksuitecloud.com/os/manifests/<ring>/<arch>.json`
-(or the policy's `update_mirror`), verifies the manifest's Ed25519 signature against
+Checks 15 min after boot and every 6 h (WSOS-AUP-001) at `<host>/os/manifests/<ring>/<arch>.json` on the WorkSuite
+Update Center (Livezen-Technologies/worksite-download). `<host>` is, in order: the enrolled organisation's policy
+`update_mirror`, `update_host` in `/etc/worksuite/updates.json` (shipped by the image; also `update_ring` and
+`update_mode` for unmanaged devices), then `https://download.worksuitecloud.com`; https only. The same host's
+`/os/apt` becomes the URI of `worksuite.sources` and an approved APT source. It verifies the manifest's Ed25519 signature against
 `/usr/share/worksuite/keys/release/<key_id>.pem` and rejects one for another ring or arch (WSOS-AUP-002), points the
 WorkSuite APT source at the ring's suite (`trixie-dev|pilot|stable`), then decides:
 
@@ -50,7 +53,35 @@ Installs run through the same job queue (`ApplyUpdate`), and results go to `desk
 device credential on managed devices (WSOS-UPD-005). D-Bus: `GetUpdateStatus`, `CheckForUpdates`, `DeferUpdate` and
 `InstallUpdateNow` (the last two need `lk.worksuite.update.apply`), and the `UpdateStatusChanged` signal.
 
-Not yet: local `.deb` installs (WSOS-APT-005), AppImages, arch checks against the catalog (WSOS-ARM-005), offline `.wsupdate` bundles (WSOS-AUP-010) and download resume beyond APT's own (AUP-008).
+Downloads (AUP-008) run `apt-get --download-only` with retries; partial files are kept and apt resumes them, and an
+interrupted download leaves the coordinator `waiting` (`download_interrupted`), not failed. Feature releases may name
+an `entitlement` (AUP-012): they install only with a signed, device-bound licence from `desktop/v1/os/licence` that is
+active and holds it; security releases continue during grace.
+
+## Catalog, local packages, Flatpak, offline bundles
+
+- `GetCatalog` (read-only): the organization's catalog from the enrolled server's `desktop/v1/os/catalog` with the
+  device credential, plus installed state, policy `blocked_reason` and arch availability (APP-001/003, ARM-005).
+  Unmanaged or offline devices get `not_enrolled` / `unreachable`, never sample data.
+- `PreviewLocalDeb(path)` / `InstallLocalDeb(token)` (APT-005): the caller's own regular file is copied (no symlinks)
+  into `/var/lib/worksuite-package-service/spool` under its SHA-256; preview shows control fields (Maintainer as an
+  unverified publisher), arch, policy (`allow_local_debs`, allowlist) and apt's dependency simulation. Install takes the
+  token and polkit `lk.worksuite.package.install-local` (administrator password every time).
+- `GetAppPermissions`, `ResetAppPermissions`, `PruneRuntimes` (FLP-003/004). Per-user overrides, portal grants and
+  `~/.var/app` data are reset by the shell as the user.
+- `InspectBundle(path)` / `InstallBundle(path)` (AUP-010): `.wsupdate` = ustar with `manifest.json` (release manifest
+  signed with the release key, `bundle.files` = name/size/SHA-256 of every `pool/*.deb`). Verified on inspect and again
+  after copying to a root-owned directory, then `apt-get --no-download install`. Build one with
+  `worksuite-server bundle-build manifest.json out.wsupdate *.deb`.
+
+## AppImages (`worksuite-appimage`, per user)
+
+`worksuite-appimage import|approve|run|update|remove|list` (AIM-001…004, ARM-005): imports into
+`~/.local/share/worksuite/appimages/<id>/` with `metadata.json` (origin, SHA-256, version, arch, signature), writes a
+desktop entry whose `Exec` is `worksuite-appimage run <id>`, and reads the desktop file and icon from the SquashFS
+with `unsquashfs` (the AppImage is never executed to inspect it). Files stay non-executable until approved; every run
+re-checks hash, arch and the `appimages` policy. Embedded type 2 signatures (`.sha256_sig`/`.sig_key`) are verified
+with gpg; unsigned files are "checksum only". Updates are accepted only when signed by the same key.
 
 Rules (SRS §10.3, WSOS-SEC-007/008): caller UID taken from D-Bus credentials, never from arguments; polkit is
 checked per call with the caller's subject; only fixed executables are spawned with argument vectors (no shell);

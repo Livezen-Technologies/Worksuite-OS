@@ -5,6 +5,8 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
+# WSOS-SEC-009: AppArmor (security/apparmor/); "-" keeps the unit working on kernels without AppArmor.
+AppArmorProfile=-worksuite-device-agent
 Type=simple
 ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/device-agent/src/main.ts
 Restart=on-failure
@@ -21,6 +23,13 @@ LogsDirectory=worksuite
 NoNewPrivileges=yes
 ProtectSystem=strict
 ReadWritePaths=/var/lib/worksuite-device-agent /run/worksuite-device-agent /var/log/worksuite /home
+# Managed WireGuard VPN keyfile (WSOS-INT-001); "-" = fine if NetworkManager isn't installed.
+ReadWritePaths=-/etc/NetworkManager/system-connections
+# Policy enforcement (src/enforce.ts ENFORCED_PATHS): lock/faillock/offline files (and signin-policy.conf), USB storage modprobe and udev rules.
+# test/unit.test.ts checks every path the agent writes is covered here and in the AppArmor profile.
+ConfigurationDirectory=worksuite
+ConfigurationDirectoryMode=0755
+ReadWritePaths=/etc/worksuite -/etc/modprobe.d -/etc/udev/rules.d
 ProtectHome=no
 PrivateTmp=yes
 ProtectKernelTunables=yes
@@ -37,7 +46,7 @@ RestrictNamespaces=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
-CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_CHOWN CAP_SYS_ADMIN CAP_SYS_BOOT
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_CHOWN CAP_SYS_ADMIN CAP_SYS_BOOT CAP_NET_ADMIN
 DeviceAllow=block-* rw
 DevicePolicy=closed
 UMask=0077

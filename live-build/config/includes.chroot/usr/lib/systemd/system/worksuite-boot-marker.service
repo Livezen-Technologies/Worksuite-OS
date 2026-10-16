@@ -6,8 +6,8 @@ Wants=graphical.target
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/worksuite/boot-marker
-StandardOutput=tty
-TTYPath=/dev/ttyS0
+# /dev/console is the last console= on the kernel command line: the serial port (ttyS0 / ttyAMA0).
+StandardOutput=journal+console
 
 [Install]
 WantedBy=graphical.target

@@ -1,0 +1,10 @@
+#!/usr/bin/python3 -Es
+"""worksuite-wayland-bridge.service: lk.worksuite.WaylandBridge1, lk.worksuite.Tray1 and the StatusNotifierWatcher."""
+import asyncio
+import sys
+
+sys.path.insert(0, "/usr/lib/worksuite/wayland-bridge")
+
+from worksuite_bridge.__main__ import main  # noqa: E402
+
+asyncio.run(main())

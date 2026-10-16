@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recovery complete</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; background: radial-gradient(ellipse 60% 50% at 50% 35%, #0E2A55 0%, #061029 60%, #030816 100%); font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px">
+<div style="width: 96px; height: 96px; border-radius: 50%; background: rgba(95,211,154,0.14); box-shadow: 0 0 0 10px rgba(95,211,154,0.06); display: flex; align-items: center; justify-content: center">
+<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#5FD39A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+</div>
+<h1 style="margin: 12px 0 0; font-size: 34px; font-weight: 700; letter-spacing: -0.02em">Your system is fixed</h1>
+<p style="margin: 0; font-size: 16px; color: #8FA3C8; text-align: center; max-width: 520px; line-height: 1.5">Startup repair fixed 2 problems. WorkSuite OS should start normally now.</p>
+<div style="margin-top: 6px; width: 520px; box-sizing: border-box; border-radius: 14px; background: rgba(14,32,72,0.7); border: 1px solid rgba(127,178,255,0.16); overflow: hidden">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-top: {{r.border}}; font-size: 14px">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5FD39A" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+<span style="flex: 1">{{r.k}}</span><span style="font-size: 12px; color: #8FA3C8">{{r.v}}</span>
+</div>
+</sc-for>
+</div>
+<div style="margin-top: 14px; display: flex; gap: 12px">
+<button style="all: unset; padding: 12px 22px; border-radius: 10px; font-size: 15px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Back to recovery menu</button>
+<button style="all: unset; padding: 12px 32px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer">Restart</button>
+</div>
+<a href="#" style="font-size: 13px">Save repair report to USB</a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const R = [['File system errors repaired','2 fixed'],['Faulty driver rolled back','wsgpu 1.1 → 1.0'],['System files verified','18,240 OK']];
+    return { rows: R.map((r, i) => ({ k: r[0], v: r[1], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })) };
+  }
+}
+</script>
+</body>
+</html>

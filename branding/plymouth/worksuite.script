@@ -1,50 +1,211 @@
-# WorkSuite OS boot splash: centred logo on #0b1120, a progress bar, and the disk-unlock prompt.
-Window.SetBackgroundTopColor(0.043, 0.067, 0.125);
-Window.SetBackgroundBottomColor(0.043, 0.067, 0.125);
-cx = Window.GetX() + Window.GetWidth() / 2;
-cy = Window.GetY() + Window.GetHeight() / 2;
+# WorkSuite OS boot splash (design: "WorkSuite OS Boot & Install" > BootSplash, 1280x800 board).
+# One centred column, 28 px apart: the mark in a spinning ring (120 px), the title (Plex Sans Medium 28) over the
+# subtitle (Plex Sans 15, #8FA3C8), then a 420 x 4 progress bar with the phase on the left and "WorkSuite OS <version>" (filled in at package build)
+# on the right (Plex Mono 12, #5E739C); "Press Esc for details" sits 32 px from the bottom (Plex Mono 12, #3D5280).
+# Modes (Plymouth.GetMode): boot -> "Starting WorkSuite OS", shutdown -> "Shutting down", reboot -> "Restarting",
+# updates / system-upgrade / firmware-upgrade -> the same column with update progress and "Don't turn off" copy.
+# The disk-unlock prompt (LUKS, SRS full-disk encryption) appears under the bar, in a 420 x 44 field.
+# Plymouth's script language has no ternary operator: every choice below is an if/else.
+Window.SetBackgroundTopColor(0.016, 0.039, 0.102);      # #040A1A
+Window.SetBackgroundBottomColor(0.016, 0.039, 0.102);
+W = Window.GetWidth();
+H = Window.GetHeight();
+cx = Window.GetX() + W / 2;
+cy = Window.GetY() + H / 2;
+SANS = "IBM Plex Sans";
+SANS_MEDIUM = "IBM Plex Sans Medium";
+MONO = "IBM Plex Mono";
+VERSION_S = "WorkSuite OS @VERSION@";
 
-logo.image = Image("logo.png");
-logo.sprite = Sprite(logo.image);
-logo.sprite.SetPosition(cx - logo.image.GetWidth() / 2, cy - logo.image.GetHeight() / 2 - 40, 1);
+# Pango sizes are points at 96 dpi: the design's pixel sizes x 0.75.
+fun text(s, px, r, g, b, font) {
+  return Image.Text(s, r, g, b, 1, font + " " + px * 0.75);
+}
+fun place_center(sprite, y) {
+  sprite.SetPosition(Math.Int(cx - sprite.GetImage().GetWidth() / 2), Math.Int(y), 3);
+}
 
-track.image = Image("progress-track.png");
-track.sprite = Sprite(track.image);
-track.x = cx - track.image.GetWidth() / 2;
-track.y = cy + logo.image.GetHeight() / 2 + 20;
+# Column: ring 120 + 28 + title 37 + 10 + subtitle 20 + 28 + bar 4 + 10 + phase row 16 = 273 px, centred.
+ring_y = Math.Int(cy - 273 / 2);
+title_y = ring_y + 148;
+sub_y = title_y + 47;
+track_y = sub_y + 48;
+
+ring.track = Sprite(Image("ring-track.png"));
+ring.track.SetPosition(cx - 60, ring_y, 1);
+ring.arc_image = Image("ring-arc.png");
+ring.arc = Sprite(ring.arc_image);
+ring.arc.SetPosition(cx - 60, ring_y, 2);
+ring.angle = 0;
+mark = Sprite(Image("mark.png"));
+mark.SetPosition(cx - 24, ring_y + 36, 3);
+
+fun refresh_callback() {
+  ring.angle += 0.0898;                                  # one turn per 1.4 s at Plymouth's 50 Hz refresh
+  if (ring.angle > 6.2832) ring.angle -= 6.2832;
+  ring.arc.SetImage(ring.arc_image.Rotate(ring.angle));
+  if (bar.original) { step_bar(); step_shimmer(); }
+}
+Plymouth.SetRefreshRate(50);
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# Title and subtitle by mode.
+mode = Plymouth.GetMode();
+updating = 0;
+if (mode == "updates" || mode == "system-upgrade" || mode == "firmware-upgrade") updating = 1;
+if (mode == "shutdown") { title_s = "Shutting down"; sub_s = "Saving settings and closing apps."; }
+else if (mode == "reboot") { title_s = "Restarting"; sub_s = "You’ll be back in a moment."; }
+else if (mode == "firmware-upgrade") { title_s = "Updating firmware"; sub_s = "Don’t turn off your computer. It will restart when done."; }
+else if (updating) { title_s = "Installing updates"; sub_s = "Don’t turn off your computer. It will restart when done."; }
+else { title_s = "Starting WorkSuite OS"; sub_s = "Getting your workspace ready."; }
+title = Sprite(text(title_s, 28, 0.91, 0.933, 0.98, SANS_MEDIUM));
+place_center(title, title_y);
+sub = Sprite(text(sub_s, 15, 0.561, 0.639, 0.784, SANS));
+place_center(sub, sub_y);
+
+# Progress: 420 x 4 track, gradient bar, phase on the left, version on the right.
+track.sprite = Sprite(Image("progress-track.png"));
+track.x = cx - 210;
+track.y = track_y;
 track.sprite.SetPosition(track.x, track.y, 1);
 bar.original = Image("progress-bar.png");
 bar.sprite = Sprite();
 bar.sprite.SetPosition(track.x, track.y, 2);
+shimmer.original = Image("progress-shimmer.png");     # 96 x 4, white to transparent both ways
+shimmer.sprite = Sprite();
+shimmer.sprite.SetOpacity(0);
+shimmer.t = 0;
+shimmer.shown = -1;
+phase = Sprite();
+brand = Sprite(text(VERSION_S, 12, 0.369, 0.451, 0.612, MONO));
+brand.SetPosition(track.x + 420 - brand.GetImage().GetWidth(), track.y + 14, 3);
+last_phase = "";
+asking = 0;
+
+fun set_phase(p) {
+  if (p != last_phase) {
+    phase.SetImage(text(p, 12, 0.369, 0.451, 0.612, MONO));
+    phase.SetPosition(track.x, track.y + 14, 3);
+    last_phase = p;
+  }
+}
+# The fill eases toward the reported progress on every 50 Hz frame instead of jumping (the board's fill is a
+# plain gradient of the current width; a soft light sweeps across the fill every 1.6 s, as on the shell's bars).
+bar.target = 0;
+bar.shown = -1;
+bar.w = 4;
+fun set_bar(progress) {
+  t = 420 * progress;
+  if (t < 4) t = 4;
+  if (t > 420) t = 420;
+  bar.target = t;
+}
+fun step_bar() {
+  d = bar.target - bar.w;
+  if (d > 0.5 || d < -0.5) bar.w += d * 0.12;           # ~0.35 s ease-out to the new value
+  else bar.w = bar.target;
+  w = Math.Int(bar.w + 0.5);
+  if (w != bar.shown) {
+    bar.sprite.SetImage(bar.original.Scale(w, 4));
+    bar.shown = w;
+  }
+}
+
+# Shimmer: a 96 px highlight travels from left of the fill to past its right end in 80 frames (1.6 s at 50 Hz).
+# Plymouth has no clipping, so the part inside [0, fill] is cropped by scaling the image to that width.
+fun step_shimmer() {
+  shimmer.t += 1;
+  if (shimmer.t >= 80) shimmer.t = 0;
+  fw = bar.shown;
+  if (fw < 24) { shimmer.sprite.SetOpacity(0); return; }
+  x0 = Math.Int(-96 + (fw + 96) * shimmer.t / 80);
+  l = x0;
+  if (l < 0) l = 0;
+  r = x0 + 96;
+  if (r > fw) r = fw;
+  vw = r - l;
+  if (vw < 2) { shimmer.sprite.SetOpacity(0); return; }
+  if (vw != shimmer.shown) {
+    shimmer.sprite.SetImage(shimmer.original.Scale(vw, 4));
+    shimmer.shown = vw;
+  }
+  shimmer.sprite.SetPosition(track.x + l, track.y, 3);
+  shimmer.sprite.SetOpacity(1);
+}
 
 fun progress_callback(duration, progress) {
-  w = Math.Int(bar.original.GetWidth() * progress);
-  if (w < 1) w = 1;
-  bar.sprite.SetImage(bar.original.Scale(w, bar.original.GetHeight()));
+  if (updating) return;                                  # update modes are driven by the system-update callback
+  set_bar(progress);
+  if (asking) p = "Unlocking disk";
+  else if (mode == "shutdown" || mode == "reboot") {
+    if (progress < 0.5) p = "Closing apps";
+    else if (mode == "reboot") p = "Rebooting";
+    else p = "Unmounting disks";
+  } else {
+    if (progress < 0.3) p = "Starting up";
+    else if (progress < 0.7) p = "Loading system services";
+    else p = "Starting desktop";
+  }
+  set_phase(p);
 }
 Plymouth.SetBootProgressFunction(progress_callback);
 
-# Disk unlock (LUKS, SRS full-disk encryption).
+# Offline updates (plymouth system-update --progress N): N is a percentage.
+fun update_callback(percent) {
+  set_bar(percent / 100);
+  if (mode == "firmware-upgrade") p = "Updating firmware";
+  else p = "Installing updates";
+  set_phase(p + " · " + Math.Int(percent) + "%");
+}
+Plymouth.SetSystemUpdateFunction(update_callback);
+if (updating) update_callback(0);
+else progress_callback(0, 0);
+
+hint = Sprite(text("Press Esc for details", 12, 0.239, 0.322, 0.502, MONO));
+place_center(hint, Window.GetY() + H - 32 - 16);
+
+# Disk unlock / questions: label, then a 420 x 44 field holding the typed characters as dots.
 prompt.sprite = Sprite();
+field.sprite = Sprite(Image("field.png"));
+field.sprite.SetPosition(track.x, track.y + 64, 3);
+field.sprite.SetOpacity(0);
 entry.sprite = Sprite();
-fun display_password_callback(text, bullets) {
-  prompt.sprite.SetImage(Image.Text(text, 0.89, 0.91, 0.94));
-  prompt.sprite.SetPosition(cx - prompt.sprite.GetImage().GetWidth() / 2, track.y + 40, 3);
+fun show_entry(label_s, value_s) {
+  asking = 1;
+  if (!updating) set_phase("Unlocking disk");
+  prompt.sprite.SetImage(text(label_s, 13, 0.561, 0.639, 0.784, SANS));
+  prompt.sprite.SetPosition(track.x, track.y + 40, 4);
+  if (value_s == "") value_s = " ";
+  entry.sprite.SetImage(text(value_s, 13, 0.91, 0.933, 0.98, SANS));
+  entry.sprite.SetPosition(track.x + 16, Math.Int(track.y + 64 + 22 - entry.sprite.GetImage().GetHeight() / 2), 4);
+  prompt.sprite.SetOpacity(1); entry.sprite.SetOpacity(1); field.sprite.SetOpacity(1);
+}
+fun display_password_callback(prompt_s, bullets) {
+  if (prompt_s == "") prompt_s = "Enter the passphrase to unlock this disk";
   dots = "";
   for (i = 0; i < bullets; i++) dots += "●";
-  entry.sprite.SetImage(Image.Text(dots + " ", 0.0, 0.85, 0.95));
-  entry.sprite.SetPosition(cx - entry.sprite.GetImage().GetWidth() / 2, track.y + 70, 3);
-  prompt.sprite.SetOpacity(1); entry.sprite.SetOpacity(1);
+  show_entry(prompt_s, dots);
+}
+fun display_question_callback(prompt_s, entry_s) {
+  show_entry(prompt_s, entry_s);
 }
 fun display_normal_callback() {
-  prompt.sprite.SetOpacity(0); entry.sprite.SetOpacity(0);
+  asking = 0;
+  prompt.sprite.SetOpacity(0); entry.sprite.SetOpacity(0); field.sprite.SetOpacity(0);
 }
 Plymouth.SetDisplayPasswordFunction(display_password_callback);
+Plymouth.SetDisplayQuestionFunction(display_question_callback);
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
 
+# Messages (plymouth message --text=...): one line between the field and the hint.
 message.sprite = Sprite();
-fun message_callback(text) {
-  message.sprite.SetImage(Image.Text(text, 0.6, 0.65, 0.72));
-  message.sprite.SetPosition(cx - message.sprite.GetImage().GetWidth() / 2, Window.GetHeight() - 60, 3);
+fun message_callback(text_s) {
+  message.sprite.SetImage(text(text_s, 13, 0.561, 0.639, 0.784, SANS));
+  place_center(message.sprite, track.y + 132);
+  message.sprite.SetOpacity(1);
 }
-Plymouth.SetMessageFunction(message_callback);
+fun hide_message_callback(text_s) {
+  message.sprite.SetOpacity(0);
+}
+Plymouth.SetDisplayMessageFunction(message_callback);
+Plymouth.SetHideMessageFunction(hide_message_callback);

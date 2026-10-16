@@ -1,0 +1,100 @@
+// R2 Unlock disk with recovery key. The key lives only in this component's state (gone when the screen closes,
+// cleared after a successful unlock); it is never logged or stored and only leaves through recoveryUnlock.
+import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from 'react'
+import { os, type RecoveryInfo } from '../../lib/os'
+import { KEY_GROUP_LEN, KEY_LENGTH, emptyKey, fillKeyGroups, formatGiB, formatKey, keyProblem, recoveryErrorText, type DoneInfo } from '../../lib/recovery'
+import { Icon, mono } from '../../components/Ws'
+import { Header, Page, ghost, link, primary, ring } from './Frame'
+import { t } from '../../i18n'
+
+export default function Unlock({ info, onBack, onDone }: { info: RecoveryInfo | null; onBack: () => void; onDone: (d: DoneInfo) => void }) {
+  const disk = info?.luks.find((d) => !d.unlocked) ?? null
+  const [groups, setGroups] = useState(emptyKey)
+  const [usePass, setUsePass] = useState(false)
+  const [pass, setPass] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [help, setHelp] = useState(false)
+  const refs = useRef<(HTMLInputElement | null)[]>([])
+  const passRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { (usePass ? passRef.current : refs.current[0])?.focus() }, [usePass])
+
+  const set = (i: number, text: string) => {
+    const r = fillKeyGroups(groups, i, text)
+    setGroups(r.groups); setError(null)
+    if (r.focus !== i) refs.current[r.focus]?.focus()
+  }
+  const onPaste = (i: number, e: ClipboardEvent<HTMLInputElement>) => { e.preventDefault(); set(i, e.clipboardData.getData('text')) }
+  const onKey = (i: number, e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !groups[i] && i > 0) { e.preventDefault(); refs.current[i - 1]?.focus() }
+    if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0 && i > 0) refs.current[i - 1]?.focus()
+    if (e.key === 'ArrowRight' && e.currentTarget.selectionStart === groups[i].length && i < groups.length - 1) refs.current[i + 1]?.focus()
+  }
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!disk || busy) return
+    const problem = usePass ? (pass ? null : t('rec.unlock.enterPass')) : keyProblem(groups)
+    if (problem) { setError(problem); return }
+    setBusy(true); setError(null)
+    const r = await os.recoveryUnlock(disk.device, usePass ? pass : formatKey(groups))
+    setBusy(false)
+    if (r.ok) {
+      setGroups(emptyKey()); setPass('')
+      onDone({ title: t('rec.unlock.doneTitle'), text: t('rec.unlock.doneText'), ok: true, rows: [{ k: t('rec.unlock.doneRow'), v: disk.name, state: 'ok' }] })
+      return
+    }
+    setError(recoveryErrorText(r.error))
+    // Inputs are re-enabled on the next render; focus then.
+    setTimeout(() => (usePass ? passRef.current : refs.current[0])?.focus(), 0)
+  }
+
+  const diskLine = disk && [t('rec.unlock.disk', { name: disk.name }), [disk.label, disk.version ? `(LUKS${disk.version})` : '(LUKS)'].filter(Boolean).join(' '), formatGiB(disk.size_bytes)].filter(Boolean).join(' · ')
+
+  return (
+    <Page label={t('rec.unlock.label')}>
+      <Header onBack={onBack} />
+      <form onSubmit={submit} noValidate className="flex flex-col items-center gap-[22px] px-6 pb-10 pt-[70px]">
+        <div className="flex h-20 w-20 items-center justify-center rounded-[22px] bg-[rgba(31,107,255,0.18)]">
+          <Icon size={38} stroke="#7FB2FF"><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M17 6l3 3" /></Icon>
+        </div>
+        <h1 className="m-0 text-[30px] font-bold">{t('rec.unlock.title')}</h1>
+        <p id="unlock-desc" className="m-0 max-w-[520px] text-center text-[15px] leading-normal text-[#8FA3C8]">
+          {usePass ? t('rec.unlock.passHint') : t('rec.unlock.keyHint', { length: KEY_LENGTH })}
+        </p>
+        {usePass ? (
+          <input ref={passRef} type="password" aria-label={t('rec.unlock.passLabel')} aria-describedby="unlock-desc" autoComplete="off" value={pass} disabled={busy || !disk}
+            onChange={(e) => { setPass(e.target.value); setError(null) }} aria-invalid={!!error}
+            className={`mt-2 h-12 w-[470px] max-w-full rounded-[10px] border border-[rgba(127,178,255,0.2)] bg-[rgba(4,10,26,0.6)] px-4 text-[17px] text-[#E8EEFA] focus:border-[#1F6BFF] ${ring}`} />
+        ) : (
+          <fieldset className="m-0 mt-2 border-0 p-0" aria-describedby="unlock-desc">
+            <legend className="sr-only">{t('rec.unlock.legend', { groups: groups.length, size: KEY_GROUP_LEN })}</legend>
+            <div className="grid grid-cols-[repeat(4,110px)] gap-2.5">
+              {groups.map((g, i) => (
+                <input key={i} ref={(el) => { refs.current[i] = el }} aria-label={t('rec.unlock.group', { n: i + 1 })} value={g} maxLength={KEY_GROUP_LEN}
+                  inputMode="text" autoComplete="off" autoCorrect="off" autoCapitalize="characters" spellCheck={false} disabled={busy || !disk} aria-invalid={!!error}
+                  onChange={(e) => set(i, e.target.value)} onPaste={(e) => onPaste(i, e)} onKeyDown={(e) => onKey(i, e)}
+                  className={`${mono} h-12 rounded-[10px] border border-[rgba(127,178,255,0.2)] bg-[rgba(4,10,26,0.6)] text-center text-[17px] tracking-[0.08em] text-[#E8EEFA] focus:border-[#1F6BFF] disabled:opacity-60 ${ring}`} />
+              ))}
+            </div>
+          </fieldset>
+        )}
+        <span className="text-[13px] text-[#8FA3C8]">{diskLine ?? t('rec.unlock.noDisk')}</span>
+        {error && <p role="alert" className="m-0 text-[13px] text-[#FFB4A8]">{error}</p>}
+        <div className="mt-2.5 flex gap-3">
+          <button type="button" onClick={() => { setUsePass((p) => !p); setError(null); setGroups(emptyKey()); setPass('') }} className={ghost}>
+            {usePass ? t('rec.unlock.useKey') : t('rec.unlock.usePass')}
+          </button>
+          <button type="submit" disabled={busy || !disk} className={primary}>{busy ? t('rec.unlock.busy') : t('lock.unlock')}</button>
+        </div>
+        <button type="button" aria-expanded={help} aria-controls="key-help" onClick={() => setHelp((h) => !h)} className={`mt-1 ${link}`}>{t('rec.unlock.where')}</button>
+        {help && (
+          <p id="key-help" className="m-0 max-w-[520px] text-center text-[13px] leading-normal text-[#C9D6EE]">
+            {t('rec.unlock.help', { groups: KEY_LENGTH / KEY_GROUP_LEN, size: KEY_GROUP_LEN })}
+          </p>
+        )}
+      </form>
+    </Page>
+  )
+}

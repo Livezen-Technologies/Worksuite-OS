@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Installation failed</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="Sidebar" step="6" sub="1" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 80% 60% at 70% 0%, #3A1E28 0%, #0A1A3D 60%)">
+<div style="flex: 1; min-height: 0; padding: 36px 56px 0; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; gap: 18px; align-items: flex-start">
+<span style="width: 56px; height: 56px; border-radius: 16px; background: rgba(255,138,122,0.14); display: flex; align-items: center; justify-content: center; flex: none">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FF8A7A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.5h.01"></path></svg>
+</span>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #FF8A7A; letter-spacing: 0.08em">INSTALLATION STOPPED</div>
+<h1 style="margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em">Couldn't format the EFI partition on vda</h1>
+<p style="margin: 0; font-size: 15px; color: #C9D6EE; line-height: 1.5">The partition was created, but making the FAT32 file system on it failed. Nothing else was written, and no data has been copied yet.</p>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{jobs}}" as="j" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: {{j.bg}}; border: 1px solid {{j.border}}">
+<div style="height: 3px; border-radius: 2px; background: {{j.bar}}"></div>
+<span style="font-size: 13px; font-weight: 600">{{j.label}}</span>
+<span style="font-size: 12px; color: {{j.stateColor}}">{{j.state}}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 14px; background: rgba(4,10,26,0.6); border: 1px solid rgba(127,178,255,0.14); overflow: hidden">
+<div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid rgba(127,178,255,0.12)">
+<button onClick="{{toggle}}" aria-expanded="{{open}}" style="all: unset; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9D6EE" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" style="transform: {{chev}}"><path d="M9 6l6 6-6 6"></path></svg>Technical details</button>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8FA3C8">WS-PART-022 · exit code 1</span>
+<button style="all: unset; margin-left: auto; font-size: 12px; color: #7FB2FF; cursor: pointer">Copy log</button>
+</div>
+<sc-if value="{{open}}" hint-placeholder-val="{{true}}">
+<div style="flex: 1; overflow: auto; padding: 10px 0; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7">
+<sc-for list="{{log}}" as="l" hint-placeholder-count="8">
+<div style="display: flex; gap: 14px; padding: 0 16px; background: {{l.bg}}; border-left: 3px solid {{l.edge}}">
+<span style="width: 22px; text-align: right; color: #3D5280; flex: none">{{l.n}}</span>
+<span style="width: 70px; color: {{l.kindColor}}; flex: none">{{l.kind}}</span>
+<span style="color: {{l.color}}; white-space: pre-wrap">{{l.text}}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="display: flex; gap: 12px; padding: 12px 16px; border-radius: 12px; background: rgba(31,107,255,0.08); border: 1px solid rgba(31,107,255,0.3); font-size: 13px; color: #C9D6EE">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z"></path></svg>
+<span><strong>Usually fixed by:</strong> trying again, or choosing Manual partitioning and deleting the leftover partition. If it keeps failing, the disk may be in use or failing.</span>
+</div>
+</div>
+<footer style="height: 80px; box-sizing: border-box; padding: 0 56px; border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; gap: 8px">
+<button style="all: unset; padding: 12px 16px; font-size: 15px; color: #8FA3C8; cursor: pointer">Quit installer</button>
+<button style="all: unset; display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 14px; color: #7FB2FF; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M4 20h16"></path></svg>Save log to USB</button>
+</div>
+<div style="display: flex; gap: 12px">
+<button style="all: unset; padding: 12px 22px; border-radius: 10px; font-size: 15px; font-weight: 500; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">Change disk setup</button>
+<button style="all: unset; display: flex; align-items: center; gap: 8px; padding: 12px 26px; border-radius: 10px; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #1F6BFF; box-shadow: 0 8px 24px rgba(31,107,255,0.35); cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"></path></svg>Try again</button>
+</div>
+</footer>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { open: true }; }
+  renderVals() {
+    const OK = '#5FD39A', BAD = '#FF8A7A';
+    const J = [['Create partition','512 MiB · /dev/vda1','ok'],['Set label','EFI','ok'],['Create file system','FAT32 on /dev/vda1','bad'],['Copy files','Not started','wait']];
+    const jobs = J.map(j => ({ label: j[0],
+      state: j[2] === 'ok' ? '✓ ' + j[1] : j[2] === 'bad' ? '✕ Failed · ' + j[1] : j[1],
+      stateColor: j[2] === 'ok' ? OK : j[2] === 'bad' ? BAD : '#8FA3C8',
+      bar: j[2] === 'ok' ? OK : j[2] === 'bad' ? BAD : 'rgba(127,178,255,0.15)',
+      bg: j[2] === 'bad' ? 'rgba(255,138,122,0.08)' : 'rgba(14,32,72,0.5)',
+      border: j[2] === 'bad' ? 'rgba(255,138,122,0.4)' : 'rgba(127,178,255,0.1)' }));
+    const L = [
+      ['JOB','Create a new partition (512.00 MiB, fat32) on /dev/vda','i'],
+      ['CMD','sfdisk --force --append /dev/vda','c'],
+      ['CMD','sfdisk --list --output Device,UUID /dev/vda','c'],
+      ['JOB','Set the label on partition /dev/vda1 to "EFI"','i'],
+      ['CMD','sfdisk --part-label /dev/vda 1 EFI','c'],
+      ['JOB','Create file system fat32 on partition /dev/vda1','i'],
+      ['CMD','mkfs.fat -F32 -n EFI /dev/vda1','c'],
+      ['ERROR','mkfs.fat: unable to open /dev/vda1: No such device or address','e']
+    ];
+    const log = L.map((l, i) => ({ n: i + 1, kind: l[0], text: l[1],
+      kindColor: l[2] === 'e' ? BAD : l[2] === 'c' ? '#18D4F0' : '#7FB2FF',
+      color: l[2] === 'e' ? '#FFB4A8' : l[2] === 'c' ? '#C9D6EE' : '#E8EEFA',
+      bg: l[2] === 'e' ? 'rgba(255,138,122,0.1)' : 'transparent', edge: l[2] === 'e' ? BAD : 'transparent' }));
+    const open = this.state.open;
+    return { jobs, log, open, chev: open ? 'rotate(90deg)' : 'none', toggle: () => this.setState({ open: !open }) };
+  }
+}
+</script>
+</body>
+</html>

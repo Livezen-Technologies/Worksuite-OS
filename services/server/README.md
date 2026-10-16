@@ -15,6 +15,22 @@ provider for the credentials broker. Node 22 TypeScript, `node:sqlite`, no runti
 | Devices | `desktop/v1/devices/register`, `heartbeat`, `commands/{id}/ack`, `policies` | device agent |
 | OS | `desktop/v1/os/catalog`, `inventory`, `update-results`, `diagnostics`, `directory`, `break-glass` | device agent, package service |
 | Releases | `/os/manifests/{ring}/{arch}.json`, `desktop/v1/releases/manifest?platform=os` | update coordinator |
+| APT repository | `/os/apt/` (static, with `--apt-dir`; built by `tools/repo/publish.sh`) | apt on devices |
+| Admin console | `/admin` (UI), `/admin/api/*` | administrators in a browser |
+
+## Admin console
+
+`https://<server>/admin`: overview, devices (details, commands, revoke), wipe requests, users, enrollment tokens,
+policy, app catalog, releases (read-only) and an activity log.
+- **Who can use it:** users with the admin role (`user-add --admin`), and only within their own organization.
+- **Session:** an HttpOnly, Secure, SameSite=Strict cookie scoped to `/admin`, lasting 8 hours and stored hashed.
+- **CSRF:** every API call must carry `X-WS-Admin: 1`.
+- **Sign-in throttling:** 10 failures per 15 minutes per address.
+- **Page hardening:** the page uses `script-src 'self'` with no third-party code, and data is only ever rendered as text.
+- **Remote wipe:** follows the two-person rule. One administrator requests it with a reason; a different
+  administrator approves it, which issues the signed `RemoteWipe` command with `approval_id` set to the request.
+- **Policy changes:** validated field by field, versioned and signed, and every active device gets a `RefreshPolicy`.
+- **Releases:** shown read-only, because publishing signs with the release key (CLI only).
 
 ## Security model
 
@@ -63,7 +79,6 @@ node src/main.ts devices --db ws.db ; node src/main.ts device-revoke --db ws.db 
 
 - Federation to an external OneAuth or AD/LDAP. Users are local.
 - Resumable binary diagnostic bundles. JSON summaries are accepted.
-- The admin console UI.
 - Push (`sync/events` is accepted but not acted on), and multi-node deployment (SQLite, one process).
 
 ## Tests

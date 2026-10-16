@@ -1,0 +1,46 @@
+#!/bin/sh
+# Guest side, shell start and app launch (WSOS-PRF-002/005/006). Run as root on a test image.
+#   shell_ready_ms     worksuite-shell exec → first window shown (the shell prints WORKSUITE_PERF shell_ready_ms
+#                      itself when WORKSUITE_PERF=1), in cage on the greeter's seat (greetd is paused meanwhile)
+#   app_launch_ms      gtk-launch APP → its toplevel listed by lswt (labwc/cage foreign-toplevel), when lswt exists
+#   shell_restart_ms   kill the shell → its unit active again (only inside a logged-in session: SESSION_USER=name)
+set -u
+USER_NAME=${PERF_USER:-worksuite-recovery}
+APP=${PERF_APP:-org.gnome.TextEditor}
+TIMEOUT=${PERF_TIMEOUT:-120}
+out() { printf 'WORKSUITE_PERF %s %s\n' "$1" "$2"; }
+ms() { date +%s%3N; }
+
+id "$USER_NAME" >/dev/null 2>&1 || { echo "WORKSUITE_PERF_SKIP shell: no user $USER_NAME"; exit 0; }
+log=$(mktemp)
+systemctl stop greetd.service 2>/dev/null || true
+uid=$(id -u "$USER_NAME")
+# A logind session for the user so cage gets the seat, like the greeter has.
+systemd-run --quiet --unit=worksuite-perf-shell --uid="$uid" -p PAMName=login -p TTYPath=/dev/tty1 -p StandardInput=tty \
+  -p StandardOutput=file:"$log" -p StandardError=file:"$log" -E WORKSUITE_PERF=1 \
+  /usr/bin/worksuite-cage -s -- /usr/lib/worksuite/shell/worksuite-shell
+end=$(( $(date +%s) + TIMEOUT ))
+while [ "$(date +%s)" -lt "$end" ] && ! grep -q 'WORKSUITE_PERF shell_ready_ms' "$log"; do sleep 0.5; done
+grep -ao 'WORKSUITE_PERF shell_ready_ms [0-9]*' "$log" | head -n1 || echo "WORKSUITE_PERF_SKIP shell_ready_ms: no window within ${TIMEOUT}s"
+# Launcher first frame (WSOS-PRF-005), reported by the shell whenever the launcher is opened during the run.
+grep -ao 'WORKSUITE_PERF launcher_first_frame_ms [0-9]*' "$log" | head -n1 || true
+
+if command -v lswt >/dev/null && command -v gtk-launch >/dev/null; then
+  rt=/run/user/$uid
+  wl=$(ls "$rt" 2>/dev/null | grep -m1 '^wayland-[0-9]*$' || true)
+  if [ -n "$wl" ]; then
+    t0=$(ms)
+    runuser -u "$USER_NAME" -- env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" gtk-launch "$APP" >/dev/null 2>&1 &
+    while [ $(( $(ms) - t0 )) -lt $((TIMEOUT * 1000)) ]; do
+      if runuser -u "$USER_NAME" -- env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" lswt 2>/dev/null | grep -q "$APP"; then
+        out app_launch_ms $(( $(ms) - t0 )); break
+      fi
+      sleep 0.05
+    done
+  fi
+else
+  echo "WORKSUITE_PERF_SKIP app_launch_ms: lswt or gtk-launch missing"
+fi
+systemctl stop worksuite-perf-shell.service 2>/dev/null || true
+systemctl start greetd.service 2>/dev/null || true
+rm -f "$log"

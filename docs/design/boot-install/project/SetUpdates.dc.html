@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Updates</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B8D4FF}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Updates" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 26px 36px; display: flex; flex-direction: column; gap: 14px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Updates</h1>
+
+<div style="display: flex; align-items: center; gap: 20px; padding: 22px 24px; border-radius: 18px; background: {{heroBg}}; border: 1px solid {{heroBorder}}">
+<span style="width: 60px; height: 60px; border-radius: 16px; background: {{iconBg}}; display: flex; align-items: center; justify-content: center; flex: none"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{icon}}"></path></svg></span>
+<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px">
+<span style="font-size: 20px; font-weight: 700">{{title}}</span>
+<span style="font-size: 13px; color: #C9D6EE">{{sub}}</span>
+<sc-if value="{{showBar}}" hint-placeholder-val="{{false}}"><span style="margin-top: 4px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.15); overflow: hidden"><span style="display: block; height: 100%; width: 58%; background: linear-gradient(90deg, #1F6BFF, #18D4F0)"></span></span></sc-if>
+</span>
+<span style="display: flex; gap: 8px">
+<sc-if value="{{secondary}}" hint-placeholder-val="{{false}}"><button style="all: unset; padding: 10px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.25); font-size: 14px; cursor: pointer">{{secondary}}</button></sc-if>
+<button style="all: unset; padding: 10px 18px; border-radius: 10px; background: {{ctaBg}}; font-size: 14px; font-weight: 600; cursor: pointer">{{primary}}</button>
+</span>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; font-weight: 600">Update history</span><a href="#" style="font-size: 12px">Roll back…</a></div>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{hist}}" as="h" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-top: {{h.border}}">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: {{h.c}}"></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500">{{h.t}}</span><span style="font-size: 11px; color: #8FA3C8">{{h.d}}</span></span>
+<span style="font-size: 11px; color: {{h.c}}">{{h.s}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 14px; font-weight: 600">Options</span>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{opts}}" as="o" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-top: {{o.border}}">
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px">{{o.t}}</span><span style="font-size: 11px; color: #8FA3C8">{{o.d}}</span></span>
+<span style="font-size: 12px; color: #C9D6EE">{{o.v}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["up to date","available","downloading","restart needed"],"default":"available"},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.state ?? 'available';
+    const DL = 'M12 4v11M7 10l5 5 5-5M4 20h16', OK = 'M5 12.5l4.5 4.5L19 7.5', RS = 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4';
+    const M = {
+      'up to date': ['You’re up to date','WorkSuite OS 1.1.2 · checked 4 min ago','','Check now',OK,'#2E9E6A','linear-gradient(120deg, rgba(46,158,106,0.25), rgba(14,32,72,0.7))','rgba(95,211,154,0.35)','rgba(255,255,255,0.14)',false],
+      'available': ['WorkSuite OS 1.2 is available','820 MB · new Files app, faster startup, 9 security fixes','Release notes','Download and install',DL,'#1F6BFF','linear-gradient(120deg, rgba(31,107,255,0.3), rgba(14,32,72,0.7))','rgba(127,178,255,0.35)','#1F6BFF',false],
+      'downloading': ['Downloading 1.2','476 of 820 MB · 9.2 MB/s · resumes if interrupted','Pause','Cancel',DL,'#0E8FA8','linear-gradient(120deg, rgba(14,143,168,0.25), rgba(14,32,72,0.7))','rgba(24,212,240,0.35)','rgba(255,255,255,0.14)',true],
+      'restart needed': ['Restart to finish updating','Takes about 4 min · your apps will reopen','Schedule…','Restart now',RS,'#B7791F','linear-gradient(120deg, rgba(183,121,31,0.25), rgba(14,32,72,0.7))','rgba(255,185,138,0.4)','#1F6BFF',false]
+    }[s];
+    const H = [['1.1.2 · emergency security fix','14 Oct · 360 MB','Installed','#5FD39A'],['1.1.1','12 Oct','Pulled by IT','#FFB98A'],['1.1.0','7 Oct · 712 MB','Installed','#5FD39A'],['Drivers: Intel Wi-Fi 86.1','6 Oct','Installed','#5FD39A'],['1.0.0','1 Oct · first install','Installed','#5FD39A']];
+    const O = [['Download automatically','Pauses on metered networks','On'],['Install overnight','02:00–05:00 when plugged in','On'],['Release ring','Set by [Company] IT','Broad'],['Include driver updates','Proprietary drivers ask first','On'],['Update from USB','Offline .wsu bundle','Install…']];
+    return { title: M[0], sub: M[1], secondary: M[2], primary: M[3], icon: M[4], iconBg: M[5], heroBg: M[6], heroBorder: M[7], ctaBg: M[8], showBar: M[9],
+      hist: H.map((h, i) => ({ t: h[0], d: h[1], s: h[2], c: h[3], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })),
+      opts: O.map((o, i) => ({ t: o[0], d: o[1], v: o[2], border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' })) };
+  }
+}
+</script>
+</body>
+</html>

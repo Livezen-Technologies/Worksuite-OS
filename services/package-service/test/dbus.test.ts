@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import dbus from 'dbus-next';
-import { NAME, PATH, serve } from '../src/dbus.ts';
+import { ACTIONS, NAME, PATH, serve } from '../src/dbus.ts';
 import { PackageService } from '../src/service.ts';
 import { Coordinator } from '../src/coordinator.ts';
 
@@ -84,4 +84,34 @@ test('update methods: status is read-only; deferring needs the update action', a
   await assert.rejects(w.call('DeferUpdate'), (e: { type?: string }) => e.type === 'lk.worksuite.Error.NotAuthorized');
   assert.deepEqual(w.checked, ['lk.worksuite.update.apply']);
   w.close();
+});
+
+test('new methods: catalog/preview/inspect are read-only; local .deb, permissions, prune and bundles use their polkit actions', async () => {
+  const w = await setup(false);
+  // No catalog provider wired in this harness: a typed failure, never sample data.
+  await assert.rejects(w.call('GetCatalog'), (e: { type?: string }) => e.type === 'lk.worksuite.Error.Failed');
+  await assert.rejects(w.call('PreviewLocalDeb', 's', ['relative.deb']), (e: { type?: string }) => e.type === 'lk.worksuite.Error.InvalidArgs');
+  await assert.rejects(w.call('InspectBundle', 's', ['/etc/passwd']), (e: { type?: string }) => e.type === 'lk.worksuite.Error.InvalidArgs');
+  assert.deepEqual(w.checked, []);
+  for (const [m, sig, body, action] of [
+    ['InstallLocalDeb', 's', ['a'.repeat(64)], 'lk.worksuite.package.install-local'],
+    ['ResetAppPermissions', 's', ['flatpak:org.gimp.GIMP'], 'lk.worksuite.package.install'],
+    ['PruneRuntimes', '', [], 'lk.worksuite.package.install'],
+    ['AddRemote', 'ss', ['corp', 'https://flatpak.example.lk/corp.flatpakrepo'], 'lk.worksuite.package.add-remote'],
+    ['InstallBundle', 's', ['/media/u/stick/x.wsupdate'], 'lk.worksuite.update.apply'],
+  ] as const) {
+    w.checked.length = 0;
+    await assert.rejects(w.call(m, sig, [...body]), (e: { type?: string }) => e.type === 'lk.worksuite.Error.NotAuthorized');
+    assert.deepEqual(w.checked, [action]);
+  }
+  assert.deepEqual(w.calls, []);
+  w.close();
+});
+
+test('every D-Bus method is declared in the introspection XML and every polkit action exists', () => {
+  const policy = readFileSync(new URL('../polkit/lk.worksuite.package.policy', import.meta.url), 'utf8');
+  for (const [m, action] of Object.entries(ACTIONS)) {
+    assert.match(xml, new RegExp(`<method name="${m}"`), m);
+    if (action) assert.match(policy, new RegExp(`<action id="${action.replaceAll('.', '\\.')}">`), action);
+  }
 });

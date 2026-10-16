@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings – Bluetooth</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+@keyframes ws-spin{to{transform:rotate(360deg)}}
+.ws-spin{animation:ws-spin 1s linear infinite;transform-origin:50% 50%}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #0A1A3D">
+<dc-import name="SetNav" active="Bluetooth" hint-size="260px,800px"></dc-import>
+<main style="flex: 1; min-width: 0; padding: 32px 44px; display: flex; flex-direction: column; gap: 20px; background: radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Bluetooth</h1>
+<div style="display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 14px; background: rgba(14,32,72,0.7); border: 1px solid rgba(127,178,255,0.14)">
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 16px; font-weight: 600">Bluetooth</span><span style="font-size: 13px; color: #8FA3C8">Visible to nearby devices as "alex-laptop"</span></span>
+<span aria-hidden="true" style="width: 46px; height: 28px; border-radius: 14px; background: #1F6BFF; position: relative"><span style="position: absolute; top: 3px; left: 21px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF"></span></span>
+</div>
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8FA3C8; text-transform: uppercase; letter-spacing: 0.08em">{{g.name}}<sc-if value="{{g.scan}}" hint-placeholder-val="{{false}}"><svg class="ws-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"></path></svg></sc-if></span>
+<div style="border-radius: 14px; background: rgba(14,32,72,0.6); border: 1px solid rgba(127,178,255,0.12); overflow: hidden">
+<sc-for list="{{g.items}}" as="d" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 14px; padding: 13px 18px; border-top: {{d.border}}">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: rgba(31,107,255,0.16); display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{d.icon}}"></path></svg></span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 500">{{d.name}}</span><span style="font-size: 12px; color: {{d.subColor}}">{{d.sub}}</span></span>
+<sc-if value="{{d.battery}}" hint-placeholder-val="{{false}}"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #C9D6EE">{{d.battery}}</span></sc-if>
+<button style="all: unset; padding: 8px 14px; border-radius: 8px; border: 1px solid {{d.btnBorder}}; background: {{d.btnBg}}; font-size: 13px; font-weight: 500; cursor: pointer">{{d.action}}</button>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const KB = 'M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14h8', MS = 'M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6zM12 7v3', HP = 'M4 15v-3a8 8 0 0 1 16 0v3M4 15h3v5H4zM17 15h3v5h-3z', PH = 'M7 3h10v18H7zM11 18h2';
+    const mk = (list) => list.map((d, i) => ({ name: d[0], sub: d[1], icon: d[2], battery: d[3] || '', action: d[4], subColor: d[1] === 'Connected' ? '#5FD39A' : '#8FA3C8',
+      btnBorder: d[4] === 'Pair' ? '#1F6BFF' : 'rgba(127,178,255,0.25)', btnBg: d[4] === 'Pair' ? '#1F6BFF' : 'transparent', border: i ? '1px solid rgba(127,178,255,0.1)' : 'none' }));
+    return { groups: [
+      { name: 'My devices', scan: false, items: mk([['Logitech MX Keys','Connected',KB,'82%','Disconnect'],['MX Master 3S','Connected',MS,'64%','Disconnect'],['Sony WH-1000XM5','Not connected',HP,'','Connect']]) },
+      { name: 'Nearby devices', scan: true, items: mk([['Pixel 8','Phone',PH,'','Pair'],['JBL Flip 6','Speaker',HP,'','Pair']]) }
+    ] };
+  }
+}
+</script>
+</body>
+</html>

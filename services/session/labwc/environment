@@ -3,3 +3,9 @@ XDG_SESSION_DESKTOP=WorkSuite
 MOZ_ENABLE_WAYLAND=1
 QT_QPA_PLATFORM=wayland;xcb
 ELECTRON_OZONE_PLATFORM_HINT=wayland
+# WSOS-INT-011: input methods through fcitx5 (Wayland input-method-v2 for GTK/Electron, IM modules for Qt/X11 apps);
+# right Alt is the compose key.
+XMODIFIERS=@im=fcitx
+QT_IM_MODULE=fcitx
+SDL_IM_MODULE=fcitx
+XKB_DEFAULT_OPTIONS=compose:ralt

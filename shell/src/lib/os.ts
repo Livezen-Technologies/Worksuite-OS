@@ -1,12 +1,30 @@
 // Typed renderer API. In Electron the preload exposes `window.worksuite` with named functions only
 // (WSOS-SEC-001, §10.3); in a plain browser (dev/design review) a local stub answers instead.
 export interface WorkSuiteApi {
-  authenticate(user: string, password: string): Promise<{ ok: boolean; message?: string }>
+  /** method 'pin' sends the PIN where the password goes; 'key' sends no secret (pam_u2f asks for a touch). */
+  authenticate(user: string, password: string, method?: SignInMethod): Promise<{ ok: boolean; message?: string }>
   lock(): Promise<void>
   logout(): Promise<void>
   power(action: 'suspend' | 'restart' | 'shutdown'): Promise<void>
   launchApp(appId: string): Promise<void>
+  /** Idle screen-lock timeout (seconds, 0 = never) and the organization's maximum (WSOS-LOCK-003). */
+  lockSettings(): Promise<LockSettings>
+  setLockTimeout(seconds: number): Promise<CloudResult<LockSettings>>
   openLink(url: string): Promise<void>
+  /** Launcher global search across WorkSuite records and Drive (the main process holds the token). */
+  search(q: string, types?: string[]): Promise<SearchResponse>
+  /** Recent files: local (recently-used.xbel) and WorkSuite Drive. */
+  recentFiles(): Promise<{ local: SearchHit[]; cloud: { state: SourceState; hits: SearchHit[] } }>
+  /** Open a search result (worksuite:// or file://), or its location. */
+  openSearchResult(link: string, where?: 'open' | 'location'): Promise<{ ok: boolean; error?: string }>
+  /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
+  webApps(): Promise<CloudResult<{ id: string; name: string; offline_level?: 'full_offline' | 'cached_read' | 'online_only' }[]>>
+  /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
+  installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null }>
+  /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
+  launchOffice(kind: 'start' | 'docs' | 'sheets' | 'slides'): Promise<void>
+  /** WorkSuite Desktop with --module=<id> (only when installed; the launcher checks). */
+  launchWorkSuite(module: DesktopModule): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
   /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
@@ -37,6 +55,170 @@ export interface WorkSuiteApi {
   filesOpen(root: string, rel: string): Promise<CloudResult<true>>
   filesStatus(root: string): Promise<{ free_bytes: number | null; drive: { states: Record<string, number>; last_sync: number | null; service_state: string } | null }>
   onPkgJob(cb: (e: PackageJobEvent) => void): () => void
+  /** Sidebar: user name, XDG home folders that exist, removable media and the home disk's usage. */
+  filesPlaces(): Promise<FilePlaces>
+  /** Starred items (~/.config/worksuite/starred.json) as "root:rel" keys and as hits. */
+  filesStarred(): Promise<{ keys: string[]; hits: FileHit[] }>
+  filesStar(root: string, rel: string, on: boolean): Promise<CloudResult<string[]>>
+  /** Recently used files under Home (XDG recently-used.xbel). */
+  filesRecent(): Promise<FileHit[]>
+  /** File-name search below root/rel; kind 'any' | 'documents' | 'spreadsheets'; days 0 = any time. */
+  filesSearch(root: string, rel: string, q: string, kind: string, days: number): Promise<CloudResult<{ hits: FileHit[]; ms: number; truncated: boolean }>>
+  filesMkdir(root: string, rel: string, name: string): Promise<CloudResult<string>>
+  filesRename(root: string, rel: string, name: string): Promise<CloudResult<string>>
+  /** Move to the freedesktop.org Trash. */
+  filesTrash(root: string, rels: string[]): Promise<CloudResult<{ count: number; ids: string[] }>>
+  /** Shift+Delete: remove for good, skipping the Trash (FO3). */
+  filesDelete(root: string, rels: string[]): Promise<CloudResult<number>>
+  /** "Notify me when done" (FO1): a text notice in the shell's notification centre. */
+  filesNotify(summary: string, body: string): Promise<unknown>
+  filesTrashList(): Promise<TrashItem[]>
+  filesTrashRestore(ids: string[]): Promise<CloudResult<{ restored: number; skipped: number }>>
+  filesTrashDelete(ids: string[] | 'all'): Promise<CloudResult<number>>
+  /** Start a copy/move/duplicate job; progress and conflicts arrive through onFilesJob. */
+  filesPaste(op: 'copy' | 'move' | 'duplicate', srcRoot: string, rels: string[], dstRoot: string, dstRel: string): Promise<CloudResult<string>>
+  /** Answer a job: conflict (replace/skip/keep), error (retry/skip), pause/resume (copy and move), or cancel. */
+  filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel' | 'continue' | 'retry' | 'pause' | 'resume', all: boolean): Promise<CloudResult<true>>
+  /** Start a compress job (zip / 7z / tar.gz / tar.xz; a password for zip and 7z only); progress arrives through onFilesJob. */
+  filesCompress(root: string, rels: string[], opts: CompressOptions): Promise<CloudResult<string>>
+  /** Start an extract job: "here" or into "<name>/", all entries or the given ones. */
+  filesExtract(root: string, rel: string, mode: 'here' | 'folder', items: string[], password: string | null): Promise<CloudResult<string>>
+  /** Answer a job's password prompt; null cancels the job. */
+  filesArchivePassword(id: string, pw: string | null): Promise<CloudResult<true>>
+  /** An archive's entries, read-only. Errors: password, wrong_password, tool_missing, password_unsupported, failed. */
+  filesArchiveList(root: string, rel: string, password: string | null): Promise<CloudResult<ArchiveListing>>
+  /** An archive opened with Files from elsewhere (default handler for archive types). */
+  onOpenArchive(cb: (at: { root: string; rel: string }) => void): () => void
+  filesEject(id: string): Promise<CloudResult<true>>
+  onFilesJob(cb: (e: FileJob) => void): () => void
+  // Settings › Devices: real devices from sysfs (electron/hardware.ts).
+  hwDevices(): Promise<CloudResult<HwDevice[]>>
+  /** Driver catalog. No service provides one yet, so Electron answers { ok: false, error: 'unavailable' }. */
+  hwDriverUpdates(): Promise<CloudResult<DriverOffer[]>>
+  /** Install driver offers; progress arrives through onPkgJob with phase = offer id. Electron: 'unavailable'. */
+  hwInstallDrivers(ids: string[]): Promise<CloudResult<string>>
+  /** Settings › Users: accounts on this computer (electron/users.ts). */
+  sysUsers(): Promise<Avail<{ current: string; users: LocalUser[] }>>
+  /** Settings › Users › Sign-in options: this device's PIN and security keys (electron/signin.ts). Changes go
+   *  through pkexec (the person types their password); the PIN travels on stdin only. */
+  signinMethods(): Promise<Avail<SignInMethods>>
+  signinPinSet(pin: string): Promise<SigninResult>
+  signinPinRemove(): Promise<SigninResult>
+  signinKeyAdd(name: string): Promise<SigninResult>
+  signinKeyRemove(id: string): Promise<SigninResult>
+  signinSetDefault(method: SignInMethod): Promise<SigninResult>
+  /** Package repair (§9.2): finishes interrupted dpkg/apt changes; result arrives through onPkgJob. */
+  pkgRepair(): Promise<CloudResult<string>>
+  /** WSOS-APT-006: package service state; 'interrupted' means an interrupted dpkg run needs Repair. */
+  pkgState(): Promise<CloudResult<'idle' | 'busy' | 'interrupted'>>
+  /** §11.6-d Report a problem: collect (nothing leaves the computer), then save or send only the sections kept. */
+  reportCollect(): Promise<CloudResult<ProblemReport>>
+  reportSave(id: string, keep: string[], description: string): Promise<CloudResult<string>>
+  reportSend(id: string, keep: string[], description: string): Promise<CloudResult<string>>
+  /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
+  pkgCatalog(): Promise<CloudResult<AppCatalog>>
+  /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
+  pickFile(kind: 'deb' | 'appimage' | 'wsupdate' | 'wgconf' | 'ovpn'): Promise<CloudResult<{ handle: string; name: string }>>
+  localDebPreview(handle: string): Promise<CloudResult<LocalDebPreview>>
+  localDebInstall(token: string): Promise<CloudResult<string>>
+  appPermissions(catalogId: string): Promise<CloudResult<AppPermissions>>
+  appPermissionsReset(catalogId: string): Promise<CloudResult<string>>
+  /** G09: declared permissions this user switched off, and one switch (flatpak override --user). Optional: older bridges lack them. */
+  appPermsUserOff?(catalogId: string): Promise<CloudResult<string[]>>
+  appPermSet?(catalogId: string, perm: string, on: boolean): Promise<CloudResult<true>>
+  appDataRemove(catalogId: string): Promise<CloudResult<boolean>>
+  pruneRuntimes(): Promise<CloudResult<string>>
+  bundleInspect(handle: string): Promise<CloudResult<BundleInfo>>
+  bundleInstall(handle: string): Promise<CloudResult<string>>
+  /** G14: .wsupdate bundles at the top level of mounted USB drives, as pickFile-style handles. */
+  findBundles(): Promise<CloudResult<FoundBundle[]>>
+  appimageList(): Promise<CloudResult<AppImageRecord[]>>
+  appimageImport(handle: string): Promise<CloudResult<AppImageRecord>>
+  appimageApprove(id: string): Promise<CloudResult<AppImageRecord>>
+  appimageRemove(id: string): Promise<CloudResult<{ removed: string }>>
+  appimageUpdate(id: string, handle: string): Promise<CloudResult<AppImageRecord>>
+  appimageLaunch(id: string): Promise<CloudResult<true>>
+  // Recovery screens (§9.2). Features that have no service yet answer { ok: false, error: 'unavailable' }.
+  recoveryInfo(): Promise<RecoveryInfo>
+  recoveryCheck(id: CheckId): Promise<CheckResult>
+  /** secret: the formatted recovery key or the passphrase. Sent to udisks over stdin only; never stored. */
+  recoveryUnlock(device: string, secret: string): Promise<CloudResult<true>>
+  recoverySnapshots(): Promise<CloudResult<SnapshotInfo[]>>
+  recoveryRestore(snapshotId: string): Promise<CloudResult<true>>
+  recoveryReinstall(mode: 'keep' | 'erase', confirm?: string): Promise<CloudResult<true>>
+  recoveryCopyToUsb(): Promise<CloudResult<true>>
+  recoveryTerminal(): Promise<CloudResult<true>>
+  recoverySaveReport(text: string): Promise<CloudResult<string>>
+  // Settings → host services (WSOS-INT-001…006, DSK-006). `available: false` means the tool/service isn't there.
+  sysNetwork(): Promise<Avail<NetworkState>>
+  sysSetWifi(on: boolean): Promise<Avail<true>>
+  /** The password reaches nmcli on stdin only. */
+  sysWifiConnect(ssid: string, password: string): Promise<{ ok: true } | { ok: false; error: string }>
+  /** VPN profiles (managed "WorkSuite VPN" first) and whether policy allows user VPNs (WSOS-INT-001). */
+  sysVpn(): Promise<Avail<VpnState>>
+  /** Imports the WireGuard .conf behind a pickFile('wgconf') handle; the private key never reaches the renderer. */
+  sysVpnImport(handle: string): Promise<CloudResult<{ uuid: string | null; name: string }>>
+  /** Imports the OpenVPN .ovpn behind a pickFile('ovpn') handle; certificates are copied to a private folder. */
+  sysVpnImportOpenvpn(handle: string): Promise<CloudResult<{ uuid: string | null; name: string; needs_credentials: boolean }>>
+  /** creds: OpenVPN user name/password, passed to nmcli on stdin only; 'credentials_required' when missing. */
+  sysVpnConnect(uuid: string, on: boolean, creds?: { username: string; password: string }): Promise<Avail<true>>
+  sysVpnRemove(uuid: string): Promise<Avail<true>>
+  sysBluetooth(): Promise<Avail<BluetoothState>>
+  sysSetBluetooth(on: boolean): Promise<Avail<true>>
+  sysBtConnect(address: string, on: boolean): Promise<Avail<true>>
+  sysSound(): Promise<Avail<SoundState>>
+  sysSetVolume(percent: number): Promise<Avail<true>>
+  sysSetMute(muted: boolean): Promise<Avail<true>>
+  sysSetDefaultAudio(id: number): Promise<Avail<true>>
+  sysBattery(): Promise<Avail<BatteryState>>
+  sysPrinters(): Promise<Avail<Printer[]>>
+  sysDisplays(): Promise<Avail<Display[]>>
+  sysDisks(): Promise<Avail<Drive[]>>
+}
+
+export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
+export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean }
+export interface NetDevice { device: string; type: string; state: string; connection: string | null }
+export interface NetworkState { wifi_enabled: boolean; devices: NetDevice[]; networks: WifiNetwork[] }
+export interface VpnConnection { name: string; uuid: string; type: 'wireguard' | 'vpn'; kind: 'wireguard' | 'openvpn' | 'vpn'; active: boolean; device: string | null; managed: boolean; needs_credentials: boolean }
+export interface VpnState { connections: VpnConnection[]; user_vpn_allowed: boolean; vpn_required: boolean }
+export interface BtDevice { address: string; name: string; connected: boolean }
+export interface BluetoothState { powered: boolean; name: string | null; discoverable: boolean; paired: BtDevice[] }
+export interface AudioDevice { id: number; name: string; is_default: boolean }
+export interface SoundState { volume: number; muted: boolean; outputs: AudioDevice[]; inputs: AudioDevice[] }
+export interface BatteryState { present: boolean; percentage: number | null; state: string; time_to_full_s: number | null; time_to_empty_s: number | null; on_battery: boolean }
+export interface Printer { name: string; state: 'idle' | 'printing' | 'disabled' | 'unknown'; is_default: boolean }
+export interface Display { name: string; description: string; enabled: boolean; width: number | null; height: number | null; refresh: number | null; scale: number | null }
+export interface Drive { model: string; serial: string; device: string }
+
+/** "about 1 h 20 min" from seconds. */
+export function formatDuration(s: number | null): string | null {
+  if (s === null || s <= 0) return null
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60)
+  return h ? (m ? t('time.aboutHM', { h, m }) : t('time.aboutH', { h })) : t('time.aboutM', { m })
+}
+
+export type RecoveryFeature = 'unlock' | 'repair' | 'snapshots' | 'reinstall' | 'copy_usb' | 'terminal' | 'report_usb'
+export interface RecoveryLuksDevice { device: string; name: string; label: string | null; version: string | null; size_bytes: number | null; unlocked: boolean }
+export interface RecoveryInfo {
+  os_version: string | null; disk: string | null; firmware: 'EFI' | 'BIOS'
+  /** Shell restarts counted by systemd before recovery opened; null when unknown. */
+  failures: number | null
+  luks: RecoveryLuksDevice[]; features: Record<RecoveryFeature, boolean>
+}
+
+import { withAppCenterPreview } from './appcenterPreview'
+import type { DesktopModule } from './launcher'
+import type { HwDevice, HwKind } from '../../electron/hardware'
+import type { LocalUser } from '../../electron/users'
+import type { SecurityKey, SignInMethod, SignInMethods, SigninResult } from '../../electron/signin'
+import type { SearchHit, SearchResponse, SourceState } from '../../electron/search'
+export type { HwDevice, HwKind, LocalUser, SecurityKey, SignInMethod, SignInMethods, SigninResult }
+export interface DriverOffer {
+  id: string; device_id: string | null; name: string; summary: string
+  from_version: string | null; to_version: string
+  license: 'open' | 'proprietary'; category: 'security' | 'recommended' | 'optional'
+  size_bytes: number | null; restart: boolean
 }
 
 export interface PackagePreview {
@@ -49,37 +231,87 @@ export interface OsUpdateStatus {
   state: 'up_to_date' | 'checking' | 'available' | 'waiting' | 'installing' | 'ready_to_restart' | 'restart_pending' | 'failed'
   version: string | null; installed: string; release_id: string | null; mandatory: boolean; deadline: string | null
   deferrals_left: number | null; reason: string | null; restart_at: number | null; last_check: number | null
+  /** Emergency security release; resumed: this install picks up an interrupted download (older services omit both). */
+  critical?: boolean; resumed?: boolean
+  /** Update Center (or the organisation's mirror) the coordinator checked, and the device's ring. */
+  update_host?: string; ring?: 'development' | 'pilot' | 'stable'
+}
+export interface CatalogEntry {
+  id: string; source: 'apt' | 'flatpak' | 'appimage'; name: string; arches: string[]
+  required?: boolean; blocked?: boolean; sha256?: string; category?: string; summary?: string; publisher?: string
+  installed: boolean; available: boolean; blocked_reason: string | null
+}
+export type AppCatalog =
+  | { state: 'ok'; arch: string; items: CatalogEntry[]; fetched_at: number }
+  | { state: 'not_enrolled' | 'unreachable' | 'error'; arch: string; items: []; error: string }
+export interface LocalDebPreview {
+  package: string; version: string; architecture: string; publisher: string; publisher_verified: false; description: string
+  plan: PackagePreview['plan']; disk_bytes: number | null; token: string
+}
+export interface AppPermissions { app: string; permissions: string[]; overrides: string[]; broad: string[] }
+export interface FoundBundle { handle: string; name: string; drive: string }
+export interface BundleInfo { release_id: string; version: string; packages: number; bytes: number; critical: boolean; verified: true }
+export interface AppImageRecord {
+  id: string; name: string; version: string | null; origin: string; sha256: string; arch: string; size: number
+  signature: { status: 'signed'; fingerprint: string; trusted: boolean } | { status: 'unsigned' } | { status: 'invalid'; reason: string }
+  approved: boolean; imported_at: string; approved_at: string | null; categories: string[]
 }
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
+export interface FilePlaces { user: string; folders: string[]; media: { id: string; label: string }[]; disk: { device: string; used: number; total: number } | null }
+export interface FileHit { root: string; rel: string; name: string; dir: boolean; size: number | null; modified: number | null; where: string }
+export interface TrashItem { id: string; name: string; dir: boolean; size: number; orig: string; where: string; deleted: number | null }
+export interface FileStamp { size: number; modified: number }
+export interface FileJob {
+  id: string; op: 'copy' | 'move' | 'compress' | 'extract'; dest: string; state: 'running' | 'paused' | 'conflict' | 'error' | 'password' | 'confirm' | 'done' | 'failed' | 'cancelled'
+  done: number; total: number; bytes_done: number; bytes_total: number
+  conflict: { name: string; incoming: FileStamp; existing: FileStamp; remaining: number; index?: number; count?: number } | null
+  /** Copy and move: source folder (display form), the file being copied now, the destination's free bytes, start time. */
+  src?: string; current?: string | null; free?: number | null; started?: number
+  /** state 'error': no_space | permission | io | busy | missing | failed, and the file it stopped at. */
+  error_name?: string | null
+  /** Archive jobs: the archive's name, the prompt's details and why it failed. */
+  name?: string; ask?: { wrong?: boolean; bytes?: number | null; ratio?: number | null } | null; error?: string | null
+}
+export type ArchiveFormat = 'zip' | '7z' | 'tar.gz' | 'tar.xz'
+export interface CompressOptions { format: ArchiveFormat; name: string; level: number; password?: string | null }
+export interface ArchiveEntry { path: string; type: 'file' | 'dir' | 'symlink' | 'hardlink' | 'other'; size: number | null; link: string | null; modified: number | null; encrypted: boolean }
+export interface ArchiveListing { kind: string; entries: ArchiveEntry[]; encrypted: boolean; total: number | null; packed: number }
 /** state: Drive sync state (WSOS-DRV-002), "folder", "local" outside Drive, or "unknown" when sync isn't running. */
-export interface FileEntry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean }
+export interface FileEntry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean; items?: number | null }
+export type ReportSectionId = 'system' | 'services' | 'session_services' | 'session_log' | 'system_log' | 'packages'
+export interface ProblemReport { id: string; created_at: string; sections: { id: ReportSectionId; text: string; available: boolean }[] }
 export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
 
 export function formatBytes(n: number | null): string {
   if (n == null) return '—'
   const a = Math.abs(n)
-  const s = a >= 1e9 ? `${(a / 1e9).toFixed(1)} GB` : a >= 1e6 ? `${Math.round(a / 1e6)} MB` : `${Math.max(1, Math.round(a / 1e3))} kB`
-  return n < 0 ? `${s} freed` : s
+  const s = a >= 1e9 ? `${formatNumber(Number((a / 1e9).toFixed(1)))} GB` : a >= 1e6 ? `${formatNumber(Math.round(a / 1e6))} MB` : `${formatNumber(Math.max(1, Math.round(a / 1e3)))} kB`
+  return n < 0 ? t('bytes.freed', { size: s }) : s
 }
 
 /** Package service error → text. Its own messages are already written for people. */
 export function packageErrorText(code: string): string {
   switch (code) {
-    case 'not_authorized': return 'An administrator password is needed for this. Nothing was changed.'
-    case 'service_unavailable': return 'The package service isn’t running. Try again in a moment.'
-    case 'invalid_argument': return 'This app can’t be installed from here.'
-    case 'failed': return 'That didn’t work. Nothing was changed.'
+    case 'not_authorized': return t('rec.err.notAuthorized')
+    case 'cancelled': return ''
+    case 'service_unavailable': return t('pkg.err.service')
+    case 'invalid_argument': return t('pkg.err.invalid')
+    case 'failed': return t('rec.err.default')
     default: return code.charAt(0).toUpperCase() + code.slice(1) + (/[.!]$/.test(code) ? '' : '.')
   }
 }
 
 import type { SyncStatus } from './syncNotices'
+import type { CheckId, CheckResult, SnapshotInfo } from './recovery'
+import { formatNumber, t } from '../i18n'
 
 export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
   lock_timeout_max_s: number | null; offline_access_days: number | null; usb_storage: string | null; bluetooth: boolean | null
   app_allowlist_size: number
 }
+export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
+export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean }
 export interface DeviceInfo {
   agent: boolean
   device: { hostname: string; os_version: string; arch: string; kernel_version: string; encrypted: boolean | null } | null
@@ -88,27 +320,40 @@ export interface DeviceInfo {
   server: string | null
   last_check_in: number | null
   policies: DevicePolicies | null
+  /** Settings › Managed › Kiosk mode: this device's kiosk as the policy sets it (never the exit PIN); null = not a kiosk. */
+  kiosk?: KioskSummary | null
+  /** WSOS-IDN-004: provisioning requires enrollment (and so a connection) before first use. */
+  provisioning?: { require_enrollment: boolean; server: string | null }
 }
 
 /** Taskbar chip text: null when the device isn't managed (WSOS-MDM-007). */
 export function managedLabel(info: DeviceInfo | null): string | null {
   if (!info?.managed) return null
-  return info.policies?.update_ring ? `Managed · ${info.policies.update_ring} ring` : 'Managed'
+  return info.policies?.update_ring ? t('mdm.managedRing', { ring: info.policies.update_ring }) : t('mdm.managed')
 }
 
 /** Policy → plain sentences for the management notice. Only what the policy actually sets. */
 export function policyLines(p: DevicePolicies | null): string[] {
   if (!p) return []
   const out: string[] = []
-  if (p.app_allowlist_size > 0) out.push(`Only approved apps can be installed (${p.app_allowlist_size} approved)`)
-  if (p.update_ring || p.update_mode) out.push(`Updates: ${[p.update_ring && `${p.update_ring} ring`, p.update_mode && `${p.update_mode} mode`].filter(Boolean).join(', ')}${p.maintenance_window ? `, restarts ${p.maintenance_window}` : ''}`)
-  if (p.lock_timeout_max_s) out.push(`Screen locks after at most ${Math.round(p.lock_timeout_max_s / 60)} min idle`)
-  if (p.offline_access_days) out.push(`Offline sign-in allowed for ${p.offline_access_days} days`)
-  if (p.usb_storage === 'block') out.push('USB storage is blocked')
-  else if (p.usb_storage === 'read_only') out.push('USB storage is read-only')
-  if (p.bluetooth === false) out.push('Bluetooth is turned off')
+  if (p.app_allowlist_size > 0) out.push(t('mdm.allowlist', { count: p.app_allowlist_size }))
+  if (p.update_ring || p.update_mode) out.push(t('mdm.updates', { list: [p.update_ring && t('mdm.ring', { ring: p.update_ring }), p.update_mode && t('mdm.mode', { mode: p.update_mode }), p.maintenance_window && t('mdm.restarts', { window: p.maintenance_window })].filter(Boolean).join(', ') }))
+  if (p.lock_timeout_max_s) out.push(t('mdm.lock', { min: Math.round(p.lock_timeout_max_s / 60) }))
+  if (p.offline_access_days) out.push(t('mdm.offline', { days: p.offline_access_days }))
+  if (p.usb_storage === 'block') out.push(t('mdm.usbBlocked'))
+  else if (p.usb_storage === 'read_only') out.push(t('mdm.usbRO'))
+  if (p.bluetooth === false) out.push(t('mdm.btOff'))
   return out
 }
+
+export interface LockSettings { timeout_s: number; max_s: number | null; choices: number[] }
+
+export function lockChoiceLabel(s: number): string {
+  if (s === 0) return t('time.never')
+  if (s < 3600) return t('time.min', { n: Math.round(s / 60) })
+  return s === 3600 ? t('time.hour') : t('time.hours', { n: formatNumber(Math.round(s / 360) / 10) })
+}
+export interface InstalledApp { id: string; name: string; generic_name: string | null; comment: string | null; icon: string | null; categories: string[]; keywords: string[] }
 
 export type SignOutChoice = 'none' | 'export' | 'discard'
 
@@ -119,17 +364,46 @@ declare global {
   interface Window { worksuite?: WorkSuiteApi }
 }
 
+// Preview only (no helper in a plain browser): a PIN set up and one security key, so every state can be reviewed.
+const previewSignin: SignInMethods = {
+  pin: true, keys: [{ id: 'a1b2c3d4e5f60718', name: 'YubiKey 5 NFC', added: Date.UTC(2026, 8, 2) }], default: 'pin',
+  allow_pin: true, pin_min_length: 6, pin_max_length: 12, attempt_limit: 3,
+}
+
 const stub: WorkSuiteApi = {
-  async authenticate(_user, password) {
+  async authenticate(_user, password, method) {
+    // Preview: the password "wrong" and the PIN 000000 are rejected so the error states can be reviewed.
+    if (method === 'key') return { ok: true }
+    if (method === 'pin') return password === '000000' || !/^[0-9]{4,12}$/.test(password) ? { ok: false, message: 'Incorrect PIN.' } : { ok: true }
+    if (password === 'wrong') return { ok: false, message: 'Incorrect password. Try again.' }
     return password.length > 0 ? { ok: true } : { ok: false, message: 'Enter your password.' }
   },
   async lock() {},
   async logout() {},
   async power() {},
   async launchApp() {},
+  // Preview: the shipped default (5 min), no policy maximum.
+  async lockSettings() { return { timeout_s: stubLock, max_s: null, choices: [60, 120, 300, 600, 900, 1800, 3600, 0] } },
+  async setLockTimeout(s) { stubLock = s; return { ok: true, value: { timeout_s: s, max_s: null, choices: [60, 120, 300, 600, 900, 1800, 3600, 0] } } },
   async openLink() {},
+  // Preview: signed out, so search says so instead of inventing results.
+  async search(q) {
+    const query = q.trim()
+    return { query, sources: query ? [{ source: 'worksuite', state: 'not_signed_in', hits: [] }, { source: 'drive', state: 'not_signed_in', hits: [] }] : [], hits: [] }
+  },
+  async recentFiles() { return { local: [], cloud: { state: 'not_signed_in', hits: [] } } },
+  async openSearchResult() { return { ok: true } },
+  async webApps() { return { ok: false, error: 'not_signed_in' } },
+  async installedApps() {
+    return { apps: [
+      { id: 'firefox-esr', name: 'Firefox ESR', generic_name: 'Web Browser', comment: null, icon: 'firefox-esr', categories: ['Network', 'WebBrowser'], keywords: ['internet', 'web'] },
+      { id: 'foot', name: 'Foot', generic_name: 'Terminal', comment: null, icon: 'foot', categories: ['System', 'TerminalEmulator'], keywords: ['shell'] },
+    ], office: null, desktop: null }
+  },
+  async launchOffice() {},
+  async launchWorkSuite() {},
   async cloudSignIn(serverUrl, _mode) {
-    stubAccounts = [{ id: 'preview:u-1', name: 'Hasarinda', server_url: serverUrl, state: 'signed_in' }]
+    stubAccounts = [{ id: 'preview:u-1', name: 'Preview User', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
   },
   async cloudSignOut(id, choice) {
@@ -185,33 +459,296 @@ const stub: WorkSuiteApi = {
     if (root === 'drive' && !rel) return { ok: true, value: [f('Tenders 2026', 'folder', null, true, true), f('Finance', 'folder', null, true, true), f('Handbook.pdf', 'synced', 1_200_000)] }
     if (root === 'drive') return { ok: true, value: [
       f('SFCL proposal v3.docx', 'syncing', 6_400_000), f('TSHDA bid — pricing.xlsx', 'synced', 212_000),
-      f('TSHDA bid — pricing (conflict Hasarinda-laptop 2026-10-15).xlsx', 'conflict', 208_000),
+      f('TSHDA bid — pricing (conflict preview-laptop 2026-10-15).xlsx', 'conflict', 208_000),
       f('MBSL digital media tender.pdf', 'online-only', null, false), f('Care Me platform — clarifications.pdf', 'pending', 480_000),
       f('Site walk-through recording.mp4', 'error', 6_200_000_000) ] }
     if (!rel) return { ok: true, value: [f('Documents', 'local', null, true, true), f('Downloads', 'local', null, true, true), f('notes.txt', 'local', 2_000)] }
+    if (rel === 'Documents') return { ok: true, value: STUB_DOCS() }
     return { ok: true, value: [f('Invoice INV-2026-0418.pdf', 'local', 182_000), f('worksuite-agent-2.4.1.zip', 'local', 38_200_000)] }
   },
   async filesOpen() { return { ok: true, value: true } },
+  async filesPlaces() { return { user: 'alex', folders: ['Documents', 'Downloads', 'Pictures', 'Music', 'Videos'], media: [{ id: 'media:KINGSTON', label: 'KINGSTON' }], disk: { device: 'vda', used: 12.8e9, total: 39.5e9 } } },
+  async filesStarred() { return { keys: [], hits: [] } },
+  async filesStar() { return { ok: true, value: [] } },
+  async filesRecent() { return [] },
+  async filesSearch(_r, _rel, q) {
+    const hits = STUB_DOCS().filter((e) => e.name.toLowerCase().includes(q.trim().toLowerCase())).map((e) => ({ root: 'home', rel: `Documents/${e.name}`, name: e.name, dir: e.dir, size: e.size, modified: e.modified, where: '~/Documents' }))
+    return { ok: true, value: { hits, ms: 12, truncated: false } }
+  },
+  async filesMkdir(_r, rel, name) { return { ok: true, value: rel ? `${rel}/${name}` : name } },
+  async filesRename(_r, rel, name) { return { ok: true, value: name || rel } },
+  async filesTrash(_r, rels) { return { ok: true, value: { count: rels.length, ids: rels.map((r) => r.split('/').pop()!) } } },
+  async filesDelete(_r, rels) { return { ok: true, value: rels.length } },
+  async filesNotify() { return true },
+  async filesTrashList() {
+    const d = (days: number) => Date.now() - days * 86_400_000
+    return [['Old logo.png', '~/Pictures', 0, 640_000], ['Draft v1.docx', '~/Documents/Projects', 1, 312_000], ['Invoice copy.pdf', '~/Downloads', 9, 220_000]]
+      .map(([name, where, days, size]) => ({ id: String(name), name: String(name), dir: false, size: Number(size), orig: '', where: String(where), deleted: d(Number(days)) }))
+  },
+  async filesTrashRestore(ids) { return { ok: true, value: { restored: ids.length, skipped: 0 } } },
+  async filesTrashDelete(ids) { return { ok: true, value: ids === 'all' ? 0 : ids.length } },
+  async filesPaste(op, _s, rels, dstRoot) {
+    // Preview: a job that stops on one conflict, then runs to the end; Pause holds it, like the real job service.
+    const id = `stubjob${++stubJobSeq}`
+    const total = rels.length, bytes = rels.length * 2_400_000
+    const base: FileJob = { id, op: op === 'move' ? 'move' : 'copy', dest: dstRoot.startsWith('media:') ? dstRoot.slice(6) : '~/Documents', state: 'running', done: 0, total, bytes_done: 0, bytes_total: bytes, conflict: null,
+      src: '~/Documents', current: rels[0].split('/').pop()!, free: 21_400_000_000, started: Date.now(), error: null, error_name: null }
+    stubJobs.set(id, { job: base, paused: false, step: 0 })
+    setTimeout(() => stubEmit({ ...base, state: 'conflict', conflict: { name: rels[0].split('/').pop()!, incoming: { size: 2_400_000, modified: Date.now() - 600_000 }, existing: { size: 2_100_000, modified: Date.now() - 12 * 86_400_000 }, remaining: rels.length - 1, index: 1, count: rels.length } }), 50)
+    return { ok: true, value: id }
+  },
+  async filesResolve(id, r) {
+    const s = stubJobs.get(id)
+    if (!s) return { ok: false, error: 'not_found' }
+    if (r === 'cancel') { stubJobs.delete(id); stubEmit({ ...s.job, state: 'cancelled' }); return { ok: true, value: true } }
+    if (r === 'pause') { s.paused = true; stubEmit({ ...s.job, state: 'paused' }); return { ok: true, value: true } }
+    s.paused = false
+    const tick = () => {
+      const cur = stubJobs.get(id)
+      if (!cur || cur.paused) return
+      cur.step++
+      const f = Math.min(1, cur.step / 20)
+      cur.job = { ...cur.job, state: f >= 1 ? 'done' : 'running', conflict: null, done: Math.round(cur.job.total * f), bytes_done: Math.round(cur.job.bytes_total * f), current: f >= 1 ? null : cur.job.current }
+      stubEmit(cur.job)
+      if (f < 1) setTimeout(tick, 300); else stubJobs.delete(id)
+    }
+    setTimeout(tick, 100)
+    return { ok: true, value: true }
+  },
+  async filesCompress(_root, rels, o) {
+    // Preview: a job that runs to the end.
+    const base: FileJob = { id: 'stubarc', op: 'compress', dest: '~/Documents', name: `${o.name}.${o.format}`, state: 'running', done: 0, total: rels.length, bytes_done: 0, bytes_total: 48_000_000, conflict: null, ask: null, error: null }
+    for (let i = 1; i <= 10; i++) setTimeout(() => stubFileJobs.forEach((l) => l({ ...base, state: i === 10 ? 'done' : 'running', bytes_done: i * 4_800_000, done: i === 10 ? rels.length : 0 })), i * 400)
+    return { ok: true, value: base.id }
+  },
+  async filesExtract(_root, rel, mode, items, password) {
+    const name = rel.split('/').pop()!
+    const base: FileJob = { id: 'stubx', op: 'extract', dest: mode === 'folder' ? `~/Downloads/${name.replace(/\.[^.]+$/, '')}` : '~/Downloads', name, state: 'running', done: 0, total: items.length || 14, bytes_done: 0, bytes_total: 96_400_000, conflict: null, ask: null, error: null }
+    setTimeout(() => stubFileJobs.forEach((l) => l(name.includes('agent') && !password ? { ...base, state: 'password', ask: { wrong: false } } : { ...base, bytes_done: 41_000_000 })), 50)
+    return { ok: true, value: base.id }
+  },
+  async filesArchivePassword(id, pw) {
+    stubFileJobs.forEach((l) => l({ id, op: 'extract', dest: '~/Downloads/worksuite-agent-2.4.1', name: 'worksuite-agent-2.4.1.zip', state: pw === null ? 'cancelled' : 'running', done: 3, total: 14, bytes_done: 41_000_000, bytes_total: 96_400_000, conflict: null, ask: null, error: null }))
+    return { ok: true, value: true }
+  },
+  async filesArchiveList(_root, rel) {
+    const e = (path: string, size: number | null, type: 'file' | 'dir' = 'file'): ArchiveEntry => ({ path, type, size, link: null, modified: Date.now() - 86_400_000 * 3, encrypted: false })
+    const entries = [e('worksuite-agent', 0, 'dir'), e('worksuite-agent/bin', 0, 'dir'), e('worksuite-agent/bin/worksuite-agent', 61_200_000), e('worksuite-agent/bin/agentctl', 8_400_000),
+      e('worksuite-agent/config', 0, 'dir'), e('worksuite-agent/config/agent.toml', 4_100), e('worksuite-agent/config/policies.json', 12_800), e('worksuite-agent/README.md', 9_600), e('worksuite-agent/LICENSE', 11_300), e('worksuite-agent/CHANGELOG.md', 38_000)]
+    return rel.endsWith('.zip') ? { ok: true, value: { kind: 'zip', entries, encrypted: false, total: 69_676_800, packed: 38_200_000 } } : { ok: false, error: 'failed' }
+  },
+  onOpenArchive() { return () => {} },
+  async filesEject() { return { ok: false, error: 'unavailable' } },
+  onFilesJob(cb) { stubFileJobs.add(cb); return () => { stubFileJobs.delete(cb) } },
   async filesStatus(root) { return { free_bytes: 212e9, drive: root === 'drive' ? { states: { synced: 2, syncing: 1, pending: 1, conflict: 1, 'online-only': 1, error: 1 }, last_sync: Date.now() - 60_000, service_state: 'idle' } : null } },
   async deviceInfo() {
     return {
       agent: true, managed: stubManaged, org_name: stubManaged ? 'Livezen Technologies' : null, server: stubManaged ? 'work.livezentech.com' : null, last_check_in: stubManaged ? Date.now() - 4 * 60_000 : null,
       device: { hostname: 'LZT-LAP-0142', os_version: 'WorkSuite OS 1.0 (preview)', arch: 'amd64', kernel_version: '6.12', encrypted: true },
       policies: !stubManaged ? null : { version: 'preview', update_ring: 'pilot', update_mode: 'automatic', maintenance_window: '02:00-04:00', lock_timeout_max_s: 300, offline_access_days: 7, usb_storage: 'read_only', bluetooth: null, app_allowlist_size: 42 },
+      kiosk: stubManaged && typeof location !== 'undefined' && new URLSearchParams(location.search).get('kiosk') === '1' ? { user: 'kiosk', app: { type: 'url', url: 'https://work.livezentech.com/reception' }, allowed_urls: ['https://work.livezentech.com/'], idle_reset_minutes: 2, show_on_screen_keyboard: true, exit_pin: true } : null,
     }
   },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
+  async hwDevices() {
+    if (stubSim === 'none') return { ok: false, error: 'unavailable' }
+    const extra = PV.get('hw') === 'new' && Date.now() - stubStart > 3000 ? [STUB_NEW] : PV.get('hw') === 'problem' && Date.now() - stubStart > 3000 ? [{ ...STUB_NEW, driver: null, driver_version: null }] : []
+    return { ok: true, value: [...STUB_DEVICES, ...extra] }
+  },
+  async hwDriverUpdates() { return PV.get('hw') === 'catalog' ? { ok: true, value: STUB_OFFERS } : { ok: false, error: 'unavailable' } },
+  async hwInstallDrivers(ids) {
+    if (PV.get('hw') !== 'catalog') return { ok: false, error: 'unavailable' }
+    const job = `/lk/worksuite/PackageService1/job/${++stubJobId}`
+    ids.forEach((id, i) => {
+      setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 100, phase: id })), 400 + i * 100)
+      if (i === 1) setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 62, phase: ids[1] })), 500)
+    })
+    return { ok: true, value: job }
+  },
+  async signinMethods() { return stubAvail({ ...previewSignin, keys: [...previewSignin.keys] }) },
+  async signinPinSet(pin) { if (!/^[0-9]{4,12}$/.test(pin)) return { ok: false, error: 'digits_only' }; previewSignin.pin = true; return { ok: true } },
+  async signinPinRemove() { previewSignin.pin = false; if (previewSignin.default === 'pin') previewSignin.default = 'password'; return { ok: true } },
+  async signinKeyAdd(name) {
+    await new Promise((r) => setTimeout(r, 1200))
+    const id = Math.random().toString(16).slice(2, 10).padEnd(16, '0')
+    previewSignin.keys.push({ id, name: name || 'Security key', added: Date.now() }); return { ok: true, id }
+  },
+  async signinKeyRemove(id) { previewSignin.keys = previewSignin.keys.filter((k) => k.id !== id); if (!previewSignin.keys.length && previewSignin.default === 'key') previewSignin.default = 'password'; return { ok: true } },
+  async signinSetDefault(method) { previewSignin.default = method; return { ok: true } },
+  async sysUsers() { return stubAvail({ current: 'preview', users: [{ login: 'preview', name: 'Preview User', uid: 1000, admin: true }, { login: 'second', name: 'Second User', uid: 1001, admin: false }] }) },
+  async pkgRepair() { return stubJob('repair', 'repair') },
+  async pkgState() { return { ok: false, error: 'service_unavailable' } },
+  // Browser preview: no system to read, so no report (never sample logs).
+  async reportCollect() { return { ok: false, error: 'service_unavailable' } },
+  async reportSave() { return { ok: false, error: 'service_unavailable' } },
+  async reportSend() { return { ok: false, error: 'service_unavailable' } },
+  // Browser preview: there is no package service or server here, so these answer honestly instead of inventing apps.
+  async pkgCatalog() { return { ok: true, value: { state: 'not_enrolled', arch: 'amd64', items: [], error: 'Preview mode: no package service, so there is no app catalog.' } } },
+  async pickFile() { return { ok: false, error: 'service_unavailable' } },
+  async localDebPreview() { return { ok: false, error: 'service_unavailable' } },
+  async localDebInstall() { return { ok: false, error: 'service_unavailable' } },
+  async appPermissions() { return { ok: false, error: 'service_unavailable' } },
+  async appPermissionsReset() { return { ok: false, error: 'service_unavailable' } },
+  async appDataRemove() { return { ok: false, error: 'service_unavailable' } },
+  async pruneRuntimes() { return { ok: false, error: 'service_unavailable' } },
+  // ?upd=offline previews G14 with a bundle on a USB drive; otherwise there is no package service here.
+  async bundleInspect(h) { return h === 'wsupdate:preview' ? { ok: true, value: { release_id: 'os-1.1.2', version: '1.1.2', packages: 214, bytes: 377_487_360, critical: true, verified: true } } : { ok: false, error: 'service_unavailable' } },
+  async bundleInstall() { return { ok: false, error: 'service_unavailable' } },
+  async findBundles() { return { ok: true, value: PV.get('upd') === 'offline' ? [{ handle: 'wsupdate:preview', name: 'worksuite-1.1.2-offline.wsupdate', drive: 'KINGSTON' }] : [] } },
+  async appimageList() { return { ok: true, value: [] } },
+  async appimageImport() { return { ok: false, error: 'service_unavailable' } },
+  async appimageApprove() { return { ok: false, error: 'service_unavailable' } },
+  async appimageRemove() { return { ok: false, error: 'service_unavailable' } },
+  async appimageUpdate() { return { ok: false, error: 'service_unavailable' } },
+  async appimageLaunch() { return { ok: false, error: 'service_unavailable' } },
+  async recoveryInfo() {
+    const all = stubSim !== 'none'
+    return { os_version: '1.1', disk: 'vda', firmware: 'EFI', failures: all ? 3 : null,
+      luks: stubSim === 'none' ? [] : [{ device: '/dev/vda2', name: 'vda2', label: 'WorkSuite', version: '2', size_bytes: 42_412_802_048, unlocked: false }],
+      features: { unlock: all, repair: true, snapshots: all, reinstall: all, copy_usb: false, terminal: false, report_usb: false } }
+  },
+  async recoveryCheck(id) {
+    await stubWait(id === 'packages' ? 1500 : 700)
+    const preview: Record<CheckId, CheckResult> = {
+      boot: { status: 'ok', note: 'Fine' }, disk: { status: 'ok', note: 'Fine' }, crypt: { status: 'ok', note: 'Unlocked' },
+      packages: stubSim === 'none' ? { status: 'unavailable', note: 'Package service isn’t running' } : { status: 'problem', note: 'Interrupted package changes', fixable: true },
+      drivers: { status: 'unavailable', note: 'Not checked in this version' },
+      update: stubSim === 'none' ? { status: 'unavailable', note: 'Update service isn’t running' } : { status: 'ok', note: 'Version 1.1' },
+    }
+    return preview[id]
+  },
+  async recoveryUnlock(_device, secret) {
+    await stubWait(600)
+    // Preview: a key starting 00000 (or the passphrase "wrong") is refused so the error state can be reviewed.
+    return secret.startsWith('00000') || secret === 'wrong' ? { ok: false, error: 'wrong_key' } : { ok: true, value: true }
+  },
+  async recoverySnapshots() {
+    if (stubSim === 'none') return { ok: false, error: 'unavailable' }
+    const at = (d: number, h: number, m: number) => { const t = new Date(); t.setDate(t.getDate() - d); t.setHours(h, m, 0, 0); return t.getTime() }
+    return { ok: true, value: [
+      { id: 'snap-4', title: 'Before update to 1.1', created: at(0, 2, 3), kind: 'automatic', os_version: '1.0', last_working: true },
+      { id: 'snap-3', title: 'Weekly snapshot', created: at(4, 3, 0), kind: 'automatic', os_version: '1.0', last_working: false },
+      { id: 'snap-2', title: 'Before installing Docs', created: at(7, 14, 22), kind: 'app install', os_version: '1.0', last_working: false },
+      { id: 'snap-1', title: 'After first setup', created: at(14, 18, 40), kind: 'install', os_version: '1.0', last_working: false },
+    ] }
+  },
+  async recoveryRestore() { await stubWait(800); return stubSim === 'none' ? { ok: false, error: 'unavailable' } : { ok: true, value: true } },
+  async recoveryReinstall() { await stubWait(800); return stubSim === 'none' ? { ok: false, error: 'unavailable' } : { ok: true, value: true } },
+  async recoveryCopyToUsb() { return { ok: false, error: 'unavailable' } },
+  async recoveryTerminal() { return { ok: false, error: 'unavailable' } },
+  async recoverySaveReport() { return { ok: false, error: 'unavailable' } },
+  // Preview only: simulated host state; `?sim=none` shows every area as unavailable.
+  async sysNetwork() { return stubAvail({ ...stubSys.net, networks: stubSys.net.wifi_enabled ? stubSys.net.networks : [] }) },
+  async sysSetWifi(on) { stubSys.net.wifi_enabled = on; return stubAvail(true as const) },
+  async sysWifiConnect(ssid, password) {
+    await stubWait(700)
+    if (password === 'wrong') return { ok: false, error: 'bad_password' }
+    stubSys.net.networks = stubSys.net.networks.map((n) => ({ ...n, in_use: n.ssid === ssid }))
+    return { ok: true }
+  },
+  async sysVpn() { return stubAvail({ connections: stubSys.vpn, user_vpn_allowed: true, vpn_required: false }) },
+  async sysVpnImport() { return { ok: false, error: 'service_unavailable' } },
+  async sysVpnImportOpenvpn() { return { ok: false, error: 'service_unavailable' } },
+  async sysVpnConnect(uuid, on) { stubSys.vpn = stubSys.vpn.map((c) => c.uuid === uuid ? { ...c, active: on } : c); return stubAvail(true as const) },
+  async sysVpnRemove(uuid) { stubSys.vpn = stubSys.vpn.filter((c) => c.uuid !== uuid || c.managed); return stubAvail(true as const) },
+  async sysBluetooth() { return stubAvail(stubSys.bt) },
+  async sysSetBluetooth(on) { stubSys.bt.powered = on; return stubAvail(true as const) },
+  async sysBtConnect(address, on) { stubSys.bt.paired = stubSys.bt.paired.map((d) => d.address === address ? { ...d, connected: on } : d); return stubAvail(true as const) },
+  async sysSound() { return stubAvail(stubSys.sound) },
+  async sysSetVolume(p) { stubSys.sound.volume = Math.max(0, Math.min(100, Math.round(p))); return stubAvail(true as const) },
+  async sysSetMute(m) { stubSys.sound.muted = m; return stubAvail(true as const) },
+  async sysSetDefaultAudio(id) { stubSys.sound.outputs = stubSys.sound.outputs.map((o) => ({ ...o, is_default: o.id === id })); return stubAvail(true as const) },
+  async sysBattery() { return stubAvail({ present: true, percentage: 74, state: 'charging', time_to_full_s: 4800, time_to_empty_s: null, on_battery: false }) },
+  async sysPrinters() { return stubAvail([{ name: 'HP_LaserJet_M507_Floor3', state: 'idle', is_default: true }] as Printer[]) },
+  async sysDisplays() { return stubAvail([{ name: 'eDP-1', description: 'Built-in display', enabled: true, width: 1920, height: 1200, refresh: 60, scale: 1 }]) },
+  async sysDisks() { return stubAvail([{ model: 'Preview NVMe SSD', serial: 'PREVIEW0001', device: 'nvme0n1' }]) },
 }
+
+function stubAvail<T>(value: T): Avail<T> {
+  return stubSim === 'none' ? { available: false, reason: 'service_unavailable' } : { available: true, value: structuredClone(value) }
+}
+const stubSys: { net: NetworkState; bt: BluetoothState; sound: SoundState; vpn: VpnConnection[] } = {
+  vpn: [{ name: 'WorkSuite VPN', uuid: '6f1d9a52-3c47-4b8e-9a0d-57e2c1b4f0a3', type: 'wireguard', kind: 'wireguard', active: true, device: 'wsvpn0', managed: true, needs_credentials: false }],
+  net: { wifi_enabled: true, devices: [{ device: 'wlan0', type: 'wifi', state: 'connected', connection: 'Preview-WiFi' }, { device: 'eth0', type: 'ethernet', state: 'unavailable', connection: null }],
+    networks: [{ ssid: 'Preview-WiFi', signal: 82, security: 'WPA2', in_use: true }, { ssid: 'Guest', signal: 54, security: '', in_use: false }] },
+  bt: { powered: false, name: 'preview-laptop', discoverable: false, paired: [{ address: 'AA:BB:CC:DD:EE:01', name: 'Preview keyboard', connected: false }] },
+  sound: { volume: 60, muted: false, outputs: [{ id: 46, name: 'Built-in speakers', is_default: true }, { id: 51, name: 'HDMI output', is_default: false }], inputs: [{ id: 47, name: 'Built-in microphone', is_default: true }] },
+}
+
+// Preview only: `?sim=none` shows the recovery screens as on a host where none of the optional services exist.
+const stubSim = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('sim') ?? 'preview' : 'preview'
+const stubWait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+let stubLock = 300
+// Browser preview only (never in Electron): ?upd=available|downloading|ready|forced|failed|whatsnew|uptodate,
+// ?hw=catalog|new|problem, ?sim=none drive the stub into each board's state.
+const PV = new URLSearchParams(typeof location === 'undefined' ? '' : location.search)
+const stubStart = Date.now()
+const dev = (id: string, name: string, vendor: string | null, kind: HwKind, bus: 'usb' | 'pci', driver: string | null, extra: Partial<HwDevice> = {}): HwDevice =>
+  ({ id, name, vendor, kind, bus, built_in: bus === 'pci', driver, driver_version: null, driver_proprietary: driver ? false : null, ids: '0000:0000', ...extra })
+const STUB_DEVICES: HwDevice[] = [
+  dev('usb:1-1', 'USB Keyboard', 'Preview', 'keyboard', 'usb', 'usbhid'),
+  dev('usb:1-3', 'USB Printer', 'Preview', 'printer', 'usb', 'usblp'),
+  dev('pci:0000:00:14.3', 'Wireless adapter', 'Preview', 'wireless', 'pci', 'iwlwifi'),
+  dev('pci:0000:00:02.0', 'Integrated graphics', 'Preview', 'graphics', 'pci', 'i915'),
+  dev('pci:0000:00:1f.3', 'Audio controller', 'Preview', 'audio', 'pci', 'snd_hda_intel'),
+]
+const STUB_NEW = dev('usb:1-2', 'USB Camera', 'Preview', 'camera', 'usb', 'uvcvideo', { driver_version: '1.1.1' })
+const STUB_OFFERS: DriverOffer[] = [
+  { id: 'drv-gfx', device_id: 'pci:0000:00:02.0', name: 'Graphics driver (preview)', summary: 'Preview catalog entry', from_version: '1.0', to_version: '1.1', license: 'proprietary', category: 'optional', size_bytes: 140e6, restart: true },
+  { id: 'drv-cam', device_id: 'usb:1-2', name: 'Camera driver (preview)', summary: 'Preview catalog entry', from_version: null, to_version: '2.0', license: 'open', category: 'recommended', size_bytes: 4e6, restart: false },
+  { id: 'drv-wifi', device_id: 'pci:0000:00:14.3', name: 'Wi-Fi firmware (preview)', summary: 'Preview catalog entry', from_version: '83', to_version: '86', license: 'open', category: 'security', size_bytes: 2e6, restart: false },
+]
 
 let stubAccounts: CloudAccount[] = []
 // Preview only: package jobs finish after a short delay.
 const stubListeners = new Set<(e: PackageJobEvent) => void>()
 let stubJobId = 0
 // Preview: a mandatory security release waiting for the user.
-let stubOs: OsUpdateStatus = { state: 'waiting', version: '1.0.3', installed: '1.0.2', release_id: 'os-1.0.3', mandatory: true,
-  deadline: new Date(Date.now() + 2 * 86_400_000).toISOString(), deferrals_left: 2, reason: 'waiting_for_user', restart_at: null, last_check: Date.now() - 3_600_000 }
+let stubOs: OsUpdateStatus = stubUpdateState(PV.get('upd'))
+function stubUpdateState(k: string | null): OsUpdateStatus {
+  const base: OsUpdateStatus = { state: 'waiting', version: '1.0.3', installed: '1.0.2', release_id: 'os-1.0.3', mandatory: true,
+    deadline: new Date(Date.now() + 2 * 86_400_000).toISOString(), deferrals_left: 2, reason: 'waiting_for_user', restart_at: null, last_check: Date.now() - 3_600_000 }
+  const opt = { ...base, mandatory: false, deadline: null, deferrals_left: null }
+  switch (k) {
+    case 'available': return opt
+    case 'offline': {
+      const two = new Date(); two.setDate(two.getDate() + 1); two.setHours(2, 0, 0, 0)
+      return { ...base, version: '1.1.2', installed: '1.1.0', release_id: 'os-1.1.2', critical: true, resumed: true, state: 'installing', reason: null, deadline: two.toISOString() }
+    }
+    case 'downloading': return { ...opt, state: 'installing', reason: null }
+    case 'ready': return { ...opt, state: 'ready_to_restart', installed: '1.0.3', reason: null }
+    case 'forced': return { ...base, state: 'restart_pending', reason: 'deadline', restart_at: Date.now() + 60_000 }
+    case 'failed': return { ...opt, state: 'installing', reason: null }
+    case 'whatsnew': return { ...opt, state: 'up_to_date', installed: '1.0.3', version: '1.0.3', reason: null }
+    case 'uptodate': return { ...opt, state: 'up_to_date', version: null, installed: '1.0.2', release_id: null, reason: null }
+    default: return base
+  }
+}
+// Preview: drive the update job the way the package service does (JobProgress phases, then a status change).
+if (typeof window !== 'undefined') {
+  const k = PV.get('upd')
+  const job = '/lk/worksuite/PackageService1/job/90'
+  const emitJob = (percent: number, phase: string) => stubListeners.forEach((l) => l({ job, kind: 'progress', percent, phase }))
+  const setOs = (p: Partial<OsUpdateStatus>) => { stubOs = { ...stubOs, ...p }; stubOsListeners.forEach((l) => l(stubOs)) }
+  if (k === 'downloading') setTimeout(() => emitJob(41, 'downloading'), 400)
+  if (k === 'offline') setTimeout(() => emitJob(70, 'downloading'), 400)
+  if (k === 'forced') { setTimeout(() => setOs({ state: 'installing', reason: null, restart_at: null }), 600); setTimeout(() => emitJob(50, 'applying'), 800) }
+  if (k === 'failed') { setTimeout(() => emitJob(50, 'applying'), 400); setTimeout(() => setOs({ state: 'failed', reason: 'dpkg: error processing package linux-image-6.12 (--configure)' }), 700) }
+}
+const stubJobs = new Map<string, { job: FileJob; paused: boolean; step: number }>()
+let stubJobSeq = 0
+const stubEmit = (e: FileJob) => stubFileJobs.forEach((l) => l(e))
+const stubFileJobs = new Set<(e: FileJob) => void>()
+function STUB_DOCS(): FileEntry[] {
+  const day = 86_400_000, now = Date.now()
+  const e = (name: string, ago: number, size: number | null, items?: number): FileEntry => ({ name, dir: items != null, size, modified: now - ago * day, state: 'local', local: true, ...(items != null ? { items } : {}) })
+  return [e('Archive', 13, null, 230), e('Contracts', 3, null, 7), e('Invoices', 1, null, 48), e('Projects', 0, null, 12),
+    e('Budget 2027.xlsx', 0, 2_400_000), e('Brand guide.pdf', 14, 8_100_000), e('Logo export.png', 4, 640_000), e('Meeting notes.md', 5, 6_000),
+    e('Proposal v3.docx', 6, 312_000), e('Q4 plan draft.docx', 0, 184_000), e('Roadmap.pptx', 17, 5_600_000), e('Signed NDA.pdf', 3, 220_000), e('Team offsite.pptx', 1, 12_000_000)]
+}
 const stubOsListeners = new Set<(s: OsUpdateStatus) => void>()
-let stubUpdates = { packages: ['firefox-esr', 'libreoffice', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
+let stubUpdates = { packages: ['firefox-esr', 'libc6', 'openssl'], flatpaks: ['org.gimp.GIMP'] }
 function stubJob(_id: string, _kind: string): CloudResult<string> {
   const job = `/lk/worksuite/PackageService1/job/${++stubJobId}`
   setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 50, phase: 'installing' })), 300)
@@ -222,25 +759,25 @@ function stubJob(_id: string, _kind: string): CloudResult<string> {
 let stubUnsent = 3
 let stubPolls = 0
 // Preview only: unmanaged until enrolled (first-run or Settings).
-let stubManaged = false
+let stubManaged = typeof location !== 'undefined' && new URLSearchParams(location.search).get('managed') === '1'
 
 /** Broker error codes → text for the user. */
 export function cloudErrorText(code: string): string {
   switch (code) {
-    case 'discovery_failed': return 'That server didn’t answer as a WorkSuite server. Check the address.'
-    case 'insecure_url': return 'The server must use https.'
-    case 'sign_in_timeout': return 'Sign-in wasn’t finished in the browser. Try again.'
-    case 'access_denied': return 'Sign-in was cancelled.'
-    case 'broker_unavailable': return 'The sign-in service isn’t running. Try again in a moment.'
-    case 'device_not_enrolled': return 'This computer isn’t enrolled with your organization yet. Ask IT to enroll it, then sign in again.'
+    case 'discovery_failed': return t('cloud.err.discovery')
+    case 'insecure_url': return t('cloud.err.insecure')
+    case 'sign_in_timeout': return t('cloud.err.timeout')
+    case 'access_denied': return t('cloud.err.denied')
+    case 'broker_unavailable': return t('cloud.err.broker')
+    case 'device_not_enrolled': return t('cloud.err.notEnrolled')
     case 'bootstrap_failed':
-    case 'bootstrap_invalid': return 'Signed in, but WorkSuite couldn’t load your organization’s settings. Try again.'
-    case 'auth_cancelled': return 'Enrollment needs an administrator password. Nothing was changed.'
-    case 'enrollment_rejected': return 'The server didn’t accept that enrollment code. Check it with your IT admin; codes expire quickly.'
-    case 'invalid_code': return 'Enter the enrollment code exactly as your IT admin gave it.'
-    case 'agent_unavailable': return 'The device agent isn’t running, so this computer can’t be enrolled right now.'
-    case 'export_failed': return 'Couldn’t save the unsent changes. Nothing was signed out.'
-    default: return 'Sign-in didn’t work. Check your connection and try again.'
+    case 'bootstrap_invalid': return t('cloud.err.bootstrap')
+    case 'auth_cancelled': return t('cloud.err.authCancelled')
+    case 'enrollment_rejected': return t('cloud.err.rejected')
+    case 'invalid_code': return t('cloud.err.code')
+    case 'agent_unavailable': return t('cloud.err.agent')
+    case 'export_failed': return t('cloud.err.export')
+    default: return t('cloud.err.default')
   }
 }
 
@@ -251,4 +788,4 @@ export function serverUrlFor(mode: 'personal' | 'enterprise', server: string): s
   return /^[a-z]+:\/\//i.test(s) ? s : `https://${s}`
 }
 
-export const os: WorkSuiteApi = (typeof window !== 'undefined' && window.worksuite) || stub
+export const os: WorkSuiteApi = (typeof window !== 'undefined' && window.worksuite) || withAppCenterPreview(stub)

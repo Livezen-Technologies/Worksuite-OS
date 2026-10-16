@@ -1,0 +1,48 @@
+# AppArmor profile for the break-glass rotation (worksuite-breakglass-rotate.service, WSOS-SEC-009/DIR-010).
+abi <abi/4.0>,
+include <tunables/global>
+
+profile worksuite-directory flags=(attach_disconnected) {
+  include <abstractions/base>
+  include <abstractions/nameservice>
+  include <abstractions/ssl_certs>
+  include <abstractions/openssl>
+
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network unix,
+
+  /{usr/,}bin/{sh,dash} ix,
+  /usr/libexec/worksuite/worksuite-pam-directory rix,
+  /usr/bin/worksuite-node rix,
+  /usr/lib/worksuite/shell/electron/electron mrix,
+  /usr/lib/worksuite/shell/electron/** mr,
+  /usr/lib/worksuite/directory/** r,
+  /etc/** r,
+  @{PROC}/** r,
+  /dev/shm/** rwk,
+  /tmp/** rwk,
+  /var/lib/worksuite-device-agent/state.json r,
+  owner /var/lib/worksuite-directory/ rw,
+  owner /var/lib/worksuite-directory/** rwk,
+  # Greeter domain settings and status markers (WSOS-DIR-002/007).
+  /run/worksuite-directory/ rw,
+  /run/worksuite-directory/** rw,
+  # Break-glass reason left by the greeter (G04).
+  /run/worksuite/break-glass/reason rw,
+  /usr/bin/logger rix,
+  # Account tools run inside this profile (ix; the unit has NoNewPrivileges=yes) and may edit only the account files.
+  capability chown dac_override dac_read_search fowner fsetid audit_write setuid setgid,
+  /usr/{s,}bin/{usermod,chpasswd,gpasswd,useradd,systemctl} rix,
+  /etc/{passwd,shadow,group,gshadow,subuid,subgid}{,-,+,.lock,.edit} rwlk,
+  /etc/{nshadow,npasswd,ngroup,ngshadow} rwlk,
+  /etc/.pwd.lock rwk,
+  /etc/{passwd,shadow,group,gshadow}.[0-9]* rwlk,
+  /run/systemd/private rw,
+  /run/dbus/system_bus_socket rw,
+  /dev/log w,
+
+  deny /home/** rwx,
+}

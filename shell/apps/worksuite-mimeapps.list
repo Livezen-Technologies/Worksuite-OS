@@ -1,0 +1,52 @@
+# WorkSuite OS defaults: /usr/share/applications/worksuite-mimeapps.list (XDG_CURRENT_DESKTOP=WorkSuite)
+# and /etc/xdg/mimeapps.list. Office document types are claimed by WorkSuite Office's own package when installed.
+[Default Applications]
+# worksuite:// goes to WorkSuite Desktop (worksuite.desktop, package worksuite) when it is installed, else to
+# the web app windows (worksuite-url-handler.desktop): XDG takes the first installed entry of the list.
+x-scheme-handler/worksuite=worksuite.desktop;worksuite-url-handler.desktop;
+# Web: Firefox ESR. Audio and video: Celluloid (mpv).
+x-scheme-handler/http=firefox-esr.desktop;
+x-scheme-handler/https=firefox-esr.desktop;
+text/html=firefox-esr.desktop;
+application/xhtml+xml=firefox-esr.desktop;
+video/mp4=io.github.celluloid_player.Celluloid.desktop;
+video/webm=io.github.celluloid_player.Celluloid.desktop;
+video/x-matroska=io.github.celluloid_player.Celluloid.desktop;
+video/quicktime=io.github.celluloid_player.Celluloid.desktop;
+video/x-msvideo=io.github.celluloid_player.Celluloid.desktop;
+video/mpeg=io.github.celluloid_player.Celluloid.desktop;
+audio/mpeg=io.github.celluloid_player.Celluloid.desktop;
+audio/ogg=io.github.celluloid_player.Celluloid.desktop;
+audio/flac=io.github.celluloid_player.Celluloid.desktop;
+audio/x-wav=io.github.celluloid_player.Celluloid.desktop;
+audio/mp4=io.github.celluloid_player.Celluloid.desktop;
+audio/aac=io.github.celluloid_player.Celluloid.desktop;
+# Windows programs never run: they open an explanation (WSOS-LCH-003).
+application/x-ms-dos-executable=worksuite-windows-app.desktop;
+application/x-msdownload=worksuite-windows-app.desktop;
+application/vnd.microsoft.portable-executable=worksuite-windows-app.desktop;
+application/x-msi=worksuite-windows-app.desktop;
+application/x-ms-installer=worksuite-windows-app.desktop;
+application/x-ms-shortcut=worksuite-windows-app.desktop;
+application/x-bat=worksuite-windows-app.desktop;
+application/x-msdos-program=worksuite-windows-app.desktop;
+# Archives (zip, 7z, rar, tar.*, gz, xz, bz2, zst): WorkSuite Files browses them read-only and extracts them
+# (shell/apps/worksuite-files.desktop -> worksuite-open-archive -> lk.worksuite.Shell1.OpenArchive).
+application/zip=worksuite-files.desktop;
+application/x-zip-compressed=worksuite-files.desktop;
+application/x-7z-compressed=worksuite-files.desktop;
+application/vnd.rar=worksuite-files.desktop;
+application/x-rar=worksuite-files.desktop;
+application/x-rar-compressed=worksuite-files.desktop;
+application/x-tar=worksuite-files.desktop;
+application/x-compressed-tar=worksuite-files.desktop;
+application/x-xz-compressed-tar=worksuite-files.desktop;
+application/x-bzip2-compressed-tar=worksuite-files.desktop;
+application/x-bzip-compressed-tar=worksuite-files.desktop;
+application/x-zstd-compressed-tar=worksuite-files.desktop;
+application/gzip=worksuite-files.desktop;
+application/x-gzip=worksuite-files.desktop;
+application/x-xz=worksuite-files.desktop;
+application/x-bzip2=worksuite-files.desktop;
+application/x-bzip=worksuite-files.desktop;
+application/zstd=worksuite-files.desktop;

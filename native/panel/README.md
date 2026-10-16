@@ -1,15 +1,21 @@
-# worksuite-panel
+# Panel
 
-Native layer-shell taskbar, one instance per output (SRS §5.1). Native by default; a React panel is allowed
-only after a tested Electron/Chromium layer-shell integration passes the prototype decision gate.
+There is no separate `worksuite-panel` binary or unit. The WorkSuite shell's taskbar is the panel
+(SRS §5.1 allows a React panel once it consumes the bridge), so `worksuite-panel.service` was removed and
+`worksuite-shell.service` wants `worksuite-wayland-bridge.service`.
 
-- `zwlr_layer_shell_v1`, layer `top`, anchored bottom, exclusive zone reserves the edge; recreated on output hotplug
-  (monitor unplug must not strand the launcher).
-- Window list comes only from `lk.worksuite.WaylandBridge1` (`../wayland-bridge/`); the panel never binds
-  foreign-toplevel itself.
-- Hosts clock, StatusNotifierItem tray (WSOS-INT-008), quick settings (NetworkManager, PipeWire, BlueZ, UPower),
-  update badge (WSOS-AUP-011) and sync state.
-- Full keyboard operation, visible focus, Orca support via AT-SPI, 200 % text scale (WSOS-ACC-001…006).
-- Runs as `worksuite-panel.service` (`services/session/systemd/user/`), `Restart=always`.
+- Window list, activate and minimize come only from `lk.worksuite.WaylandBridge1` (`../wayland-bridge/`),
+  called from the shell's Electron main process (`shell/electron/panel.ts`), which the bridge verifies by its
+  executable (WSOS-SHL-004). The panel never binds foreign-toplevel itself.
+- Tray: StatusNotifierItems registered with the bridge's `org.kde.StatusNotifierWatcher`, listed and activated
+  through `lk.worksuite.Tray1` (`shell/src/components/PanelItems.tsx`).
+- Update badge (WSOS-AUP-011): available, installing, ready-to-restart and failed, from the package service's
+  update coordinator.
+- Super key: Labwc calls `lk.worksuite.Shell1.ToggleLauncher`, exported by the shell (`shell/dbus/lk.worksuite.Shell1.xml`).
+- Keyboard: arrow keys move between taskbar and tray buttons; visible focus; high contrast, reduced motion and
+  text size from the Accessibility panel (WSOS-ACC-001…006).
 
-Native code is not yet in this repo. Arm64 and amd64 builds are required (WSOS-ARM-004).
+Still open: the shell is one fullscreen Electron window, not a `zwlr_layer_shell_v1` surface per output, so it
+does not reserve a screen edge and has no per-monitor panel (WSOS-DSK-005/007). `OutputsChanged` and
+`ListOutputs` are available for that work; a layer-shell Electron integration or a native panel would consume
+the same bridge interface.

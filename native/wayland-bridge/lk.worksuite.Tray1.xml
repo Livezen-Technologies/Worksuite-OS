@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- Session bus: lk.worksuite.WaylandBridge1 at /lk/worksuite/Tray1 (WSOS-INT-008).
+     The bridge process is also the StatusNotifierWatcher (org.kde.StatusNotifierWatcher at /StatusNotifierWatcher)
+     and the one StatusNotifierHost; this interface hands the registered items to the shell's panel.
+     Same caller check as WaylandBridge1 (WSOS-SHL-004); unknown key → lk.worksuite.WaylandBridge1.Error.NotFound. -->
+<node name="/lk/worksuite/Tray1">
+  <interface name="lk.worksuite.Tray1">
+    <!-- (key, id, title, icon_name, status); status: Passive|Active|NeedsAttention -->
+    <method name="ListItems">
+      <arg name="items" type="a(sssss)" direction="out"/>
+    </method>
+    <!-- Primary activation (left click) at screen position x, y. -->
+    <method name="Activate">
+      <arg name="key" type="s" direction="in"/>
+      <arg name="x" type="i" direction="in"/>
+      <arg name="y" type="i" direction="in"/>
+    </method>
+    <!-- Emitted when an item registers, unregisters or leaves the bus; carries no item data. -->
+    <signal name="ItemsChanged"/>
+  </interface>
+</node>

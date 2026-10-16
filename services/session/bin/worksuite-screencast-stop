@@ -1,0 +1,26 @@
+#!/bin/sh
+# Screen-sharing emergency stop (SRS §7.1, WSOS-INT-013). Installed as /usr/lib/worksuite/worksuite-screencast-stop.
+# Run by the panel's "Stop sharing" button and by Super+Shift+Esc (Labwc keybind, also while the screen is locked).
+#
+# Ends every ScreenCast session at once: each xdg-desktop-portal-wlr PipeWire stream node is destroyed (the sharing
+# app's stream ends immediately), then xdg-desktop-portal-wlr itself is restarted, so xdg-desktop-portal closes every
+# portal Session it backed and the apps receive Session.Closed. A new share always goes through the consent chooser
+# again. Prints the number of streams it stopped; exit 0 even when nothing was being shared.
+set -u
+log() { printf '%s\n' "worksuite-screencast-stop: $1" | systemd-cat -t worksuite-screencast-stop -p "${2:-notice}" 2>/dev/null || true; }
+
+# PipeWire nodes of xdpw streams. pw-cli prints "id N, type PipeWire:Interface:Node/3" then the properties.
+ids=$(pw-cli ls Node 2>/dev/null | awk '
+    /^[[:space:]]*id [0-9]+,/ { gsub(/,/, "", $2); id = $2 }
+    /node\.name = "xdpw_stream/ { print id }')
+count=0
+for id in $ids; do
+    pw-cli destroy "$id" >/dev/null 2>&1 && count=$((count + 1))
+done
+
+# Restarting the backend closes every portal ScreenCast session it held (D-Bus activation starts it again on demand).
+if ! systemctl --user restart xdg-desktop-portal-wlr.service 2>/dev/null; then
+    pkill -x xdg-desktop-portal-wlr 2>/dev/null || true
+fi
+log "stopped $count screen-sharing stream(s)"
+echo "$count"

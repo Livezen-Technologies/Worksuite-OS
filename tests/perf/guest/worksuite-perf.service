@@ -1,0 +1,15 @@
+[Unit]
+Description=WorkSuite performance and reliability probes on the serial console (test images only)
+After=worksuite-boot-marker.service greetd.service
+Wants=graphical.target
+
+[Service]
+Type=oneshot
+Environment=PERF_LOGIN_CYCLES=20 PERF_SUSPEND_CYCLES=5
+ExecStart=/bin/sh -c '/usr/libexec/worksuite/perf/measure-boot; /usr/libexec/worksuite/perf/measure-shell; /usr/libexec/worksuite/perf/login-cycles $PERF_LOGIN_CYCLES; /usr/libexec/worksuite/perf/suspend-cycles $PERF_SUSPEND_CYCLES; /usr/libexec/worksuite/perf/electron-kill; echo WORKSUITE_PERF_DONE'
+# /dev/console is the last console= on the kernel command line: the serial port (ttyS0 / ttyAMA0).
+StandardOutput=journal+console
+TimeoutStartSec=90min
+
+[Install]
+WantedBy=graphical.target

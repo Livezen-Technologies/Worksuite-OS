@@ -14,8 +14,16 @@ calamares_add_plugin(worksuiteconfirm
     EXPORT_MACRO PLUGINDLLEXPORT_PRO
     SOURCES
         WorksuiteConfirmViewStep.cpp
+        WsStyle.cpp
     SHARED_LIB
 )
+# The QML focus fix (WorksuiteConfirmViewStep.cpp, QmlFocus) moves Qt's focus window into the embedded QML page
+# through the QPA interface, which is in Qt's private headers (Debian: qt6-base-private-dev).
+if(TARGET Qt6::Core)
+    find_package(Qt6 REQUIRED COMPONENTS Gui)
+    target_link_libraries(calamares_viewmodule_worksuiteconfirm PRIVATE Qt6::GuiPrivate)
+    target_compile_definitions(calamares_viewmodule_worksuiteconfirm PRIVATE WORKSUITE_QPA_FOCUS)
+endif()
 
 option(WORKSUITE_TESTS "Build unit tests" OFF)
 if(WORKSUITE_TESTS)

@@ -1,0 +1,6 @@
+Name: WorkSuite: kiosk devices sign in only the kiosk account and administrators at the greeter
+Default: yes
+Priority: 0
+Account-Type: Primary
+Account:
+	requisite	pam_exec.so quiet /usr/lib/worksuite/worksuite-kiosk-signin

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { Coordinator, manifestUrl, type CoordinatorEnv } from '../src/coordinator.ts';
+import { Coordinator, DEFAULT_HOST, manifestUrl, updateHost, type CoordinatorEnv } from '../src/coordinator.ts';
+import { rewriteSources } from '../src/main.ts';
 import { PackageService } from '../src/service.ts';
 import { canonical, type Manifest } from '../src/updates.ts';
 
@@ -9,17 +10,22 @@ const keys = generateKeyPairSync('ed25519');
 const signed = (m: Record<string, unknown>, key = keys.privateKey) => ({ ...m, signature: `r1:${sign(null, Buffer.from(canonical(m)), key).toString('base64')}` });
 const base = { release_id: 'os-1.0.2', version: '1.0.2', min_version: '1.0.0', ring: 'stable', arch: 'amd64', rollout_percent: 100, state: 'active' };
 
-function world(opts: { manifest?: unknown; policy?: ReturnType<CoordinatorEnv['policy']>; idle?: boolean; installed?: string; reboot?: boolean; aptFails?: boolean } = {}) {
+function world(opts: { manifest?: unknown; policy?: ReturnType<CoordinatorEnv['policy']>; idle?: boolean; installed?: string; reboot?: boolean; aptFails?: boolean; health?: string[]; dpkgAudit?: string; badVersion?: boolean; downloadFails?: number; config?: ReturnType<NonNullable<CoordinatorEnv['config']>> } = {}) {
+  let dlFails = opts.downloadFails ?? 0;
   const log: string[] = [];
   const reports: Record<string, unknown>[] = [];
   let store = { deferrals: {} as Record<string, number> };
   let installed = opts.installed ?? '1.0.1';
+  const calls: string[][] = [];
   const svc = new PackageService({
     runner: { async run(cmd, args) {
+      calls.push([cmd, ...args]);
+      if (cmd === 'dpkg' && args[0] === '--audit') return { code: 0, stdout: opts.dpkgAudit ?? '', stderr: '' };
+      if (cmd === 'apt-get' && args.includes('--download-only') && dlFails > 0) { dlFails--; return { code: 100, stdout: '', stderr: 'E: Failed to fetch https://repo/pool/x.deb  Connection timed out' }; }
       if (cmd === 'test') return { code: opts.reboot ? 0 : 1, stdout: '', stderr: '' };
       if (cmd === 'apt-get' && args.includes('full-upgrade') && args.includes('-y') && !args.includes('--download-only')) {
         log.push('apply'); if (opts.aptFails) return { code: 100, stdout: '', stderr: 'E: Sub-process /usr/bin/dpkg returned an error code (1)' };
-        installed = '1.0.2';
+        installed = opts.badVersion ? '1.0.1' : '1.0.2';
       }
       return { code: 0, stdout: '', stderr: '' };
     } },
@@ -34,15 +40,17 @@ function world(opts: { manifest?: unknown; policy?: ReturnType<CoordinatorEnv['p
     deviceKey: () => 'machine-1',
     idle: async () => opts.idle ?? true,
     metered: async () => false,
-    setSuite: (s) => log.push(`suite ${s}`),
+    setSuite: (s, repo) => log.push(`suite ${s}`, `repo ${repo}`),
+    config: () => opts.config ?? null,
     load: () => store,
     save: (s) => { store = s; },
     report: async (r) => { reports.push(r); },
     reboot: async () => { log.push('reboot'); },
     now: () => new Date(2026, 9, 15, 3).getTime(),
-    audit() {},
+    audit(e) { log.push(`audit ${e}`); },
+    ...(opts.health ? { healthCheck: async () => opts.health! } : {}),
   };
-  return { c: new Coordinator(env, svc), log, reports };
+  return { c: new Coordinator(env, svc), log, reports, calls };
 }
 
 test('manifest URL is https, per ring and arch', () => {
@@ -119,4 +127,98 @@ test('refuses downgrades and reports them (WSOS-AUP-003)', async () => {
   await w.c.check();
   assert.equal(w.c.status.state, 'failed');
   assert.deepEqual(w.reports.map((r) => r.result), ['refused_downgrade']);
+});
+
+test('post-update health check passes and is reported (WSOS-UPD-001)', async () => {
+  const w = world({ health: [] });
+  await w.c.check();
+  assert.equal(w.reports.at(-1)!.health_check, 'pass');
+  assert.ok(w.calls.some((c) => c.join(' ') === 'dpkg --audit'));
+});
+
+test('a failed health check fails the update, skips the reboot and reports the failures (WSOS-UPD-001)', async () => {
+  const w = world({ health: ['unit_failed:greetd.service'], reboot: true });
+  await w.c.check();
+  const r = w.reports.at(-1)!;
+  assert.equal(r.result, 'failed');
+  assert.equal(r.health_check, 'fail');
+  assert.deepEqual(r.health_failures, ['unit_failed:greetd.service']);
+  assert.equal(w.c.status.state, 'failed');
+  assert.match(w.c.status.reason!, /health check failed/);
+  assert.ok(w.log.includes('audit health_check_failed'));
+  assert.ok(!w.log.includes('reboot'));
+});
+
+test('a version mismatch after apply fails the health check', async () => {
+  const w = world({ badVersion: true });
+  await w.c.check();
+  assert.deepEqual(w.reports.at(-1)!.health_failures, ['version_mismatch']);
+});
+
+test('updates never touch user data, the outbox or licences (WSOS-UPD-006)', async () => {
+  const w = world({ health: [] });
+  await w.c.check();
+  assert.ok(w.calls.length > 0);
+  for (const c of w.calls) {
+    assert.ok(!['rm', 'shred', 'find', 'mv'].includes(c[0]), `unexpected command ${c.join(' ')}`);
+    for (const a of c) assert.doesNotMatch(a, /\/home|outbox|licen[cs]e|\/var\/lib\/worksuite-sync|autoremove|--purge/, c.join(' '));
+  }
+});
+
+test('an emergency release is flagged critical, and an install after a dropped download is marked resumed (G14)', async () => {
+  const w = world({ manifest: signed({ ...base, critical: true }), downloadFails: 3 });
+  await w.c.check();
+  assert.equal(w.c.status.critical, true);
+  assert.equal(w.c.status.state, 'waiting');
+  assert.equal(w.c.status.reason, 'download_interrupted');
+  const seen: boolean[] = [];
+  w.c.on('status', (s) => { if (s.state === 'installing') seen.push(s.resumed); });
+  await w.c.installNow();
+  assert.deepEqual(seen, [true]);
+  assert.equal(w.c.status.state, 'up_to_date');
+  assert.equal(w.c.status.resumed, false);
+});
+
+test('the default update host is the WorkSuite Update Center, with its APT repo', async () => {
+  assert.equal(DEFAULT_HOST, 'https://download.worksuitecloud.com');
+  const w = world();
+  await w.c.check();
+  assert.ok(w.log.includes('GET https://download.worksuitecloud.com/os/manifests/stable/amd64.json'));
+  assert.ok(w.log.includes('repo https://download.worksuitecloud.com/os/apt'));
+  assert.equal(w.c.status.update_host, DEFAULT_HOST);
+});
+
+test('/etc/worksuite/updates.json sets host, ring and mode; an enrolled policy overrides it', async () => {
+  const local = { update_host: 'https://updates.example.org/ignored/path', update_ring: 'development' as const, update_mode: 'notify' as const };
+  const w = world({ config: local, manifest: signed({ ...base, ring: 'development' }) });
+  const d = await w.c.check();
+  assert.ok(w.log.includes('GET https://updates.example.org/os/manifests/development/amd64.json'));
+  assert.ok(w.log.includes('suite trixie-dev'));
+  assert.deepEqual(d, { action: 'wait', reason: 'waiting_for_user' });
+  const o = world({ config: local, policy: { update_ring: 'pilot', update_mirror: 'https://mirror.org.example', update_mode: 'automatic' }, manifest: signed({ ...base, ring: 'pilot' }) });
+  await o.c.check();
+  assert.ok(o.log.includes('GET https://mirror.org.example/os/manifests/pilot/amd64.json'));
+  assert.ok(o.log.includes('repo https://mirror.org.example/os/apt'));
+  assert.equal(o.c.status.state, 'up_to_date');   // automatic install ran
+});
+
+test('an insecure or malformed host falls back to the Update Center', () => {
+  assert.equal(updateHost('http://evil.example', 'not a url', undefined), DEFAULT_HOST);
+  assert.equal(updateHost('', 'https://u:p@x.example', 'https://ok.example:8443/x'), 'https://ok.example:8443');
+});
+
+test('security releases install automatically even in notify mode; feature releases wait', async () => {
+  const sec = world({ policy: { update_mode: 'notify' }, manifest: signed({ ...base, security: true }) });
+  assert.deepEqual(await sec.c.check(), { action: 'install', reason: 'security' });
+  const feat = world({ policy: { update_mode: 'notify' } });
+  assert.deepEqual(await feat.c.check(), { action: 'wait', reason: 'waiting_for_user' });
+});
+
+test('worksuite.sources follows the ring and host, keeping Signed-By', () => {
+  const src = 'Types: deb\nURIs: https://download.worksuitecloud.com/os/apt\nSuites: trixie-stable\nComponents: main\nSigned-By: /usr/share/keyrings/worksuite-archive-keyring.gpg\n';
+  const out = rewriteSources(src, 'trixie-pilot', 'https://mirror.example/os/apt');
+  assert.match(out, /^URIs: https:\/\/mirror.example\/os\/apt$/m);
+  assert.match(out, /^Suites: trixie-pilot$/m);
+  assert.match(out, /^Signed-By: \/usr\/share\/keyrings\/worksuite-archive-keyring.gpg$/m);
+  assert.equal(rewriteSources(src, 'trixie-dev', 'http://x/os/apt; rm'), src.replace('trixie-stable', 'trixie-dev'));
 });

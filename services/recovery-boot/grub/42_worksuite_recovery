@@ -1,0 +1,47 @@
+#!/bin/sh
+# /etc/grub.d/42_worksuite_recovery — WSOS-BOOT-003, SRS §9.2.
+# Adds two top-level entries after the normal one:
+#   "WorkSuite Recovery"                 newest kernel, boots worksuite-recovery.target (shell recovery screens)
+#   "WorkSuite OS (previous kernel …)"   the newest-but-one kernel, normal boot, for a failed kernel/graphics update
+# Test hooks: WORKSUITE_BOOT_DIR (default /boot), and the grub-mkconfig_lib helpers are stubbed when absent.
+set -e
+prefix=/usr
+datarootdir=/usr/share
+if [ -r "${datarootdir}/grub/grub-mkconfig_lib" ] && [ -z "${WORKSUITE_BOOT_DIR:-}" ]; then
+  . "${datarootdir}/grub/grub-mkconfig_lib"
+else
+  prepare_grub_to_access_device() { :; }
+  make_system_path_relative_to_its_root() { echo "$1"; }
+  version_sort() { sort -V; }
+fi
+boot=${WORKSUITE_BOOT_DIR:-/boot}
+
+# Newest first. Only kernels that have an initrd are bootable here (cryptroot needs it).
+kernels=$(for k in "$boot"/vmlinuz-*; do
+  [ -f "$k" ] || continue
+  v=${k#"$boot"/vmlinuz-}
+  [ -f "$boot/initrd.img-$v" ] && echo "$v"
+done | version_sort | tac 2>/dev/null || true)
+[ -n "$kernels" ] || exit 0
+newest=$(echo "$kernels" | sed -n 1p)
+previous=$(echo "$kernels" | sed -n 2p)
+
+if [ -n "${GRUB_DEVICE_UUID:-}" ] && [ "${GRUB_DISABLE_LINUX_UUID:-}" != true ]; then root="UUID=${GRUB_DEVICE_UUID}"; else root=${GRUB_DEVICE:-/dev/root}; fi
+args="root=$root ro ${GRUB_CMDLINE_LINUX:-}"
+
+entry() { # title version extra-args id icon-class
+  rel=$(make_system_path_relative_to_its_root "$boot")
+  echo "menuentry '$1' --class $5 --class worksuite --class gnu-linux --id '$4' {"
+  echo "	load_video"
+  echo "	insmod gzio"
+  [ -n "${GRUB_DEVICE_BOOT:-}" ] && prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | sed 's/^/	/'
+  echo "	echo 'Loading Linux $2 ...'"
+  echo "	linux	${rel}/vmlinuz-$2 $args $3"
+  echo "	initrd	${rel}/initrd.img-$2"
+  echo "}"
+}
+
+# worksuite.recovery=1 is what the shell reads (shell/electron/bootmode.ts); the unit does the rest.
+entry "WorkSuite Recovery" "$newest" "systemd.unit=worksuite-recovery.target worksuite.recovery=1 quiet splash" worksuite-recovery ws-recovery
+[ -n "$previous" ] && entry "WorkSuite OS (previous kernel $previous)" "$previous" "${GRUB_CMDLINE_LINUX_DEFAULT:-quiet splash}" "worksuite-previous-$previous" ws-previous
+exit 0

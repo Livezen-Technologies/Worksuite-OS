@@ -1,53 +1,51 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DesktopProps } from './types'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
-import { LogoMark } from '../components/Logo'
-import { diffStatus, type Notice, type SyncStatus } from '../lib/syncNotices'
+import type { Notice } from '../lib/syncNotices'
+import { BG, Icon, Mark, P } from '../components/Ws'
+import { PowerMenu, ShutdownConfirm } from '../components/Power'
+import { RunningApps, TrayItems, UpdateBadge, VpnBadge, useLauncherKey } from '../components/PanelItems'
+import { QuickPanel, QuickTray, useQuickState } from '../components/QuickSettings'
+import { OskButton } from '../components/TouchItems'
+import { useTouchMode } from '../lib/touch'
+import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
+import type { PanelWindow } from '../lib/panel'
+import A11yPanel from '../components/A11yPanel'
+import NotifDock, { MOON } from '../components/NotifDock'
+import { CaptureBadge } from '../components/CaptureBadge'
+import { useDnd } from '../lib/dnd'
+import { localeTag, t as t0, useT } from '../i18n'
+import { UpdateOverlays } from './Updates'
+import { DeviceWatcher } from './Hardware'
+import { requestSettingsSection } from '../lib/settingsNav'
+import { markLauncherRequest, reportLauncherFirstFrame } from '../lib/perfProbe'
+import { alphaGroups, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
+import type { MessageKey } from '../i18n'
+import GlobalSearch from '../components/GlobalSearch'
+import ShellRestartNotice from '../components/ShellRestartNotice'
+import AuthPrompt from '../components/AuthPrompt'
+import type { SearchHit } from '../../electron/search'
 
-const TONE: Record<Notice['tone'], string> = { ok: 'bg-[#ecfdf5] text-[#047857]', warn: 'bg-[#fffbeb] text-[#b45309]', error: 'bg-[#fef2f2] text-[#b91c1c]' }
+const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 
-type Kind = 'WorkSuite' | 'Linux app' | 'System'
-interface App { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean }
-
-const ws = (id: string, name: string, mark: string, bg: string, fg: string, fav = false): App => ({ id, name, mark, bg, fg, kind: 'WorkSuite', fav })
-const lx = (id: string, name: string, mark: string, bg: string, fg: string, fav = false): App => ({ id, name, mark, bg, fg, kind: 'Linux app', fav })
-
-const APPS: App[] = [
-  ws('mail', 'Mail', 'M', '#dbeafe', '#1d4ed8', true),
-  ws('calendar', 'Calendar', 'C', '#e0e7ff', '#4338ca', true),
-  ws('chat', 'Chat', 'Ch', '#dcfce7', '#15803d', true),
-  ws('drive', 'Drive', 'D', '#e0f2fe', '#0369a1', true),
-  ws('tasks', 'Tasks', 'T', '#fef3c7', '#b45309'),
-  ws('projects', 'Projects', 'P', '#fae8ff', '#a21caf'),
-  ws('crm', 'CRM', 'CR', '#ffe4e6', '#be123c'),
-  ws('meet', 'Meet', 'Me', '#ccfbf1', '#0f766e'),
-  ws('office', 'Office', 'O', '#ffedd5', '#c2410c', true),
-  ws('pdf-studio', 'PDF Studio', 'PDF', '#fee2e2', '#b91c1c'),
-  lx('firefox', 'Firefox', 'Fx', '#f1f5f9', '#334155', true),
-  lx('terminal', 'Terminal', '>_', '#0f172a', '#e2e8f0'),
-  { id: 'appcenter', name: 'App Center', mark: 'A', bg: '#2563eb', fg: '#ffffff', kind: 'System' },
+// Settings pages the search finds, with the Settings section each opens.
+const SETTINGS_PAGES: [MessageKey, string][] = [
+  ['launcher.page.network', 'Network'], ['settings.nav.Bluetooth', 'Bluetooth'], ['launcher.page.displays', 'Display'], ['settings.nav.Sound', 'Sound'],
+  ['launcher.page.power', 'Power'], ['settings.nav.Appearance', 'Appearance'], ['launcher.page.accounts', 'Users'], ['launcher.page.privacy', 'Privacy'],
+  ['settings.nav.Updates', 'Updates'], ['launcher.page.shortcuts', 'Keyboard'],
 ]
 
-const SETTINGS_PAGES = ['Wi-Fi and network', 'Bluetooth', 'Displays', 'Sound', 'Power and battery', 'Appearance', 'Accounts', 'Privacy and security', 'Updates', 'Keyboard shortcuts']
+// Recent files: local (XDG recently-used.xbel) then WorkSuite Drive's recent list, through the main-process bridge.
+const RECENT_MAX = 6
 
-const RECENT = [
-  { ext: 'XLS', name: 'Q4 budget — Livezen.xlsx', where: 'WorkSuite Cloud › Finance', state: 'Synced', cls: 'bg-[#ecfdf5] text-[#047857]' },
-  { ext: 'DOC', name: 'SFCL proposal v3.docx', where: 'WorkSuite Cloud › Tenders', state: 'Uploading', cls: 'bg-[#eff6ff] text-[#1d4ed8]' },
-  { ext: 'PDF', name: 'Invoice INV-2026-0418.pdf', where: 'This Computer › Downloads', state: 'Local', cls: 'bg-[#f1f5f9] text-[#334155]' },
-]
+// Taskbar pins (running windows from the Wayland bridge join them, components/PanelItems.tsx); entries the org hasn't enabled or that aren't installed drop out.
+const TASKBAR = ['worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office', 'firefox-esr']
 
-const TASKBAR = [
-  { id: 'mail', running: true, active: true },
-  { id: 'chat', running: true },
-  { id: 'drive' },
-  { id: 'office', running: true },
-  { id: 'firefox' },
-  { id: 'terminal' },
-] as { id: string; running?: boolean; active?: boolean }[]
-
-const TABS = [['all', 'All apps'], ['ws', 'WorkSuite'], ['linux', 'Linux apps'], ['fav', 'Favorites']] as const
-type Tab = (typeof TABS)[number][0]
+// Settings as a Start menu tile (G02); it opens the Settings window like the footer button.
+const SETTINGS_TILE: LauncherApp = { id: 'settings', get name() { return t0('launcher.settings') }, mark: '⚙', bg: '#5E739C', fg: '#ffffff', kind: 'System', launch: { screen: 'settings' }, keywords: [] }
+const EXT_COLOR: Record<string, string> = { xlsx: '#2E9E6A', ods: '#2E9E6A', csv: '#2E9E6A', docx: '#1F6BFF', odt: '#1F6BFF', doc: '#1F6BFF', pptx: '#D9572B', odp: '#D9572B', pdf: '#D9452B', png: '#7A4FE0', jpg: '#7A4FE0', jpeg: '#7A4FE0', svg: '#7A4FE0' }
+const FOOT_ICONS = { files: 'M3 6h6l2 2h10v11H3z', settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2', lock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z', power: 'M12 3v9M6.3 7.3a8 8 0 1 0 11.4 0' }
 
 function useClock() {
   const [now, setNow] = useState(() => new Date())
@@ -55,43 +53,34 @@ function useClock() {
   return now
 }
 
-export default function Desktop({ user, onLock, onLogout, onOpen, children }: DesktopProps) {
+export default function Desktop({ user, onLock, onLogout, onOpen, notes, children }: DesktopProps) {
+  const t = useT()
   const now = useClock()
   const [launcher, setLauncher] = useState(false)
-  const [tab, setTab] = useState<Tab>('all')
+  useTouchMode() // :root[data-touch] sizing and the on-screen keyboard on text-field focus
+  const [a11yOpen, setA11yOpen] = useState(false)
+  // Super key from Labwc arrives over lk.worksuite.Shell1 (WSOS-DSK-011).
+  useLauncherKey(useCallback((a: 'toggle' | 'show') => { markLauncherRequest(); setLauncher((v) => (a === 'show' ? true : !v)) }, []))
+  // Launcher first frame (WSOS-PRF-005); only forwarded off the console in perf test runs.
+  useEffect(() => { if (launcher) void reportLauncherFirstFrame() }, [launcher])
+  const [allView, setAllView] = useState(false)
+  const [qsOpen, setQsOpen] = useState(false)
+  const [quick, refreshQuick] = useQuickState()
   const [query, setQuery] = useState('')
   const [powerOpen, setPowerOpen] = useState(false)
-  const [workspace, setWorkspace] = useState(1)
-  // Notices from the sync service (and later other system sources); newest first.
-  const [notices, setNotices] = useState<(Notice & { at: number })[]>([])
-  const [toast, setToast] = useState<Notice | null>(null)
-  const [unread, setUnread] = useState(0)
+  const [confirmShutdown, setConfirmShutdown] = useState(false)
+  const { notices, setNotices, toast, setToast, unread, setUnread } = notes
   const [trayOpen, setTrayOpen] = useState(false)
+  // Do not disturb holds toasts back; notices still collect in the notification center.
+  const [dnd, setDnd] = useDnd()
   const searchRef = useRef<HTMLInputElement>(null)
-  const name = displayName(user) || 'Hasarinda'
+  const name = displayName(user) || user
 
-  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-  const longDate = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
-  const shortDate = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
+  const time = now.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit', hour12: false })
+  const longDate = now.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })
+  const shortDate = now.toLocaleDateString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
 
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 8000); return () => clearTimeout(t) }, [toast])
-
-  // Poll the sync service's status and turn changes into notices.
-  useEffect(() => {
-    let prev: SyncStatus | null = null
-    const poll = () => void os.syncStatus().then((r) => {
-      if (!r.ok) return
-      const fresh = diffStatus(prev, r.value)
-      prev = r.value
-      if (!fresh.length) return
-      setNotices((all) => [...fresh.map((f) => ({ ...f, at: Date.now() })), ...all].slice(0, 50))
-      setUnread((u) => u + fresh.length)
-      setToast(fresh[0])
-    })
-    poll()
-    const t = setInterval(poll, 15_000)
-    return () => clearInterval(t)
-  }, [])
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t) }, [toast, setToast])
 
   // Management chip from the device agent's status; re-read each minute so enrollment, wipe or revocation show up.
   const [device, setDevice] = useState<DeviceInfo | null>(null)
@@ -105,213 +94,237 @@ export default function Desktop({ user, onLock, onLogout, onOpen, children }: De
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false) }
-      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) setLauncher((v) => !v)
+      if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false); setQsOpen(false) }
+      else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  useEffect(() => { if (launcher) searchRef.current?.focus(); else { setQuery(''); setPowerOpen(false) } }, [launcher])
+  const launcherButton = useRef<HTMLButtonElement>(null)
+  const launcherWasOpen = useRef(false)
+  useEffect(() => {
+    if (launcher) searchRef.current?.focus()
+    else {
+      setQuery('')
+      setAllView(false)
+      // Focus goes back to the launcher button on close, so screen-reader and keyboard users are not left on <body>.
+      if (launcherWasOpen.current && (!document.activeElement || document.activeElement === document.body)) launcherButton.current?.focus()
+    }
+    launcherWasOpen.current = launcher
+  }, [launcher])
 
+  // Start menu list: the org's WorkSuite apps (fallback list when not signed in/offline) and installed XDG apps.
+  const [allApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
+  const appsLoaded = useRef(false)
+  useEffect(() => {
+    // On start, then again each time the launcher opens (sign-in, installs and org changes show up).
+    if (!launcher && appsLoaded.current) return
+    appsLoaded.current = true
+    let live = true
+    void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null)]).then(([w, i]) => {
+      if (live) setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null))
+    })
+    return () => { live = false }
+  }, [launcher])
+  const [recent, setRecent] = useState<SearchHit[]>([])
+  useEffect(() => {
+    if (!launcher) return
+    let live = true
+    void os.recentFiles().then((r) => { if (live) setRecent([...r.local, ...r.cloud.hits].slice(0, RECENT_MAX)) }).catch(() => { if (live) setRecent([]) })
+    return () => { live = false }
+  }, [launcher])
   const q = query.trim().toLowerCase()
-  const apps = useMemo(() => APPS.filter((a) => {
-    if (tab === 'ws' && a.kind !== 'WorkSuite') return false
-    if (tab === 'linux' && a.kind !== 'Linux app') return false
-    if (tab === 'fav' && !a.fav) return false
-    // App Center lives in the footer; it joins the grid only as a search hit so Recent stays visible.
-    if (!q) return a.id !== 'appcenter'
-    return a.name.toLowerCase().includes(q)
-  }), [tab, q])
-  const settingsHits = q ? SETTINGS_PAGES.filter((s) => s.toLowerCase().includes(q)) : []
-  const recent = q ? RECENT.filter((r) => r.name.toLowerCase().includes(q)) : RECENT
+  const apps = useMemo(() => filterApps(allApps, 'all', q), [allApps, q])
+  const pins = useMemo(() => startPins(allApps, 12, [SETTINGS_TILE]), [allApps])
+  const groups = useMemo(() => alphaGroups(allApps), [allApps])
+  const settingsHits = useMemo(() => (q ? SETTINGS_PAGES.map(([k, section]) => ({ label: t(k), section })).filter((s) => s.label.toLowerCase().includes(q)) : []), [q, t])
 
   const launch = (id: string) => {
     setLauncher(false)
-    if (id === 'drive') onOpen('files')
-    else if (id === 'appcenter') onOpen('appcenter')
-    else void os.launchApp(id)
+    const a = id === SETTINGS_TILE.id ? SETTINGS_TILE : allApps.find((x) => x.id === id)
+    if (!a) return
+    if ('screen' in a.launch) onOpen(a.launch.screen)
+    else if ('office' in a.launch) void os.launchOffice(a.launch.office)
+    else if ('worksuite' in a.launch) void os.launchWorkSuite(a.launch.worksuite)
+    else void os.launchApp(a.launch.desktop)
   }
-  const byId = (id: string) => APPS.find((a) => a.id === id)!
+  const taskbar = taskbarApps(allApps, TASKBAR)
+  // This window is the primary monitor's desktop; other monitors have their own (OutputDesktop, WSOS-DSK-005).
+  const display = useDisplayState()
+  const primaryOut = display?.layout.primary ?? null
+  const onPrimary = useMemo(() => (primaryOut && display ? (ws: PanelWindow[]) => windowsOnOutput(ws, primaryOut, true, display.layout.outputs.filter((o) => o.enabled).map((o) => o.name)) : undefined), [primaryOut, display])
+
+  const openSettingsAt = (section: string) => { requestSettingsSection(section); onOpen('settings') }
+
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#172033] font-sans text-[#0f172a]">
-      <svg aria-hidden="true" className="absolute inset-0 h-full w-full" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
-        <circle cx="1180" cy="180" r="420" fill="none" stroke="#24314a" />
-        <circle cx="1180" cy="180" r="300" fill="none" stroke="#24314a" />
-        <circle cx="1180" cy="180" r="180" fill="none" stroke="#2b3a56" />
-        <circle cx="220" cy="820" r="360" fill="none" stroke="#1e2a40" />
-      </svg>
-
-      <div className="absolute top-7 left-8 flex flex-col gap-1.5 text-[#e2e8f0]">
-        <div className="text-sm text-[#94a3b8]">{longDate}</div>
+    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: wallpaperFor(display, primaryOut, BG.desktop) }}>
+      <div className="absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
+        <div className="text-sm text-[#8FA3C8]">{longDate}</div>
         <div className="text-[44px] font-light tracking-[-1px]">{time}</div>
       </div>
 
       {/* Work area for open windows, above the taskbar */}
-      {children && <div className="absolute inset-x-0 top-0 bottom-14 z-10 px-6 pt-5 pb-5">{children}</div>}
+      {children && <div className="absolute inset-x-0 top-0 bottom-[52px] z-10 px-6 pt-5 pb-5">{children}</div>}
 
-      {toast && (
-        <div role="status" className="absolute top-6 right-6 z-20 flex w-[340px] items-start gap-3 rounded-xl bg-white px-4 py-3.5 shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
-          <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${TONE[toast.tone]}`}><BIcon name={toast.tone === 'ok' ? 'check' : 'alert'} /></div>
-          <div className="flex grow flex-col gap-0.5">
-            <div className="text-[13px] font-semibold">{toast.title}</div>
-            <div className="text-xs text-[#475569]">{toast.body}</div>
+      {toast && !dnd && !trayOpen && (
+        <div role="status" className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] font-bold text-white" style={{ background: TONE_BG[toast.tone] }}><BIcon name={toast.tone === 'ok' ? 'check' : 'alert'} /></span>
+          <div className="flex flex-1 flex-col gap-[3px]">
+            <div className="flex justify-between gap-2"><span className="text-sm font-semibold">{toast.title}</span><span className="text-xs text-[#8FA3C8]">{t('notes.now')}</span></div>
+            <span className="text-[13px] leading-[1.4] text-[#C9D6EE]">{toast.body}</span>
           </div>
-          <button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)} className="text-[#475569] hover:text-[#0f172a]"><BIcon name="close" size={14} /></button>
+          <button type="button" aria-label={t('notes.dismiss')} onClick={() => setToast(null)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[#8FA3C8] hover:bg-white/10 hover:text-white"><Icon d={P.close} size={14} /></button>
         </div>
       )}
 
-      {trayOpen && (
-        <div role="dialog" aria-label="Notifications" className="absolute right-4 bottom-16 z-40 flex max-h-[60%] w-[360px] flex-col overflow-hidden rounded-xl bg-white shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
-          <div className="flex items-center border-b border-[#e2e8f0] px-4 py-3 text-sm font-semibold">
-            <span className="grow">Notifications</span>
-            {notices.length > 0 && <button type="button" onClick={() => setNotices([])} className="text-xs font-normal text-[#2563eb]">Clear all</button>}
-          </div>
-          <div className="overflow-auto">
-            {notices.length === 0 && <p className="m-0 px-4 py-6 text-center text-[13px] text-[#475569]">No notifications</p>}
-            {notices.map((x) => (
-              <div key={x.id} className="flex gap-3 border-b border-[#f1f5f9] px-4 py-3">
-                <div className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${TONE[x.tone]}`}><BIcon name={x.tone === 'ok' ? 'check' : 'alert'} size={14} /></div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[13px] font-semibold">{x.title}</span>
-                  <span className="text-xs text-[#475569]">{x.body}</span>
-                  <span className="text-[11px] text-[#94a3b8]">{new Date(x.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* G12: the shell was restarted by systemd; apps in their own scopes kept running */}
+      <ShellRestartNotice />
+      <AuthPrompt />
+
+      {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
+      <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">
+        <DeviceWatcher onOpenUpdates={() => openSettingsAt('Updates')} onOpenDrivers={() => openSettingsAt('Drivers')} />
+        <UpdateOverlays quiet={trayOpen || qsOpen || launcher || Children.toArray(children).length > 0} onOpenUpdates={() => openSettingsAt('Updates')} />
+      </div>
+
+      {trayOpen && <NotifDock now={now} time={time} notices={notices} setNotices={setNotices} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} />}
+
+      {launcher && q && (
+        <div className="absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-start justify-center bg-[rgba(2,6,16,0.45)] px-4 pt-[90px] backdrop-blur-[6px]" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
+          <GlobalSearch query={query} onQuery={setQuery} apps={apps} settings={settingsHits} onLaunchApp={launch}
+            onOpenSettings={(s) => { setLauncher(false); openSettingsAt(s) }} onClose={() => setLauncher(false)} />
         </div>
       )}
-
-      {launcher && (
-        <div className="absolute inset-x-0 top-0 bottom-14 z-30 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
-          <div id="ws-launcher" role="dialog" aria-label="Launcher" className="flex h-[650px] max-h-full w-[720px] max-w-full flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_rgba(2,6,23,0.5)]">
-            <div className="flex flex-col gap-3.5 px-5 pt-5 pb-3">
-              <label className="flex h-11 items-center gap-2.5 rounded-[10px] border border-[#e2e8f0] bg-[#f1f5f9] px-3.5 text-[#475569]">
-                <BIcon name="search" />
-                <span className="sr-only">Search</span>
-                <input ref={searchRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search apps, files, records and settings" className="grow border-0 bg-transparent text-[15px] text-[#0f172a] outline-none" />
-                <span className="rounded border border-[#cbd5e1] px-1.5 py-0.5 text-[11px] text-[#475569]">Super</span>
+      {launcher && !q && (
+        <div className="absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-end justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
+          <div id="ws-launcher" role="dialog" aria-modal="true" aria-label={t('launcher.title')} className="ws-rise flex h-[660px] max-h-full w-[660px] max-w-full flex-col overflow-hidden rounded-[22px] border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] text-[#E8EEFA] shadow-[0_40px_90px_rgba(0,0,0,0.6)] backdrop-blur-[24px]">
+            <div className="flex min-h-0 flex-1 flex-col gap-[18px] px-[26px] pt-[22px]">
+              <label className="box-border flex h-11 shrink-0 items-center gap-2.5 rounded-[22px] border border-[rgba(127,178,255,0.18)] bg-[rgba(4,10,26,0.6)] px-4 text-[#8FA3C8] focus-within:border-[#1F6BFF]">
+                <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={16} width={2.2} />
+                <span className="sr-only">{t('launcher.search')}</span>
+                <input ref={searchRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('launcher.searchPlaceholder')} className="grow border-0 bg-transparent text-sm focus-visible:shadow-none focus-visible:outline-none text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8]" />
+                <span aria-hidden="true" className="rounded border border-[#3D5280] px-1.5 py-0.5 font-mono text-[10px]">Super</span>
               </label>
-              <div role="tablist" className="flex gap-1.5">
-                {TABS.map(([id, label]) => (
-                  <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-                    className={`h-8 rounded-full px-3.5 text-[13px] ${tab === id ? 'bg-[#2563eb] font-semibold text-white' : 'border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f8fafc]'}`}>{label}</button>
-                ))}
+              <div className="flex items-center justify-between">
+                <h2 className="m-0 text-sm font-semibold">{allView ? t('launcher.tab.all') : t('launcher.pinned')}</h2>
+                <button type="button" onClick={() => setAllView((v) => !v)} className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/[0.07] px-3 py-[5px] text-xs hover:bg-white/[0.12]">
+                  {allView ? t('common.back') : t('launcher.tab.all')}<Icon d={[allView ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6']} size={12} width={2.4} stroke="#C9D6EE" />
+                </button>
               </div>
-            </div>
-
-            <div className="min-h-0 grow overflow-auto">
-              <div className="px-5 py-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">{q ? 'Apps' : tab === 'all' ? 'Pinned' : TABS.find((t) => t[0] === tab)![1]}</div>
-              {apps.length ? (
-                <div className="grid grid-cols-6 gap-2 px-5 pt-2 pb-1">
-                  {apps.map((a) => (
-                    <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex flex-col items-center gap-2 rounded-xl px-1 py-3 hover:bg-[#f1f5f9]">
-                      <span className="flex size-12 items-center justify-center rounded-xl text-[17px] font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
-                      <span className="text-xs text-[#0f172a]">{a.name}</span>
-                      <span className="text-[10.5px] text-[#475569]">{a.kind}</span>
-                    </button>
+              {!allView ? (
+                <>
+                  <div className="ws-pins grid grid-cols-6 gap-x-1.5 gap-y-1">
+                    {pins.map((a) => (
+                      <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] rounded-xl px-1 py-2.5 hover:bg-white/[0.07] focus-visible:bg-white/[0.07]">
+                        <span aria-hidden="true" className="flex size-11 items-center justify-center rounded-xl text-base font-bold text-white shadow-[0_6px_14px_rgba(0,0,0,0.25)]" style={{ background: tileColor(a) }}>{a.mark}</span>
+                        <span className="max-w-full truncate text-xs">{a.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="h-px shrink-0 bg-[rgba(127,178,255,0.1)]" />
+                  <div className="flex items-center justify-between">
+                    <h2 className="m-0 text-sm font-semibold">{t('launcher.recommended')}</h2>
+                    <button type="button" onClick={() => { setLauncher(false); onOpen('files') }} className="cursor-pointer text-xs text-[#7FB2FF] hover:text-[#B8D4FF]">{t('launcher.more')}</button>
+                  </div>
+                  {recent.length ? (
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                      {recent.map((r) => {
+                        const ext = (r.ext ?? '').toLowerCase()
+                        return (
+                          <button key={r.id} type="button" onClick={() => { setLauncher(false); void os.openSearchResult(r.link) }} className="flex min-w-0 cursor-pointer items-center gap-3 rounded-[10px] px-2.5 py-2 text-left hover:bg-white/[0.07]">
+                            <span aria-hidden="true" className="flex size-[34px] flex-none items-center justify-center rounded-lg font-mono text-[9px] font-bold uppercase" style={{ background: EXT_COLOR[ext] ?? '#3D5280' }}>{ext.slice(0, 4) || '—'}</span>
+                            <span className="flex min-w-0 flex-col gap-px"><span className="truncate text-[13px]">{r.title}</span><span className="truncate text-[11px] text-[#8FA3C8]">{r.subtitle || t(r.source === 'local' ? 'launcher.recentLocal' : 'search.source.drive')}</span></span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : <p className="m-0 px-2.5 text-[13px] text-[#8FA3C8]">{t('launcher.noRecent')}</p>}
+                </>
+              ) : (
+                <div className="flex min-h-0 flex-1 flex-col gap-px overflow-auto pr-1">
+                  {groups.map((g) => (
+                    <div key={g.letter} role="group" aria-label={g.letter} className="flex flex-col gap-px">
+                      <span aria-hidden="true" className="px-2.5 pt-2 pb-1 text-xs font-bold text-[#18D4F0]">{g.letter}</span>
+                      {g.apps.map((a) => (
+                        <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex cursor-pointer items-center gap-3 rounded-[9px] px-2.5 py-[7px] text-left hover:bg-white/[0.07]">
+                          <span aria-hidden="true" className="flex size-[30px] items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: tileColor(a) }}>{a.mark}</span>
+                          <span className="text-[13px]">{a.name}</span>
+                          <span className="ml-auto text-[11px] text-[#8FA3C8]">{a.kind === 'WorkSuite' ? '' : t(`launcher.kind.${a.kind}` as MessageKey)}</span>
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
-              ) : <p className="px-5 py-3 text-[13px] text-[#475569]">No apps match.</p>}
-
-              {settingsHits.length > 0 && (
-                <>
-                  <div className="px-5 pt-3 pb-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">Settings</div>
-                  <div className="flex flex-col px-3 py-1">
-                    {settingsHits.map((s) => (
-                      <button key={s} type="button" onClick={() => { setLauncher(false); onOpen('settings') }} className="flex h-11 items-center gap-3 rounded-lg px-2 text-left hover:bg-[#f1f5f9]">
-                        <span className="flex size-7 items-center justify-center rounded-md bg-[#f1f5f9] text-[#334155]"><BIcon name="settings" size={16} /></span>
-                        <span className="grow text-[13px]">{s}</span>
-                        <span className="text-xs text-[#475569]">Settings</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {recent.length > 0 && (
-                <>
-                  <div className="px-5 pt-3 pb-1 text-xs font-semibold tracking-[0.06em] text-[#475569] uppercase">Recent</div>
-                  <div className="flex flex-col px-3 py-1">
-                    {recent.map((r) => (
-                      <button key={r.name} type="button" onClick={() => { setLauncher(false); onOpen('files') }} className="flex h-11 items-center gap-3 rounded-lg px-2 text-left hover:bg-[#f1f5f9]">
-                        <span className="flex size-7 items-center justify-center rounded-md bg-[#eff6ff] text-[11px] font-bold text-[#1d4ed8]">{r.ext}</span>
-                        <span className="grow text-[13px] text-[#0f172a]">{r.name}</span>
-                        <span className="text-xs text-[#475569]">{r.where}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] ${r.cls}`}>{r.state}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
               )}
             </div>
 
-            <div className="relative flex items-center gap-3 border-t border-[#e2e8f0] bg-[#f8fafc] px-5 py-3">
-              <span className="flex size-9 items-center justify-center rounded-full bg-[#1e3a8a] text-sm font-semibold text-white">{name[0]?.toUpperCase()}</span>
-              <div className="flex grow flex-col gap-px">
-                <span className="text-[13px] font-semibold">{name}</span>
-                <span className="text-xs text-[#475569]">Livezen Technologies · Enterprise · Synced 1 min ago</span>
-              </div>
-              <button type="button" aria-label="App Center" onClick={() => launch('appcenter')} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="grid" /></button>
-              <button type="button" aria-label="Settings" onClick={() => { setLauncher(false); onOpen('settings') }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="settings" /></button>
-              <button type="button" aria-label="Lock" onClick={() => { setLauncher(false); onLock() }} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#334155] hover:bg-[#f1f5f9]"><BIcon name="lock" /></button>
-              <button type="button" aria-label="Power menu" aria-haspopup="menu" aria-expanded={powerOpen} onClick={() => setPowerOpen((v) => !v)} className="flex size-10 items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#b91c1c] hover:bg-[#fef2f2]"><BIcon name="power" /></button>
-              {powerOpen && (
-                <div role="menu" aria-label="Power" className="absolute right-5 bottom-[60px] flex w-48 flex-col rounded-xl border border-[#e2e8f0] bg-white p-1.5 shadow-[0_12px_32px_rgba(2,6,23,0.25)]">
-                  <button type="button" role="menuitem" onClick={onLogout} className="h-9 rounded-lg px-3 text-left text-[13px] hover:bg-[#f1f5f9]">Log out</button>
-                  <button type="button" role="menuitem" onClick={() => { setPowerOpen(false); void os.power('suspend') }} className="h-9 rounded-lg px-3 text-left text-[13px] hover:bg-[#f1f5f9]">Suspend</button>
-                  <button type="button" role="menuitem" onClick={() => { setPowerOpen(false); void os.power('restart') }} className="h-9 rounded-lg px-3 text-left text-[13px] hover:bg-[#f1f5f9]">Restart</button>
-                  <button type="button" role="menuitem" onClick={() => { setPowerOpen(false); void os.power('shutdown') }} className="h-9 rounded-lg px-3 text-left text-[13px] text-[#b91c1c] hover:bg-[#fef2f2]">Shut down</button>
-                </div>
-              )}
+            <div className="mt-3.5 flex items-center gap-3 border-t border-[rgba(127,178,255,0.1)] bg-[rgba(4,10,26,0.45)] px-[22px] py-3">
+              <button type="button" onClick={() => { setLauncher(false); openSettingsAt('Users') }} className="flex cursor-pointer items-center gap-2.5 rounded-[10px] py-1.5 pr-2.5 pl-1.5 text-left hover:bg-white/[0.06]">
+                <span aria-hidden="true" className="flex size-[34px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#1F6BFF,#18D4F0)] text-xs font-semibold">{initials(name)}</span>
+                <span className="flex flex-col"><span className="text-[13px] font-semibold">{name}</span><span className="text-[11px] text-[#8FA3C8]">{device?.org_name ?? user}</span></span>
+              </button>
+              <span className="ml-auto flex gap-1.5">
+                {([['files', t('files.title'), () => { setLauncher(false); onOpen('files') }], ['settings', t('launcher.settings'), () => { setLauncher(false); onOpen('settings') }],
+                  ['lock', t('quick.lock'), () => { setLauncher(false); onLock() }], ['power', t('launcher.powerMenu'), () => { setLauncher(false); setPowerOpen(true) }]] as const).map(([k, label, run]) => (
+                  <button key={k} type="button" aria-label={label} title={label} aria-haspopup={k === 'power' ? 'menu' : undefined} onClick={run}
+                    className="flex size-[38px] cursor-pointer items-center justify-center rounded-[10px] bg-white/[0.05] hover:bg-white/[0.12]"><Icon d={[FOOT_ICONS[k]]} size={18} stroke="#C9D6EE" /></button>
+                ))}
+              </span>
             </div>
           </div>
         </div>
       )}
 
-      <nav aria-label="Taskbar" className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-1.5 border-t border-[#24314a] bg-[rgba(15,23,42,0.94)] px-3 text-[#e2e8f0]">
-        <button type="button" aria-label="Open launcher" aria-expanded={launcher} aria-controls="ws-launcher" onClick={() => setLauncher((v) => !v)}
-          className={`flex size-11 items-center justify-center rounded-[10px] ${launcher ? 'bg-[#334155] ring-2 ring-[#0A6CFF]' : 'bg-[#1e293b] hover:bg-[#334155]'}`}><LogoMark onDark height={30} /></button>
-        <div className="mx-1.5 h-7 w-px bg-[#334155]" />
-        {TASKBAR.map((t) => {
-          const a = byId(t.id)
-          return (
-            <button key={t.id} type="button" aria-label={`${a.name}${t.running ? ', running' : ''}`} onClick={() => launch(t.id)}
-              className={`relative flex size-11 items-center justify-center rounded-[10px] ${t.active ? 'bg-[#1e293b]' : 'hover:bg-[#1e293b]'}`}>
-              <span className="flex size-[30px] items-center justify-center rounded-lg text-xs font-bold" style={{ background: a.bg, color: a.fg }}>{a.mark}</span>
-              {t.running && <span className={`absolute bottom-[3px] h-[3px] rounded-sm bg-[#60a5fa] ${t.active ? 'w-3.5' : 'w-1.5'}`} />}
-            </button>
-          )
-        })}
-        <div role="group" aria-label="Workspaces" className="ml-4 hidden gap-1 sm:flex">
-          {[1, 2, 3].map((n) => (
-            <button key={n} type="button" aria-label={`Workspace ${n}`} aria-pressed={workspace === n} onClick={() => setWorkspace(n)}
-              className={`h-7 min-w-7 rounded-md text-xs ${workspace === n ? 'bg-[#334155] text-[#f8fafc]' : 'text-[#94a3b8] hover:bg-[#1e293b]'}`}>{n}</button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-1">
+      {qsOpen && (
+        <QuickPanel state={quick} refresh={refreshQuick} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} onClose={() => setQsOpen(false)}
+          onSettings={() => { setQsOpen(false); onOpen('settings') }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
+      )}
+
+      <nav aria-label={t('panel.taskbar')} className="ws-taskbar absolute inset-x-0 bottom-0 z-40 box-border flex h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px]">
+        <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
+          className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
+        <button type="button" onClick={() => setLauncher(true)} className="box-border hidden h-9 w-[200px] cursor-text items-center gap-2 rounded-[9px] bg-white/[0.06] px-3 text-[13px] text-[#8FA3C8] hover:bg-white/10 md:flex">
+          <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={14} width={2.2} />{t('launcher.search')}
+        </button>
+        <span aria-hidden="true" className="mx-1 h-6 w-px bg-[rgba(127,178,255,0.15)]" />
+        <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => { const a = allApps.find((x) => x.id === id); return a && { ...a, bg: tileColor(a), fg: '#FFFFFF' } }} onLaunch={launch} only={onPrimary} />
+        <div className="ml-auto flex items-center gap-1.5">
           {managed && (
-            <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? `Managed by ${device.org_name}` : undefined}
-              className="hidden rounded-full bg-[#1e3a8a] px-2.5 py-1 text-xs text-[#dbeafe] hover:bg-[#1e40af] lg:inline">{managed}</button>
+            <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? t('panel.managedBy', { org: device.org_name }) : undefined}
+              className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
-          <button type="button" aria-label="Network: Livezen-Office, connected" className="flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]"><BIcon name="wifi" /></button>
-          <button type="button" aria-label="Volume 60 percent" className="flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]"><BIcon name="volume" /></button>
-          <button type="button" aria-label="Battery 82 percent" className="flex h-10 items-center gap-1.5 rounded-lg px-2 text-xs hover:bg-[#1e293b]"><BIcon name="battery" />82%</button>
-          <button type="button" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} aria-expanded={trayOpen}
-            onClick={() => { setTrayOpen((v) => !v); setUnread(0) }} className="relative flex size-10 items-center justify-center rounded-lg hover:bg-[#1e293b]">
-            <BIcon name="bell" />
-            {unread > 0 && <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#dc2626] px-1 text-[10px] text-white">{unread}</span>}
+          <TrayItems />
+          <CaptureBadge />
+          <VpnBadge onOpen={() => openSettingsAt('VPN')} />
+          <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
+          <OskButton />
+          <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setQsOpen(false) }}
+            className="flex size-9 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
+          <QuickTray state={quick} open={qsOpen} onToggle={() => { setQsOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setA11yOpen(false) }} />
+          <time dateTime={now.toISOString()} className="flex flex-col items-end px-2 text-xs leading-[1.25]"><span>{time}</span><span className="text-[#8FA3C8]">{shortDate}</span></time>
+          <button type="button" aria-label={unread > 0 ? `${t('notes.title')}, ${t('panel.newCount', { count: unread })}` : t('notes.title')} aria-expanded={trayOpen} aria-controls="ws-notifications"
+            onClick={() => { setTrayOpen((v) => !v); setUnread(0); setPowerOpen(false); setQsOpen(false) }}
+            className={`relative flex size-9 cursor-pointer items-center justify-center rounded-[10px] ${trayOpen ? 'bg-white/20' : 'hover:bg-white/10'}`}>
+            <Icon d={dnd ? MOON : P.bell} size={18} />
+            {unread > 0 && <span aria-hidden="true" className="absolute top-[5px] right-[5px] size-2 rounded-full bg-[#18D4F0]" />}
           </button>
-          <div className="flex flex-col items-end pr-2 pl-2.5 text-xs leading-[1.3]">
-            <span className="text-[#f8fafc]">{time}</span>
-            <span className="text-[#94a3b8]">{shortDate}</span>
-          </div>
         </div>
       </nav>
+      {powerOpen && (
+        <PowerMenu user={name} className="right-3 bottom-16" onClose={() => setPowerOpen(false)}
+          onLock={onLock} onSignOut={onLogout} onShutdown={() => setConfirmShutdown(true)} />
+      )}
+      {confirmShutdown && <ShutdownConfirm onCancel={() => setConfirmShutdown(false)} />}
+      {a11yOpen && <A11yPanel className="right-4 bottom-[68px]" onClose={() => setA11yOpen(false)} />}
     </div>
   )
+}
+
+function initials(name: string) {
+  const w = name.split(/[\s._-]+/).filter(Boolean)
+  return ((w[0]?.[0] ?? '') + (w[1]?.[0] ?? '')).toUpperCase() || '?'
 }
 
 // Login names arrive as user, user@domain or DOMAIN\user; show the bare name capitalised.

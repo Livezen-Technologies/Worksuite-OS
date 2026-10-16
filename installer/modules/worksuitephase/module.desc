@@ -1,0 +1,7 @@
+# Marks where the install has got to, for the install slideshow (show.qml: design 6 · Copy files / Configure system).
+# One instance per stage in settings.conf, each placed before the jobs of its stage.
+---
+type:       "job"
+name:       "worksuitephase"
+interface:  "python"
+script:     "main.py"

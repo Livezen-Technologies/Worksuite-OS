@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Notification dock</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+@keyframes ws-in{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+.ws-in{animation:ws-in 0.22s cubic-bezier(.2,.8,.2,1)}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(circle at 30% 30%, rgba(24,212,240,0.25) 0%, transparent 40%), radial-gradient(circle at 70% 85%, rgba(122,79,224,0.35) 0%, transparent 45%), radial-gradient(circle at 18% 80%, rgba(31,107,255,0.45) 0%, transparent 45%), linear-gradient(160deg, #0E2A66 0%, #071330 60%, #040A1A 100%)">
+<div style="position: absolute; left: 70px; top: 80px; width: 640px; height: 400px; border-radius: 14px; background: #0C1E46; border: 1px solid rgba(127,178,255,0.15); opacity: 0.45"></div>
+
+<aside class="ws-in" aria-label="Notifications" style="position: absolute; top: 12px; right: 12px; bottom: 64px; width: 408px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+
+<div style="padding: 16px; border-radius: 22px; background: rgba(12,28,64,0.72); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(28px) saturate(1.4); box-shadow: 0 20px 50px rgba(0,0,0,0.4); display: flex; gap: 16px">
+<div style="flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<span style="display: flex; flex-direction: column"><span style="font-size: 34px; font-weight: 300; letter-spacing: -0.03em; line-height: 1">01:23</span><span style="font-size: 12px; color: #8FA3C8; margin-top: 4px">Friday, 16 October</span></span>
+<div role="radiogroup" aria-label="Focus mode" style="display: flex; flex-direction: column; gap: 4px">
+<sc-for list="{{modes}}" as="m" hint-placeholder-count="3">
+<button role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" style="all: unset; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: {{m.bg}}; font-size: 12px; font-weight: 500; cursor: pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{m.icon}}"></path></svg>{{m.t}}</button>
+</sc-for>
+</div>
+</div>
+<div style="width: 176px; flex: none">
+<div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px"><span style="font-weight: 600">October</span><span style="color: #8FA3C8">‹ ›</span></div>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; text-align: center; font-size: 10px">
+<sc-for list="{{dow}}" as="d" hint-placeholder-count="7"><span style="color: #5E739C; padding-bottom: 2px">{{d}}</span></sc-for>
+<sc-for list="{{days}}" as="d" hint-placeholder-count="35"><span style="height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: {{d.bg}}; color: {{d.c}}; font-weight: {{d.w}}; position: relative">{{d.n}}<sc-if value="{{d.dot}}" hint-placeholder-val="{{false}}"><span style="position: absolute; bottom: 1px; width: 3px; height: 3px; border-radius: 50%; background: #18D4F0"></span></sc-if></span></sc-for>
+</div>
+</div>
+</div>
+
+<div style="padding: 12px 14px; border-radius: 20px; background: linear-gradient(120deg, rgba(122,79,224,0.55), rgba(224,85,155,0.35)); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(28px); display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 12px">
+<span style="width: 46px; height: 46px; border-radius: 12px; background: conic-gradient(from 200deg, #18D4F0, #7A4FE0, #E0559B, #18D4F0); box-shadow: 0 6px 16px rgba(0,0,0,0.3)"></span>
+<span style="flex: 1; display: flex; flex-direction: column; min-width: 0"><span style="font-size: 14px; font-weight: 600">Focus Flow</span><span style="font-size: 11px; color: rgba(255,255,255,0.8)">Lo-fi work mix · Browser</span></span>
+<span style="display: flex; gap: 2px; align-items: center">
+<button aria-label="Previous" style="all: unset; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"></path></svg></button>
+<button aria-label="Pause" style="all: unset; width: 34px; height: 34px; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="#2A1A4E" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"></path></svg></button>
+<button aria-label="Next" style="all: unset; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"></path></svg></button>
+</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.75)"><span>1:42</span><span style="flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.25); overflow: hidden"><span style="display: block; width: 38%; height: 100%; background: #FFFFFF"></span></span><span>4:30</span></div>
+</div>
+
+<div style="flex: 1; min-height: 0; border-radius: 22px; background: rgba(12,28,64,0.72); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(28px) saturate(1.4); box-shadow: 0 20px 50px rgba(0,0,0,0.4); display: flex; flex-direction: column; overflow: hidden">
+<div style="padding: 14px 16px 10px; display: flex; align-items: center; gap: 10px">
+<span style="font-size: 15px; font-weight: 600">Notifications</span>
+<span style="min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: rgba(31,107,255,0.35); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">{{count}}</span>
+<button onClick="{{clear}}" style="all: unset; margin-left: auto; font-size: 12px; color: #7FB2FF; cursor: pointer">Clear all</button>
+</div>
+<div role="tablist" style="margin: 0 16px 10px; padding: 3px; border-radius: 10px; background: rgba(255,255,255,0.06); display: flex">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+<button role="tab" aria-selected="{{t.on}}" onClick="{{t.pick}}" style="all: unset; flex: 1; text-align: center; padding: 6px 0; border-radius: 8px; font-size: 12px; font-weight: 600; background: {{t.bg}}; color: {{t.c}}; cursor: pointer">{{t.label}}</button>
+</sc-for>
+</div>
+<div style="flex: 1; min-height: 0; overflow: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px">
+<sc-if value="{{empty}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 40px 0; color: #8FA3C8; font-size: 13px"><span style="width: 56px; height: 56px; border-radius: 50%; background: rgba(95,211,154,0.12); display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#5FD39A" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>You're all caught up</div>
+</sc-if>
+<sc-for list="{{sections}}" as="s" hint-placeholder-count="2">
+<span style="padding: 4px 6px 0; font-size: 11px; font-weight: 600; color: {{s.c}}; text-transform: uppercase; letter-spacing: 0.08em">{{s.name}}</span>
+<sc-for list="{{s.items}}" as="n" hint-placeholder-count="2">
+<div style="position: relative; padding-bottom: {{n.stackPad}}">
+<sc-if value="{{n.stacked}}" hint-placeholder-val="{{false}}"><div style="position: absolute; left: 10px; right: 10px; bottom: 0; height: 12px; border-radius: 0 0 14px 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.06); border-top: none"></div></sc-if>
+<div style="position: relative; display: flex; gap: 12px; padding: 12px; border-radius: 16px; background: {{n.bg}}; border: 1px solid {{n.border}}">
+<span style="position: relative; width: 38px; height: 38px; flex: none">
+<span style="width: 38px; height: 38px; border-radius: {{n.shape}}; background: {{n.avatar}}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700">{{n.ini}}</span>
+<span style="position: absolute; right: -3px; bottom: -3px; width: 18px; height: 18px; border-radius: 5px; background: {{n.appC}}; border: 2px solid #0E2050; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700">{{n.appI}}</span>
+</span>
+<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+<span style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{n.t}}</span><span style="margin-left: auto; font-size: 11px; color: #8FA3C8; flex: none">{{n.time}}</span></span>
+<span style="font-size: 12px; color: #C9D6EE; line-height: 1.4">{{n.b}}</span>
+<sc-if value="{{n.more}}" hint-placeholder-val="{{false}}"><button onClick="{{n.expand}}" style="all: unset; align-self: flex-start; margin-top: 2px; font-size: 11px; color: #7FB2FF; cursor: pointer">{{n.moreLabel}}</button></sc-if>
+<sc-if value="{{n.extra}}" hint-placeholder-val="{{false}}"><span style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px; padding-left: 10px; border-left: 2px solid rgba(127,178,255,0.25)"><sc-for list="{{n.extraItems}}" as="x" hint-placeholder-count="2"><span style="font-size: 12px; color: #C9D6EE"><strong style="color: #FFFFFF">{{x.who}}</strong> {{x.msg}}</span></sc-for></span></sc-if>
+<sc-if value="{{n.reply}}" hint-placeholder-val="{{false}}"><span style="display: flex; gap: 6px; margin-top: 6px"><input aria-label="Reply" placeholder="Reply…" style="flex: 1; min-width: 0; height: 32px; box-sizing: border-box; padding: 0 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.12); background: rgba(4,10,26,0.5); color: #E8EEFA; font: inherit; font-size: 12px"><button aria-label="Send" style="all: unset; width: 32px; height: 32px; border-radius: 50%; background: #1F6BFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button></span></sc-if>
+<sc-if value="{{n.action}}" hint-placeholder-val="{{false}}"><span style="display: flex; gap: 6px; margin-top: 6px"><button style="all: unset; padding: 6px 14px; border-radius: 999px; background: #1F6BFF; font-size: 12px; font-weight: 600; cursor: pointer">{{n.action}}</button><button style="all: unset; padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,0.08); font-size: 12px; cursor: pointer">Tonight</button></span></sc-if>
+</span>
+<button onClick="{{n.dismiss}}" aria-label="Dismiss" style="all: unset; position: absolute; top: -6px; left: -6px; width: 20px; height: 20px; border-radius: 50%; background: #2A3B66; border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1; cursor: pointer">×</button>
+</div>
+</div>
+</sc-for>
+</sc-for>
+</div>
+</div>
+</aside>
+
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: 52px; box-sizing: border-box; padding: 0 10px; background: rgba(6,14,34,0.88); border-top: 1px solid rgba(127,178,255,0.12); display: flex; align-items: center; gap: 6px">
+<span style="width: 40px; height: 40px; border-radius: 10px; background: rgba(31,107,255,0.25); display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 60 60" aria-hidden="true"><rect x="20" y="0" width="40" height="40" rx="4" fill="#1F6BFF"></rect><rect x="20" y="20" width="20" height="20" fill="#0A1A3D"></rect><rect x="0" y="20" width="20" height="20" rx="4" fill="#18D4F0"></rect><rect x="20" y="40" width="20" height="20" rx="4" fill="#18D4F0"></rect></svg></span>
+<span style="margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 10px; background: rgba(31,107,255,0.3); font-size: 12px">{{modeIcon}} 01:23<span style="min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 10px; background: {{badgeBg}}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700">{{count}}</span></span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { mode: 0, tab: 'All', gone: {}, open: {} }; }
+  renderVals() {
+    const { mode, tab, gone, open } = this.state;
+    const M = [['Everything','M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0','#1F6BFF'],['Work focus','M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z','#0E8FA8'],['Do not disturb','M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z','#7A4FE0']];
+    const modes = M.map((m, i) => ({ t: m[0], icon: m[1], on: i === mode, bg: i === mode ? m[2] : 'rgba(255,255,255,0.06)', pick: () => this.setState({ mode: i }) }));
+    const days = [];
+    for (let i = 0; i < 3; i++) days.push({ n: '', bg: 'transparent', c: '#5E739C', w: 400, dot: false });
+    for (let d = 1; d <= 31; d++) days.push({ n: String(d), bg: d === 16 ? '#1F6BFF' : 'transparent', c: d === 16 ? '#FFFFFF' : d < 16 ? '#8FA3C8' : '#E8EEFA', w: d === 16 ? 700 : 400, dot: d === 16 || d === 17 || d === 22 });
+    const N = [
+      ['chat','Priority','Mentions','Buddhika Silva','BS','linear-gradient(135deg,#7A4FE0,#E0559B)','50%','C','#7A4FE0','now','@Alex can you share the installer screens before review?',{ reply: 1, extra: [['Nimali','Love the new boot splash'],['Buddhika','Also the VPN flow please']] }],
+      ['upd','Priority','System','WorkSuite OS 1.2 is ready','U','#1F6BFF','10px','⚙','#5E739C','12 m','Restart to finish · about 4 min · apps reopen',{ action: 'Restart now' }],
+      ['cal','Priority','System','Design review in 19 min','31','#D9452B','10px','31','#D9452B','5 m','Room 3 · 18:30–19:00 · 4 people',{}],
+      ['mail','Earlier','Mentions','Finance','F','linear-gradient(135deg,#2E9E6A,#0E8FA8)','50%','M','#D9572B','40 m','Re: Q4 budget sign-off · Approved, with two small changes to line 14.',{}],
+      ['drive','Earlier','System','Sync complete','D','#B7791F','10px','D','#B7791F','1 h','128 files are up to date on WorkSuite Drive.',{}]
+    ];
+    const live = N.filter(n => !gone[n[0]] && (tab === 'All' || n[2] === tab));
+    const allLive = N.filter(n => !gone[n[0]]).length;
+    const mk = n => { const o = n[11], ex = !!o.extra, isOpen = !!open[n[0]]; return {
+      t: n[3], ini: n[4], avatar: n[5], shape: n[6], appI: n[7], appC: n[8], time: n[9], b: n[10],
+      reply: !!o.reply, action: o.action || '', stacked: ex && !isOpen, stackPad: ex && !isOpen ? '8px' : '0',
+      more: ex, moreLabel: isOpen ? 'Show less' : '+2 more from Design team', extra: ex && isOpen,
+      extraItems: (o.extra || []).map(x => ({ who: x[0], msg: x[1] })),
+      bg: n[1] === 'Priority' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.045)', border: n[0] === 'chat' ? 'rgba(122,79,224,0.5)' : 'rgba(255,255,255,0.07)',
+      expand: () => this.setState({ open: Object.assign({}, open, { [n[0]]: !isOpen }) }),
+      dismiss: () => this.setState({ gone: Object.assign({}, gone, { [n[0]]: true }) }) }; };
+    const sections = ['Priority','Earlier'].map(name => ({ name, c: name === 'Priority' ? '#18D4F0' : '#5E739C', items: live.filter(n => n[1] === name).map(mk) })).filter(s => s.items.length);
+    return { modes, dow: ['M','T','W','T','F','S','S'], days, sections, count: allLive, empty: live.length === 0,
+      tabs: ['All','Mentions','System'].map(t => ({ label: t, on: t === tab, bg: t === tab ? 'rgba(255,255,255,0.14)' : 'transparent', c: t === tab ? '#FFFFFF' : '#8FA3C8', pick: () => this.setState({ tab: t }) })),
+      clear: () => this.setState({ gone: { chat: 1, upd: 1, cal: 1, mail: 1, drive: 1 } }),
+      badgeBg: allLive ? '#1F6BFF' : 'rgba(127,178,255,0.3)', modeIcon: mode === 2 ? '☾' : '' };
+  }
+}
+</script>
+</body>
+</html>

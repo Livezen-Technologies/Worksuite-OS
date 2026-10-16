@@ -1,0 +1,11 @@
+#!/bin/sh
+# WorkSuite Desktop: open a WorkSuite web module in its own app window.
+#   worksuite-app <module>                     e.g. worksuite-app mail
+#   worksuite-app worksuite://<module>/<route>  (the worksuite:// URL handler)
+# The module key and link are validated again in the Electron main process (electron/webapps.ts).
+case "$1" in
+  worksuite:*) ;;
+  [a-z]*) printf '%s' "$1" | grep -Eqx '[a-z][a-z0-9_-]{0,63}' || { echo "worksuite-app: invalid module '$1'" >&2; exit 2; } ;;
+  *) echo "usage: worksuite-app <module> | worksuite-app worksuite://<module>/<route>" >&2; exit 2 ;;
+esac
+exec /usr/lib/worksuite/shell/electron/electron --ozone-platform-hint=auto /usr/lib/worksuite/shell --worksuite-app="$1"

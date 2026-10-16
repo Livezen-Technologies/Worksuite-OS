@@ -1,0 +1,39 @@
+#!/bin/sh
+# Guest side, WSOS-REL-004: killing the shell (Electron) must not end applications the user started from it.
+# Opens a logind session through PAM (as greetd does), starts a shell process in it and an app the way the shell
+# launches apps (session.ts scopeCommand: systemd-run --user --scope --slice=app.slice app-worksuite-*.scope), sends
+# SIGKILL to the shell process and checks the app and its scope survive.
+# If a real WorkSuite shell is running in a graphical session it is used instead of the stand-in shell process.
+#   electron-kill        (root; uses the throwaway user wsperf)
+set -u
+u=wsperf
+id "$u" >/dev/null 2>&1 || useradd --create-home --shell /bin/sh "$u"
+uid=$(id -u "$u")
+rt=/run/user/$uid
+real=0
+systemctl stop wsperf-rel004.service >/dev/null 2>&1
+# Session leader stays (like labwc); its child plays the shell (like Electron under labwc).
+systemd-run --quiet --collect --unit=wsperf-rel004 --uid="$uid" -p PAMName=login \
+  /bin/sh -c 'sleep 600 & echo $! > "$XDG_RUNTIME_DIR/rel004-shell.pid"; exec sleep 600'
+j=0; while [ ! -S "$rt/bus" ] || [ ! -s "$rt/rel004-shell.pid" ]; do [ $j -ge 30 ] && break; sleep 1; j=$((j + 1)); done
+shell_pid=$(cat "$rt/rel004-shell.pid" 2>/dev/null)
+real_pid=$(pgrep -u "$uid" -f 'worksuite-shell|/opt/worksuite/shell' | head -n 1)
+[ -n "$real_pid" ] && { shell_pid=$real_pid; real=1; }
+scope=app-worksuite-rel004probe-$$.scope
+runuser -u "$u" -- env XDG_RUNTIME_DIR="$rt" DBUS_SESSION_BUS_ADDRESS="unix:path=$rt/bus" \
+  systemd-run --user --scope --collect --quiet --slice=app.slice --unit="$scope" --description=rel004 -- sleep 300 &
+sleep 3
+app_pid=$(pgrep -u "$uid" -f '^sleep 300$' | head -n 1)
+lost=1
+if [ -n "${shell_pid:-}" ] && [ -n "$app_pid" ]; then
+  kill -KILL "$shell_pid"
+  sleep 3
+  if kill -0 "$app_pid" 2>/dev/null && ! kill -0 "$shell_pid" 2>/dev/null; then
+    runuser -u "$u" -- env XDG_RUNTIME_DIR="$rt" DBUS_SESSION_BUS_ADDRESS="unix:path=$rt/bus" \
+      systemctl --user is-active --quiet "$scope" && lost=0
+  fi
+fi
+[ -n "$app_pid" ] && kill "$app_pid" 2>/dev/null
+systemctl stop wsperf-rel004.service >/dev/null 2>&1
+printf 'WORKSUITE_PERF electron_kill_real_shell %s\n' "$real"
+printf 'WORKSUITE_PERF electron_kill_apps_lost %s\n' "$lost"
