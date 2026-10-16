@@ -34,6 +34,8 @@ zstd
 tpm2-tools
 firmware-linux-free
 plymouth
+# Crashed apps: core dumps go to the journal, the shell says "X quit unexpectedly" (electron/sessionHost.ts).
+systemd-coredump
 # Scripts for the installer's language list and the desktop (Sinhala, Tamil, Devanagari, Arabic, ...)
 fonts-noto-core
 # Recovery (§9.2)
