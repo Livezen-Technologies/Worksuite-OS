@@ -17,7 +17,7 @@
 :root[data-theme="light"] .bg-\[rgba\(10\,24\,56\,0\.97\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(239,242,249,0.97); }
 :root[data-theme="light"] .bg-\[rgba\(10\,24\,56\,0\.98\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(239,242,249,0.98); }
 :root[data-theme="light"] .bg-\[rgba\(10\,26\,56\,0\.55\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(239,243,249,0.94); }
-:root[data-theme="light"] .bg-\[rgba\(12\,28\,64\,0\.72\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(244,246,251,0.94); }
+:root[data-theme="light"] .bg-\[rgba\(12\,28\,64\,0\.96\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(244,246,251,0.96); }
 :root[data-theme="light"] .bg-\[rgba\(14\,32\,72\,0\.5\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(248,249,252,0.94); }
 :root[data-theme="light"] .bg-\[rgba\(14\,32\,72\,0\.55\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(248,249,252,0.94); }
 :root[data-theme="light"] .bg-\[rgba\(14\,32\,72\,0\.6\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(248,249,252,0.94); }
