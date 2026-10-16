@@ -91,6 +91,7 @@ describe('shell on every workspace', () => {
     expect(rc).toMatch(/<windowRule identifier="worksuite-shell"[^>]*>\s*<action name="ToggleOmnipresent"\/>/)
     const main = readFileSync(path.join(__dirname, 'main.ts'), 'utf8')
     expect(main).toContain("SHELL_APP_ID = 'worksuite-shell'")
-    expect(main).toContain('setDesktopName?.(`${SHELL_APP_ID}.desktop`)')
+    const pkg = JSON.parse(readFileSync(path.join(__dirname, '../package.json'), 'utf8')) as { name: string }
+    expect(pkg.name).toBe('worksuite-shell')
   })
 })
