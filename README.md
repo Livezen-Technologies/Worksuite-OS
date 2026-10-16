@@ -41,6 +41,27 @@ object (`widgets`), with a local copy. Signed out: one "Sign in to WorkSuite to 
 `desktop_widgets: false` (admin console › Policy) turns them off; a kiosk never shows them. UI:
 `shell/src/components/DesktopWidgets.tsx`, model `shell/src/lib/widgets.ts`, strings `shell/src/i18n/widgets.ts`.
 
+### Desktops and Task View
+
+Virtual desktops work like Windows 11. **Super+Tab** (or the Task View button next to Search, or a three-finger swipe
+up) opens Task View: the desktop's open windows as cards, and a strip of desktops with **New desktop**. Click a window
+to focus it; drag it onto a desktop to move it; right-click for **Move to**, **Show this window on all desktops** and
+**Show windows from this app on all desktops**. Right-click a desktop for **Rename** (or double-click its name, or F2),
+**Choose background**, **Move left/right** (or drag, or Alt+Shift+Left/Right) and **Close**. Esc closes Task View.
+**Ctrl+Super+D** adds a desktop, **Ctrl+Super+F4** closes the current one (its windows go to the desktop on its left),
+**Ctrl+Super+Left/Right** switch (the name shows briefly; the wallpaper slides unless motion is reduced),
+Super+1…9 / Super+Shift+1…9 go to or send the window to a desktop. 1 to 16 desktops; one to start with. Hover the
+Task View button for a flyout of desktops. Settings › Multitasking: the Task View button, and whether the taskbar and
+Alt+Tab show windows from only the current desktop (default) or all. Names, order, count, wallpapers and apps on all
+desktops are kept in the synced `preferences/shell` object and restored at sign-in. A kiosk has one desktop and no
+Task View.
+
+Labwc 0.8 fixes the desktop count in rc.xml and does not report a window's desktop, so the Wayland bridge
+(`native/wayland-bridge/worksuite_bridge/workspace.py`) tracks windows, rewrites `<desktops>` in
+`~/.config/worksuite/labwc/rc.xml` and reloads Labwc (`labwc --reconfigure`), moving windows to their final desktop
+first because Labwc drops surplus desktops from the end. Labwc 0.8 cannot capture single windows, so window cards show
+the app icon and title, and the current desktop's card a small capture of the screen (`grim`, in memory only).
+
 ### WhatsApp
 
 WhatsApp has no native Linux app, so WorkSuite OS ships the official WhatsApp Web (https://web.whatsapp.com) as an
