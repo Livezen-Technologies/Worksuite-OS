@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Files
+Comment=Browse archives and extract them, in WorkSuite Files
+Exec=/usr/lib/worksuite/shell/worksuite-open-archive %f
+TryExec=/usr/lib/worksuite/shell/worksuite-open-archive
+Icon=system-file-manager
+Terminal=false
+NoDisplay=true
+MimeType=application/zip;application/x-zip-compressed;application/x-7z-compressed;application/vnd.rar;application/x-rar;application/x-rar-compressed;application/x-tar;application/x-compressed-tar;application/x-xz-compressed-tar;application/x-bzip2-compressed-tar;application/x-bzip-compressed-tar;application/x-zstd-compressed-tar;application/gzip;application/x-gzip;application/x-xz;application/x-bzip2;application/x-bzip;application/zstd;

@@ -72,8 +72,17 @@ export interface WorkSuiteApi {
   filesTrashDelete(ids: string[] | 'all'): Promise<CloudResult<number>>
   /** Start a copy/move/duplicate job; progress and conflicts arrive through onFilesJob. */
   filesPaste(op: 'copy' | 'move' | 'duplicate', srcRoot: string, rels: string[], dstRoot: string, dstRel: string): Promise<CloudResult<string>>
-  filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel', all: boolean): Promise<CloudResult<true>>
-  filesCompress(root: string, rels: string[]): Promise<CloudResult<string>>
+  filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel' | 'continue', all: boolean): Promise<CloudResult<true>>
+  /** Start a compress job (zip / 7z / tar.gz / tar.xz; a password for zip and 7z only); progress arrives through onFilesJob. */
+  filesCompress(root: string, rels: string[], opts: CompressOptions): Promise<CloudResult<string>>
+  /** Start an extract job: "here" or into "<name>/", all entries or the given ones. */
+  filesExtract(root: string, rel: string, mode: 'here' | 'folder', items: string[], password: string | null): Promise<CloudResult<string>>
+  /** Answer a job's password prompt; null cancels the job. */
+  filesArchivePassword(id: string, pw: string | null): Promise<CloudResult<true>>
+  /** An archive's entries, read-only. Errors: password, wrong_password, tool_missing, password_unsupported, failed. */
+  filesArchiveList(root: string, rel: string, password: string | null): Promise<CloudResult<ArchiveListing>>
+  /** An archive opened with Files from elsewhere (default handler for archive types). */
+  onOpenArchive(cb: (at: { root: string; rel: string }) => void): () => void
   filesEject(id: string): Promise<CloudResult<true>>
   onFilesJob(cb: (e: FileJob) => void): () => void
   // Settings › Devices: real devices from sysfs (electron/hardware.ts).
@@ -230,10 +239,16 @@ export interface FileHit { root: string; rel: string; name: string; dir: boolean
 export interface TrashItem { id: string; name: string; dir: boolean; size: number; orig: string; where: string; deleted: number | null }
 export interface FileStamp { size: number; modified: number }
 export interface FileJob {
-  id: string; op: 'copy' | 'move'; dest: string; state: 'running' | 'conflict' | 'done' | 'failed' | 'cancelled'
+  id: string; op: 'copy' | 'move' | 'compress' | 'extract'; dest: string; state: 'running' | 'conflict' | 'password' | 'confirm' | 'done' | 'failed' | 'cancelled'
   done: number; total: number; bytes_done: number; bytes_total: number
   conflict: { name: string; incoming: FileStamp; existing: FileStamp; remaining: number } | null
+  /** Archive jobs: the archive's name, the prompt's details and why it failed. */
+  name?: string; ask?: { wrong?: boolean; bytes?: number | null; ratio?: number | null } | null; error?: string | null
 }
+export type ArchiveFormat = 'zip' | '7z' | 'tar.gz' | 'tar.xz'
+export interface CompressOptions { format: ArchiveFormat; name: string; level: number; password?: string | null }
+export interface ArchiveEntry { path: string; type: 'file' | 'dir' | 'symlink' | 'hardlink' | 'other'; size: number | null; link: string | null; modified: number | null; encrypted: boolean }
+export interface ArchiveListing { kind: string; entries: ArchiveEntry[]; encrypted: boolean; total: number | null; packed: number }
 /** state: Drive sync state (WSOS-DRV-002), "folder", "local" outside Drive, or "unknown" when sync isn't running. */
 export interface FileEntry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean; items?: number | null }
 export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
@@ -439,7 +454,29 @@ const stub: WorkSuiteApi = {
     stubFileJobs.forEach((l) => l({ id, op: 'copy', dest: 'KINGSTON', state: r === 'cancel' ? 'cancelled' : 'done', done: 1, total: 1, bytes_done: 2_400_000, bytes_total: 2_400_000, conflict: null }))
     return { ok: true, value: true }
   },
-  async filesCompress() { return { ok: false, error: 'unavailable' } },
+  async filesCompress(_root, rels, o) {
+    // Preview: a job that runs to the end.
+    const base: FileJob = { id: 'stubarc', op: 'compress', dest: '~/Documents', name: `${o.name}.${o.format}`, state: 'running', done: 0, total: rels.length, bytes_done: 0, bytes_total: 48_000_000, conflict: null, ask: null, error: null }
+    for (let i = 1; i <= 10; i++) setTimeout(() => stubFileJobs.forEach((l) => l({ ...base, state: i === 10 ? 'done' : 'running', bytes_done: i * 4_800_000, done: i === 10 ? rels.length : 0 })), i * 400)
+    return { ok: true, value: base.id }
+  },
+  async filesExtract(_root, rel, mode, items, password) {
+    const name = rel.split('/').pop()!
+    const base: FileJob = { id: 'stubx', op: 'extract', dest: mode === 'folder' ? `~/Downloads/${name.replace(/\.[^.]+$/, '')}` : '~/Downloads', name, state: 'running', done: 0, total: items.length || 14, bytes_done: 0, bytes_total: 96_400_000, conflict: null, ask: null, error: null }
+    setTimeout(() => stubFileJobs.forEach((l) => l(name.includes('agent') && !password ? { ...base, state: 'password', ask: { wrong: false } } : { ...base, bytes_done: 41_000_000 })), 50)
+    return { ok: true, value: base.id }
+  },
+  async filesArchivePassword(id, pw) {
+    stubFileJobs.forEach((l) => l({ id, op: 'extract', dest: '~/Downloads/worksuite-agent-2.4.1', name: 'worksuite-agent-2.4.1.zip', state: pw === null ? 'cancelled' : 'running', done: 3, total: 14, bytes_done: 41_000_000, bytes_total: 96_400_000, conflict: null, ask: null, error: null }))
+    return { ok: true, value: true }
+  },
+  async filesArchiveList(_root, rel) {
+    const e = (path: string, size: number | null, type: 'file' | 'dir' = 'file'): ArchiveEntry => ({ path, type, size, link: null, modified: Date.now() - 86_400_000 * 3, encrypted: false })
+    const entries = [e('worksuite-agent', 0, 'dir'), e('worksuite-agent/bin', 0, 'dir'), e('worksuite-agent/bin/worksuite-agent', 61_200_000), e('worksuite-agent/bin/agentctl', 8_400_000),
+      e('worksuite-agent/config', 0, 'dir'), e('worksuite-agent/config/agent.toml', 4_100), e('worksuite-agent/config/policies.json', 12_800), e('worksuite-agent/README.md', 9_600), e('worksuite-agent/LICENSE', 11_300), e('worksuite-agent/CHANGELOG.md', 38_000)]
+    return rel.endsWith('.zip') ? { ok: true, value: { kind: 'zip', entries, encrypted: false, total: 69_676_800, packed: 38_200_000 } } : { ok: false, error: 'failed' }
+  },
+  onOpenArchive() { return () => {} },
   async filesEject() { return { ok: false, error: 'unavailable' } },
   onFilesJob(cb) { stubFileJobs.add(cb); return () => { stubFileJobs.delete(cb) } },
   async filesStatus(root) { return { free_bytes: 212e9, drive: root === 'drive' ? { states: { synced: 2, syncing: 1, pending: 1, conflict: 1, 'online-only': 1, error: 1 }, last_sync: Date.now() - 60_000, service_state: 'idle' } : null } },

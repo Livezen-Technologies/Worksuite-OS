@@ -34,7 +34,7 @@ const KINDS: [string[], string, MessageKey | null][] = [
   [['md'], '#5E739C', 'files.kind.md'],
   [['mp4', 'mkv', 'webm', 'mov', 'avi'], '#D9572B', 'files.kind.video'],
   [['mp3', 'ogg', 'flac', 'wav', 'm4a'], '#B7791F', 'files.kind.audio'],
-  [['zip', 'tar', 'gz', 'xz', '7z', 'bz2', 'zst'], '#5E739C', 'files.kind.archive'],
+  [['zip', 'tar', 'gz', 'xz', '7z', 'bz2', 'zst', 'rar', 'tgz', 'txz'], '#5E739C', 'files.kind.archive'],
 ]
 export function kindOf(name: string, dir: boolean) {
   if (dir) return { ext: '▣', badge: 'FOLDER', color: C.blue, label: t('files.folder'), image: false }
@@ -57,7 +57,8 @@ export function day(ms: number | null): string {
 }
 export const sizeOf = (e: Pick<FileEntry, 'dir' | 'size' | 'items'>) => (e.dir ? (e.items != null ? t('files.itemsShort', { count: e.items }) : '—') : formatBytes(e.size))
 
-export type Place = { kind: 'dir'; root: string; rel: string } | { kind: 'recent' } | { kind: 'starred' } | { kind: 'trash' }
+/** archive: browsing an archive file read-only; inner is the folder inside it ("" for the top). */
+export type Place = { kind: 'dir'; root: string; rel: string } | { kind: 'recent' } | { kind: 'starred' } | { kind: 'trash' } | { kind: 'archive'; root: string; rel: string; inner: string }
 
 const FOLDER_ICON: Record<string, [string, MessageKey]> = {
   Documents: [P.folder, 'files.documents'], Downloads: [P.download, 'files.downloads'], Pictures: [P.pictures, 'files.pictures'], Music: [P.music, 'files.music'], Videos: [P.videos, 'files.videos'],
@@ -121,5 +122,15 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
         </> : <span className="text-xs" style={{ color: C.muted }}>{t('files.storageUnknown')}</span>}
       </div>
     </nav>
+  )
+}
+
+export function Modal({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(2,6,16,0.5)' }}>
+      <div role="dialog" aria-modal="true" aria-label={label} className={`box-border flex ${wide ? 'w-[500px]' : 'w-[440px]'} flex-col gap-4 rounded-[18px] p-6`} style={{ background: '#0F2350', border: '1px solid rgba(127,178,255,0.2)', boxShadow: '0 30px 80px rgba(0,0,0,0.6)', color: C.text }}>
+        {children}
+      </div>
+    </div>
   )
 }

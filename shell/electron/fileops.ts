@@ -1,5 +1,5 @@
 // Files (§7.2) operations beyond listing: places, Recent (XDG recently-used.xbel), Starred (~/.config/worksuite),
-// search, new folder, rename, freedesktop.org Trash, copy/move jobs with conflict prompts, compress and eject.
+// search, new folder, rename, freedesktop.org Trash, copy/move jobs with conflict prompts, and eject.
 // The renderer only names roots and relative paths; everything is resolved through resolveIn and stays inside a root.
 import { execFile } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statfsSync, writeFileSync } from 'node:fs'
@@ -337,16 +337,7 @@ export function jobs(env: Env, emit: (e: JobEvent) => void) {
   }
 }
 
-// ---- Compress (tar.gz with the system tar) and eject (udisksctl) ----
-export function compress(env: Env, root: string, rels: string[]): Promise<Reply<string>> {
-  const ps = rels.map((r) => resolveIn(env, root, r)).filter((p): p is NonNullable<typeof p> => !!p && existsSync(p.full))
-  if (!ps.length || ps.some((p) => path.dirname(p.full) !== path.dirname(ps[0].full))) return Promise.resolve({ ok: false, error: 'invalid' })
-  const dir = path.dirname(ps[0].full)
-  const name = `${ps.length === 1 ? path.basename(ps[0].full) : 'Archive'}.tar.gz`
-  const out = existsSync(path.join(dir, name)) ? freeName(dir, name) : name
-  return new Promise((resolve) => execFile('tar', ['-czf', path.join(dir, out), '-C', dir, '--', ...ps.map((p) => path.basename(p.full))], (err) => resolve(err ? { ok: false, error: 'failed' } : { ok: true, value: out })))
-}
-
+// ---- Eject (udisksctl); archives are in ./archives ----
 export function eject(env: Env, id: string): Promise<Reply<true>> {
   const r = roots(env).find((x) => x.id === id && id.startsWith('media:'))
   const m = r ? mountOf(r.path) : null
