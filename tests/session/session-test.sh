@@ -356,6 +356,16 @@ check "worksuite-toasts preloads gtk4-layer-shell" "$(cat "$LOG")" "python3 -E -
 WORKSUITE_LAYER_SHELL_LIB="$T/missing.so.0" sh "$BIN/worksuite-toasts"; check "worksuite-toasts without layer-shell exits 69" "$?" 69
 grep -q 'LS.Layer.OVERLAY' "$ROOT/services/session/toasts/worksuite_toasts/ui.py" && grep -q '^services/session/bin/worksuite-toasts ' "$ROOT/packaging/debian/worksuite-session.install" \
   && ok "toasts: overlay layer, installed" || bad "toasts: overlay layer, installed"
+# Installed as worksuite-session.install puts it, the helper's package imports and parses a toast with the real python3
+# (-E -s from its folder, as the wrapper runs it), and it is no unique GApplication: a second helper (an earlier
+# shell's) must never make the shell's own exit at once, which lost every toast.
+R=$T/pkgroot; mkdir -p "$R"
+while read -r src dst; do case "$src" in services/session/bin/worksuite-toasts|services/session/toasts/*) mkdir -p "$R/$dst"; cp -r "$ROOT/$src" "$R/$dst";; esac; done < "$ROOT/packaging/debian/worksuite-session.install"
+[ -x "$R/usr/lib/worksuite/worksuite-toasts" ] && (cd "$R/usr/lib/worksuite/toasts" && /usr/bin/env -i /usr/bin/python3 -E -s -c 'from worksuite_toasts.model import parse; import sys; sys.exit(0 if parse("{\"op\":\"show\",\"key\":\"a\",\"title\":\"t\"}") else 1)') \
+  && ok "toasts: the packaged helper is installed executable and its module runs" || bad "toasts: the packaged helper is installed executable and its module runs"
+grep -q 'Gio.ApplicationFlags.NON_UNIQUE' "$ROOT/services/session/toasts/worksuite_toasts/ui.py" \
+  && ok "toasts: one helper per shell (NON_UNIQUE)" || bad "toasts: one helper per shell (NON_UNIQUE)"
+for p in libnotify-bin foot; do grep -qx "$p" "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && ok "image ships $p" || bad "image ships $p"; done
 
 echo "1..$n"
 exit $fail

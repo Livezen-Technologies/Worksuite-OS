@@ -15,7 +15,8 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gtk4LayerShell", "1.0")
-from gi.repository import Gdk, GLib, Gtk, Gtk4LayerShell as LS  # noqa: E402
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell as LS  # noqa: E402
 
 from .model import TIMEOUT_MS, Stack, Toast, parse  # noqa: E402
 
@@ -143,7 +144,10 @@ class ToastWindow(Gtk.ApplicationWindow):
 
 
 def run() -> int:  # pragma: no cover - needs a compositor
-    app = Gtk.Application(application_id="lk.worksuite.Toasts")
+    # NON_UNIQUE: each shell feeds its own helper through a pipe. A unique application would hand its "activate" to a
+    # helper already on the bus (left by an earlier shell, or one per output) and exit 0 at once, and every toast the
+    # shell then wrote went nowhere: no toast over the apps, although a worksuite_toasts process was running.
+    app = Gtk.Application(application_id="lk.worksuite.Toasts", flags=Gio.ApplicationFlags.NON_UNIQUE)
     state: dict = {"buf": b""}
 
     def activate(a):

@@ -13,7 +13,8 @@ export type ToastSpawn = () => ToastProc | null
 
 const realSpawn: ToastSpawn = () => {
   try {
-    const p = spawn(WORKSUITE_TOASTS, [], { stdio: ['pipe', 'pipe', 'ignore'] })
+    // stderr goes to the shell's journal: a helper that fails says why.
+    const p = spawn(WORKSUITE_TOASTS, [], { stdio: ['pipe', 'pipe', 'inherit'] })
     p.on('error', () => undefined)
     p.stdin.on('error', () => undefined)
     let buf = ''
@@ -57,7 +58,8 @@ export function toastHost(onClick: (key: string) => void, spawnFn: ToastSpawn = 
     show(t: ToastMsg): boolean {
       if (!KEY.test(t.key)) return false
       send({ op: 'show', key: t.key, title: String(t.title ?? '').slice(0, 200), body: String(t.body ?? '').slice(0, 400), tone: t.tone ?? 'ok', icon: (t.icon && resolveIcon(t.icon)) || '', sticky: !!t.sticky })
-      return !unavailable
+      // false = not shown (no helper running now): the renderer draws the toast itself.
+      return !unavailable && !!proc
     },
     hide(key: string) { if (KEY.test(key) && proc) proc.write(`${JSON.stringify({ op: 'hide', key })}\n`) },
     stop() { unavailable = true; proc?.kill(); proc = null },

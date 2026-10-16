@@ -82,6 +82,10 @@ zip
 unzip
 xz-utils
 bzip2
+# Terminal (the Start menu's "Terminal" in the design, docs/design/boot-install G02Start; Labwc only recommends foot and
+# the build installs no recommends) and notify-send for scripts and admins (the shell is the notification server).
+foot
+libnotify-bin
 # Web browser and media player (WorkSuite defaults: shell/apps/worksuite-mimeapps.list)
 firefox-esr
 celluloid
