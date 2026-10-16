@@ -34,7 +34,7 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
   const tv = taskViewHost(c, send, lift)
   // Anything else of the shell's own open over the apps (launcher, Settings, Files, power menu…): see shellLift.
   // Sent when the set of open things changes or a shell window is opened again: each "on" raises the shell again.
-  handle('ws:panelShellOnTop', (on) => { void lift.set('overlay', on === '1', true); return true })
+  handle('ws:panelShellOnTop', (on) => lift.set('overlay', on === '1', true).then(() => true))   // resolves once lifted (or lowered)
   handle('ws:panelTaskView', (open) => {
     if (open === 'open') void tv.open(true)
     else tv.state(open === '1')
@@ -83,6 +83,7 @@ export function shellLift(c: LiftClient | null, behind: () => void = () => undef
   let again = false        // raise again although lifted
   let busy: Promise<void> | null = null
   let focusedApp: string | null = null
+  let known: Set<string> | null = null   // app windows seen in the last list
   async function apply() {
     for (;;) {
       const want = reasons.size > 0
@@ -117,6 +118,11 @@ export function shellLift(c: LiftClient | null, behind: () => void = () => undef
       const app = windows.find((w) => w.flags & ACTIVATED_FLAG && !SHELL_IDS.has(w.appId.toLowerCase()))?.handle ?? ''
       const before = focusedApp
       focusedApp = app
+      // A window that maps while Task View is open would stack over it: lift the shell over it again.
+      const appHandles = new Set(windows.filter((w) => !SHELL_IDS.has(w.appId.toLowerCase())).map((w) => w.handle))
+      const mapped = known !== null && [...appHandles].some((h) => !known!.has(h))
+      known = appHandles
+      if (mapped && reasons.has('taskview')) { again = true; void kick(); return }
       // Task View moves and picks windows itself (the bridge focuses a window to move it) and closes itself.
       if (before === null || !app || app === before || (!reasons.size && !lifted) || reasons.has('taskview') || reasons.has('snip')) return
       reasons.clear()

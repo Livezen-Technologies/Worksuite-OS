@@ -47,3 +47,18 @@ describe('app notification card', () => {
     expect(invoke).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('closing the notification centre', () => {
+  it('closes on a click outside it, not on a click inside', async () => {
+    const host = el = document.createElement('div'); document.body.appendChild(host)
+    const outside = document.createElement('button'); host.after(outside)
+    root = createRoot(host)
+    const onClose = vi.fn()
+    await act(async () => root.render(<NotifDock onClose={onClose} now={new Date()} time="09:00" notices={[]} setNotices={() => {}} dnd={false} setDnd={() => {}} />))
+    host.querySelector('button')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    expect(onClose).not.toHaveBeenCalled()
+    outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    outside.remove()
+  })
+})

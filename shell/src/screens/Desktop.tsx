@@ -67,6 +67,14 @@ const SNIP_TILE: LauncherApp = { id: 'snipping-tool', get name() { return t0('sn
 const EXT_COLOR: Record<string, string> = { xlsx: '#2E9E6A', ods: '#2E9E6A', csv: '#2E9E6A', docx: '#1F6BFF', odt: '#1F6BFF', doc: '#1F6BFF', pptx: '#D9572B', odp: '#D9572B', pdf: '#D9452B', png: '#7A4FE0', jpg: '#7A4FE0', jpeg: '#7A4FE0', svg: '#7A4FE0' }
 const FOOT_ICONS = { files: 'M3 6h6l2 2h10v11H3z', settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2', lock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z', power: 'M12 3v9M6.3 7.3a8 8 0 1 0 11.4 0' }
 
+/** An app window is on screen on the desktop shown (not minimized, not the shell's own). */
+export function appShowing(windows: PanelWindow[], ws: { current: number; windows: Record<string, number>; sticky?: string[] }): boolean {
+  return windows.some((w) => !SHELL_APP_IDS.has(w.appId.toLowerCase()) && !(w.flags & MINIMIZED_FLAG)
+    && (ws.windows[w.handle] === undefined || ws.windows[w.handle] === ws.current || !!ws.sticky?.includes(w.handle)))
+}
+const SHELL_APP_IDS = new Set(['worksuite-shell', 'worksuite', 'electron'])
+const MINIMIZED_FLAG = 2
+
 function useClock() {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 15000); return () => clearInterval(t) }, [])
@@ -270,11 +278,26 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     setLauncher(false); setA11yOpen(false); setAssistant(false); setQsOpen(false); setPowerOpen(false); setTrayOpen(false)
     setFlyout(false); setWidgetPicker(false); setBehind(true)
   }), [])
+  const closeTray = useCallback(() => setTrayOpen(false), [])
   const hasWindow = Children.toArray(children).length > 0
   useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
     || flyout || widgetPicker || authOpen || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
-  useEffect(() => { void panel.shellOnTop?.(shellOnTop) }, [shellOnTop, liftSeq])
+  // Once the shell is over the apps it has the keyboard (the bridge activates it): give it to the launcher's search
+  // again, which was focused while an app still had the keyboard (Start opened with the mouse).
+  const focusSearch = useRef(() => undefined as void)
+  focusSearch.current = () => { if (launcher && searchRef.current && document.activeElement !== searchRef.current) searchRef.current.focus() }
+  useEffect(() => { void Promise.resolve(panel.shellOnTop?.(shellOnTop)).then(() => focusSearch.current()).catch(() => undefined) }, [shellOnTop, liftSeq])
+  useEffect(() => {
+    const onFocus = () => focusSearch.current()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
+  // Over the apps the window is see-through (electron/main.ts: a transparent window): Start, the notification centre,
+  // quick settings and the shell's own windows float over the app below. The wallpaper (and what sits on it) is drawn
+  // only while the shell is the desktop, below the apps, or when no app window is showing on this desktop.
+  const seeThrough = shellOnTop && !ending && appShowing(panelWindows, desk.ws)
+  useEffect(() => { document.documentElement.classList.toggle('ws-see-through', seeThrough) }, [seeThrough])
   useEffect(() => {
     if (!launcher) return
     let live = true
@@ -345,18 +368,18 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
 
   return (
-    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: monitorWallpaper }}
+    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: seeThrough ? 'transparent' : monitorWallpaper }}
       onContextMenu={(e) => { if (e.target !== e.currentTarget || !widgetsOn) return; e.preventDefault(); setWallMenu({ x: e.clientX, y: e.clientY }) }}
       onMouseDown={(e) => { if (wallMenu && !(e.target as HTMLElement).closest?.('#ws-wall-menu')) setWallMenu(null) }}>
       {/* This desktop's wallpaper, sliding in on a switch (reduced motion: no slide). */}
-      {desktopsOn && <div key={desk.ws.current} aria-hidden="true" className={`pointer-events-none absolute inset-0 ${slide}`} style={{ background: wallpaperOf(desk.ws.current) }} />}
+      {desktopsOn && !seeThrough && <div key={desk.ws.current} aria-hidden="true" className={`pointer-events-none absolute inset-0 ${slide}`} style={{ background: wallpaperOf(desk.ws.current) }} />}
       {/* On the wallpaper: keeps its light text in the light theme (ws-dark-zone). */}
-      <div className="ws-dark-zone absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
+      {!seeThrough && <div className="ws-dark-zone absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
         <div className="text-sm text-[#8FA3C8]">{longDate}</div>
         <div className="text-[44px] font-light tracking-[-1px]">{time}</div>
-      </div>
+      </div>}
 
-      {widgetsOn && (
+      {widgetsOn && !seeThrough && (
         <DesktopWidgets snap={widgetData.snap} loading={widgetData.loading} online={widgetData.online} layout={widgetLayout} onLayout={setWidgetLayout}
           editing={widgetEdit} onEditing={(v) => { setWidgetEdit(v); if (!v) setWidgetPicker(false) }} picker={widgetPicker} onPicker={setWidgetPicker}
           onRefresh={widgetData.refresh} onSignIn={() => openSettingsAt('Users')} now={now} />
@@ -398,7 +421,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
         <UpdateOverlays quiet={trayOpen || qsOpen || launcher || Children.toArray(children).length > 0} onOpenUpdates={() => openSettingsAt('Updates')} />
       </div>
 
-      {trayOpen && <NotifDock now={now} time={time} notices={notices} setNotices={setNotices} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} />}
+      {trayOpen && <NotifDock onClose={closeTray} now={now} time={time} notices={notices} setNotices={setNotices} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} />}
 
       {launcher && q && (
         <div className="absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-start justify-center bg-[rgba(2,6,16,0.45)] px-4 pt-[90px] backdrop-blur-[6px]" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>

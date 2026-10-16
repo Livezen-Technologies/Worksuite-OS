@@ -2,7 +2,7 @@
 // the system sources in lib/useNotices; chat and mail don't post here yet, so "Mentions" stays empty and says why.
 // There is no media-session (MPRIS) bridge, so the board's now-playing card is left out.
 import { useThemeIcon } from '../lib/appIcons'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import BIcon from './BIcon'
 import { Icon, P } from './Ws'
 import type { TimedNotice } from '../lib/useNotices'
@@ -13,15 +13,29 @@ import { localeTag, useT } from '../i18n'
 import { AnimatedProgress, CountUp } from './AnimatedProgress'
 
 const TONE_BG: Record<TimedNotice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
-const glass = 'rounded-[22px] border border-white/10 bg-[rgba(12,28,64,0.72)] shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-[28px] backdrop-saturate-[1.4]'
+const glass = 'rounded-[22px] border border-white/10 bg-[rgba(12,28,64,0.96)] shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-[28px] backdrop-saturate-[1.4]'
 const BELL = ['M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0']
 const MOON = ['M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z']
 type Tab = 'all' | 'mentions' | 'system'
 
-export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd }: {
+export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd, onClose }: {
+  onClose?: () => void
   now: Date; time: string; notices: TimedNotice[]; setNotices: (n: TimedNotice[]) => void; dnd: boolean; setDnd: (v: boolean) => void
 }) {
   const t = useT()
+  const ref = useRef<HTMLElement>(null)
+  // A click outside closes it, like Start and quick settings (its own bell button toggles it instead). The space
+  // between its cards counts as outside.
+  useEffect(() => {
+    if (!onClose) return
+    const onDown = (e: MouseEvent) => {
+      const el = ref.current, target = e.target as HTMLElement
+      if (!el || (el.contains(target) && target !== el) || target.closest?.('[aria-controls="ws-notifications"]')) return
+      onClose()
+    }
+    window.addEventListener('mousedown', onDown)
+    return () => window.removeEventListener('mousedown', onDown)
+  }, [onClose])
   const [tab, setTab] = useState<Tab>('all')
   const [month, setMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1))
   const longDate = now.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })
@@ -44,7 +58,7 @@ export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd 
   const tabs: [Tab, string][] = [['all', t('dock.all')], ['mentions', t('dock.mentions')], ['system', t('dock.system')]]
 
   return (
-    <aside id="ws-notifications" aria-label={t('notes.title')} className="absolute top-3 right-3 bottom-16 z-40 flex w-[408px] max-w-[calc(100%-24px)] flex-col gap-2.5 text-[#E8EEFA]">
+    <aside ref={ref} id="ws-notifications" aria-label={t('notes.title')} className="absolute top-3 right-3 bottom-16 z-40 flex w-[408px] max-w-[calc(100%-24px)] flex-col gap-2.5 text-[#E8EEFA]">
       <div className={`${glass} flex gap-4 p-4`}>
         <div className="flex min-w-0 flex-1 flex-col gap-2.5">
           <span className="flex flex-col"><span className="text-[34px] leading-none font-light tracking-[-0.03em]">{time}</span><span className="mt-1 text-xs text-[#8FA3C8]">{longDate}</span></span>

@@ -127,3 +127,23 @@ describe('Task View keeps the shell lifted while the bridge focuses windows to m
     expect(lift.lifted).toBe('sh')
   })
 })
+
+describe('a window that maps while Task View is open', () => {
+  const w = (handle: string, flags = 0) => ({ handle, appId: handle === 'sh' ? 'worksuite-shell' : 'foot', title: handle, output: '', flags })
+  it('lifts the shell over it again; without Task View it changes nothing', async () => {
+    const c = client(), lift = shellLift(c as never)
+    lift.windowsChanged([w('a', 1), w('sh')])
+    await lift.set('taskview', true)
+    expect(c.setShellRaised).toHaveBeenCalledTimes(1)
+    lift.windowsChanged([w('a'), w('b', 1), w('sh')])
+    await new Promise((r) => setTimeout(r, 0))
+    expect(c.setShellRaised).toHaveBeenCalledTimes(2)
+    expect(c.setShellRaised).toHaveBeenLastCalledWith('sh', true)
+    expect(lift.lifted).toBe('sh')
+    await lift.set('taskview', false)
+    lift.windowsChanged([w('a'), w('b'), w('c', 1), w('sh')])
+    await new Promise((r) => setTimeout(r, 0))
+    expect(c.setShellRaised).toHaveBeenLastCalledWith('sh', false)
+    expect(c.setShellRaised).toHaveBeenCalledTimes(3)
+  })
+})

@@ -42,6 +42,8 @@
 @layer base {
   html, body, #root { height: 100%; margin: 0; }
   body { font-family: var(--font-sans); color: var(--color-ws-ink); background: var(--color-ws-night); }
+  /* Lifted over the apps (Desktop.tsx): the window is see-through except for what the shell draws. */
+  html.ws-see-through, html.ws-see-through body, html.ws-see-through #root { background: transparent !important; }
   /* Visible focus on every control (WSOS-ACC): blue ring with a dark halo so it shows on light and dark surfaces. */
   :focus-visible { outline: 2px solid #7FB2FF; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(2, 6, 23, 0.85); }
   /* Headings and regions focused by script (tabIndex -1, e.g. each first-run step's title for screen readers) are not

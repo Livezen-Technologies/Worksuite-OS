@@ -106,9 +106,11 @@ function run(cmd: string, args: string[]) {
 function createWindow() {
   win = new BrowserWindow({
     fullscreen: true,
-    // The greeter's last frame (a dark veil, services/session/greeter/worksuite_greeter/veil.py): the desktop's first
-    // frame is the same colour, so signing in fades through dark instead of flashing.
-    backgroundColor: '#040A1A',
+    // See-through, so Start, the notification centre, quick settings and the shell's windows float over the app below
+    // while the shell is lifted (src/screens/Desktop.tsx draws the wallpaper only when it is the desktop). The page
+    // itself starts in the greeter veil's colour (index.css), so signing in still fades through dark.
+    transparent: true,
+    backgroundColor: '#00000000',
     webPreferences: shellPrefs(),
   })
   shellContents.add(win.webContents)
