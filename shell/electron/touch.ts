@@ -363,7 +363,14 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
     osk = oskIsOurs ? spawnFn(WORKSUITE_OSK, worksuiteOskArgs(st.settings, methods)) : spawnFn('wvkbd-mobintl', oskArgs(st.settings, methods))
     st.osk = { available: !!osk, visible: false }
     const ours = oskIsOurs
-    osk?.onExit(() => { osk = null; if (ours) oskOursFailed = true; st.osk = { available: false, visible: false }; emit() })
+    const self = osk
+    osk?.onExit(() => {
+      if (osk !== self) return   // stopOsk() or a newer keyboard
+      osk = null; st.osk = { available: false, visible: false }
+      // The WorkSuite keyboard could not run (e.g. no gtk4-layer-shell): fall back to wvkbd at once, not "not installed".
+      if (ours && !oskOursFailed) { oskOursFailed = true; startOsk() }
+      emit()
+    })
   }
   function stopOsk() { osk?.kill('SIGTERM'); osk = null; st.osk.visible = false }
 

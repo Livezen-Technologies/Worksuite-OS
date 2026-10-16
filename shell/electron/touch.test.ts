@@ -170,6 +170,18 @@ describe('WorkSuite keyboard (worksuite-osk)', () => {
     expect(b.osk(false)).toEqual({ available: true, value: false })
     expect(lines.slice(-2)).toEqual(['show 6 8\n', 'hide\n'])
   })
+  it('falls back to wvkbd at once when worksuite-osk cannot run (Settings never says "not installed")', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))
+    const spawned: string[] = []
+    const exits: Record<string, () => void> = {}
+    const sp: Spawn = (cmd, args) => { spawned.push([cmd, ...args].join(' ')); return { kill: () => {}, onLine: () => {}, onExit: (cb) => { exits[cmd] = cb } } }
+    const exec: Exec = async () => ({ code: 1, stdout: '', stderr: '' })
+    const b = touchBridge(home, exec, sp, home, () => true, () => {})
+    await b.start()
+    exits['/usr/lib/worksuite/worksuite-osk']()
+    expect(spawned[spawned.length - 1]).toMatch(/^wvkbd-mobintl /)
+    expect(b.osk(true)).toEqual({ available: true, value: true })
+  })
   it('control lines are bounded numbers only', () => {
     expect(oskControlLine(true, 99, -1)).toBe('show 0 0\n')
     expect(oskControlLine(true, 9, 0xffff)).toBe('show 9 1023\n')

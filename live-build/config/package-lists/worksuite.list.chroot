@@ -60,6 +60,8 @@ wvkbd
 # WorkSuite greeter (WSOS-AUTH-001; the build installs no recommends)
 python3-gi
 gir1.2-gtk-4.0
+# worksuite-osk (the WorkSuite on-screen keyboard) is a gtk4-layer-shell surface; without it the shell falls back to wvkbd.
+gir1.2-gtk4layershell-1.0
 # Smart-card sign-in, off until enabled (WSOS-DIR-011)
 pcscd
 opensc
