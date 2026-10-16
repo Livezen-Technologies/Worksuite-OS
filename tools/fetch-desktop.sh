@@ -19,7 +19,7 @@
 # The pick goes by the control fields (dpkg-deb -f Package/Architecture), never the file name. Builds before
 # worksuite-desktop's deb packageName (0.2.x up to early October 2026, e.g. WorkSuite-0.2.74-amd64.deb) are package
 # "worksuite-desktop", the OS metapackage's name: such a deb (Architecture not all, Version below 1.0~, which the
-# metapackage never is) is the same app, so its control file is rewritten to Package: worksuite (data untouched) with
+# metapackage never is) is the same app, so its control file is rewritten to Package: worksuite (its docs moved to /usr/share/doc/worksuite) with
 # Replaces/Breaks worksuite-desktop (<< 1.0~), as the newer builds declare themselves.
 #
 # ARCH (default amd64) selects the package. Saved as worksuite-app_<version>_<arch>.deb. In WorkSuite OS the
@@ -58,24 +58,23 @@ else
   candidates=$(find "$tmp/art" -name '*.deb' | sort)
 fi
 
-# rename_legacy IN OUT: IN with its control file's Package set to worksuite; data.tar is copied as is.
+# rename_legacy IN OUT: IN as package worksuite. Its docs move from /usr/share/doc/worksuite-desktop to
+# /usr/share/doc/worksuite: the OS metapackage worksuite-desktop (>= 1.0) owns the old path, and dpkg refused to
+# install the renamed app over it ("trying to overwrite .../worksuite-desktop/changelog.gz").
 rename_legacy() {
-  w="$tmp/legacy"; rm -rf "$w"; mkdir -p "$w/ctl"
-  (cd "$w" && ar x "$1")
-  ctl=$(cd "$w" && ls control.tar*)
-  case "$ctl" in
-    control.tar) tar -xf "$w/$ctl" -C "$w/ctl" ;;
-    control.tar.gz) tar -xzf "$w/$ctl" -C "$w/ctl" ;;
-    control.tar.xz) tar -xJf "$w/$ctl" -C "$w/ctl" ;;
-    control.tar.zst) zstd -dc "$w/$ctl" | tar -xf - -C "$w/ctl" ;;
-    *) echo "fetch-desktop: $1: unknown $ctl" >&2; return 1 ;;
-  esac
-  sed -i -e 's/^Package: .*/Package: worksuite/' -e '/^Replaces:/d' -e '/^Breaks:/d' "$w/ctl/control"
-  printf 'Replaces: worksuite-desktop (<< 1.0~)\nBreaks: worksuite-desktop (<< 1.0~)\n' >> "$w/ctl/control"
-  data=$(cd "$w" && ls data.tar*)
-  (cd "$w/ctl" && tar --owner=0 --group=0 --numeric-owner -czf "$w/control.tar.gz" .)
-  rm -f "$2"; (cd "$w" && ar rc "$2" debian-binary control.tar.gz "$data")
+  w="$tmp/legacy"; rm -rf "$w"; mkdir -p "$w"
+  dpkg-deb -R "$1" "$w/pkg"
+  if [ -d "$w/pkg/usr/share/doc/worksuite-desktop" ]; then
+    rm -rf "$w/pkg/usr/share/doc/worksuite"
+    mv "$w/pkg/usr/share/doc/worksuite-desktop" "$w/pkg/usr/share/doc/worksuite"
+    [ -f "$w/pkg/DEBIAN/md5sums" ] && sed -i 's#  usr/share/doc/worksuite-desktop/#  usr/share/doc/worksuite/#' "$w/pkg/DEBIAN/md5sums"
+  fi
+  sed -i -e 's/^Package: .*/Package: worksuite/' -e '/^Replaces:/d' -e '/^Breaks:/d' "$w/pkg/DEBIAN/control"
+  printf 'Replaces: worksuite-desktop (<< 1.0~)\nBreaks: worksuite-desktop (<< 1.0~)\n' >> "$w/pkg/DEBIAN/control"
+  rm -f "$2"; dpkg-deb --root-owner-group -Zxz -b "$w/pkg" "$2" >/dev/null
+  rm -rf "$w"
   [ "$(dpkg-deb -f "$2" Package)" = worksuite ]
+  ! dpkg-deb -c "$2" | grep -q ' ./usr/share/doc/worksuite-desktop/'
 }
 
 pick=

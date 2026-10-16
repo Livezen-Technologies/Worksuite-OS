@@ -1,7 +1,7 @@
 #!/bin/sh
 # tools/fetch-desktop.sh picks WorkSuite Desktop's .deb by its control fields: tiny fake debs built with dpkg-deb.
 # Package worksuite wins; the old name worksuite-desktop (0.x, arch-specific, e.g. WorkSuite-0.2.74-amd64.deb) is
-# renamed to worksuite with its data untouched; the OS metapackage worksuite-desktop (all, 1.0.0~dev1) never matches.
+# renamed to worksuite (docs moved to /usr/share/doc/worksuite, the metapackage owns the old path); the OS metapackage worksuite-desktop (all, 1.0.0~dev1) never matches.
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
 t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
@@ -12,6 +12,7 @@ fake() {   # fake DIR FILE PACKAGE VERSION ARCH [COMPRESSION]
   d="$t/src/$2"; mkdir -p "$d/DEBIAN" "$d/opt/WorkSuite" "$1"
   printf 'Package: %s\nVersion: %s\nArchitecture: %s\nMaintainer: Test <t@example.com>\nDescription: fake\n' "$3" "$4" "$5" > "$d/DEBIAN/control"
   echo "$3 $4 $5" > "$d/opt/WorkSuite/worksuite"
+  mkdir -p "$d/usr/share/doc/$3"; echo "changelog" > "$d/usr/share/doc/$3/changelog"
   dpkg-deb -Z"${6:-xz}" --root-owner-group -b "$d" "$1/$2" >/dev/null
 }
 fetch() {  # fetch DIR [ARCH] → status; output deb in $t/out
@@ -42,7 +43,9 @@ for z in xz gzip zstd; do
   field Replaces | grep -q 'worksuite-desktop (<< 1.0~)' || fail "old ($z): Replaces"
   dpkg-deb --info "$out" >/dev/null || fail "old ($z): invalid deb"
   [ "$(dpkg-deb --fsys-tarfile "$out" | tar -xOf - ./opt/WorkSuite/worksuite)" = "worksuite-desktop 0.2.74 amd64" ] || fail "old ($z): data"
-  ok "old package name worksuite-desktop renamed to worksuite ($z)"
+  dpkg-deb -c "$out" | grep -q ' ./usr/share/doc/worksuite-desktop/' && fail "old ($z): still ships the metapackage's doc dir"
+  dpkg-deb -c "$out" | grep -q ' ./usr/share/doc/worksuite/changelog' || fail "old ($z): docs not moved"
+  ok "old package name worksuite-desktop renamed to worksuite, docs moved off the metapackage's path ($z)"
 done
 
 # Only the OS metapackage, or the wrong arch: nothing to pick.
