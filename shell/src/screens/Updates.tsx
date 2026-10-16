@@ -118,7 +118,7 @@ export function UpdatesPanel() {
             )}
             <div className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
               <span className="h-2 w-2 rounded-full" style={{ background: C.green }} />
-              <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">WorkSuite OS {st.installed}</span><span className="text-[11px] text-[#8FA3C8]">{t('upd.lastChecked', { when: st.last_check ? fmtWhen(st.last_check) : t('settings.about.notYet') })}</span></span>
+              <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">WorkSuite OS {st.installed}</span><span className="text-[11px] text-[#8FA3C8]">{t('upd.lastChecked', { when: st.last_check ? fmtWhen(st.last_check) : t('settings.about.notYet') })}{updateSource(st.update_host)}</span></span>
               <span className="text-[11px]" style={{ color: C.green }}>{t('upd.hist.installed')}</span>
             </div>
             <div className={`px-4 py-[11px] text-[11px] text-[#8FA3C8] ${rowLine}`}>{t('upd.hist.none')}</div>
@@ -358,4 +358,10 @@ export function UpdateOverlays({ onOpenUpdates, quiet }: { onOpenUpdates: () => 
     {tracking.failure && createPortal(<UpdateFailed {...tracking.failure} onClose={updates.clearFailure} onRetry={() => { updates.clearFailure(); void updates.installNow() }} />, document.body)}
     {news && !tracking.forced && !tracking.failure && <WhatsNew version={news} onClose={() => setNews(null)} />}
   </>
+}
+
+/** " · download.worksuitecloud.com" — where updates come from (the Update Center or the organisation's mirror). */
+export function updateSource(host: string | undefined): string {
+  if (!host) return ''
+  try { return ` · ${new URL(host).host}` } catch { return '' }
 }

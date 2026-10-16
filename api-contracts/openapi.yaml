@@ -725,7 +725,10 @@ components:
     ReleaseManifest:
       description: >
         Signed OS release manifest per ring and arch, served at
-        https://download.worksuitecloud.com/os/manifests/{ring}/{arch}.json (or the policy's update_mirror).
+        https://download.worksuitecloud.com/os/manifests/{ring}/{arch}.json by the WorkSuite Update Center
+        (Livezen-Technologies/worksite-download, which signs it with its release key through its signing service),
+        or the policy's update_mirror / update_host in /etc/worksuite/updates.json. Optional fields security, critical,
+        mandatory come from the Update Center's release type (security, emergency); state from pause / pull.
         Devices check 15 min after boot and every 6 h (WSOS-AUP-001).
       type: object
       required: [release_id, version, min_version, ring, arch, signature]

@@ -6,7 +6,13 @@ import type { KeyObject } from 'node:crypto';
 import { canDefer, decide, verifyLicence, verifyManifest, type Decision, type Licence, type Manifest, type Mode, type Ring } from './updates.ts';
 import type { Job, PackageService } from './service.ts';
 
+/** The WorkSuite Update Center (Livezen-Technologies/worksite-download), which serves manifests and the APT repo. */
 export const DEFAULT_HOST = 'https://download.worksuitecloud.com';
+/** Device-local defaults (root-owned); an enrolled organisation's policy overrides every field. */
+export const LOCAL_CONFIG = '/etc/worksuite/updates.json';
+
+/** /etc/worksuite/updates.json: host for unmanaged devices and images built for a private Update Center. */
+export interface LocalUpdateConfig { update_host?: string; update_ring?: Ring; update_mode?: Mode }
 export const FIRST_CHECK_MS = 15 * 60_000;
 export const CHECK_EVERY_MS = 6 * 60 * 60_000;
 export const WARNING_MS = 15 * 60_000;
@@ -25,7 +31,10 @@ export interface UpdateStatus {
   reason: string | null;             // waiting reason, refusal or error
   restart_at: number | null;
   last_check: number | null;
-  resumed: boolean;                  // this install picks up a download that was interrupted (apt resumes partials)
+  resumed: boolean;
+  /** Where manifests come from (Update Center or the organisation's mirror). */
+  update_host?: string;
+  ring?: Ring;                  // this install picks up a download that was interrupted (apt resumes partials)
 }
 
 export interface CoordinatorEnv {
@@ -37,8 +46,10 @@ export interface CoordinatorEnv {
   deviceKey(): string;
   idle(): Promise<boolean>;
   metered(): Promise<boolean>;
-  /** Point the WorkSuite APT source at the ring's suite (trixie-dev | trixie-pilot | trixie-stable). */
-  setSuite(suite: string): void;
+  /** Point the WorkSuite APT source at the ring's suite (trixie-dev | trixie-pilot | trixie-stable) on `repo`. */
+  setSuite(suite: string, repo?: string): void;
+  /** LOCAL_CONFIG, or null when absent/invalid. */
+  config?(): LocalUpdateConfig | null;
   load(): { deferrals: Record<string, number> };
   save(s: { deferrals: Record<string, number> }): void;
   report(result: Record<string, unknown>): Promise<void>;
@@ -53,6 +64,18 @@ export interface CoordinatorEnv {
 }
 
 const SUITE: Record<Ring, string> = { development: 'trixie-dev', pilot: 'trixie-pilot', stable: 'trixie-stable' };
+
+const RINGS: Ring[] = ['development', 'pilot', 'stable'];
+const MODES: Mode[] = ['automatic', 'notify', 'manual'];
+
+/** Normalise an https origin (path ignored); anything else falls back. */
+export function updateHost(...candidates: (string | undefined | null)[]): string {
+  for (const c of candidates) {
+    if (!c) continue;
+    try { const u = new URL(c); if (u.protocol === 'https:' && !u.username && !u.password) return u.origin; } catch { /* next */ }
+  }
+  return DEFAULT_HOST;
+}
 
 export function manifestUrl(host: string, ring: Ring, arch: string) {
   const u = new URL(host);
@@ -86,19 +109,30 @@ export class Coordinator extends EventEmitter {
     this.emit('status', this.status);
   }
 
-  private ring(): Ring { return this.env.policy()?.update_ring ?? 'stable'; }
+  private local(): LocalUpdateConfig { try { return this.env.config?.() ?? {}; } catch { return {}; } }
+  /** Policy (enrolled organisation) wins over /etc/worksuite/updates.json, which wins over the defaults. */
+  private ring(): Ring {
+    const r = this.env.policy()?.update_ring ?? this.local().update_ring;
+    return r && RINGS.includes(r) ? r : 'stable';
+  }
+  private mode(): Mode {
+    const m = this.env.policy()?.update_mode ?? this.local().update_mode;
+    return m && MODES.includes(m) ? m : 'automatic';
+  }
+  host(): string { return updateHost(this.env.policy()?.update_mirror, this.local().update_host); }
   private deferrals(id: string) { return this.env.load().deferrals[id] ?? 0; }
 
   async check(): Promise<Decision | null> {
     if (this.status.state === 'installing' || this.status.state === 'restart_pending') return null;
     const policy = this.env.policy();
     const ring = this.ring();
-    this.set({ state: 'checking', installed: this.env.installedVersion() });
-    this.env.setSuite(SUITE[ring]);
+    const host = this.host();
+    this.set({ state: 'checking', installed: this.env.installedVersion(), update_host: host, ring });
+    this.env.setSuite(SUITE[ring], `${host}/os/apt`);
     let raw: unknown;
     try {
       // WSOS-AUP-009: an enterprise mirror from policy; WorkSuite signatures are still required.
-      raw = await this.env.fetchJson(manifestUrl(policy?.update_mirror || DEFAULT_HOST, ring, this.env.arch));
+      raw = await this.env.fetchJson(manifestUrl(host, ring, this.env.arch));
     } catch (e) {
       this.set({ state: 'failed', reason: `can't reach the update server`, last_check: this.env.now() });
       return null;
@@ -113,7 +147,7 @@ export class Coordinator extends EventEmitter {
     const used = this.deferrals(raw.release_id);
     const licence = await this.licence();
     const d = decide({ licence,
-      manifest: raw, installed: this.env.installedVersion(), managed: !!policy, mode: policy?.update_mode ?? 'automatic',
+      manifest: raw, installed: this.env.installedVersion(), managed: !!policy, mode: this.mode(),
       window: policy?.maintenance_window, deviceKey: this.env.deviceKey(), now: new Date(this.env.now()),
       idle: await this.env.idle(), metered: await this.env.metered(), deferrals: used,
     });

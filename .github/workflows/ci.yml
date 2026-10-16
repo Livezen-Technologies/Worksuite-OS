@@ -67,6 +67,7 @@ jobs:
         with:
           node-version: 22
       - run: node --test tools/sbom/spdx.test.mjs
+      - run: node --test tools/release/publish-update-center.test.mjs
       # No private key material in the tree (WSOS-SEC-011).
       - run: "! git grep -I -l -e 'BEGIN [A-Z ]*PRIVATE KEY' -- . ':!docs/**'"
 

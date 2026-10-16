@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import dbus from 'dbus-next';
 import { busAuthority, loadIntrospection, NAME, serve } from './dbus.ts';
 import { PackageService, type DevicePolicy, type Env, type RunResult } from './service.ts';
-import { Coordinator, type CoordinatorEnv } from './coordinator.ts';
+import { Coordinator, LOCAL_CONFIG, updateHost, type CoordinatorEnv } from './coordinator.ts';
 import { loadCatalog } from './catalog.ts';
 
 const POLICY = '/run/worksuite-device-agent/policy.json';
@@ -38,6 +38,14 @@ export const linuxEnv: Env = {
     const d = '/etc/apt/sources.list.d';
     if (existsSync(d)) for (const f of readdirSync(d)) if (/\.(list|sources)$/.test(f)) files.push([join(d, f), readOr(join(d, f))]);
     return files;
+  },
+  // The Update Center the coordinator uses (policy update_mirror > /etc/worksuite/updates.json > default) is an approved
+  // APT source too, so pointing worksuite.sources at it doesn't lock APT.
+  updateHosts: () => {
+    let local: { update_host?: string } = {};
+    try { local = JSON.parse(readFileSync('/etc/worksuite/updates.json', 'utf8')); } catch { /* defaults */ }
+    const p = linuxEnv.policy() as { update_mirror?: string } | null;
+    return [new URL(updateHost(p?.update_mirror, local.update_host)).host];
   },
   power: () => {
     const base = '/sys/class/power_supply';
@@ -73,6 +81,13 @@ const pkgVersion = (name: string) => { try { return execFileSync('dpkg-query', [
 
 const UPDATE_STATUS_DIR = '/run/worksuite-package-service';
 
+/** Point worksuite.sources (deb822) at `repo` (an https …/os/apt URL) and `suite`; keeps Signed-By. */
+export function rewriteSources(text: string, suite: string, repo?: string): string {
+  let next = text.replace(/^Suites:.*$/m, `Suites: ${suite}`);
+  if (repo && /^https:\/\/[A-Za-z0-9.-]+(:\d+)?\/[A-Za-z0-9._/-]*$/.test(repo)) next = next.replace(/^URIs:.*$/m, `URIs: ${repo}`);
+  return next;
+}
+
 export function coordinatorEnv(): CoordinatorEnv {
   return {
     async fetchJson(url) {
@@ -89,10 +104,11 @@ export function coordinatorEnv(): CoordinatorEnv {
     idle: async () => (await busctlGet(['org.freedesktop.login1', '/org/freedesktop/login1', 'org.freedesktop.login1.Manager', 'IdleHint'])) === 'b true',
     // NetworkManager Metered: 1 = yes, 3 = guess-yes.
     metered: async () => /^u [13]$/.test(await busctlGet(['org.freedesktop.NetworkManager', '/org/freedesktop/NetworkManager', 'org.freedesktop.NetworkManager', 'Metered'])),
-    setSuite(suite) {
+    config: () => { try { return JSON.parse(readFileSync(LOCAL_CONFIG, 'utf8')); } catch { return null; } },
+    setSuite(suite, repo) {
       if (!existsSync(WORKSUITE_SOURCES)) return;
       const text = readFileSync(WORKSUITE_SOURCES, 'utf8');
-      const next = text.replace(/^Suites:.*$/m, `Suites: ${suite}`);
+      const next = rewriteSources(text, suite, repo);
       if (next !== text) { writeFileSync(WORKSUITE_SOURCES + '.tmp', next, { mode: 0o644 }); renameSync(WORKSUITE_SOURCES + '.tmp', WORKSUITE_SOURCES); }
     },
     // WSOS-UPD-001: the WorkSuite system units must still be active after an update.
