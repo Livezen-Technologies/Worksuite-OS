@@ -44,7 +44,7 @@ fun refresh_callback() {
   ring.angle += 0.0898;                                  # one turn per 1.4 s at Plymouth's 50 Hz refresh
   if (ring.angle > 6.2832) ring.angle -= 6.2832;
   ring.arc.SetImage(ring.arc_image.Rotate(ring.angle));
-  if (bar.original) step_bar();
+  if (bar.original) { step_bar(); step_shimmer(); }
 }
 Plymouth.SetRefreshRate(50);
 Plymouth.SetRefreshFunction(refresh_callback);
@@ -71,6 +71,11 @@ track.sprite.SetPosition(track.x, track.y, 1);
 bar.original = Image("progress-bar.png");
 bar.sprite = Sprite();
 bar.sprite.SetPosition(track.x, track.y, 2);
+shimmer.original = Image("progress-shimmer.png");     # 96 x 4, white to transparent both ways
+shimmer.sprite = Sprite();
+shimmer.sprite.SetOpacity(0);
+shimmer.t = 0;
+shimmer.shown = -1;
 phase = Sprite();
 brand = Sprite(text(VERSION_S, 12, 0.369, 0.451, 0.612, MONO));
 brand.SetPosition(track.x + 420 - brand.GetImage().GetWidth(), track.y + 14, 3);
@@ -85,7 +90,7 @@ fun set_phase(p) {
   }
 }
 # The fill eases toward the reported progress on every 50 Hz frame instead of jumping (the board's fill is a
-# plain gradient of the current width: no shimmer or sweep; only the ring is animated, 1.4 s linear).
+# plain gradient of the current width; a soft light sweeps across the fill every 1.6 s, as on the shell's bars).
 bar.target = 0;
 bar.shown = -1;
 bar.w = 4;
@@ -104,6 +109,28 @@ fun step_bar() {
     bar.sprite.SetImage(bar.original.Scale(w, 4));
     bar.shown = w;
   }
+}
+
+# Shimmer: a 96 px highlight travels from left of the fill to past its right end in 80 frames (1.6 s at 50 Hz).
+# Plymouth has no clipping, so the part inside [0, fill] is cropped by scaling the image to that width.
+fun step_shimmer() {
+  shimmer.t += 1;
+  if (shimmer.t >= 80) shimmer.t = 0;
+  fw = bar.shown;
+  if (fw < 24) { shimmer.sprite.SetOpacity(0); return; }
+  x0 = Math.Int(-96 + (fw + 96) * shimmer.t / 80);
+  l = x0;
+  if (l < 0) l = 0;
+  r = x0 + 96;
+  if (r > fw) r = fw;
+  vw = r - l;
+  if (vw < 2) { shimmer.sprite.SetOpacity(0); return; }
+  if (vw != shimmer.shown) {
+    shimmer.sprite.SetImage(shimmer.original.Scale(vw, 4));
+    shimmer.shown = vw;
+  }
+  shimmer.sprite.SetPosition(track.x + l, track.y, 3);
+  shimmer.sprite.SetOpacity(1);
 }
 
 fun progress_callback(duration, progress) {

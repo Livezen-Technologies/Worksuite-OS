@@ -182,6 +182,8 @@ const si: Partial<Record<MessageKey, string>> = {
   'settings.about.cpu': 'සකසනය',
   'settings.about.desktop': 'ඩෙස්ක්ටොප්',
   'settings.about.freeHome': 'ඔබේ නිවෙස් ෆෝල්ඩරයේ {size} නිදහස්',
+  'settings.about.storageUsed': '{total} න් {used} භාවිතයේ',
+  'progress.working': 'ක්‍රියාත්මක වෙමින්',
   'settings.about.graphics': 'ග්‍රැෆික්ස්',
   'settings.about.managedBy': 'කළමනාකරණය කරන්නේ',
   'settings.about.memory': 'මතකය',

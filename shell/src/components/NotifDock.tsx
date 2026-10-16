@@ -9,6 +9,7 @@ import { AppNoticeActions, dismissAppNotices } from './AppNoticeActions'
 import { appIdOf, notificationsApi } from '../lib/appNotifications'
 import { ageLabel } from '../lib/power'
 import { localeTag, useT } from '../i18n'
+import { AnimatedProgress, CountUp } from './AnimatedProgress'
 
 const TONE_BG: Record<TimedNotice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 const glass = 'rounded-[22px] border border-white/10 bg-[rgba(12,28,64,0.72)] shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-[28px] backdrop-saturate-[1.4]'
@@ -105,6 +106,7 @@ export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd 
                   <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                     <span className="flex items-baseline gap-1.5"><span className="truncate text-[13px] font-semibold">{x.title}</span><span className="ml-auto flex-none text-[11px] text-[#8FA3C8]">{ageLabel(x.at, now.getTime())}</span></span>
                     <span className="text-xs leading-[1.4] text-[#C9D6EE]">{x.body}</span>
+                    {x.value != null && <span className="mt-1 flex items-center gap-2"><AnimatedProgress value={x.value} label={x.title} height={4} className="flex-1" tone={x.value >= 100 ? 'success' : 'default'} /><span className="font-mono text-[11px] text-[#8FA3C8]"><CountUp value={Math.round(x.value)} /></span></span>}
                     {x.app && <AppNoticeActions notice={x} onDone={() => setNotices(notices.filter((n) => n.id !== x.id))} />}
                   </span>
                   <button type="button" aria-label={t('notes.dismiss')} onClick={() => dismiss(x.id)}

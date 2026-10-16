@@ -1,5 +1,6 @@
 // R3 Startup repair. Each row is a real check through the bridge; interrupted package changes are repaired by
 // the package service (polkit-authorized job). Progress is the share of checks finished.
+import { AnimatedProgress, CountUp } from '../../components/AnimatedProgress'
 import { useEffect, useRef, useState } from 'react'
 import { os, packageErrorText, type PackageJobEvent } from '../../lib/os'
 import { initialChecks, repairPercent, repairSummary, type CheckId, type CheckRow, type CheckState, type DoneInfo } from '../../lib/recovery'
@@ -80,10 +81,7 @@ export default function Repair({ onBack, onDone }: { onBack: () => void; onDone:
           <h1 className="m-0 text-[30px] font-bold">{stopped ? t('rec.repair.stopped') : t('rec.repair.checkingSystem')}</h1>
           <p className="m-0 text-[15px] text-[#8FA3C8]">{stopped ? t('rec.repair.skipped') : t('rec.repair.wait')}</p>
         </div>
-        <div role="progressbar" aria-label={t('rec.repair.progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-valuetext={t('rec.repair.pct', { percent: pct })}
-          className="h-2 overflow-hidden rounded bg-[rgba(127,178,255,0.12)]">
-          <div className="h-full rounded bg-[linear-gradient(90deg,#1F6BFF,#18D4F0)] transition-[width] duration-500" style={{ width: `${pct}%` }} />
-        </div>
+        <AnimatedProgress value={pct} label={t('rec.repair.progress')} valueText={t('rec.repair.pct', { percent: pct })} height={8} tone={stopped ? 'paused' : 'default'} />
         <ol className="m-0 flex list-none flex-col gap-1.5 p-0" aria-live="polite">
           {rows.map((c) => {
             const active = c.state === 'active'

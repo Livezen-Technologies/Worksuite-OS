@@ -182,6 +182,8 @@ const ta: Partial<Record<MessageKey, string>> = {
   'settings.about.cpu': 'செயலி',
   'settings.about.desktop': 'மேசைத்தளம்',
   'settings.about.freeHome': 'உங்கள் முகப்புக் கோப்புறையில் {size} காலி',
+  'settings.about.storageUsed': '{total} இல் {used} பயன்படுத்தப்பட்டது',
+  'progress.working': 'நடைபெறுகிறது',
   'settings.about.graphics': 'வரைகலை',
   'settings.about.managedBy': 'நிர்வகிப்பது',
   'settings.about.memory': 'நினைவகம்',

@@ -1,4 +1,5 @@
 // Shared pieces of the Files window (boards FMSide, FM1–FM6): icons, kinds, dates and the sidebar.
+import { AnimatedProgress, CountUp } from '../../components/AnimatedProgress'
 import { formatBytes, type FileEntry, type FilePlaces } from '../../lib/os'
 import { formatDate, t, type MessageKey } from '../../i18n'
 
@@ -116,9 +117,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
       <div role="group" aria-label={t('files.storageLabel')} className="mt-auto flex flex-col gap-2 rounded-[10px] px-2.5 py-3" style={{ background: C.card }}>
         {disk ? <>
           <div className="flex justify-between text-xs"><span>{disk.device}</span><span style={{ color: C.muted }}>{t('files.storage', { used: formatBytes(disk.used), total: formatBytes(disk.total) })}</span></div>
-          <div className="h-[5px] overflow-hidden rounded-[3px]" style={{ background: 'rgba(127,178,255,0.15)' }}>
-            <div className="h-full" style={{ width: `${Math.round((disk.used / Math.max(1, disk.total)) * 100)}%`, background: `linear-gradient(90deg, ${C.blue}, ${C.cyan})` }} />
-          </div>
+          <AnimatedProgress value={Math.round((disk.used / Math.max(1, disk.total)) * 100)} label={t('files.storageLabel')} height={5} shimmer={false} />
         </> : <span className="text-xs" style={{ color: C.muted }}>{t('files.storageUnknown')}</span>}
       </div>
     </nav>
