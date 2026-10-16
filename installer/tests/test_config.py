@@ -202,3 +202,17 @@ class CopyPageTest(unittest.TestCase):
         cpp = (ROOT / "modules" / "worksuiteconfirm" / "WorksuiteConfirmViewStep.cpp").read_text()
         self.assertIn("worksuiteImagePackages", cpp)
         self.assertIn("f_files - vfs.f_ffree", cpp)
+
+
+class PageIndexTest(unittest.TestCase):
+    def test_qml_pages_know_their_step_index(self):
+        # WsPage uses stepIndex to know it is the current page (and to skip itself in Express); a wrong one made the
+        # enroll page skip itself (localeq said 4 after the enroll page was added at 4).
+        seq = load(ROOT / "settings.conf")["sequence"]
+        shown = []
+        for block in seq:
+            shown += block["show"] if "show" in block else ["<exec>"]
+        for qml in (ROOT / "branding" / "worksuite").glob("*q.qml"):
+            m = re.search(r"^\s*stepIndex: (\d+)", qml.read_text(), re.M)
+            if m:
+                self.assertEqual(shown.index(qml.stem), int(m.group(1)), qml.name)
