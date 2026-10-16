@@ -2,7 +2,7 @@
 # One centred column, 28 px apart: the mark in a spinning ring (120 px), the title (Plex Sans Medium 28) over the
 # subtitle (Plex Sans 15, #8FA3C8), then a 420 x 4 progress bar with the phase on the left and "WorkSuite OS <version>" (filled in at package build)
 # on the right (Plex Mono 12, #5E739C); "Press Esc for details" sits 32 px from the bottom (Plex Mono 12, #3D5280).
-# Modes (Plymouth.GetMode): boot -> "Starting WorkSuite OS", shutdown -> "Shutting down", reboot -> "Restarting",
+# Modes (Plymouth.GetMode): boot -> "Booting…", shutdown -> "Shutting down…", reboot -> "Restarting…",
 # updates / system-upgrade / firmware-upgrade -> the same column with update progress and "Don't turn off" copy.
 # The disk-unlock prompt (LUKS, SRS full-disk encryption) appears under the bar, in a 420 x 44 field.
 # Plymouth's script language has no ternary operator: every choice below is an if/else.
@@ -53,11 +53,11 @@ Plymouth.SetRefreshFunction(refresh_callback);
 mode = Plymouth.GetMode();
 updating = 0;
 if (mode == "updates" || mode == "system-upgrade" || mode == "firmware-upgrade") updating = 1;
-if (mode == "shutdown") { title_s = "Shutting down"; sub_s = "Saving settings and closing apps."; }
-else if (mode == "reboot") { title_s = "Restarting"; sub_s = "You’ll be back in a moment."; }
+if (mode == "shutdown") { title_s = "Shutting down…"; sub_s = "Saving settings and closing apps."; }
+else if (mode == "reboot") { title_s = "Restarting…"; sub_s = "You’ll be back in a moment."; }
 else if (mode == "firmware-upgrade") { title_s = "Updating firmware"; sub_s = "Don’t turn off your computer. It will restart when done."; }
 else if (updating) { title_s = "Installing updates"; sub_s = "Don’t turn off your computer. It will restart when done."; }
-else { title_s = "Starting WorkSuite OS"; sub_s = "Getting your workspace ready."; }
+else { title_s = "Booting…"; sub_s = "Getting your workspace ready."; }
 title = Sprite(text(title_s, 28, 0.91, 0.933, 0.98, SANS_MEDIUM));
 place_center(title, title_y);
 sub = Sprite(text(sub_s, 15, 0.561, 0.639, 0.784, SANS));

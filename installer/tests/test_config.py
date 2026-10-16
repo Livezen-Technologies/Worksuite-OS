@@ -136,7 +136,10 @@ class BootSplashTest(unittest.TestCase):
         live = (REPO / "live-build/auto/config").read_text()
         self.assertRegex(live, r"bootappend-live \"[^\"]*\bsplash\b[^\"]*plymouth\.ignore-serial-consoles")
         grub = (REPO / "branding/grub/worksuite.cfg").read_text()
-        self.assertIn('GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"', grub)
+        self.assertIn('GRUB_CMDLINE_LINUX_DEFAULT="quiet splash ', grub)
+        for quiet in ("loglevel=3", "systemd.show_status=false", "rd.udev.log_level=3", "vt.global_cursor_default=0"):
+            self.assertIn(quiet, grub)
+        self.assertIn("GRUB_TIMEOUT_STYLE=hidden", grub)
         self.assertIn("GRUB_GFXPAYLOAD_LINUX=keep", grub)
         self.assertEqual(load(MODULES / "grubcfg.conf")["kernel_params"], ["quiet"])
 

@@ -49,6 +49,11 @@ case "${1:-}" in
     --ready)  ready ;;
     --logout) cleanup; [ -n "${LABWC_PID:-}" ] && kill -TERM "$LABWC_PID" ;;
     "")
+        # Nothing the session prints may reach the VT (Xwayland's xkbcomp warnings showed on sign-out and restart):
+        # Labwc and everything it starts log to the journal instead.
+        if [ -z "${WORKSUITE_SESSION_JOURNAL:-}" ] && command -v systemd-cat >/dev/null 2>&1; then
+            WORKSUITE_SESSION_JOURNAL=1 exec systemd-cat -t worksuite-session "$0"
+        fi
         # Kiosk mode (device policy, WSOS-AUTH-002): the kiosk account gets the kiosk session, never the full shell.
         kiosk=$(sed -n 's/^KIOSK_USER=//p' "${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}" 2>/dev/null | head -n 1)
         if [ -n "$kiosk" ] && [ "$kiosk" = "$(id -un)" ]; then exec "${WORKSUITE_KIOSK_SESSION:-/usr/lib/worksuite/worksuite-kiosk-session}"; fi

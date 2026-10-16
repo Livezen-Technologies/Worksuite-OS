@@ -30,6 +30,17 @@ grep -q pam_faillock.so /etc/pam.d/common-auth || { echo "pam_faillock is not en
 grep -q pam_gnome_keyring.so /etc/pam.d/common-auth && grep -q pam_gnome_keyring.so /etc/pam.d/common-session || { echo "pam_gnome_keyring is not enabled" >&2; exit 1; }
 # Boot splash: the WorkSuite Plymouth theme, with the DRM/framebuffer drivers in the initramfs (WSOS-BOOT splash).
 plymouth-set-default-theme worksuite
+# The splash from the first frame, and kept until the greeter takes the screen: no console text in between.
+mkdir -p /etc/plymouth
+printf '[Daemon]\nTheme=worksuite\nShowDelay=0\nDeviceTimeout=8\n' > /etc/plymouth/plymouthd.conf
+mkdir -p /etc/systemd/system/greetd.service.d
+cat > /etc/systemd/system/greetd.service.d/worksuite-quiet.conf <<'CONF'
+[Unit]
+# The greeter replaces the splash directly: start once Plymouth has let go of the display, on a cleared VT.
+After=plymouth-quit-wait.service
+[Service]
+ExecStartPre=-/bin/sh -c 'printf "\\033[2J\\033[H\\033[?25l" > /dev/tty7'
+CONF
 grep -qx 'FRAMEBUFFER=y' /etc/initramfs-tools/conf.d/worksuite-splash || { echo "initramfs splash config missing" >&2; exit 1; }
 [ -x /usr/share/initramfs-tools/hooks/worksuite-plymouth-fonts ] || { echo "splash font initramfs hook missing" >&2; exit 1; }
 # The same splash on shutdown and restart: plymouth ships these statically wanted by poweroff/reboot.target.

@@ -243,7 +243,8 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       )}
 
       {/* Work area for open windows, above the taskbar */}
-      {children && <div className="absolute inset-x-0 top-0 bottom-[52px] z-10 px-6 pt-5 pb-5">{children}</div>}
+      {/* Only with a window open: an empty work area would cover the wallpaper (its widgets and right-click menu). */}
+      {Children.toArray(children).length > 0 && <div className="absolute inset-x-0 top-0 bottom-[52px] z-10 px-6 pt-5 pb-5">{children}</div>}
 
       {toast && !dnd && !trayOpen && (
         <div role="status" className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">

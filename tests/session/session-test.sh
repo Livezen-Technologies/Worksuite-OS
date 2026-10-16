@@ -100,7 +100,7 @@ kill -0 $labwc 2>/dev/null && bad "logout ends the compositor" || ok "logout end
 export WORKSUITE_NOTICE_DIR="$T/notice"
 stub labwc 'exit 1'
 echo ': wlr env' > "$T/wlr-env"
-WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"; rc=$?
+WORKSUITE_SESSION_JOURNAL=1 WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"; rc=$?
 check "session exit status is the compositor's" "$rc" 1
 [ -f "$T/notice/uid-$(id -u)" ] && ok "abnormal exit leaves a greeter notice" || bad "abnormal exit leaves a greeter notice"
 stub zenity 'echo "zenity $*" >> "$LOG"'
@@ -128,7 +128,7 @@ grep -q gtkgreet "$LOG" && ok "gtkgreet is the fallback without GTK 4" || bad "g
 rm -f "$T/stub/python3"
 stub labwc 'exit 0'
 stub xdg-user-dirs-update 'echo "xdg-user-dirs-update" >> "$LOG"'
-WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"
+WORKSUITE_SESSION_JOURNAL=1 WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"
 grep -q "^xdg-user-dirs-update" "$LOG" && ok "session start creates the XDG user folders" || bad "session start creates the XDG user folders"
 [ -e "$T/notice/uid-$(id -u)" ] && bad "clean exit leaves no notice" || ok "clean exit leaves no notice"
 
@@ -240,6 +240,12 @@ grep -q '^ReadWritePaths=-%h/.local/share/worksuite -%t/worksuite$' "$ROOT/servi
   && grep -q '^d %h/.local/share/worksuite ' "$ROOT/services/ai/systemd/user-tmpfiles.d/worksuite-ai.conf" \
   && grep -q 'user-tmpfiles.d/worksuite-ai.conf usr/share/user-tmpfiles.d/' "$ROOT/packaging/debian/worksuite-ai.install" \
   && ok "worksuite-ai: data dirs created by user tmpfiles, optional in the sandbox" || bad "worksuite-ai: data dirs created by user tmpfiles, optional in the sandbox"
+
+# ---- no console text: the session's output goes to the journal, never the VT ----
+grep -q 'exec systemd-cat -t worksuite-session "$0"' "$BIN/worksuite-session" && ok "session output goes to the journal" || bad "session output goes to the journal"
+H=$ROOT/live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot
+grep -q 'ShowDelay=0' "$H" && grep -q 'After=plymouth-quit-wait.service' "$H" && grep -q 'systemd.show_status=false' "$ROOT/live-build/auto/config" \
+  && ok "splash from the first frame until the greeter; live boot quiet" || bad "splash from the first frame until the greeter; live boot quiet"
 
 echo "1..$n"
 exit $fail
