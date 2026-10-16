@@ -203,6 +203,8 @@ export interface OsUpdateStatus {
   deferrals_left: number | null; reason: string | null; restart_at: number | null; last_check: number | null
   /** Emergency security release; resumed: this install picks up an interrupted download (older services omit both). */
   critical?: boolean; resumed?: boolean
+  /** Update Center (or the organisation's mirror) the coordinator checked, and the device's ring. */
+  update_host?: string; ring?: 'development' | 'pilot' | 'stable'
 }
 export interface CatalogEntry {
   id: string; source: 'apt' | 'flatpak' | 'appimage'; name: string; arches: string[]

@@ -31,8 +31,11 @@ Errors (`lk.worksuite.Error.*`): `NotAuthorized`, `NotInCatalog`, `InvalidArgs`,
 
 ## Update coordinator (`src/updates.ts`, `src/coordinator.ts`)
 
-Checks 15 min after boot and every 6 h (WSOS-AUP-001) at `https://download.worksuitecloud.com/os/manifests/<ring>/<arch>.json`
-(or the policy's `update_mirror`), verifies the manifest's Ed25519 signature against
+Checks 15 min after boot and every 6 h (WSOS-AUP-001) at `<host>/os/manifests/<ring>/<arch>.json` on the WorkSuite
+Update Center (Livezen-Technologies/worksite-download). `<host>` is, in order: the enrolled organisation's policy
+`update_mirror`, `update_host` in `/etc/worksuite/updates.json` (shipped by the image; also `update_ring` and
+`update_mode` for unmanaged devices), then `https://download.worksuitecloud.com`; https only. The same host's
+`/os/apt` becomes the URI of `worksuite.sources` and an approved APT source. It verifies the manifest's Ed25519 signature against
 `/usr/share/worksuite/keys/release/<key_id>.pem` and rejects one for another ring or arch (WSOS-AUP-002), points the
 WorkSuite APT source at the ring's suite (`trixie-dev|pilot|stable`), then decides:
 

@@ -6,7 +6,8 @@
 # a last hook removes both from the image).
 # WORKSUITE_TEST_SERVER=DIR (from tests/vm/server-e2e.sh prepare) builds a separate *-test ISO that trusts that test
 # CA, maps ws.test to the QEMU host, ships the test server's signing keys and runs the end-to-end client.
-# WORKSUITE_REPO=1 also adds download.worksuitecloud.com/os/apt (once it exists and its keyring is packaged).
+# WORKSUITE_REPO=1 also adds the Update Center's APT repo, download.worksuitecloud.com/os/apt (needs the packaged
+# archive keyring); WORKSUITE_UPDATE_HOST=https://… points the image at another Update Center.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 : "${ARCH:=amd64}" "${SNAPSHOT:?pin a snapshot.debian.org timestamp}" "${WORKSUITE_REPO:=0}"
@@ -126,7 +127,20 @@ if [ "${WORKSUITE_PERF:-0}" = 1 ]; then
   chmod +x config/hooks/normal/9001-worksuite-perf.hook.chroot
   suffix="${suffix:-}-perf"
 fi
-[ "$WORKSUITE_REPO" = 1 ] || rm -f config/archives/worksuite.list.* config/includes.chroot/etc/apt/sources.list.d/worksuite.sources
+if [ "$WORKSUITE_REPO" = 1 ]; then
+  # The Update Center's OS repository (https://download.worksuitecloud.com/os/apt), verified with the archive keyring
+  # for the image build too. WORKSUITE_UPDATE_HOST points the image (APT source + coordinator) at another Update Center.
+  key="$here/../packaging/keyring/worksuite-archive-keyring.gpg"
+  [ -f "$key" ] || { echo "WORKSUITE_REPO=1 needs packaging/keyring/worksuite-archive-keyring.gpg" >&2; exit 1; }
+  cp "$key" config/archives/worksuite.key.chroot; cp "$key" config/archives/worksuite.key.binary
+  if [ -n "${WORKSUITE_UPDATE_HOST:-}" ]; then
+    case "$WORKSUITE_UPDATE_HOST" in https://*) ;; *) echo "WORKSUITE_UPDATE_HOST must be https://" >&2; exit 1 ;; esac
+    h=${WORKSUITE_UPDATE_HOST%/}
+    sed -i "s#https://download.worksuitecloud.com#$h#g" config/archives/worksuite.list.* config/includes.chroot/etc/apt/sources.list.d/worksuite.sources config/includes.chroot/etc/worksuite/updates.json
+  fi
+else
+  rm -f config/archives/worksuite.list.* config/includes.chroot/etc/apt/sources.list.d/worksuite.sources
+fi
 ARCH="$ARCH" SNAPSHOT="$SNAPSHOT" lb config
 # Snapshot Release files are past Valid-Until by design; auto/config disables that check for apt.
 lb build > build.log 2>&1 || { tail -40 build.log >&2; exit 1; }
