@@ -23,6 +23,9 @@ unit services/device-agent/systemd/worksuite-device-agent.service worksuite-devi
 unit services/package-service/systemd/worksuite-package-service.service worksuite-package-service
 unit services/directory/systemd/worksuite-breakglass-rotate.service worksuite-directory
 unit services/session/systemd/user/worksuite-shell.service worksuite-shell
+unit services/ai/systemd/worksuite-ai.service worksuite-ai
+unit services/ai/systemd/worksuite-ai-engine.service worksuite-ai-engine
+check "AI engine has no network" 'grep -q "^RestrictAddressFamilies=AF_UNIX\$" "$here/services/ai/systemd/worksuite-ai-engine.service" && grep -q "^  deny network inet," "$aa/worksuite-ai-engine"'
 unit services/recovery-boot/systemd/worksuite-recovery-shell.service worksuite-shell
 check "shell profile allows the Wayland bridge" 'grep -q "peer=(name=lk.worksuite.WaylandBridge1)" "$aa/worksuite-shell"'
 check "shell profile may own lk.worksuite.Shell1" 'grep -q "dbus (bind) bus=session name=lk.worksuite.Shell1" "$aa/worksuite-shell"'

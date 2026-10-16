@@ -15,6 +15,12 @@ override_dh_auto_build:
 	# The device agent serves lk.worksuite.DeviceAgent1 with the same dbus-next (WSOS-ARC-002).
 	cd services/device-agent && npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
 	find services/device-agent/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore \) -delete
+	# AI assistant: node-llama-cpp with its prebuilt llama.cpp for this architecture (CPU and Vulkan; never compiled
+	# here or on the device). The CUDA builds and other architectures are dropped; no model is ever packaged.
+	cd services/ai && npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+	a=$$(case $(DEB_HOST_ARCH) in amd64) echo x64;; arm64) echo arm64;; esac); \
+	  find services/ai/node_modules/@node-llama-cpp -mindepth 1 -maxdepth 1 ! -name "linux-$$a" ! -name "linux-$$a-vulkan" -exec rm -rf {} +
+	find services/ai/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore -o -name "*.gguf" \) -delete
 	# Shell: renderer + Electron main, and the Electron runtime for this architecture.
 	cd shell && npm ci --no-audit --no-fund && npm run build
 	# Calamares view module (installer/modules/worksuiteconfirm).
@@ -80,6 +86,7 @@ override_dh_auto_test:
 	cd services/sync && npm test
 	cd services/credentials && npm test
 	cd services/device-agent && npm test
+	cd services/ai && npm test
 	cd services/directory && npm test
 	tests/boot/recovery-boot.test.sh
 	cd shell && npx vitest run

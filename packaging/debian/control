@@ -21,7 +21,7 @@ Rules-Requires-Root: no
 Package: worksuite-desktop
 Architecture: all
 Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archive-keyring,
- worksuite-user-services, worksuite-package-service, worksuite-device-agent, worksuite-directory, worksuite-recovery-boot, worksuite-wayland-bridge,
+ worksuite-user-services, worksuite-ai, worksuite-package-service, worksuite-device-agent, worksuite-directory, worksuite-recovery-boot, worksuite-wayland-bridge,
  labwc, wlr-randr, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, grim, xdg-desktop-portal-gtk, gnome-keyring,
  pipewire, pipewire-pulse, wireplumber, network-manager, bluez, udisks2, upower, cups, polkitd, pkexec,
@@ -78,6 +78,19 @@ Description: WorkSuite user services (catalog, files, credentials broker, sync)
  Per-user services: the offline-first sync service (local SQLite store and
  outbox) and the credentials broker (OneAuth sign-in, keyring-held refresh
  tokens).
+
+Package: worksuite-ai
+Architecture: amd64 arm64
+Depends: worksuite-shell (= ${binary:Version}), systemd, ${misc:Depends}
+Recommends: libvulkan1, mesa-vulkan-drivers
+Description: WorkSuite AI assistant: models that run on this device
+ Per-user service behind a 0600 Unix socket that runs a downloaded GGUF model
+ with llama.cpp (node-llama-cpp, prebuilt CPU and Vulkan builds) for the
+ shell's assistant. Inference runs in its own unit with no network and with
+ memory and CPU limits. Models are never shipped in the image: they are
+ downloaded over HTTPS from the packaged catalog's host, verified against a
+ pinned SHA-256 before every load, and can be switched off or limited by the
+ organization's device policy. Prompts and answers are never logged.
 
 Package: worksuite-package-service
 Architecture: amd64 arm64

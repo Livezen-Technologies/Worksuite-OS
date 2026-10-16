@@ -1,0 +1,35 @@
+# AppArmor profile for worksuite-ai-engine (services/ai; WSOS-SEC-009): llama.cpp with no network. It reads model
+# files (after worksuite-ai checked their SHA-256) and writes nothing outside its own socket. Applied by the unit.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile worksuite-ai-engine flags=(attach_disconnected) {
+  include <abstractions/base>
+  include <abstractions/dri-common>
+  include <abstractions/mesa>
+  include <abstractions/vulkan>
+
+  # No network: Unix sockets only, and only its own.
+  deny network inet,
+  deny network inet6,
+  network unix stream,
+  unix (create, bind, listen, accept, send, receive) type=stream,
+
+  /{usr/,}bin/{sh,dash} ix,
+  /usr/bin/worksuite-node rix,
+  /usr/lib/worksuite/shell/electron/electron mrix,
+  /usr/lib/worksuite/shell/electron/** mr,
+  /usr/lib/worksuite/ai/** mr,
+  /usr/lib/@{multiarch}/** mr,
+  @{PROC}/** r,
+  /sys/devices/system/cpu/** r,
+  /sys/devices/system/node/** r,
+  /dev/dri/** rw,
+  /dev/shm/** rwk,
+  /tmp/** rwk,
+  # Model files: this person's and an administrator's (mapped, read only).
+  owner @{HOME}/.local/share/worksuite/ai/models/** mr,
+  /var/lib/worksuite/ai/models/** mr,
+  owner /run/user/*/worksuite/ai-engine/ rw,
+  owner /run/user/*/worksuite/ai-engine/engine.sock rw,
+}

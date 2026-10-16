@@ -1,0 +1,4 @@
+#!/bin/sh
+# worksuite-ai system-install <model-id> <file.gguf>: an administrator installs a model for everyone on this computer
+# after checking it against the catalog's pinned SHA-256 (/var/lib/worksuite/ai/models). Run as root.
+exec /usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/ai/src/main.ts "$@"

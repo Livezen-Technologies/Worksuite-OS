@@ -1,5 +1,10 @@
 # WorkSuite desktop (pulls labwc, greetd, portals, PipeWire, NetworkManager, ...)
 worksuite-desktop
+# On-device AI assistant (services/ai): the service and llama.cpp runtime only; models are downloaded later, never in
+# the image. Vulkan for GPUs that have it (the build installs no recommends).
+worksuite-ai
+libvulkan1
+mesa-vulkan-drivers
 # Installer (live only; Calamares removes itself from the installed system)
 calamares
 calamares-settings-worksuite

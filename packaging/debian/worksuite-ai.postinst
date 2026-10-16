@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+  # Models an administrator installs for everyone (worksuite-ai system-install); readable by all, written by root.
+  install -d -m 0755 /var/lib/worksuite /var/lib/worksuite/ai /var/lib/worksuite/ai/models
+  if [ -x /usr/sbin/apparmor_parser ] && [ -d /sys/kernel/security/apparmor ]; then
+    apparmor_parser -r -T -W /etc/apparmor.d/worksuite-ai /etc/apparmor.d/worksuite-ai-engine || true
+  fi
+fi
+#DEBHELPER#
+exit 0
