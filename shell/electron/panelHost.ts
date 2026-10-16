@@ -12,7 +12,7 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
     client = new PanelClient(bus as never, {
       windows: (w) => send('ws:panelWindowsChanged', w),
       tray: (t) => send('ws:panelTrayChanged', t),
-      launcher: (a) => { if (a === 'taskview') void taskView(); else send('ws:launcher', a) },
+      launcher: (a) => { if (a === 'taskview') void tv.open(); else send('ws:launcher', a) },
       outputs: outputsChanged,
       openArchive,
       workspaces: (w) => send('ws:panelWorkspacesChanged', w),
@@ -23,18 +23,12 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
   }
   const c = client
   const none = { ok: false, error: 'bridge_unavailable' }
-  // Task View (Super+Tab, the taskbar button, three fingers up): the output is captured first, while the apps are
-  // still on screen, then the shell's window is raised over them. The capture is a data: URL in memory only.
-  let taskViewOpen = false
-  async function taskView(fromShell = false) {
-    if (taskViewOpen) { send('ws:launcher', 'taskview'); return }
-    const previous = c?.windows.find((w) => w.flags & ACTIVATED_FLAG && w.appId !== 'worksuite-shell')?.handle ?? ''
-    const capture = c && !fromShell && c.workspaces.capture ? await c.captureOutput('', 480) : null
-    send('ws:taskView', { capture, previous })
-    const own = c?.shellWindow()
-    if (own) await c?.activate(own.handle)
-  }
-  handle('ws:panelTaskView', (open) => { if (open === 'open') void taskView(true); else taskViewOpen = open === '1'; return true })
+  const tv = taskViewHost(c, send)
+  handle('ws:panelTaskView', (open) => {
+    if (open === 'open') void tv.open(true)
+    else tv.state(open === '1')
+    return true
+  })
   const n16 = (n: string) => Math.max(1, Math.min(MAX_DESKTOPS, Number(n) | 0))
   handle('ws:panelWorkspaceCreate', () => (c ? c.createWorkspace() : none))
   handle('ws:panelWorkspaceRemove', (n) => (c ? c.removeWorkspace(n16(n)) : none))
@@ -58,4 +52,41 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
   handle('ws:panelMoveToWorkspace', (h, n) => (c ? c.moveToWorkspace(h, n16(n)) : none))
   handle('ws:panelTrayActivate', (k, x, y) => (c ? c.trayActivate(k, Number(x) || 0, Number(y) || 0) : none))
   return client
+}
+
+type TaskViewClient = Pick<PanelClient, 'windows' | 'workspaces' | 'captureOutput' | 'shellWindow' | 'setShellRaised' | 'activate'>
+
+/** Task View (Super+Tab, the taskbar button, three fingers up): the output is captured first, while the apps are still
+ *  on screen, then the shell's window is lifted over them. The shell's windows are always on bottom (Labwc rc.xml), so
+ *  activating one alone would leave it under the apps; closing Task View puts it back down, also when it closes before
+ *  the lift is done. The capture is a data: URL in memory only. */
+export function taskViewHost(c: TaskViewClient | null, send: (channel: string, payload: unknown) => void) {
+  let isOpen = false
+  let lifted = ''
+  let opened = 0, closed = 0
+  async function lower() {
+    const h = lifted
+    lifted = ''
+    if (h && c) await c.setShellRaised(h, false)
+  }
+  return {
+    async open(fromShell = false) {
+      if (isOpen) { send('ws:launcher', 'taskview'); return }
+      const seq = ++opened
+      const previous = c?.windows.find((w) => w.flags & ACTIVATED_FLAG && w.appId !== 'worksuite-shell')?.handle ?? ''
+      const capture = c && !fromShell && c.workspaces.capture ? await c.captureOutput('', 480) : null
+      send('ws:taskView', { capture, previous })
+      const own = c?.shellWindow()
+      if (!own || !c) return
+      const r = await c.setShellRaised(own.handle, true)
+      if (!r.ok) { await c.activate(own.handle); return }
+      lifted = own.handle
+      if (closed >= seq) await lower()
+    },
+    /** The renderer's Task View mounted (true) or closed (false). */
+    state(open: boolean) {
+      isOpen = open
+      if (!open) { closed = opened; void lower() }
+    },
+  }
 }

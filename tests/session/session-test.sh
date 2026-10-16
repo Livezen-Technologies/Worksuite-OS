@@ -96,6 +96,22 @@ done
 check "logout: sync stops before the keyring locks" "$(grep -n -e worksuite-sync -e Secret.Service.Lock "$LOG" | cut -d: -f1 | tr '\n' ' ')" "1 3 "
 kill -0 $labwc 2>/dev/null && bad "logout ends the compositor" || ok "logout ends the compositor"
 
+# ---- a stale user rc.xml is rebuilt from the system file (the shell was omnipresent and hid every app) ----
+mkdir -p "$T/sysconf" "$T/home/.config/worksuite/labwc"
+cp "$(dirname "$0")/../../services/session/labwc/rc.xml" "$T/sysconf/rc.xml"
+sed -e 's|<action name="ToggleAlwaysOnBottom"/>|<action name="ToggleOmnipresent"/>|' \
+    -e 's|<desktops number="1">.*</desktops>|<desktops number="2"><popupTime>0</popupTime><names><name>Mail</name><name>Code</name></names></desktops>|' \
+    "$T/sysconf/rc.xml" > "$T/home/.config/worksuite/labwc/rc.xml"
+stub labwc 'exit 0'
+echo ': wlr env' > "$T/wlr-env"
+WORKSUITE_SESSION_JOURNAL=1 WORKSUITE_WLR_ENV="$T/wlr-env" WORKSUITE_LABWC_SYSCONF="$T/sysconf" \
+  WORKSUITE_BRIDGE_LIB="$(cd "$(dirname "$0")/../../native/wayland-bridge" && pwd)" sh "$BIN/worksuite-session"
+u="$T/home/.config/worksuite/labwc/rc.xml"
+[ ! -L "$u" ] && grep -A1 '<windowRule identifier="worksuite-shell"' "$u" | grep -q '<action name="ToggleAlwaysOnBottom"/>' \
+  && ok "stale user rc.xml gets the shell's always-on-bottom rule" || bad "stale user rc.xml gets the shell's always-on-bottom rule"
+grep -q '<name>Mail</name><name>Code</name>' "$u" && ok "the user's desktops are kept" || bad "the user's desktops are kept"
+rm -rf "$T/home/.config/worksuite/labwc"
+
 # ---- compositor exit notice → greeter (WSOS-SES-006) ----
 export WORKSUITE_NOTICE_DIR="$T/notice"
 stub labwc 'exit 1'

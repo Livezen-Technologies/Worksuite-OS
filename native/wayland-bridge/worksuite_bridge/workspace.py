@@ -42,7 +42,8 @@ from .model import ACTIVATED, NotFound, NotSupported, Window, WindowRegistry
 
 MAX_WORKSPACES = 16
 NAME_MAX = 40
-# The shell's own windows: on every desktop through rc.xml's window rule, never moved.
+# The shell's own windows: always on bottom (so on every desktop) through rc.xml's window rule, never moved; focusing
+# one does not change the desktop.
 OWN_APP_IDS = {"worksuite-shell", "worksuite", "electron"}
 
 
@@ -105,7 +106,8 @@ class WorkspaceTracker:
             self.active[w.handle] = now_active
             if became:
                 self.focus_log = (self.focus_log + [(w.handle, self.clock())])[-8:]
-                if w.handle not in self.sticky and self.of.get(w.handle, self.current) != self.current:
+                if w.handle not in self.sticky and w.app_id.lower() not in OWN_APP_IDS \
+                        and self.of.get(w.handle, self.current) != self.current:
                     # Labwc goes to the desktop of a window that gets focus (activated from the panel, or by an app).
                     self.current = self.of[w.handle]
                     self._changed()
@@ -198,6 +200,9 @@ def _run(argv: list[str]) -> int:
 
 
 OMNI_KEY = "F24"
+# Lifts the shell out of Labwc's always-on-bottom layer, over the apps of the desktop shown and on every desktop (Task
+# View), and back: one binding toggles both, so the two states stay paired (rc.xml's shell window rule).
+LIFT_KEY = "F23"
 
 
 class LabwcKeys:
@@ -235,6 +240,10 @@ class LabwcKeys:
         time.sleep(self.settle_s)
         self._send(self.argv(OMNI_KEY, False))
 
+    def toggle_lift(self) -> None:
+        time.sleep(self.settle_s)
+        self._send(self.argv(LIFT_KEY, False))
+
 
 # ---- rc.xml ---------------------------------------------------------------------------------------------------
 _DESKTOPS = re.compile(r"<desktops\b[^>]*/>|<desktops\b[^>]*>.*?</desktops>", re.S)
@@ -270,15 +279,47 @@ def rewrite_rc(rc: str, names: list[str], switcher_all: bool) -> str:
     """rc.xml with the desktops element and the window switcher's scope replaced (everything else kept)."""
     el = desktops_element(names)
     out = _DESKTOPS.sub(lambda _m: el, rc, count=1) if _DESKTOPS.search(rc) else rc.replace("<keyboard>", f"{el}\n  <keyboard>", 1)
+    return _set_switcher(out, switcher_all)
+
+
+def _set_switcher(rc: str, switcher_all: bool) -> str:
     flag = "yes" if switcher_all else "no"
 
     def sw(m: re.Match[str]) -> str:
         tag = re.sub(r'\s+allWorkspaces="[^"]*"', "", m.group(0)[:-2 if m.group(1) else -1])
         return f'{tag} allWorkspaces="{flag}"{m.group(1)}>'
-    if _SWITCHER.search(out):
-        out = _SWITCHER.sub(sw, out, count=1)
-    else:
-        out = out.replace("<keyboard>", f'<windowSwitcher allWorkspaces="{flag}"/>\n  <keyboard>', 1)
+    if _SWITCHER.search(rc):
+        return _SWITCHER.sub(sw, rc, count=1)
+    return rc.replace("<keyboard>", f'<windowSwitcher allWorkspaces="{flag}"/>\n  <keyboard>', 1)
+
+
+TOUCH_BEGIN = "<!-- worksuite-touch:begin"
+TOUCH_END = "<!-- worksuite-touch:end -->"
+_TOUCH = re.compile(re.escape(TOUCH_BEGIN) + r".*?" + re.escape(TOUCH_END) + r"\n?", re.S)
+
+
+def refresh_rc(user: str, system: str) -> str:
+    """The user's rc.xml rebuilt from the system file, keeping only what belongs to the user: the desktops (count and
+    names), Alt+Tab's scope and the touchscreen block of Settings › Touchscreen & pen (shell/electron/touch.ts). So a
+    copy written by an older version picks up the current window rules and key bindings (the shell's always-on-bottom
+    rule, the Task View binding) instead of keeping stale ones."""
+    if not system.strip():
+        return user
+    if not user.strip():
+        return system
+    out = system
+    m = _DESKTOPS.search(user)
+    if m:
+        out = _DESKTOPS.sub(lambda _m: m.group(0), out, count=1) if _DESKTOPS.search(out) else out.replace("<keyboard>", f"{m.group(0)}\n  <keyboard>", 1)
+    sw = re.search(r'<windowSwitcher\b[^>]*?allWorkspaces="(yes|no)"', user)
+    if sw:
+        out = _set_switcher(out, sw.group(1) == "yes")
+    touch = _TOUCH.search(user)
+    if touch:
+        out = _TOUCH.sub("", out)
+        close = out.rfind("</labwc_config>")
+        block = touch.group(0).rstrip("\n") + "\n"
+        out = out[:close] + block + out[close:] if close >= 0 else out.rstrip("\n") + "\n" + block
     return out
 
 
@@ -302,7 +343,12 @@ class LabwcConfig:
         return parse_desktops(self.read())
 
     def write(self, names: list[str], switcher_all: bool) -> None:
-        text = rewrite_rc(self.read(), names, switcher_all)
+        # From the system file (current window rules and bindings), with the user's touchscreen block kept.
+        try:
+            system = self.system_rc.read_text()
+        except OSError:
+            system = ""
+        text = rewrite_rc(refresh_rc(self.read(), system), names, switcher_all)
         self.user_rc.parent.mkdir(parents=True, exist_ok=True)
         if self.user_rc.is_symlink():  # starts as a link to the system file (worksuite-session)
             self.user_rc.unlink()
@@ -332,7 +378,9 @@ class Desktops:
         self.blocking = blocking or self._executor
         self.reload_settle_s = reload_settle_s
         self.lock = asyncio.Lock()
+        self.lifted: set[str] = set()  # shell windows lifted over the apps (Task View)
         tracker.added.append(self._new_window)
+        tracker.registry.listeners.append(lambda kind, w: self.lifted.discard(w.handle) if kind == "removed" else None)
 
     @staticmethod
     async def _executor(fn: Callable[..., object], *args: object) -> object:
@@ -483,6 +531,21 @@ class Desktops:
                     await self._sticky(w, on)
             ws._changed()
 
+    async def set_shell_raised(self, handle: str, on: bool) -> None:
+        """Task View: the shell's window over the apps (on every desktop while open), then back below them."""
+        async with self.lock:
+            w = self.ws.registry.get(handle)
+            if w.app_id.lower() not in OWN_APP_IDS:
+                raise NotFound(f"{handle!r} is not a shell window")
+            if (handle in self.lifted) == bool(on):
+                return
+            self.activate(w)
+            await self.blocking(self.keys.toggle_lift)
+            if on:
+                self.lifted.add(handle)
+            else:
+                self.lifted.discard(handle)
+
     def _new_window(self, w: Window) -> None:
         if w.app_id in self.ws.sticky_apps:
             async def later() -> None:
@@ -512,5 +575,6 @@ def rc_bindings(count: int = MAX_WORKSPACES) -> str:
         lines.append(f'    <keybind key="C-A-W-F{n}"><action name="GoToDesktop" to="{n}"/><action name="Execute" command="{ev} goto {n}"/></keybind>')
     for n in range(1, count + 1):
         lines.append(f'    <keybind key="C-A-S-W-F{n}"><action name="SendToDesktop" to="{n}" follow="no"/><action name="Execute" command="{ev} move {n}"/></keybind>')
+    lines.append(f'    <keybind key="C-A-W-{LIFT_KEY}"><action name="ToggleAlwaysOnBottom"/><action name="ToggleOmnipresent"/></keybind>')
     lines.append(f'    <keybind key="C-A-W-{OMNI_KEY}"><action name="ToggleOmnipresent"/></keybind>')
     return "\n".join(lines)

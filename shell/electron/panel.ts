@@ -244,6 +244,8 @@ export class PanelClient {
   setWindowOnAllWorkspaces(handle: string, on: boolean) { return this.op('SetWindowOnAllWorkspaces', 'sb', [handle, on]) }
   setAppOnAllWorkspaces(appId: string, on: boolean) { return this.op('SetAppOnAllWorkspaces', 'sb', [appId, on]) }
   setSwitcherAllWorkspaces(on: boolean) { return this.op('SetSwitcherAllWorkspaces', 'b', [on]) }
+  /** Task View: the shell's window over the apps (it is always on bottom otherwise, rc.xml), and back. */
+  setShellRaised(handle: string, raised: boolean) { return this.op('SetShellRaised', 'sb', [handle, raised]) }
 
   /** A small JPEG of an output for Task View, as a data: URL held in memory only; null when the bridge can't. */
   async captureOutput(output: string, maxWidth: number): Promise<string | null> {

@@ -64,7 +64,7 @@ case "${1:-}" in
         . "${WORKSUITE_WLR_ENV:-/usr/lib/worksuite/wlr-env}"
         # Per-user Labwc config dir: the system files, linked, except rc.xml once Settings › Touchscreen & pen has
         # written its own copy (shell/electron/touch.ts adds the touch block to the system rc.xml).
-        SYSCONF=/etc/xdg/worksuite/labwc
+        SYSCONF=${WORKSUITE_LABWC_SYSCONF:-/etc/xdg/worksuite/labwc}
         CONF=${XDG_CONFIG_HOME:-$HOME/.config}/worksuite/labwc
         if mkdir -p "$CONF" 2>/dev/null; then
             for f in "$SYSCONF"/*; do
@@ -73,6 +73,22 @@ case "${1:-}" in
                 [ "$n" = rc.xml ] && [ -f "$CONF/rc.xml" ] && [ ! -L "$CONF/rc.xml" ] && continue
                 ln -sfn "$f" "$CONF/$n"
             done
+            # A copy written by an older version keeps its old window rules and bindings (the shell was omnipresent,
+            # which hid every app): rebuild it from the system file, keeping its desktops, Alt+Tab scope and touch block.
+            if [ -f "$CONF/rc.xml" ] && [ ! -L "$CONF/rc.xml" ] && [ -f "$SYSCONF/rc.xml" ]; then
+                python3 -Es - "$CONF/rc.xml" "$SYSCONF/rc.xml" "${WORKSUITE_BRIDGE_LIB:-/usr/lib/worksuite/wayland-bridge}" <<'PY' >/dev/null 2>&1 || true
+import os, sys
+user, system, lib = sys.argv[1:4]
+sys.path.insert(0, lib)
+from worksuite_bridge.workspace import refresh_rc
+old = open(user, encoding="utf-8").read()
+new = refresh_rc(old, open(system, encoding="utf-8").read())
+if new != old:
+    with open(user + ".tmp", "w", encoding="utf-8") as f:
+        f.write(new)
+    os.replace(user + ".tmp", user)
+PY
+            fi
         else
             CONF=$SYSCONF
         fi

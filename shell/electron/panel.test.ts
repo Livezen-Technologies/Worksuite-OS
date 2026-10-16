@@ -145,6 +145,15 @@ describe('panel workspaces (WSOS-DSK-003)', () => {
     expect(toWorkspaces(null, ['activate'])).toEqual({ supported: false, current: 1, count: 1, windows: {}, dynamic: false, capture: false })
   })
 
+  it('lifts the shell for Task View with SetShellRaised(handle, raised)', async () => {
+    const f = fakeBus({ SetShellRaised: () => [] })
+    const c = new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn() })
+    expect(await c.setShellRaised('w1', true)).toEqual({ ok: true, value: true })
+    const m = f.calls.find((x) => x.member === 'SetShellRaised')
+    expect(m?.signature).toBe('sb')
+    expect(m?.body).toEqual(['w1', true])
+  })
+
   it('reports NotFound from the bridge as not_found', async () => {
     const f = fakeBus({ ActivateWorkspace: () => dbusError('lk.worksuite.WaylandBridge1.Error.NotFound') })
     const c = new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn() })

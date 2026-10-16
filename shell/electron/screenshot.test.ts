@@ -88,9 +88,13 @@ describe('Labwc key bindings (WSOS-DSK-011)', () => {
 })
 
 describe('shell on every workspace', () => {
-  it('Labwc rule for the shell app_id makes it omnipresent, and main sets that app_id', () => {
+  it('Labwc keeps the shell always on bottom (on every desktop, below every app), and main sets that app_id', () => {
     const rc = readFileSync(path.join(__dirname, '../../services/session/labwc/rc.xml'), 'utf8')
-    expect(rc).toMatch(/<windowRule identifier="worksuite-shell"[^>]*>\s*<action name="ToggleOmnipresent"\/>/)
+    const rule = /<windowRule identifier="worksuite-shell"[^>]*>([\s\S]*?)<\/windowRule>/.exec(rc)?.[1] ?? ''
+    expect(rule).toContain('<action name="ToggleAlwaysOnBottom"/>')
+    // Omnipresent windows are re-parented to the TOP of the desktop Labwc switches to: the shell then hid every app.
+    expect(rule).not.toContain('ToggleOmnipresent')
+    expect(rule).not.toMatch(/AlwaysOnTop|Raise/)
     const main = readFileSync(path.join(__dirname, 'main.ts'), 'utf8')
     expect(main).toContain("SHELL_APP_ID = 'worksuite-shell'")
     const pkg = JSON.parse(readFileSync(path.join(__dirname, '../package.json'), 'utf8')) as { name: string }

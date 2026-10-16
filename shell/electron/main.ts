@@ -131,7 +131,7 @@ if (appRequest?.id === WHATSAPP_ID) {
 } else startShell()
 
 /** The shell's Wayland app_id is Electron's default, "worksuite-shell" (package.json name): Labwc's window rule
- *  (services/session/labwc/rc.xml) puts it on every workspace by that id. */
+ *  (services/session/labwc/rc.xml) keeps it always on bottom by that id: below every app, and on every desktop. */
 export const SHELL_APP_ID = 'worksuite-shell'
 function startShell() {
 app.whenReady().then(() => {

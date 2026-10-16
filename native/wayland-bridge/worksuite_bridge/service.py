@@ -102,6 +102,7 @@ class Bridge:
             (BRIDGE_PATH, BRIDGE_IFACE, "SetAppOnAllWorkspaces"): self._app_all,
             (BRIDGE_PATH, BRIDGE_IFACE, "SetSwitcherAllWorkspaces"): self._switcher_all,
             (BRIDGE_PATH, BRIDGE_IFACE, "CaptureOutput"): self._capture_output,
+            (BRIDGE_PATH, BRIDGE_IFACE, "SetShellRaised"): self._shell_raised,
             (EVENTS_PATH, EVENTS_IFACE, "Event"): self._workspace_event,
             (EVENTS_PATH, INTROSPECTABLE, "Introspect"): self._xml(EVENTS_XML),
             (BRIDGE_PATH, PROPS, "Get"): self._bridge_prop_get,
@@ -340,6 +341,11 @@ class Bridge:
 
     async def _switcher_all(self, m: Message) -> tuple[str, list[Any]]:
         await self._need_desktops().set_switcher_all(bool(m.body[0]))
+        return "", []
+
+    async def _shell_raised(self, m: Message) -> tuple[str, list[Any]]:
+        self._need("activate")
+        await self._need_desktops().set_shell_raised(str(m.body[0]), bool(m.body[1]))
         return "", []
 
     async def _capture_output(self, m: Message) -> tuple[str, list[Any]]:

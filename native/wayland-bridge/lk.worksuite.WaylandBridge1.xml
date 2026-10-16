@@ -89,6 +89,11 @@
       <arg name="output" type="s" direction="in"/><arg name="max_width" type="u" direction="in"/>
       <arg name="image" type="ay" direction="out"/><arg name="mime" type="s" direction="out"/>
     </method>
+    <!-- Task View: lift one of the shell's own windows (app_id worksuite-shell) over the apps, on every desktop, and
+         put it back below them (Labwc's always-on-bottom layer). Only the shell's windows; repeating a state does nothing. -->
+    <method name="SetShellRaised">
+      <arg name="handle" type="s" direction="in"/><arg name="raised" type="b" direction="in"/>
+    </method>
     <signal name="WorkspacesChanged">
       <arg name="current" type="u"/><arg name="count" type="u"/>
     </signal>

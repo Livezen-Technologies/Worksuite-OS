@@ -13,7 +13,7 @@ from worksuite_bridge.capture import OutputCapture
 from worksuite_bridge.model import ACTIVATED, NotFound, NotSupported, Output, WindowRegistry
 from worksuite_bridge.service import BRIDGE_IFACE, BRIDGE_PATH, EVENTS_IFACE, EVENTS_PATH, Bridge
 from worksuite_bridge.workspace import (MAX_WORKSPACES, Desktops, LabwcConfig, LabwcKeys, WorkspaceTracker, clean_name,
-                                        desktops_element, parse_desktops, rewrite_rc)
+                                        desktops_element, parse_desktops, refresh_rc, rewrite_rc)
 
 from .busutil import PrivateBus
 from .test_dbus import ME, FakeBackend, call
@@ -203,6 +203,30 @@ class ControllerTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn('allWorkspaces="yes"', self.r.rc.read_text())
 
 
+    async def test_task_view_lifts_the_shell_and_puts_it_back(self):
+        shell = self.r.reg.add("shell", "worksuite-shell", "WorkSuite")
+        app = self.r.place({"a": 1})["a"]
+        await self.r.d.set_shell_raised(shell.handle, True)
+        self.assertEqual(self.r.keys_sent, ["F23"])
+        self.assertEqual(self.r.activated[-1], shell.handle)   # the binding acts on the focused window
+        await self.r.d.set_shell_raised(shell.handle, True)    # already lifted: nothing sent (the toggle stays paired)
+        await self.r.d.set_shell_raised(shell.handle, False)
+        await self.r.d.set_shell_raised(shell.handle, False)
+        self.assertEqual(self.r.keys_sent, ["F23", "F23"])
+        with self.assertRaises(NotFound):                      # only the shell's own windows
+            await self.r.d.set_shell_raised(app, True)
+        await self.r.d.set_shell_raised(shell.handle, True)
+        self.r.reg.remove("shell")                             # a closed window forgets its state
+        self.assertEqual(self.r.d.lifted, set())
+
+    def test_focusing_the_shell_does_not_change_the_desktop(self):
+        shell = self.r.reg.add("shell", "worksuite-shell", "WorkSuite")   # added on desktop 1, always on bottom
+        self.r.ws.event("goto", 3)
+        self.r.reg.update("shell", flags=ACTIVATED)
+        self.assertEqual(self.r.ws.current, 3)
+        self.assertNotIn(shell.handle, self.r.ws._movable())
+
+
 class RcTest(unittest.TestCase):
     def test_rewrite_keeps_everything_else(self):
         out = rewrite_rc(RC, ["A & B", "<x>"], True)
@@ -216,6 +240,36 @@ class RcTest(unittest.TestCase):
         self.assertIn("<popupTime>0</popupTime>", desktops_element(["x"]))
         kept = rewrite_rc('<labwc_config><windowSwitcher show="yes" allWorkspaces="no"><fields/></windowSwitcher><keyboard/></labwc_config>', ["x"], True)
         self.assertIn('<windowSwitcher show="yes" allWorkspaces="yes"><fields/>', kept)
+
+    def test_refresh_takes_rules_from_the_system_file_and_keeps_the_users_parts(self):
+        system = (Path(__file__).resolve().parents[3] / "services/session/labwc/rc.xml").read_text()
+        stale = system.replace('<action name="ToggleAlwaysOnBottom"/>\n    </windowRule>', '<action name="ToggleOmnipresent"/>\n    </windowRule>')
+        stale = rewrite_rc(stale, ["Mail", "Code", "Play"], True)
+        stale = stale.replace("</labwc_config>", "<!-- worksuite-touch:begin (x) -->\n  <touch deviceName=\"t\" mapToOutput=\"HDMI-A-1\" />\n<!-- worksuite-touch:end -->\n</labwc_config>")
+        out = refresh_rc(stale, system)
+        rule = out[out.index('<windowRule identifier="worksuite-shell"'):]
+        rule = rule[:rule.index("</windowRule>")]
+        self.assertIn("ToggleAlwaysOnBottom", rule)
+        self.assertNotIn("ToggleOmnipresent", rule)
+        self.assertEqual(parse_desktops(out), (3, ["Mail", "Code", "Play"]))
+        self.assertIn('<windowSwitcher allWorkspaces="yes"/>', out)
+        self.assertEqual(out.count("worksuite-touch:begin"), 1)
+        self.assertLess(out.index('<touch deviceName="t"'), out.index("</labwc_config>"))
+        self.assertEqual(refresh_rc(out, system), out)          # stable
+        self.assertEqual(refresh_rc("", system), system)
+        self.assertEqual(refresh_rc(stale, ""), stale)
+
+    def test_write_rebuilds_a_stale_copy_from_the_system_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            sysrc, user = Path(d) / "sys.xml", Path(d) / "rc.xml"
+            sysrc.write_text(RC.replace("<keyboard>", '<windowRules><windowRule identifier="worksuite-shell"><action name="ToggleAlwaysOnBottom"/></windowRule></windowRules>\n  <keyboard>'))
+            user.write_text(RC.replace("<keyboard>", '<windowRules><windowRule identifier="worksuite-shell"><action name="ToggleOmnipresent"/></windowRule></windowRules>\n  <keyboard>'))
+            LabwcConfig(user_rc=user, system_rc=sysrc, run=lambda _a: 0).write(["a", "b"], False)
+            text = user.read_text()
+            self.assertIn("ToggleAlwaysOnBottom", text)
+            self.assertNotIn("ToggleOmnipresent", text)
+            self.assertIn('<touch deviceName="x"', text)
+            self.assertEqual(parse_desktops(text), (2, ["a", "b"]))
 
     def test_symlinked_user_rc_becomes_a_file(self):
         with tempfile.TemporaryDirectory() as d:
@@ -310,6 +364,12 @@ class DesktopsDbusTest(unittest.IsolatedAsyncioTestCase):
         r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "CaptureOutput", "su", ["", 320])
         self.assertEqual(r.body, [b"JPEG", "image/jpeg"])
         r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "RemoveWorkspace", "u", [9])
+        self.assertEqual(r.error_name, "lk.worksuite.WaylandBridge1.Error.NotFound")
+        shell = self.registry.add("sh", "worksuite-shell", "WorkSuite")
+        r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "SetShellRaised", "sb", [shell.handle, True])
+        self.assertEqual(r.message_type, MessageType.METHOD_RETURN, r.body)
+        self.assertEqual(self.bridge.desktops.lifted, {shell.handle})
+        r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "SetShellRaised", "sb", [w.handle, True])
         self.assertEqual(r.error_name, "lk.worksuite.WaylandBridge1.Error.NotFound")
 
     async def test_keyboard_new_and_close(self):
