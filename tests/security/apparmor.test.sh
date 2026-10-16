@@ -25,6 +25,7 @@ unit services/directory/systemd/worksuite-breakglass-rotate.service worksuite-di
 unit services/session/systemd/user/worksuite-shell.service worksuite-shell
 unit services/ai/systemd/worksuite-ai.service worksuite-ai
 unit services/ai/systemd/worksuite-ai-engine.service worksuite-ai-engine
+check "device agent can read the udev database (lsblk FSTYPE: LUKS detection)" 'grep -q "^  /run/udev/data/\* r," "$aa/worksuite-device-agent"'
 check "AI engine has no network" 'grep -q "^RestrictAddressFamilies=AF_UNIX\$" "$here/services/ai/systemd/worksuite-ai-engine.service" && grep -q "^  deny network inet," "$aa/worksuite-ai-engine"'
 unit services/recovery-boot/systemd/worksuite-recovery-shell.service worksuite-shell
 check "shell profile allows the Wayland bridge" 'grep -q "peer=(name=lk.worksuite.WaylandBridge1)" "$aa/worksuite-shell"'
