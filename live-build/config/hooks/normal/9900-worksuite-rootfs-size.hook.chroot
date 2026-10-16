@@ -1,0 +1,6 @@
+#!/bin/sh
+# The installer's copy page (installer/branding/worksuite/show.qml) shows "x GB of y GB": y is this image's unpacked
+# size, measured here as the last chroot step (the squashfs holds what is in the chroot now).
+set -e
+mkdir -p /usr/share/worksuite
+du -sxb --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp / | cut -f1 > /usr/share/worksuite/rootfs.size

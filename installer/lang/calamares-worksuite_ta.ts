@@ -242,6 +242,14 @@
       <translation>சுத்தம் செய்கிறது</translation>
     </message>
     <message>
+      <source>Less than a minute left</source>
+      <translation>ஒரு நிமிடத்திற்கும் குறைவாக உள்ளது</translation>
+    </message>
+    <message>
+      <source>About %1 min left</source>
+      <translation>சுமார் %1 நிமிடம் உள்ளது</translation>
+    </message>
+    <message>
       <source>STEP 6 · COPY FILES</source>
       <translation>படி 6 · கோப்புகளை நகலெடுத்தல்</translation>
     </message>
@@ -274,32 +282,32 @@
       <translation>கணினிப் படிமம் விரிக்கப்படுகிறது</translation>
     </message>
     <message>
-      <source>Progress and the file being copied are shown at the bottom of the window.</source>
-      <translation>முன்னேற்றமும் நகலெடுக்கப்படும் கோப்பும் சாளரத்தின் கீழே காட்டப்படும்.</translation>
+      <source> of %1</source>
+      <translation> / %1</translation>
+    </message>
+    <message>
+      <source>Files copied</source>
+      <translation>நகலெடுத்த கோப்புகள்</translation>
+    </message>
+    <message>
+      <source>Packages</source>
+      <translation>தொகுப்புகள்</translation>
+    </message>
+    <message>
+      <source>%1 / %2</source>
+      <translation>%1 / %2</translation>
     </message>
     <message>
       <source>Elapsed</source>
       <translation>கழிந்த நேரம்</translation>
     </message>
     <message>
-      <source>Encryption</source>
-      <translation>மறையாக்கம்</translation>
+      <source>Hide details</source>
+      <translation>விவரங்களை மறை</translation>
     </message>
     <message>
-      <source>On</source>
-      <translation>இயக்கத்தில்</translation>
-    </message>
-    <message>
-      <source>Off</source>
-      <translation>முடக்கத்தில்</translation>
-    </message>
-    <message>
-      <source>Stage</source>
-      <translation>கட்டம்</translation>
-    </message>
-    <message>
-      <source>1 of 2</source>
-      <translation>2 இல் 1</translation>
+      <source>Show details</source>
+      <translation>விவரங்களைக் காட்டு</translation>
     </message>
     <message>
       <source>Do not turn off your computer</source>
