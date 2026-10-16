@@ -13,6 +13,7 @@ import { useDnd } from '../lib/dnd'
 import { VpnPanel } from './settings/Vpn'
 import { PowerPanel, PrintersPanel } from './settings/Devices'
 import { BigSwitch } from './settings/ui'
+import { SignInOptions } from './settings/SignIn'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
 import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
@@ -456,6 +457,7 @@ function UsersPanel() {
         </ul>}
       </section>
     </div>
+    <SignInOptions />
     <section aria-labelledby="ws-acct" className="flex flex-col gap-2">
       <h2 id="ws-acct" className="m-0 text-sm font-semibold">{t('settings.acct.title')}</h2>
       <div className={`${card} overflow-hidden`}><CloudAccounts /></div>

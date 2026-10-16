@@ -1,0 +1,8 @@
+Name: WorkSuite: sign in with this device's PIN (turned on by Settings > Users when someone sets a PIN)
+Default: no
+Priority: 320
+Auth-Type: Primary
+Auth:
+	[success=end default=ignore]	pam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-pin
+Auth-Initial:
+	[success=end default=ignore]	pam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-pin

@@ -3,6 +3,7 @@ import { verify, type KeyObject } from 'node:crypto';
 import { ApiError, type DeviceApi } from './api.ts';
 import { canonical, validateCommand, type CommandEnvelope, type CommandName } from './commands.ts';
 import { offlineAccessExpired, offlineNotice, policyEnforcement, type Enforcement } from './enforce.ts';
+import { activeKiosk, publicPolicy } from './kiosk.ts';
 import type { AgentState, Policy, StateFile } from './state.ts';
 import { rotationDue, userVpnsToRemove, vpnPlan, type NmConnection, type VpnConfig, type VpnPlan } from './vpn.ts';
 
@@ -98,7 +99,7 @@ export class Agent {
     const p = await this.o.api.policy();
     if (!this.verifyPolicy(p)) { this.o.host.audit('policy_rejected', { version: p?.version }); throw new Error('POLICY_SIGNATURE'); }
     this.o.state.update((s) => { s.policy = p; s.last_check_in = this.o.now(); });
-    this.o.host.publishPolicy(p);
+    this.o.host.publishPolicy(publicPolicy(p));
     // The VPN config travels with the policy refresh; a failure keeps the last verified config in force.
     await this.refreshVpn().catch((e) => this.o.host.audit('vpn_refresh_failed', { error: e instanceof Error ? e.message : String(e) }));
     await this.enforce();
@@ -110,7 +111,7 @@ export class Agent {
   async enforce(): Promise<void> {
     const p = this.s.enrolled ? this.s.policy ?? null : null;
     try {
-      await this.o.host.applyEnforcement(policyEnforcement(p));
+      await this.o.host.applyEnforcement(policyEnforcement(p, this.s.device_id));
       this.o.host.audit('policy_enforced', { version: p?.version ?? null, usb_storage: p?.usb_storage ?? 'allow', bluetooth: p?.bluetooth ?? true, lock_timeout_max_s: p?.lock_timeout_max_s ?? null });
     } catch (e) {
       this.o.host.audit('policy_enforce_failed', { version: p?.version ?? null, error: e instanceof Error ? e.message : String(e) });
@@ -353,8 +354,10 @@ export class Agent {
         maintenance_window: p.maintenance_window ?? null, lock_timeout_max_s: p.lock_timeout_max_s ?? null,
         offline_access_days: p.offline_access_days ?? null, usb_storage: p.usb_storage ?? null, bluetooth: p.bluetooth ?? null,
         login_failures_max: p.login_failures_max ?? null, login_lockout_s: p.login_lockout_s ?? null,
+        allow_pin: p.allow_pin ?? null, pin_min_length: p.pin_min_length ?? null,
         app_allowlist_size: p.app_allowlist?.length ?? 0,
         vpn_required: p.vpn_required ?? null, user_vpn: p.user_vpn ?? null,
+        kiosk: this.s.enrolled && activeKiosk(p, this.s.device_id) !== null,
       } : null,
       // Managed VPN as configured (connection state itself comes from NetworkManager in Settings).
       vpn: this.s.enrolled && this.s.vpn?.enabled ? {

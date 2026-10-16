@@ -2,6 +2,7 @@ import { findBundles } from './bundles'
 import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
 import { bootMode } from './bootmode'
@@ -11,6 +12,7 @@ import { deviceCredential, deviceInfo, enrollDevice } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
 import { listDevices } from './hardware'
 import { checkOwnPassword, localUsers } from './users'
+import { ask, signinHost, type SignInMethod } from './signin'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
 import { loadSession, parseAppArgs, resolveLink } from './webapps'
@@ -118,7 +120,14 @@ app.whenReady().then(() => {
   const webGrants = loadGrants()
 
   // Sign-in is greetd/PAM's; the shell only re-checks the signed-in user's own password to unlock its lock screen.
-  handle('ws:authenticate', (user, password) => checkOwnPassword(user, password))
+  handle('ws:authenticate', async (user, secret, method) => {
+    if (method === 'pin') {
+      const r = await ask({ op: 'verify', user: os.userInfo().username, pin: secret })
+      return r.ok ? { ok: true } : { ok: false }
+    }
+    if (method === 'key') return { ok: false, message: 'Use your password.' }
+    return checkOwnPassword(user, secret)
+  })
   handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
   handle('ws:logout', () => run(...logoutCommand()))
   handle('ws:power', (action) => {
@@ -275,6 +284,14 @@ app.whenReady().then(() => {
   handle('ws:hwDriverUpdates', () => ({ ok: false, error: 'unavailable' }))
   handle('ws:hwInstallDrivers', () => ({ ok: false, error: 'unavailable' }))
   handle('ws:sysUsers', () => localUsers())
+  // Settings › Users › Sign-in options. Every change runs worksuite-signin through pkexec; the PIN goes on stdin.
+  const signin = signinHost()
+  handle('ws:signinMethods', () => signin.methods())
+  handle('ws:signinPinSet', (pin) => signin.pinSet(pin))
+  handle('ws:signinPinRemove', () => signin.pinRemove())
+  handle('ws:signinKeyAdd', (name) => signin.keyAdd(name))
+  handle('ws:signinKeyRemove', (id) => signin.keyRemove(id))
+  handle('ws:signinSetDefault', (m) => ['password', 'pin', 'key'].includes(m) ? signin.setDefault(m as SignInMethod) : { ok: false, error: 'bad_method' })
   handle('ws:pkgRepair', () => pkg.repair())
   handle('ws:pkgCatalog', () => pkg.catalog())
   // Files for local installs come only from the user's own choice in a file dialog: the renderer gets an opaque

@@ -19,6 +19,9 @@ strip() {  # config without any [initial_session] table
 enrolled() { [ -f "$AGENT_STATE" ] && grep -q '"enrolled"[[:space:]]*:[[:space:]]*true' "$AGENT_STATE"; }
 
 policy_kiosk_user() {  # kiosk_autologin_user from the device's signed policy (stored by the device agent)
+    # Kiosk mode policy: the agent writes the kiosk account for this device here (services/device-agent/src/kiosk.ts).
+    k=$(sed -n 's/^KIOSK_USER=\([a-z_][a-z0-9_.@-]*\)$/\1/p' "${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}" 2>/dev/null | head -n 1)
+    if [ -n "$k" ]; then echo "$k"; return 0; fi
     [ -f "$AGENT_STATE" ] || return 0
     sed -n 's/.*"kiosk_autologin_user"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$AGENT_STATE" | head -n 1
 }

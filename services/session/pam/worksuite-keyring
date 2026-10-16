@@ -3,6 +3,7 @@ Default: yes
 Priority: 0
 Auth-Type: Additional
 Auth-Final:
+	[success=1 default=ignore]	pam_exec.so quiet /usr/lib/worksuite/worksuite-signin pam-pin-used
 	optional	pam_gnome_keyring.so
 Session-Type: Additional
 Session-Interactive-Only: yes

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { Agent, type Host } from '../src/agent.ts';
 import { ApiError, type DeviceApi } from '../src/api.ts';
 import { canonical, signingBytes, type CommandEnvelope } from '../src/commands.ts';
-import { ENFORCED_PATHS, faillockConf, offlineAccessExpired, policyEnforcement, type Enforcement } from '../src/enforce.ts';
+import { ENFORCED_PATHS, faillockConf, offlineAccessExpired, policyEnforcement, signinPolicyConf, type Enforcement } from '../src/enforce.ts';
 import { splitCatalogId, windowStart } from '../src/host.ts';
 import { StateFile, type Policy } from '../src/state.ts';
 
@@ -250,6 +250,14 @@ test('policy enforcement: USB storage, Bluetooth, lock timeout and faillock map 
   assert.equal(ro.bluetooth, 'allow');
   assert.equal(ro.files[ENFORCED_PATHS.usbModprobe], null);
   assert.match(ro.files[ENFORCED_PATHS.usbUdev]!, /ENV\{ID_BUS\}=="usb".*RUN\+="\/usr\/sbin\/blockdev --setro \$devnode"/);
+  // Device PIN (Settings > Users): unmanaged = no file (helper defaults); policy can turn it off or raise the length.
+  assert.equal(none.files[ENFORCED_PATHS.signinPolicy], null);
+  assert.equal(ro.files[ENFORCED_PATHS.signinPolicy], signinPolicyConf(true, 6));
+  const pinOff = policyEnforcement({ version: 'p', signature: 'x', allow_pin: false, pin_min_length: 8 });
+  assert.match(pinOff.files[ENFORCED_PATHS.signinPolicy]!, /^ALLOW_PIN=0$/m);
+  assert.match(pinOff.files[ENFORCED_PATHS.signinPolicy]!, /^PIN_MIN_LENGTH=8$/m);
+  assert.match(policyEnforcement({ version: 'p', signature: 'x', pin_min_length: 99 }).files[ENFORCED_PATHS.signinPolicy]!, /^PIN_MIN_LENGTH=6$/m);
+  assert.equal(policyEnforcement({ version: 'p', signature: 'x', allow_pin: 'no' as unknown as boolean, pin_min_length: '4\nALLOW_PIN=1' as unknown as number }).files[ENFORCED_PATHS.signinPolicy], signinPolicyConf(true, 6));
   // Only integers ever reach the lock file that worksuite-idle reads.
   assert.equal(policyEnforcement({ version: 'p', signature: 'x', lock_timeout_max_s: '60; rm -rf /' as unknown as number }).files[ENFORCED_PATHS.lockPolicy], null);
 });
@@ -314,5 +322,27 @@ test('WSOS-IDN-007: revocation stops management but never locks or blocks local 
   assert.equal(w.agent.status().offline_access_expired, false);
   assert.deepEqual((w.log as string[]).filter((l) => l === 'lock' || l === 'offline block'), []);
   assert.ok((w.log as string[]).includes('offline unblock'));
+  w.cleanup();
+});
+
+test('kiosk mode: only listed devices become kiosks; USB blocked; verifier kept off the public policy (WSOS-AUTH-002)', async () => {
+  const verifier = 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$' + 'B'.repeat(43) + '=';
+  const kiosk = { enabled: true, user: 'kiosk', devices: ['dev-1'], app: { type: 'url', url: 'https://visitors.example.com/' }, allow_exit_pin: true, exit_pin_verifier: verifier, idle_reset_minutes: 5 };
+  const w = await enrolled({ policy: signedPolicy({ version: 'p1', usb_storage: 'allow', kiosk }) });
+  const e = w.s.enforced.at(-1)!;
+  assert.equal(e.kiosk_user, 'kiosk');
+  assert.equal(e.usb_storage, 'block');
+  assert.equal(e.secret_files![ENFORCED_PATHS.exitVerifier], verifier + '\n');
+  assert.ok(!e.files[ENFORCED_PATHS.config]!.includes('scrypt'));
+  assert.ok(!JSON.stringify(w.s.published.policy).includes('scrypt'), 'world-readable policy has no verifier');
+  assert.equal((w.s.published.policy!.kiosk as { exit_pin_set: boolean }).exit_pin_set, true);
+  assert.equal(w.agent.status().policies?.kiosk, true);
+  // Another device of the same org is not a kiosk.
+  w.s.policy = signedPolicy({ version: 'p2', kiosk: { ...kiosk, devices: ['dev-2'] } });
+  await w.agent.refreshPolicy();
+  assert.equal(w.s.enforced.at(-1)!.kiosk_user, null);
+  assert.equal(w.s.enforced.at(-1)!.files[ENFORCED_PATHS.config], null);
+  assert.equal(w.s.enforced.at(-1)!.secret_files![ENFORCED_PATHS.exitVerifier], null);
+  assert.equal(w.s.enforced.at(-1)!.usb_storage, 'allow');
   w.cleanup();
 });

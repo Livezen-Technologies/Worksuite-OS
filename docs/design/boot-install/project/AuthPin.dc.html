@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Set up a PIN</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button:focus-visible,input:focus-visible{outline:2px solid #18D4F0;outline-offset:2px} @keyframes pulse{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.5);opacity:0}}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(ellipse 70% 60% at 30% 10%, #1A3F8A 0%, #0A1A3D 55%, #050E24 100%); display: flex; align-items: center; justify-content: center; position: relative">
+<div style="width: 560px; box-sizing: border-box; padding: 32px 36px; border-radius: 22px; background: rgba(14,32,72,0.72); border: 1px solid rgba(127,178,255,0.18); box-shadow: 0 30px 80px rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 20px; align-items: center; text-align: center">
+<span style="width: 56px; height: 56px; border-radius: 16px; background: rgba(31,107,255,0.2); display: flex; align-items: center; justify-content: center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 10h14v10H5zM8 10V7a4 4 0 0 1 8 0v3M12 14v2"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: .08em">{{stepLabel}}</div><h1 style="margin: 0; font-size: 24px; font-weight: 700">{{title}}</h1><p style="margin: 0; font-size: 14px; color: #8FA3C8">{{sub}}</p></div>
+<div aria-live="polite" style="display: flex; gap: 12px; height: 18px; align-items: center"><sc-for list="{{dots}}" as="d" hint-placeholder-count="6"><span style="width: 14px; height: 14px; border-radius: 50%; background: {{d.bg}}; border: 2px solid {{d.bd}}; box-sizing: border-box"></span></sc-for></div>
+<div style="height: 18px; font-size: 13px; color: {{msgCol}}">{{msg}}</div>
+<div style="display: grid; grid-template-columns: repeat(3, 72px); gap: 12px">
+<sc-for list="{{keys}}" as="k" hint-placeholder-count="12"><button aria-label="{{k.aria}}" onClick="{{k.press}}" style="all: unset; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 500; background: {{k.bg}}; cursor: pointer; visibility: {{k.vis}}">{{k.label}}</button></sc-for>
+</div>
+<label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #C9D6EE"><input type="checkbox" style="accent-color: #1F6BFF; width: 16px; height: 16px">Include letters and symbols</label>
+<div style="align-self: stretch; display: flex; justify-content: space-between; padding-top: 16px; border-top: 1px solid rgba(127,178,255,0.12)">
+<button onClick="{{reset}}" style="all: unset; padding: 11px 18px; font-size: 14px; color: #8FA3C8; cursor: pointer">Cancel</button>
+<button disabled="{{notDone}}" style="all: unset; padding: 11px 26px; border-radius: 10px; font-size: 14px; font-weight: 600; background: {{ctaBg}}; color: {{ctaCol}}; cursor: pointer">{{cta}}</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p){super(p);this.state={stage:0,first:'',cur:'',err:''};}
+  renderVals(){
+    const {stage,first,cur,err}=this.state, L=6, done=stage===2;
+    const weak=p=>/^(\d)\1+$/.test(p)||'0123456789'.includes(p)||'9876543210'.includes(p);
+    const press=d=>()=>{ if(done)return; const v=(cur+d).slice(0,L); if(v.length<L) return this.setState({cur:v,err:''});
+      if(stage===0){ if(weak(v)) return this.setState({cur:'',err:'Too easy to guess — avoid repeats and sequences'}); return this.setState({stage:1,first:v,cur:'',err:''}); }
+      if(v!==first) return this.setState({cur:'',err:'PINs don’t match — try again'}); this.setState({stage:2,cur:v,err:''}); };
+    const del=()=>this.setState({cur:cur.slice(0,-1)});
+    const keys=['1','2','3','4','5','6','7','8','9','','0','⌫'].map(k=>({label:k,aria:k==='⌫'?'Delete':k||'blank',vis:k?'visible':'hidden',bg:k==='⌫'?'transparent':'rgba(127,178,255,0.1)',press:k==='⌫'?del:press(k)}));
+    const fill=done?'#5FD39A':err?'#FF8A7A':'#1F6BFF';
+    return {keys,dots:Array.from({length:L},(_,i)=>({bg:i<cur.length||done?fill:'transparent',bd:i<cur.length||done?fill:err?'#FF8A7A':'rgba(127,178,255,0.35)'})),
+      stepLabel:['STEP 1 OF 2','STEP 2 OF 2','ALL SET'][stage], title:['Create a PIN','Confirm your PIN','PIN is ready'][stage],
+      sub:['6 digits. It only works on this computer.','Enter the same 6 digits again.','Use it on the lock screen and for admin prompts.'][stage],
+      msg:err||(done?'✓ Saved securely in the TPM':''), msgCol:err?'#FF8A7A':'#5FD39A',
+      notDone:!done, cta:'Done', ctaBg:done?'#1F6BFF':'rgba(31,107,255,0.3)', ctaCol:done?'#FFFFFF':'rgba(255,255,255,0.5)',
+      reset:()=>this.setState({stage:0,first:'',cur:'',err:''})};
+  }
+}
+</script>
+</body>
+</html>

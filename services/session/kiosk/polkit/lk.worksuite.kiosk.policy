@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>WorkSuite</vendor>
+  <vendor_url>https://download.worksuitecloud.com</vendor_url>
+  <!-- Kiosk exit (WSOS-AUTH-002). pkexec matches these by path and first argument. -->
+  <action id="lk.worksuite.kiosk.exit-admin">
+    <description>Leave kiosk mode</description>
+    <message>An administrator's password is required to leave kiosk mode</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/worksuite/worksuite-kiosk-exit</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">--admin</annotate>
+  </action>
+  <action id="lk.worksuite.kiosk.exit-pin">
+    <description>Leave kiosk mode with the exit PIN</description>
+    <message>Leaving kiosk mode needs the exit PIN</message>
+    <!-- No polkit password: the helper itself checks the PIN (stdin) against the policy's verifier, rate limited,
+         and only for the kiosk account's own active session. -->
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/worksuite/worksuite-kiosk-exit</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">--pin</annotate>
+  </action>
+</policyconfig>
