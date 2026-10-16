@@ -13,6 +13,7 @@ import { DEFAULT_PATHS, linuxHost } from './host.ts';
 import { StateFile } from './state.ts';
 import { forwardPackageAudit } from './auditForward.ts';
 import { serveControl } from './control.ts';
+import { applyPendingEnrollment } from './pendingEnroll.ts';
 
 const KEY_DIR = '/usr/share/worksuite/keys/device-commands';   // from worksuite-archive-keyring
 const SOCKET = join(DEFAULT_PATHS.runtimeDir, 'control.sock');
@@ -59,6 +60,13 @@ async function daemon() {
     const tick = () => { void safe(what, fn).finally(() => setTimeout(tick, jitter(ms))); };
     setTimeout(tick, jitter(10_000));
   };
+  // Enrollment chosen in the installer (WSOS-INS-006): tried at start and every 5 minutes until it is done or dropped.
+  let pending = true;
+  every(5 * 60_000, 'installer_enrollment', async () => {
+    if (!pending) return;
+    const r = await applyPendingEnrollment({ enrolled: () => state.state.enrolled, enroll: (u, t) => agent.enroll(u, t), audit: (e, d) => host.audit(e, d) });
+    if (r !== 'retry') pending = false;
+  });
   every(CHECK_IN_MS, 'check_in', () => agent.checkIn());
   every(POLICY_MS, 'policy', () => agent.refreshPolicy());
   every(5 * 60_000, 'package_audit', async () => {

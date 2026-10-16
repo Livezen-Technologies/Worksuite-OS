@@ -14,6 +14,7 @@ calamares_add_plugin(worksuiteconfirm
     EXPORT_MACRO PLUGINDLLEXPORT_PRO
     SOURCES
         WorksuiteConfirmViewStep.cpp
+        EnrollLink.cpp
         WsStyle.cpp
     SHARED_LIB
 )
@@ -39,4 +40,9 @@ if(WORKSUITE_TESTS)
     set_target_properties(worksuiteconfirm-tests PROPERTIES AUTOMOC ON)
     target_link_libraries(worksuiteconfirm-tests calamares_viewmodule_worksuiteconfirm Qt${_qt}::Test)
     add_test(NAME worksuiteconfirm COMMAND worksuiteconfirm-tests)
+    # Enrollment link parsing and the private pending file (WSOS-INS-006): QtCore only.
+    add_executable(worksuiteenroll-tests EnrollTests.cpp EnrollLink.cpp)
+    set_target_properties(worksuiteenroll-tests PROPERTIES AUTOMOC ON)
+    target_link_libraries(worksuiteenroll-tests Qt${_qt}::Core Qt${_qt}::Test)
+    add_test(NAME worksuiteenroll COMMAND worksuiteenroll-tests)
 endif()
