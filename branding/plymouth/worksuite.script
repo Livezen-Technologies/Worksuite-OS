@@ -200,6 +200,8 @@ Plymouth.SetDisplayNormalFunction(display_normal_callback);
 # Messages (plymouth message --text=...): one line between the field and the hint.
 message.sprite = Sprite();
 fun message_callback(text_s) {
+  # Status chatter from the initramfs ("cryptsetup: luks-…: set up successfully") is console text: not shown.
+  if (text_s.SubString(0, 11) == "cryptsetup:") return;
   message.sprite.SetImage(text(text_s, 13, 0.561, 0.639, 0.784, SANS));
   place_center(message.sprite, track.y + 132);
   message.sprite.SetOpacity(1);
