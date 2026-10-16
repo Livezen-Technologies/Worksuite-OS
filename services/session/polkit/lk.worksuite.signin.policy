@@ -15,6 +15,7 @@
     </defaults>
     <!-- Settings > Users runs "worksuite-signin pin-set|pin-remove|key-add|key-remove" through pkexec; the account is
          PKEXEC_UID, the PIN is on stdin. -->
+    <!-- Checked by lk.worksuite.SignIn1 for each method (services/session/signin/worksuite_signin/bus.py); the helper may still be run through pkexec by an administrator. -->
     <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/worksuite/worksuite-signin</annotate>
   </action>
 </policyconfig>
