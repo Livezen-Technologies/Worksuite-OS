@@ -16,9 +16,11 @@ Rectangle {
     property int subStep: 0
     property bool subNextOk: true
     property bool installFailed: false
-    // settings.conf sequence: ... confirm-erase (6), install (7), recovery key (8), finished (9).
-    readonly property bool afterInstall: ViewManager.currentStepIndex >= 8
-    readonly property bool atEnd: ViewManager.currentStepIndex >= 9
+    // settings.conf sequence ends: ... install, recovery key (last - 1), finished (last). Counted from the end so an
+    // added page before the install (e.g. enroll) never shifts these.
+    readonly property int lastStep: ViewManager.rowCount() - 1
+    readonly property bool afterInstall: ViewManager.currentStepIndex >= lastStep - 1
+    readonly property bool atEnd: ViewManager.currentStepIndex >= lastStep
     Timer {
         interval: 150; running: true; repeat: true; triggeredOnStart: true
         onTriggered: {
@@ -89,7 +91,8 @@ Rectangle {
         Item { Layout.fillWidth: true }
         NavButton {
             label: ViewManager.backLabel
-            visible: ViewManager.backAndNextVisible; enabled: (nav.inSubs && nav.subStep > 0) || ViewManager.backEnabled
+            // Nothing to go back to once installed: no Back on the recovery key or Complete page.
+            visible: ViewManager.backAndNextVisible && !nav.afterInstall; enabled: (nav.inSubs && nav.subStep > 0) || ViewManager.backEnabled
             onActivated: nav.inSubs && nav.subStep > 0 ? nav.request("back") : ViewManager.back()
         }
         NavButton {

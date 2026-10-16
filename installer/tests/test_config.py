@@ -165,3 +165,39 @@ class EnrollmentTest(unittest.TestCase):
         self.assertEqual(load(MODULES / "worksuiteconfirm-enroll.conf")["mode"], "enroll")
         self.assertGreater(execs.index("worksuiteenroll"), execs.index("usersq"))
         self.assertLess(execs.index("worksuiteenroll"), execs.index("umount"))
+
+
+class StepIndexTest(unittest.TestCase):
+    """The sidebar and footer map Calamares step indices; a page added to the sequence must not shift them."""
+
+    def steps(self):
+        seq = load(ROOT / "settings.conf")["sequence"]
+        n = 0
+        for block in seq:
+            n += len(block["show"]) if "show" in block else 1   # the exec block is one step
+        return n
+
+    def test_sidebar_maps_every_step(self):
+        qml = (ROOT / "branding" / "worksuite" / "calamares-sidebar.qml").read_text()
+        m = re.search(r"readonly property var stepOf: (\[.*\])\n", qml)
+        self.assertEqual(len(re.findall(r"\[\d+, \d+\]", m.group(1))), self.steps())
+
+    def test_footer_counts_from_the_end_and_hides_back_after_install(self):
+        qml = (ROOT / "branding" / "worksuite" / "calamares-navigation.qml").read_text()
+        self.assertIn("ViewManager.rowCount() - 1", qml)
+        self.assertNotRegex(qml, r"currentStepIndex >= \d")
+        self.assertIn("visible: ViewManager.backAndNextVisible && !nav.afterInstall", qml)
+
+
+class CopyPageTest(unittest.TestCase):
+    def test_numbers_are_real(self):
+        qml = (ROOT / "branding" / "worksuite" / "show.qml").read_text()
+        self.assertNotIn("under a minute", qml)
+        self.assertIn("bytesDone / bytesTotal", qml)          # percentage agrees with the GB shown
+        self.assertIn('num("worksuiteImagePackages")', qml)
+        hook = (ROOT.parent / "live-build" / "config" / "hooks" / "normal" / "9900-worksuite-rootfs-size.hook.chroot").read_text()
+        self.assertIn("/usr/share/worksuite/rootfs.files", hook)
+        self.assertIn("/usr/share/worksuite/rootfs.packages", hook)
+        cpp = (ROOT / "modules" / "worksuiteconfirm" / "WorksuiteConfirmViewStep.cpp").read_text()
+        self.assertIn("worksuiteImagePackages", cpp)
+        self.assertIn("f_files - vfs.f_ffree", cpp)

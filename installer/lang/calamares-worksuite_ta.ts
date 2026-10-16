@@ -270,8 +270,12 @@
       <translation>கணினியை மின்னிணைப்பில் வைத்திருங்கள். இங்கிருந்து பின்செல்ல முடியாது.</translation>
     </message>
     <message>
-      <source>Applying your choices. This usually takes under a minute.</source>
-      <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன. இது பொதுவாக ஒரு நிமிடத்திற்குள் முடியும்.</translation>
+      <source>Applying your choices.</source>
+      <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன.</translation>
+    </message>
+    <message>
+      <source>Applying your choices. This step is taking longer than usual; it is still working.</source>
+      <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன. இந்தப் படி வழக்கத்தை விட அதிக நேரம் எடுக்கிறது; இது இன்னும் செயல்படுகிறது.</translation>
     </message>
     <message>
       <source>Preparing the disk</source>

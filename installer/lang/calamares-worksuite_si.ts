@@ -270,8 +270,12 @@
       <translation>පරිගණකය විදුලියට සම්බන්ධව තබන්න. ඔබට මෙතැනින් ආපසු යා නොහැක.</translation>
     </message>
     <message>
-      <source>Applying your choices. This usually takes under a minute.</source>
-      <translation>ඔබගේ තේරීම් යොදමින්. මෙයට සාමාන්‍යයෙන් මිනිත්තුවකට අඩු කාලයක් ගතවේ.</translation>
+      <source>Applying your choices.</source>
+      <translation>ඔබගේ තේරීම් යොදමින්.</translation>
+    </message>
+    <message>
+      <source>Applying your choices. This step is taking longer than usual; it is still working.</source>
+      <translation>ඔබගේ තේරීම් යොදමින්. මෙම පියවරට සාමාන්‍යයට වඩා වැඩි කාලයක් ගතවේ; එය තවමත් ක්‍රියා කරයි.</translation>
     </message>
     <message>
       <source>Preparing the disk</source>

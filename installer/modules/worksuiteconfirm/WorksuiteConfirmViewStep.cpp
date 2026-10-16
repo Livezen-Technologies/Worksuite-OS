@@ -9,6 +9,7 @@
 #include "utils/Logger.h"
 
 #include <QApplication>
+#include <sys/statvfs.h>
 #include <QCheckBox>
 #include <QDialog>
 #include <QFile>
@@ -61,7 +62,17 @@ recordEncryption( bool on )
      worksuiteFiles*      unpackfs "Unpacking image a/b, file n/m"
      worksuitePackages*   packages "Processing packages (n / m)"
      worksuiteBytesDone   bytes written to the target root since the copy started (its file system's used space)
-     worksuiteBytesTotal  the image's unpacked size, measured at image build time (/usr/share/worksuite/rootfs.size) */
+     worksuiteBytesTotal  the image's unpacked size, measured at image build time (/usr/share/worksuite/rootfs.size)
+     worksuiteFiles*      when unpackfs reports no file counts: files written to the target (its used inodes since the
+                          copy started) of the image's file count (/usr/share/worksuite/rootfs.files)
+     worksuiteImagePackages  packages in the image (/usr/share/worksuite/rootfs.packages) */
+static qint64
+readCount( const char* path )
+{
+    QFile f( QString::fromLatin1( path ) );
+    return f.open( QIODevice::ReadOnly ) ? QString::fromLatin1( f.readAll() ).trimmed().section( QLatin1Char( '\t' ), 0, 0 ).toLongLong() : 0;
+}
+
 static void
 reportProgress( qreal percent, const QString& message )
 {
@@ -86,6 +97,7 @@ reportProgress( qreal percent, const QString& message )
     }
 
     static const QRegularExpression files( QStringLiteral( "(\\d+)\\s*/\\s*(\\d+)\\s*$" ) );
+    static bool filesFromMessages = false;
     static const QRegularExpression packages( QStringLiteral( "\\((\\d+)\\s*/\\s*(\\d+)\\)" ) );
     const QString phase = gs->value( QStringLiteral( "worksuitePhase" ) ).toString();
     if ( phase == QLatin1String( "copy" ) )
@@ -95,6 +107,7 @@ reportProgress( qreal percent, const QString& message )
         {
             gs->insert( QStringLiteral( "worksuiteFilesDone" ), m.captured( 1 ).toLongLong() );
             gs->insert( QStringLiteral( "worksuiteFilesTotal" ), m.captured( 2 ).toLongLong() );
+            filesFromMessages = true;
         }
     }
     const auto pm = packages.match( line );
@@ -105,13 +118,19 @@ reportProgress( qreal percent, const QString& message )
     }
 
     static qint64 total = -1;
+    static qint64 imageFiles = 0;
     if ( total < 0 )
     {
-        QFile f( QStringLiteral( "/usr/share/worksuite/rootfs.size" ) );
-        total = f.open( QIODevice::ReadOnly ) ? QString::fromLatin1( f.readAll() ).trimmed().section( QLatin1Char( '\t' ), 0, 0 ).toLongLong() : 0;
+        total = readCount( "/usr/share/worksuite/rootfs.size" );
         if ( total > 0 )
         {
             gs->insert( QStringLiteral( "worksuiteBytesTotal" ), total );
+        }
+        imageFiles = readCount( "/usr/share/worksuite/rootfs.files" );
+        const qint64 packageCount = readCount( "/usr/share/worksuite/rootfs.packages" );
+        if ( packageCount > 0 )
+        {
+            gs->insert( QStringLiteral( "worksuiteImagePackages" ), packageCount );
         }
     }
     const QString root = gs->value( QStringLiteral( "rootMountPoint" ) ).toString();
@@ -127,6 +146,18 @@ reportProgress( qreal percent, const QString& message )
                 baseline = used;
             }
             gs->insert( QStringLiteral( "worksuiteBytesDone" ), qMax< qint64 >( 0, used - baseline ) );
+        }
+        struct statvfs vfs;
+        if ( !filesFromMessages && imageFiles > 0 && ::statvfs( QFile::encodeName( root ).constData(), &vfs ) == 0 && vfs.f_files > 0 )
+        {
+            static qint64 inodeBaseline = -1;
+            const qint64 usedInodes = qint64( vfs.f_files - vfs.f_ffree );
+            if ( inodeBaseline < 0 )
+            {
+                inodeBaseline = usedInodes;
+            }
+            gs->insert( QStringLiteral( "worksuiteFilesDone" ), qBound< qint64 >( 0, usedInodes - inodeBaseline, imageFiles ) );
+            gs->insert( QStringLiteral( "worksuiteFilesTotal" ), imageFiles );
         }
     }
 }

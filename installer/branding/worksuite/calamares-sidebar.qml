@@ -13,9 +13,9 @@ Rectangle {
     color: "#071330"
 
     property WsState state: WsState {}
-    // Calamares step index → [design step, first sub-step]: welcome, keyboard | partition | users | locale |
-    // summary, confirm-erase | install, recovery key, finished.
-    readonly property var stepOf: [[0, 0], [0, 1], [1, 0], [2, 0], [3, 0], [4, 0], [4, 1], [5, 0], [5, 2], [5, 3]]
+    // Calamares step index → [design step, first sub-step]: welcome, keyboard | partition | users, enroll | locale |
+    // summary, confirm-erase | install, recovery key, finished. One entry per settings.conf step (tests/test_config.py).
+    readonly property var stepOf: [[0, 0], [0, 1], [1, 0], [2, 0], [2, 1], [3, 0], [4, 0], [4, 1], [5, 0], [5, 2], [5, 3]]
     readonly property var steps: [
         [qsTr("Language"), [qsTr("Language"), qsTr("Keyboard")]],
         [qsTr("Installation type"), [qsTr("Disk"), qsTr("Encryption")]],
