@@ -17,6 +17,11 @@ export function Keys({ k, small }: { k: string; small?: boolean }) {
   )
 }
 
+/** Several key combinations for one shortcut, with "or" between them. */
+export function KeyList({ keys, small }: { keys: string[]; small?: boolean }) {
+  return <>{keys.map((k, i) => <span key={k} className="inline-flex items-center gap-1.5">{i > 0 && <span className="text-[11px] text-[#8FA3C8]">{t('sc.or')}</span>}<Keys k={k} small={small} /></span>)}</>
+}
+
 export default function ShortcutHelp({ prefs, backdrop, onClose, onSettings }: { prefs?: ShortcutPrefs; backdrop?: string | null; onClose: () => void; onSettings: () => void }) {
   useT()
   const [q, setQ] = useState('')
@@ -61,7 +66,7 @@ export default function ShortcutHelp({ prefs, backdrop, onClose, onSettings }: {
                 {g.rows.map((r) => (
                   <div key={r.id} className="flex items-center justify-between gap-3">
                     <dt className="text-[13px] text-[#C9D6EE]">{r.label}</dt>
-                    <dd className="m-0 flex flex-wrap justify-end gap-1.5">{r.keys.map((k) => <Keys key={k} k={k} small />)}</dd>
+                    <dd className="m-0 flex flex-wrap justify-end gap-1.5"><KeyList keys={r.keys} small /></dd>
                   </div>
                 ))}
               </dl>

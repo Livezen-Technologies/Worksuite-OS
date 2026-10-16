@@ -49,7 +49,7 @@ export default function SnippingTool({ onClose, shotId = 0, onNew }: WindowProps
   }
 
   return (
-    <div role="dialog" aria-modal="false" aria-label={t('snip.app')} className="fixed inset-0 z-50 flex flex-col bg-[#0A1A3D] font-sans text-[#E8EEFA]"
+    <div role="dialog" aria-modal="false" aria-label={t('snip.app')} className="fixed inset-x-0 top-0 bottom-[52px] z-50 flex flex-col bg-[#0A1A3D] font-sans text-[#E8EEFA]"
       onKeyDown={(e) => { if (e.key === 'Escape' && !document.querySelector('[aria-modal="true"]') && !(e.target as HTMLElement).closest('textarea')) onClose() }}>
       <header className="flex flex-wrap items-center gap-2 border-b border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.6)] px-4 py-2.5">
         <span className="flex items-center gap-2 pe-3 text-sm font-semibold"><Svg d="M6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12" size={18} stroke="#18D4F0" />{t('snip.app')}</span>
@@ -258,7 +258,7 @@ function Editor({ shot }: { shot: Shot }) {
         {doc && view ? (
           <div className="relative max-h-full max-w-full">
             <canvas ref={canvas} role="img" aria-label={t('snip.imageLabel', { w: formatNumber(out!.w), h: formatNumber(out!.h) })} onPointerDown={down} onPointerMove={move} onPointerUp={up}
-              className={`block max-h-[calc(100vh-170px)] max-w-full touch-none shadow-[0_10px_40px_rgba(0,0,0,0.5)] ${tool === 'text' ? 'cursor-text' : tool === 'eraser' ? 'cursor-cell' : 'cursor-crosshair'}`} />
+              className={`block max-h-[calc(100vh-230px)] max-w-full touch-none shadow-[0_10px_40px_rgba(0,0,0,0.5)] ${tool === 'text' ? 'cursor-text' : tool === 'eraser' ? 'cursor-cell' : 'cursor-crosshair'}`} />
             {text && textPos && (
               <textarea ref={textRef} value={text.value} aria-label={t('snip.textLabel')} rows={1} onChange={(e) => setText({ ...text, value: e.target.value })}
                 onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitText() } if (e.key === 'Escape') { e.preventDefault(); setText(null) } }}

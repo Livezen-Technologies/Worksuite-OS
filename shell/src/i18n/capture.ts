@@ -227,6 +227,7 @@ export const captureEn = {
   'sc.needsModifier': 'Use Ctrl, Alt or Super with the key.',
   'sc.inUse': 'Already used by {names}.',
   'sc.save': 'Save',
+  'sc.or': 'or',
 } as const
 
 type Key = keyof typeof captureEn
@@ -447,6 +448,7 @@ export const captureSi: Record<Key, string> = {
   'sc.needsModifier': 'යතුර සමඟ Ctrl, Alt හෝ Super භාවිත කරන්න.',
   'sc.inUse': 'දැනටමත් {names} භාවිත කරයි.',
   'sc.save': 'සුරකින්න',
+  'sc.or': 'හෝ',
 }
 
 export const captureTa: Record<Key, string> = {
@@ -665,4 +667,5 @@ export const captureTa: Record<Key, string> = {
   'sc.needsModifier': 'விசையுடன் Ctrl, Alt அல்லது Super ஐப் பயன்படுத்தவும்.',
   'sc.inUse': 'ஏற்கனவே {names} பயன்படுத்துகிறது.',
   'sc.save': 'சேமி',
+  'sc.or': 'அல்லது',
 }

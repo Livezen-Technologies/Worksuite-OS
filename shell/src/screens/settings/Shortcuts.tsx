@@ -5,7 +5,7 @@
 // "Use the Print Screen key to open screen snipping" switch (electron/capture.ts).
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Dialog, Svg, btnGhost, btnPrimary, card, dialogFooter, field, linkBtn, rowLine, sectionLabel } from '../../components/Dk'
-import { Keys } from '../../components/ShortcutHelp'
+import { KeyList, Keys } from '../../components/ShortcutHelp'
 import { os } from '../../lib/os'
 import { shellPrefsFrom, type ShellPrefs } from '../../lib/shellPrefs'
 import { captureApi } from '../../lib/captureApi'
@@ -105,7 +105,7 @@ export function ShortcutsPanel({ initial }: { initial?: ShortcutPrefs }) {
             const other = clashOf({ kind: 'system', id: x.id })
             return (
               <Line key={x.id} label={t(shortcutLabel(x.id))} keys={keys} off={!keys.length} changed={changed} conflict={other.map((o) => ownerName(o, prefs))}
-                sub={!x.editable ? (x.action ? t('sc.fixed') : t('sc.byApps')) : undefined}>
+                sub={!x.editable ? (x.action || x.display ? t('sc.fixed') : t('sc.byApps')) : undefined}>
                 {x.editable && <>
                   <button type="button" className={linkBtn} aria-label={t('sc.changeNamed', { name: t(shortcutLabel(x.id)) })} onClick={() => setEditing({ kind: 'system', s: x })}>{t('sc.changeOne')}</button>
                   {keys.length > 0 && <button type="button" className={linkBtn} aria-label={t('sc.turnOffNamed', { name: t(shortcutLabel(x.id)) })} onClick={() => setKey(x.id, '')}>{t('sc.turnOff')}</button>}
@@ -152,7 +152,7 @@ function Line({ label, sub, keys, off, changed, conflict, children }: { label: s
         {sub && <span className="truncate text-xs text-[#8FA3C8]">{sub}</span>}
         {conflict.length > 0 && <span className="flex items-center gap-1 text-xs text-[#F5B83D]"><Svg d="M12 3l9 16H3zM12 10v4M12 17h.01" size={13} />{t('sc.alsoUsedBy', { names: conflict.join(', ') })}</span>}
       </span>
-      <span className="flex flex-wrap items-center gap-2">{off ? <span className="text-[13px] text-[#8FA3C8]">{t('common.off')}</span> : keys.map((k) => <Keys key={k} k={k} />)}</span>
+      <span className="flex flex-wrap items-center gap-2">{off ? <span className="text-[13px] text-[#8FA3C8]">{t('common.off')}</span> : <KeyList keys={keys} />}</span>
       {children && <span className="flex items-center gap-3">{children}</span>}
     </div>
   )

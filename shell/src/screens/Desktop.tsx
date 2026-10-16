@@ -330,7 +330,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
               : { title: t('snip.failedTitle'), body: t('snip.failedBody'), tone: 'error' as const }
         setToast({ id: c.id ? `snip-${c.id}` : `snip-x${Date.now()}`, ...msg, icon: 'accessories-screenshot' })
       }),
-      captureApi?.onToastClicked((key) => { const m = /^snip-(\d+)$/.exec(String(key)); if (m) openSnipEditorRef.current(Number(m[1])) }),
+      captureApi?.onToastClicked((key) => { const m = /^snip-(\d+)$/.exec(String(key)); if (m) { setToast(null); openSnipEditorRef.current(Number(m[1])) } }),
     ]
     return () => { window.removeEventListener(SHELL_OPEN_EVENT, local); offs.forEach((f) => f?.()) }
   }, [setToast, t])
