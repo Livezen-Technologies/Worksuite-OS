@@ -13,6 +13,8 @@ export const BRIDGE_PATH = '/lk/worksuite/WaylandBridge1'
 export const TRAY_PATH = '/lk/worksuite/Tray1'
 export const TRAY_IFACE = 'lk.worksuite.Tray1'
 export const SHELL = 'lk.worksuite.Shell1'
+/** D-Bus signature (string handle, uint32 index) of MoveWindowToWorkspace. */
+const HANDLE_INDEX = 'su'
 export const SHELL_PATH = '/lk/worksuite/Shell1'
 
 export const SHELL_XML = `<node name="${SHELL_PATH}">
@@ -203,6 +205,6 @@ export class PanelClient {
   close(handle: string) { return this.op('CloseWindow', 's', [handle]) }
   minimize(handle: string, state: boolean) { return this.op('SetMinimized', 'sb', [handle, state]) }
   activateWorkspace(n: number) { return this.op('ActivateWorkspace', 'u', [n]) }
-  moveToWorkspace(handle: string, n: number) { return this.op('MoveWindowToWorkspace', 'su', [handle, n]) }
+  moveToWorkspace(handle: string, n: number) { return this.op('MoveWindowToWorkspace', HANDLE_INDEX, [handle, n]) }
   trayActivate(key: string, x: number, y: number) { return this.op('Activate', 'sii', [key, Math.round(x), Math.round(y)], TRAY_PATH, TRAY_IFACE) }
 }
