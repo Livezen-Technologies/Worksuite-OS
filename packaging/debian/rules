@@ -3,6 +3,10 @@
 # from the same tag (WSOS-ARM-001). Run from the repository root with packaging/debian copied to ./debian
 # (packaging/build-debs.sh does this).
 export DH_VERBOSE = 1
+# npm reads these: retry dropped registry connections (a single ECONNRESET used to fail the image build).
+export npm_config_fetch_retries = 5
+export npm_config_fetch_retry_mintimeout = 10000
+export npm_config_fetch_retry_maxtimeout = 60000
 include /usr/share/dpkg/architecture.mk
 
 %:
