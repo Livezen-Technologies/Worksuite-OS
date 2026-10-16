@@ -11,6 +11,7 @@ import gettext
 import os
 import sys
 import threading
+import traceback
 
 import gi
 
@@ -82,6 +83,20 @@ METHOD_LABELS = {"password": _("Password"), "pin": _("PIN"), "key": _("Security 
 
 def label(text, *classes, **kw):
     return Gtk.Label(label=text, css_classes=list(classes), wrap=True, **kw)
+
+
+def set_input_purpose(entry, purpose):
+    """Gtk.PasswordEntry has no input-purpose of its own (setting it raised TypeError and left a black screen at
+    boot): the hint goes on the Gtk.Text inside it, or on the entry itself where it has the property."""
+    if entry.find_property("input-purpose") is not None:
+        entry.set_property("input-purpose", purpose)
+        return
+    child = entry.get_first_child()
+    while child is not None:
+        if child.find_property("input-purpose") is not None:
+            child.set_property("input-purpose", purpose)
+            return
+        child = child.get_next_sibling()
 
 
 def undecorate(win):
@@ -338,7 +353,7 @@ class Greeter(Gtk.ApplicationWindow):
             if (m == method) != b.get_active():
                 b.set_active(m == method)
         self.key_wait.set_visible(method == "key" and v == "user")
-        self.password.set_property("input-purpose", Gtk.InputPurpose.PIN if method == "pin" else Gtk.InputPurpose.PASSWORD)
+        set_input_purpose(self.password, Gtk.InputPurpose.PIN if method == "pin" else Gtk.InputPurpose.PASSWORD)
         self.password_field.label.set_text(pw_label)
         self.password.update_property([Gtk.AccessibleProperty.LABEL], [pw_label])
 
@@ -477,8 +492,24 @@ class Greeter(Gtk.ApplicationWindow):
 
 def main():
     app = Gtk.Application(application_id="lk.worksuite.Greeter")
-    app.connect("activate", lambda a: Greeter(a).present())
-    return app.run(sys.argv[:1])
+    failed = []
+
+    def activate(a):
+        # A window that fails half-way through __init__ is already attached to the application, so the main loop
+        # would keep running with nothing on screen: cage shows only a pointer and the gtkgreet fallback in the
+        # wrapper never starts. Any startup error therefore ends the greeter with a failure status.
+        try:
+            Greeter(a).present()
+        except Exception:
+            traceback.print_exc()
+            failed.append(True)
+            for w in a.get_windows():
+                w.destroy()
+            a.quit()
+
+    app.connect("activate", activate)
+    rc = app.run(sys.argv[:1])
+    return 1 if failed else rc
 
 
 if __name__ == "__main__":
