@@ -82,5 +82,10 @@ bzip2
 # Web browser and media player (WorkSuite defaults: shell/apps/worksuite-mimeapps.list)
 firefox-esr
 celluloid
+# GTK 4 apps (Celluloid, Files' helpers) draw Adwaita's icons, most of them SVG: the theme and the SVG pixbuf loader.
+# Without the loader every SVG icon is GTK's missing-image icon (hook 0150 checks the loader is registered).
+adwaita-icon-theme
+hicolor-icon-theme
+librsvg2-common
 gstreamer1.0-plugins-good
 gstreamer1.0-libav

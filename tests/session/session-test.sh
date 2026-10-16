@@ -280,5 +280,11 @@ check "worksuite-osk without the gtk4-layer-shell library hands over to wvkbd (6
 grep -q 'libgtk4-layer-shell0' "$ROOT/packaging/debian/control" && grep -q '^libgtk4-layer-shell0$' "$ROOT/live-build/config/package-lists/worksuite.list.chroot" \
   && ok "the gtk4-layer-shell library is installed, not only its typelib" || bad "the gtk4-layer-shell library is installed, not only its typelib"
 
+# ---- GTK apps draw their icons: Adwaita, hicolor and the SVG pixbuf loader on the image, checked at build time ----
+L=$ROOT/live-build/config/package-lists/worksuite.list.chroot
+grep -qx adwaita-icon-theme "$L" && grep -qx hicolor-icon-theme "$L" && grep -qx librsvg2-common "$L" \
+  && grep -q "image/svg+xml" "$ROOT/live-build/config/hooks/normal/0150-worksuite-icons.hook.chroot" \
+  && ok "GTK apps (Celluloid) get Adwaita's SVG icons: theme, loader and a build check" || bad "GTK apps (Celluloid) get Adwaita's SVG icons: theme, loader and a build check"
+
 echo "1..$n"
 exit $fail
