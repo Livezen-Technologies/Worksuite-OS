@@ -133,7 +133,7 @@ describe('accessibility settings are wired in CSS (WSOS-ACC-004/005/006)', () =>
   const css = readFileSync('src/index.css', 'utf8')
   it('focus ring, high-contrast ring and field rings exist', () => {
     expect(css).toMatch(/:focus-visible \{ outline: 2px solid #7FB2FF/)
-    expect(css).toMatch(/\[data-high-contrast\] :focus-visible \{ outline: 3px solid #ffd400/)
+    expect(css).toMatch(/\[data-high-contrast\] :focus-visible:not\(\[tabindex="-1"\]\) \{ outline: 3px solid #ffd400/)
     expect(css).toMatch(/:has\(> :is\(input, textarea, select\)\.outline-none:focus-visible\)/)
   })
   it('app marks are fixed-size logos in fixed-size tiles: never wrap or scale out of the tile at 200 %', () => {

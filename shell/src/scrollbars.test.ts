@@ -8,3 +8,12 @@ describe('shell scrollbars', () => {
     expect(css).toMatch(/\*::-webkit-scrollbar-track[^{]*\{ background: transparent; \}/)
   })
 })
+
+describe('focus ring', () => {
+  const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8')
+  it('keeps the ring on controls', () => expect(css).toMatch(/:focus-visible \{ outline: 2px solid #7FB2FF;/))
+  it('draws no ring on script-focused headings (first run titles)', () => {
+    expect(css).toContain('[tabindex="-1"]:focus-visible { outline: none; box-shadow: none; }')
+    expect(css).toContain('[data-high-contrast] :focus-visible:not([tabindex="-1"])')
+  })
+})
