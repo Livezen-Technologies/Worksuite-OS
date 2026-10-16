@@ -11,7 +11,7 @@ and stays usable when the WorkSuite backend is unreachable. Requirements: SRS-WS
 | `api-contracts/` | OpenAPI for `desktop/v1` and the new `desktop/v1/os` group |
 | `packaging/` | Debian packages incl. the `worksuite-desktop` metapackage |
 | `live-build/`, `installer/` | ISO build (amd64, arm64, UEFI) and Calamares configuration |
-| `docs/` | Requirements traceability |
+| `docs/` | Requirements traceability; hardware acceptance checklist [`docs/testing/hardware-acceptance.md`](docs/testing/hardware-acceptance.md) with results template [`docs/testing/hardware-results-template.csv`](docs/testing/hardware-results-template.csv) |
 
 ## Shell
 

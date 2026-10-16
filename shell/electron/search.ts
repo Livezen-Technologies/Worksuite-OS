@@ -34,7 +34,7 @@ type Resp = { ok: boolean; status: number; json(): Promise<unknown> }
 export type SearchFetch = (url: string, init: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<Resp>
 export type SearchBroker = (method: string, params?: Record<string, unknown>) => Promise<{ ok: true; value: unknown } | { ok: false; error: string }>
 
-export interface SearchOptions { broker: SearchBroker; fetch: SearchFetch; debounceMs?: number; timeoutMs?: number; limit?: number }
+export interface SearchOptions { broker: SearchBroker; fetch: SearchFetch; /** Device credential (X-WS-Device), read fresh; null when not enrolled. */ device?: () => string | null; debounceMs?: number; timeoutMs?: number; limit?: number }
 
 const ICONS = new Set<IconKind>(['mail', 'contact', 'crm', 'task', 'chat', 'event', 'note', 'project', 'document', 'file'])
 const iconOf = (type: string): IconKind => (ICONS.has(type as IconKind) ? (type as IconKind) : 'record')
@@ -42,6 +42,8 @@ const str = (v: unknown) => (typeof v === 'string' ? v : null)
 const num = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
 /** Only worksuite:// links pass through; anything else from a server is dropped. */
 const wsLink = (v: unknown) => { const s = str(v); return s && /^worksuite:\/\/[a-z][a-z0-9_-]*(\/|$)/.test(s) ? s : null }
+
+const withDevice = (h: Record<string, string>, d: string | null | undefined) => (d ? { ...h, 'x-ws-device': d } : h)
 
 type Account = { accountId: string; token: string; apiBase: string }
 type AccountResult = { ok: true; value: Account } | { ok: false; state: SourceState }
@@ -111,7 +113,7 @@ export function createSearch(o: SearchOptions) {
     const onAbort = () => ctl.abort()
     parent.addEventListener('abort', onAbort)
     try {
-      const r = await o.fetch(new URL(path, a.apiBase).toString(), { headers: { authorization: `Bearer ${a.token}` }, signal: ctl.signal })
+      const r = await o.fetch(new URL(path, a.apiBase).toString(), { headers: withDevice({ authorization: `Bearer ${a.token}` }, o.device?.()), signal: ctl.signal })
       if (r.status === 401) return { state: 'auth_required', hits: [] }
       if (!r.ok) return { state: 'error', hits: [] }
       return { state: 'ok', hits: parse(await r.json()) }

@@ -7,7 +7,7 @@ import { appWebPreferences, appWindows } from './appwindows'
 import { bootMode } from './bootmode'
 import { appLaunchCommand, scopeCommand, lockPaths, logoutCommand, readLockSettings, writeLockTimeout } from './session'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
-import { deviceInfo, enrollDevice } from './device'
+import { deviceCredential, deviceInfo, enrollDevice } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
 import { listDevices } from './hardware'
 import { localUsers } from './users'
@@ -167,7 +167,7 @@ app.whenReady().then(() => {
   })
   // Launcher global search (WSOS-LCH, DSK-010): the token is attached here; the renderer only gets results.
   const brokerFn = (m: string, p?: Record<string, unknown>) => brokerCall(m, p ?? {})
-  const searcher = createSearch({ broker: brokerFn, fetch: (url, init) => fetch(url, { headers: init.headers, signal: init.signal }) })
+  const searcher = createSearch({ broker: brokerFn, device: () => deviceCredential(), fetch: (url, init) => fetch(url, { headers: init.headers, signal: init.signal }) })
   handle('ws:search', (q, types) => searcher.search(q, types ? types.split(',').filter(Boolean) : []))
   handle('ws:recentFiles', async () => {
     const home = app.getPath('home')
