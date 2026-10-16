@@ -140,7 +140,7 @@ class BootSplashTest(unittest.TestCase):
         for quiet in ("loglevel=3", "systemd.show_status=false", "rd.udev.log_level=3", "vt.global_cursor_default=0"):
             self.assertIn(quiet, grub)
         self.assertIn("GRUB_TIMEOUT_STYLE=hidden", grub)
-        self.assertIn("GRUB_TIMEOUT=0", grub)
+        self.assertIn("GRUB_TIMEOUT=1", grub)   # hidden, but Esc/F4/Shift open the menu
         self.assertIn("GRUB_ENABLE_CRYPTODISK=n", grub)
         self.assertIn("GRUB_TERMINAL_OUTPUT=gfxterm", grub)
         self.assertIn("GRUB_GFXPAYLOAD_LINUX=keep", grub)
