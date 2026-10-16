@@ -36,6 +36,18 @@ class OskTest(unittest.TestCase):
         src = (pathlib.Path(osk.__file__).parent / "ui.py").read_text()
         self.assertNotIn("input-keyboard-symbolic", src)
 
+    def test_no_gtk_screen_looks_up_theme_icons(self):
+        # The greeter (cage, _greetd), the OSK and the polkit agent run without a full icon theme: a themed icon name
+        # shows GTK's missing-image icon. Glyphs are drawn (osk.icon) or come from GTK's own built-in resources.
+        import pathlib
+        import re
+        session = pathlib.Path(osk.__file__).resolve().parents[2]
+        hits = []
+        for f in list(session.glob("*/worksuite_*/*.py")) + list(session.glob("gtklock/*")):
+            txt = f.read_text(errors="ignore")
+            hits += [f"{f.name}: {m}" for m in re.findall(r"icon_name\s*=\s*[\"'][^\"']+|from_icon_name\(|set_icon_name\(|-gtk-icontheme", txt)]
+        self.assertEqual(hits, [])
+
 
 if __name__ == "__main__":
     unittest.main()
