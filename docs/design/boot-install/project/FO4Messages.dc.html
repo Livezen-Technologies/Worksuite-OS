@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File operations · messages</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button{font-family:inherit} button:focus-visible{outline:2px solid #18D4F0;outline-offset:2px} @keyframes stripe{to{background-position:28px 0}}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: linear-gradient(160deg, #12306B, #050E24); padding: 50px 60px; box-sizing: border-box; display: grid; grid-template-columns: 1fr 1fr; gap: 22px 30px; align-content: start">
+<div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: .08em">FILE OPERATION MESSAGES</span><span style="font-size: 14px; color: #8FA3C8">Toasts appear bottom-center in Files for 6 s · errors stay until handled</span></div>
+<sc-for list="{{toasts}}" as="t" hint-placeholder-count="4">
+<div role="status" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 16px; border-radius: 14px; background: rgba(16,36,79,0.92); border: 1px solid rgba(127,178,255,0.18); box-shadow: 0 14px 40px rgba(0,0,0,0.4)"><span style="width: 30px; height: 30px; border-radius: 50%; background: {{t.bg}}; display: flex; align-items: center; justify-content: center; flex: none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{{t.col}}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{t.icon}}"></path></svg></span><span style="flex: 1; font-size: 14px">{{t.text}}</span><button style="all: unset; padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #7FB2FF; cursor: pointer">{{t.act}}</button></div>
+</sc-for>
+<sc-for list="{{errors}}" as="e" hint-placeholder-count="4">
+<div role="alert" style="display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border-radius: 16px; background: #10244F; border: 1px solid {{e.bd}}">
+<div style="display: flex; gap: 12px; align-items: flex-start"><span style="width: 36px; height: 36px; border-radius: 10px; background: {{e.bg}}; display: flex; align-items: center; justify-content: center; flex: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{e.col}}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{e.icon}}"></path></svg></span><span style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 15px; font-weight: 600">{{e.title}}</span><span style="font-size: 13px; color: #C9D6EE; line-height: 1.45">{{e.body}}</span></span></div>
+<div style="display: flex; justify-content: flex-end; gap: 8px"><button style="all: unset; padding: 8px 14px; border-radius: 8px; font-size: 13px; color: #C9D6EE; cursor: pointer">{{e.b1}}</button><button style="all: unset; padding: 8px 14px; border-radius: 8px; font-size: 13px; border: 1px solid rgba(127,178,255,0.25); cursor: pointer">{{e.b2}}</button><button style="all: unset; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; background: {{e.ctaBg}}; cursor: pointer">{{e.b3}}</button></div>
+</div>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals(){
+    const ok='M5 12.5l4.5 4.5L19 7.5', g=['rgba(95,211,154,0.16)','#5FD39A'];
+    const T=[['248 items copied to KINGSTON','Open folder',...g,ok],['“Invoices Q3” moved to Finance','Undo',...g,'M4 12h14M13 6l6 6-6 6'],['3 items moved to Trash','Undo','rgba(31,107,255,0.2)','#7FB2FF','M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13'],['Copy paused · drive disconnected','Resume','rgba(255,159,90,0.16)','#FFB98A','M7 5h4v14H7zM13 5h4v14h-4z']];
+    const red=['rgba(255,138,122,0.4)','rgba(255,138,122,0.16)','#FF8A7A','#E5484D'], amb=['rgba(255,159,90,0.4)','rgba(255,159,90,0.16)','#FFB98A','#1F6BFF'];
+    const E=[['Not enough space on KINGSTON','Needs 3.3 GB, 1.2 GB free. 182 of 248 items were copied.','Cancel','Copy what fits','Free up space',...amb,'M3 6h18v12H3zM7 10h6'],
+      ['You don’t have permission','“/etc/hosts” is a system file. An administrator can allow this.','Skip','Skip all','Unlock as admin',...amb,'M5 10h14v10H5zM8 10V7a4 4 0 0 1 8 0v3'],
+      ['Couldn’t read “video-final.mp4”','The file may be damaged or the drive was removed (I/O error).','Details','Skip','Retry',...red,'M12 8v5M12 16h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z'],
+      ['File is in use','“report.xlsx” is open in Sheets. Close it to move it.','Skip','Show app','Try again',...amb,'M8 8h11v11H8zM5 16V5h11']];
+    return {toasts:T.map(t=>({text:t[0],act:t[1],bg:t[2],col:t[3],icon:t[4]})),
+      errors:E.map(e=>({title:e[0],body:e[1],b1:e[2],b2:e[3],b3:e[4],bd:e[5],bg:e[6],col:e[7],ctaBg:e[8],icon:e[9]}))};
+  }
+}
+</script>
+</body>
+</html>
