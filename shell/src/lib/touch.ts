@@ -10,9 +10,9 @@ export type TabletMode = 'auto' | 'on' | 'off'
 export type OskSize = 'small' | 'medium' | 'large'
 export interface GestureSettings {
   enabled: boolean; edgeSwipes: boolean; edgeBottom: 'launcher' | 'off'; edgeRight: 'notifications' | 'off'; edgeLeft: 'switch-apps' | 'off'
-  threeHorizontal: 'workspaces' | 'switch-apps' | 'off'; threeDown: 'desktop' | 'off'
+  threeHorizontal: 'workspaces' | 'switch-apps' | 'off'; threeDown: 'desktop' | 'off'; threeUp?: 'taskview' | 'off'
 }
-export const DEFAULT_GESTURES: GestureSettings = { enabled: true, edgeSwipes: true, edgeBottom: 'launcher', edgeRight: 'notifications', edgeLeft: 'switch-apps', threeHorizontal: 'workspaces', threeDown: 'desktop' }
+export const DEFAULT_GESTURES: GestureSettings = { enabled: true, edgeSwipes: true, edgeBottom: 'launcher', edgeRight: 'notifications', edgeLeft: 'switch-apps', threeHorizontal: 'workspaces', threeDown: 'desktop', threeUp: 'taskview' }
 export interface TouchSettings { touchEnabled: boolean; mapToOutput: Record<string, string>; tabletMode: TabletMode; rotationLock: boolean; osk: OskMode; oskSize: OskSize; calibration: Record<string, number[]>; gestures?: GestureSettings; longPressMs?: number; oskLayout?: 'full' | 'split' | 'floating'; oskSuggestions?: boolean }
 export interface TouchState {
   devices: InputDev[]; settings: TouchSettings; tabletSwitch: boolean; touchMode: boolean

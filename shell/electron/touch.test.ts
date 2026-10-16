@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, oskControlLine, worksuiteOskArgs, labwcTouchBlock, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
+  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, oskControlLine, worksuiteOskArgs, labwcTouchBlock, carryDesktops, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
   parseOrientation, parsePenLine, parseSwitchLine, parseUdevProps, saveTouch, touchBridge, touchModeOn, type Spawn,
 } from './touch'
 import type { Exec } from './system'
@@ -94,6 +94,15 @@ describe('Labwc config writer', () => {
     expect(twice.match(/worksuite-touch:begin/g)).toHaveLength(1)
     expect(twice).toContain('<sendEventsMode>yes</sendEventsMode>')
     expect(twice).not.toContain('mapToOutput')
+  })
+  it('keeps the desktops and Alt+Tab scope the Wayland bridge wrote (WSOS-DSK-003)', () => {
+    const sys = '<labwc_config><desktops number="1"><names><name>Desktop 1</name></names></desktops><windowSwitcher allWorkspaces="no"/></labwc_config>'
+    const user = '<labwc_config><desktops number="3"><names><name>A</name><name>B</name><name>C</name></names></desktops><windowSwitcher allWorkspaces="yes"/></labwc_config>'
+    const out = carryDesktops(user, mergeRcXml(sys, labwcTouchBlock(DEFAULT_TOUCH, [])))
+    expect(out).toContain('<desktops number="3">')
+    expect(out).toContain('allWorkspaces="yes"')
+    expect(out).toContain('worksuite-touch:begin')
+    expect(carryDesktops('', sys)).toBe(sys)
   })
   it('writes a calibration matrix and drops unusable ones', () => {
     const m = [1.02, 0, -0.01, 0, 0.98, 0.015]

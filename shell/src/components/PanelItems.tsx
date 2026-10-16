@@ -1,6 +1,7 @@
 import { AppGlyph } from './AppGlyph'
 import { useEffect, useMemo, useState, type KeyboardEvent, type WheelEvent } from 'react'
-import { clickAction, onWorkspace, panel, taskbarEntries, taskbarUnread, updateBadge, type PanelWindow, type ShellAction, type TrayItem, type Workspaces } from '../lib/panel'
+import { taskbarWindows, isSticky, isStickyApp, desktopName, MAX_DESKTOPS, type Scope } from '../lib/desktops'
+import { clickAction, panel, taskbarEntries, taskbarUnread, updateBadge, type PanelWindow, type ShellAction, type TrayItem, type Workspaces } from '../lib/panel'
 import { os, type OsUpdateStatus, type VpnState } from '../lib/os'
 import { activeVpn, vpnErrorText } from '../lib/vpn'
 import { useT } from '../i18n'
@@ -33,28 +34,6 @@ export function useWorkspaces(): Workspaces {
   return ws
 }
 
-/** Panel workspace switcher (WSOS-DSK-003): Labwc desktops through the bridge; hidden where there are none. */
-export function WorkspaceSwitcher() {
-  const t = useT()
-  const ws = useWorkspaces()
-  if (!ws.supported) return null
-  return (
-    <div role="toolbar" aria-label={t('panel.workspaces')} onKeyDown={rovingKeys} className="flex items-center gap-1 rounded-[10px] bg-white/[0.06] p-1">
-      {Array.from({ length: ws.count }, (_, i) => i + 1).map((n) => {
-        const count = Object.values(ws.windows).filter((x) => x === n).length
-        return (
-          <button key={n} type="button" aria-pressed={n === ws.current} aria-label={count ? t('panel.workspaceWindows', { n: String(n), count }) : t('panel.workspace', { n: String(n) })}
-            onClick={() => void panel.activateWorkspace?.(n)}
-            className={`relative flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg px-2 text-[13px] font-semibold ${n === ws.current ? 'bg-[#1F6BFF] text-white' : 'text-[#C9D6EE] hover:bg-white/10'}`}>
-            {n}
-            {count > 0 && n !== ws.current && <span aria-hidden="true" className="absolute bottom-[3px] size-1 rounded-full bg-[#18D4F0]" />}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 /** Super key through lk.worksuite.Shell1 (Labwc keybinding). */
 export function useLauncherKey(onAction: (a: ShellAction) => void): void {
   useEffect(() => panel.onLauncher(onAction), [onAction])
@@ -78,12 +57,13 @@ function wheelScroll(e: WheelEvent<HTMLElement>) {
 }
 
 /** `only` limits the windows to one monitor's (per-monitor taskbars, WSOS-DSK-005). */
-export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]; info: (id: string) => AppInfo | undefined; onLaunch: (id: string) => void; only?: (w: PanelWindow[]) => PanelWindow[] }) {
+/** scope: Settings › Multitasking, "On the taskbar, show windows from" (the current desktop's, by default, or all). */
+export function RunningApps({ pinned, info, onLaunch, only, scope = 'current' }: { pinned: string[]; info: (id: string) => AppInfo | undefined; onLaunch: (id: string) => void; only?: (w: PanelWindow[]) => PanelWindow[]; scope?: Scope }) {
   const t = useT()
   const all = usePanelWindows()
   const ws = useWorkspaces()
   const [menu, setMenu] = useState<{ handle: string; x: number } | null>(null)
-  const windows = useMemo(() => onWorkspace(only ? only(all) : all, ws), [only, all, ws])
+  const windows = useMemo(() => taskbarWindows(only ? only(all) : all, ws, scope), [only, all, ws, scope])
   const entries = useMemo(() => taskbarEntries(pinned, windows), [pinned, windows])
   const click = (id: string) => {
     const e = entries.find((x) => x.id === id)!
@@ -115,27 +95,37 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
           </button>
         )
       })}
-      {menu && <MoveMenu ws={ws} x={menu.x} onPick={(n) => { void panel.moveToWorkspace?.(menu.handle, n); setMenu(null) }} onClose={() => setMenu(null)} />}
+      {menu && <MoveMenu ws={ws} win={all.find((w) => w.handle === menu.handle)} x={menu.x} onPick={(n) => { void panel.moveToWorkspace?.(menu.handle, n); setMenu(null) }} onClose={() => setMenu(null)} />}
     </div>
   )
 }
 
-/** "Move to workspace" for a taskbar window (right-click or long-press on the button). */
-function MoveMenu({ ws, x, onPick, onClose }: { ws: Workspaces; x: number; onPick: (n: number) => void; onClose: () => void }) {
+/** A taskbar window's menu (right-click or long-press): move it to another desktop, or show it (or its app's windows)
+ *  on all desktops, like Windows 11. */
+function MoveMenu({ ws, win, x, onPick, onClose }: { ws: Workspaces; win?: PanelWindow; x: number; onPick: (n: number) => void; onClose: () => void }) {
   const t = useT()
   useEffect(() => {
     const k = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   }, [onClose])
+  const others = Array.from({ length: ws.count }, (_, i) => i + 1).filter((n) => n !== (win ? ws.windows[win.handle] ?? ws.current : ws.current))
+  const item = 'cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10'
+  const newDesktop = async () => { if (!win) return; await panel.createWorkspace?.(); void panel.moveToWorkspace?.(win.handle, ws.count + 1); onClose() }
   return (
     <>
       <div className="fixed inset-0 z-40" aria-hidden="true" onClick={onClose} />
-      <div role="menu" aria-label={t('panel.moveTo')} className="fixed bottom-[64px] z-50 flex min-w-[200px] flex-col rounded-xl border border-[rgba(127,178,255,0.2)] bg-[#10244F] p-1 text-[13px] text-[#E8EEFA] shadow-[0_18px_40px_rgba(0,0,0,0.5)]" style={{ left: Math.max(8, x) }}>
-        <span className="px-3 py-1.5 text-xs text-[#8FA3C8]">{t('panel.moveTo')}</span>
-        {Array.from({ length: ws.count }, (_, i) => i + 1).filter((n) => n !== ws.current).map((n, i) => (
-          <button key={n} type="button" role="menuitem" autoFocus={i === 0} onClick={() => onPick(n)} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10">{t('panel.workspace', { n: String(n) })}</button>
+      <div role="menu" aria-label={t('desktops.moveTo')} className="fixed bottom-[64px] z-50 flex min-w-[240px] flex-col rounded-xl border border-[rgba(127,178,255,0.2)] bg-[#10244F] p-1 text-[13px] text-[#E8EEFA] shadow-[0_18px_40px_rgba(0,0,0,0.5)]" style={{ left: Math.max(8, x) }}>
+        <span className="px-3 py-1.5 text-xs text-[#8FA3C8]">{t('desktops.moveTo')}</span>
+        {others.map((n, i) => (
+          <button key={n} type="button" role="menuitem" autoFocus={i === 0} onClick={() => onPick(n)} className={item}>{desktopName(ws, n)}</button>
         ))}
+        {ws.dynamic && ws.count < MAX_DESKTOPS && <button type="button" role="menuitem" autoFocus={!others.length} onClick={() => void newDesktop()} className={item}>{t('desktops.new')}</button>}
+        {ws.dynamic && win && <>
+          <span role="separator" className="my-1 h-px bg-[rgba(127,178,255,0.15)]" />
+          <button type="button" role="menuitemcheckbox" aria-checked={isSticky(ws, win)} onClick={() => { void panel.setWindowOnAllDesktops?.(win.handle, !isSticky(ws, win)); onClose() }} className={item}>{t('desktops.showWindowAll')}</button>
+          <button type="button" role="menuitemcheckbox" aria-checked={isStickyApp(ws, win)} onClick={() => { void panel.setAppOnAllDesktops?.(win.appId, !isStickyApp(ws, win)); onClose() }} className={item}>{t('desktops.showAppAll')}</button>
+        </>}
       </div>
     </>
   )

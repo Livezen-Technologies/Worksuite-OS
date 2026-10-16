@@ -7,10 +7,17 @@ export interface PanelWindow { handle: string; appId: string; title: string; out
 export interface TrayItem { key: string; id: string; title: string; icon: string; status: string }
 export type PanelResult = { ok: true; value: true } | { ok: false; error: string }
 /** Labwc desktops via the bridge (WSOS-DSK-003). */
-export interface Workspaces { supported: boolean; current: number; count: number; windows: Record<string, number> }
+export interface Workspaces {
+  supported: boolean; current: number; count: number; windows: Record<string, number>
+  /** "" = no name of its own (shown as "Desktop N"); see electron/panel.ts. */
+  names?: string[]; sticky?: string[]; stickyApps?: string[]; switcherAll?: boolean; dynamic?: boolean; capture?: boolean; ids?: string[]
+}
+/** What opening Task View carries from the main process: a capture of the output taken before the shell was raised
+ *  (data: URL in memory, or null) and the window that had focus (focused again when Task View closes with Esc). */
+export interface TaskViewOpen { capture: string | null; previous: string }
 
 /** lk.worksuite.Shell1 calls: Super key (toggle/show) and touch gestures (notifications, desktop). */
-export type ShellAction = 'toggle' | 'show' | 'notifications' | 'desktop' | 'assistant'
+export type ShellAction = 'toggle' | 'show' | 'notifications' | 'desktop' | 'assistant' | 'taskview'
 
 export const ACTIVATED = 1
 export const MINIMIZED = 2
@@ -30,6 +37,18 @@ export interface PanelApi {
   activateWorkspace?(n: number): Promise<PanelResult>
   moveToWorkspace?(handle: string, n: number): Promise<PanelResult>
   onWorkspaces?(cb: (w: Workspaces) => void): () => void
+  createWorkspace?(): Promise<PanelResult>
+  removeWorkspace?(n: number): Promise<PanelResult>
+  moveWorkspace?(from: number, to: number): Promise<PanelResult>
+  renameWorkspace?(n: number, name: string): Promise<PanelResult>
+  restoreWorkspaces?(names: string[], prefix: string): Promise<PanelResult>
+  setWindowOnAllDesktops?(handle: string, on: boolean): Promise<PanelResult>
+  setAppOnAllDesktops?(appId: string, on: boolean): Promise<PanelResult>
+  setSwitcherAllDesktops?(on: boolean): Promise<PanelResult>
+  /** Ask the main process to open Task View (taskbar button). */
+  openTaskView?(): Promise<unknown>
+  taskViewState?(open: boolean): Promise<unknown>
+  onTaskView?(cb: (o: TaskViewOpen) => void): () => void
 }
 
 /** Taskbar shows the windows of the current workspace; windows the bridge has not placed count as current. */
@@ -38,9 +57,10 @@ export function showDesktopTargets(windows: PanelWindow[], ws: Workspaces): stri
   return onWorkspace(windows, ws).filter((w) => !(w.flags & MINIMIZED) && !['worksuite', 'worksuite-shell', 'electron'].includes(w.appId.toLowerCase())).map((w) => w.handle)
 }
 
-export function onWorkspace(windows: PanelWindow[], ws: Workspaces): PanelWindow[] {
+export function onWorkspace(windows: PanelWindow[], ws: Workspaces, n = ws.current): PanelWindow[] {
   if (!ws.supported) return windows
-  return windows.filter((w) => (ws.windows[w.handle] ?? ws.current) === ws.current)
+  const sticky = new Set(ws.sticky ?? [])
+  return windows.filter((w) => sticky.has(w.handle) || (ws.windows[w.handle] ?? ws.current) === n)
 }
 
 declare global {
@@ -134,8 +154,57 @@ const stub: PanelApi = {
   onWindows(cb) { stubListeners.add(cb); return () => { stubListeners.delete(cb) } },
   onTray() { return () => {} },
   onLauncher() { return () => {} },
-  // No workspaces in a plain browser: the switcher only appears where Labwc and the bridge provide them.
-  async workspaces() { return { supported: false, current: 1, count: 1, windows: {} } },
+  // No desktops in a plain browser, except the design-review demo (?demo=desktops): three desktops in memory.
+  async workspaces() { return demoWs ? { ...demoWs } : { supported: false, current: 1, count: 1, windows: {} } },
+  async activateWorkspace(n) { return demo((w) => { w.current = n }) },
+  async moveToWorkspace(h, n) { return demo((w) => { w.windows = { ...w.windows, [h]: n } }) },
+  onWorkspaces(cb) { wsListeners.add(cb); return () => { wsListeners.delete(cb) } },
+  async createWorkspace() { return demo((w) => { w.count++; w.names = [...w.names!, '']; w.ids = [...w.ids!, `d${Date.now() % 1e6}`]; w.current = w.count }) },
+  async removeWorkspace(n) {
+    return demo((w) => {
+      const to = n > 1 ? n - 1 : 1
+      w.windows = Object.fromEntries(Object.entries(w.windows).map(([h, d]) => [h, d === n ? to : d > n ? d - 1 : d]))
+      w.names = w.names!.filter((_, i) => i !== n - 1); w.ids = w.ids!.filter((_, i) => i !== n - 1); w.count--
+      w.current = w.current === n ? to : w.current > n ? w.current - 1 : w.current
+    })
+  },
+  async moveWorkspace(from, to) {
+    return demo((w) => {
+      const order = Array.from({ length: w.count }, (_, i) => i + 1); order.splice(to - 1, 0, order.splice(from - 1, 1)[0])
+      const pos = (d: number) => order.indexOf(d) + 1
+      w.windows = Object.fromEntries(Object.entries(w.windows).map(([h, d]) => [h, pos(d)]))
+      w.names = order.map((d) => w.names![d - 1]); w.ids = order.map((d) => w.ids![d - 1]); w.current = pos(w.current)
+    })
+  },
+  async renameWorkspace(n, name) { return demo((w) => { w.names = w.names!.map((x, i) => (i === n - 1 ? name : x)) }) },
+  async setWindowOnAllDesktops(h, on) { return demo((w) => { w.sticky = on ? [...w.sticky!, h] : w.sticky!.filter((x) => x !== h) }) },
+  async setAppOnAllDesktops(a, on) { return demo((w) => { w.stickyApps = on ? [...w.stickyApps!, a] : w.stickyApps!.filter((x) => x !== a) }) },
+  async setSwitcherAllDesktops(on) { return demo((w) => { w.switcherAll = on }) },
+  async openTaskView() { taskViewListeners.forEach((l) => l({ capture: null, previous: '' })); return true },
+  async taskViewState() { return true },
+  onTaskView(cb) { taskViewListeners.add(cb); return () => { taskViewListeners.delete(cb) } },
+}
+const wsListeners = new Set<(w: Workspaces) => void>()
+const taskViewListeners = new Set<(o: TaskViewOpen) => void>()
+let demoWs: Workspaces | null = null
+function demo(f: (w: Workspaces) => void): PanelResult {
+  if (!demoWs) return { ok: false, error: 'not_supported' }
+  const next = { ...demoWs }
+  f(next)
+  demoWs = next
+  wsListeners.forEach((l) => l({ ...next }))
+  return { ok: true, value: true }
+}
+if (typeof location !== 'undefined' && /[?&]demo=desktops\b/.test(location.search)) {
+  stubWindows = [
+    { handle: 'w1', appId: 'firefox-esr', title: 'WorkSuite Cloud — Firefox', output: 'HDMI-A-1', flags: ACTIVATED },
+    { handle: 'w2', appId: 'foot', title: 'Terminal', output: 'HDMI-A-1', flags: 0 },
+    { handle: 'w3', appId: 'worksuite-mail', title: 'Inbox — Mail', output: 'HDMI-A-1', flags: 0 },
+    { handle: 'w4', appId: 'office', title: 'Q3 budget.xlsx — Office', output: 'HDMI-A-1', flags: 0 },
+    { handle: 'w5', appId: 'worksuite-chat', title: 'Team chat', output: 'HDMI-A-1', flags: 0 },
+  ]
+  demoWs = { supported: true, dynamic: true, capture: false, current: 1, count: 3, windows: { w1: 1, w2: 1, w3: 1, w4: 2, w5: 3 },
+    names: ['', 'Finance', ''], ids: ['d1', 'd2', 'd3'], sticky: [], stickyApps: [], switcherAll: false }
 }
 
 export const panel: PanelApi = (typeof window !== 'undefined' && window.worksuitePanel) || stub

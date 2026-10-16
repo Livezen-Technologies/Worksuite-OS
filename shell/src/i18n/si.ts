@@ -3,6 +3,7 @@ import type { LocaleReview, MessageKey } from './en'
 import { aiSi } from './ai'
 import { widgetsSi } from './widgets'
 import { whatsappSi } from './whatsapp'
+import { desktopsSi } from './desktops'
 
 /** Machine-drafted: not yet reviewed by a native Sinhala speaker. See docs/i18n/README.md before changing. */
 export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedKeys: {} }
@@ -11,6 +12,7 @@ const si: Partial<Record<MessageKey, string>> = {
   ...aiSi,
   ...widgetsSi,
   ...whatsappSi,
+  ...desktopsSi,
   'panel.taskbar': 'කාර්ය තීරුව',
   'panel.openLauncher': 'දියත්කරනය විවෘත කරන්න',
   'panel.running': '{name}, ධාවනය වෙමින්',

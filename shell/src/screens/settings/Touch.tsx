@@ -149,6 +149,7 @@ function Gestures({ s, set }: { s: TouchSettings; set: (p: Partial<TouchSettings
     { k: 'edgeLeft', f: '1 →', what: 'touch.g.edgeLeft', opts: ['switch-apps', 'off'], edge: true },
     { k: 'threeHorizontal', f: '3 ↔', what: 'touch.g.threeHorizontal', opts: ['workspaces', 'switch-apps', 'off'], edge: false },
     { k: 'threeDown', f: '3 ↓', what: 'touch.g.threeDown', opts: ['desktop', 'off'], edge: false },
+    { k: 'threeUp', f: '3 ↑', what: 'touch.g.threeUp', opts: ['taskview', 'off'], edge: false },
   ]
   return (
     <section aria-label={t('touch.g.title')} className="flex flex-col gap-2">

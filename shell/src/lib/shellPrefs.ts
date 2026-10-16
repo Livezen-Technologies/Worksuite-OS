@@ -1,6 +1,7 @@
 // Shell ENH-01 preferences (WSOS-DSK-001): the user's favourites, taskbar pins and Start order, stored in the synced
 // 'preferences/shell' object so they follow the user and work offline. Unknown or bad data falls back to defaults.
 import { normaliseLayout, type WidgetLayout } from './widgets'
+import { desktopPrefsFrom, type DesktopPrefs } from './desktopPrefs'
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/
 const MAX = 64
@@ -9,7 +10,7 @@ const MAX = 64
 export type TaskbarAlign = 'center' | 'left'
 
 /** widgets: the desktop widgets' layout (lib/widgets.ts), saved alongside the pins. taskbarAlign: see TaskbarAlign. */
-export interface ShellPrefs { favorites?: string[]; taskbar?: string[]; order?: string[]; widgets?: WidgetLayout; taskbarAlign?: TaskbarAlign }
+export interface ShellPrefs { favorites?: string[]; taskbar?: string[]; order?: string[]; widgets?: WidgetLayout; taskbarAlign?: TaskbarAlign; desktops?: DesktopPrefs }
 
 const ids = (v: unknown): string[] | undefined =>
   Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && ID.test(x)))].slice(0, MAX) : undefined
@@ -22,6 +23,8 @@ export function shellPrefsFrom(v: unknown): ShellPrefs {
   for (const k of ['favorites', 'taskbar', 'order'] as const) { const l = ids(o[k]); if (l) out[k] = l }
   if (o.widgets && typeof o.widgets === 'object') out.widgets = normaliseLayout(o.widgets)
   if (o.taskbarAlign === 'center' || o.taskbarAlign === 'left') out.taskbarAlign = o.taskbarAlign
+  const d = desktopPrefsFrom(o.desktops)
+  if (d) out.desktops = d
   return out
 }
 

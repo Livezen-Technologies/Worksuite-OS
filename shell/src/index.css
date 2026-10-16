@@ -187,3 +187,14 @@
 .ws-taskbar-apps::-webkit-scrollbar { display: none; }
 /* High contrast: the running dot takes the theme's ink (the grey one would fall below 3:1). */
 [data-high-contrast] .ws-run-dot { background: #ffffff !important; }
+
+/* Desktops (WSOS-DSK-003): the wallpaper slides in from the side the new desktop is on; the name shows briefly.
+   Reduced motion (system or Settings) turns both animations off through the rules above. */
+@keyframes ws-desk-from-right { from { transform: translateX(14%); opacity: 0.4 } to { transform: none; opacity: 1 } }
+@keyframes ws-desk-from-left { from { transform: translateX(-14%); opacity: 0.4 } to { transform: none; opacity: 1 } }
+.ws-desk-from-right { animation: ws-desk-from-right 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ws-desk-from-left { animation: ws-desk-from-left 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes ws-desk-toast { 0% { opacity: 0; transform: scale(0.94) } 15%, 80% { opacity: 1; transform: none } 100% { opacity: 0 } }
+.ws-desk-toast { animation: ws-desk-toast 1.4s ease-out forwards; }
+@keyframes ws-fade { from { opacity: 0 } to { opacity: 1 } }
+.ws-fade { animation: ws-fade 0.16s ease-out; }
