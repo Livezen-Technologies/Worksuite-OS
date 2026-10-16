@@ -10,6 +10,10 @@ import * as admin from '../src/admin.ts';
 import { purgeTombstones, TOMBSTONE_WINDOW } from '../src/api.ts';
 import { openDb } from '../src/db.ts';
 import { createHandler } from '../src/main.ts';
+import { setLogSink } from '../src/log.ts';
+
+const logLines: string[] = [];
+setLogSink((l) => { logLines.push(l); });
 import { issueTokens } from '../src/oauth.ts';
 
 let dir: string, server: Server, base: string, db: ReturnType<typeof openDb>;
@@ -235,4 +239,20 @@ test('§11.6-d problem reports: stored for the user\'s org with the device, unkn
   const row = db.prepare('SELECT device_id, body FROM problem_reports WHERE id = ?').get('rep-00001') as { device_id: string; body: string };
   assert.equal(row.device_id, d.device_id);
   assert.equal(JSON.parse(row.body).description, 'Wi-Fi drops');
+});
+
+test('§11.6-c structured logs: one JSON line per request with the caller\'s request id, no query string', async () => {
+  logLines.length = 0;
+  const rid = 'req-' + randomUUID();
+  await fetch(new URL('/desktop/v1/bootstrap?access_token=secret', base), { headers: { 'x-request-id': rid, authorization: 'Bearer nope' } });
+  await new Promise((r) => setTimeout(r, 20));
+  const lines = logLines.map((l) => JSON.parse(l));
+  const req = lines.find((l) => l.request_id === rid);
+  assert.ok(req, 'request logged');
+  assert.equal(req.service, 'worksuite-server');
+  assert.equal(req.event, 'request');
+  assert.equal(req.path, '/desktop/v1/bootstrap');
+  assert.equal(req.status, 401);
+  assert.ok(typeof req.ts === 'string' && typeof req.ms === 'number' && req.level === 'info');
+  assert.ok(!logLines.join('\n').includes('secret') && !logLines.join('\n').includes('nope'));
 });

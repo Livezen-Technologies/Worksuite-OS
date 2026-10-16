@@ -30,6 +30,7 @@ import * as identity from './identity.ts';
 import { apiRoutes, purgeTombstones } from './api.ts';
 import { openDb } from './db.ts';
 import { HttpError, makeCtx, Router, sendError } from './http.ts';
+import { log } from './log.ts';
 import { oauthRoutes } from './oauth.ts';
 import { consoleRoutes } from './console.ts';
 
@@ -62,6 +63,11 @@ export function createHandler(db: DatabaseSync, o: ServerOptions) {
   consoleRoutes(r, db, { secureCookie: publicUrl.startsWith('https:') });
   return async (req: IncomingMessage, res: ServerResponse) => {
     const ctx = makeCtx(req, res, publicUrl);
+    const started = process.hrtime.bigint();
+    res.once('finish', () => log(res.statusCode >= 500 ? 'error' : 'info', 'request', {
+      request_id: ctx.requestId, method: req.method, path: ctx.url.pathname, status: res.statusCode,
+      ms: Number((process.hrtime.bigint() - started) / 1_000_000n),
+    }));
     try {
       if (o.aptDir && (req.method === 'GET' || req.method === 'HEAD') && ctx.url.pathname.startsWith('/os/apt/')) {
         if (serveApt(o.aptDir, ctx.url.pathname, res)) return;
@@ -112,7 +118,7 @@ async function main(argv: string[]) {
       const [host, port] = [v.listen!.slice(0, v.listen!.lastIndexOf(':')), Number(v.listen!.slice(v.listen!.lastIndexOf(':') + 1))];
       purgeTombstones(db);
       setInterval(() => purgeTombstones(db), 3_600_000).unref();
-      server.listen(port, host, () => console.log(`worksuite-server listening on ${v.listen} as ${v['public-url']}`));
+      server.listen(port, host, () => log('info', 'listening', { listen: v.listen, public_url: v['public-url'] }));
       process.on('SIGTERM', () => server.close(() => process.exit(0)));
       return;
     }

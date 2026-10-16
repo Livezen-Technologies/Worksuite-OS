@@ -150,4 +150,4 @@ async function main() {
   log('started', { accounts: accounts.length });
 }
 
-if (import.meta.main) main().catch((e) => { process.stderr.write(`${e?.stack ?? e}\n`); process.exit(1); });
+if (import.meta.main) main().catch((e) => { process.stdout.write(JSON.stringify({ ts: new Date().toISOString(), service: 'worksuite-credentials', level: 'error', event: 'fatal', error: String(e?.stack ?? e) }) + '\n'); process.exit(1); });

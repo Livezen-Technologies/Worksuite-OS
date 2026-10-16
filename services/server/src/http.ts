@@ -1,6 +1,7 @@
 // Minimal HTTP plumbing: structured errors (Error schema), JSON bodies with the 1 MiB limit, request ids.
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { log } from './log.ts';
 
 export class HttpError extends Error {
   readonly status: number; readonly code: string; readonly retryable?: boolean;
@@ -66,7 +67,7 @@ export function send(ctx: Ctx, status: number, body?: unknown, headers: Record<s
 
 export function sendError(ctx: Ctx, e: unknown) {
   const err = e instanceof HttpError ? e : new HttpError(500, 'INTERNAL', 'internal error', { retryable: true });
-  if (!(e instanceof HttpError)) console.error(ctx.requestId, e);
+  if (!(e instanceof HttpError)) log('error', 'unhandled_error', { request_id: ctx.requestId, error: e instanceof Error ? e.message : String(e) });
   send(ctx, err.status, { error: {
     code: err.code, message: err.message, request_id: ctx.requestId,
     ...(err.retryable !== undefined ? { retryable: err.retryable } : {}), ...(err.details ? { details: err.details } : {}),
