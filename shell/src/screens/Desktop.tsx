@@ -6,12 +6,15 @@ import BIcon from '../components/BIcon'
 import type { Notice } from '../lib/syncNotices'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
-import { RunningApps, TrayItems, UpdateBadge, VpnBadge, WorkspaceSwitcher, useLauncherKey } from '../components/PanelItems'
+import { RunningApps, TrayItems, UpdateBadge, VpnBadge, useLauncherKey, usePanelWindows } from '../components/PanelItems'
+import TaskView, { DesktopToast, DesktopsFlyout, type AppLookup } from '../components/TaskView'
+import { useDesktops } from '../components/useDesktops'
+import { desktopWallpaper, desktopsAllowed } from '../lib/desktops'
 import { QuickPanel, QuickTray, useQuickState } from '../components/QuickSettings'
 import { OskButton } from '../components/TouchItems'
 import { useTouchMode } from '../lib/touch'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
-import { panel, showDesktopTargets, type PanelWindow, type ShellAction } from '../lib/panel'
+import { panel, showDesktopTargets, type PanelWindow, type ShellAction, type TaskViewOpen } from '../lib/panel'
 import A11yPanel from '../components/A11yPanel'
 import NotifDock, { MOON } from '../components/NotifDock'
 import { CaptureBadge } from '../components/CaptureBadge'
@@ -73,7 +76,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const [assistant, setAssistant] = useState(false)
   const [assistantReq, setAssistantReq] = useState<AssistantRequest | null>(null)
   useEffect(() => onAssistantRequest((r) => { setLauncher(false); setAssistantReq(r); setAssistant(true) }), [])
+  // Task View (Super+Tab, the taskbar button, three fingers up; WSOS-DSK-003). The main process captures the screen
+  // and raises the shell first (electron/panelHost.ts); 'taskview' from Shell1 while it is open closes it.
+  const [taskView, setTaskView] = useState<TaskViewOpen | null>(null)
+  useEffect(() => panel.onTaskView?.((o) => { setLauncher(false); setTaskView(o) }), [])
   useLauncherKey(useCallback((a: ShellAction) => {
+    if (a === 'taskview') { setTaskView(null); return }
     if (a === 'assistant') { setLauncher(false); setAssistant((v) => !v); return }
     if (a === 'notifications') { setTrayOpen((v) => !v); return }
     if (a === 'desktop') { void Promise.all([panel.windows(), panel.workspaces?.() ?? Promise.resolve(undefined)]).then(([w, ws]) => showDesktopTargets(w, ws ?? { supported: false, current: 1, count: 1, windows: {} }).forEach((h) => void panel.minimize(h, true))); return }
@@ -109,12 +117,28 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     return () => clearInterval(t)
   }, [])
   const managed = managedLabel(device)
+  // Desktops: never on a kiosk device (it runs its own single-desktop session anyway).
+  const desk = useDesktops(device?.policies?.kiosk !== true)
+  const desktopsOn = desktopsAllowed(desk.ws, device?.policies ?? null)
+  const panelWindows = usePanelWindows()
+  const [flyout, setFlyout] = useState(false)
+  const flyoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hoverTaskView = (on: boolean) => {
+    if (flyoutTimer.current) clearTimeout(flyoutTimer.current)
+    flyoutTimer.current = on ? setTimeout(() => setFlyout(true), 450) : null
+  }
+  // Which way the wallpaper slides on a switch (from the right when going to a desktop further right).
+  const lastDesk = useRef(desk.ws.current)
+  const slide = desk.ws.current === lastDesk.current ? '' : desk.ws.current > lastDesk.current ? 'ws-desk-from-right' : 'ws-desk-from-left'
+  useEffect(() => { lastDesk.current = desk.ws.current }, [desk.ws.current])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false); setQsOpen(false) }
       // Super+A inside the shell's own window (the compositor binding covers everywhere else).
       else if (e.metaKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setLauncher(false); setAssistant((v) => !v) }
+      // Super+Tab with the shell focused (Labwc's binding covers everywhere else).
+      else if (e.metaKey && e.key === 'Tab') { e.preventDefault(); void (panel.openTaskView?.() ?? Promise.resolve()) }
       else if ((e.key === 'Meta' || e.key === 'OS' || e.key === 'Super') && !e.repeat) { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }
     }
     window.addEventListener('keydown', onKey)
@@ -218,12 +242,20 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const onPrimary = useMemo(() => (primaryOut && display ? (ws: PanelWindow[]) => windowsOnOutput(ws, primaryOut, true, display.layout.outputs.filter((o) => o.enabled).map((o) => o.name)) : undefined), [primaryOut, display])
 
   const openSettingsAt = (section: string) => { requestSettingsSection(section); onOpen('settings') }
+  const monitorWallpaper = wallpaperFor(display, primaryOut, BG.desktop)
+  const wallpaperOf = (n: number) => desktopWallpaper(desk.wallpapers, desk.ws, n) ?? monitorWallpaper
+  const appLookup: AppLookup = (id) => {
+    const a = allApps.find((x) => x.id === id) ?? appForWindow(allApps, id)
+    return a ? { ...a, bg: tileColor(a), fg: '#FFFFFF' } : { id, name: id, mark: id.slice(0, 2), bg: '#3D5280', fg: '#FFFFFF', icon: /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) ? id : null }
+  }
 
 
   return (
-    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: wallpaperFor(display, primaryOut, BG.desktop) }}
+    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: monitorWallpaper }}
       onContextMenu={(e) => { if (e.target !== e.currentTarget || !widgetsOn) return; e.preventDefault(); setWallMenu({ x: e.clientX, y: e.clientY }) }}
       onMouseDown={(e) => { if (wallMenu && !(e.target as HTMLElement).closest?.('#ws-wall-menu')) setWallMenu(null) }}>
+      {/* This desktop's wallpaper, sliding in on a switch (reduced motion: no slide). */}
+      {desktopsOn && <div key={desk.ws.current} aria-hidden="true" className={`pointer-events-none absolute inset-0 ${slide}`} style={{ background: wallpaperOf(desk.ws.current) }} />}
       {/* On the wallpaper: keeps its light text in the light theme (ws-dark-zone). */}
       <div className="ws-dark-zone absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
         <div className="text-sm text-[#8FA3C8]">{longDate}</div>
@@ -376,11 +408,20 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
             className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
           {searchButton}
+          {desktopsOn && desk.prefs.taskViewButton && (
+            <span className="relative" onMouseEnter={() => hoverTaskView(true)} onMouseLeave={() => { hoverTaskView(false); setFlyout(false) }}>
+              <button type="button" aria-label={t('desktops.taskViewButton')} title={t('desktops.taskViewButton')} aria-expanded={!!taskView} aria-controls="ws-taskview"
+                onClick={() => { setFlyout(false); if (taskView) setTaskView(null); else void (panel.openTaskView?.() ?? Promise.resolve()) }}
+                className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${taskView ? 'bg-white/20' : 'hover:bg-white/10'}`}>
+                <Icon d={['M3 5h8v6H3z', 'M13 5h8v6h-8z', 'M3 15h18v4H3z']} size={18} />
+              </button>
+              {flyout && !taskView && <DesktopsFlyout ws={desk.ws} windows={panelWindows} info={appLookup} wallpaper={wallpaperOf} onLeave={() => setFlyout(false)} />}
+            </span>
+          )}
           <span aria-hidden="true" className="mx-1 hidden h-6 w-px shrink-0 bg-[rgba(127,178,255,0.15)] md:block" />
-          <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => { const a = allApps.find((x) => x.id === id) ?? appForWindow(allApps, id); return a && { ...a, bg: tileColor(a), fg: '#FFFFFF' } }} onLaunch={launch} only={onPrimary} />
+          <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => { const a = allApps.find((x) => x.id === id) ?? appForWindow(allApps, id); return a && { ...a, bg: tileColor(a), fg: '#FFFFFF' } }} onLaunch={launch} only={onPrimary} scope={desk.prefs.taskbar} />
         </div>
         <div data-testid="taskbar-end" className={`flex shrink-0 items-center justify-end gap-1.5 ${centered ? 'flex-[1_0_0]' : 'ms-auto'}`}>
-          <WorkspaceSwitcher />
           {managed && (
             <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? t('panel.managedBy', { org: device.org_name }) : undefined}
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
@@ -410,6 +451,11 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       )}
       {confirmShutdown && <ShutdownConfirm onCancel={() => setConfirmShutdown(false)} />}
       {a11yOpen && <A11yPanel className="right-4 bottom-[68px]" onClose={() => setA11yOpen(false)} />}
+      {desktopsOn && <DesktopToast ws={desk.ws} />}
+      {desktopsOn && taskView && (
+        <TaskView ws={desk.ws} windows={panelWindows} info={appLookup} wallpaper={wallpaperOf} capture={taskView.capture} onBackground={desk.setWallpaper}
+          onClose={(picked) => { if (!picked && taskView.previous) void panel.activate(taskView.previous); setTaskView(null) }} />
+      )}
     </div>
   )
 }

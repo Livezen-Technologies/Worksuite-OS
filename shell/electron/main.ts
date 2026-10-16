@@ -565,7 +565,7 @@ app.whenReady().then(() => {
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
   // Clicking one (its "default" action) also raises the sender's window through the bridge, whatever the app does.
   const notices = startNotifications(handle, broadcast, (n) => {
-    const w = panelClient && windowForNotification(n, panelClient.windows)
+    const w = panelClient && windowForNotification(n, panelClient.windows, installedApps())
     if (w) void panelClient.activate(w.handle)
   })
   // Files' "Notify me when done" (FO1): a notice in the shell's own notification centre, text only.

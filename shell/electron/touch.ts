@@ -114,10 +114,10 @@ export interface GestureSettings {
   edgeRight: 'notifications' | 'off'
   edgeLeft: 'switch-apps' | 'off'
   threeHorizontal: 'workspaces' | 'switch-apps' | 'off'
-  threeDown: 'desktop' | 'off'
+  threeDown: 'desktop' | 'off'; threeUp?: 'taskview' | 'off'
 }
-export const DEFAULT_GESTURES: GestureSettings = { enabled: true, edgeSwipes: true, edgeBottom: 'launcher', edgeRight: 'notifications', edgeLeft: 'switch-apps', threeHorizontal: 'workspaces', threeDown: 'desktop' }
-const GESTURE_CHOICES: Record<string, readonly string[]> = { edgeBottom: ['launcher', 'off'], edgeRight: ['notifications', 'off'], edgeLeft: ['switch-apps', 'off'], threeHorizontal: ['workspaces', 'switch-apps', 'off'], threeDown: ['desktop', 'off'] }
+export const DEFAULT_GESTURES: GestureSettings = { enabled: true, edgeSwipes: true, edgeBottom: 'launcher', edgeRight: 'notifications', edgeLeft: 'switch-apps', threeHorizontal: 'workspaces', threeDown: 'desktop', threeUp: 'taskview' }
+const GESTURE_CHOICES: Record<string, readonly string[]> = { edgeBottom: ['launcher', 'off'], edgeRight: ['notifications', 'off'], edgeLeft: ['switch-apps', 'off'], threeHorizontal: ['workspaces', 'switch-apps', 'off'], threeDown: ['desktop', 'off'], threeUp: ['taskview', 'off'] }
 export function normalizeGestures(v: unknown): GestureSettings {
   const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
   const out = { ...DEFAULT_GESTURES } as Record<string, unknown>
@@ -205,6 +205,19 @@ export function mergeRcXml(rc: string, block: string): string {
   const close = base.lastIndexOf('</labwc_config>')
   if (close < 0) return `${base.trimEnd()}\n${block}\n`
   return `${base.slice(0, close)}${block}\n${base.slice(close)}`
+}
+
+const DESKTOPS = /<desktops\b[^>]*\/>|<desktops\b[^>]*>[\s\S]*?<\/desktops>/
+const SWITCHER = /<windowSwitcher\b[^>]*?\/?>/
+/** The Wayland bridge keeps the desktops (count, names) and Alt+Tab's scope in the user's rc.xml
+ *  (native/wayland-bridge/worksuite_bridge/workspace.py): a rewrite from the system file carries them over. */
+export function carryDesktops(previous: string, next: string): string {
+  let out = next
+  for (const re of [DESKTOPS, SWITCHER]) {
+    const old = previous.match(re)?.[0]
+    if (old && re.test(out)) out = out.replace(re, () => old)
+  }
+  return out
 }
 
 // ---------- on-screen keyboard ----------
@@ -337,8 +350,10 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
       const base = readFileSync(sysRc, 'utf8')
       mkdirSync(labwcDir, { recursive: true })
       // worksuite-session starts Labwc with this dir; rc.xml starts as a symlink to the system file.
+      let previous = ''
+      try { previous = readFileSync(userRc, 'utf8') } catch { /* absent */ }
       try { if (lstatSync(userRc).isSymbolicLink()) unlinkSync(userRc) } catch { /* absent */ }
-      writeFileSync(`${userRc}.tmp`, mergeRcXml(base, labwcTouchBlock(st.settings, screens)))
+      writeFileSync(`${userRc}.tmp`, carryDesktops(previous, mergeRcXml(base, labwcTouchBlock(st.settings, screens))))
       renameSync(`${userRc}.tmp`, userRc)
     } catch { return { available: false, reason: 'labwc_config' } }
     const r = await exec('labwc', ['--reconfigure'])

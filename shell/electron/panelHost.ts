@@ -1,6 +1,6 @@
 // Wires the panel client (electron/panel.ts) to IPC. Without a session bus or bridge the taskbar shows pinned apps only.
 import dbus from 'dbus-next'
-import { PanelClient } from './panel'
+import { ACTIVATED_FLAG, MAX_DESKTOPS, PanelClient } from './panel'
 
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 
@@ -12,7 +12,7 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
     client = new PanelClient(bus as never, {
       windows: (w) => send('ws:panelWindowsChanged', w),
       tray: (t) => send('ws:panelTrayChanged', t),
-      launcher: (a) => send('ws:launcher', a),
+      launcher: (a) => { if (a === 'taskview') void taskView(); else send('ws:launcher', a) },
       outputs: outputsChanged,
       openArchive,
       workspaces: (w) => send('ws:panelWorkspacesChanged', w),
@@ -23,14 +23,39 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
   }
   const c = client
   const none = { ok: false, error: 'bridge_unavailable' }
+  // Task View (Super+Tab, the taskbar button, three fingers up): the output is captured first, while the apps are
+  // still on screen, then the shell's window is raised over them. The capture is a data: URL in memory only.
+  let taskViewOpen = false
+  async function taskView(fromShell = false) {
+    if (taskViewOpen) { send('ws:launcher', 'taskview'); return }
+    const previous = c?.windows.find((w) => w.flags & ACTIVATED_FLAG && w.appId !== 'worksuite-shell')?.handle ?? ''
+    const capture = c && !fromShell && c.workspaces.capture ? await c.captureOutput('', 480) : null
+    send('ws:taskView', { capture, previous })
+    const own = c?.shellWindow()
+    if (own) await c?.activate(own.handle)
+  }
+  handle('ws:panelTaskView', (open) => { if (open === 'open') void taskView(true); else taskViewOpen = open === '1'; return true })
+  const n16 = (n: string) => Math.max(1, Math.min(MAX_DESKTOPS, Number(n) | 0))
+  handle('ws:panelWorkspaceCreate', () => (c ? c.createWorkspace() : none))
+  handle('ws:panelWorkspaceRemove', (n) => (c ? c.removeWorkspace(n16(n)) : none))
+  handle('ws:panelWorkspaceMove', (a, b) => (c ? c.moveWorkspace(n16(a), n16(b)) : none))
+  handle('ws:panelWorkspaceRename', (n, name) => (c ? c.renameWorkspace(n16(n), String(name)) : none))
+  handle('ws:panelWorkspacesRestore', (json, prefix) => {
+    let names: unknown = null
+    try { names = JSON.parse(json) } catch { /* bad input */ }
+    return c && Array.isArray(names) && names.length ? c.restoreWorkspaces(names.map(String), String(prefix)) : none
+  })
+  handle('ws:panelWindowAllDesktops', (h, on) => (c ? c.setWindowOnAllWorkspaces(h, on === '1') : none))
+  handle('ws:panelAppAllDesktops', (app, on) => (c ? c.setAppOnAllWorkspaces(app, on === '1') : none))
+  handle('ws:panelSwitcherAll', (on) => (c ? c.setSwitcherAllWorkspaces(on === '1') : none))
   handle('ws:panelWindows', () => c?.windows ?? [])
   handle('ws:panelTray', () => c?.tray ?? [])
   handle('ws:panelActivate', (h) => (c ? c.activate(h) : none))
   handle('ws:panelClose', (h) => (c ? c.close(h) : none))
   handle('ws:panelMinimize', (h, s) => (c ? c.minimize(h, s === '1') : none))
   handle('ws:panelWorkspaces', () => c?.workspaces ?? { supported: false, current: 1, count: 1, windows: {} })
-  handle('ws:panelWorkspaceActivate', (n) => (c ? c.activateWorkspace(Math.max(1, Math.min(9, Number(n) | 0))) : none))
-  handle('ws:panelMoveToWorkspace', (h, n) => (c ? c.moveToWorkspace(h, Math.max(1, Math.min(9, Number(n) | 0))) : none))
+  handle('ws:panelWorkspaceActivate', (n) => (c ? c.activateWorkspace(n16(n)) : none))
+  handle('ws:panelMoveToWorkspace', (h, n) => (c ? c.moveToWorkspace(h, n16(n)) : none))
   handle('ws:panelTrayActivate', (k, x, y) => (c ? c.trayActivate(k, Number(x) || 0, Number(y) || 0) : none))
   return client
 }

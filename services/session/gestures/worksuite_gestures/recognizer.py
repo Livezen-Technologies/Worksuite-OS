@@ -86,14 +86,15 @@ class Recognizer:
 
 
 # ---- settings → actions ---------------------------------------------------------------------------------------
-ACTIONS = ("launcher", "notifications", "switch-apps", "workspaces", "desktop", "off")
-DEFAULTS = {"edgeBottom": "launcher", "edgeRight": "notifications", "edgeLeft": "switch-apps", "threeHorizontal": "workspaces", "threeDown": "desktop"}
+ACTIONS = ("launcher", "notifications", "switch-apps", "workspaces", "desktop", "taskview", "off")
+DEFAULTS = {"edgeBottom": "launcher", "edgeRight": "notifications", "edgeLeft": "switch-apps", "threeHorizontal": "workspaces", "threeDown": "desktop", "threeUp": "taskview"}
 ALLOWED = {
     "edgeBottom": ("launcher", "off"),
     "edgeRight": ("notifications", "off"),
     "edgeLeft": ("switch-apps", "off"),
     "threeHorizontal": ("workspaces", "switch-apps", "off"),
     "threeDown": ("desktop", "off"),
+    "threeUp": ("taskview", "off"),
 }
 
 
@@ -113,7 +114,7 @@ def plan(gesture: str, cfg: dict) -> tuple[str, str] | None:
     if gesture.startswith("edge-") and not cfg.get("edgeSwipes", True):
         return None
     key = {"edge-bottom": "edgeBottom", "edge-right": "edgeRight", "edge-left": "edgeLeft",
-           "three-left": "threeHorizontal", "three-right": "threeHorizontal", "three-down": "threeDown"}.get(gesture)
+           "three-left": "threeHorizontal", "three-right": "threeHorizontal", "three-down": "threeDown", "three-up": "threeUp"}.get(gesture)
     action = cfg.get(key) if key else None
     if not action or action == "off":
         return None
@@ -132,6 +133,9 @@ def command(action: str, direction: str) -> list[str] | None:
         return SHELL + ["ToggleNotifications"]
     if action == "desktop":
         return SHELL + ["ShowDesktop"]
+    if action == "taskview":
+        # Three fingers up: Task View, like Windows 11 (the shell's lk.worksuite.Shell1, as Super+Tab).
+        return SHELL + ["ToggleTaskView"]
     if action == "switch-apps":
         # Labwc's A-Tab NextWindow binding (services/session/labwc/rc.xml), through the virtual keyboard.
         return ["wtype", "-M", "alt", "-k", "Tab", "-m", "alt"] if direction != "left" else ["wtype", "-M", "alt", "-M", "shift", "-k", "Tab", "-m", "shift", "-m", "alt"]

@@ -12,7 +12,7 @@ from dbus_next.aio import MessageBus
 from worksuite_bridge.access import AccessPolicy
 from worksuite_bridge.model import ACTIVATED, NotFound, WindowRegistry
 from worksuite_bridge.service import BRIDGE_IFACE, BRIDGE_PATH, EVENTS_IFACE, EVENTS_PATH, Bridge
-from worksuite_bridge.workspace import LabwcKeys, WorkspaceTracker, rc_bindings
+from worksuite_bridge.workspace import LabwcKeys, WorkspaceTracker, parse_desktops, rc_bindings
 
 from .busutil import PrivateBus
 from .test_dbus import ME, FakeBackend, call
@@ -32,7 +32,7 @@ class TrackerTest(unittest.TestCase):
     def setUp(self):
         self.reg = WindowRegistry()
         self.clock = Clock()
-        self.ws = WorkspaceTracker(self.reg, count=4, clock=self.clock)
+        self.ws = WorkspaceTracker(self.reg, count=4, wrap=True, clock=self.clock)
         self.changes = []
         self.ws.listeners.append(lambda: self.changes.append((self.ws.current, dict(self.ws.windows()))))
 
@@ -112,15 +112,20 @@ class KeysTest(unittest.TestCase):
 
     def test_rc_xml_has_the_generated_bindings(self):
         rc = (REPO / "services/session/labwc/rc.xml").read_text()
-        for line in rc_bindings(4).splitlines():
+        for line in rc_bindings().splitlines():
             self.assertIn(line.strip(), rc)
-        self.assertIn('<desktops number="4"/>', rc)
+        self.assertEqual(parse_desktops(rc), (1, ["Desktop 1"]))
+        self.assertIn("ToggleTaskView", rc)
+        self.assertIn('<windowSwitcher allWorkspaces="no"/>', rc)
 
     def test_event_helper_validates_and_never_blocks(self):
         helper = REPO / "services/session/bin/worksuite-workspace-event"
         env = {**os.environ, "PATH": "/nonexistent"}
         self.assertEqual(subprocess.run(["/bin/sh", str(helper), "goto", "x;reboot"], env=env, capture_output=True).returncode, 2)
         self.assertEqual(subprocess.run(["/bin/sh", str(helper), "bogus"], env=env, capture_output=True).returncode, 2)
+        self.assertEqual(subprocess.run(["/bin/sh", str(helper), "goto", "17"], env=env, capture_output=True).returncode, 2)
+        for args in (["goto", "16"], ["new"], ["close"]):
+            self.assertEqual(subprocess.run(["/bin/sh", str(helper), *args], env=env, capture_output=True).returncode, 127)
         # busctl missing: fails quietly
         r = subprocess.run(["/bin/sh", str(helper), "goto", "2"], env=env, capture_output=True, text=True)
         self.assertEqual(r.stdout, "")

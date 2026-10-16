@@ -3,12 +3,14 @@
 import { aiEn } from './ai'
 import { widgetsEn } from './widgets'
 import { whatsappEn } from './whatsapp'
+import { desktopsEn } from './desktops'
 
 const en = {
   // On-device AI assistant (services/ai): src/i18n/ai.ts
   ...aiEn,
   ...widgetsEn,
   ...whatsappEn,
+  ...desktopsEn,
   // Panel / taskbar
   'panel.taskbar': 'Taskbar',
   'panel.openLauncher': 'Open launcher',
