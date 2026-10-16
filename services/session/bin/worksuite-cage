@@ -1,4 +1,16 @@
 #!/bin/sh
 # cage with WorkSuite's renderer selection (greeter, live installer). Same arguments as cage.
-. /usr/lib/worksuite/wlr-env
-exec cage "$@"
+. "${WORKSUITE_WLR_ENV:-/usr/lib/worksuite/wlr-env}"
+# The greeter: cage shows black (and a pointer) from the moment it starts until the greeter's first frame, which took
+# over a minute on slow machines (E2E under TCG). Before cage takes the screen (the boot splash, or the dark sign-out
+# frame, stays up meanwhile) check GTK 4 for the greeter and load its Python modules and libraries once, so its first
+# frame comes as soon as possible after cage starts. WORKSUITE_GREETER_CHECKED tells the greeter wrapper not to check
+# again inside cage.
+case " $* " in
+    *" /usr/lib/worksuite/worksuite-greeter "*|*" /usr/lib/worksuite/worksuite-greeter")
+        if [ -z "${WORKSUITE_GREETER_LEGACY:-}" ] && PYTHONPATH=/usr/lib/worksuite/greeter${PYTHONPATH:+:$PYTHONPATH} \
+            ${WORKSUITE_PYTHON:-python3} -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_foreign("cairo"); import worksuite_greeter.ui' >/dev/null 2>&1; then
+            export WORKSUITE_GREETER_CHECKED=1
+        fi ;;
+esac
+exec ${WORKSUITE_CAGE:-cage} "$@"

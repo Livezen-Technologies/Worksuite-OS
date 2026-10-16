@@ -103,6 +103,13 @@ function run(cmd: string, args: string[]) {
   return new Promise<void>((resolve) => execFile(cmd, args, () => resolve()))
 }
 
+/** $XDG_RUNTIME_DIR/worksuite/shell-ready: services/session/greeter/worksuite_greeter/veil.py session_main. */
+function markSessionVeil() {
+  const run = process.env.XDG_RUNTIME_DIR
+  if (!run) return
+  try { mkdirSync(path.join(run, 'worksuite'), { recursive: true, mode: 0o700 }); writeFileSync(path.join(run, 'worksuite', 'shell-ready'), `${process.pid}\n`) } catch { /* no veil to tell */ }
+}
+
 function createWindow() {
   win = new BrowserWindow({
     fullscreen: true,
@@ -117,6 +124,10 @@ function createWindow() {
   // Perf probe (tests/perf/guest/measure-shell, WSOS-PRF-002/006): process start → first window ready.
   if (process.env.WORKSUITE_PERF === '1') win.once('ready-to-show', () => process.stdout.write(`WORKSUITE_PERF shell_ready_ms ${Math.round(process.uptime() * 1000)}\n`))
   win.once('ready-to-show', () => markShellReady(Math.round(process.uptime() * 1000)))
+  // The session veil (worksuite-session-veil, over Labwc from the session's start) leaves once the renderer has drawn
+  // its first screen (ws:firstFrame, src/main.tsx); ready-to-show is only the empty page. A renderer that never says so
+  // still lets it go a little after its page showed.
+  win.once('ready-to-show', () => setTimeout(markSessionVeil, 5000))
   // Renderer probes (launcher first frame, WSOS-PRF-005) report on the console; forwarded only in perf runs.
   if (process.env.WORKSUITE_PERF === '1') win.webContents.on('console-message', (ev) => { if (/^WORKSUITE_PERF [a-z_]+ \d+$/.test(ev.message)) process.stdout.write(`${ev.message}\n`) })
   win.webContents.on('will-navigate', (e) => e.preventDefault())
@@ -317,6 +328,7 @@ app.whenReady().then(() => {
   handle('ws:syncFailed', () => syncCall('ListFailed'))
   handle('ws:syncRetry', (mutationId) => syncCall('RetryFailed', { mutation_id: mutationId }))
   handle('ws:deviceInfo', () => deviceInfo())
+  handle('ws:firstFrame', () => { markSessionVeil(); return true })
   // Settings → NetworkManager, BlueZ, PipeWire, UPower, CUPS, wlr-randr, UDisks2 (WSOS-INT-001…006, DSK-006).
   const sys = systemBridge()
   handle('ws:sysNetwork', () => sys.network())

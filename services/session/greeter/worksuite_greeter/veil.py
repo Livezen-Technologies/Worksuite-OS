@@ -68,11 +68,25 @@ def build(Gtk, Pango, PangoCairo):
     """Veil widget class for this GTK (imported lazily so the geometry above is tested without GTK)."""
 
     class Veil(Gtk.DrawingArea):
-        def __init__(self, title="", sub="", phase="", show_column=True):
+        def __init__(self, title="", sub="", phase="", show_column=True, mark_only=False):
             super().__init__(hexpand=True, vexpand=True, can_target=False)
             self.title, self.sub, self.phase, self.show_column = title, sub, phase, show_column
+            self.mark_only = mark_only   # the ring (spinning, see spin()) and the mark; no texts, no bar
+            self.angle = 0.0
             self.version = splash_version()
             self.set_draw_func(self._draw)
+
+        def spin(self):
+            """Turns the ring's arc, like the splash's spinner, until the widget goes."""
+            t0 = [None]
+
+            def tick(_w, clock):
+                now = clock.get_frame_time()
+                t0[0] = now if t0[0] is None else t0[0]
+                self.angle = ((now - t0[0]) / 1e6) * 2 * math.pi / 1.4   # one turn in 1.4 s
+                self.queue_draw()
+                return True
+            self.add_tick_callback(tick)
 
         def set_texts(self, title, sub, phase, show_column=True):
             self.title, self.sub, self.phase, self.show_column = title, sub, phase, show_column
@@ -108,7 +122,7 @@ def build(Gtk, Pango, PangoCairo):
             cr.stroke()
             cr.set_source_rgb(0.094, 0.831, 0.941)              # #18D4F0 arc, a quarter turn
             cr.set_line_cap(1)
-            cr.arc(rc[0], rc[1], 54, -math.pi / 2, 0)
+            cr.arc(rc[0], rc[1], 54, -math.pi / 2 + self.angle, self.angle)
             cr.stroke()
             mx, my = cx - 24, g["ring_y"] + 36                   # the mark, 48 px (60-unit artwork scaled 0.8)
             k = 0.8
@@ -120,6 +134,8 @@ def build(Gtk, Pango, PangoCairo):
             rect(20, 20, 20, BG)
             rect(0, 20, 20, (0.094, 0.831, 0.941))
             rect(20, 40, 20, (0.094, 0.831, 0.941))
+            if self.mark_only:
+                return
             if self.title:
                 self._text(cr, self.title, 28, (0.91, 0.933, 0.98), "IBM Plex Sans", Pango.Weight.MEDIUM, cx, g["title_y"], "center")
             if self.sub:
@@ -168,9 +184,78 @@ class Fader:
         return False
 
 
+SHELL_READY = "worksuite/shell-ready"   # under XDG_RUNTIME_DIR; the shell writes it on its first frame (main.ts)
+
+
+def session_done(ready, started, failed):
+    """The session veil goes once the shell has drawn (its mark is newer than the veil) or the shell failed."""
+    try:
+        if os.stat(ready).st_mtime >= started:
+            return True
+    except OSError:
+        pass
+    return failed()
+
+
+def shell_failed():
+    try:
+        return subprocess.run(["systemctl", "--user", "is-failed", "--quiet", "worksuite-shell.service"], timeout=3, check=False).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def session_main():
+    """Session start: from Labwc's first moment until the shell's first frame, the splash colour with the mark and a
+    spinner on a layer-shell overlay (Labwc showed black with a pointer for a minute on slow machines). It leaves
+    when the shell has drawn (SHELL_READY) or the shell's unit failed; never on a timer."""
+    import time
+    import gi
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("PangoCairo", "1.0")
+    gi.require_version("Gtk4LayerShell", "1.0")
+    gi.require_foreign("cairo")
+    from gi.repository import GLib, Gtk, Gtk4LayerShell as LS, Pango, PangoCairo
+    started = time.time() - 1
+    ready = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", SHELL_READY)
+    Veil = build(Gtk, Pango, PangoCairo)
+    app = Gtk.Application(application_id="lk.worksuite.SessionVeil")
+
+    def activate(a):
+        win = Gtk.ApplicationWindow(application=a, title="WorkSuite")
+        prov = Gtk.CssProvider()
+        prov.load_from_data(b"window { background: transparent; }")
+        Gtk.StyleContext.add_provider_for_display(win.get_display(), prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        LS.init_for_window(win)
+        LS.set_namespace(win, "worksuite-veil")
+        LS.set_layer(win, LS.Layer.OVERLAY)
+        for e in (LS.Edge.TOP, LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT):
+            LS.set_anchor(win, e, True)
+        LS.set_exclusive_zone(win, -1)
+        LS.set_keyboard_mode(win, LS.KeyboardMode.NONE)
+        v = Veil(mark_only=True)
+        v.spin()
+        win.set_child(v)
+        win.present()
+        polls = [0]
+
+        def poll():
+            polls[0] += 1
+            if session_done(ready, started, shell_failed if polls[0] % 10 == 0 else (lambda: False)):
+                Fader(GLib, [win], 1.0, 0.0, 300, done=a.quit)   # the whole surface: the shell shows through
+                return False
+            return True
+        GLib.timeout_add(100, poll)
+
+    app.connect("activate", activate)
+    app.run(sys.argv[:1])
+    return 0
+
+
 def main(argv=None):
-    """Installer start: the veil, then CMD in front of it (cage shows the newest window)."""
+    """Installer start: the veil, then CMD in front of it (cage shows the newest window). --session: session_main."""
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["--session"]:
+        return session_main()
     title = ""
     if argv[:1] == ["--installer"]:
         from . import i18n

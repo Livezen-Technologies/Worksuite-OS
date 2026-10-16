@@ -2,17 +2,28 @@
 # greetd's ExecStartPost (services/session/systemd/greetd/greetd.service): ends the boot splash once the greeter (or
 # the live installer's veil) has drawn its first frame, which repeats the splash's last frame, so the splash hands
 # over without a black screen. --retain-splash: Plymouth leaves the picture alone (the greeter owns the display now).
-# Without a sign from the greeter (gtkgreet fallback, a crash) Plymouth is ended after the timeout all the same.
+# No fixed timeout: on a slow machine (E2E under TCG: over 60 s from greetd to the greeter's first frame) a 15 s
+# timeout ended the splash long before the greeter drew. The gtkgreet fallback marks the handoff too
+# (worksuite-greeter); if Plymouth goes away by itself there is nothing left to do. WORKSUITE_HANDOFF_TIMEOUT (seconds)
+# still sets a limit when wanted. It waits in the background, so greetd counts as started at once.
 set -u
 READY=${WORKSUITE_GREETER_READY:-/run/worksuite/greeter/ready}
-TIMEOUT=${WORKSUITE_HANDOFF_TIMEOUT:-15}
+TIMEOUT=${WORKSUITE_HANDOFF_TIMEOUT:-0}
 PLYMOUTH=${WORKSUITE_PLYMOUTH:-plymouth}
 command -v "$PLYMOUTH" >/dev/null 2>&1 || exit 0
 "$PLYMOUTH" --ping 2>/dev/null || exit 0
+if [ -z "${WORKSUITE_HANDOFF_FOREGROUND:-}" ]; then
+    WORKSUITE_HANDOFF_FOREGROUND=1 "$0" "$@" </dev/null &
+    exit 0
+fi
 n=0
-while [ ! -e "$READY" ] && [ "$n" -lt $((TIMEOUT * 10)) ]; do
+while [ ! -e "$READY" ]; do
     sleep 0.1
     n=$((n + 1))
+    if [ $((n % 10)) -eq 0 ] && ! "$PLYMOUTH" --ping 2>/dev/null; then exit 0; fi   # the splash is gone anyway
+    if [ "$TIMEOUT" -gt 0 ] && [ "$n" -ge $((TIMEOUT * 10)) ]; then
+        echo "worksuite-greeter-handoff: no first frame from the greeter after ${TIMEOUT}s; ending the splash" >&2
+        break
+    fi
 done
-[ -e "$READY" ] || echo "worksuite-greeter-handoff: no first frame from the greeter after ${TIMEOUT}s; ending the splash" >&2
 exec "$PLYMOUTH" quit --retain-splash

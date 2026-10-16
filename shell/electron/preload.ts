@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 // Named functions only; the renderer never sees ipcRenderer (WSOS-SEC-001, §10.3).
 contextBridge.exposeInMainWorld('worksuite', {
+  firstFrame: () => ipcRenderer.invoke('ws:firstFrame'),
   authenticate: (user: string, password: string, method?: string) => ipcRenderer.invoke('ws:authenticate', String(user), String(password), String(method ?? 'password')),
   lock: () => ipcRenderer.invoke('ws:lock'),
   logout: () => ipcRenderer.invoke('ws:logout'),

@@ -283,14 +283,45 @@ grep -q '^services/session/systemd/greetd/greetd.service etc/systemd/system/$' "
 stub plymouth 'case "$1" in --ping) [ -e "$T/ply-up" ] ;; *) echo "plymouth $*" >> "$LOG" ;; esac'
 : > "$LOG"; : > "$T/ply-up"; rm -f "$T/ready"
 ( sleep 0.3; : > "$T/ready" ) &
-WORKSUITE_GREETER_READY="$T/ready" WORKSUITE_HANDOFF_TIMEOUT=5 sh "$BIN/worksuite-greeter-handoff"
+WORKSUITE_HANDOFF_FOREGROUND=1 WORKSUITE_GREETER_READY="$T/ready" sh "$BIN/worksuite-greeter-handoff"
 check "handoff: splash ends with its picture kept once the greeter has drawn" "$(cat "$LOG")" "plymouth quit --retain-splash"
 : > "$LOG"; rm -f "$T/ready"
-WORKSUITE_GREETER_READY="$T/ready" WORKSUITE_HANDOFF_TIMEOUT=1 sh "$BIN/worksuite-greeter-handoff" 2>/dev/null
-check "handoff: no sign from the greeter, the splash still ends after the timeout" "$(cat "$LOG")" "plymouth quit --retain-splash"
+( sleep 2.5; : > "$T/ready" ) &
+WORKSUITE_HANDOFF_FOREGROUND=1 WORKSUITE_GREETER_READY="$T/ready" sh "$BIN/worksuite-greeter-handoff"
+check "handoff: no fixed timeout, a slow greeter keeps the splash until its first frame" "$(cat "$LOG")" "plymouth quit --retain-splash"
+: > "$LOG"; rm -f "$T/ready"
+( sleep 0.5; rm -f "$T/ply-up" ) &
+WORKSUITE_HANDOFF_FOREGROUND=1 WORKSUITE_GREETER_READY="$T/ready" sh "$BIN/worksuite-greeter-handoff"
+check "handoff: the splash went away by itself, nothing to end" "$(cat "$LOG")" ""
+: > "$LOG"; : > "$T/ply-up"
+WORKSUITE_HANDOFF_FOREGROUND=1 WORKSUITE_GREETER_READY="$T/ready" WORKSUITE_HANDOFF_TIMEOUT=1 sh "$BIN/worksuite-greeter-handoff" 2>/dev/null
+check "handoff: an explicit timeout still ends the splash" "$(cat "$LOG")" "plymouth quit --retain-splash"
+: > "$LOG"; : > "$T/ply-up"; rm -f "$T/ready"
+t0=$(date +%s); WORKSUITE_GREETER_READY="$T/ready" sh "$BIN/worksuite-greeter-handoff"; t1=$(date +%s)
+check "handoff: waits in the background (greetd counts as started at once)" "$([ $((t1 - t0)) -le 1 ] && echo quick)" "quick"
+: > "$T/ready"; sleep 1.5
+check "handoff: background waiter ends the splash" "$(cat "$LOG")" "plymouth quit --retain-splash"
 : > "$LOG"; rm -f "$T/ply-up"
-WORKSUITE_GREETER_READY="$T/ready" WORKSUITE_HANDOFF_TIMEOUT=1 sh "$BIN/worksuite-greeter-handoff"
+WORKSUITE_HANDOFF_FOREGROUND=1 WORKSUITE_GREETER_READY="$T/ready" sh "$BIN/worksuite-greeter-handoff"
 check "handoff: nothing to do without a splash" "$(cat "$LOG")" ""
+# The greeter is checked and preloaded before cage takes the screen (cage is black until the greeter's first frame).
+printf '#!/bin/sh\necho "cage $* checked=${WORKSUITE_GREETER_CHECKED:-}"\n' > "$T/cage"; chmod +x "$T/cage"
+printf '#!/bin/sh\necho "py $*" >> "%s/py.log"; exit ${PY_RC:-0}\n' "$T" > "$T/py"; chmod +x "$T/py"
+echo ': wlr env' > "$T/wlr-env"
+check "cage: greeter preloaded and checked before cage starts" \
+  "$(WORKSUITE_WLR_ENV="$T/wlr-env" WORKSUITE_CAGE="$T/cage" WORKSUITE_PYTHON="$T/py" sh "$BIN/worksuite-cage" -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-session)" \
+  "cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-session checked=1"
+check "cage: no GTK 4, the greeter wrapper decides inside cage" \
+  "$(PY_RC=1 WORKSUITE_WLR_ENV="$T/wlr-env" WORKSUITE_CAGE="$T/cage" WORKSUITE_PYTHON="$T/py" sh "$BIN/worksuite-cage" -s -- /usr/lib/worksuite/worksuite-greeter)" \
+  "cage -s -- /usr/lib/worksuite/worksuite-greeter checked="
+rm -f "$T/py.log"
+check "cage: the installer is not preloaded" \
+  "$(WORKSUITE_WLR_ENV="$T/wlr-env" WORKSUITE_CAGE="$T/cage" WORKSUITE_PYTHON="$T/py" sh "$BIN/worksuite-cage" -s -- /usr/lib/worksuite/worksuite-installer-start; [ -e "$T/py.log" ] && echo ran)" \
+  "cage -s -- /usr/lib/worksuite/worksuite-installer-start checked="
+grep -q 'worksuite-session-veil' "$ROOT/services/session/labwc/autostart" && grep -q '^services/session/bin/worksuite-session-veil usr/lib/worksuite/$' "$ROOT/packaging/debian/worksuite-session.install" \
+  && grep -q "shell-ready" "$ROOT/shell/electron/main.ts" \
+  && ok "session veil from Labwc's start until the shell's first frame" || bad "session veil from Labwc's start until the shell's first frame"
+check "software GPU: GTK draws with cairo" "$(env -u GSK_RENDERER sh -c ". '$BIN/wlr-env'; echo \${GSK_RENDERER:-gl}")" "$( [ -n "$(env -u WLR_RENDERER sh -c ". '$BIN/wlr-env'; echo \$WLR_RENDERER")" ] && echo cairo || echo gl)"
 IS=$ROOT/live-build/config/includes.chroot/usr/lib/worksuite/worksuite-installer-start
 grep -q 'worksuite_greeter.veil --installer -- calamares' "$IS" && grep -q '^exec calamares' "$IS" && [ -x "$IS" ] \
   && grep -q 'worksuite-installer-start' "$ROOT/live-build/config/includes.chroot/usr/lib/live/config/2000-worksuite-installer" \

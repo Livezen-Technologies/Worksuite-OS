@@ -20,3 +20,5 @@ const kiosk = q.get('mode') === 'kiosk-exit' ? <KioskExit /> : q.get('mode') ===
 
 // Cut/Copy/Paste on every text field of the shell's own screens (not the kiosk's).
 createRoot(document.getElementById('root')!).render(<StrictMode>{kiosk ?? (output ? <OutputDesktop output={output} /> : <><App /><TextContextMenu /></>)}</StrictMode>)
+// The first screen is painted (two frames after the first render): the session veil over Labwc can go (electron/main.ts).
+requestAnimationFrame(() => requestAnimationFrame(() => { void (window as unknown as { worksuite?: { firstFrame?: () => Promise<unknown> } }).worksuite?.firstFrame?.()?.catch(() => undefined) }))
