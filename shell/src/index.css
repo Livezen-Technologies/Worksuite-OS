@@ -27,6 +27,15 @@
   --color-ws-danger: #b91c1c;
 }
 
+/* Scrollbars match the shell (thin, translucent thumb, no white native track) in every scrolling panel. */
+* { scrollbar-width: thin; scrollbar-color: rgba(127, 178, 255, 0.28) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(127, 178, 255, 0.28); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(127, 178, 255, 0.45); }
+*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
+:root[data-theme="light"] * { scrollbar-color: rgba(15, 23, 42, 0.25) transparent; }
+:root[data-theme="light"] *::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.25); }
+
 @layer base {
   html, body, #root { height: 100%; margin: 0; }
   body { font-family: var(--font-sans); color: var(--color-ws-ink); background: var(--color-ws-night); }
