@@ -25,6 +25,17 @@ class OskTest(unittest.TestCase):
                 for ch in row:
                     self.assertEqual(osk.apply_key("", 0, ch)[0], ch)
 
+    def test_toggle_icon_is_drawn_inside_its_box(self):
+        rects = osk.icon_rects(18, 18)
+        self.assertGreater(len(rects), 5)
+        for x, y, w, h, _filled in rects:
+            self.assertTrue(0 <= x and 0 <= y and x + w <= 18 and y + h <= 18)
+
+    def test_toggle_uses_no_theme_icon(self):
+        import pathlib
+        src = (pathlib.Path(osk.__file__).parent / "ui.py").read_text()
+        self.assertNotIn("input-keyboard-symbolic", src)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -145,7 +145,7 @@ class Greeter(Gtk.ApplicationWindow):
         # On-screen keyboard for touch-only devices (osk.py): typed into the field that last had focus.
         self.typing_into = None
         self.connect("notify::focus-widget", self._focus_changed)
-        kbd = Gtk.Button(icon_name="input-keyboard-symbolic", tooltip_text=_("On-screen keyboard"), css_classes=["osk-toggle"], valign=Gtk.Align.CENTER)
+        kbd = Gtk.Button(child=osk.icon(Gtk), tooltip_text=_("On-screen keyboard"), css_classes=["osk-toggle"], valign=Gtk.Align.CENTER)
         kbd.set_focus_on_click(False)
         kbd.update_property([Gtk.AccessibleProperty.LABEL], [_("On-screen keyboard")])
         top.append(kbd)

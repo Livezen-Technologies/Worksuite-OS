@@ -85,3 +85,31 @@ button.osk-key:active { background: #1F6BFF; }
 button.osk-space { min-width: 280px; }
 button.osk-toggle { background: rgba(255,255,255,0.08); border-radius: 10px; min-width: 44px; min-height: 44px; border: none; color: #FFFFFF; }
 """
+
+
+# The toggle's keyboard glyph is drawn, not looked up: the greeter runs without an icon theme that has
+# input-keyboard-symbolic (or an SVG pixbuf loader), and GTK then shows its broken-image icon.
+def icon_rects(w, h):
+    """Outline and keys of a keyboard glyph in a w×h box: [(x, y, width, height, filled), ...]."""
+    bw, bh = w * 0.9, h * 0.62
+    x0, y0 = (w - bw) / 2, (h - bh) / 2
+    out = [(x0, y0, bw, bh, False)]
+    kw, kh, gap = bw / 8, bh / 6, bw / 16
+    for row in range(2):
+        for col in range(5):
+            out.append((x0 + gap + col * (kw + gap * 0.6), y0 + bh * 0.2 + row * (kh + bh * 0.12), kw, kh, True))
+    out.append((x0 + bw * 0.25, y0 + bh * 0.68, bw * 0.5, kh, True))
+    return out
+
+
+def icon(Gtk, size=18):
+    area = Gtk.DrawingArea(content_width=size, content_height=size)
+
+    def draw(_a, cr, w, h):
+        cr.set_source_rgb(1, 1, 1)
+        cr.set_line_width(1.5)
+        for x, y, rw, rh, filled in icon_rects(w, h):
+            cr.rectangle(x, y, rw, rh)
+            cr.fill() if filled else cr.stroke()
+    area.set_draw_func(draw)
+    return area
