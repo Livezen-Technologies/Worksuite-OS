@@ -43,7 +43,7 @@ export async function forcePower(exec: Exec, action: string): Promise<{ ok: true
   if (!a || action === 'suspend') return { ok: false, error: 'invalid_argument' }
   const quiet = await exec('systemctl', [...a, '--no-ask-password'])
   if (quiet.code === 0) return { ok: true, value: true }
-  const r = await exec('pkexec', [POWER_FORCE, a[0]])
+  const r = await exec('pkexec', ['/usr/lib/worksuite/worksuite-power-force', a[0]])   // POWER_FORCE; a[0] is reboot|poweroff
   return r.code === 0 ? { ok: true, value: true } : { ok: false, error: pkexecError(r.code) === 'failed' ? 'not_authorized' : pkexecError(r.code) }
 }
 
