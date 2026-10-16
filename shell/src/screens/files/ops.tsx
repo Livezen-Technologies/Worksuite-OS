@@ -334,7 +334,8 @@ const TOAST_LOOK: Record<ToastKind, [readonly [string, string], string]> = {
   ok: [TINT.green, ICON.done], move: [TINT.green, ICON.move], trash: [TINT.blue, P.trash], paused: [TINT.amber, ICON.pause], error: [TINT.red, ICON.error],
 }
 
-/** Bottom-centre toasts; each goes after 6 s unless the pointer is on it. */
+/** Bottom-centre toasts; each goes after 6 s (one with an action such as Undo after 12 s: on a slow machine the pointer
+ *  often got there just as it went) unless the pointer is on it. */
 export function Toasts({ toasts, dismiss }: { toasts: Toast[]; dismiss: (id: number) => void }) {
   if (!toasts.length) return null
   return (
@@ -345,7 +346,7 @@ export function Toasts({ toasts, dismiss }: { toasts: Toast[]; dismiss: (id: num
 }
 function ToastCard({ toast, dismiss }: { toast: Toast; dismiss: (id: number) => void }) {
   const [hold, setHold] = useState(false)
-  useEffect(() => { if (hold) return; const id = setTimeout(() => dismiss(toast.id), 6000); return () => clearTimeout(id) }, [hold, toast.id, dismiss])
+  useEffect(() => { if (hold) return; const id = setTimeout(() => dismiss(toast.id), toast.action ? 12_000 : 6000); return () => clearTimeout(id) }, [hold, toast.id, toast.action, dismiss])
   const [tint, d] = TOAST_LOOK[toast.kind]
   return (
     <div role="status" onMouseEnter={() => setHold(true)} onMouseLeave={() => setHold(false)} className="pointer-events-auto flex items-center gap-3 rounded-[14px] py-3 pr-3.5 pl-4"

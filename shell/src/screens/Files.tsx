@@ -133,11 +133,18 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
   // Undo (the toast's button, or Ctrl+Z like Windows' Explorer): puts the last items moved to the Trash back where their
   // .trashinfo files say they came from (electron/fileops.ts trashRestore).
   const lastTrash = useRef<string[] | null>(null)
-  const undoTrash = (ids: string[]) => {
+  const lastTrashNames = useRef<string[]>([])
+  const undoTrash = (ids: string[], names: string[] = []) => {
     if (lastTrash.current === ids) lastTrash.current = null
+    // Say what happened: the restore is quick, and with the view refreshing under the pointer an Undo that did nothing
+    // (the toast already gone, an item no longer in the Trash) looked the same as one that worked.
     void os.filesTrashRestore(ids).then((x) => {
       if (!x.ok) setNotice(t('files.err.generic'))
-      else if (x.value.skipped) setNotice(t('files.trash.skipped', { count: x.value.skipped }))
+      else {
+        const n = x.value.restored
+        if (n) toast({ kind: 'ok', text: n === 1 && names.length === 1 ? t('files.ops.toastRestoredOne', { name: names[0] }) : t('files.ops.toastRestored', { count: formatNumber(n) }) })
+        if (x.value.skipped) setNotice(n || x.value.skipped < ids.length ? t('files.trash.skipped', { count: x.value.skipped }) : t('files.ops.undoGone'))
+      }
       reload()
     })
   }
@@ -155,8 +162,9 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
       if (r.ok) {
         const ids = r.value.ids
         lastTrash.current = ids
+        lastTrashNames.current = names
         toast({ kind: 'trash', text: names.length === 1 ? t('files.ops.toastTrashedOne', { name: names[0] }) : t('files.ops.toastTrashed', { count: formatNumber(r.value.count) }),
-          action: { label: t('files.ops.undo'), run: () => undoTrash(ids) } })
+          action: { label: t('files.ops.undo'), run: () => undoTrash(ids, names) } })
       } else setNotice(t('files.err.generic'))
     }
     reload()
@@ -185,7 +193,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
     else if (ev.ctrlKey && (ev.key === 'c' || ev.key === 'x') && sel.length) setClip({ op: ev.key === 'c' ? 'copy' : 'move', root: dir.root, rels: sel.map(relOf) })
     else if (ev.ctrlKey && ev.key === 'v') paste()
     else if (ev.ctrlKey && ev.key === 'a') setSel(shown.map((e) => e.name))
-    else if (ev.ctrlKey && !ev.shiftKey && ev.key === 'z' && lastTrash.current) undoTrash(lastTrash.current)
+    else if (ev.ctrlKey && !ev.shiftKey && ev.key === 'z' && lastTrash.current) undoTrash(lastTrash.current, lastTrashNames.current)
     else return
     ev.preventDefault()
   }

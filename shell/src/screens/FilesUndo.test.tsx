@@ -56,3 +56,18 @@ it("the toast's Undo restores from the Trash", async () => {
   await settle()
   expect(restore).toHaveBeenCalledWith(['Meeting notes.md'])
 })
+
+it('says that the item is back, or that there was nothing to undo', async () => {
+  vi.spyOn(os, 'filesTrashRestore').mockResolvedValueOnce({ ok: true, value: { restored: 1, skipped: 0 } })
+  await deleteNotes()
+  const undo = [...host!.querySelectorAll('button')].find((b) => b.textContent === 'Undo')!
+  await act(async () => { undo.click() })
+  await settle()
+  expect(host!.textContent).toContain('“Meeting notes.md” is back')
+  vi.spyOn(os, 'filesTrashRestore').mockResolvedValueOnce({ ok: true, value: { restored: 0, skipped: 1 } })
+  await deleteNotes()
+  const again = [...host!.querySelectorAll('button')].filter((b) => b.textContent === 'Undo').at(-1)!
+  await act(async () => { again.click() })
+  await settle()
+  expect(host!.textContent).toContain('Nothing to undo')
+})
