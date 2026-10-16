@@ -23,11 +23,11 @@ stub systemd-cat 'cat >/dev/null'
 # ---- worksuite-session hands the kiosk account to the kiosk session ----
 printf '#!/bin/sh\necho kiosk-session >> "$LOG"\n' > "$T/ks"; chmod +x "$T/ks"
 printf 'KIOSK_USER=%s\nKIOSK_IDLE_RESET_S=600\nKIOSK_OSK=1\nKIOSK_EXIT_PIN=1\n' "$ME" > "$T/session.env"
-WORKSUITE_KIOSK_SESSION="$T/ks" sh "$BIN/worksuite-session" >/dev/null 2>&1
+WORKSUITE_KIOSK_SESSION="$T/ks" WORKSUITE_SESSION_JOURNAL=1 sh "$BIN/worksuite-session" >/dev/null 2>&1
 grep -qx kiosk-session "$LOG" && ok "kiosk account: kiosk session instead of the shell" || bad "kiosk account: kiosk session instead of the shell"
 grep -q '^labwc' "$LOG" && bad "kiosk account never gets the full shell" || ok "kiosk account never gets the full shell"
 : > "$LOG"; printf 'KIOSK_USER=someoneelse\n' > "$T/session.env"
-WORKSUITE_KIOSK_SESSION="$T/ks" sh "$BIN/worksuite-session" >/dev/null 2>&1
+WORKSUITE_KIOSK_SESSION="$T/ks" WORKSUITE_SESSION_JOURNAL=1 sh "$BIN/worksuite-session" >/dev/null 2>&1
 grep -q kiosk-session "$LOG" && bad "other accounts get the normal session" || ok "other accounts get the normal session"
 grep -q '^labwc -C ' "$LOG" && ok "normal session runs Labwc with the WorkSuite config" || bad "normal session runs Labwc with the WorkSuite config"
 
