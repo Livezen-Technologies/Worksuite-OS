@@ -30,12 +30,16 @@ export function notifyIcon(appIcon: unknown, desktopEntry: unknown): string | nu
   }
   return null
 }
-/** The sender's window for a clicked notification: by desktop-entry hint, else app_name, matched against window
- *  app_ids (exact, StartupWMClass-style case-insensitive, or a reverse-DNS id's last part). Most recent window wins. */
-export function windowForNotification<W extends { handle: string; appId: string }>(n: Pick<AppNotification, 'app' | 'desktopEntry'>, windows: W[]): W | undefined {
+/** The sender's window for a clicked notification: by desktop-entry hint, else app_name, else the installed entries
+ *  whose Name= is the app_name (their id and StartupWMClass), matched against window app_ids (exact, case-insensitive,
+ *  or a reverse-DNS id's last part). Most recent window wins. */
+export function windowForNotification<W extends { handle: string; appId: string }>(n: Pick<AppNotification, 'app' | 'desktopEntry'>, windows: W[],
+  entries: { id: string; name: string; wm_class?: string | null }[] = []): W | undefined {
   const norm = (s: string) => s.trim().toLowerCase().replace(/\.desktop$/, '')
   const last = (s: string) => s.split('.').pop() ?? s
-  const keys = [n.desktopEntry, n.app].filter((x): x is string => !!x && !!x.trim()).map(norm)
+  const app = n.app?.trim().toLowerCase()
+  const named = app ? entries.filter((e) => e.name.trim().toLowerCase() === app).flatMap((e) => [e.id, e.wm_class ?? '']) : []
+  const keys = [n.desktopEntry, n.app, ...named].filter((x): x is string => !!x && !!x.trim()).map(norm)
   for (const k of keys) {
     const hit = [...windows].reverse().find((w) => norm(w.appId) === k)
       ?? [...windows].reverse().find((w) => k.includes('.') && last(k) === norm(w.appId))
