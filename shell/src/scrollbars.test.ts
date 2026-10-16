@@ -24,3 +24,12 @@ describe('password fields in rounded containers (lock, greeter)', () => {
     expect(css).toContain(':is(input, textarea, select).outline-none:focus-visible { box-shadow: none; }')
   })
 })
+
+describe('scrollbar variants', () => {
+  const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8')
+  it('has no arrow buttons and light / high-contrast variants', () => {
+    expect(css).toContain('*::-webkit-scrollbar-button { display: none;')
+    expect(css).toContain(':root[data-theme="light"] * { scrollbar-color:')
+    expect(css).toContain('[data-high-contrast] * { scrollbar-color: #ffffff #000000; }')
+  })
+})

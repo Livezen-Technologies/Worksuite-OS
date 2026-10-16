@@ -35,6 +35,9 @@
 *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
 :root[data-theme="light"] * { scrollbar-color: rgba(15, 23, 42, 0.25) transparent; }
 :root[data-theme="light"] *::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.25); }
+*::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+[data-high-contrast] * { scrollbar-color: #ffffff #000000; }
+[data-high-contrast] *::-webkit-scrollbar-thumb { background: #ffffff; }
 
 @layer base {
   html, body, #root { height: 100%; margin: 0; }
