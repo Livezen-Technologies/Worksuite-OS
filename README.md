@@ -23,3 +23,20 @@ npm test           # unit tests
 npm run build      # renderer + Electron main/preload
 npm start          # run in Electron
 ```
+
+### Desktop widgets
+
+After sign-in the wallpaper shows WorkSuite Desktop's Home cards as widgets: At a glance (due today, meetings,
+unread mail and chats), Today's work, Today's agenda, Waiting for me, Announcements, and on request Your daily
+brief, Recent activity and Recent files. The main process (`shell/electron/widgets.ts`) reads the same platform
+endpoints as Desktop's Home (`/api/dashboard/home`, `/api/dashboard/summary`, `/api/tasks`, `/api/calendar/events`,
+`/api/hr/announcements/mine`, `/api/hr/approvals/pending`) with the credentials broker's token, which never reaches
+the renderer; it caches the last answer per account in `~/.cache/worksuite/widgets` (dropped on sign-out) and the
+renderer refreshes every 5 minutes and on reconnect. A module the person cannot open (404/403) has no widget.
+Items open through the worksuite:// path: WorkSuite Desktop when installed, else the module's web app window.
+
+Right-click the wallpaper (or the pencil above the widgets) for **Edit widgets** / **Add widgets**: remove, move
+(drag, or the arrow buttons), wide/narrow, and the picker. The layout is saved in the synced `preferences/shell`
+object (`widgets`), with a local copy. Signed out: one "Sign in to WorkSuite to see your widgets" card. Policy
+`desktop_widgets: false` (admin console › Policy) turns them off; a kiosk never shows them. UI:
+`shell/src/components/DesktopWidgets.tsx`, model `shell/src/lib/widgets.ts`, strings `shell/src/i18n/widgets.ts`.
