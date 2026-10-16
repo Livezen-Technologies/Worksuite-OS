@@ -9,6 +9,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QDialog>
+#include <QFile>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -23,6 +24,8 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
+#include <QStorageInfo>
+#include <QToolBar>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -44,6 +47,83 @@ recordEncryption( bool on )
     QSettings state( QString::fromLatin1( WS_STATE ), QSettings::IniFormat );
     state.setValue( QStringLiteral( "encrypt" ), on );
     state.sync();
+}
+
+/* The install page (branding/worksuite/show.qml) shows real numbers only. Calamares passes the slideshow nothing,
+   so the queue's progress signal is copied into global storage, which the page polls:
+     worksuiteProgress    0..1, the whole queue (the same value as Calamares' own bar)
+     worksuiteLog         the job status lines so far ("Show details")
+     worksuiteFiles*      unpackfs "Unpacking image a/b, file n/m"
+     worksuitePackages*   packages "Processing packages (n / m)"
+     worksuiteBytesDone   bytes written to the target root since the copy started (its file system's used space)
+     worksuiteBytesTotal  the image's unpacked size, measured at image build time (/usr/share/worksuite/rootfs.size) */
+static void
+reportProgress( qreal percent, const QString& message )
+{
+    auto* jq = Calamares::JobQueue::instance();
+    if ( !jq )
+    {
+        return;
+    }
+    auto* gs = jq->globalStorage();
+    gs->insert( QStringLiteral( "worksuiteProgress" ), percent );
+
+    static QStringList log;
+    const QString line = message.trimmed();
+    if ( !line.isEmpty() && ( log.isEmpty() || log.last() != line ) )
+    {
+        log << line;
+        while ( log.size() > 200 )
+        {
+            log.removeFirst();
+        }
+        gs->insert( QStringLiteral( "worksuiteLog" ), log );
+    }
+
+    static const QRegularExpression files( QStringLiteral( "(\\d+)\\s*/\\s*(\\d+)\\s*$" ) );
+    static const QRegularExpression packages( QStringLiteral( "\\((\\d+)\\s*/\\s*(\\d+)\\)" ) );
+    const QString phase = gs->value( QStringLiteral( "worksuitePhase" ) ).toString();
+    if ( phase == QLatin1String( "copy" ) )
+    {
+        const auto m = files.match( line );
+        if ( m.hasMatch() && m.captured( 2 ).toLongLong() > 0 )
+        {
+            gs->insert( QStringLiteral( "worksuiteFilesDone" ), m.captured( 1 ).toLongLong() );
+            gs->insert( QStringLiteral( "worksuiteFilesTotal" ), m.captured( 2 ).toLongLong() );
+        }
+    }
+    const auto pm = packages.match( line );
+    if ( pm.hasMatch() && pm.captured( 2 ).toLongLong() > 0 )
+    {
+        gs->insert( QStringLiteral( "worksuitePackagesDone" ), pm.captured( 1 ).toLongLong() );
+        gs->insert( QStringLiteral( "worksuitePackagesTotal" ), pm.captured( 2 ).toLongLong() );
+    }
+
+    static qint64 total = -1;
+    if ( total < 0 )
+    {
+        QFile f( QStringLiteral( "/usr/share/worksuite/rootfs.size" ) );
+        total = f.open( QIODevice::ReadOnly ) ? QString::fromLatin1( f.readAll() ).trimmed().section( QLatin1Char( '\t' ), 0, 0 ).toLongLong() : 0;
+        if ( total > 0 )
+        {
+            gs->insert( QStringLiteral( "worksuiteBytesTotal" ), total );
+        }
+    }
+    const QString root = gs->value( QStringLiteral( "rootMountPoint" ) ).toString();
+    if ( ( phase == QLatin1String( "prepare" ) || phase == QLatin1String( "copy" ) ) && !root.isEmpty() && root != QLatin1String( "/" ) )
+    {
+        QStorageInfo target( root );
+        if ( target.isValid() && target.rootPath() == root )
+        {
+            static qint64 baseline = -1;   // the empty file system's own use (journal, metadata)
+            const qint64 used = target.bytesTotal() - target.bytesFree();
+            if ( baseline < 0 )
+            {
+                baseline = used;
+            }
+            gs->insert( QStringLiteral( "worksuiteBytesDone" ), qMax< qint64 >( 0, used - baseline ) );
+        }
+    }
 }
 
 namespace
@@ -123,6 +203,25 @@ public:
                     return true;
                 }
             }
+        }
+        // The install page draws its own progress card (show.qml): hide Calamares' bar, log button and status line.
+        if ( o->isWidgetType() && e->type() == QEvent::Show && o->objectName() == QLatin1String( "exec-progress" ) )
+        {
+            auto* bar = static_cast< QWidget* >( o );
+            QTimer::singleShot( 0, bar, [ bar ] {
+                bar->hide();
+                if ( auto* page = bar->parentWidget() )
+                {
+                    for ( auto* tb : page->findChildren< QToolBar* >( QString(), Qt::FindDirectChildrenOnly ) )
+                    {
+                        tb->hide();
+                    }
+                    if ( auto* label = page->findChild< QWidget* >( QStringLiteral( "exec-message" ) ) )
+                    {
+                        label->hide();
+                    }
+                }
+            } );
         }
         // The stock partition page's "Encrypt system" box: report its state to the sidebar and slideshow.
         if ( o->isWidgetType() && e->type() == QEvent::Show && o->objectName() == QLatin1String( "m_encryptCheckBox" )
@@ -241,6 +340,7 @@ WorksuiteConfirmViewStep::WorksuiteConfirmViewStep( QObject* parent )
            (it connected before any module loaded), so the dialog exists by the time this one runs. */
         if ( auto* jq = Calamares::JobQueue::instance() )
         {
+            QObject::connect( jq, &Calamares::JobQueue::progress, qApp, &reportProgress );
             QObject::connect( jq, &Calamares::JobQueue::failed, qApp, [] {
                 QSettings state( QString::fromLatin1( WS_STATE ), QSettings::IniFormat );
                 state.setValue( QStringLiteral( "installFailed" ), true );   // the footer keeps Quit usable
@@ -516,7 +616,12 @@ WorksuiteConfirmViewStep::onActivate()
             }
         }
         m_disk = diskFromDescriptions( descriptions );
-        recordEncryption( encryptedFromDescriptions( descriptions ) );
+        // Calamares describes an encrypted root as "... with entries root", without saying luks: the descriptions
+        // can only confirm encryption, never rule it out. The Encrypt box (watched above) records the off state.
+        if ( encryptedFromDescriptions( descriptions ) )
+        {
+            recordEncryption( true );
+        }
         QString model, size;
         if ( !m_disk.isEmpty() )
         {
