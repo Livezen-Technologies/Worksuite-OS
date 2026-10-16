@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { nextState, requestLock, shouldEnterRecovery } from './session'
+import { nextState, personName, requestLock, shouldEnterRecovery } from './session'
 
 describe('session lifecycle', () => {
   it('follows greeter → starting → active', () => {
@@ -51,5 +51,14 @@ describe('requestLock (one lock screen)', () => {
     await requestLock(async () => { throw new Error('no logind') }, show)
     await requestLock(async () => undefined, show)
     expect(show).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('personName (Start menu, first run)', () => {
+  it('shows the full name when the account has one', () => expect(personName('ana', 'Ana Perera')).toBe('Ana Perera'))
+  it('falls back to the bare login, capitalised', () => {
+    expect(personName('ana')).toBe('Ana')
+    expect(personName('ana@corp.lk', '  ')).toBe('Ana')
+    expect(personName('CORP\\ana')).toBe('Ana')
   })
 })

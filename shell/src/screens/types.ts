@@ -5,6 +5,8 @@ export interface LockProps { user: string; name?: string; onUnlock: () => void; 
 export interface FirstRunProps { onDone: () => void; userName?: string }
 export interface DesktopProps {
   user: string
+  /** The account's full name, when it has one. */
+  fullName?: string
   onLock: () => void
   onLogout: () => void
   onOpen: (app: WindowApp) => void

@@ -33,3 +33,11 @@ export async function requestLock(lock: () => Promise<boolean | void>, showShell
   try { system = (await lock()) === true } catch { system = false }
   if (!system) showShellLock()
 }
+
+// The name the shell shows for the signed-in person: the account's full name (GECOS) when it has one, else the login
+// name (user, user@domain or DOMAIN\\user) bare and capitalised.
+export function personName(login: string, fullName?: string | null): string {
+  if (fullName && fullName.trim()) return fullName.trim()
+  const bare = login.split('\\').pop()!.split('@')[0]
+  return bare.charAt(0).toUpperCase() + bare.slice(1)
+}

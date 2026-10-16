@@ -1,5 +1,6 @@
 import { Children, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DesktopProps } from './types'
+import { personName } from '../lib/session'
 import { managedLabel, os, type DeviceInfo } from '../lib/os'
 import BIcon from '../components/BIcon'
 import type { Notice } from '../lib/syncNotices'
@@ -56,7 +57,7 @@ function useClock() {
   return now
 }
 
-export default function Desktop({ user, onLock, onLogout, onOpen, notes, children }: DesktopProps) {
+export default function Desktop({ user, fullName, onLock, onLogout, onOpen, notes, children }: DesktopProps) {
   const t = useT()
   const now = useClock()
   const [launcher, setLauncher] = useState(false)
@@ -87,7 +88,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   // Do not disturb holds toasts back; notices still collect in the notification center.
   const [dnd, setDnd] = useDnd()
   const searchRef = useRef<HTMLInputElement>(null)
-  const name = displayName(user) || user
+  const name = personName(user, fullName) || user
 
   const time = formatTime(now)
   const longDate = now.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })
@@ -361,8 +362,3 @@ function initials(name: string) {
   return ((w[0]?.[0] ?? '') + (w[1]?.[0] ?? '')).toUpperCase() || '?'
 }
 
-// Login names arrive as user, user@domain or DOMAIN\user; show the bare name capitalised.
-function displayName(login: string) {
-  const bare = login.split('\\').pop()!.split('@')[0]
-  return bare.charAt(0).toUpperCase() + bare.slice(1)
-}
