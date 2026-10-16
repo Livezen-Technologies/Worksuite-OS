@@ -35,6 +35,9 @@ class OskTest(unittest.TestCase):
         import pathlib
         src = (pathlib.Path(osk.__file__).parent / "ui.py").read_text()
         self.assertNotIn("input-keyboard-symbolic", src)
+        self.assertIn(".osk-glyph-key", src)
+        # No cairo draw function: python3-gi-cairo is not in the image.
+        self.assertNotIn("set_draw_func", (pathlib.Path(osk.__file__)).read_text())
 
     def test_no_gtk_screen_looks_up_theme_icons(self):
         # The greeter (cage, _greetd), the OSK and the polkit agent run without a full icon theme: a themed icon name

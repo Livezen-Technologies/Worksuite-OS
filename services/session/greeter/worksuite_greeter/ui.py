@@ -25,6 +25,9 @@ from .greetd import Greetd, GreetdError  # noqa: E402
 _ = gettext.translation("worksuite-greeter", fallback=True).gettext
 
 CSS = b"""
+.osk-glyph { border: 1.5px solid #FFFFFF; border-radius: 3px; padding: 2px 3px; }
+.osk-glyph-key { background-color: #FFFFFF; min-width: 2px; min-height: 2px; border-radius: 1px; }
+.osk-glyph-space { background-color: #FFFFFF; min-width: 12px; min-height: 2px; border-radius: 1px; }
 window.ws-greeter { color: #FFFFFF; font-family: "IBM Plex Sans", sans-serif;
   background-color: #061029;
   background-image: radial-gradient(circle at 78% 22%, rgba(24,212,240,0.22) 0%, transparent 38%),

@@ -103,13 +103,16 @@ def icon_rects(w, h):
 
 
 def icon(Gtk, size=18):
-    area = Gtk.DrawingArea(content_width=size, content_height=size)
-
-    def draw(_a, cr, w, h):
-        cr.set_source_rgb(1, 1, 1)
-        cr.set_line_width(1.5)
-        for x, y, rw, rh, filled in icon_rects(w, h):
-            cr.rectangle(x, y, rw, rh)
-            cr.fill() if filled else cr.stroke()
-    area.set_draw_func(draw)
-    return area
+    """The keyboard glyph from plain GTK boxes styled in CSS (no cairo: python3-gi-cairo is not in the image, and a
+    draw function then renders nothing)."""
+    w, h = size, size
+    outline = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, css_classes=["osk-glyph"],
+                      halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+    for row in range(2):
+        r = Gtk.Box(spacing=2, halign=Gtk.Align.CENTER)
+        for _col in range(5):
+            r.append(Gtk.Box(css_classes=["osk-glyph-key"]))
+        outline.append(r)
+    outline.append(Gtk.Box(css_classes=["osk-glyph-space"], halign=Gtk.Align.CENTER))
+    outline.set_size_request(int(w * 1.3), int(h * 0.85))
+    return outline
