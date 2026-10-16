@@ -2,6 +2,7 @@
 // (WSOS-INT-004), power profiles and inhibitors (WSOS-INT-005), printers (WSOS-INT-006), input methods (WSOS-INT-011)
 // and changes the server rejected (WSOS-SYN-004). Everything shown comes from the host; without the bridge each
 // section says it is unavailable.
+import { ErrorDetails } from '../components/ErrorDetails'
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Dialog, Switch, btnGhost, btnPrimary, card, dialogFooter, field, rowLine, sectionLabel } from '../components/Dk'
 import { failureKind, knownReason, peripheralsApi, type Avail, type FailedChange, type FoundPrinter, type Inhibitor, type InputState, type PeripheralsApi, type PowerProfiles, type PrintJob, type PrinterIssue, type Volume, type BtFound } from '../lib/peripheralsApi'
@@ -352,7 +353,8 @@ export function SyncProblemsSection() {
             <Line key={f.mutation_id}>
               <span className="flex flex-1 flex-col gap-0.5">
                 <span className="text-sm font-medium">{t('per.sync.record', { module: f.module, id: f.object_id })}</span>
-                <span className="text-xs text-[#FFB98A]">{kind === 'permission' ? t('per.sync.permission') : kind === 'validation' ? t('per.sync.validation') : t('per.sync.other')}{f.last_error ? ` (${f.last_error})` : ''}</span>
+                <span className="text-xs text-[#FFB98A]">{kind === 'permission' ? t('per.sync.permission') : kind === 'validation' ? t('per.sync.validation') : t('per.sync.other')}</span>
+                <ErrorDetails details={f.last_error} />
               </span>
               <button type="button" onClick={() => void retry(f.mutation_id)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{t('common.tryAgain')}</button>
             </Line>

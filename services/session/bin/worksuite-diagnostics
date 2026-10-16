@@ -1,0 +1,39 @@
+#!/bin/sh
+# Settings › About › Diagnostics (administrators only), run as root through pkexec, polkit action
+# lk.worksuite.diagnostics (auth_admin_keep: one administrator password covers a few minutes of use).
+#   worksuite-diagnostics journal boot|previous|greeter [LINES]   recent system journal, short-iso, no pager
+#   worksuite-diagnostics boot-details status|on|off               the "show boot details" GRUB entry
+# Nothing here is shown to people outside this area: the splash, the greeter and the shell say plain sentences and
+# the technical text stays in the journal, where this helper reads it for administrators.
+set -eu
+JOURNALCTL=${WORKSUITE_JOURNALCTL:-journalctl}
+UPDATE_GRUB=${WORKSUITE_UPDATE_GRUB:-update-grub}
+FLAG=${WORKSUITE_BOOT_DETAILS_FLAG:-/etc/worksuite/boot-details}
+
+lines() {
+    case "${1:-}" in
+        '') echo 500 ;;
+        *[!0-9]*) echo "invalid line count" >&2; exit 2 ;;
+        *) [ "$1" -ge 1 ] && [ "$1" -le 5000 ] && echo "$1" || { echo "line count out of range" >&2; exit 2; } ;;
+    esac
+}
+
+case "${1:-}" in
+journal)
+    n=$(lines "${3:-}")
+    case "${2:-}" in
+        boot) exec "$JOURNALCTL" -b 0 -o short-iso -n "$n" --no-pager -q ;;
+        previous) exec "$JOURNALCTL" -b -1 -o short-iso -n "$n" --no-pager -q ;;
+        greeter) exec "$JOURNALCTL" -b 0 -o short-iso -n "$n" --no-pager -q -t worksuite-greeter -t greetd -t worksuite-installer -t plymouth ;;
+        *) echo "usage: worksuite-diagnostics journal boot|previous|greeter [LINES]" >&2; exit 2 ;;
+    esac ;;
+boot-details)
+    case "${2:-}" in
+        status) [ -e "$FLAG" ] && echo on || echo off ;;
+        on) mkdir -p "$(dirname "$FLAG")"; : > "$FLAG"; "$UPDATE_GRUB" >/dev/null 2>&1 || { echo "update-grub failed" >&2; exit 1; }; echo on ;;
+        off) rm -f "$FLAG"; "$UPDATE_GRUB" >/dev/null 2>&1 || { echo "update-grub failed" >&2; exit 1; }; echo off ;;
+        *) echo "usage: worksuite-diagnostics boot-details status|on|off" >&2; exit 2 ;;
+    esac ;;
+*)
+    echo "usage: worksuite-diagnostics journal|boot-details …" >&2; exit 2 ;;
+esac

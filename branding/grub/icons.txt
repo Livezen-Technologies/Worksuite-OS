@@ -1,7 +1,8 @@
 # GRUB row icons (24px stroke paths from the G13 board), rendered by branding/render.sh to icons/<class>.png.
 # GRUB picks the first --class of an entry that has an icon: 10_linux entries carry "worksuite gnu-linux …" (GRUB_DISTRIBUTOR),
-# 42_worksuite_recovery adds ws-recovery / ws-previous, 30_uefi-firmware's entry has no class (no icon).
+# 42_worksuite_recovery adds ws-recovery / ws-previous / ws-details, 30_uefi-firmware's entry has no class (no icon).
 ws-os M12 3v9M6.3 7.3a8 8 0 1 0 11.4 0
 worksuite M12 3v9M6.3 7.3a8 8 0 1 0 11.4 0
 ws-previous M3 12a9 9 0 1 0 2.6-6.4M3 4v5h5
 ws-recovery M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z
+ws-details M4 5h16v14H4zM7 9l3 3-3 3M12 15h5

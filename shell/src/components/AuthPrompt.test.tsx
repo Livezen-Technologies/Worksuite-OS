@@ -35,7 +35,12 @@ describe('AuthPrompt (G05)', () => {
     const { api } = mount(BASE)
     await act(async () => root!.render(<AuthPrompt />))
     expect(host!.querySelector('[role="alertdialog"]')?.textContent).toContain('Administrator access needed')
+    // The polkit action id is technical: only under Details.
+    expect(host!.textContent).not.toContain('org.worksuite.packagekit.install')
+    const more = [...host!.querySelectorAll('button')].find((b) => b.getAttribute('aria-expanded') === 'false')!
+    await act(async () => more.click())
     expect(host!.textContent).toContain('org.worksuite.packagekit.install')
+    await act(async () => more.click())
     const input = host!.querySelector<HTMLInputElement>('#au-pw')!
     expect(host!.querySelector('label[for="au-pw"]')?.textContent).toBe('Password for Alex Perera (administrator)')
     await act(async () => {

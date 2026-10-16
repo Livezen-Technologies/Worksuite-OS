@@ -38,6 +38,7 @@ import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
+import { startSessionHost } from './sessionHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
@@ -68,7 +69,7 @@ function broadcast(channel: string, payload: unknown) {
 const shellPrefs = () => shellWebPreferences(path.join(__dirname, 'preload.cjs'))
 
 const monitors = outputWindows((r) => {
-  const w = new BrowserWindow({ x: r.x, y: r.y, width: r.width, height: r.height, fullscreen: true, frame: false, title: `WorkSuite desktop ${r.name}`, backgroundColor: '#0f172a', webPreferences: shellPrefs() })
+  const w = new BrowserWindow({ x: r.x, y: r.y, width: r.width, height: r.height, fullscreen: true, frame: false, title: `WorkSuite desktop ${r.name}`, backgroundColor: '#040A1A', webPreferences: shellPrefs() })
   const wc = w.webContents
   shellContents.add(wc)
   w.on('closed', () => { shellContents.delete(wc); monitors.forget(r.name) })
@@ -96,7 +97,9 @@ function run(cmd: string, args: string[]) {
 function createWindow() {
   win = new BrowserWindow({
     fullscreen: true,
-    backgroundColor: '#0f172a',
+    // The greeter's last frame (a dark veil, services/session/greeter/worksuite_greeter/veil.py): the desktop's first
+    // frame is the same colour, so signing in fades through dark instead of flashing.
+    backgroundColor: '#040A1A',
     webPreferences: shellPrefs(),
   })
   shellContents.add(win.webContents)
@@ -557,6 +560,11 @@ app.whenReady().then(() => {
   })
   // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
   startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
+  // Shutdown/restart/sign-out overlay on every display, inhibitors, crashed apps, administrators' diagnostics.
+  startSessionHost(handle, broadcast, {
+    apps: () => installedApps(), user: os.userInfo().username, readGroup: () => readFileSync('/etc/group', 'utf8'),
+    launch: (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined },
+  })
   // System monitor (G11) and quick settings brightness / power mode (G01).
   startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).

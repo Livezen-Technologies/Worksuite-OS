@@ -9,6 +9,8 @@ import { useOsUpdate, updates } from '../lib/useOsUpdate'
 import { REMIND_KEY, SEEN_KEY, UPDATE_PHASES, fmtWhen, heroView, needsAttention, canDefer, restartOptions, whatsNew, type Action, type RestartChoice, type Tone } from '../lib/updates'
 import { C, Dialog, OptionCard, Progress, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, heroCard, linkBtn, rowLine } from '../components/Dk'
 import { Mark } from '../components/Ws'
+import { ErrorDetails } from '../components/ErrorDetails'
+import { errorMessage, friendlyError } from '../lib/errors'
 import { OfflineUpdates, showsOffline, useUsbBundles } from './UpdatesOffline'
 import { formatNumber, messages, t } from '../i18n'
 
@@ -271,7 +273,7 @@ export function UpdateFailed({ installed, version, reason, phase, percent, onRet
   const rows: [string, string][] = [
     [t('upd.fail.current'), installed],
     [t('upd.fail.at'), phase ? `${UPDATE_PHASES[phase] ?? phase}${percent != null ? ` · ${formatNumber(percent)}%` : ''}` : t('upd.fail.unknownStep')],
-    [t('upd.fail.error'), reason],
+    [t('upd.fail.error'), errorMessage(reason, 'update')],
   ]
   return (
     <div role="alertdialog" aria-modal="true" aria-labelledby="upd-fail-t" aria-describedby="upd-fail-d"
@@ -285,6 +287,7 @@ export function UpdateFailed({ installed, version, reason, phase, percent, onRet
       <dl className="m-0 mt-2 w-[560px] max-w-full overflow-hidden rounded-[14px] border border-[rgba(127,178,255,0.16)] bg-[rgba(14,32,72,0.7)]">
         {rows.map(([k, v]) => <div key={k} className={`flex justify-between gap-6 px-[18px] py-3 text-[13px] ${rowLine}`}><dt className="text-[#8FA3C8]">{k}</dt><dd className="m-0 text-right font-mono">{v}</dd></div>)}
       </dl>
+      <ErrorDetails details={friendlyError(reason, 'update').details} className="w-[560px] max-w-full" />
       <div className="mt-3.5 flex gap-3">
         <button type="button" onClick={onRetry} className={`${btnGhost} px-[22px] py-3 text-[15px]`}>{t('common.tryAgain')}</button>
         <button type="button" data-autofocus autoFocus onClick={onClose} className={`${btnPrimary} px-7 py-3 text-[15px] shadow-[0_8px_24px_rgba(31,107,255,0.35)]`}>{t('upd.fail.continue')}</button>

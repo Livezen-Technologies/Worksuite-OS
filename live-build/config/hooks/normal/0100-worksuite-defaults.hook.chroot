@@ -8,7 +8,8 @@ if dpkg -s openssh-server >/dev/null 2>&1; then echo "openssh-server must not be
 mkdir -p /etc/greetd
 cat > /etc/greetd/config.toml <<'CONF'
 [terminal]
-vt = 7
+# The splash's VT: the greeter takes the screen from Plymouth with no VT switch (no text console in between).
+vt = 1
 [default_session]
 command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-session"
 user = "_greetd"
@@ -38,14 +39,12 @@ fi
 # The splash from the first frame, and kept until the greeter takes the screen: no console text in between.
 mkdir -p /etc/plymouth
 printf '[Daemon]\nTheme=worksuite\nShowDelay=0\nDeviceTimeout=8\n' > /etc/plymouth/plymouthd.conf
-mkdir -p /etc/systemd/system/greetd.service.d
-cat > /etc/systemd/system/greetd.service.d/worksuite-quiet.conf <<'CONF'
-[Unit]
-# The greeter replaces the splash directly: start once Plymouth has let go of the display, on a cleared VT.
-After=plymouth-quit-wait.service
-[Service]
-ExecStartPre=-/bin/sh -c 'printf "\\033[2J\\033[H\\033[?25l" > /dev/tty7'
-CONF
+# Splash to greeter with no black screen: worksuite-session's greetd.service (/etc/systemd/system) deactivates Plymouth,
+# runs on VT 1 and ends the splash once the greeter has drawn its first frame (worksuite-greeter-handoff). VT 1 is the
+# greeter's, so no getty there; Ctrl+Alt+F2… still open text consoles for administrators.
+grep -q 'plymouth deactivate' /etc/systemd/system/greetd.service || { echo "WorkSuite greetd.service (splash handoff) missing" >&2; exit 1; }
+grep -q 'After=.*plymouth-quit-wait' /etc/systemd/system/greetd.service && { echo "greetd must not wait for the splash to quit" >&2; exit 1; }
+systemctl mask getty@tty1.service
 grep -qx 'FRAMEBUFFER=y' /etc/initramfs-tools/conf.d/worksuite-splash || { echo "initramfs splash config missing" >&2; exit 1; }
 [ -x /usr/share/initramfs-tools/hooks/worksuite-plymouth-fonts ] || { echo "splash font initramfs hook missing" >&2; exit 1; }
 # The same splash on shutdown and restart: plymouth ships these statically wanted by poweroff/reboot.target.

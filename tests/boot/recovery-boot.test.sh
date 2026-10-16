@@ -23,6 +23,11 @@ check "version order is not lexical" '! echo "$out" | grep -q "previous kernel 6
 mkdir -p "$t/empty"
 check "no kernels, no entries" '[ -z "$(WORKSUITE_BOOT_DIR="$t/empty" sh "$rb/grub/42_worksuite_recovery")" ]'
 
+check "no boot-details entry unless an administrator turned it on" '! echo "$out" | grep -q "show boot details"'
+: > "$t/details"
+det=$(WORKSUITE_BOOT_DIR="$t/boot" WORKSUITE_BOOT_DETAILS_FLAG="$t/details" GRUB_DEVICE_UUID=1234-abcd sh "$rb/grub/42_worksuite_recovery")
+check "boot-details entry: newest kernel, no splash, systemd status shown" \
+  'echo "$det" | grep -q "WorkSuite OS (show boot details)" && echo "$det" | grep "vmlinuz-6.12.41" | grep -q "nosplash systemd.show_status=true" && ! echo "$det" | grep "show_status=true" | grep -q " quiet"'
 check "row icons: recovery and previous classes" 'echo "$out" | grep -q "class ws-recovery" && echo "$out" | grep -q "class ws-previous"'
 
 # G13 failed-start fallback

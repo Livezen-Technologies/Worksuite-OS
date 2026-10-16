@@ -6,6 +6,9 @@ import BIcon from '../components/BIcon'
 import type { Notice } from '../lib/syncNotices'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
+import { SessionEnd, SessionFadeIn } from '../components/SessionEnd'
+import { CrashDialog } from '../components/CrashDialog'
+import type { EndAction } from '../lib/sessionApi'
 import { RunningApps, TrayItems, UpdateBadge, VpnBadge, useLauncherKey, usePanelWindows } from '../components/PanelItems'
 import TaskView, { DesktopToast, DesktopsFlyout, type AppLookup } from '../components/TaskView'
 import { useDesktops } from '../components/useDesktops'
@@ -95,6 +98,8 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const [query, setQuery] = useState('')
   const [powerOpen, setPowerOpen] = useState(false)
   const [confirmShutdown, setConfirmShutdown] = useState(false)
+  // Shutdown / restart / sign-out overlay (components/SessionEnd.tsx), on every display.
+  const [ending, setEnding] = useState<EndAction | null>(null)
   const { notices, setNotices, toast, setToast, unread, setUnread } = notes
   const [trayOpen, setTrayOpen] = useState(false)
   // Do not disturb holds toasts back; notices still collect in the notification center.
@@ -447,9 +452,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       </nav>
       {powerOpen && (
         <PowerMenu user={name} className="right-3 bottom-16" onClose={() => setPowerOpen(false)}
-          onLock={onLock} onSignOut={onLogout} onShutdown={() => setConfirmShutdown(true)} />
+          onLock={onLock} onSignOut={() => setEnding('logout')} onRestart={() => setEnding('restart')} onShutdown={() => setConfirmShutdown(true)} />
       )}
-      {confirmShutdown && <ShutdownConfirm onCancel={() => setConfirmShutdown(false)} />}
+      {confirmShutdown && <ShutdownConfirm onCancel={() => setConfirmShutdown(false)} onEnd={(a) => { setConfirmShutdown(false); setEnding(a) }} />}
+      {ending && <SessionEnd action={ending} onCancel={() => setEnding(null)} onLogout={onLogout} nameOf={(id) => appLookup(id).name} />}
+      <CrashDialog onReport={() => openSettingsAt('About')} />
+      <SessionFadeIn />
       {a11yOpen && <A11yPanel className="right-4 bottom-[68px]" onClose={() => setA11yOpen(false)} />}
       {desktopsOn && <DesktopToast ws={desk.ws} />}
       {desktopsOn && taskView && (

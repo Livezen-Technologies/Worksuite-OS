@@ -311,13 +311,15 @@ export function packageErrorText(code: string): string {
     case 'service_unavailable': return t('pkg.err.service')
     case 'invalid_argument': return t('pkg.err.invalid')
     case 'failed': return t('rec.err.default')
-    default: return code.charAt(0).toUpperCase() + code.slice(1) + (/[.!]$/.test(code) ? '' : '.')
+    // Anything else is PackageKit's/dpkg's own text: a sentence from lib/errors.ts instead (details for administrators).
+    default: return errorMessage(code, 'package')
   }
 }
 
 import type { SyncStatus } from './syncNotices'
 import type { CheckId, CheckResult, SnapshotInfo } from './recovery'
 import { formatDecimal, formatNumber, t } from '../i18n'
+import { errorMessage } from './errors'
 
 export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null

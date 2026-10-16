@@ -4,6 +4,7 @@ import { aiTa } from './ai'
 import { widgetsTa } from './widgets'
 import { whatsappTa } from './whatsapp'
 import { desktopsTa } from './desktops'
+import { bootuiTa } from './bootui'
 
 /** Machine-drafted: not yet reviewed by a native Tamil speaker. See docs/i18n/README.md before changing. */
 export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedKeys: {} }
@@ -13,6 +14,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   ...widgetsTa,
   ...whatsappTa,
   ...desktopsTa,
+  ...bootuiTa,
   'panel.taskbar': 'பணிப்பட்டி',
   'panel.openLauncher': 'தொடக்கியைத் திற',
   'panel.running': '{name}, இயங்குகிறது',
