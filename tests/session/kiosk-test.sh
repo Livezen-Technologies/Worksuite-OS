@@ -29,7 +29,7 @@ grep -q '^labwc' "$LOG" && bad "kiosk account never gets the full shell" || ok "
 : > "$LOG"; printf 'KIOSK_USER=someoneelse\n' > "$T/session.env"
 WORKSUITE_KIOSK_SESSION="$T/ks" sh "$BIN/worksuite-session" >/dev/null 2>&1
 grep -q kiosk-session "$LOG" && bad "other accounts get the normal session" || ok "other accounts get the normal session"
-grep -q '^labwc -C /etc/xdg/worksuite/labwc' "$LOG" && ok "normal session runs the WorkSuite Labwc config" || bad "normal session runs the WorkSuite Labwc config"
+grep -q '^labwc -C ' "$LOG" && ok "normal session runs Labwc with the WorkSuite config" || bad "normal session runs Labwc with the WorkSuite config"
 
 # ---- worksuite-kiosk-session ----
 : > "$LOG"
@@ -51,6 +51,13 @@ sleep 0.2
 check "crashed app restarted" "$(grep -c '^app-run$' "$LOG")" 3
 grep -q "^swayidle -w timeout 300 $T/lib/worksuite-kiosk-ctl reset$" "$LOG" && ok "idle reset after the policy's time" || bad "idle reset after the policy's time"
 grep -q '^osk --kiosk$' "$LOG" && ok "on-screen keyboard hook started" || bad "on-screen keyboard hook started"
+: > "$LOG"; rm "$T/lib/worksuite-osk"; stub wvkbd-mobintl 'echo "wvkbd $*" >> "$LOG"'
+KIOSK_OSK=1 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" WORKSUITE_KIOSK_RESTART_DELAY=0 WORKSUITE_KIOSK_MAX_RESTARTS=1 sh "$K/worksuite-kiosk-start"
+sleep 0.2
+grep -q '^wvkbd -H 260 -L 208 -l full,special --fn IBM Plex Sans 16$' "$LOG" && ok "on-screen keyboard: the desktop's wvkbd, shown" || bad "on-screen keyboard: the desktop's wvkbd, shown"
+: > "$LOG"; KIOSK_OSK=0 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" WORKSUITE_KIOSK_RESTART_DELAY=0 WORKSUITE_KIOSK_MAX_RESTARTS=1 sh "$K/worksuite-kiosk-start"
+sleep 0.2
+grep -q wvkbd "$LOG" && bad "no on-screen keyboard unless the policy asks" || ok "no on-screen keyboard unless the policy asks"
 : > "$LOG"; mkdir -p "$T/run/worksuite-kiosk"; touch "$T/run/worksuite-kiosk/exiting"
 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" sh "$K/worksuite-kiosk-start"
 check "no restart once leaving kiosk mode" "$(grep -c '^app-run$' "$LOG")" 0

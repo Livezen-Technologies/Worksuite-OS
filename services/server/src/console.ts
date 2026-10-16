@@ -49,6 +49,9 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   bluetooth: (v) => typeof v === 'boolean',
   login_failures_max: (v) => Number.isInteger(v) && (v as number) >= 3 && (v as number) <= 20,
   login_lockout_s: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 86_400,
+  // Device PIN sign-in (Settings > Users): false turns it off on the device; minimum digits 4–12.
+  allow_pin: (v) => typeof v === 'boolean',
+  pin_min_length: (v) => Number.isInteger(v) && (v as number) >= 4 && (v as number) <= 12,
   app_allowlist: (v) => Array.isArray(v) && v.length <= 1000 && v.every((x) => typeof x === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(x)),
   approved_remotes: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && x.length <= 200),
   offline_wipe_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 365,

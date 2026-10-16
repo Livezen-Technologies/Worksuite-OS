@@ -26,6 +26,9 @@ export default function App() {
   const [user, setUser] = useState('')
   const [firstRun, setFirstRun] = useState(() => localStorageGet('ws.firstRunDone') !== '1')
   const [win, setWin] = useState<WindowApp | null>(null)
+  // An archive opened from elsewhere (Files is the default handler for archive types): open it in Files.
+  const [archive, setArchive] = useState<{ root: string; rel: string; n: number } | null>(null)
+  useEffect(() => os.onOpenArchive((at) => { setArchive({ ...at, n: Date.now() }); setWin('files') }), [])
   const [installing, setInstalling] = useState(mode === 'installer')
   const inSession = (state === 'active' && !firstRun) || state === 'locked' || state === 'suspending'
   const notes = useNotices(inSession)
@@ -73,7 +76,7 @@ export default function App() {
       if (firstRun) return <FirstRun userName={displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
       return (
         <Desktop user={user} onLock={() => { void os.lock(); send('lock') }} onLogout={() => { void os.logout(); send('logout') }} onOpen={setWin} notes={notes}>
-          {win === 'files' && <Files onClose={() => setWin(null)} />}
+          {win === 'files' && <Files archive={archive} onClose={() => { setWin(null); setArchive(null) }} />}
           {win === 'appcenter' && <AppCenter onClose={() => setWin(null)} />}
           {win === 'settings' && <Settings onClose={() => setWin(null)} />}
           {win === 'monitor' && <Monitor onClose={() => setWin(null)} />}

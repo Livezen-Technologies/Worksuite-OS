@@ -1,6 +1,7 @@
 // Settings app (boards SetNav, SetNetwork, SetBluetooth, SetDisplay, SetAppearance, SetSound, SetPrivacy, SetUsers,
 // UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
 // can't tell, the section says so instead of showing sample values.
+import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
@@ -12,6 +13,8 @@ import { useDnd } from '../lib/dnd'
 import { VpnPanel } from './settings/Vpn'
 import { PowerPanel, PrintersPanel } from './settings/Devices'
 import { BigSwitch } from './settings/ui'
+import { SignInOptions } from './settings/SignIn'
+import { KeyboardPanel, TouchPanel } from './settings/Touch'
 import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
@@ -24,6 +27,8 @@ const NAV = [
   { id: 'VPN', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4' },
   { id: 'Bluetooth', tint: '#1F6BFF', icon: 'M7 7l10 10-5 5V2l5 5L7 17' },
   { id: 'Display', tint: '#0E8FA8', icon: 'M3 4h18v12H3zM8 20h8M12 16v4', sep: true },
+  { id: 'Touchscreen & pen', tint: '#0E8FA8', icon: 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15' },
+  { id: 'Keyboard', tint: '#7A4FE0', icon: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10' },
   { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
   { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
   { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
@@ -43,7 +48,7 @@ export type Section = (typeof NAV)[number]['id']
 const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
 const navLabel = (id: Section) => t(`settings.nav.${id}` as MessageKey)
 // Older names (launcher search, earlier builds) still land somewhere sensible.
-const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power' }
+const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard' }
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
 /** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
@@ -452,6 +457,7 @@ function UsersPanel() {
         </ul>}
       </section>
     </div>
+    <SignInOptions />
     <section aria-labelledby="ws-acct" className="flex flex-col gap-2">
       <h2 id="ws-acct" className="m-0 text-sm font-semibold">{t('settings.acct.title')}</h2>
       <div className={`${card} overflow-hidden`}><CloudAccounts /></div>
@@ -475,12 +481,14 @@ function AboutPanel() {
   const [info, setInfo] = useState<DeviceInfo | null>(null)
   const [gpus, setGpus] = useState<string[] | null>(null)
   const [free, setFree] = useState<number | null>(null)
+  const [disk, setDisk] = useState<{ used: number; total: number } | null>(null)
   const [copied, setCopied] = useState(false)
   const [checking, setChecking] = useState(false)
   useEffect(() => {
     void os.deviceInfo().then(setInfo).catch(() => {})
     void os.hwDevices().then((r) => setGpus(r.ok ? r.value.filter((x) => x.kind === 'graphics').map((x) => x.name) : [])).catch(() => setGpus([]))
     void os.filesStatus('home').then((r) => setFree(r.free_bytes)).catch(() => {})
+    void os.filesPlaces().then((r) => setDisk(r.disk)).catch(() => {})
   }, [])
   if (!info) return <><H1>{t('settings.nav.About')}</H1><Empty title={t('settings.about.loading')} /></>
   const d = info.device
@@ -546,10 +554,12 @@ function AboutPanel() {
     <div className="grid gap-3" style={{ gridTemplateColumns: 'minmax(0,1.2fr) minmax(0,1fr)' }}>
       <div className={`${card} flex flex-col gap-2.5 px-4 py-3.5`}>
         <div className="flex justify-between gap-3 text-[13px]"><span className="font-semibold">{t('settings.about.storage')}{drives[0] ? ` · ${drives[0].device}` : ''}</span><span className="text-[#8FA3C8]">{free != null ? t('settings.about.freeHome', { size: formatBytes(free) }) : na}</span></div>
+        {disk && disk.total > 0 && <AnimatedProgress value={(disk.used / disk.total) * 100} label={t('settings.about.storageUsed', { used: formatBytes(disk.used), total: formatBytes(disk.total) })} valueText={t('settings.about.storageUsed', { used: formatBytes(disk.used), total: formatBytes(disk.total) })} height={8} shimmer={false} />}
         <div className="flex flex-col gap-1">
           {disks.state === 'loading' ? <span className="text-xs text-[#8FA3C8]">…</span> : drives.length === 0 ? <span className="text-xs text-[#8FA3C8]">{disks.state === 'ok' ? t('common.noneFound') : na}</span>
             : drives.map((x) => <span key={x.device} className="flex items-center gap-1.5 text-[11px] text-[#C9D6EE]"><span className="h-2 w-2 rounded-sm bg-[#1F6BFF]" />{x.model || x.device} <span className="font-mono text-[#8FA3C8]">{x.device}</span></span>)}
         </div>
+        {battery.state === 'ok' && battery.value.present && battery.value.percentage != null && <AnimatedProgress value={battery.value.percentage} label={t('settings.about.battery')} height={6} shimmer={battery.value.state === 'charging'} tone={battery.value.percentage <= 15 && battery.value.on_battery ? 'error' : battery.value.state === 'fully-charged' ? 'success' : 'default'} />}
         <span className="text-[11px] text-[#8FA3C8]">{battery.state === 'ok' && battery.value.present ? `${t('settings.about.battery')}: ${batteryText(battery.value)}` : t('settings.about.usageNote')}</span>
       </div>
       <div className={`${card} py-1.5`}>
@@ -819,6 +829,8 @@ export default function Settings({ onClose }: WindowProps) {
         {section === 'VPN' && <VpnPanel />}
         {section === 'Bluetooth' && <BluetoothPanel />}
         {section === 'Display' && <DisplayPanel />}
+        {section === 'Touchscreen & pen' && <TouchPanel />}
+        {section === 'Keyboard' && <KeyboardPanel />}
         {section === 'Appearance' && <AppearancePanel />}
         {section === 'Sound' && <SoundPanel />}
         {section === 'Notifications' && <NotificationsPanel />}

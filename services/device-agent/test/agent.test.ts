@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { Agent, type Host } from '../src/agent.ts';
 import { ApiError, type DeviceApi } from '../src/api.ts';
 import { canonical, signingBytes, type CommandEnvelope } from '../src/commands.ts';
-import { ENFORCED_PATHS, faillockConf, offlineAccessExpired, policyEnforcement, type Enforcement } from '../src/enforce.ts';
+import { ENFORCED_PATHS, faillockConf, offlineAccessExpired, policyEnforcement, signinPolicyConf, type Enforcement } from '../src/enforce.ts';
 import { splitCatalogId, windowStart } from '../src/host.ts';
 import { StateFile, type Policy } from '../src/state.ts';
 
@@ -250,6 +250,14 @@ test('policy enforcement: USB storage, Bluetooth, lock timeout and faillock map 
   assert.equal(ro.bluetooth, 'allow');
   assert.equal(ro.files[ENFORCED_PATHS.usbModprobe], null);
   assert.match(ro.files[ENFORCED_PATHS.usbUdev]!, /ENV\{ID_BUS\}=="usb".*RUN\+="\/usr\/sbin\/blockdev --setro \$devnode"/);
+  // Device PIN (Settings > Users): unmanaged = no file (helper defaults); policy can turn it off or raise the length.
+  assert.equal(none.files[ENFORCED_PATHS.signinPolicy], null);
+  assert.equal(ro.files[ENFORCED_PATHS.signinPolicy], signinPolicyConf(true, 6));
+  const pinOff = policyEnforcement({ version: 'p', signature: 'x', allow_pin: false, pin_min_length: 8 });
+  assert.match(pinOff.files[ENFORCED_PATHS.signinPolicy]!, /^ALLOW_PIN=0$/m);
+  assert.match(pinOff.files[ENFORCED_PATHS.signinPolicy]!, /^PIN_MIN_LENGTH=8$/m);
+  assert.match(policyEnforcement({ version: 'p', signature: 'x', pin_min_length: 99 }).files[ENFORCED_PATHS.signinPolicy]!, /^PIN_MIN_LENGTH=6$/m);
+  assert.equal(policyEnforcement({ version: 'p', signature: 'x', allow_pin: 'no' as unknown as boolean, pin_min_length: '4\nALLOW_PIN=1' as unknown as number }).files[ENFORCED_PATHS.signinPolicy], signinPolicyConf(true, 6));
   // Only integers ever reach the lock file that worksuite-idle reads.
   assert.equal(policyEnforcement({ version: 'p', signature: 'x', lock_timeout_max_s: '60; rm -rf /' as unknown as number }).files[ENFORCED_PATHS.lockPolicy], null);
 });

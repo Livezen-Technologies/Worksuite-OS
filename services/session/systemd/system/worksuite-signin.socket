@@ -1,0 +1,12 @@
+[Unit]
+Description=WorkSuite PIN check socket (device PIN sign-in)
+
+[Socket]
+ListenStream=/run/worksuite-signin.sock
+# Everyone may connect (gtklock runs as the user); the daemon only answers for the caller's own account (SO_PEERCRED).
+SocketMode=0666
+Accept=yes
+MaxConnections=16
+
+[Install]
+WantedBy=sockets.target

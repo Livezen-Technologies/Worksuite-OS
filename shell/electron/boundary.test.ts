@@ -26,7 +26,7 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
     }
   })
 
-  it('elevates only through the one named, polkit-guarded enrollment helper', () => {
+  it('elevates only through the named, polkit-guarded helpers (enrollment; sign-in methods)', () => {
     const elevations: string[] = []
     for (const [f, s] of all) {
       expect(s, f).not.toMatch(/['"`](sudo|doas|su|runuser|setpriv)['"`]\s*,/)
@@ -35,7 +35,7 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
       expect(s, f).not.toMatch(/['"`]pkexec['"`]\s*,\s*\[\s*[^'\s]/)
     }
     // kioskMain.ts: leaving kiosk mode (PIN or administrator password, polkit lk.worksuite.kiosk.exit-*).
-    expect(elevations).toEqual(['device.ts:/usr/bin/worksuite-device-agent', 'kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit'])
+    expect(elevations.sort()).toEqual(['device.ts:/usr/bin/worksuite-device-agent', 'kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit', 'signin.ts:/usr/lib/worksuite/worksuite-signin'])
   })
 
   it('every IPC handler goes through the sender check', () => {

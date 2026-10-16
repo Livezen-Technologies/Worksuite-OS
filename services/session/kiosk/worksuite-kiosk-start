@@ -10,10 +10,12 @@ APP=${WORKSUITE_KIOSK_APP:-/usr/lib/worksuite/shell/electron/electron --ozone-pl
 # Polkit agent: the administrator-password way out (worksuite-kiosk-exit --admin) asks through it.
 [ -x "$LIB/worksuite-polkit-agent" ] && "$LIB/worksuite-polkit-agent" &
 
-# On-screen keyboard. Hook point: the touch/OSK work installs worksuite-osk; until then wvkbd if it is installed.
+# On-screen keyboard: the same wvkbd the desktop uses (shell/electron/touch.ts, medium size), always shown here because
+# there is no shell to show/hide it; layer-shell gives it its own strip so the app is not covered. A site may replace
+# it with $LIB/worksuite-osk (hook).
 if [ "${KIOSK_OSK:-0}" = 1 ]; then
     if [ -x "$LIB/worksuite-osk" ]; then "$LIB/worksuite-osk" --kiosk &
-    elif command -v wvkbd-mobintl >/dev/null 2>&1; then wvkbd-mobintl --hidden &
+    elif command -v wvkbd-mobintl >/dev/null 2>&1; then wvkbd-mobintl -H 260 -L 208 -l full,special --fn "IBM Plex Sans 16" &
     fi
 fi
 

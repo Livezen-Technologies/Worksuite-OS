@@ -725,7 +725,10 @@ components:
     ReleaseManifest:
       description: >
         Signed OS release manifest per ring and arch, served at
-        https://download.worksuitecloud.com/os/manifests/{ring}/{arch}.json (or the policy's update_mirror).
+        https://download.worksuitecloud.com/os/manifests/{ring}/{arch}.json by the WorkSuite Update Center
+        (Livezen-Technologies/worksite-download, which signs it with its release key through its signing service),
+        or the policy's update_mirror / update_host in /etc/worksuite/updates.json. Optional fields security, critical,
+        mandatory come from the Update Center's release type (security, emergency); state from pause / pull.
         Devices check 15 min after boot and every 6 h (WSOS-AUP-001).
       type: object
       required: [release_id, version, min_version, ring, arch, signature]
@@ -769,6 +772,8 @@ components:
         bluetooth: { type: boolean, description: 'WSOS-INT-003 false = bluetooth.service masked and radios rfkill-blocked; true or absent = allowed' }
         login_failures_max: { type: integer, minimum: 3, maximum: 20, description: 'WSOS-AUTH-004 pam_faillock deny (default 5)' }
         login_lockout_s: { type: integer, minimum: 0, maximum: 86400, description: 'WSOS-AUTH-004 pam_faillock unlock_time; 0 = until reset by an administrator (default 600)' }
+        allow_pin: { type: boolean, description: 'Device PIN sign-in (Settings > Users). false = PINs are refused at sign-in and cannot be set; absent = allowed. Device: /etc/worksuite/signin-policy.conf' }
+        pin_min_length: { type: integer, minimum: 4, maximum: 12, description: 'Shortest device PIN accepted when one is set (default 6; PINs are digits, at most 12)' }
         app_allowlist: { type: array, items: { type: string } }
         approved_remotes: { type: array, items: { type: string } }
         offline_wipe_days: { type: integer, description: WSOS-WIPE-006 offline kill timer; absent = off }

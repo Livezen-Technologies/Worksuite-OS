@@ -18,6 +18,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from . import login  # noqa: E402
+from . import osk  # noqa: E402
 from .greetd import Greetd, GreetdError  # noqa: E402
 
 _ = gettext.translation("worksuite-greeter", fallback=True).gettext
@@ -50,6 +51,11 @@ button.cta { background: #1F6BFF; color: white; border-radius: 12px; min-height:
 button.cta.danger { background: #D9452B; }
 button.link { background: none; border: none; box-shadow: none; padding: 0; min-height: 0; color: #7FB2FF; font-size: 12px; }
 button.link:hover { color: #B8D4FF; }
+.methods-label { font-size: 12px; color: #8FA3C8; }
+button.method { min-width: 44px; min-height: 36px; border-radius: 12px; background: rgba(14,32,72,0.6); color: #E8EEFA;
+  border: 1px solid rgba(127,178,255,0.18); box-shadow: none; padding: 0 12px; font-size: 13px; }
+button.method:checked { background: rgba(31,107,255,0.35); border-color: #1F6BFF; }
+.key-wait { font-size: 14px; color: #C9D6EE; }
 button.account { background: rgba(4,10,26,0.45); border-radius: 12px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.12); }
 .account .avatar { min-width: 36px; min-height: 36px; border-radius: 18px; font-size: 14px; }
 """
@@ -65,7 +71,13 @@ ERRORS = {
     "empty": _("Enter a user name."),
     "reason": _("Enter a reason (at least 5 characters). It is sent to the audit log."),
     "reason_failed": _("The reason could not be saved, so emergency sign-in is not possible."),
+    "bad_pin": _("Enter your PIN (4 to 12 digits)."),
+    "pin_denied": _("Incorrect PIN, or the PIN is locked after too many tries. Use your password."),
+    "key_failed": _("The security key wasn’t accepted. Insert it, touch it when it blinks, or use your password."),
 }
+
+# AuthLockPin board: Sign-in options under the field.
+METHOD_LABELS = {"password": _("Password"), "pin": _("PIN"), "key": _("Security key")}
 
 
 def label(text, *classes, **kw):
@@ -80,6 +92,11 @@ def undecorate(win):
 
 
 class Greeter(Gtk.ApplicationWindow):
+    def _focus_changed(self, *_a):
+        w = self.get_focus()
+        if isinstance(w, Gtk.Editable):
+            self.typing_into = w
+
     def __init__(self, app, cfg=None, users=None, reachable_probe=None):
         super().__init__(application=app, title="WorkSuite", css_classes=["ws-greeter"])
         undecorate(self)
@@ -95,6 +112,9 @@ class Greeter(Gtk.ApplicationWindow):
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS)
         Gtk.StyleContext.add_provider_for_display(self.get_display(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        osk_css = Gtk.CssProvider()
+        osk_css.load_from_data(osk.CSS)
+        Gtk.StyleContext.add_provider_for_display(self.get_display(), osk_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
         overlay = Gtk.Overlay()
         self.set_child(overlay)
@@ -107,7 +127,18 @@ class Greeter(Gtk.ApplicationWindow):
         self.net_label = label("")
         self.net.append(self.net_label)
         top.append(self.net)
+        # On-screen keyboard for touch-only devices (osk.py): typed into the field that last had focus.
+        self.typing_into = None
+        self.connect("notify::focus-widget", self._focus_changed)
+        kbd = Gtk.Button(icon_name="input-keyboard-symbolic", tooltip_text=_("On-screen keyboard"), css_classes=["osk-toggle"], valign=Gtk.Align.CENTER)
+        kbd.set_focus_on_click(False)
+        kbd.update_property([Gtk.AccessibleProperty.LABEL], [_("On-screen keyboard")])
+        top.append(kbd)
         overlay.add_overlay(top)
+        self.osk = Gtk.Revealer(child=osk.build(Gtk, lambda: self.typing_into), valign=Gtk.Align.END,
+                                transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
+        kbd.connect("clicked", lambda _b: self.osk.set_reveal_child(not self.osk.get_reveal_child()))
+        overlay.add_overlay(self.osk)
 
         self.card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16, css_classes=["card"], halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
         self.card.set_size_request(420, -1)
@@ -146,6 +177,26 @@ class Greeter(Gtk.ApplicationWindow):
         self.new2.connect("activate", lambda *_a: self.submit())
         self.new2_field = self._field(_("Confirm new password"), self.new2)
 
+        self.method = "password"
+        self.key_wait = label(_("Insert your security key, choose Sign in, then touch it when it blinks."), "key-wait", justify=Gtk.Justification.CENTER,
+                              max_width_chars=40, visible=False)
+        self.card.append(self.key_wait)
+        self.methods = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
+        self.methods.append(label(_("Sign-in options"), "methods-label", justify=Gtk.Justification.CENTER))
+        row = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+        row.update_property([Gtk.AccessibleProperty.LABEL], [_("Sign-in method")])
+        self.method_buttons = {}
+        first = None
+        for m in login.METHODS:
+            b = Gtk.ToggleButton(label=METHOD_LABELS[m], css_classes=["method"])
+            if first:
+                b.set_group(first)
+            first = first or b
+            b.connect("toggled", lambda btn, m=m: btn.get_active() and self.pick_method(m))
+            row.append(b)
+            self.method_buttons[m] = b
+        self.methods.append(row)
+        self.card.append(self.methods)
         self.note = label("", "note", xalign=0, max_width_chars=40)
         self.card.append(self.note)
         self.message = label("", "error", xalign=0, max_width_chars=40, visible=False)
@@ -208,6 +259,8 @@ class Greeter(Gtk.ApplicationWindow):
         if selected is not None:
             self.selected = selected
         self.mode, self.need_code = "password", False
+        u = self.user()
+        self.method = login.signin_methods(u["name"])["default"] if u else "password"
         self.message.set_text("")
         for e in (self.password, self.reason, self.code, self.new1, self.new2):
             e.set_text("")
@@ -271,6 +324,21 @@ class Greeter(Gtk.ApplicationWindow):
         self.note.set_text(note)
         self.note.set_css_classes(["note", tone or "warn"])
         self.note.set_visible(bool(note))
+        choices = self.method_choices()
+        if self.method not in choices:
+            self.method = "password"
+        method = self.method
+        if method == "pin":
+            pw_label = _("PIN")
+        elif method == "key":
+            cta = _("Sign in with security key")
+        self.methods.set_visible(len(choices) > 1)
+        for m, b in self.method_buttons.items():
+            b.set_visible(m in choices)
+            if (m == method) != b.get_active():
+                b.set_active(m == method)
+        self.key_wait.set_visible(method == "key" and v == "user")
+        self.password.set_property("input-purpose", Gtk.InputPurpose.PIN if method == "pin" else Gtk.InputPurpose.PASSWORD)
         self.password_field.label.set_text(pw_label)
         self.password.update_property([Gtk.AccessibleProperty.LABEL], [pw_label])
 
@@ -280,7 +348,7 @@ class Greeter(Gtk.ApplicationWindow):
             self.fill_accounts()
         self.user_field.set_visible(v == "directory")
         self.reason_field.set_visible(v == "breakglass")
-        self.password_field.set_visible(not listing)
+        self.password_field.set_visible(not listing and not (v == "user" and method == "key"))
         self.code_field.set_visible(self.need_code and not listing)
         change = self.mode == "change"
         self.new1_field.set_visible(change)
@@ -292,6 +360,22 @@ class Greeter(Gtk.ApplicationWindow):
         self.link_a.set_visible(bool(links[0]))
         self.link_b.set_label(links[1])
         self.link_b.set_visible(bool(links[1]))
+
+    def pick_method(self, m):
+        if m == self.method:
+            return
+        self.method = m
+        self.message.set_text("")
+        self.password.set_text("")
+        self.refresh()
+        if m != "key":
+            self.password.grab_focus()
+
+    def method_choices(self):
+        u = self.user()
+        if not u or self.offline_cached() or self.mode == "change":
+            return ["password"]
+        return login.available_methods(login.signin_methods(u["name"]))
 
     def break_glass(self):
         return login.break_glass_available()
@@ -361,11 +445,13 @@ class Greeter(Gtk.ApplicationWindow):
                 return self.fail("mismatch")
             if len(new) < 10:
                 return self.fail("short")
-        otp = self.code.get_text().strip() if self.need_code else None
+        otp = self.code.get_text().strip() if self.need_code and self.method == "password" else None
+        method = self.method if self.view == "user" else "password"
         try:
             g = Greetd()
             try:
-                r = login.sign_in(g, name, self.password.get_text(), otp=otp or None, new_password=new)
+                r = login.sign_in(g, name, "" if method == "key" else self.password.get_text(), otp=otp or None, new_password=new,
+                                  method=method)
             finally:
                 g.close()
         except (GreetdError, OSError):
@@ -383,6 +469,8 @@ class Greeter(Gtk.ApplicationWindow):
             self.need_code = True
             self.refresh()
             self.fail(None, _("Enter your password and the 6-digit code from your authenticator app."))
+        elif r.reason == "denied" and method == "pin":
+            self.fail("pin_denied")
         else:
             self.fail(r.reason)
 

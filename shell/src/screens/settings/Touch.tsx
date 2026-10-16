@@ -1,0 +1,139 @@
+// Settings › Touchscreen & pen and Settings › Keyboard (on-screen keyboard). State comes from electron/touch.ts;
+// with no touchscreen the page says so instead of showing controls that would do nothing.
+import { useEffect, useState, type ReactNode } from 'react'
+import { Svg, card, chip, field, rowLine, sectionLabel } from '../../components/Dk'
+import { Empty } from '../Hardware'
+import { hasTabletSwitch, pens, touchApi, touchScreens, useTouch, type OskMode, type OskSize, type PenEvent, type TabletMode, type TouchSettings } from '../../lib/touch'
+import { formatNumber, t, type MessageKey } from '../../i18n'
+import { BigSwitch, H1, Note, Unavail } from './ui'
+
+const HAND = 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15'
+const PEN = 'M15 4l5 5L9 20H4v-5zM13 6l5 5'
+const KBD = 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10'
+
+function Row({ title, sub, children }: { title: ReactNode; sub?: ReactNode; children: ReactNode }) {
+  return (
+    <div className={`flex min-h-[56px] items-center gap-4 px-5 py-3 ${rowLine}`}>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="text-sm font-semibold">{title}</span>{sub && <span className="text-xs text-[#8FA3C8]">{sub}</span>}</span>
+      {children}
+    </div>
+  )
+}
+/** Segmented choice in the boards' style (chips in a pill). */
+function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { id: T; label: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex shrink-0 gap-1 rounded-[10px] bg-[rgba(4,10,26,0.5)] p-1">
+      {options.map((o) => (
+        <button key={o.id} type="button" role="radio" aria-checked={o.id === value} onClick={() => onChange(o.id)}
+          className={`min-h-9 cursor-pointer rounded-lg px-3 text-[13px] ${o.id === value ? 'bg-[#1F6BFF] font-semibold text-white' : 'text-[#C9D6EE] hover:bg-white/[0.06]'}`}>{o.label}</button>
+      ))}
+    </div>
+  )
+}
+const Hero = ({ d, title, sub, tint }: { d: string; title: string; sub: string; tint: string }) => (
+  <div className={`${card} flex items-center gap-4 px-5 py-[18px]`}>
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style={{ background: tint }}><Svg d={d} size={24} stroke="#FFFFFF" /></span>
+    <span className="flex min-w-0 flex-col gap-0.5"><span className="text-base font-semibold">{title}</span><span className="text-[13px] text-[#8FA3C8]">{sub}</span></span>
+  </div>
+)
+
+function PenTest() {
+  const [on, setOn] = useState(false)
+  const [p, setP] = useState<{ pressure: number; near: boolean; buttons: string[] }>({ pressure: 0, near: false, buttons: [] })
+  useEffect(() => {
+    const api = touchApi()
+    if (!on || !api) return
+    void api.penTest(true)
+    const off = api.onPen((raw) => {
+      const e = raw as PenEvent
+      setP((s) => ({
+        pressure: e.pressure ?? s.pressure,
+        near: e.proximity ?? s.near,
+        buttons: e.button ? (e.pressed ? [...new Set([...s.buttons, e.button])] : s.buttons.filter((b) => b !== e.button)) : s.buttons,
+      }))
+    })
+    return () => { off(); void api.penTest(false) }
+  }, [on])
+  return (
+    <Row title={t('touch.pen.test')} sub={on ? (p.near ? t('touch.pen.near') : t('touch.pen.bring')) : t('touch.pen.testSub')}>
+      {on && <span className="flex w-40 flex-col gap-1">
+        <span className="h-2 overflow-hidden rounded bg-white/15" role="meter" aria-label={t('touch.pen.pressure')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p.pressure * 100)}>
+          <span className="block h-full bg-[#18D4F0]" style={{ width: `${p.pressure * 100}%` }} />
+        </span>
+        <span className="text-[11px] text-[#8FA3C8]">{t('touch.pen.pressureValue', { n: formatNumber(Math.round(p.pressure * 100)) })}{p.buttons.length ? ` · ${p.buttons.join(', ')}` : ''}</span>
+      </span>}
+      <BigSwitch label={t('touch.pen.test')} checked={on} onChange={setOn} />
+    </Row>
+  )
+}
+
+export function TouchPanel() {
+  const { state, reason, set } = useTouch()
+  if (reason) return <><H1>{t('settings.nav.Touchscreen & pen')}</H1><Unavail what={t('touch.devices')} reason={reason} /></>
+  if (!state) return <><H1>{t('settings.nav.Touchscreen & pen')}</H1><Empty title={t('touch.reading')} /></>
+  const screens = touchScreens(state)
+  const pen = pens(state)
+  const s = state.settings
+  const tabletOpts: { id: TabletMode; label: string }[] = [{ id: 'auto', label: t('touch.mode.auto') }, { id: 'on', label: t('common.on') }, { id: 'off', label: t('common.off') }]
+  return <>
+    <H1>{t('settings.nav.Touchscreen & pen')}</H1>
+    {!screens.length ? <Hero d={HAND} tint="rgba(127,178,255,0.18)" title={t('touch.none')} sub={t('touch.noneSub')} /> : <>
+      <Hero d={HAND} tint="#0E8FA8" title={screens.map((d) => d.name).join(', ')} sub={s.touchEnabled ? t('touch.on') : t('touch.offSub')} />
+      <section aria-label={t('touch.screen')} className="flex flex-col gap-2">
+        <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('touch.screen')}</h2>
+        <div className={card}>
+          <Row title={t('touch.enable')} sub={t('touch.enableSub')}><BigSwitch label={t('touch.enable')} checked={s.touchEnabled} onChange={(v) => void set({ touchEnabled: v })} /></Row>
+          {state.outputs.length > 1 && screens.map((d) => (
+            <Row key={d.node} title={t('touch.mapTo')} sub={d.name}>
+              <select aria-label={t('touch.mapToFor', { name: d.name })} value={s.mapToOutput[d.name] ?? ''} className={field}
+                onChange={(e) => void set({ mapToOutput: { ...s.mapToOutput, [d.name]: e.target.value } })}>
+                <option value="">{t('touch.allDisplays')}</option>
+                {state.outputs.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </Row>
+          ))}
+        </div>
+      </section>
+    </>}
+    <section aria-label={t('touch.tabletMode')} className="flex flex-col gap-2">
+      <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('touch.tabletMode')}</h2>
+      <div className={card}>
+        <Row title={t('touch.tabletMode')} sub={hasTabletSwitch(state) ? (state.tabletSwitch ? t('touch.folded') : t('touch.laptop')) : t('touch.noSwitch')}>
+          <Segmented label={t('touch.tabletMode')} value={s.tabletMode} options={tabletOpts} onChange={(v) => void set({ tabletMode: v })} />
+        </Row>
+        <Row title={t('touch.rotationLock')} sub={state.hasAccelerometer ? t('touch.rotationSub') : t('touch.noSensor')}>
+          <BigSwitch label={t('touch.rotationLock')} checked={s.rotationLock} disabled={!state.hasAccelerometer} onChange={(v) => void set({ rotationLock: v })} />
+        </Row>
+      </div>
+      <Note>{t('touch.modeNote')}</Note>
+    </section>
+    <section aria-label={t('touch.pen')} className="flex flex-col gap-2">
+      <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('touch.pen')}</h2>
+      {!pen.length ? <Hero d={PEN} tint="rgba(127,178,255,0.18)" title={t('touch.noPen')} sub={t('touch.noPenSub')} /> : (
+        <div className={card}>
+          {pen.map((d) => <Row key={d.node} title={d.name} sub={t('touch.penFound')}><span className={chip}>{d.node.replace('/dev/input/', '')}</span></Row>)}
+          <PenTest />
+        </div>
+      )}
+    </section>
+    <Note>{t('touch.calibrationNote')}</Note>
+  </>
+}
+
+export function KeyboardPanel() {
+  const { state, reason, set } = useTouch()
+  const s: TouchSettings | null = state?.settings ?? null
+  const modes: { id: OskMode; label: string }[] = [{ id: 'off', label: t('common.off') }, { id: 'touch', label: t('osk.touchOnly') }, { id: 'always', label: t('osk.always') }]
+  const sizes: { id: OskSize; label: string }[] = (['small', 'medium', 'large'] as const).map((id) => ({ id, label: t(`osk.size.${id}` as MessageKey) }))
+  return <>
+    <H1>{t('settings.nav.Keyboard')}</H1>
+    {reason ? <Unavail what={t('osk.title')} reason={reason} /> : !s ? <Empty title={t('touch.reading')} /> : <>
+      <Hero d={KBD} tint="#7A4FE0" title={t('osk.title')} sub={state?.osk.available || s.osk === 'off' ? t('osk.sub') : t('osk.missing')} />
+      <div className={card}>
+        <Row title={t('osk.show')} sub={t('osk.showSub')}><Segmented label={t('osk.show')} value={s.osk} options={modes} onChange={(v) => void set({ osk: v })} /></Row>
+        <Row title={t('osk.sizeTitle')}><Segmented label={t('osk.sizeTitle')} value={s.oskSize} options={sizes} onChange={(v) => void set({ oskSize: v })} /></Row>
+      </div>
+      <Note>{t('osk.layoutsNote')}</Note>
+    </>}
+  </>
+}

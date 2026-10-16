@@ -3,6 +3,7 @@
 // update coordinator status (critical, resumed, deadline, paused/pulled reason), the update job's progress, the
 // device policy and the bundles the main process found on mounted drives. Byte counts and speed are not reported
 // by apt's progress, so the download line says how far it got in percent.
+import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
 import { formatBytes, os, packageErrorText, type BundleInfo, type DeviceInfo, type FoundBundle, type OsUpdateStatus } from '../lib/os'
 import { updates } from '../lib/useOsUpdate'
@@ -85,7 +86,7 @@ export function OfflineUpdates({ st, job, policy, orgName, bundles }: {
           </div>
           <Progress value={interrupted(st) ? null : pct} label={t('upd.progress')} height={8} />
           <span className="font-mono text-[11px] text-[#8FA3C8]">
-            {interrupted(st) ? t('upd.g14.stopped') : st.resumed ? t('upd.g14.resumedNote', { percent: pct == null ? '…' : formatNumber(pct) }) : pct == null ? t('upd.starting') : `${formatNumber(pct)}%`}
+            {interrupted(st) ? t('upd.g14.stopped') : st.resumed ? t('upd.g14.resumedNote', { percent: pct == null ? '…' : formatNumber(pct) }) : pct == null ? t('upd.starting') : <CountUp value={pct} />}
           </span>
         </div>
       )}

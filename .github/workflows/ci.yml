@@ -65,10 +65,13 @@ jobs:
       - run: sh tests/session/session-test.sh
       # Kiosk mode session scripts (WSOS-AUTH-002).
       - run: sh tests/session/kiosk-test.sh
+      # Device PIN / security-key PAM profiles, daemon and packaging (runs the helper unit tests too).
+      - run: sh tests/session/signin-pam-test.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: node --test tools/sbom/spdx.test.mjs
+      - run: node --test tools/release/publish-update-center.test.mjs
       # No private key material in the tree (WSOS-SEC-011).
       - run: "! git grep -I -l -e 'BEGIN [A-Z ]*PRIVATE KEY' -- . ':!docs/**'"
 
@@ -87,6 +90,7 @@ jobs:
       - run: python3 -m unittest discover -s tests/hw
       - run: cd services/session/greeter && python3 -m unittest discover -s tests -t .
       - run: cd services/session/kiosk && python3 -m unittest discover -s tests -t .
+      - run: cd services/session/signin && python3 -m unittest discover -s tests -t .
 
   portals:
     # Portal acceptance (SRS §7.1): each portal interface WorkSuite uses, against xdg-desktop-portal with the -wlr and

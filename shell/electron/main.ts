@@ -11,6 +11,7 @@ import { deviceCredential, deviceInfo, enrollDevice } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
 import { listDevices } from './hardware'
 import { localUsers } from './users'
+import { signinHost, type SignInMethod } from './signin'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
 import { loadSession, parseAppArgs, resolveLink } from './webapps'
@@ -18,8 +19,9 @@ import { createSearch, localRecentHits, parseXbel } from './search'
 import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
+import { archiveJobs, listIn, locate } from './archives'
 import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
-import { compress, eject, jobs as fileJobs, mkdirIn, places, recent, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
+import { eject, jobs as fileJobs, mkdirIn, places, recent, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel } from './panelHost'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import { outputWindows } from './outputWindows'
@@ -28,6 +30,7 @@ import { startDesktopHost } from './desktopHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
+import { startTouchHost } from './touch'
 import { startNotifications } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
@@ -272,6 +275,14 @@ app.whenReady().then(() => {
   handle('ws:hwDriverUpdates', () => ({ ok: false, error: 'unavailable' }))
   handle('ws:hwInstallDrivers', () => ({ ok: false, error: 'unavailable' }))
   handle('ws:sysUsers', () => localUsers())
+  // Settings › Users › Sign-in options. Every change runs worksuite-signin through pkexec; the PIN goes on stdin.
+  const signin = signinHost()
+  handle('ws:signinMethods', () => signin.methods())
+  handle('ws:signinPinSet', (pin) => signin.pinSet(pin))
+  handle('ws:signinPinRemove', () => signin.pinRemove())
+  handle('ws:signinKeyAdd', (name) => signin.keyAdd(name))
+  handle('ws:signinKeyRemove', (id) => signin.keyRemove(id))
+  handle('ws:signinSetDefault', (m) => ['password', 'pin', 'key'].includes(m) ? signin.setDefault(m as SignInMethod) : { ok: false, error: 'bad_method' })
   handle('ws:pkgRepair', () => pkg.repair())
   handle('ws:pkgCatalog', () => pkg.catalog())
   // Files for local installs come only from the user's own choice in a file dialog: the renderer gets an opaque
@@ -406,8 +417,13 @@ app.whenReady().then(() => {
   handle('ws:filesTrashRestore', (ids) => trashRestore(files, strs(ids)))
   handle('ws:filesTrashDelete', (ids) => trashDelete(files, ids === 'all' ? 'all' : strs(ids)))
   handle('ws:filesPaste', (op, srcRoot, rels, dstRoot, dstRel) => fjobs.start(op, srcRoot, strs(rels), dstRoot, dstRel))
-  handle('ws:filesResolve', (id, r, all) => fjobs.resolve(id, r, all === '1'))
-  handle('ws:filesCompress', (root, rels) => compress(files, root, strs(rels)))
+  // Archives (electron/archives.ts): passwords arrive here only to go to 7z's stdin; they are never logged or sent back.
+  const ajobs = archiveJobs(files, (e) => broadcast('ws:filesJob', e))
+  handle('ws:filesResolve', (id, r, all) => (id.startsWith('arc') ? ajobs.resolve(id, r, all === '1') : fjobs.resolve(id, r, all === '1')))
+  handle('ws:filesCompress', (root, rels, opts) => { try { return ajobs.compress(root, strs(rels), JSON.parse(opts)) } catch { return { ok: false, error: 'invalid' } } })
+  handle('ws:filesExtract', (root, rel, mode, items, password) => ajobs.extract(root, rel, mode, strs(items), password || null))
+  handle('ws:filesArchivePassword', (id, pw, cancel) => ajobs.password(id, cancel === '1' ? null : pw))
+  handle('ws:filesArchiveList', (root, rel, password) => listIn(files, root, rel, password || null))
   handle('ws:filesEject', (id) => eject(files, id))
   followJobs((e) => broadcast(e.kind === 'update_status' ? 'ws:updateStatusChanged' : 'ws:pkgJob', e.kind === 'update_status' ? e.status : e))
   handle('ws:cloudAccounts', async () => {
@@ -433,13 +449,18 @@ app.whenReady().then(() => {
   handle('ws:displayWallpaper', (output, id) => displays.setWallpaper(output, id))
   void displays.applySaved()
   // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
-  startPanel(handle, broadcast, () => void displays.applySaved())
+  startPanel(handle, broadcast, () => void displays.applySaved(), (full) => {
+    // An archive opened from elsewhere (worksuite-open-archive, the default handler): browse it in Files.
+    const at = locate(files, full)
+    if (at) { broadcast('ws:openArchive', at); win?.show(); win?.focus() }
+  })
   // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
   startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
   // System monitor (G11) and quick settings brightness / power mode (G01).
   startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
+  startTouchHost(handle, broadcast, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
   startNotifications(handle, broadcast)
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).

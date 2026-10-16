@@ -53,7 +53,21 @@ case "${1:-}" in
         systemctl --user unset-environment $VARS 2>/dev/null
         export XDG_CURRENT_DESKTOP=WorkSuite:wlroots XDG_SESSION_TYPE=wayland
         . "${WORKSUITE_WLR_ENV:-/usr/lib/worksuite/wlr-env}"
-        labwc -C /etc/xdg/worksuite/labwc
+        # Per-user Labwc config dir: the system files, linked, except rc.xml once Settings › Touchscreen & pen has
+        # written its own copy (shell/electron/touch.ts adds the touch block to the system rc.xml).
+        SYSCONF=/etc/xdg/worksuite/labwc
+        CONF=${XDG_CONFIG_HOME:-$HOME/.config}/worksuite/labwc
+        if mkdir -p "$CONF" 2>/dev/null; then
+            for f in "$SYSCONF"/*; do
+                [ -e "$f" ] || continue
+                n=$(basename "$f")
+                [ "$n" = rc.xml ] && [ -f "$CONF/rc.xml" ] && [ ! -L "$CONF/rc.xml" ] && continue
+                ln -sfn "$f" "$CONF/$n"
+            done
+        else
+            CONF=$SYSCONF
+        fi
+        labwc -C "$CONF"
         rc=$?
         cleanup
         # WSOS-SES-006: unexpected compositor exit → greeter shows a notice on next display.

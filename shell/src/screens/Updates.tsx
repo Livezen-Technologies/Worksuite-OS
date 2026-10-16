@@ -1,6 +1,7 @@
 // OS update screens (boards U1–U7, UpdSettings) on the package service's update coordinator (WSOS-AUP-011).
 // Everything shown comes from the coordinator status and the update job's progress events; the manifest
 // carries no release notes, download size or update history, so those places say so instead.
+import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { formatBytes, os, packageErrorText, type BundleInfo, type DeviceInfo } from '../lib/os'
@@ -94,7 +95,7 @@ export function UpdatesPanel() {
           {v.progress && st.state === 'installing' && (
             <div className="mt-1 flex flex-col gap-1.5">
               <Progress value={pct} label={t('upd.progress')} height={6} shine />
-              <span className="font-mono text-xs text-[#8FA3C8]">{pct == null ? t('upd.starting') : `${UPDATE_PHASES[v.progress === 'indeterminate' ? '' : v.progress.phase] ?? ''} · ${formatNumber(pct)}%`}</span>
+              <span className="font-mono text-xs text-[#8FA3C8]">{pct == null ? t('upd.starting') : <>{UPDATE_PHASES[v.progress === 'indeterminate' ? '' : v.progress.phase] ?? ''} · <CountUp value={pct} /></>}</span>
             </div>
           )}
           {error && <span role="alert" className="text-[13px] text-[#FF8A7A]">{error}</span>}
@@ -118,7 +119,7 @@ export function UpdatesPanel() {
             )}
             <div className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
               <span className="h-2 w-2 rounded-full" style={{ background: C.green }} />
-              <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">WorkSuite OS {st.installed}</span><span className="text-[11px] text-[#8FA3C8]">{t('upd.lastChecked', { when: st.last_check ? fmtWhen(st.last_check) : t('settings.about.notYet') })}</span></span>
+              <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">WorkSuite OS {st.installed}</span><span className="text-[11px] text-[#8FA3C8]">{t('upd.lastChecked', { when: st.last_check ? fmtWhen(st.last_check) : t('settings.about.notYet') })}{updateSource(st.update_host)}</span></span>
               <span className="text-[11px]" style={{ color: C.green }}>{t('upd.hist.installed')}</span>
             </div>
             <div className={`px-4 py-[11px] text-[11px] text-[#8FA3C8] ${rowLine}`}>{t('upd.hist.none')}</div>
@@ -217,7 +218,7 @@ export function UpdatingScreen({ from, to, percent, phase }: { from: string; to:
         <span className="absolute top-9 left-9"><Mark size={48} hole="#040A1A" /></span>
       </div>
       <div className="flex flex-col items-center gap-2.5">
-        <h1 id="updating-t" className="m-0 text-[28px] font-medium">{t('upd.updating')}{percent != null ? ` · ${formatNumber(percent)}%` : ''}</h1>
+        <h1 id="updating-t" className="m-0 text-[28px] font-medium">{t('upd.updating')}{percent != null ? <> · <CountUp value={percent} /></> : ''}</h1>
         <p className="m-0 text-[15px] text-[#8FA3C8]">{t('upd.dontTurnOff')}</p>
       </div>
       <div className="flex w-[420px] max-w-full flex-col gap-2.5">
@@ -358,4 +359,10 @@ export function UpdateOverlays({ onOpenUpdates, quiet }: { onOpenUpdates: () => 
     {tracking.failure && createPortal(<UpdateFailed {...tracking.failure} onClose={updates.clearFailure} onRetry={() => { updates.clearFailure(); void updates.installNow() }} />, document.body)}
     {news && !tracking.forced && !tracking.failure && <WhatsNew version={news} onClose={() => setNews(null)} />}
   </>
+}
+
+/** " · download.worksuitecloud.com" — where updates come from (the Update Center or the organisation's mirror). */
+export function updateSource(host: string | undefined): string {
+  if (!host) return ''
+  try { return ` · ${new URL(host).host}` } catch { return '' }
 }

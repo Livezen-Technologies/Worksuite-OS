@@ -94,6 +94,15 @@ describe('panel client', () => {
     expect(f.method(new Message({ type: 1, serial: 8, sender: ':1.2', path: '/other', interface: SHELL, member: 'ToggleLauncher' }))).toBe(false)
   })
 
+  it('opens an archive in Files through Shell1.OpenArchive', async () => {
+    const f = fakeBus({})
+    const openArchive = vi.fn()
+    await new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn(), openArchive }).start()
+    expect(f.method(new Message({ type: 1, serial: 9, sender: ':1.2', path: SHELL_PATH, interface: SHELL, member: 'OpenArchive', signature: 's', body: ['/home/a/x.zip'] }))).toBe(true)
+    expect(openArchive).toHaveBeenCalledWith('/home/a/x.zip')
+    expect(f.method(new Message({ type: 1, serial: 10, sender: ':1.2', path: SHELL_PATH, interface: SHELL, member: 'OpenArchive', signature: 'u', body: [1] }))).toBe(false)
+  })
+
   it('ignores malformed rows', () => {
     expect(rowsToWindows([['a'], 'x', ['h', 'app', 't', 'o', 2]])).toEqual([{ handle: 'h', appId: 'app', title: 't', output: 'o', flags: 2 }])
     expect(rowsToWindows(undefined)).toEqual([])

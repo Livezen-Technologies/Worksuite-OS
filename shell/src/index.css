@@ -61,6 +61,8 @@
 .ws-spin { animation: ws-spin 1.1s linear infinite; transform-origin: 50% 50%; }
 @keyframes ws-shimmer { 0% { transform: translateX(-100%) } 100% { transform: translateX(250%) } }
 .ws-shine { animation: ws-shimmer 1.8s ease-in-out infinite; }
+@keyframes ws-indeterminate { 0% { left: -35% } 100% { left: 100% } }
+.ws-indeterminate { animation: ws-indeterminate 1.4s cubic-bezier(0.65,0,0.35,1) infinite; }
 
 /* Accessibility settings (WSOS-ACC-001…006, lib/a11y.ts). The system prefers-reduced-motion rule is in @layer base. */
 [data-reduced-motion] *, [data-reduced-motion] *::before, [data-reduced-motion] *::after {
@@ -127,3 +129,15 @@
 :root[data-text-scale] .text-\[30px\] { font-size: calc(30px * var(--ws-text-scale)); }
 :root[data-text-scale] .text-\[32px\] { font-size: calc(32px * var(--ws-text-scale)); }
 :root[data-text-scale] .text-\[34px\] { font-size: calc(34px * var(--ws-text-scale)); }
+
+/* Touch (tablet) mode, Settings › Touchscreen & pen (src/lib/touch.ts sets :root[data-touch]): 48 px hit targets,
+   a taller taskbar and the Start menu as a full-screen grid. */
+:root[data-touch] button, :root[data-touch] [role='switch'], :root[data-touch] [role='radio'], :root[data-touch] select, :root[data-touch] input:not([type='range']) { min-height: 44px; min-width: 44px; }
+:root[data-touch] .ws-taskbar { height: 64px; gap: 10px; }
+:root[data-touch] .ws-taskbar button { min-height: 48px; min-width: 48px; }
+:root[data-touch] .bottom-\[52px\] { bottom: 64px; }
+:root[data-touch] #ws-launcher { width: 100%; height: 100%; max-width: none; border-radius: 0; }
+:root[data-touch] #ws-launcher .ws-pins { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 12px; }
+:root[data-touch] #ws-launcher .ws-pins > button { padding: 16px 4px; }
+:root[data-touch] #ws-launcher .ws-pins > button > span:first-child { width: 64px; height: 64px; font-size: 22px; border-radius: 16px; }
+:root[data-touch] input[type='range'] { height: 32px; }
