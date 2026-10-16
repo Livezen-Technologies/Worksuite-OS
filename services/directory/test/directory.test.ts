@@ -244,3 +244,13 @@ test('G04: break-glass reason typed at the greeter goes into the audit event onc
   assert.equal(await authenticate(f.deps, 'ana@corp.example', PW), 'ok');
   assert.deepEqual(offlineUntil(f.getCache()), { 'ana@corp.example': f.state.now + 7 * DAY });
 });
+
+test('helper exit codes for pam_worksuite.so (WSOS-DIR-009)', async () => {
+  const { authExit } = await import('../src/main.ts');
+  assert.equal(authExit('ok'), 0);
+  assert.equal(authExit('ok_offline'), 0);
+  assert.equal(authExit('mfa_required'), 10);
+  assert.equal(authExit('password_expired'), 11);
+  assert.equal(authExit('not_directory'), 12);
+  for (const r of ['denied', 'disabled', 'expired_cache', 'unavailable', 'uid_conflict'] as const) assert.equal(authExit(r), 1);
+});

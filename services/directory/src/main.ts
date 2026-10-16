@@ -158,7 +158,7 @@ export async function main(argv: string[], deps: Deps = { server: httpServer(), 
   switch (argv[0]) {
     case 'auth': {
       const r = await authenticate(deps, user, await readSecret());
-      return r === 'ok' || r === 'ok_offline' ? 0 : 1;
+      return authExit(r);
     }
     case 'session':
       if (process.env.PAM_TYPE && process.env.PAM_TYPE !== 'open_session') return 0;
@@ -172,6 +172,14 @@ export async function main(argv: string[], deps: Deps = { server: httpServer(), 
       process.stderr.write('usage: worksuite-pam-directory auth|session|rotate|greeter-config\n');
       return 2;
   }
+}
+
+/**
+ * Exit status for pam_worksuite.so (native/pam-worksuite): 0 signed in, 10 second factor needed (the module prompts
+ * for the code), 11 password expired, 12 not a directory name; 1 refused. Under pam_exec any non-zero is a failure.
+ */
+export function authExit(r: Awaited<ReturnType<typeof authenticate>>): number {
+  return r === 'ok' || r === 'ok_offline' ? 0 : r === 'mfa_required' ? 10 : r === 'password_expired' ? 11 : r === 'not_directory' ? 12 : 1;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

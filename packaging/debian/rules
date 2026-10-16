@@ -20,6 +20,8 @@ override_dh_auto_build:
 	# Calamares view module (installer/modules/worksuiteconfirm).
 	cmake -S installer/modules/worksuiteconfirm -B build-installer -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWORKSUITE_TESTS=ON
 	cmake --build build-installer
+	# pam_worksuite.so: directory sign-in with a PAM conversation for the second factor (WSOS-DIR-009).
+	$(MAKE) -C native/pam-worksuite pam_worksuite.so
 	# Wayland bridge: pywayland bindings for wlr-foreign-toplevel-management (native/wayland-bridge/Makefile).
 	$(MAKE) -C native/wayland-bridge protocols
 	# Installer translations: compiled into the Calamares branding's lang/ directory.
@@ -29,6 +31,7 @@ override_dh_auto_build:
 	dh_auto_build
 
 override_dh_auto_install:
+	install -D -m 0644 native/pam-worksuite/pam_worksuite.so debian/worksuite-directory/usr/lib/$(DEB_HOST_MULTIARCH)/security/pam_worksuite.so
 	dh_auto_install
 	# calamares-settings-worksuite: config, branding and the two WorkSuite modules next to the stock ones.
 	d=debian/calamares-settings-worksuite; m=$$d/usr/lib/$(DEB_HOST_MULTIARCH)/calamares/modules; \
@@ -81,6 +84,7 @@ override_dh_auto_test:
 	tests/boot/recovery-boot.test.sh
 	cd shell && npx vitest run
 	$(MAKE) -C native/wayland-bridge test
+	sh native/pam-worksuite/test.sh
 	python3 -m unittest discover -s installer/tests
 
 # Electron ships prebuilt and stripped; its shared-library needs are listed in debian/control.

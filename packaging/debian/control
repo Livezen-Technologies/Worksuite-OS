@@ -10,6 +10,7 @@ Build-Depends: debhelper-compat (= 13), nodejs (>= 22.18), npm,
 # Branding: SVG sources rendered to PNG for Plymouth, GRUB and icons.
  librsvg2-bin, grub-common, fonts-dejavu-core,
 # Wayland bridge: protocol bindings generated with pywayland-scanner from wayland.xml; D-Bus tests on a private bus.
+ libpam0g-dev,
  python3, python3-pywayland, python3-cffi-backend, python3-dbus-next, python3-yaml, libwayland-dev, pkgconf, dbus-daemon,
 # Installer translations (.ts → .qm).
  qt6-l10n-tools | qttools5-dev-tools
@@ -96,7 +97,7 @@ Description: WorkSuite device agent (enrollment, policy, signed remote commands)
 
 Package: worksuite-directory
 Architecture: amd64 arm64
-Depends: worksuite-shell (= ${binary:Version}), libpam-runtime, libpam-modules, passwd, bsdutils, systemd, ${misc:Depends}
+Depends: worksuite-shell (= ${binary:Version}), libpam-runtime, libpam-modules, passwd, bsdutils, systemd, ${shlibs:Depends}, ${misc:Depends}
 Recommends: worksuite-device-agent
 Description: WorkSuite directory sign-in and break-glass admin
  Signs organization users in at the greeter through pam_exec and the

@@ -3,9 +3,9 @@ Default: yes
 Priority: 300
 Auth-Type: Primary
 Auth:
-	[success=end default=ignore]	pam_exec.so quiet expose_authtok /usr/libexec/worksuite/worksuite-pam-directory auth
+	[success=end default=ignore]	pam_worksuite.so
 Auth-Initial:
-	[success=end default=ignore]	pam_exec.so quiet expose_authtok /usr/libexec/worksuite/worksuite-pam-directory auth
+	[success=end default=ignore]	pam_worksuite.so
 Session-Type: Additional
 Session-Interactive-Only: yes
 Session:
