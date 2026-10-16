@@ -166,10 +166,11 @@ async function cpTree(from: string, to: string) {
   else if (st.isFile()) await copyFile(from, to)
 }
 
-export async function trash(env: Env, root: string, rels: string[]): Promise<Reply<number>> {
+/** Moves items to the Trash; the ids let the caller undo it with trashRestore. */
+export async function trash(env: Env, root: string, rels: string[]): Promise<Reply<{ count: number; ids: string[] }>> {
   const t = trashDir(env)
   mkdirSync(path.join(t, 'files'), { recursive: true }); mkdirSync(path.join(t, 'info'), { recursive: true })
-  let n = 0
+  const ids: string[] = []
   for (const rel of rels) {
     const p = resolveIn(env, root, rel)
     if (!p || !rel || !existsSync(p.full)) continue
@@ -177,9 +178,32 @@ export async function trash(env: Env, root: string, rels: string[]): Promise<Rep
     let id = base, i = 1
     while (existsSync(path.join(t, 'files', id)) || existsSync(path.join(t, 'info', `${id}.trashinfo`))) id = `${base}.${++i}`
     writeFileSync(path.join(t, 'info', `${id}.trashinfo`), `[Trash Info]\nPath=${encodeURI(p.full)}\nDeletionDate=${trashDate(new Date())}\n`, { flag: 'wx' })
-    try { await moveAcross(p.full, path.join(t, 'files', id)); n++ } catch { await rm(path.join(t, 'info', `${id}.trashinfo`), { force: true }) }
+    try { await moveAcross(p.full, path.join(t, 'files', id)); ids.push(id) } catch { await rm(path.join(t, 'info', `${id}.trashinfo`), { force: true }) }
   }
-  return n ? { ok: true, value: n } : { ok: false, error: 'not_found' }
+  return ids.length ? { ok: true, value: { count: ids.length, ids } } : { ok: false, error: 'not_found' }
+}
+
+/** Shift+Delete: removes items for good, skipping the Trash. Only inside a root, never the root itself. */
+export async function removeIn(env: Env, root: string, rels: string[]): Promise<Reply<number>> {
+  let n = 0, failed: string | null = null
+  for (const rel of rels) {
+    const p = resolveIn(env, root, rel)
+    if (!p || !rel || !existsSync(p.full)) continue
+    try { await rm(p.full, { recursive: true }); n++ } catch (e) { failed = errCode(e) }
+  }
+  return failed && !n ? { ok: false, error: failed } : n ? { ok: true, value: n } : { ok: false, error: 'not_found' }
+}
+
+/** errno → the reasons Files explains (FO4): no space, no permission, a read/write error, a file in use. */
+export function errCode(e: unknown): 'no_space' | 'permission' | 'io' | 'busy' | 'missing' | 'failed' {
+  switch ((e as NodeJS.ErrnoException)?.code) {
+    case 'ENOSPC': case 'EDQUOT': return 'no_space'
+    case 'EACCES': case 'EPERM': case 'EROFS': return 'permission'
+    case 'EIO': case 'ENXIO': case 'ENODEV': return 'io'
+    case 'EBUSY': case 'ETXTBSY': return 'busy'
+    case 'ENOENT': return 'missing'
+    default: return 'failed'
+  }
 }
 
 async function treeSize(p: string): Promise<number> {
@@ -243,13 +267,19 @@ export async function trashDelete(env: Env, ids: string[] | 'all'): Promise<Repl
 }
 
 // ---- Copy / move jobs ----
+function freeAt(dir: string): number | null { try { const s = statfsSync(dir); return s.bavail * s.bsize } catch { return null } }
+function sameDevice(a: string, b: string): boolean { try { return lstatSync(a).dev === lstatSync(b).dev } catch { return false } }
 export interface FileStamp { size: number; modified: number }
 export interface JobEvent {
-  id: string; op: 'copy' | 'move'; dest: string; state: 'running' | 'conflict' | 'done' | 'failed' | 'cancelled'
+  id: string; op: 'copy' | 'move'; dest: string; state: 'running' | 'paused' | 'conflict' | 'error' | 'done' | 'failed' | 'cancelled'
   done: number; total: number; bytes_done: number; bytes_total: number
-  conflict: { name: string; incoming: FileStamp; existing: FileStamp; remaining: number } | null
+  conflict: { name: string; incoming: FileStamp; existing: FileStamp; remaining: number; index: number; count: number } | null
+  /** Where it comes from (display form), the file being copied now, and the destination's free bytes. */
+  src: string; current: string | null; free: number | null; started: number
+  /** state 'error' / 'failed': why (errCode), and the file it stopped at. */
+  error: string | null; error_name: string | null
 }
-export type Resolution = 'replace' | 'skip' | 'keep' | 'cancel'
+export type Resolution = 'replace' | 'skip' | 'keep' | 'cancel' | 'retry'
 
 /** "Budget 2027.xlsx" -> "Budget 2027 (2).xlsx", the first name not taken in dir. */
 export function freeName(dir: string, name: string): string {
@@ -259,14 +289,23 @@ export function freeName(dir: string, name: string): string {
 }
 
 export function jobs(env: Env, emit: (e: JobEvent) => void) {
-  const live = new Map<string, { resolve: ((r: Resolution, all: boolean) => void) | null; cancel: boolean }>()
+  const live = new Map<string, { resolve: ((r: Resolution, all: boolean) => void) | null; cancel: boolean; paused: boolean; wake: (() => void) | null }>()
   let seq = 0
 
   async function run(id: string, op: 'copy' | 'move', srcRoot: string, rels: string[], dstRoot: string, dstRel: string, duplicate: boolean) {
     const dst = resolveIn(env, dstRoot, dstRel)
     const ctl = live.get(id)!
-    const ev: JobEvent = { id, op, dest: displayDir(env, dstRoot, dstRel), state: 'running', done: 0, total: 0, bytes_done: 0, bytes_total: 0, conflict: null }
-    if (!dst || !existsSync(dst.full)) { emit({ ...ev, state: 'failed' }); return }
+    const srcDir = rels[0]?.split('/').slice(0, -1).join('/') ?? ''
+    const ev: JobEvent = { id, op, dest: displayDir(env, dstRoot, dstRel), state: 'running', done: 0, total: 0, bytes_done: 0, bytes_total: 0, conflict: null,
+      src: displayDir(env, srcRoot, srcDir), current: null, free: dst ? freeAt(dst.full) : null, started: Date.now(), error: null, error_name: null }
+    // Waits for the person: a conflict or an error resolution, or Resume after Pause.
+    const ask = (e: JobEvent) => new Promise<{ r: Resolution; all: boolean }>((resolve) => { ctl.resolve = (r, all) => { ctl.resolve = null; resolve({ r, all }) }; emit(e) })
+    const holdIfPaused = async () => {
+      if (!ctl.paused) return
+      while (ctl.paused && !ctl.cancel) { const woke = new Promise<void>((w) => { ctl.wake = w }); emit({ ...ev, state: 'paused' }); await woke; ctl.wake = null }
+      emit({ ...ev })
+    }
+    if (!dst || !existsSync(dst.full)) { emit({ ...ev, state: 'failed', error: 'missing' }); live.delete(id); return }
     // Enumerate files (folders are created as needed and merged).
     const plan: { from: string; to: string; size: number; mtime: number; top: string }[] = []
     const tops: string[] = []
@@ -286,35 +325,53 @@ export function jobs(env: Env, emit: (e: JobEvent) => void) {
     }
     ev.total = plan.length; ev.bytes_total = plan.reduce((a, f) => a + f.size, 0)
     emit({ ...ev })
+    const cancelled = () => { emit({ ...ev, state: 'cancelled', current: null }); live.delete(id) }
+    // Not enough room: ask before copying anything (a move on the same file system needs no room).
+    const sameFs = op === 'move' && plan.every((f) => sameDevice(f.from, dst.full))
+    while (!sameFs && ev.free != null && ev.bytes_total > ev.free) {
+      const { r } = await ask({ ...ev, state: 'error', error: 'no_space', error_name: null })
+      if (r === 'cancel' || ctl.cancel) return cancelled()
+      ev.free = freeAt(dst.full)
+    }
     let applyAll: Resolution | null = null
     const conflicts = plan.filter((f) => existsSync(f.to)).length
     let seen = 0
     let last = 0
     for (const f of plan) {
-      if (ctl.cancel) { emit({ ...ev, state: 'cancelled' }); live.delete(id); return }
+      await holdIfPaused()
+      if (ctl.cancel) return cancelled()
       let to = f.to
       if (existsSync(to)) {
         seen++
         let choice: Resolution | null = applyAll as Resolution | null
         if (!choice) {
           const ex = await stat(to)
-          choice = await new Promise<Resolution>((resolve) => {
-            ctl.resolve = (r, all) => { if (all) applyAll = r; resolve(r) }
-            emit({ ...ev, state: 'conflict', conflict: { name: path.basename(to), incoming: { size: f.size, modified: f.mtime }, existing: { size: ex.size, modified: ex.mtimeMs }, remaining: conflicts - seen } })
-          })
-          ctl.resolve = null
+          const a = await ask({ ...ev, state: 'conflict', conflict: { name: path.basename(to), incoming: { size: f.size, modified: f.mtime }, existing: { size: ex.size, modified: ex.mtimeMs }, remaining: conflicts - seen, index: seen, count: conflicts } })
+          choice = a.r
+          if (a.all) applyAll = a.r
         }
-        if (choice === 'cancel') { emit({ ...ev, state: 'cancelled' }); live.delete(id); return }
+        if (choice === 'cancel' || ctl.cancel) return cancelled()
         if (choice === 'skip') { ev.done++; ev.bytes_done += f.size; continue }
         if (choice === 'keep') to = path.join(path.dirname(to), freeName(path.dirname(to), path.basename(to)))
       }
-      try {
-        await mkdir(path.dirname(to), { recursive: true })
-        if (op === 'move') await moveAcross(f.from, to); else await copyFile(f.from, to)
-      } catch { emit({ ...ev, state: 'failed' }); live.delete(id); return }
+      ev.current = path.basename(f.from)
+      // A failed file: Retry, Skip it, or Cancel the rest (FO4).
+      for (;;) {
+        try {
+          await mkdir(path.dirname(to), { recursive: true })
+          if (op === 'move') await moveAcross(f.from, to); else await copyFile(f.from, to)
+          break
+        } catch (e) {
+          const { r } = await ask({ ...ev, state: 'error', error: errCode(e), error_name: path.basename(f.from) })
+          if (r === 'cancel' || ctl.cancel) return cancelled()
+          if (r === 'skip') { ev.bytes_total -= f.size; ev.total--; to = ''; break }
+        }
+      }
+      if (!to) continue
       ev.done++; ev.bytes_done += f.size
-      if (Date.now() - last > 150) { last = Date.now(); emit({ ...ev }) }
+      if (Date.now() - last > 150) { last = Date.now(); ev.free = freeAt(dst.full); emit({ ...ev }) }
     }
+    ev.current = null; ev.free = freeAt(dst.full)
     if (op === 'move') for (const t of tops) await rm(t, { recursive: true, force: true }).catch(() => undefined)
     emit({ ...ev, state: 'done' }); live.delete(id)
   }
@@ -323,14 +380,16 @@ export function jobs(env: Env, emit: (e: JobEvent) => void) {
     start(op: string, srcRoot: string, rels: string[], dstRoot: string, dstRel: string): Reply<string> {
       if (!['copy', 'move', 'duplicate'].includes(op) || !Array.isArray(rels) || !rels.every((r) => typeof r === 'string')) return { ok: false, error: 'invalid' }
       const id = `job${++seq}`
-      live.set(id, { resolve: null, cancel: false })
+      live.set(id, { resolve: null, cancel: false, paused: false, wake: null })
       void run(id, op === 'move' ? 'move' : 'copy', srcRoot, rels, dstRoot, dstRel, op === 'duplicate')
       return { ok: true, value: id }
     },
     resolve(id: string, r: string, all: boolean): Reply<true> {
       const j = live.get(id)
-      if (!j || !['replace', 'skip', 'keep', 'cancel'].includes(r)) return { ok: false, error: 'not_found' }
-      if (r === 'cancel') j.cancel = true
+      if (!j || !['replace', 'skip', 'keep', 'cancel', 'retry', 'pause', 'resume'].includes(r)) return { ok: false, error: 'not_found' }
+      if (r === 'pause') { j.paused = true; return { ok: true, value: true } }
+      if (r === 'resume') { j.paused = false; j.wake?.(); return { ok: true, value: true } }
+      if (r === 'cancel') { j.cancel = true; j.wake?.() }
       j.resolve?.(r as Resolution, all)
       return { ok: true, value: true }
     },

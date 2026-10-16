@@ -81,6 +81,8 @@ contextBridge.exposeInMainWorld('worksuite', {
   filesMkdir: (root: string, rel: string, name: string) => ipcRenderer.invoke('ws:filesMkdir', String(root), String(rel), String(name)),
   filesRename: (root: string, rel: string, name: string) => ipcRenderer.invoke('ws:filesRename', String(root), String(rel), String(name)),
   filesTrash: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesTrash', String(root), JSON.stringify(rels.map(String))),
+  filesDelete: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesDelete', String(root), JSON.stringify(rels.map(String))),
+  filesNotify: (summary: string, body: string) => ipcRenderer.invoke('ws:filesNotify', String(summary), String(body)),
   filesTrashList: () => ipcRenderer.invoke('ws:filesTrashList'),
   filesTrashRestore: (ids: string[]) => ipcRenderer.invoke('ws:filesTrashRestore', JSON.stringify(ids.map(String))),
   filesTrashDelete: (ids: string[] | 'all') => ipcRenderer.invoke('ws:filesTrashDelete', ids === 'all' ? 'all' : JSON.stringify(ids.map(String))),

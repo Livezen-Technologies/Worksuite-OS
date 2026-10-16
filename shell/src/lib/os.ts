@@ -67,13 +67,18 @@ export interface WorkSuiteApi {
   filesMkdir(root: string, rel: string, name: string): Promise<CloudResult<string>>
   filesRename(root: string, rel: string, name: string): Promise<CloudResult<string>>
   /** Move to the freedesktop.org Trash. */
-  filesTrash(root: string, rels: string[]): Promise<CloudResult<number>>
+  filesTrash(root: string, rels: string[]): Promise<CloudResult<{ count: number; ids: string[] }>>
+  /** Shift+Delete: remove for good, skipping the Trash (FO3). */
+  filesDelete(root: string, rels: string[]): Promise<CloudResult<number>>
+  /** "Notify me when done" (FO1): a text notice in the shell's notification centre. */
+  filesNotify(summary: string, body: string): Promise<unknown>
   filesTrashList(): Promise<TrashItem[]>
   filesTrashRestore(ids: string[]): Promise<CloudResult<{ restored: number; skipped: number }>>
   filesTrashDelete(ids: string[] | 'all'): Promise<CloudResult<number>>
   /** Start a copy/move/duplicate job; progress and conflicts arrive through onFilesJob. */
   filesPaste(op: 'copy' | 'move' | 'duplicate', srcRoot: string, rels: string[], dstRoot: string, dstRel: string): Promise<CloudResult<string>>
-  filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel' | 'continue', all: boolean): Promise<CloudResult<true>>
+  /** Answer a job: conflict (replace/skip/keep), error (retry/skip), pause/resume (copy and move), or cancel. */
+  filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel' | 'continue' | 'retry' | 'pause' | 'resume', all: boolean): Promise<CloudResult<true>>
   /** Start a compress job (zip / 7z / tar.gz / tar.xz; a password for zip and 7z only); progress arrives through onFilesJob. */
   filesCompress(root: string, rels: string[], opts: CompressOptions): Promise<CloudResult<string>>
   /** Start an extract job: "here" or into "<name>/", all entries or the given ones. */
@@ -251,9 +256,13 @@ export interface FileHit { root: string; rel: string; name: string; dir: boolean
 export interface TrashItem { id: string; name: string; dir: boolean; size: number; orig: string; where: string; deleted: number | null }
 export interface FileStamp { size: number; modified: number }
 export interface FileJob {
-  id: string; op: 'copy' | 'move' | 'compress' | 'extract'; dest: string; state: 'running' | 'conflict' | 'password' | 'confirm' | 'done' | 'failed' | 'cancelled'
+  id: string; op: 'copy' | 'move' | 'compress' | 'extract'; dest: string; state: 'running' | 'paused' | 'conflict' | 'error' | 'password' | 'confirm' | 'done' | 'failed' | 'cancelled'
   done: number; total: number; bytes_done: number; bytes_total: number
-  conflict: { name: string; incoming: FileStamp; existing: FileStamp; remaining: number } | null
+  conflict: { name: string; incoming: FileStamp; existing: FileStamp; remaining: number; index?: number; count?: number } | null
+  /** Copy and move: source folder (display form), the file being copied now, the destination's free bytes, start time. */
+  src?: string; current?: string | null; free?: number | null; started?: number
+  /** state 'error': no_space | permission | io | busy | missing | failed, and the file it stopped at. */
+  error_name?: string | null
   /** Archive jobs: the archive's name, the prompt's details and why it failed. */
   name?: string; ask?: { wrong?: boolean; bytes?: number | null; ratio?: number | null } | null; error?: string | null
 }
@@ -456,7 +465,9 @@ const stub: WorkSuiteApi = {
   },
   async filesMkdir(_r, rel, name) { return { ok: true, value: rel ? `${rel}/${name}` : name } },
   async filesRename(_r, rel, name) { return { ok: true, value: name || rel } },
-  async filesTrash(_r, rels) { return { ok: true, value: rels.length } },
+  async filesTrash(_r, rels) { return { ok: true, value: { count: rels.length, ids: rels.map((r) => r.split('/').pop()!) } } },
+  async filesDelete(_r, rels) { return { ok: true, value: rels.length } },
+  async filesNotify() { return true },
   async filesTrashList() {
     const d = (days: number) => Date.now() - days * 86_400_000
     return [['Old logo.png', '~/Pictures', 0, 640_000], ['Draft v1.docx', '~/Documents/Projects', 1, 312_000], ['Invoice copy.pdf', '~/Downloads', 9, 220_000]]
@@ -465,13 +476,31 @@ const stub: WorkSuiteApi = {
   async filesTrashRestore(ids) { return { ok: true, value: { restored: ids.length, skipped: 0 } } },
   async filesTrashDelete(ids) { return { ok: true, value: ids === 'all' ? 0 : ids.length } },
   async filesPaste(op, _s, rels, dstRoot) {
-    // Preview: a copy that stops on one conflict, like the real job service.
-    const base: FileJob = { id: 'stubjob', op: op === 'move' ? 'move' : 'copy', dest: dstRoot.startsWith('media:') ? dstRoot.slice(6) : '~', state: 'running', done: 0, total: rels.length, bytes_done: 0, bytes_total: rels.length * 2_400_000, conflict: null }
-    setTimeout(() => stubFileJobs.forEach((l) => l({ ...base, state: 'conflict', conflict: { name: rels[0].split('/').pop()!, incoming: { size: 2_400_000, modified: Date.now() - 600_000 }, existing: { size: 2_100_000, modified: Date.now() - 12 * 86_400_000 }, remaining: rels.length - 1 } })), 50)
-    return { ok: true, value: base.id }
+    // Preview: a job that stops on one conflict, then runs to the end; Pause holds it, like the real job service.
+    const id = `stubjob${++stubJobSeq}`
+    const total = rels.length, bytes = rels.length * 2_400_000
+    const base: FileJob = { id, op: op === 'move' ? 'move' : 'copy', dest: dstRoot.startsWith('media:') ? dstRoot.slice(6) : '~/Documents', state: 'running', done: 0, total, bytes_done: 0, bytes_total: bytes, conflict: null,
+      src: '~/Documents', current: rels[0].split('/').pop()!, free: 21_400_000_000, started: Date.now(), error: null, error_name: null }
+    stubJobs.set(id, { job: base, paused: false, step: 0 })
+    setTimeout(() => stubEmit({ ...base, state: 'conflict', conflict: { name: rels[0].split('/').pop()!, incoming: { size: 2_400_000, modified: Date.now() - 600_000 }, existing: { size: 2_100_000, modified: Date.now() - 12 * 86_400_000 }, remaining: rels.length - 1, index: 1, count: rels.length } }), 50)
+    return { ok: true, value: id }
   },
   async filesResolve(id, r) {
-    stubFileJobs.forEach((l) => l({ id, op: 'copy', dest: 'KINGSTON', state: r === 'cancel' ? 'cancelled' : 'done', done: 1, total: 1, bytes_done: 2_400_000, bytes_total: 2_400_000, conflict: null }))
+    const s = stubJobs.get(id)
+    if (!s) return { ok: false, error: 'not_found' }
+    if (r === 'cancel') { stubJobs.delete(id); stubEmit({ ...s.job, state: 'cancelled' }); return { ok: true, value: true } }
+    if (r === 'pause') { s.paused = true; stubEmit({ ...s.job, state: 'paused' }); return { ok: true, value: true } }
+    s.paused = false
+    const tick = () => {
+      const cur = stubJobs.get(id)
+      if (!cur || cur.paused) return
+      cur.step++
+      const f = Math.min(1, cur.step / 20)
+      cur.job = { ...cur.job, state: f >= 1 ? 'done' : 'running', conflict: null, done: Math.round(cur.job.total * f), bytes_done: Math.round(cur.job.bytes_total * f), current: f >= 1 ? null : cur.job.current }
+      stubEmit(cur.job)
+      if (f < 1) setTimeout(tick, 300); else stubJobs.delete(id)
+    }
+    setTimeout(tick, 100)
     return { ok: true, value: true }
   },
   async filesCompress(_root, rels, o) {
@@ -689,6 +718,9 @@ if (typeof window !== 'undefined') {
   if (k === 'forced') { setTimeout(() => setOs({ state: 'installing', reason: null, restart_at: null }), 600); setTimeout(() => emitJob(50, 'applying'), 800) }
   if (k === 'failed') { setTimeout(() => emitJob(50, 'applying'), 400); setTimeout(() => setOs({ state: 'failed', reason: 'dpkg: error processing package linux-image-6.12 (--configure)' }), 700) }
 }
+const stubJobs = new Map<string, { job: FileJob; paused: boolean; step: number }>()
+let stubJobSeq = 0
+const stubEmit = (e: FileJob) => stubFileJobs.forEach((l) => l(e))
 const stubFileJobs = new Set<(e: FileJob) => void>()
 function STUB_DOCS(): FileEntry[] {
   const day = 86_400_000, now = Date.now()
