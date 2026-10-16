@@ -506,6 +506,28 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     send(ctx, 200, loginReply(user, dir, d.id));
   });
 
+  // WSOS-SEC-008: privileged package changes on the device (package-service audit log, forwarded by the device agent).
+  r.on('POST', '/desktop/v1/os/audit', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    await idempotent(db, ctx, `device:${d.id}`, ctx.header('idempotency-key'), async () => {
+      const b = obj(await ctx.body());
+      if (!Array.isArray(b.events) || b.events.length === 0 || b.events.length > 500) throw invalid('events', 'array of 1 to 500');
+      const rows = (b.events as unknown[]).map((e) => {
+        const ev = obj(e, 'events[]');
+        const type = str(ev, 'type', 80);
+        if (!/^package\.[a-z_]{1,64}$/.test(type)) throw invalid('events[].type', 'package.<event>');
+        const at = str(ev, 'at', 64);
+        if (Number.isNaN(Date.parse(at))) throw invalid('events[].at', 'ISO date');
+        const data = ev.data === undefined ? null : JSON.stringify(ev.data);
+        if (data !== null && data.length > 4096) throw invalid('events[].data', 'at most 4 KiB');
+        return [str(ev, 'id', 64), `device:${d.id}`, type, at, data] as const;
+      });
+      const ins = db.prepare('INSERT OR IGNORE INTO audit (id, principal, type, at, data) VALUES (?, ?, ?, ?, ?)');
+      tx(db, () => { for (const r of rows) ins.run(...r); });
+      return { status: 202 };
+    });
+  });
+
   // Break-glass audit (WSOS-DIR-010): every use and every rotation is recorded against the device.
   r.on('POST', '/desktop/v1/os/break-glass/events', async (ctx) => {
     const d = deviceFromHeader(db, ctx, true);

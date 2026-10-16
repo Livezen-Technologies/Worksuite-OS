@@ -130,7 +130,7 @@ function world(opts: { orgVpn?: Partial<VpnConfig> | false; policy?: Omit<Policy
     async register(_u, _t, body) { s.sentBodies.push(body); s.peerKey = opts.ignoreRegisterKey ? undefined : body.wg_public_key; return { device_id: 'dev-1', credential: 'c', org_name: 'Org' }; },
     async heartbeat() { return { commands: [] }; },
     async policy() { return s.policy; },
-    async ack() {}, async inventory() {}, async diagnostics() {},
+    async ack() {}, async inventory() {}, async diagnostics() {}, async audit() {},
     async vpn() { return vpnFor() as VpnConfig; },
     async vpnPeer(pub) { s.sentBodies.push({ public_key: pub }); s.peerKey = pub; return vpnFor() as VpnConfig; },
   };

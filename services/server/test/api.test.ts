@@ -160,6 +160,21 @@ test('directory authenticate is device-bound, refuses disabled accounts; break-g
   assert.deepEqual(rows.map((r) => r.type), ['break_glass.used']);
 });
 
+test('WSOS-SEC-008: device package-change audit events are stored against the device, retries are ignored', async () => {
+  const d = await enroll();
+  const post = (events: unknown) => call('POST', '/desktop/v1/os/audit', { device: d.credential, idem: randomUUID(), body: { events } });
+  const ev = { id: 'pkg-1', type: 'package.installed', at: '2026-10-16T10:00:00.000Z', data: { caller: 1000, source: 'flatpak', name: 'org.gnome.Calculator' } };
+  assert.equal((await post([ev])).status, 202);
+  assert.equal((await post([ev])).status, 202);
+  assert.equal((await post([{ ...ev, id: 'x', type: 'directory.password_changed' }])).status, 400);
+  assert.equal((await post([{ ...ev, id: 'y', at: 'yesterday' }])).status, 400);
+  assert.equal((await post([])).status, 400);
+  assert.equal((await call('POST', '/desktop/v1/os/audit', { idem: randomUUID(), body: { events: [ev] } })).status, 403);
+  const rows = db.prepare('SELECT type, data FROM audit WHERE principal = ? AND type LIKE ?').all(`device:${d.device_id}`, 'package.%') as { type: string; data: string }[];
+  assert.equal(rows.length, 1);
+  assert.equal(JSON.parse(rows[0].data).name, 'org.gnome.Calculator');
+});
+
 test('expired commands are not delivered', async () => {
   const d = await enroll();
   const id = admin.issueCommand(db, d.device_id, 'RefreshPolicy');

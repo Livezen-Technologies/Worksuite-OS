@@ -49,6 +49,7 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
     },
     async inventory() {},
     async diagnostics() { log.push('diagnostics uploaded'); },
+    async audit() {},
     async vpn() { throw new ApiError(404, 'NOT_FOUND'); },
     async vpnPeer() { throw new ApiError(404, 'NOT_FOUND'); },
   };

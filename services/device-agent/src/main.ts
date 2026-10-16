@@ -11,12 +11,14 @@ import { Agent } from './agent.ts';
 import { httpApi } from './api.ts';
 import { DEFAULT_PATHS, linuxHost } from './host.ts';
 import { StateFile } from './state.ts';
+import { forwardPackageAudit } from './auditForward.ts';
 
 const KEY_DIR = '/usr/share/worksuite/keys/device-commands';   // from worksuite-archive-keyring
 const SOCKET = join(DEFAULT_PATHS.runtimeDir, 'control.sock');
 const CHECK_IN_MS = 15 * 60_000;
 const POLICY_MS = 60 * 60_000;
 const INVENTORY_MS = 24 * 60 * 60_000;
+const PACKAGE_AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';   // written by worksuite-package-service
 
 /** Server signing keys by id: <KEY_DIR>/<key_id>.pem. */
 export function loadKeys(dir: string): (id: string) => KeyObject | undefined {
@@ -76,6 +78,11 @@ async function daemon() {
   };
   every(CHECK_IN_MS, 'check_in', () => agent.checkIn());
   every(POLICY_MS, 'policy', () => agent.refreshPolicy());
+  every(5 * 60_000, 'package_audit', async () => {
+    if (!state.state.enrolled) return;
+    const api = httpApi(() => state.state);
+    await forwardPackageAudit({ path: PACKAGE_AUDIT_LOG, cursor: state.state.package_audit ?? { offset: 0 }, send: (ev) => api.audit(ev), save: (c) => state.update((s) => { s.package_audit = c; }) });
+  });
   every(INVENTORY_MS, 'inventory', async () => { if (state.state.enrolled) await httpApi(() => state.state).inventory(await host.inventory()); });
 
   process.on('SIGTERM', () => { server.close(); process.exit(0); });

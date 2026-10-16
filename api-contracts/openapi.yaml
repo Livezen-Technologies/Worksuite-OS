@@ -469,6 +469,39 @@ paths:
         '202': { description: Accepted }
         default: { $ref: '#/components/responses/Error' }
 
+  /desktop/v1/os/audit:
+    post:
+      tags: [os]
+      summary: Privileged package changes made on the device (WSOS-SEC-008)
+      description: |
+        Sent by the device agent from the package service's local audit log. `type` is `package.<event>`; ids are
+        stable per log line, so a resend is ignored. At most 500 events, `data` at most 4 KiB each.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                    required: [id, type, at]
+                    properties:
+                      id: { type: string, maxLength: 64 }
+                      type: { type: string, pattern: '^package\\.[a-z_]{1,64}$' }
+                      at: { type: string, format: date-time }
+                      data: { type: object }
+      responses:
+        '202': { description: Accepted }
+        default: { $ref: '#/components/responses/Error' }
+
   /desktop/v1/os/diagnostics:
     post:
       tags: [os]
