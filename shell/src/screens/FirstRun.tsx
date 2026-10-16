@@ -1,3 +1,4 @@
+import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { FirstRunProps } from './types'
 import { cloudErrorText, os, serverUrlFor, type CloudAccount } from '../lib/os'
@@ -140,9 +141,7 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
               <li key={a.id} className="flex items-center gap-3.5 rounded-xl border border-[rgba(127,178,255,0.14)] bg-[rgba(14,32,72,0.6)] px-4 py-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white" style={{ background: a.color }}>{a.initial}</span>
                 <span className="w-[70px] text-sm font-medium">{a.name}</span>
-                <span className="h-1.5 flex-1 overflow-hidden rounded-[3px] bg-[rgba(127,178,255,0.15)]" role="progressbar" aria-label={tr('setup.installOf', { name: a.name })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={a.percent} aria-valuetext={a.label}>
-                  <span className="block h-full rounded-[3px] bg-[linear-gradient(90deg,#1F6BFF,#18D4F0)]" style={{ width: `${a.percent}%` }} />
-                </span>
+                <AnimatedProgress className="flex-1" value={a.percent} label={tr('setup.installOf', { name: a.name })} valueText={a.label} height={6} />
                 <span className={`w-[52px] text-right text-xs text-[#8FA3C8] ${mono}`}>{a.label}</span>
               </li>
             ))}

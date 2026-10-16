@@ -1,6 +1,7 @@
 // Settings app (boards SetNav, SetNetwork, SetBluetooth, SetDisplay, SetAppearance, SetSound, SetPrivacy, SetUsers,
 // UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
 // can't tell, the section says so instead of showing sample values.
+import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
@@ -478,12 +479,14 @@ function AboutPanel() {
   const [info, setInfo] = useState<DeviceInfo | null>(null)
   const [gpus, setGpus] = useState<string[] | null>(null)
   const [free, setFree] = useState<number | null>(null)
+  const [disk, setDisk] = useState<{ used: number; total: number } | null>(null)
   const [copied, setCopied] = useState(false)
   const [checking, setChecking] = useState(false)
   useEffect(() => {
     void os.deviceInfo().then(setInfo).catch(() => {})
     void os.hwDevices().then((r) => setGpus(r.ok ? r.value.filter((x) => x.kind === 'graphics').map((x) => x.name) : [])).catch(() => setGpus([]))
     void os.filesStatus('home').then((r) => setFree(r.free_bytes)).catch(() => {})
+    void os.filesPlaces().then((r) => setDisk(r.disk)).catch(() => {})
   }, [])
   if (!info) return <><H1>{t('settings.nav.About')}</H1><Empty title={t('settings.about.loading')} /></>
   const d = info.device
@@ -549,10 +552,12 @@ function AboutPanel() {
     <div className="grid gap-3" style={{ gridTemplateColumns: 'minmax(0,1.2fr) minmax(0,1fr)' }}>
       <div className={`${card} flex flex-col gap-2.5 px-4 py-3.5`}>
         <div className="flex justify-between gap-3 text-[13px]"><span className="font-semibold">{t('settings.about.storage')}{drives[0] ? ` · ${drives[0].device}` : ''}</span><span className="text-[#8FA3C8]">{free != null ? t('settings.about.freeHome', { size: formatBytes(free) }) : na}</span></div>
+        {disk && disk.total > 0 && <AnimatedProgress value={(disk.used / disk.total) * 100} label={t('settings.about.storageUsed', { used: formatBytes(disk.used), total: formatBytes(disk.total) })} valueText={t('settings.about.storageUsed', { used: formatBytes(disk.used), total: formatBytes(disk.total) })} height={8} shimmer={false} />}
         <div className="flex flex-col gap-1">
           {disks.state === 'loading' ? <span className="text-xs text-[#8FA3C8]">…</span> : drives.length === 0 ? <span className="text-xs text-[#8FA3C8]">{disks.state === 'ok' ? t('common.noneFound') : na}</span>
             : drives.map((x) => <span key={x.device} className="flex items-center gap-1.5 text-[11px] text-[#C9D6EE]"><span className="h-2 w-2 rounded-sm bg-[#1F6BFF]" />{x.model || x.device} <span className="font-mono text-[#8FA3C8]">{x.device}</span></span>)}
         </div>
+        {battery.state === 'ok' && battery.value.present && battery.value.percentage != null && <AnimatedProgress value={battery.value.percentage} label={t('settings.about.battery')} height={6} shimmer={battery.value.state === 'charging'} tone={battery.value.percentage <= 15 && battery.value.on_battery ? 'error' : battery.value.state === 'fully-charged' ? 'success' : 'default'} />}
         <span className="text-[11px] text-[#8FA3C8]">{battery.state === 'ok' && battery.value.present ? `${t('settings.about.battery')}: ${batteryText(battery.value)}` : t('settings.about.usageNote')}</span>
       </div>
       <div className={`${card} py-1.5`}>

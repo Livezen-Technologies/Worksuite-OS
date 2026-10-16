@@ -1,6 +1,7 @@
 // System monitor (G11): live CPU, memory, disk and network from /proc through the Electron bridge
 // (electron/monitor.ts), usage per app, the user's processes, startup apps and this device's performance numbers
 // against the SRS §16 limits. Values the device doesn't measure say so instead of showing a number.
+import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useState } from 'react'
 import type { WindowProps } from './types'
 import { C, card, Svg } from '../components/Dk'
@@ -84,8 +85,8 @@ export default function Monitor({ onClose }: WindowProps) {
     const ghz = snap.cpu.mhz ? formatNumber(Number((snap.cpu.mhz / 1000).toFixed(1))) : null
     const memPct = Math.round((snap.memory.used / snap.memory.total) * 100)
     return [
-      { id: 'cpu', label: t('monitor.cpu'), value: pct(snap.cpu.percent), detail: ghz ? t('monitor.coresGhz', { n: snap.cpu.cores, ghz }) : t('monitor.cores', { n: snap.cpu.cores }), color: C.cyan, pts: sparkPoints(hist.cpu, 100) },
-      { id: 'mem', label: t('monitor.memory'), value: formatBytes(snap.memory.used), detail: t('monitor.memOf', { total: formatBytes(snap.memory.total), pct: memPct }), color: C.link, pts: sparkPoints(hist.mem, snap.memory.total) },
+      { id: 'cpu', label: t('monitor.cpu'), value: pct(snap.cpu.percent), detail: ghz ? t('monitor.coresGhz', { n: snap.cpu.cores, ghz }) : t('monitor.cores', { n: snap.cpu.cores }), color: C.cyan, meter: snap.cpu.percent, pts: sparkPoints(hist.cpu, 100) },
+      { id: 'mem', label: t('monitor.memory'), value: formatBytes(snap.memory.used), detail: t('monitor.memOf', { total: formatBytes(snap.memory.total), pct: memPct }), color: C.link, meter: memPct, pts: sparkPoints(hist.mem, snap.memory.total) },
       { id: 'disk', label: t('monitor.disk'), value: rate(snap.disk.read_bps == null ? null : snap.disk.read_bps + (snap.disk.write_bps ?? 0)), detail: t('monitor.diskRw', { r: rate(snap.disk.read_bps), w: rate(snap.disk.write_bps) }), color: C.green, pts: sparkPoints(hist.disk, niceTop(hist.disk, 1e6)) },
       { id: 'net', label: t('monitor.network'), value: rate(snap.net.rx_bps == null ? null : snap.net.rx_bps + (snap.net.tx_bps ?? 0)), detail: t('monitor.netRx', { rx: rate(snap.net.rx_bps), tx: rate(snap.net.tx_bps) }), color: '#B9A0FF', pts: sparkPoints(hist.net, niceTop(hist.net, 1e5)) },
     ]
@@ -142,6 +143,7 @@ export default function Monitor({ onClose }: WindowProps) {
               <svg width="100%" height="56" viewBox="0 0 200 56" preserveAspectRatio="none" role="img" aria-label={t('monitor.graphLabel', { name: g.label })}>
                 {g.pts && <polyline points={g.pts} fill="none" stroke={g.color} strokeWidth="2" vectorEffect="non-scaling-stroke" />}
               </svg>
+              {'meter' in g && g.meter != null && <AnimatedProgress value={g.meter} height={4} decorative shimmer={false} tone={g.meter >= 90 ? 'error' : 'default'} />}
               <span className="text-[11px]" style={{ color: C.muted }}>{g.detail}</span>
             </div>
           ))}

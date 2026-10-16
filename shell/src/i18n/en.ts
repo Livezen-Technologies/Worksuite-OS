@@ -407,6 +407,8 @@ const en = {
   'settings.about.cpu': 'Processor',
   'settings.about.desktop': 'Desktop',
   'settings.about.freeHome': '{size} free in your home folder',
+  'settings.about.storageUsed': '{used} of {total} used',
+  'progress.working': 'In progress',
   'settings.about.graphics': 'Graphics',
   'settings.about.managedBy': 'Managed by',
   'settings.about.memory': 'Memory',
