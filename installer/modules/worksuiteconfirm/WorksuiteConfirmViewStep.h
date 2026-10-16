@@ -3,6 +3,9 @@
  *                   exactly (WSOS-INS-003).
  *  mode "recovery": shows the LUKS2 recovery key created by the worksuiterecovery job once, and keeps Next disabled
  *                   until the user confirms they saved it (WSOS-INS-004). Skipped for unencrypted installs.
+ *  mode "enroll":   optional, after the account page (WSOS-INS-006): an enrollment code and server, or the admin
+ *                   console's enrollment link pasted or read from its QR code with the camera (zbarcam). Valid input
+ *                   is written to a 0600 root file (EnrollLink.h) for the worksuiteenroll job; never logged.
  */
 #pragma once
 
@@ -58,7 +61,10 @@ public:
 private:
     void refresh();
 
-    enum class Mode { Erase, Recovery };
+    void scanQr();
+    void enrollChanged();
+
+    enum class Mode { Erase, Recovery, Enroll };
     Mode m_mode = Mode::Erase;
     QWidget* m_widget = nullptr;
     QLabel* m_eyebrow = nullptr;
@@ -73,6 +79,9 @@ private:
     QLineEdit* m_input = nullptr;
     QLabel* m_key = nullptr;
     QCheckBox* m_saved = nullptr;
+    QLineEdit* m_server = nullptr;  // enroll
+    QLabel* m_status = nullptr;     // enroll: what the input means, or why it is not usable
+    class QPushButton* m_scan = nullptr;
     QString m_disk;
     bool m_ok = false;
 };

@@ -3,3 +3,6 @@
 # folded and show pen pressure in Settings. Keyboards and pointers are not included.
 SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", TAG+="uaccess"
 SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_TABLET}=="1", TAG+="uaccess"
+# Touchscreens, read-only, for the gesture daemon (services/session/gestures, worksuite-gestures): edge and
+# three-finger swipes. A touchscreen reports only contact positions, never typed text.
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_TOUCHSCREEN}=="1", TAG+="uaccess"

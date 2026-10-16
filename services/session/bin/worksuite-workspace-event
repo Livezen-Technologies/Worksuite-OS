@@ -1,0 +1,11 @@
+#!/bin/sh
+# worksuite-workspace-event goto N | move N | left | right
+# Run by Labwc's desktop key bindings (services/session/labwc/rc.xml) right after GoToDesktop / SendToDesktop, so the
+# Wayland bridge (and through it the panel's workspace switcher) knows the current desktop. Labwc 0.8 has no workspace
+# protocol for clients (ext-workspace-v1 came in 0.9). Fire and forget: a missing bridge must not delay the binding.
+case "${1:-}" in
+  goto|move) case "${2:-}" in [1-9]) n=$2 ;; *) exit 2 ;; esac ;;
+  left|right) n=0 ;;
+  *) echo "usage: worksuite-workspace-event goto N | move N | left | right" >&2; exit 2 ;;
+esac
+exec busctl --user --timeout=2 call lk.worksuite.WaylandBridge1 /lk/worksuite/WaylandBridge1/Workspaces lk.worksuite.WorkspaceEvents1 Event su "$1" "$n" >/dev/null 2>&1

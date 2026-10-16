@@ -19,6 +19,11 @@ services/session/pam/faillock.conf usr/share/worksuite/
 services/session/fcitx5/profile etc/xdg/fcitx5/
 services/session/bin/worksuite-screencast-chooser usr/lib/worksuite/
 services/session/bin/worksuite-screencast-stop usr/lib/worksuite/
+services/session/bin/worksuite-workspace-event usr/lib/worksuite/
+services/session/bin/worksuite-gestures usr/lib/worksuite/
+services/session/bin/worksuite-osk usr/lib/worksuite/
+services/session/osk/worksuite_osk usr/lib/worksuite/osk/
+services/session/gestures/worksuite_gestures usr/lib/worksuite/gestures/
 services/session/xdg-desktop-portal-wlr/config etc/xdg/xdg-desktop-portal-wlr/
 services/session/greeter/worksuite_greeter usr/lib/worksuite/greeter/
 services/session/greeter/gtkgreet.css usr/share/worksuite/
@@ -27,6 +32,7 @@ services/session/polkit/worksuite_polkit_agent usr/lib/worksuite/polkit/
 services/session/kiosk/worksuite-kiosk-session usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-start usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-ctl usr/lib/worksuite/
+services/session/kiosk/worksuite-kiosk-screen usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-apply usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-signin usr/lib/worksuite/
 services/session/kiosk/worksuite-kiosk-exit usr/lib/worksuite/

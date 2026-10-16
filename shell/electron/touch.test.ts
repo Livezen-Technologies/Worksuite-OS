@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  DEFAULT_TOUCH, hasTabletModeBit, labwcTouchBlock, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
+  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, oskControlLine, worksuiteOskArgs, labwcTouchBlock, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
   parseOrientation, parsePenLine, parseSwitchLine, parseUdevProps, saveTouch, touchBridge, touchModeOn, type Spawn,
 } from './touch'
 import type { Exec } from './system'
@@ -137,5 +137,42 @@ describe('Labwc config writer', () => {
     expect(calls).toContain('wlr-randr --output eDP-1 --transform 90')
     expect(b.osk(true)).toEqual({ available: true, value: true })
     expect(spawned).toContain('kill wvkbd-mobintl SIGUSR2')
+    // Gestures: the daemon runs with a touchscreen, re-reads its file on a change and stops when turned off.
+    const gfile = path.join(home, '.config', 'worksuite', 'gestures.json')
+    expect(spawned).toContain('/usr/lib/worksuite/worksuite-gestures')
+    expect(JSON.parse(readFileSync(gfile, 'utf8')).edgeBottom).toBe('launcher')
+    await b.set(JSON.stringify({ touchEnabled: true, gestures: { ...DEFAULT_GESTURES, threeHorizontal: 'switch-apps' }, longPressMs: 800 }))
+    expect(JSON.parse(readFileSync(gfile, 'utf8')).threeHorizontal).toBe('switch-apps')
+    await b.set(JSON.stringify({ longPressMs: 900 }))
+    expect(spawned).toContain('kill /usr/lib/worksuite/worksuite-gestures SIGHUP')
+    await b.set(JSON.stringify({ gestures: { ...DEFAULT_GESTURES, enabled: false } }))
+    expect(spawned).toContain('kill /usr/lib/worksuite/worksuite-gestures SIGTERM')
+  })
+  it('gesture settings: only known choices, long-press delay 300–1200 ms', () => {
+    const n = normalizeTouch({ gestures: { edgeBottom: 'off', threeHorizontal: 'rm -rf', edgeSwipes: false }, longPressMs: 5000 })
+    expect(n.gestures).toEqual({ ...DEFAULT_GESTURES, edgeBottom: 'off', edgeSwipes: false })
+    expect(n.longPressMs).toBe(600)
+    expect(normalizeTouch({ longPressMs: 900 }).longPressMs).toBe(900)
+  })
+})
+
+describe('WorkSuite keyboard (worksuite-osk)', () => {
+  it('is preferred over wvkbd and gets the field type over its socket', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))
+    const spawned: string[] = []
+    const lines: string[] = []
+    const sp: Spawn = (cmd, args) => { spawned.push([cmd, ...args].join(' ')); return { kill: () => {}, onLine: () => {}, onExit: () => {} } }
+    const exec: Exec = async () => ({ code: 1, stdout: '', stderr: '' })
+    const b = touchBridge(home, exec, sp, home, () => true, (_s, l) => lines.push(l))
+    await b.start()
+    expect(spawned[spawned.length - 1]).toBe('/usr/lib/worksuite/worksuite-osk --size medium --mode full --langs en,si,ta')
+    expect(b.osk(true, 6, 8)).toEqual({ available: true, value: true })
+    expect(b.osk(false)).toEqual({ available: true, value: false })
+    expect(lines.slice(-2)).toEqual(['show 6 8\n', 'hide\n'])
+  })
+  it('control lines are bounded numbers only', () => {
+    expect(oskControlLine(true, 99, -1)).toBe('show 0 0\n')
+    expect(oskControlLine(true, 9, 0xffff)).toBe('show 9 1023\n')
+    expect(worksuiteOskArgs({ ...DEFAULT_TOUCH, oskLayout: 'split', oskSuggestions: false }, [])).toEqual(['--size', 'medium', '--mode', 'split', '--langs', 'en,si,ta', '--no-suggestions'])
   })
 })

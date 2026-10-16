@@ -72,7 +72,9 @@ describe('KioskExit', () => {
 
 describe('kiosk status screens (board KioskStates)', () => {
   it('reads only known states and clean values from the query', () => {
-    expect(kioskStatusFrom(new URLSearchParams('state=offline&host=work.example.com<script>&secs=8'))).toEqual({ state: 'offline', host: 'work.example.comscript', secs: 8, attempt: 0 })
+    expect(kioskStatusFrom(new URLSearchParams('state=offline&host=work.example.com<script>&secs=8'))).toEqual({ state: 'offline', host: 'work.example.comscript', secs: 8, attempt: 0, until: '' })
+    expect(kioskStatusFrom(new URLSearchParams('state=screen-off&until=07:00'))).toMatchObject({ state: 'screen-off', until: '07:00' })
+    expect(kioskStatusFrom(new URLSearchParams('state=screen-off&until=7pm'))).toMatchObject({ state: 'screen-off', until: '' })
     expect(kioskStatusFrom(new URLSearchParams('state=evil&secs=-1'))).toMatchObject({ state: 'starting', secs: 0 })
   })
   it('shows the idle warning, restart and offline states', async () => {
@@ -82,6 +84,7 @@ describe('kiosk status screens (board KioskStates)', () => {
       [{ state: 'idle' as const, secs: 15 }, 'Starting over in 15 s'],
       [{ state: 'restarting' as const, attempt: 2 }, 'attempt 2'],
       [{ state: 'offline' as const, host: 'work.example.com', secs: 8 }, 'Can’t reach work.example.com. Trying again in 8 s'],
+      [{ state: 'screen-off' as const, until: '07:00' }, 'Screen off until 07:00'],
     ] as const) {
       const el = document.createElement('div'); document.body.append(el)
       const r = createRoot(el)

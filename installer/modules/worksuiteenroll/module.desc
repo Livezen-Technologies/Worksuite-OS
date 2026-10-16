@@ -1,0 +1,8 @@
+# Moves the enrollment chosen on the "Enroll this device" page into the installed system (WSOS-INS-006); the device
+# agent enrolls on first boot. Runs after "usersq" in exec. Nothing when the page was left empty.
+---
+type:       "job"
+name:       "worksuiteenroll"
+interface:  "python"
+script:     "main.py"
+noconfig:   true

@@ -60,7 +60,7 @@ export function createHandler(db: DatabaseSync, o: ServerOptions) {
   oauthRoutes(r, db, { issuer, clientIds: o.clientIds ?? ['worksuite-os'] });
   const webUrl = o.webUrl ? o.webUrl.replace(/\/?$/, '/') : new URL('apps/', publicUrl).toString();
   apiRoutes(r, db, { publicUrl, issuer, updateHost: o.updateHost ?? new URL(publicUrl).host, webUrl });
-  consoleRoutes(r, db, { secureCookie: publicUrl.startsWith('https:') });
+  consoleRoutes(r, db, { secureCookie: publicUrl.startsWith('https:'), publicUrl });
   return async (req: IncomingMessage, res: ServerResponse) => {
     const ctx = makeCtx(req, res, publicUrl);
     const started = process.hrtime.bigint();

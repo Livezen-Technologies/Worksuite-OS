@@ -321,7 +321,9 @@ export interface DevicePolicies {
   ai_assistant?: boolean | null; ai_models?: string[] | null
 }
 export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
-export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean }
+export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean
+  /** Policy kiosk.orientation and kiosk.screen_off (older agents send neither). */
+  orientation?: 'landscape' | 'portrait' | 'landscape-flipped' | 'portrait-flipped'; screen_off?: { from: string; until: string } | null }
 export interface DeviceInfo {
   agent: boolean
   device: { hostname: string; os_version: string; arch: string; kernel_version: string; encrypted: boolean | null } | null

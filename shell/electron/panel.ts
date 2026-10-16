@@ -13,6 +13,8 @@ export const BRIDGE_PATH = '/lk/worksuite/WaylandBridge1'
 export const TRAY_PATH = '/lk/worksuite/Tray1'
 export const TRAY_IFACE = 'lk.worksuite.Tray1'
 export const SHELL = 'lk.worksuite.Shell1'
+/** D-Bus signature (string handle, uint32 index) of MoveWindowToWorkspace. */
+const HANDLE_INDEX = 'su'
 export const SHELL_PATH = '/lk/worksuite/Shell1'
 
 export const SHELL_XML = `<node name="${SHELL_PATH}">
@@ -20,6 +22,9 @@ export const SHELL_XML = `<node name="${SHELL_PATH}">
     <!-- Super key (services/session/labwc/rc.xml): open or close the launcher. -->
     <method name="ToggleLauncher"/>
     <method name="ShowLauncher"/>
+    <!-- Touch gestures (worksuite-gestures): edge swipe from the right, three-finger swipe down. -->
+    <method name="ToggleNotifications"/>
+    <method name="ShowDesktop"/>
     <!-- Super+A (rc.xml): open or close the AI assistant (services/ai). -->
     <method name="ToggleAssistant"/>
     <!-- Files is the default handler for archives (shell/apps/worksuite-files.desktop): browse this one. -->
@@ -29,6 +34,8 @@ export const SHELL_XML = `<node name="${SHELL_PATH}">
 
 export interface PanelWindow { handle: string; appId: string; title: string; output: string; flags: number }
 export interface TrayItem { key: string; id: string; title: string; icon: string; status: string }
+/** Labwc desktops through the bridge (WSOS-DSK-003): current and count are 1-based; windows maps handle → workspace. */
+export interface Workspaces { supported: boolean; current: number; count: number; windows: Record<string, number> }
 export type PanelResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 /** The part of a dbus-next MessageBus the panel uses (tests pass a fake). */
@@ -62,16 +69,27 @@ function errorCode(e: unknown): string {
 export interface PanelEvents {
   windows(list: PanelWindow[]): void
   tray(items: TrayItem[]): void
-  launcher(action: 'toggle' | 'show' | 'assistant'): void
+  launcher(action: 'toggle' | 'show' | 'notifications' | 'desktop' | 'assistant'): void
   /** A monitor was plugged, unplugged or reconfigured (bridge OutputsChanged, WSOS-DSK-007). */
   outputs?(): void
   /** OpenArchive(path) from worksuite-open-archive. */
   openArchive?(path: string): void
+  workspaces?(w: Workspaces): void
+}
+
+export function toWorkspaces(body: unknown, ops: string[]): Workspaces {
+  const b = Array.isArray(body) ? body : []
+  const count = Math.max(1, Math.min(9, Number(b[1]) || 1))
+  const current = Math.max(1, Math.min(count, Number(b[0]) || 1))
+  const windows: Record<string, number> = {}
+  if (b[2] && typeof b[2] === 'object') for (const [h, n] of Object.entries(b[2] as Record<string, unknown>)) if (/^w[0-9a-f]{1,32}$/.test(h) && Number.isInteger(n)) windows[h] = n as number
+  return { supported: ops.includes('workspaces') && count > 1, current, count, windows }
 }
 
 export class PanelClient {
   windows: PanelWindow[] = []
   tray: TrayItem[] = []
+  workspaces: Workspaces = { supported: false, current: 1, count: 1, windows: {} }
   private refreshTimer: ReturnType<typeof setTimeout> | null = null
 
   private bus: PanelBus
@@ -103,13 +121,14 @@ export class PanelClient {
 
   async reconnect(): Promise<void> {
     await this.call(BRIDGE_PATH, BRIDGE, 'SubscribeWindowEvents').catch(() => null)
-    await Promise.all([this.refreshWindows(), this.refreshTray()])
+    await Promise.all([this.refreshWindows(), this.refreshTray(), this.refreshWorkspaces()])
   }
 
   private onMethod(msg: Msg): boolean {
     if (msg.path !== SHELL_PATH) return false
-    if (msg.interface === SHELL && (msg.member === 'ToggleLauncher' || msg.member === 'ShowLauncher' || msg.member === 'ToggleAssistant')) {
-      this.events.launcher(msg.member === 'ToggleLauncher' ? 'toggle' : msg.member === 'ShowLauncher' ? 'show' : 'assistant')
+    const shellAction = ({ ToggleLauncher: 'toggle', ShowLauncher: 'show', ToggleNotifications: 'notifications', ShowDesktop: 'desktop', ToggleAssistant: 'assistant' } as const)[msg.member as 'ToggleLauncher']
+    if (msg.interface === SHELL && shellAction) {
+      this.events.launcher(shellAction)
       this.bus.send(Message.newMethodReturn(msg, '', []))
       return true
     }
@@ -128,6 +147,7 @@ export class PanelClient {
   private onSignal(msg: Msg) {
     if (msg.type !== 4 /* SIGNAL */) return
     if (msg.interface === BRIDGE && ['WindowAdded', 'WindowChanged', 'WindowRemoved'].includes(msg.member ?? '')) this.scheduleRefresh()
+    else if (msg.interface === BRIDGE && msg.member === 'WorkspacesChanged') void this.refreshWorkspaces()
     else if (msg.interface === BRIDGE && msg.member === 'OutputsChanged') { this.events.outputs?.(); this.scheduleRefresh() }
     else if (msg.interface === TRAY_IFACE && msg.member === 'ItemsChanged') void this.refreshTray()
     else if (msg.member === 'NameOwnerChanged' && msg.body?.[0] === BRIDGE && msg.body?.[2]) void this.reconnect()
@@ -148,6 +168,19 @@ export class PanelClient {
     }
     this.events.windows(this.windows)
     return this.windows
+  }
+
+  async refreshWorkspaces(): Promise<Workspaces> {
+    try {
+      const [r, p] = await Promise.all([this.call(BRIDGE_PATH, BRIDGE, 'ListWorkspaces'),
+        this.call(BRIDGE_PATH, 'org.freedesktop.DBus.Properties', 'Get', 'ss', [BRIDGE, 'SupportedOperations'])])
+      const ops = (p?.body?.[0] as { value?: unknown } | undefined)?.value
+      this.workspaces = toWorkspaces(r?.body, Array.isArray(ops) ? ops.map(String) : [])
+    } catch {
+      this.workspaces = { supported: false, current: 1, count: 1, windows: {} }
+    }
+    this.events.workspaces?.(this.workspaces)
+    return this.workspaces
   }
 
   async refreshTray(): Promise<TrayItem[]> {
@@ -173,5 +206,7 @@ export class PanelClient {
   activate(handle: string) { return this.op('ActivateWindow', 'ss', [handle, ''] ) }
   close(handle: string) { return this.op('CloseWindow', 's', [handle]) }
   minimize(handle: string, state: boolean) { return this.op('SetMinimized', 'sb', [handle, state]) }
+  activateWorkspace(n: number) { return this.op('ActivateWorkspace', 'u', [n]) }
+  moveToWorkspace(handle: string, n: number) { return this.op('MoveWindowToWorkspace', HANDLE_INDEX, [handle, n]) }
   trayActivate(key: string, x: number, y: number) { return this.op('Activate', 'sii', [key, Math.round(x), Math.round(y)], TRAY_PATH, TRAY_IFACE) }
 }

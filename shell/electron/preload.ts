@@ -178,6 +178,10 @@ contextBridge.exposeInMainWorld('worksuitePanel', {
   onWindows: on('ws:panelWindowsChanged'),
   onTray: on('ws:panelTrayChanged'),
   onLauncher: on('ws:launcher'),
+  workspaces: () => ipcRenderer.invoke('ws:panelWorkspaces'),
+  activateWorkspace: (n: number) => ipcRenderer.invoke('ws:panelWorkspaceActivate', String(Number(n) | 0)),
+  moveToWorkspace: (handle: string, n: number) => ipcRenderer.invoke('ws:panelMoveToWorkspace', String(handle), String(Number(n) | 0)),
+  onWorkspaces: on('ws:panelWorkspacesChanged'),
 })
 
 // On-device AI assistant — see electron/ai.ts and services/ai. Answers stream back as onEvent.
@@ -272,7 +276,7 @@ contextBridge.exposeInMainWorld('worksuiteNotifications', {
 contextBridge.exposeInMainWorld('worksuiteTouch', {
   state: () => ipcRenderer.invoke('ws:touchState'),
   set: (patch: unknown) => ipcRenderer.invoke('ws:touchSet', JSON.stringify(patch)),
-  osk: (show: boolean) => ipcRenderer.invoke('ws:oskShow', show ? '1' : '0'),
+  osk: (show: boolean, purpose = 0, hints = 0) => ipcRenderer.invoke('ws:oskShow', show ? '1' : '0', String(Number(purpose) | 0), String(Number(hints) | 0)),
   penTest: (on: boolean) => ipcRenderer.invoke('ws:penTest', on ? '1' : '0'),
   onChange: on('ws:touchChanged'),
   onPen: on('ws:penEvent'),

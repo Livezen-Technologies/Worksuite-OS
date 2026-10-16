@@ -27,7 +27,14 @@ export interface KioskPolicy {
   show_on_screen_keyboard?: boolean;
   allow_exit_pin?: boolean;
   exit_pin_verifier?: string;
+  /** Board KioskSettings: screen orientation, applied to every output by the kiosk session. */
+  orientation?: KioskOrientation;
+  /** Nightly screen-off (board KioskStates "Screen off until 07:00"): local time, may span midnight. */
+  screen_off?: { from: string; until: string };
 }
+export const KIOSK_ORIENTATIONS = ['landscape', 'portrait', 'landscape-flipped', 'portrait-flipped'] as const;
+export type KioskOrientation = typeof KIOSK_ORIENTATIONS[number];
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export function pinVerifier(pin: string, salt: Buffer = randomBytes(16)): string {
   const hash = scryptSync(pin.normalize('NFKC'), salt, 32, { N: SCRYPT_N, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
@@ -58,7 +65,7 @@ function app(v: unknown): KioskApp {
 export function normalizeKiosk(v: unknown, current?: KioskPolicy | null): KioskPolicy {
   if (!v || typeof v !== 'object' || Array.isArray(v)) throw invalid('kiosk', 'must be an object');
   const k = v as Record<string, unknown>;
-  const known = new Set(['enabled', 'user', 'devices', 'app', 'allowed_urls', 'idle_reset_minutes', 'show_on_screen_keyboard', 'allow_exit_pin', 'exit_pin', 'exit_pin_set', 'exit_pin_verifier']);
+  const known = new Set(['enabled', 'user', 'devices', 'app', 'allowed_urls', 'idle_reset_minutes', 'show_on_screen_keyboard', 'allow_exit_pin', 'exit_pin', 'exit_pin_set', 'exit_pin_verifier', 'orientation', 'screen_off']);
   for (const key of Object.keys(k)) if (!known.has(key)) throw invalid('kiosk.' + key, 'unknown kiosk field');
   if (typeof k.enabled !== 'boolean') throw invalid('kiosk.enabled', 'must be true or false');
   const out: KioskPolicy = { enabled: k.enabled };
@@ -83,6 +90,17 @@ export function normalizeKiosk(v: unknown, current?: KioskPolicy | null): KioskP
   if (k.show_on_screen_keyboard !== undefined) {
     if (typeof k.show_on_screen_keyboard !== 'boolean') throw invalid('kiosk.show_on_screen_keyboard', 'must be true or false');
     out.show_on_screen_keyboard = k.show_on_screen_keyboard;
+  }
+  if (k.orientation !== undefined && k.orientation !== null) {
+    if (!(KIOSK_ORIENTATIONS as readonly unknown[]).includes(k.orientation)) throw invalid('kiosk.orientation', KIOSK_ORIENTATIONS.join(', '));
+    out.orientation = k.orientation as KioskOrientation;
+  }
+  if (k.screen_off !== undefined && k.screen_off !== null) {
+    const so = k.screen_off as Record<string, unknown>;
+    if (typeof so !== 'object' || Array.isArray(so) || Object.keys(so).some((x) => x !== 'from' && x !== 'until')) throw invalid('kiosk.screen_off', '{ from, until } in HH:MM');
+    if (typeof so.from !== 'string' || !HHMM.test(so.from) || typeof so.until !== 'string' || !HHMM.test(so.until)) throw invalid('kiosk.screen_off', 'from and until as HH:MM (24 h)');
+    if (so.from === so.until) throw invalid('kiosk.screen_off', 'from and until must differ');
+    out.screen_off = { from: so.from, until: so.until };
   }
   if (k.allow_exit_pin !== undefined && typeof k.allow_exit_pin !== 'boolean') throw invalid('kiosk.allow_exit_pin', 'must be true or false');
   // A verifier is only ever made here from a PIN, or carried over from the stored policy; never accepted from the client.

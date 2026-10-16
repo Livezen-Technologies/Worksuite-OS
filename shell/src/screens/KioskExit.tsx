@@ -92,20 +92,22 @@ export default function KioskExit({ api = kioskApi() }: { api?: KioskApi | null 
   )
 }
 
-export type KioskStatusState = 'starting' | 'unavailable' | 'restarting' | 'offline' | 'idle'
+export type KioskStatusState = 'starting' | 'unavailable' | 'restarting' | 'offline' | 'idle' | 'screen-off'
 /** Reads `?state=…&host=…&secs=…&attempt=…` as the kiosk app sets them (electron/kioskMain.ts). */
-export function kioskStatusFrom(q: URLSearchParams): { state: KioskStatusState; host: string; secs: number; attempt: number } {
+export function kioskStatusFrom(q: URLSearchParams): { state: KioskStatusState; host: string; secs: number; attempt: number; until: string } {
   const st = q.get('state')
-  const state: KioskStatusState = st === 'unavailable' || st === 'restarting' || st === 'offline' || st === 'idle' ? st : 'starting'
+  const state: KioskStatusState = st === 'unavailable' || st === 'restarting' || st === 'offline' || st === 'idle' || st === 'screen-off' ? st : 'starting'
+  const until = /^([01]\d|2[0-3]):[0-5]\d$/.test(q.get('until') ?? '') ? q.get('until') as string : ''
   const n = (k: string) => { const v = Number(q.get(k)); return Number.isFinite(v) && v > 0 ? Math.min(3600, Math.round(v)) : 0 }
   const host = (q.get('host') ?? '').replace(/[^A-Za-z0-9.:-]/g, '').slice(0, 120)
-  return { state, host, secs: n('secs'), attempt: n('attempt') }
+  return { state, host, secs: n('secs'), attempt: n('attempt'), until }
 }
 
 const ICON = {
   restarting: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5',
   offline: 'M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M12 19h.01M3 3l18 18',
   unavailable: 'M12 8v5M12 16h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+  'screen-off': 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
   idle: 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15',
 }
 
@@ -117,7 +119,7 @@ function useCountdown(from: number) {
 }
 
 /** The kiosk's own full-screen states (board KioskStates); never shows the desktop. */
-export function KioskStatus({ state, host = '', secs = 0, attempt = 0 }: { state: KioskStatusState; host?: string; secs?: number; attempt?: number }) {
+export function KioskStatus({ state, host = '', secs = 0, attempt = 0, until = '' }: { state: KioskStatusState; host?: string; secs?: number; attempt?: number; until?: string }) {
   const t = useT()
   const left = useCountdown(secs)
   const light = state === 'idle'
@@ -125,6 +127,16 @@ export function KioskStatus({ state, host = '', secs = 0, attempt = 0 }: { state
     <main className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-[#0A1A3D] px-6 text-center font-sans text-[#E8EEFA]">
       <svg width="64" height="80" viewBox="0 0 30 38" aria-hidden="true"><rect x="10" y="0" width="20" height="20" fill="#0A6CFF" /><rect x="0" y="10" width="10" height="10" fill="#00DAF2" /><rect x="10" y="10" width="10" height="10" fill="#0B2A66" /><rect x="10" y="20" width="10" height="10" fill="#00DAF2" /><rect x="0" y="33" width="30" height="5" rx="2.5" fill="#E2E8F0" /></svg>
       <p role="status" className="m-0 text-base text-[#C9D6EE]">{t('kiosk.starting')}</p>
+    </main>
+  )
+  if (state === 'screen-off') return (
+    <main className="fixed inset-0 flex flex-col items-center justify-center gap-3 bg-[#050E24] px-6 text-center font-sans text-[#C9D6EE]">
+      <span className="mb-1 flex size-[72px] items-center justify-center rounded-[20px] bg-[rgba(127,178,255,0.12)]">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#C9D6EE" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON['screen-off']} /></svg>
+      </span>
+      <h1 className="m-0 text-[28px] font-bold text-[#E8EEFA]">{until ? t('kiosk.st.screenOffTitle', { time: until }) : t('kiosk.st.screenOffTitleNoTime')}</h1>
+      <p role="status" className="m-0 max-w-[460px] text-base leading-normal">{t('kiosk.st.screenOffBody')}</p>
+      <span className="mt-1 font-mono text-xs text-[#8FA3C8]">{t('kiosk.st.screenOffMeta')}</span>
     </main>
   )
   const title = state === 'idle' ? t('kiosk.st.idleTitle') : state === 'restarting' ? t('kiosk.st.restartTitle') : state === 'offline' ? t('kiosk.st.offlineTitle') : t('kiosk.unavailableTitle')

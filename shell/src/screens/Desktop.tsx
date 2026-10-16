@@ -5,12 +5,12 @@ import BIcon from '../components/BIcon'
 import type { Notice } from '../lib/syncNotices'
 import { BG, Icon, Mark, P } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
-import { RunningApps, TrayItems, UpdateBadge, VpnBadge, useLauncherKey } from '../components/PanelItems'
+import { RunningApps, TrayItems, UpdateBadge, VpnBadge, WorkspaceSwitcher, useLauncherKey } from '../components/PanelItems'
 import { QuickPanel, QuickTray, useQuickState } from '../components/QuickSettings'
 import { OskButton } from '../components/TouchItems'
 import { useTouchMode } from '../lib/touch'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
-import type { PanelWindow } from '../lib/panel'
+import { panel, showDesktopTargets, type PanelWindow, type ShellAction } from '../lib/panel'
 import A11yPanel from '../components/A11yPanel'
 import NotifDock, { MOON } from '../components/NotifDock'
 import { CaptureBadge } from '../components/CaptureBadge'
@@ -67,11 +67,13 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   // in search and "Explain with AI" in Files.
   const [assistant, setAssistant] = useState(false)
   const [assistantReq, setAssistantReq] = useState<AssistantRequest | null>(null)
-  useLauncherKey(useCallback((a: 'toggle' | 'show' | 'assistant') => {
+  useEffect(() => onAssistantRequest((r) => { setLauncher(false); setAssistantReq(r); setAssistant(true) }), [])
+  useLauncherKey(useCallback((a: ShellAction) => {
     if (a === 'assistant') { setLauncher(false); setAssistant((v) => !v); return }
+    if (a === 'notifications') { setTrayOpen((v) => !v); return }
+    if (a === 'desktop') { void Promise.all([panel.windows(), panel.workspaces?.() ?? Promise.resolve(undefined)]).then(([w, ws]) => showDesktopTargets(w, ws ?? { supported: false, current: 1, count: 1, windows: {} }).forEach((h) => void panel.minimize(h, true))); return }
     markLauncherRequest(); setLauncher((v) => (a === 'show' ? true : !v))
   }, []))
-  useEffect(() => onAssistantRequest((r) => { setLauncher(false); setAssistantReq(r); setAssistant(true) }), [])
   // Launcher first frame (WSOS-PRF-005); only forwarded off the console in perf test runs.
   useEffect(() => { if (launcher) void reportLauncherFirstFrame() }, [launcher])
   const [allView, setAllView] = useState(false)
@@ -320,6 +322,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
         <span aria-hidden="true" className="mx-1 h-6 w-px bg-[rgba(127,178,255,0.15)]" />
         <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => { const a = allApps.find((x) => x.id === id); return a && { ...a, bg: tileColor(a), fg: '#FFFFFF' } }} onLaunch={launch} only={onPrimary} />
         <div className="ml-auto flex items-center gap-1.5">
+          <WorkspaceSwitcher />
           {managed && (
             <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? t('panel.managedBy', { org: device.org_name }) : undefined}
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>

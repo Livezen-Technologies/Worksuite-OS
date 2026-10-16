@@ -29,17 +29,28 @@
       <action name="Execute" command="loginctl lock-session"/>
     </keybind>
     <keybind key="A-F4"><action name="Close"/></keybind>
-    <!-- Workspaces (WSOS-DSK-011): Super+1…4 switch, Super+Shift+1…4 move the window, Ctrl+Alt+Left/Right step. -->
-    <keybind key="W-1"><action name="GoToDesktop" to="1"/></keybind>
-    <keybind key="W-2"><action name="GoToDesktop" to="2"/></keybind>
-    <keybind key="W-3"><action name="GoToDesktop" to="3"/></keybind>
-    <keybind key="W-4"><action name="GoToDesktop" to="4"/></keybind>
-    <keybind key="W-S-1"><action name="SendToDesktop" to="1" follow="no"/></keybind>
-    <keybind key="W-S-2"><action name="SendToDesktop" to="2" follow="no"/></keybind>
-    <keybind key="W-S-3"><action name="SendToDesktop" to="3" follow="no"/></keybind>
-    <keybind key="W-S-4"><action name="SendToDesktop" to="4" follow="no"/></keybind>
-    <keybind key="C-A-Left"><action name="GoToDesktop" to="left" wrap="yes"/></keybind>
-    <keybind key="C-A-Right"><action name="GoToDesktop" to="right" wrap="yes"/></keybind>
+    <!-- Workspaces (WSOS-DSK-003/011): Super+1…4 switch, Super+Shift+1…4 move the window, Ctrl+Alt+Left/Right step.
+         Each also tells the Wayland bridge (worksuite-workspace-event) so the panel's switcher follows. Ctrl+Alt+Super+F1…F4
+         (go) and Ctrl+Alt+Shift+Super+F1…F4 (move the focused window) are what the panel sends through the bridge; generated
+         by native/wayland-bridge/worksuite_bridge/workspace.py rc_bindings(), compared in its tests. -->
+    <keybind key="W-1"><action name="GoToDesktop" to="1"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event goto 1"/></keybind>
+    <keybind key="W-2"><action name="GoToDesktop" to="2"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event goto 2"/></keybind>
+    <keybind key="W-3"><action name="GoToDesktop" to="3"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event goto 3"/></keybind>
+    <keybind key="W-4"><action name="GoToDesktop" to="4"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event goto 4"/></keybind>
+    <keybind key="W-S-1"><action name="SendToDesktop" to="1" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 1"/></keybind>
+    <keybind key="W-S-2"><action name="SendToDesktop" to="2" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 2"/></keybind>
+    <keybind key="W-S-3"><action name="SendToDesktop" to="3" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 3"/></keybind>
+    <keybind key="W-S-4"><action name="SendToDesktop" to="4" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 4"/></keybind>
+    <keybind key="C-A-Left"><action name="GoToDesktop" to="left" wrap="yes"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event left"/></keybind>
+    <keybind key="C-A-Right"><action name="GoToDesktop" to="right" wrap="yes"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event right"/></keybind>
+    <keybind key="C-A-W-F1"><action name="GoToDesktop" to="1"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event goto 1"/></keybind>
+    <keybind key="C-A-W-F2"><action name="GoToDesktop" to="2"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event goto 2"/></keybind>
+    <keybind key="C-A-W-F3"><action name="GoToDesktop" to="3"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event goto 3"/></keybind>
+    <keybind key="C-A-W-F4"><action name="GoToDesktop" to="4"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event goto 4"/></keybind>
+    <keybind key="C-A-S-W-F1"><action name="SendToDesktop" to="1" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 1"/></keybind>
+    <keybind key="C-A-S-W-F2"><action name="SendToDesktop" to="2" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 2"/></keybind>
+    <keybind key="C-A-S-W-F3"><action name="SendToDesktop" to="3" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 3"/></keybind>
+    <keybind key="C-A-S-W-F4"><action name="SendToDesktop" to="4" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 4"/></keybind>
     <!-- Screenshot through xdg-desktop-portal (shell/electron/screenshot.ts): Print = whole screen, Shift+Print = choose. -->
     <keybind key="Print"><action name="Execute" command="worksuite-screenshot"/></keybind>
     <keybind key="S-Print"><action name="Execute" command="worksuite-screenshot --interactive"/></keybind>

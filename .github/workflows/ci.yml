@@ -67,6 +67,7 @@ jobs:
       - run: tests/security/apparmor.test.sh
       - run: tests/security/isolation-claims.test.sh
       - run: tests/perf/gates.test.sh
+      - run: tests/image/fetch-desktop.sh
       # Session scripts with stubbed programs: lock, idle, greeter, polkit agent fallback, screen-sharing consent.
       - run: sh tests/session/session-test.sh
       # Kiosk mode session scripts (WSOS-AUTH-002).

@@ -153,3 +153,15 @@ class BootSplashTest(unittest.TestCase):
         pkgs = (REPO / "live-build/config/package-lists/worksuite.list.chroot").read_text().split()
         for p in ("console-setup", "zstd", "plymouth", "worksuite-branding"):
             self.assertIn(p, pkgs)
+
+
+class EnrollmentTest(unittest.TestCase):
+    """WSOS-INS-006: optional enrollment page after the account page, applied by the device agent on first boot."""
+
+    def test_page_and_job_order(self):
+        settings, shows, execs = sequence()
+        self.assertEqual(shows[shows.index("usersq") + 1], "worksuiteconfirm@enroll")
+        self.assertIn({"id": "enroll", "module": "worksuiteconfirm", "config": "worksuiteconfirm-enroll.conf"}, settings["instances"])
+        self.assertEqual(load(MODULES / "worksuiteconfirm-enroll.conf")["mode"], "enroll")
+        self.assertGreater(execs.index("worksuiteenroll"), execs.index("usersq"))
+        self.assertLess(execs.index("worksuiteenroll"), execs.index("umount"))

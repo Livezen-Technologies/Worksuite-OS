@@ -14,7 +14,7 @@ export const APP_HTML = `<!doctype html><html lang="en"><head><meta charset="utf
 <div id="app" class="shell" hidden>
 <nav class="side" aria-label="Sections"><div class="brand">${LOGO}<span>WorkSuite</span></div>
 <a href="#overview">Overview</a><a href="#devices">Devices</a><a href="#wipes">Wipe requests</a><a href="#users">Users</a>
-<a href="#enroll">Enrollment</a><a href="#policy">Policy</a><a href="#apps">App catalog</a><a href="#releases">Releases</a><a href="#activity">Activity</a>
+<a href="#enroll">Enrollment</a><a href="#policy">Policy</a><a href="#apps">App catalog</a><a href="#releases">Releases</a><a href="#problems">Problem reports</a><a href="#audit">Package audit</a><a href="#activity">Activity</a>
 <div class="me"><span id="me-name"></span><span id="me-org" class="muted"></span><button id="logout" class="link">Sign out</button></div></nav>
 <main id="main" tabindex="-1"></main></div>
 <div id="toast" class="toast" role="status" hidden></div>
@@ -68,7 +68,10 @@ dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:0}dt{c
 .wipe-foot{padding:14px 18px;background:rgba(4,10,26,.35);border-top:1px solid rgba(127,178,255,.12);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .wipe-foot .muted{font-size:12px}.wipe-foot button{padding:10px 18px;border-radius:10px;background:transparent;color:#E8EEFA;border:1px solid rgba(127,178,255,.25);font-weight:500}
 .wipe-foot button.erase{background:#D9452B;border-color:transparent;color:#fff;font-weight:600}.wipe-foot button.erase:disabled{opacity:1;background:rgba(217,69,43,.3);color:rgba(255,255,255,.5)}
-@media (max-width:760px){.shell{grid-template-columns:1fr}.side{flex-direction:row;flex-wrap:wrap;padding:10px}.side .brand{width:100%;padding-bottom:8px}
+.qr{display:block;width:232px;height:232px;image-rendering:pixelated;background:#fff;border-radius:10px;padding:0}
+.enroll-out{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start}.pager{display:flex;gap:10px;align-items:center;margin-top:12px}
+pre.report{white-space:pre-wrap;word-break:break-word;font:13px/1.45 ui-monospace,monospace;background:var(--chip);padding:12px;border-radius:10px;max-height:420px;overflow:auto;margin:0}
+@media (max-width:760px){.enroll-out{grid-template-columns:1fr}.shell{grid-template-columns:1fr}.side{flex-direction:row;flex-wrap:wrap;padding:10px}.side .brand{width:100%;padding-bottom:8px}
 .me{width:100%;border:0}main{padding:16px}}
 `;
 
@@ -227,8 +230,11 @@ const views = {
     const out = h('div');
     const f = h('form', { class: 'card form', onsubmit: async (e) => { e.preventDefault(); try {
       const t = await api('POST', 'enrollment-tokens', { hours: Number(f.hours.value), uses: Number(f.uses.value) });
-      out.replaceChildren(h('div', { class: 'card form' }, h('b', {}, 'Enrollment token'), h('p', { class: 'muted' }, 'Shown once. Valid until ' + new Date(t.expires_at).toLocaleString() + ' for ' + t.uses + ' device(s).'),
-        h('div', { class: 'secret' }, t.token), h('div', {}, h('button', { type: 'button', onclick: () => navigator.clipboard.writeText(t.token).then(() => toast('Copied.')) }, 'Copy'))));
+      out.replaceChildren(h('div', { class: 'card enroll-out' }, t.qr ? h('img', { class: 'qr', src: qrSvg(t.qr), alt: 'QR code of the enrollment link' }) : null,
+        h('div', { class: 'form' }, h('b', {}, 'Enrollment token'), h('p', { class: 'muted' }, 'Shown once. Valid until ' + new Date(t.expires_at).toLocaleString() + ' for ' + t.uses + ' device(s).'),
+        h('div', { class: 'secret' }, t.token), h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => navigator.clipboard.writeText(t.token).then(() => toast('Copied.')) }, 'Copy token'),
+          t.link ? h('button', { type: 'button', onclick: () => navigator.clipboard.writeText(t.link).then(() => toast('Copied.')) }, 'Copy enrollment link') : null),
+        t.link ? h('p', { class: 'muted' }, 'In the installer, on the Enroll this device page: scan this code with the camera, or paste the link. The link holds this server\'s address and the token.') : null)));
     } catch (x) { toast(x.message); } } },
       h('p', { class: 'muted' }, 'On a WorkSuite OS device: first-run setup → "Managed by my organization", or Settings → About this device → Enroll. Enter this server\'s address and the token.'),
       h('div', { class: 'row' }, h('label', {}, 'Valid for (hours)', h('input', { name: 'hours', type: 'number', min: 1, max: 720, value: 24 })), h('label', {}, 'Devices', h('input', { name: 'uses', type: 'number', min: 1, max: 1000, value: 1 }))),
@@ -292,12 +298,58 @@ const views = {
       table(['Ring', 'Arch', 'Version', 'Rollout', 'State', 'Flags'], items.map((r) => h('tr', {}, h('td', {}, r.ring), h('td', {}, r.arch), h('td', {}, r.version), h('td', {}, (r.rollout_percent ?? 100) + '%'), h('td', {}, r.state || 'active'),
         h('td', {}, [r.security && 'security', r.mandatory && 'mandatory', r.critical && 'critical'].filter(Boolean).join(', ') || '—'))))];
   },
+  async problems(arg) {
+    const page = Number(arg) || 1;
+    const r = await api('GET', 'problem-reports?page=' + page);
+    return [h('h1', {}, 'Problem reports'), h('p', { class: 'muted' }, 'Reports people reviewed and sent from Settings › About › Report a problem. Opening a report is recorded in Activity.'),
+      table(['Sent', 'Person', 'Device', 'Description', 'Includes'], r.items.map((x) => h('tr', { class: 'click', tabindex: 0, onclick: () => { location.hash = 'problem/' + encodeURIComponent(x.id); }, onkeydown: (e) => { if (e.key === 'Enter') location.hash = 'problem/' + encodeURIComponent(x.id); } },
+        h('td', {}, when(x.at)), h('td', {}, x.user_name, h('div', { class: 'muted' }, x.user_email)), h('td', {}, x.hostname || (x.device_id ? x.device_id : '—')),
+        h('td', {}, x.summary || h('span', { class: 'muted' }, 'No description')), h('td', {}, x.sections.map((s) => h('span', { class: 'chip' }, SECTION_NAMES[s] || s)))))),
+      pager(r, 'problems')];
+  },
+  async problem(id) {
+    const r = await api('GET', 'problem-reports/' + encodeURIComponent(id));
+    return [h('p', {}, h('a', { href: '#problems' }, '← Problem reports')), h('h1', {}, 'Problem report'),
+      h('div', { class: 'card' }, h('dl', {}, h('dt', {}, 'Sent'), h('dd', {}, when(r.at)), h('dt', {}, 'Person'), h('dd', {}, r.user_name + ' (' + r.user_email + ')'),
+        h('dt', {}, 'Device'), h('dd', {}, r.device_id ? h('a', { href: '#device/' + encodeURIComponent(r.device_id) }, r.hostname || r.device_id) : 'Not sent from an enrolled device'),
+        h('dt', {}, 'Description'), h('dd', {}, r.description || h('span', { class: 'muted' }, 'No description')))),
+      r.sections.length ? r.sections.map((s) => [h('h2', {}, SECTION_NAMES[s.id] || s.id), h('pre', { class: 'report' }, s.text || '(empty)')]) : h('p', { class: 'muted' }, 'The person left out every section.')];
+  },
+  async audit(arg) {
+    const [pg, type] = (arg || '').split('~');
+    const page = Number(pg) || 1;
+    const r = await api('GET', 'device-audit?page=' + page + (type ? '&type=' + encodeURIComponent(type) : ''));
+    const filter = h('select', { 'aria-label': 'Event type', onchange: (e) => { location.hash = 'audit/1' + (e.target.value ? '~' + e.target.value : ''); } },
+      h('option', { value: '' }, 'All package events'), r.types.map((t) => h('option', { value: t, selected: t === type }, t.replace(/^package\./, '').replace(/_/g, ' '))));
+    const detail = (d) => !d ? '—' : Object.entries(d).map(([k, v]) => k + ': ' + (Array.isArray(v) ? v.join(', ') : typeof v === 'object' && v ? JSON.stringify(v) : v)).join(' · ');
+    return [h('h1', {}, 'Package audit'), h('p', { class: 'muted' }, 'Privileged package changes on devices (installs, removals, updates, repairs), forwarded by each device agent.'),
+      h('div', { class: 'row' }, h('label', {}, 'Show', filter)), h('br'),
+      table(['When', 'Device', 'Event', 'Details'], r.items.map((x) => h('tr', {}, h('td', {}, new Date(x.at).toLocaleString()), h('td', {}, h('a', { href: '#device/' + encodeURIComponent(x.device_id) }, x.hostname)),
+        h('td', {}, x.type.replace(/^package\./, '').replace(/_/g, ' ')), h('td', { class: 'muted' }, detail(x.data))))),
+      pager(r, 'audit', type ? '~' + type : '')];
+  },
   async activity() {
     const { items } = await api('GET', 'log');
     return [h('h1', {}, 'Activity'), table(['When', 'Who', 'Action', 'Details'], items.map((l) => h('tr', {}, h('td', {}, when(l.at)), h('td', {}, l.name), h('td', {}, l.action.replace(/_/g, ' ')),
       h('td', { class: 'muted' }, Object.entries(l.detail || {}).map(([k, v]) => k + ': ' + v).join(', ')))))];
   },
 };
+
+// ---- problem reports, package audit, enrollment QR ----
+const SECTION_NAMES = { system: 'System', services: 'System services', session_services: 'Session services', session_log: 'Session warnings', system_log: 'System errors', packages: 'WorkSuite packages' };
+function pager(r, view, suffix) {
+  const pages = Math.max(1, Math.ceil(r.total / r.per_page));
+  const go = (p) => { location.hash = view + '/' + p + (suffix || ''); };
+  return h('nav', { class: 'pager', 'aria-label': 'Pages' }, h('button', { type: 'button', disabled: r.page <= 1, onclick: () => go(r.page - 1) }, 'Previous'),
+    h('span', { class: 'muted' }, 'Page ' + r.page + ' of ' + pages + ' · ' + r.total + ' in all'), h('button', { type: 'button', disabled: r.page >= pages, onclick: () => go(r.page + 1) }, 'Next'));
+}
+/** The server's QR matrix (rows of 0/1) as an SVG data URI (img-src allows data:; nothing is inserted as markup). */
+function qrSvg(rows) {
+  const n = rows.length, q = 4;
+  let d = '';
+  rows.forEach((row, y) => { for (let x = 0; x < n; x++) if (row[x] === '1') d += 'M' + (x + q) + ' ' + (y + q) + 'h1v1h-1z'; });
+  return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + (n + 2 * q) + ' ' + (n + 2 * q) + '" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>');
+}
 
 // ---- kiosk mode (WSOS-AUTH-002): set on the Policy page, turned on per device on the device page ----
 const KIOSK_MODULES = ['home', 'mail', 'chat', 'calendar', 'tasks', 'files', 'crm', 'hr'];
@@ -311,7 +363,8 @@ function kioskForm(p) {
     const pinOn = f.allow_exit_pin.checked;
     const kiosk = { enabled: f.enabled.checked, user: f.user.value.trim(), devices: k.devices || [], app,
       allowed_urls: f.allowed_urls.value.split(/[\s,]+/).filter(Boolean), idle_reset_minutes: Number(f.idle_reset_minutes.value || 0),
-      show_on_screen_keyboard: f.osk.checked, allow_exit_pin: pinOn };
+      show_on_screen_keyboard: f.osk.checked, allow_exit_pin: pinOn, orientation: f.orientation.value,
+      screen_off: f.screen_off_on.checked ? { from: f.screen_off_from.value, until: f.screen_off_until.value } : null };
     if (pinOn) { if (f.exit_pin.value) kiosk.exit_pin = f.exit_pin.value; else kiosk.exit_pin_set = !!k.exit_pin_set; }
     if (kiosk.enabled && !kiosk.devices.length) kiosk.enabled = false;
     act(() => api('PUT', 'policy', { policy: { ...p, kiosk } }).then((r) => toast('Kiosk settings saved in policy version ' + r.version + '.')));
@@ -327,6 +380,13 @@ function kioskForm(p) {
       h('label', {}, 'Installed app (.desktop ID)', h('input', { name: 'app_desktop', placeholder: 'org.example.Viewer.desktop', value: a.type === 'desktop' ? a.id : '' }))),
     h('label', {}, 'Other allowed web addresses (one per line; https://host/path, *.host allowed)', h('textarea', { name: 'allowed_urls' }, (k.allowed_urls || []).join('\n'))),
     h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'osk', checked: !!k.show_on_screen_keyboard }), ' Show the on-screen keyboard')),
+    h('fieldset', { class: 'form' }, h('legend', {}, 'Screen'),
+      h('label', {}, 'Orientation', h('select', { name: 'orientation' }, [['landscape', 'Landscape'], ['portrait', 'Portrait'], ['landscape-flipped', 'Landscape (upside down)'], ['portrait-flipped', 'Portrait (upside down)']]
+        .map(([v, l]) => h('option', { value: v, selected: (k.orientation || 'landscape') === v }, l)))),
+      h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'screen_off_on', checked: !!k.screen_off }), ' Turn the screen off at night')),
+      h('div', { class: 'row' }, h('label', {}, 'Off from', h('input', { name: 'screen_off_from', type: 'time', value: (k.screen_off && k.screen_off.from) || '22:00' })),
+        h('label', {}, 'Until', h('input', { name: 'screen_off_until', type: 'time', value: (k.screen_off && k.screen_off.until) || '07:00' }))),
+      h('p', { class: 'muted' }, 'Device local time. A touch wakes the screen for a minute.')),
     h('fieldset', { class: 'form' }, h('legend', {}, 'Leaving kiosk mode'),
       h('p', { class: 'muted' }, 'On the device: Ctrl+Alt+Shift+K, or tap the top-left corner five times. An administrator password always works.'),
       h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'allow_exit_pin', checked: !!k.allow_exit_pin }), ' Also allow an exit PIN')),
@@ -352,7 +412,7 @@ function kioskDevice(id, on) {
 async function route() {
   const [view, arg] = (location.hash.slice(1) || 'overview').split('/');
   const fn = views[view] || views.overview;
-  for (const a of document.querySelectorAll('.side a')) a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + (view === 'device' ? 'devices' : view));
+  for (const a of document.querySelectorAll('.side a')) a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + (view === 'device' ? 'devices' : view === 'problem' ? 'problems' : view));
   for (const a of document.querySelectorAll('.side a[aria-current]')) a.setAttribute('aria-current', 'page');
   const main = $('#main');
   try { main.replaceChildren(...[await fn(arg ? decodeURIComponent(arg) : undefined)].flat(Infinity).filter((x) => x != null)); main.focus(); }

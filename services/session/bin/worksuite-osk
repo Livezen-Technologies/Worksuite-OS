@@ -1,0 +1,12 @@
+#!/bin/sh
+# WorkSuite on-screen keyboard (services/session/osk): GTK 4 + gtk4-layer-shell, output through wtype.
+# This is the worksuite-osk hook the shell and the kiosk session look for. Without GTK 4 layer-shell bindings it exits
+# 69 (the shell then uses wvkbd); in the kiosk it hands over to wvkbd itself.
+if ! python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Gtk4LayerShell", "1.0"); from gi.repository import Gtk4LayerShell' 2>/dev/null; then
+    case " $* " in *" --kiosk "*)
+        command -v wvkbd-mobintl >/dev/null 2>&1 && exec wvkbd-mobintl -H 260 -L 208 -l full,special --fn "IBM Plex Sans 16" \
+            --bg 071330f7 --fg 1a2c51 --fg-sp 0f1e3e --press 2a4a8f --press-sp 1f6bff --text e8eefa --text-sp c9d6ee ;;
+    esac
+    exit 69
+fi
+cd /usr/lib/worksuite/osk && exec python3 -E -s -m worksuite_osk "$@"

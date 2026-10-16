@@ -1,0 +1,3 @@
+#!/bin/sh
+# Touchscreen gesture daemon (services/session/gestures); the shell starts it when gestures are on.
+cd /usr/lib/worksuite/gestures && exec python3 -E -s -m worksuite_gestures.daemon "$@"

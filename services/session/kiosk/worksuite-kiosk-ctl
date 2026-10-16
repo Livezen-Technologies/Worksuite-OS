@@ -1,12 +1,18 @@
 #!/bin/sh
-# worksuite-kiosk-ctl exit-prompt | reset | warn | active    (kiosk session; Labwc's exit gesture and swayidle call it)
+# worksuite-kiosk-ctl exit-prompt | reset | warn | active | screen-off HH:MM | screen-on
+#   (kiosk session; Labwc's exit gesture, swayidle and worksuite-kiosk-screen call it)
 # Signals the kiosk app (shell/electron/kioskMain.ts): SIGUSR1 shows the exit prompt, SIGUSR2 resets the app, SIGHUP
-# shows or hides the "Still there?" screen, as written to $RUN/idle (warn | active).
+# shows or hides the "Still there?" screen, as written to $RUN/idle (warn | active), and the night screen-off notice,
+# as written to $RUN/screen (off HH:MM | on).
 PID=$(cat "${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk/app.pid" 2>/dev/null)
 case "$PID" in ''|*[!0-9]*) echo "worksuite-kiosk-ctl: kiosk app not running" >&2; exit 1 ;; esac
 case "${1:-}" in
   exit-prompt) kill -USR1 "$PID" ;;
   reset) kill -USR2 "$PID" ;;
   warn|active) printf '%s\n' "$1" > "${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk/idle" && kill -HUP "$PID" ;;
-  *) echo "usage: worksuite-kiosk-ctl exit-prompt | reset | warn | active" >&2; exit 2 ;;
+  screen-off)
+    case "${2:-}" in [0-2][0-9]:[0-5][0-9]) ;; *) echo "worksuite-kiosk-ctl: screen-off needs HH:MM" >&2; exit 2 ;; esac
+    printf 'off %s\n' "$2" > "${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk/screen" && kill -HUP "$PID" ;;
+  screen-on) printf 'on\n' > "${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk/screen" && kill -HUP "$PID" ;;
+  *) echo "usage: worksuite-kiosk-ctl exit-prompt | reset | warn | active | screen-off HH:MM | screen-on" >&2; exit 2 ;;
 esac

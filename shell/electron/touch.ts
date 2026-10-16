@@ -13,7 +13,8 @@
 //               Sinhala and Tamil m17n methods turn the Latin layout into Sinhala or Tamil.
 // Settings are per user in ~/.config/worksuite/touch.json and applied when the shell starts at login.
 import { spawn } from 'node:child_process'
-import { lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createConnection } from 'node:net'
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { realExec, type Avail, type Exec } from './system'
 import { xdgDirs } from './xdgDirs'
@@ -98,8 +99,34 @@ export interface TouchSettings {
   oskSize: 'small' | 'medium' | 'large'
   /** device name → libinput calibration matrix (6 numbers, row-major a b c d e f), set by Touch calibration. */
   calibration: Record<string, number[]>
+  /** Board SetTouch › Gestures; run by worksuite-gestures (services/session/gestures). */
+  gestures: GestureSettings
+  /** Touch and hold this long for a right-click (the shell's own surfaces). */
+  longPressMs: number
+  /** WorkSuite keyboard (worksuite-osk) layout and suggestion bar; wvkbd ignores both. */
+  oskLayout: 'full' | 'split' | 'floating'
+  oskSuggestions: boolean
 }
-export const DEFAULT_TOUCH: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium', calibration: {} }
+export interface GestureSettings {
+  enabled: boolean
+  edgeSwipes: boolean
+  edgeBottom: 'launcher' | 'off'
+  edgeRight: 'notifications' | 'off'
+  edgeLeft: 'switch-apps' | 'off'
+  threeHorizontal: 'workspaces' | 'switch-apps' | 'off'
+  threeDown: 'desktop' | 'off'
+}
+export const DEFAULT_GESTURES: GestureSettings = { enabled: true, edgeSwipes: true, edgeBottom: 'launcher', edgeRight: 'notifications', edgeLeft: 'switch-apps', threeHorizontal: 'workspaces', threeDown: 'desktop' }
+const GESTURE_CHOICES: Record<string, readonly string[]> = { edgeBottom: ['launcher', 'off'], edgeRight: ['notifications', 'off'], edgeLeft: ['switch-apps', 'off'], threeHorizontal: ['workspaces', 'switch-apps', 'off'], threeDown: ['desktop', 'off'] }
+export function normalizeGestures(v: unknown): GestureSettings {
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+  const out = { ...DEFAULT_GESTURES } as Record<string, unknown>
+  for (const [k, allowed] of Object.entries(GESTURE_CHOICES)) if (typeof o[k] === 'string' && allowed.includes(o[k] as string)) out[k] = o[k]
+  out.enabled = o.enabled !== false
+  out.edgeSwipes = o.edgeSwipes !== false
+  return out as unknown as GestureSettings
+}
+export const DEFAULT_TOUCH: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium', calibration: {}, gestures: { ...DEFAULT_GESTURES }, longPressMs: 600, oskLayout: 'full', oskSuggestions: true }
 
 /** A usable calibration matrix: six finite numbers, scale terms within ±4 and offsets within ±2 (a sane touchscreen). */
 export function validMatrix(m: unknown): m is number[] {
@@ -126,6 +153,10 @@ export function normalizeTouch(v: unknown): TouchSettings {
     rotationLock: o.rotationLock === true,
     osk: o.osk === 'off' || o.osk === 'always' ? o.osk : 'touch',
     oskSize: o.oskSize === 'small' || o.oskSize === 'large' ? o.oskSize : 'medium',
+    gestures: normalizeGestures(o.gestures),
+    oskLayout: o.oskLayout === 'split' || o.oskLayout === 'floating' ? o.oskLayout : 'full',
+    oskSuggestions: o.oskSuggestions !== false,
+    longPressMs: Number.isInteger(o.longPressMs) && (o.longPressMs as number) >= 300 && (o.longPressMs as number) <= 1200 ? o.longPressMs as number : 600,
   }
 }
 export function loadTouch(file: string): TouchSettings {
@@ -197,6 +228,21 @@ export function oskArgs(s: TouchSettings, methods: string[]): string[] {
   return ['--hidden', '-H', String(h), '-L', String(Math.round(h * 0.8)), '-l', oskLayouts(methods).join(','), '--fn', 'IBM Plex Sans 16', ...OSK_COLORS]
 }
 
+/** worksuite-osk (services/session/osk): GTK 4 layer-shell keyboard with suggestions, emoji, clipboard, split and
+ *  floating layouts, Sinhala and Tamil, and layouts by field type. Preferred over wvkbd when installed. */
+export const WORKSUITE_OSK = '/usr/lib/worksuite/worksuite-osk'
+export function worksuiteOskArgs(s: TouchSettings, methods: string[]): string[] {
+  const langs = ['en', ...['si', 'ta'].filter((l) => methods.some((m) => m.includes(`m17n_${l}`) || m.startsWith(`keyboard-${l === 'si' ? 'lk' : 'in'}`)))]
+  return ['--size', s.oskSize, '--mode', s.oskLayout, '--langs', (langs.length > 1 ? langs : ['en', 'si', 'ta']).join(','), ...(s.oskSuggestions ? [] : ['--no-suggestions'])]
+}
+/** HTML field → text-input-v3 content purpose and hints, as worksuite-osk takes them ("show <purpose> <hints>"). */
+export function oskControlLine(show: boolean, purpose = 0, hints = 0): string {
+  if (!show) return 'hide\n'
+  const p = Number.isInteger(purpose) && purpose >= 0 && purpose <= 13 ? purpose : 0
+  const h = Number.isInteger(hints) && hints >= 0 ? hints & 0x3ff : 0
+  return `show ${p} ${h}\n`
+}
+
 // ---------- host ----------
 export interface TouchState {
   devices: InputDev[]
@@ -224,7 +270,18 @@ const realSpawn: Spawn = (cmd, args) => {
   } catch { return null }
 }
 
-export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn = realSpawn, sysLabwc = '/etc/xdg/worksuite/labwc') {
+/** One line to worksuite-osk's control socket (0600, in the user's runtime dir). */
+function realOskSend(sock: string, line: string) {
+  try {
+    const c = createConnection(sock)
+    c.on('error', () => undefined)
+    c.end(line)
+  } catch { /* keyboard not up yet */ }
+}
+
+export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn = realSpawn, sysLabwc = '/etc/xdg/worksuite/labwc',
+  hasOsk: () => boolean = () => existsSync(WORKSUITE_OSK), oskSendTo: (sock: string, line: string) => void = realOskSend) {
+  const oskSend = (line: string) => oskSendTo(oskSocket, line)
   const file = path.join(xdgDirs(home).config, 'worksuite', 'touch.json')
   const labwcDir = path.join(xdgDirs(home).config, 'worksuite', 'labwc')
   const st: TouchState = { devices: [], settings: loadTouch(file), tabletSwitch: false, touchMode: false, orientation: null, hasAccelerometer: false, osk: { available: false, visible: false }, outputs: [] }
@@ -233,6 +290,22 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
   let switchWatch: Proc | null = null
   let sensor: Proc | null = null
   let pen: Proc | null = null
+  let gestures: Proc | null = null
+  const gestureFile = path.join(xdgDirs(home).config, 'worksuite', 'gestures.json')
+
+  /** worksuite-gestures runs while a touchscreen is present, touch is on and gestures are on; it re-reads its file on SIGHUP. */
+  function syncGestures() {
+    try {
+      mkdirSync(path.dirname(gestureFile), { recursive: true })
+      writeFileSync(`${gestureFile}.tmp`, JSON.stringify(st.settings.gestures, null, 2))
+      renameSync(`${gestureFile}.tmp`, gestureFile)
+    } catch { /* the daemon keeps its defaults */ }
+    const want = st.settings.touchEnabled && st.settings.gestures.enabled && st.devices.some((d) => d.kinds.includes('touchscreen'))
+    if (!want) { gestures?.kill('SIGTERM'); gestures = null; return }
+    if (gestures) { gestures.kill('SIGHUP'); return }
+    gestures = spawnFn('/usr/lib/worksuite/worksuite-gestures', [])
+    gestures?.onExit(() => { gestures = null })
+  }
 
   const emit = () => listener(structuredClone(st))
 
@@ -272,18 +345,25 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
     return r.code === 0 ? { available: true, value: true } : { available: false, reason: r.missing ? 'labwc_missing' : 'labwc_reload' }
   }
 
+  let oskIsOurs = false
+  let oskOursFailed = false   // worksuite-osk exited (e.g. no gtk4-layer-shell): wvkbd from then on
+  let oskHint = { purpose: 0, hints: 0 }
+  const oskSocket = path.join(process.env.XDG_RUNTIME_DIR || '/tmp', 'worksuite-osk.sock')
   function setOskVisible(v: boolean) {
     if (!osk) return
-    osk.kill(v ? 'SIGUSR2' : 'SIGUSR1')
+    if (oskIsOurs) oskSend(oskControlLine(v, oskHint.purpose, oskHint.hints))
+    else osk.kill(v ? 'SIGUSR2' : 'SIGUSR1')
     st.osk.visible = v
   }
   function startOsk() {
     if (osk) return
     let methods: string[] = []
     try { methods = readFileSync(path.join(xdgDirs(home).config, 'fcitx5', 'profile'), 'utf8').split('\n').map((l) => /^Name=(.+)$/.exec(l.trim())?.[1] ?? '').filter(Boolean) } catch { /* default layout */ }
-    osk = spawnFn('wvkbd-mobintl', oskArgs(st.settings, methods))
+    oskIsOurs = hasOsk() && !oskOursFailed
+    osk = oskIsOurs ? spawnFn(WORKSUITE_OSK, worksuiteOskArgs(st.settings, methods)) : spawnFn('wvkbd-mobintl', oskArgs(st.settings, methods))
     st.osk = { available: !!osk, visible: false }
-    osk?.onExit(() => { osk = null; st.osk = { available: false, visible: false }; emit() })
+    const ours = oskIsOurs
+    osk?.onExit(() => { osk = null; if (ours) oskOursFailed = true; st.osk = { available: false, visible: false }; emit() })
   }
   function stopOsk() { osk?.kill('SIGTERM'); osk = null; st.osk.visible = false }
 
@@ -329,6 +409,7 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
       st.devices = await detect(); st.outputs = await outputs()
       if (st.devices.some((d) => d.kinds.includes('touchscreen'))) await writeLabwc()
       watch()
+      syncGestures()
       await refreshMode()
     },
     async state(): Promise<Avail<TouchState>> {
@@ -340,16 +421,18 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
       try { next = normalizeTouch({ ...st.settings, ...JSON.parse(json) }) } catch { return { available: false, reason: 'bad_settings' } }
       const labwc = next.touchEnabled !== st.settings.touchEnabled || JSON.stringify(next.mapToOutput) !== JSON.stringify(st.settings.mapToOutput)
         || JSON.stringify(next.calibration) !== JSON.stringify(st.settings.calibration)
-      const restartOsk = next.oskSize !== st.settings.oskSize
+      const restartOsk = next.oskSize !== st.settings.oskSize || next.oskLayout !== st.settings.oskLayout || next.oskSuggestions !== st.settings.oskSuggestions
       st.settings = next
       try { saveTouch(file, next) } catch { return { available: false, reason: 'save_failed' } }
       if (labwc) { const r = await writeLabwc(); if (!r.available) return r }
       if (restartOsk) stopOsk()
+      syncGestures()
       await refreshMode()
       return { available: true, value: structuredClone(st) }
     },
     /** Taskbar button / text-field focus: show or hide the keyboard. */
-    osk(show: boolean): Avail<boolean> {
+    osk(show: boolean, purpose = 0, hints = 0): Avail<boolean> {
+      oskHint = { purpose, hints }
       if (st.settings.osk === 'off' && show) return { available: false, reason: 'osk_off' }
       startOsk()
       if (!osk) return { available: false, reason: 'osk_missing' }
@@ -367,7 +450,7 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
       pen.onLine((l) => { const e = parsePenLine(l); if (e) cb(e) })
       return { available: true, value: true }
     },
-    stop() { [osk, switchWatch, sensor, pen].forEach((p) => p?.kill()) },
+    stop() { [osk, switchWatch, sensor, pen, gestures].forEach((p) => p?.kill()) },
   }
 }
 
@@ -375,7 +458,7 @@ export function startTouchHost(handle: Handle, broadcast: (ch: string, p: unknow
   b.onChange((s) => broadcast('ws:touchChanged', s))
   handle('ws:touchState', () => b.state())
   handle('ws:touchSet', (json) => b.set(json))
-  handle('ws:oskShow', (on) => b.osk(on === '1'))
+  handle('ws:oskShow', (on, purpose, hints) => b.osk(on === '1', Number(purpose) || 0, Number(hints) || 0))
   handle('ws:penTest', (on) => b.penTest(on === '1', (e) => broadcast('ws:penEvent', e)))
   void b.start()
   return b

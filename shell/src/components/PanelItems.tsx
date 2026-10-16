@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
-import { clickAction, panel, taskbarEntries, updateBadge, type PanelWindow, type TrayItem } from '../lib/panel'
+import { clickAction, onWorkspace, panel, taskbarEntries, updateBadge, type PanelWindow, type ShellAction, type TrayItem, type Workspaces } from '../lib/panel'
 import { os, type OsUpdateStatus, type VpnState } from '../lib/os'
 import { activeVpn, vpnErrorText } from '../lib/vpn'
 import { useT } from '../i18n'
@@ -19,8 +19,42 @@ export function usePanelWindows(): PanelWindow[] {
   return windows
 }
 
+const NO_WS: Workspaces = { supported: false, current: 1, count: 1, windows: {} }
+export function useWorkspaces(): Workspaces {
+  const [ws, setWs] = useState<Workspaces>(NO_WS)
+  useEffect(() => {
+    let live = true
+    void panel.workspaces?.().then((w) => { if (live) setWs(w) })
+    const off = panel.onWorkspaces?.(setWs)
+    return () => { live = false; off?.() }
+  }, [])
+  return ws
+}
+
+/** Panel workspace switcher (WSOS-DSK-003): Labwc desktops through the bridge; hidden where there are none. */
+export function WorkspaceSwitcher() {
+  const t = useT()
+  const ws = useWorkspaces()
+  if (!ws.supported) return null
+  return (
+    <div role="toolbar" aria-label={t('panel.workspaces')} onKeyDown={rovingKeys} className="flex items-center gap-1 rounded-[10px] bg-white/[0.06] p-1">
+      {Array.from({ length: ws.count }, (_, i) => i + 1).map((n) => {
+        const count = Object.values(ws.windows).filter((x) => x === n).length
+        return (
+          <button key={n} type="button" aria-pressed={n === ws.current} aria-label={count ? t('panel.workspaceWindows', { n: String(n), count }) : t('panel.workspace', { n: String(n) })}
+            onClick={() => void panel.activateWorkspace?.(n)}
+            className={`relative flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg px-2 text-[13px] font-semibold ${n === ws.current ? 'bg-[#1F6BFF] text-white' : 'text-[#C9D6EE] hover:bg-white/10'}`}>
+            {n}
+            {count > 0 && n !== ws.current && <span aria-hidden="true" className="absolute bottom-[3px] size-1 rounded-full bg-[#18D4F0]" />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Super key through lk.worksuite.Shell1 (Labwc keybinding). */
-export function useLauncherKey(onAction: (a: 'toggle' | 'show' | 'assistant') => void): void {
+export function useLauncherKey(onAction: (a: ShellAction) => void): void {
   useEffect(() => panel.onLauncher(onAction), [onAction])
 }
 
@@ -39,7 +73,9 @@ export function rovingKeys(e: KeyboardEvent<HTMLElement>) {
 export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]; info: (id: string) => AppInfo | undefined; onLaunch: (id: string) => void; only?: (w: PanelWindow[]) => PanelWindow[] }) {
   const t = useT()
   const all = usePanelWindows()
-  const windows = useMemo(() => (only ? only(all) : all), [only, all])
+  const ws = useWorkspaces()
+  const [menu, setMenu] = useState<{ handle: string; x: number } | null>(null)
+  const windows = useMemo(() => onWorkspace(only ? only(all) : all, ws), [only, all, ws])
   const entries = useMemo(() => taskbarEntries(pinned, windows), [pinned, windows])
   const click = (id: string) => {
     const e = entries.find((x) => x.id === id)!
@@ -55,6 +91,8 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
         const label = e.windows.length > 1 ? t('panel.windows', { name: a.name, count: e.windows.length }) : e.active ? t('panel.active', { name: a.name }) : e.running ? t('panel.running', { name: a.name }) : a.name
         return (
           <button key={e.id} type="button" aria-label={label} aria-pressed={e.running ? e.active : undefined} title={e.title || a.name} onClick={() => click(e.id)}
+            aria-haspopup={ws.supported && e.running ? 'menu' : undefined}
+            onContextMenu={(ev) => { if (!ws.supported || !e.running) return; ev.preventDefault(); const w = e.windows.find((x) => x.flags & 1) ?? e.windows[0]; setMenu({ handle: w.handle, x: ev.currentTarget.getBoundingClientRect().left }) }}
             className={`relative flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${e.active ? 'bg-white/10' : 'hover:bg-white/10'}`}>
             {/* The mark is an icon drawn by CSS (not text), so the button's name is the app's name alone (WCAG 2.5.3). */}
             <span aria-hidden="true" data-mark={a.mark} className="ws-mark flex size-7 items-center justify-center whitespace-nowrap rounded-[7px] leading-none font-bold before:content-[attr(data-mark)]" style={{ background: a.bg, color: a.fg, fontSize: 11 }} />
@@ -62,7 +100,29 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
           </button>
         )
       })}
+      {menu && <MoveMenu ws={ws} x={menu.x} onPick={(n) => { void panel.moveToWorkspace?.(menu.handle, n); setMenu(null) }} onClose={() => setMenu(null)} />}
     </div>
+  )
+}
+
+/** "Move to workspace" for a taskbar window (right-click or long-press on the button). */
+function MoveMenu({ ws, x, onPick, onClose }: { ws: Workspaces; x: number; onPick: (n: number) => void; onClose: () => void }) {
+  const t = useT()
+  useEffect(() => {
+    const k = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose])
+  return (
+    <>
+      <div className="fixed inset-0 z-40" aria-hidden="true" onClick={onClose} />
+      <div role="menu" aria-label={t('panel.moveTo')} className="fixed bottom-[64px] z-50 flex min-w-[200px] flex-col rounded-xl border border-[rgba(127,178,255,0.2)] bg-[#10244F] p-1 text-[13px] text-[#E8EEFA] shadow-[0_18px_40px_rgba(0,0,0,0.5)]" style={{ left: Math.max(8, x) }}>
+        <span className="px-3 py-1.5 text-xs text-[#8FA3C8]">{t('panel.moveTo')}</span>
+        {Array.from({ length: ws.count }, (_, i) => i + 1).filter((n) => n !== ws.current).map((n, i) => (
+          <button key={n} type="button" role="menuitem" autoFocus={i === 0} onClick={() => onPick(n)} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10">{t('panel.workspace', { n: String(n) })}</button>
+        ))}
+      </div>
+    </>
   )
 }
 

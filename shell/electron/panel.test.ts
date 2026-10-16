@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import dbus from 'dbus-next'
-import { BRIDGE, BRIDGE_PATH, PanelClient, SHELL, SHELL_PATH, TRAY_IFACE, TRAY_PATH, rowsToWindows, type PanelBus } from './panel'
+import { BRIDGE, BRIDGE_PATH, PanelClient, SHELL, SHELL_PATH, TRAY_IFACE, TRAY_PATH, rowsToWindows, toWorkspaces, type PanelBus } from './panel'
 
 const { Message } = dbus
 type Msg = InstanceType<typeof Message>
@@ -109,5 +109,43 @@ describe('panel client', () => {
   it('ignores malformed rows', () => {
     expect(rowsToWindows([['a'], 'x', ['h', 'app', 't', 'o', 2]])).toEqual([{ handle: 'h', appId: 'app', title: 't', output: 'o', flags: 2 }])
     expect(rowsToWindows(undefined)).toEqual([])
+  })
+})
+
+describe('panel workspaces (WSOS-DSK-003)', () => {
+  it('reads Labwc desktops from the bridge and follows WorkspacesChanged', async () => {
+    let current = 1
+    const f = fakeBus({
+      ListWorkspaces: () => [current, 4, { w1: 1, w2: 3, 'bad;': 2 }],
+      Get: () => [{ value: ['activate', 'close', 'minimize', 'workspaces'] }],
+      ListWindows: () => [[]],
+      ActivateWorkspace: () => [],
+      MoveWindowToWorkspace: () => [],
+    })
+    const workspaces = vi.fn()
+    const c = new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn(), workspaces })
+    await c.start()
+    expect(workspaces).toHaveBeenLastCalledWith({ supported: true, current: 1, count: 4, windows: { w1: 1, w2: 3 } })
+    current = 3
+    f.emit(new Message({ type: 4, path: BRIDGE_PATH, interface: BRIDGE, member: 'WorkspacesChanged', signature: 'uu', body: [3, 4] }))
+    await new Promise((r) => setTimeout(r, 10))
+    expect(workspaces).toHaveBeenLastCalledWith(expect.objectContaining({ current: 3 }))
+    expect(await c.activateWorkspace(2)).toEqual({ ok: true, value: true })
+    expect(await c.moveToWorkspace('w1', 4)).toEqual({ ok: true, value: true })
+    const sent = f.calls.filter((m) => m.member === 'ActivateWorkspace' || m.member === 'MoveWindowToWorkspace')
+    expect(sent.map((m) => [m.member, m.signature, m.body])).toEqual([['ActivateWorkspace', 'u', [2]], ['MoveWindowToWorkspace', 'su', ['w1', 4]]])
+  })
+
+  it('is unsupported without the bridge operation or with one desktop', () => {
+    expect(toWorkspaces([1, 4, {}], ['activate']).supported).toBe(false)
+    expect(toWorkspaces([1, 1, {}], ['workspaces']).supported).toBe(false)
+    expect(toWorkspaces([9, 4, {}], ['workspaces']).current).toBe(4)
+    expect(toWorkspaces(null, ['workspaces'])).toEqual({ supported: false, current: 1, count: 1, windows: {} })
+  })
+
+  it('reports NotFound from the bridge as not_found', async () => {
+    const f = fakeBus({ ActivateWorkspace: () => dbusError('lk.worksuite.WaylandBridge1.Error.NotFound') })
+    const c = new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn() })
+    expect(await c.activateWorkspace(9)).toEqual({ ok: false, error: 'not_found' })
   })
 })

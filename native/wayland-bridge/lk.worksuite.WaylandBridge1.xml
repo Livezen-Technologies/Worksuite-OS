@@ -30,6 +30,22 @@
     <method name="ListOutputs">
       <arg name="outputs" type="a(ssiiiid)" direction="out"/>
     </method>
+    <!-- Workspaces (Labwc desktops; WSOS-DSK-003). current and count are 1-based; windows maps handle → workspace.
+         Labwc reports no desktop per window, so the bridge tracks them (native/wayland-bridge/worksuite_bridge/workspace.py).
+         ActivateWorkspace / MoveWindowToWorkspace need "workspaces" in SupportedOperations, otherwise NotSupported;
+         an index outside 1..count is NotFound. -->
+    <method name="ListWorkspaces">
+      <arg name="current" type="u" direction="out"/><arg name="count" type="u" direction="out"/><arg name="windows" type="a{su}" direction="out"/>
+    </method>
+    <method name="ActivateWorkspace">
+      <arg name="index" type="u" direction="in"/>
+    </method>
+    <method name="MoveWindowToWorkspace">
+      <arg name="handle" type="s" direction="in"/><arg name="index" type="u" direction="in"/>
+    </method>
+    <signal name="WorkspacesChanged">
+      <arg name="current" type="u"/><arg name="count" type="u"/>
+    </signal>
     <signal name="WindowAdded">
       <arg name="handle" type="s"/><arg name="app_id" type="s"/><arg name="title" type="s"/>
     </signal>
@@ -40,7 +56,7 @@
       <arg name="handle" type="s"/>
     </signal>
     <signal name="OutputsChanged"/>
-    <!-- Operations available on this compositor build, e.g. ["activate","close","minimize"]. -->
+    <!-- Operations available on this compositor build, e.g. ["activate","close","minimize","workspaces"]. -->
     <property name="SupportedOperations" type="as" access="read"/>
   </interface>
 </node>
