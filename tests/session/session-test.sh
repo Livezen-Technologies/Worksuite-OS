@@ -264,5 +264,17 @@ H=$ROOT/live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot
 grep -q 'ShowDelay=0' "$H" && grep -q 'After=plymouth-quit-wait.service' "$H" && grep -q 'systemd.show_status=false' "$ROOT/live-build/auto/config" \
   && ok "splash from the first frame until the greeter; live boot quiet" || bad "splash from the first frame until the greeter; live boot quiet"
 
+# ---- worksuite-osk: gtk4-layer-shell preloaded, else the window is no layer surface and never shows over the shell ----
+stub python3 'case "$*" in *require_version*) exit 0;; esac; echo "python3 $* LD_PRELOAD=$LD_PRELOAD" >> "$LOG"'
+# Any loadable library stands in for it (the stubbed python3 is a shell script that ld.so preloads it into).
+cp "$(ldd /bin/sh | sed -n 's|.*=> \(/[^ ]*libc\.so[^ ]*\).*|\1|p' | head -n 1)" "$T/libgtk4-layer-shell.so.0"; mkdir -p "$T/oskdir"; : > "$LOG"
+WORKSUITE_LAYER_SHELL_LIB="$T/libgtk4-layer-shell.so.0" WORKSUITE_OSK_DIR="$T/oskdir" sh "$BIN/worksuite-osk" --size medium
+check "worksuite-osk preloads gtk4-layer-shell" "$(cat "$LOG")" "python3 -E -s -m worksuite_osk --size medium LD_PRELOAD=$T/libgtk4-layer-shell.so.0"
+: > "$LOG"
+WORKSUITE_LAYER_SHELL_LIB="$T/missing.so.0" WORKSUITE_OSK_DIR="$T/oskdir" sh "$BIN/worksuite-osk"; rc=$?
+check "worksuite-osk without the gtk4-layer-shell library hands over to wvkbd (69)" "$rc:$(cat "$LOG")" "69:"
+grep -q 'libgtk4-layer-shell0' "$ROOT/packaging/debian/control" && grep -q '^libgtk4-layer-shell0$' "$ROOT/live-build/config/package-lists/worksuite.list.chroot" \
+  && ok "the gtk4-layer-shell library is installed, not only its typelib" || bad "the gtk4-layer-shell library is installed, not only its typelib"
+
 echo "1..$n"
 exit $fail

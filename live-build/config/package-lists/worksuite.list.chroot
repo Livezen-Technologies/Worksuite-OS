@@ -62,6 +62,8 @@ python3-gi
 gir1.2-gtk-4.0
 # worksuite-osk (the WorkSuite on-screen keyboard) is a gtk4-layer-shell surface; without it the shell falls back to wvkbd.
 gir1.2-gtk4layershell-1.0
+# The library itself: Debian's typelib package does not depend on it, and worksuite-osk preloads it.
+libgtk4-layer-shell0
 # Smart-card sign-in, off until enabled (WSOS-DIR-011)
 pcscd
 opensc

@@ -244,6 +244,7 @@ export function oskArgs(s: TouchSettings, methods: string[]): string[] {
 /** worksuite-osk (services/session/osk): GTK 4 layer-shell keyboard with suggestions, emoji, clipboard, split and
  *  floating layouts, Sinhala and Tamil, and layouts by field type. Preferred over wvkbd when installed. */
 export const WORKSUITE_OSK = '/usr/lib/worksuite/worksuite-osk'
+const WVKBD_SETTLE_MS = 400
 export function worksuiteOskArgs(s: TouchSettings, methods: string[]): string[] {
   const langs = ['en', ...['si', 'ta'].filter((l) => methods.some((m) => m.includes(`m17n_${l}`) || m.startsWith(`keyboard-${l === 'si' ? 'lk' : 'in'}`)))]
   return ['--size', s.oskSize, '--mode', s.oskLayout, '--langs', (langs.length > 1 ? langs : ['en', 'si', 'ta']).join(','), ...(s.oskSuggestions ? [] : ['--no-suggestions'])]
@@ -284,13 +285,43 @@ const realSpawn: Spawn = (cmd, args) => {
 }
 
 /** One line to worksuite-osk's control socket (0600, in the user's runtime dir). */
-function realOskSend(sock: string, line: string) {
-  try {
-    const c = createConnection(sock)
-    c.on('error', () => undefined)
-    c.end(line)
-  } catch { /* keyboard not up yet */ }
+type Connect = (sock: string) => { on(ev: 'error', fn: () => void): unknown; on(ev: 'connect', fn: () => void): unknown; end(line: string): unknown }
+
+/** Sends control lines to worksuite-osk's socket. The first taskbar tap starts the keyboard and asks it to show at
+ *  once, before its socket exists: that line used to be lost, so the keyboard ran but never showed. Now a line that
+ *  can't be delivered is retried (every `delayMs`, `tries` times), and only the newest one: show then hide ends hidden. */
+export function oskSocketSender(connect: Connect = (sock) => createConnection(sock), delayMs = 100, tries = 50) {
+  let pending: { sock: string; line: string } | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+  function attempt(left: number) {
+    timer = null
+    const job = pending
+    if (!job) return
+    let done = false
+    const retry = () => {
+      if (done) return
+      done = true
+      if (pending === job && left > 0 && !timer) timer = setTimeout(() => attempt(left - 1), delayMs)
+    }
+    try {
+      const c = connect(job.sock)
+      c.on('error', retry)
+      c.on('connect', () => {
+        if (done) return
+        done = true
+        if (pending !== job) { c.end(''); return }   // a newer line took over
+        pending = null
+        c.end(job.line)
+      })
+    } catch { retry() }
+  }
+  return (sock: string, line: string) => {
+    pending = { sock, line }
+    if (timer) { clearTimeout(timer); timer = null }
+    attempt(tries)
+  }
 }
+const realOskSend = oskSocketSender()
 
 export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn = realSpawn, sysLabwc = '/etc/xdg/worksuite/labwc',
   hasOsk: () => boolean = () => existsSync(WORKSUITE_OSK), oskSendTo: (sock: string, line: string) => void = realOskSend) {
@@ -364,10 +395,19 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
   let oskOursFailed = false   // worksuite-osk exited (e.g. no gtk4-layer-shell): wvkbd from then on
   let oskHint = { purpose: 0, hints: 0 }
   const oskSocket = path.join(process.env.XDG_RUNTIME_DIR || '/tmp', 'worksuite-osk.sock')
+  let oskStarted = 0
+  let wvkbdTimer: ReturnType<typeof setTimeout> | null = null
   function setOskVisible(v: boolean) {
     if (!osk) return
     if (oskIsOurs) oskSend(oskControlLine(v, oskHint.purpose, oskHint.hints))
-    else osk.kill(v ? 'SIGUSR2' : 'SIGUSR1')
+    else {
+      // wvkbd needs a moment to set up its SIGUSR1/2 handlers: a signal sent right after the spawn would end it.
+      const p = osk, sig = v ? 'SIGUSR2' : 'SIGUSR1'
+      if (wvkbdTimer) { clearTimeout(wvkbdTimer); wvkbdTimer = null }
+      const wait = oskStarted + WVKBD_SETTLE_MS - Date.now()
+      if (wait > 0) wvkbdTimer = setTimeout(() => { wvkbdTimer = null; if (osk === p) p.kill(sig) }, wait)
+      else p.kill(sig)
+    }
     st.osk.visible = v
   }
   function startOsk() {
@@ -377,6 +417,7 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
     oskIsOurs = hasOsk() && !oskOursFailed
     osk = oskIsOurs ? spawnFn(WORKSUITE_OSK, worksuiteOskArgs(st.settings, methods)) : spawnFn('wvkbd-mobintl', oskArgs(st.settings, methods))
     st.osk = { available: !!osk, visible: false }
+    oskStarted = Date.now()
     const ours = oskIsOurs
     const self = osk
     osk?.onExit(() => {
