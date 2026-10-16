@@ -80,6 +80,9 @@ export interface WorkSuiteApi {
   filesDelete(root: string, rels: string[]): Promise<CloudResult<number>>
   /** "Notify me when done" (FO1): a text notice in the shell's notification centre. */
   filesNotify(summary: string, body: string): Promise<unknown>
+  /** worksuite-toasts runs: toasts go there (a layer-shell surface over the apps) instead of the shell's window. */
+  toastsAvailable?(): Promise<boolean>
+  toastShow?(t: { key: string; title: string; body?: string; tone?: 'ok' | 'warn' | 'error'; icon?: string | null }): Promise<boolean>
   filesTrashList(): Promise<TrashItem[]>
   filesTrashRestore(ids: string[]): Promise<CloudResult<{ restored: number; skipped: number }>>
   filesTrashDelete(ids: string[] | 'all'): Promise<CloudResult<number>>
@@ -512,6 +515,8 @@ const stub: WorkSuiteApi = {
   async filesTrash(_r, rels) { return { ok: true, value: { count: rels.length, ids: rels.map((r) => r.split('/').pop()!) } } },
   async filesDelete(_r, rels) { return { ok: true, value: rels.length } },
   async filesNotify() { return true },
+  async toastsAvailable() { return false },
+  async toastShow() { return false },
   async filesTrashList() {
     const d = (days: number) => Date.now() - days * 86_400_000
     return [['Old logo.png', '~/Pictures', 0, 640_000], ['Draft v1.docx', '~/Documents/Projects', 1, 312_000], ['Invoice copy.pdf', '~/Downloads', 9, 220_000]]

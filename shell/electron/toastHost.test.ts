@@ -1,0 +1,46 @@
+import { describe, expect, it, vi } from 'vitest'
+import { toastHost, type ToastProc } from './toastHost'
+
+function fake(code: number | null = null) {
+  const lines: string[] = []
+  let out: (l: string) => void = () => {}
+  let exit: (c: number | null) => void = () => {}
+  const p: ToastProc = { write: (l) => { lines.push(l) }, onLine: (cb) => { out = cb }, onExit: (cb) => { exit = cb }, kill: vi.fn() }
+  return { p, lines, say: (l: string) => out(l), exit: () => exit(code) }
+}
+
+describe('toasts over the apps (worksuite-toasts)', () => {
+  it('sends one JSON line per toast and reports clicks by key', () => {
+    const f = fake(), clicks: string[] = []
+    const h = toastHost((k) => clicks.push(k), () => f.p)
+    expect(h.available()).toBe(true)
+    expect(h.show({ key: 'app-7', title: 'Firefox', body: 'Done', icon: 'firefox-esr' })).toBe(true)
+    expect(JSON.parse(f.lines[0])).toEqual({ op: 'show', key: 'app-7', title: 'Firefox', body: 'Done', tone: 'ok', icon: 'firefox-esr', sticky: false })
+    h.hide('app-7')
+    expect(JSON.parse(f.lines[1])).toEqual({ op: 'hide', key: 'app-7' })
+    f.say('click app-7'); f.say('closed app-7'); f.say('click ../x y')
+    expect(clicks).toEqual(['app-7'])
+    expect(h.show({ key: 'bad key', title: 'x' })).toBe(false)
+  })
+
+  it('is unavailable without layer-shell (exit 69), so the shell keeps its own toast', () => {
+    const f = fake(69)
+    const h = toastHost(() => {}, () => f.p)
+    expect(h.available()).toBe(true)
+    f.exit()
+    expect(h.available()).toBe(false)
+    expect(toastHost(() => {}, () => null).available()).toBe(false)
+  })
+
+  it('starts again after a crash, gives up after three', () => {
+    vi.useFakeTimers()
+    const procs = [fake(1), fake(1), fake(1)]
+    let i = 0
+    const h = toastHost(() => {}, () => procs[i++]?.p ?? null, 10)
+    h.available(); procs[0].exit(); vi.advanceTimersByTime(10)
+    expect(i).toBe(2)
+    procs[1].exit(); vi.advanceTimersByTime(10); procs[2].exit(); vi.advanceTimersByTime(10)
+    expect(h.available()).toBe(false)
+    vi.useRealTimers()
+  })
+})

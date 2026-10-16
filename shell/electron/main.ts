@@ -39,6 +39,7 @@ import { realExec } from './system'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
 import { startSessionHost } from './sessionHost'
+import { toastHost, type ToastMsg } from './toastHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
@@ -576,6 +577,25 @@ app.whenReady().then(() => {
     const w = panelClient && windowForNotification(n, panelClient.windows, installedApps())
     if (w) void panelClient.activate(w.handle)
   })
+  // Toasts over the apps (worksuite-toasts, a layer-shell overlay surface): the renderer hands its toast here when the
+  // helper runs. Clicking an app notification's toast takes its default action, which focuses the sender's window.
+  const toasts = toastHost((key) => {
+    const m = /^app-(\d+)$/.exec(key)
+    if (m) notices.invoke(Number(m[1]), 'default')
+    else broadcast('ws:toastClicked', key)
+  })
+  handle('ws:toastsAvailable', () => toasts.available())
+  handle('ws:toastShow', (json) => {
+    try { const t = JSON.parse(json) as ToastMsg; return toasts.show({ ...t, key: String(t.key) }) } catch { return false }
+  })
+  // A notification closed by its app (or from the notification centre) takes its toast away too.
+  let liveIds = new Set<number>()
+  notices.onChange((list) => {
+    const now = new Set(list.map((n) => n.id))
+    for (const id of liveIds) if (!now.has(id)) toasts.hide(`app-${id}`)
+    liveIds = now
+  })
+  app.on('before-quit', () => toasts.stop())
   // Files' "Notify me when done" (FO1): a notice in the shell's own notification centre, text only.
   handle('ws:filesNotify', (summary, body) => notices.notify('Files', 0, String(summary).slice(0, 200), String(body).slice(0, 400), [], 1))
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).

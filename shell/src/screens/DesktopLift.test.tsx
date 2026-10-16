@@ -7,6 +7,7 @@ import { afterEach, beforeAll, expect, it, vi } from 'vitest'
 import Desktop from './Desktop'
 import { panel } from '../lib/panel'
 import { useNotices } from '../lib/useNotices'
+import { os } from '../lib/os'
 
 beforeAll(() => {
   ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -44,4 +45,18 @@ it('lifts the shell while the launcher or a shell window is open, and puts it ba
   await act(async () => { root!.render(<Host open={false} />) })
   await settle()
   expect(onTop).toHaveBeenLastCalledWith(false)
+})
+
+it('hands a toast to worksuite-toasts (over the apps) and does not draw it in its own window', async () => {
+  vi.spyOn(os, 'toastsAvailable').mockResolvedValue(true)
+  const show = vi.spyOn(os, 'toastShow').mockResolvedValue(true)
+  const setToast = vi.fn()
+  const notes = { notices: [], setNotices: () => {}, toast: { id: 'app-12', tone: 'ok' as const, title: 'Firefox', body: 'Download finished', icon: 'firefox-esr' }, setToast, unread: 1, setUnread: () => {} }
+  host = document.createElement('div'); document.body.appendChild(host)
+  root = createRoot(host)
+  await act(async () => { root!.render(<Desktop user="alex" onLock={() => {}} onLogout={() => {}} onOpen={() => {}} notes={notes as never} />) })
+  await settle()
+  expect(show).toHaveBeenCalledWith({ key: 'app-12', title: 'Firefox', body: 'Download finished', tone: 'ok', icon: 'firefox-esr' })
+  expect(setToast).toHaveBeenCalledWith(null)
+  expect(host.textContent).not.toContain('Download finished')
 })

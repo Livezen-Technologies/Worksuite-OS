@@ -349,5 +349,13 @@ grep -qx adwaita-icon-theme "$L" && grep -qx hicolor-icon-theme "$L" && grep -qx
   && grep -q "image/svg+xml" "$ROOT/live-build/config/hooks/normal/0150-worksuite-icons.hook.chroot" \
   && ok "GTK apps (Celluloid) get Adwaita's SVG icons: theme, loader and a build check" || bad "GTK apps (Celluloid) get Adwaita's SVG icons: theme, loader and a build check"
 
+# ---- worksuite-toasts: the same gtk4-layer-shell preload, and 69 without it (the shell keeps its in-window toast) ----
+: > "$LOG"
+WORKSUITE_LAYER_SHELL_LIB="$T/libgtk4-layer-shell.so.0" WORKSUITE_TOASTS_DIR="$T/oskdir" sh "$BIN/worksuite-toasts"
+check "worksuite-toasts preloads gtk4-layer-shell" "$(cat "$LOG")" "python3 -E -s -m worksuite_toasts LD_PRELOAD=$T/libgtk4-layer-shell.so.0"
+WORKSUITE_LAYER_SHELL_LIB="$T/missing.so.0" sh "$BIN/worksuite-toasts"; check "worksuite-toasts without layer-shell exits 69" "$?" 69
+grep -q 'LS.Layer.OVERLAY' "$ROOT/services/session/toasts/worksuite_toasts/ui.py" && grep -q '^services/session/bin/worksuite-toasts ' "$ROOT/packaging/debian/worksuite-session.install" \
+  && ok "toasts: overlay layer, installed" || bad "toasts: overlay layer, installed"
+
 echo "1..$n"
 exit $fail

@@ -102,6 +102,7 @@ jobs:
       - run: python3 -m unittest discover -s tests/hw
       - run: cd services/session/greeter && python3 -m unittest discover -s tests -t .
       - run: cd services/session/kiosk && python3 -m unittest discover -s tests -t .
+      - run: cd services/session/toasts && python3 -m unittest discover -s tests -t .
       - run: cd services/session/signin && python3 -m unittest discover -s tests -t .
 
   portals:

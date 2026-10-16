@@ -24,6 +24,8 @@ services/session/bin/worksuite-workspace-event usr/lib/worksuite/
 services/session/bin/worksuite-gestures usr/lib/worksuite/
 services/session/bin/worksuite-osk usr/lib/worksuite/
 services/session/osk/worksuite_osk usr/lib/worksuite/osk/
+services/session/bin/worksuite-toasts usr/lib/worksuite/
+services/session/toasts/worksuite_toasts usr/lib/worksuite/toasts/
 services/session/gestures/worksuite_gestures usr/lib/worksuite/gestures/
 services/session/xdg-desktop-portal-wlr/config etc/xdg/xdg-desktop-portal-wlr/
 services/session/greeter/worksuite_greeter usr/lib/worksuite/greeter/

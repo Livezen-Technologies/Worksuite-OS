@@ -1,0 +1,17 @@
+#!/bin/sh
+# WorkSuite toasts (services/session/toasts): notification pop-ups on a layer-shell overlay surface, over every app.
+# Started by the shell (shell/electron/toastHost.ts) with pipes on stdin/stdout. Exits 69 without GTK 4 layer-shell;
+# the shell then keeps showing toasts in its own window.
+# gtk4-layer-shell must load before libwayland-client: from Python that needs LD_PRELOAD (see worksuite-osk).
+lib=${WORKSUITE_LAYER_SHELL_LIB:-}
+if [ -z "$lib" ]; then
+    for d in /usr/lib/*-linux-gnu /usr/lib64 /usr/lib; do
+        [ -e "$d/libgtk4-layer-shell.so.0" ] && { lib="$d/libgtk4-layer-shell.so.0"; break; }
+    done
+fi
+if [ -z "$lib" ] || [ ! -e "$lib" ] || \
+   ! python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Gtk4LayerShell", "1.0"); from gi.repository import Gtk4LayerShell' 2>/dev/null; then
+    exit 69
+fi
+export LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}"
+cd "${WORKSUITE_TOASTS_DIR:-/usr/lib/worksuite/toasts}" && exec python3 -E -s -m worksuite_toasts "$@"

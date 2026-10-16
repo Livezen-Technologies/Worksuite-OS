@@ -112,6 +112,16 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const shortDate = now.toLocaleDateString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t) }, [toast, setToast])
+  // Toasts go to worksuite-toasts when it runs: a layer-shell surface over the apps (this window is below them). If it
+  // turns out not to run, the toast stays here and later ones are drawn here too.
+  const [externalToasts, setExternalToasts] = useState(false)
+  useEffect(() => { void os.toastsAvailable?.().then((v) => setExternalToasts(v === true)).catch(() => {}) }, [])
+  useEffect(() => {
+    if (!toast || dnd || trayOpen || !externalToasts || !os.toastShow) return
+    const key = toast.id.replace(/[^A-Za-z0-9._:-]/g, '_').slice(0, 64) || 'notice'
+    void os.toastShow({ key, title: toast.title, body: toast.body, tone: toast.tone, icon: toast.icon ?? null })
+      .then((ok) => { if (ok) setToast(null); else setExternalToasts(false) }).catch(() => setExternalToasts(false))
+  }, [toast, dnd, trayOpen, externalToasts, setToast])
 
   // Management chip from the device agent's status; re-read each minute so enrollment, wipe or revocation show up.
   const [device, setDevice] = useState<DeviceInfo | null>(null)
@@ -292,7 +302,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       {/* Only with a window open: an empty work area would cover the wallpaper (its widgets and right-click menu). */}
       {Children.toArray(children).length > 0 && <div className="absolute inset-x-0 top-0 bottom-[52px] z-10 px-6 pt-5 pb-5">{children}</div>}
 
-      {toast && !dnd && !trayOpen && (
+      {toast && !dnd && !trayOpen && !externalToasts && (
         <div role="status" className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] font-bold text-white" style={{ background: TONE_BG[toast.tone] }}><BIcon name={toast.tone === 'ok' ? 'check' : 'alert'} /></span>
           <div className="flex flex-1 flex-col gap-[3px]">
