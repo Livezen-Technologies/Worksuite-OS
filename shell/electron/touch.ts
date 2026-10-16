@@ -95,8 +95,16 @@ export interface TouchSettings {
   rotationLock: boolean
   osk: OskMode
   oskSize: 'small' | 'medium' | 'large'
+  /** device name → libinput calibration matrix (6 numbers, row-major a b c d e f), set by Touch calibration. */
+  calibration: Record<string, number[]>
 }
-export const DEFAULT_TOUCH: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium' }
+export const DEFAULT_TOUCH: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium', calibration: {} }
+
+/** A usable calibration matrix: six finite numbers, scale terms within ±4 and offsets within ±2 (a sane touchscreen). */
+export function validMatrix(m: unknown): m is number[] {
+  return Array.isArray(m) && m.length === 6 && m.every((x) => typeof x === 'number' && Number.isFinite(x))
+    && [0, 1, 3, 4].every((i) => Math.abs(m[i]) <= 4) && [2, 5].every((i) => Math.abs(m[i]) <= 2)
+}
 const SAFE_NAME = /^[\w .,:()/+-]{1,80}$/
 
 export function normalizeTouch(v: unknown): TouchSettings {
@@ -105,9 +113,14 @@ export function normalizeTouch(v: unknown): TouchSettings {
   if (o.mapToOutput && typeof o.mapToOutput === 'object') {
     for (const [k, out] of Object.entries(o.mapToOutput as Record<string, unknown>)) if (SAFE_NAME.test(k) && typeof out === 'string' && /^[\w.-]{0,32}$/.test(out)) map[k] = out
   }
+  const cal: Record<string, number[]> = {}
+  if (o.calibration && typeof o.calibration === 'object') {
+    for (const [k, m] of Object.entries(o.calibration as Record<string, unknown>)) if (SAFE_NAME.test(k) && validMatrix(m)) cal[k] = m.map((x) => Math.round(x * 1e6) / 1e6)
+  }
   return {
     touchEnabled: o.touchEnabled !== false,
     mapToOutput: map,
+    calibration: cal,
     tabletMode: o.tabletMode === 'on' || o.tabletMode === 'off' ? o.tabletMode : 'auto',
     rotationLock: o.rotationLock === true,
     osk: o.osk === 'off' || o.osk === 'always' ? o.osk : 'touch',
@@ -143,7 +156,11 @@ export function labwcTouchBlock(s: TouchSettings, screens: string[]): string {
   const devs = screens.filter((n) => SAFE_NAME.test(n))
   if (devs.length) {
     lines.push('  <libinput>')
-    for (const name of devs) lines.push(`    <device category="${xmlAttr(name)}"><sendEventsMode>${s.touchEnabled ? 'yes' : 'no'}</sendEventsMode></device>`)
+    for (const name of devs) {
+      const m = s.calibration[name]
+      const cal = m && validMatrix(m) ? `<calibrationMatrix>${m.join(' ')}</calibrationMatrix>` : ''
+      lines.push(`    <device category="${xmlAttr(name)}"><sendEventsMode>${s.touchEnabled ? 'yes' : 'no'}</sendEventsMode>${cal}</device>`)
+    }
     lines.push('  </libinput>')
   }
   return [BEGIN, ...lines, END].join('\n')
@@ -319,6 +336,7 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
       let next: TouchSettings
       try { next = normalizeTouch({ ...st.settings, ...JSON.parse(json) }) } catch { return { available: false, reason: 'bad_settings' } }
       const labwc = next.touchEnabled !== st.settings.touchEnabled || JSON.stringify(next.mapToOutput) !== JSON.stringify(st.settings.mapToOutput)
+        || JSON.stringify(next.calibration) !== JSON.stringify(st.settings.calibration)
       const restartOsk = next.oskSize !== st.settings.oskSize
       st.settings = next
       try { saveTouch(file, next) } catch { return { available: false, reason: 'save_failed' } }

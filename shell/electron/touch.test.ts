@@ -95,6 +95,12 @@ describe('Labwc config writer', () => {
     expect(twice).toContain('<sendEventsMode>yes</sendEventsMode>')
     expect(twice).not.toContain('mapToOutput')
   })
+  it('writes a calibration matrix and drops unusable ones', () => {
+    const m = [1.02, 0, -0.01, 0, 0.98, 0.015]
+    expect(normalizeTouch({ calibration: { 'ELAN Touch': m, bad: [1, 2, 3], huge: [9, 0, 0, 0, 1, 0], 'x"<': m } }).calibration).toEqual({ 'ELAN Touch': m })
+    expect(labwcTouchBlock({ ...DEFAULT_TOUCH, calibration: { 'ELAN Touch': m } }, ['ELAN Touch']))
+      .toContain('<device category="ELAN Touch"><sendEventsMode>yes</sendEventsMode><calibrationMatrix>1.02 0 -0.01 0 0.98 0.015</calibrationMatrix></device>')
+  })
   it('skips unsafe device names', () => {
     expect(labwcTouchBlock(DEFAULT_TOUCH, ['evil"/><x'])).not.toContain('evil')
   })

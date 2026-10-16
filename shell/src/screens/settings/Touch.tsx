@@ -6,6 +6,7 @@ import { Empty } from '../Hardware'
 import { hasTabletSwitch, pens, touchApi, touchScreens, useTouch, type OskMode, type OskSize, type PenEvent, type TabletMode, type TouchSettings } from '../../lib/touch'
 import { formatNumber, t, type MessageKey } from '../../i18n'
 import { BigSwitch, H1, Note, Unavail } from './ui'
+import { TouchCalibrate } from './TouchCalibrate'
 
 const HAND = 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15'
 const PEN = 'M15 4l5 5L9 20H4v-5zM13 6l5 5'
@@ -67,18 +68,34 @@ function PenTest() {
   )
 }
 
+const ghostBtn = 'min-h-9 cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-4 text-[13px] hover:bg-white/[0.06]'
+
 export function TouchPanel() {
   const { state, reason, set } = useTouch()
+  const [calibrating, setCalibrating] = useState<string | null>(null)
   if (reason) return <><H1>{t('settings.nav.Touchscreen & pen')}</H1><Unavail what={t('touch.devices')} reason={reason} /></>
   if (!state) return <><H1>{t('settings.nav.Touchscreen & pen')}</H1><Empty title={t('touch.reading')} /></>
   const screens = touchScreens(state)
   const pen = pens(state)
   const s = state.settings
   const tabletOpts: { id: TabletMode; label: string }[] = [{ id: 'auto', label: t('touch.mode.auto') }, { id: 'on', label: t('common.on') }, { id: 'off', label: t('common.off') }]
+  const cal = s.calibration ?? {}
   return <>
-    <H1>{t('settings.nav.Touchscreen & pen')}</H1>
+    <H1 action={!!screens.length && s.touchEnabled ? <button type="button" onClick={() => setCalibrating(screens[0].name)} className={ghostBtn}>{t('touch.cal.open')}</button> : undefined}>{t('settings.nav.Touchscreen & pen')}</H1>
+    {calibrating && <TouchCalibrate device={calibrating} current={cal[calibrating]} onClose={() => setCalibrating(null)}
+      onSave={(m) => { void set({ calibration: { ...cal, [calibrating]: m } }); setCalibrating(null) }} />}
     {!screens.length ? <Hero d={HAND} tint="rgba(127,178,255,0.18)" title={t('touch.none')} sub={t('touch.noneSub')} /> : <>
-      <Hero d={HAND} tint="#0E8FA8" title={screens.map((d) => d.name).join(', ')} sub={s.touchEnabled ? t('touch.on') : t('touch.offSub')} />
+      <div className={`${card} flex items-center gap-4 px-5 py-[18px]`}>
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[rgba(14,143,168,0.25)]"><Svg d={HAND} size={24} stroke="#18D4F0" /></span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex flex-wrap items-center gap-2 text-base font-semibold">{screens.map((d) => d.name).join(', ')}
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${s.touchEnabled ? 'bg-[rgba(95,211,154,0.16)] text-[#5FD39A]' : 'bg-white/10 text-[#C9D6EE]'}`}>{s.touchEnabled ? t('touch.working') : t('touch.offBadge')}</span>
+            {screens.some((d) => cal[d.name]) && <span className="rounded-full bg-[rgba(31,107,255,0.2)] px-2 py-0.5 text-[11px] font-medium text-[#7FB2FF]">{t('touch.cal.saved')}</span>}
+          </span>
+          <span className="text-[13px] text-[#8FA3C8]">{s.touchEnabled ? t('touch.on') : t('touch.offSub')}</span>
+        </span>
+        {screens.some((d) => cal[d.name]) && <button type="button" onClick={() => { const next = { ...cal }; screens.forEach((d) => { delete next[d.name] }); void set({ calibration: next }) }} className={ghostBtn}>{t('touch.cal.reset')}</button>}
+      </div>
       <section aria-label={t('touch.screen')} className="flex flex-col gap-2">
         <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('touch.screen')}</h2>
         <div className={card}>
