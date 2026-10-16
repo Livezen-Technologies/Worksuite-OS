@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { taskViewHost } from './panelHost'
+import { shellLift, taskViewHost } from './panelHost'
 
 const ok = { ok: true as const, value: true as const }
 
@@ -23,7 +23,7 @@ describe('Task View lifts the always-on-bottom shell over the apps', () => {
     expect(c.setShellRaised).toHaveBeenLastCalledWith('sh', true)
     tv.state(true)
     tv.state(false)
-    await Promise.resolve()
+    await new Promise((r) => setTimeout(r, 0))
     expect(c.setShellRaised).toHaveBeenLastCalledWith('sh', false)
     expect(c.activate).not.toHaveBeenCalled()
   })
@@ -46,6 +46,47 @@ describe('Task View lifts the always-on-bottom shell over the apps', () => {
     await tv.open()
     expect(c.activate).toHaveBeenCalledWith('sh')
     tv.state(false)
+    await new Promise((r) => setTimeout(r, 0))
     expect(c.setShellRaised).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the shell is lifted over the apps only while something of its own is open', () => {
+  it('lifts once for several reasons and lowers when the last one closes', async () => {
+    const c = client(), lift = shellLift(c as never)
+    await lift.set('overlay', true)
+    await lift.set('taskview', true)
+    expect(c.setShellRaised.mock.calls).toEqual([['sh', true]])
+    await lift.set('overlay', false)
+    expect(lift.lifted).toBe('sh')
+    await lift.set('taskview', false)
+    expect(c.setShellRaised.mock.calls).toEqual([['sh', true], ['sh', false]])
+    expect(lift.lifted).toBe('')
+  })
+
+  it('quick open/close while a request is running ends in the last state', async () => {
+    let finish: () => void = () => undefined
+    const c = client(async (_h, on) => { if (on) await new Promise<void>((r) => { finish = r }); return ok })
+    const lift = shellLift(c as never)
+    const a = lift.set('overlay', true)
+    const b = lift.set('overlay', false)
+    const d = lift.set('overlay', true)
+    const e = lift.set('overlay', false)
+    finish()
+    await Promise.all([a, b, d, e])
+    expect(c.setShellRaised.mock.calls.at(-1)).toEqual(['sh', false])
+    expect(lift.lifted).toBe('')
+  })
+
+  it('the overlay and Task View share one lift', async () => {
+    const c = client(), lift = shellLift(c as never), tv = taskViewHost(c as never, vi.fn(), lift)
+    await lift.set('overlay', true)
+    await tv.open()
+    tv.state(true)
+    tv.state(false)
+    await lift.set('overlay', true)
+    expect(c.setShellRaised.mock.calls).toEqual([['sh', true]])
+    await lift.set('overlay', false)
+    expect(c.setShellRaised.mock.calls).toEqual([['sh', true], ['sh', false]])
   })
 })

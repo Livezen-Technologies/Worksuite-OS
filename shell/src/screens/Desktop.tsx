@@ -219,6 +219,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     return () => { live = false }
   }, [launcher])
   const [recent, setRecent] = useState<SearchHit[]>([])
+  // The shell's window sits below every app (always on bottom, Labwc rc.xml). While something of its own is open over
+  // them (launcher, a shell window such as Settings or Files, quick settings, notifications, power menu, the sign-out
+  // overlay…) it is lifted over the apps, and put back below them once all of it is closed (electron/panelHost.ts).
+  const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
+    || flyout || widgetPicker || Children.toArray(children).length > 0
+  useEffect(() => { void panel.shellOnTop?.(shellOnTop) }, [shellOnTop])
   useEffect(() => {
     if (!launcher) return
     let live = true

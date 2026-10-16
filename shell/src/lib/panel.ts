@@ -48,6 +48,8 @@ export interface PanelApi {
   /** Ask the main process to open Task View (taskbar button). */
   openTaskView?(): Promise<unknown>
   taskViewState?(open: boolean): Promise<unknown>
+  /** Something of the shell's own is open over the apps (launcher, Settings…): lift its window over them while it is. */
+  shellOnTop?(on: boolean): Promise<unknown>
   onTaskView?(cb: (o: TaskViewOpen) => void): () => void
 }
 
@@ -182,6 +184,7 @@ const stub: PanelApi = {
   async setSwitcherAllDesktops(on) { return demo((w) => { w.switcherAll = on }) },
   async openTaskView() { taskViewListeners.forEach((l) => l({ capture: null, previous: '' })); return true },
   async taskViewState() { return true },
+  async shellOnTop() { return true },
   onTaskView(cb) { taskViewListeners.add(cb); return () => { taskViewListeners.delete(cb) } },
 }
 const wsListeners = new Set<(w: Workspaces) => void>()

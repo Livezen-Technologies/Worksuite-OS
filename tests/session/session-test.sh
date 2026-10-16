@@ -338,6 +338,8 @@ check "worksuite-osk preloads gtk4-layer-shell" "$(cat "$LOG")" "python3 -E -s -
 : > "$LOG"
 WORKSUITE_LAYER_SHELL_LIB="$T/missing.so.0" WORKSUITE_OSK_DIR="$T/oskdir" sh "$BIN/worksuite-osk"; rc=$?
 check "worksuite-osk without the gtk4-layer-shell library hands over to wvkbd (69)" "$rc:$(cat "$LOG")" "69:"
+grep -q 'LS.set_layer(self, LS.Layer.OVERLAY)$' "$ROOT/services/session/osk/worksuite_osk/ui.py" && ! grep -q 'Layer.TOP' "$ROOT/services/session/osk/worksuite_osk/ui.py" \
+  && ok "worksuite-osk is on the overlay layer (Labwc hides the top layer under a full-screen window)" || bad "worksuite-osk is on the overlay layer (Labwc hides the top layer under a full-screen window)"
 grep -q 'libgtk4-layer-shell0' "$ROOT/packaging/debian/control" && grep -q '^libgtk4-layer-shell0$' "$ROOT/live-build/config/package-lists/worksuite.list.chroot" \
   && ok "the gtk4-layer-shell library is installed, not only its typelib" || bad "the gtk4-layer-shell library is installed, not only its typelib"
 

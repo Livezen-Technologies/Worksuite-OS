@@ -195,6 +195,7 @@ contextBridge.exposeInMainWorld('worksuitePanel', {
   setSwitcherAllDesktops: (on: boolean) => ipcRenderer.invoke('ws:panelSwitcherAll', on ? '1' : '0'),
   openTaskView: () => ipcRenderer.invoke('ws:panelTaskView', 'open'),
   taskViewState: (open: boolean) => ipcRenderer.invoke('ws:panelTaskView', open ? '1' : '0'),
+  shellOnTop: (on: boolean) => ipcRenderer.invoke('ws:panelShellOnTop', on ? '1' : '0'),
   onTaskView: on('ws:taskView'),
 })
 

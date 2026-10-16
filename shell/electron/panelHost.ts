@@ -23,7 +23,10 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
   }
   const c = client
   const none = { ok: false, error: 'bridge_unavailable' }
-  const tv = taskViewHost(c, send)
+  const lift = shellLift(c)
+  const tv = taskViewHost(c, send, lift)
+  // Anything else of the shell's own open over the apps (launcher, Settings, Files, power menu…): see shellLift.
+  handle('ws:panelShellOnTop', (on) => { void lift.set('overlay', on === '1'); return true })
   handle('ws:panelTaskView', (open) => {
     if (open === 'open') void tv.open(true)
     else tv.state(open === '1')
@@ -54,21 +57,54 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
   return client
 }
 
-type TaskViewClient = Pick<PanelClient, 'windows' | 'workspaces' | 'captureOutput' | 'shellWindow' | 'setShellRaised' | 'activate'>
+type LiftClient = Pick<PanelClient, 'shellWindow' | 'setShellRaised' | 'activate'>
+type TaskViewClient = LiftClient & Pick<PanelClient, 'windows' | 'workspaces' | 'captureOutput'>
+
+/** The shell's full-screen window is always on bottom (Labwc rc.xml), below every app. While something of the shell's
+ *  own is open over the apps (Task View, the launcher, Settings, Files, the power menu…) it is lifted over them, on
+ *  every desktop, and put back down once nothing is open, so it can never stay over the apps. Reasons are counted
+ *  separately; requests are applied one at a time, the last state wins. */
+export function shellLift(c: LiftClient | null) {
+  const reasons = new Set<string>()
+  let lifted = ''          // the handle lifted now
+  let busy: Promise<void> | null = null
+  async function apply() {
+    for (;;) {
+      const want = reasons.size > 0
+      if (want === !!lifted || !c) return
+      if (want) {
+        const own = c.shellWindow()
+        if (!own) return
+        const r = await c.setShellRaised(own.handle, true)
+        if (!r.ok) { await c.activate(own.handle); return }   // older bridge: at least focus it
+        lifted = own.handle
+      } else {
+        const h = lifted
+        lifted = ''
+        await c.setShellRaised(h, false)
+      }
+    }
+  }
+  function kick(): Promise<void> {
+    if (!busy) busy = apply().finally(() => { busy = null })
+    else busy = busy.then(() => apply())
+    return busy
+  }
+  return {
+    set(reason: string, on: boolean): Promise<void> {
+      if (on) reasons.add(reason); else reasons.delete(reason)
+      return kick()
+    },
+    get lifted() { return lifted },
+  }
+}
 
 /** Task View (Super+Tab, the taskbar button, three fingers up): the output is captured first, while the apps are still
- *  on screen, then the shell's window is lifted over them. The shell's windows are always on bottom (Labwc rc.xml), so
- *  activating one alone would leave it under the apps; closing Task View puts it back down, also when it closes before
- *  the lift is done. The capture is a data: URL in memory only. */
-export function taskViewHost(c: TaskViewClient | null, send: (channel: string, payload: unknown) => void) {
+ *  on screen, then the shell's window is lifted over them; closing Task View puts it back down, also when it closes
+ *  before the lift is done. The capture is a data: URL in memory only. */
+export function taskViewHost(c: TaskViewClient | null, send: (channel: string, payload: unknown) => void, lift = shellLift(c)) {
   let isOpen = false
-  let lifted = ''
-  let opened = 0, closed = 0
-  async function lower() {
-    const h = lifted
-    lifted = ''
-    if (h && c) await c.setShellRaised(h, false)
-  }
+  let opened = 0, closed = 0   // a close may come before the lift was asked for
   return {
     async open(fromShell = false) {
       if (isOpen) { send('ws:launcher', 'taskview'); return }
@@ -76,17 +112,13 @@ export function taskViewHost(c: TaskViewClient | null, send: (channel: string, p
       const previous = c?.windows.find((w) => w.flags & ACTIVATED_FLAG && w.appId !== 'worksuite-shell')?.handle ?? ''
       const capture = c && !fromShell && c.workspaces.capture ? await c.captureOutput('', 480) : null
       send('ws:taskView', { capture, previous })
-      const own = c?.shellWindow()
-      if (!own || !c) return
-      const r = await c.setShellRaised(own.handle, true)
-      if (!r.ok) { await c.activate(own.handle); return }
-      lifted = own.handle
-      if (closed >= seq) await lower()
+      if (closed < seq) await lift.set('taskview', true)
     },
     /** The renderer's Task View mounted (true) or closed (false). */
     state(open: boolean) {
       isOpen = open
-      if (!open) { closed = opened; void lower() }
+      if (!open) closed = opened
+      void lift.set('taskview', open)
     },
   }
 }

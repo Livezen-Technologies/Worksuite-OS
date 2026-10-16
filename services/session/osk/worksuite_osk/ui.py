@@ -1,7 +1,7 @@
 """GTK 4 window on a wlr-layer-shell surface (gtk4-layer-shell), drawn from engine.Keyboard (board OSKeyboard).
 
-Docked: bottom edge, full width, with an exclusive zone so the app is not covered. Split: the same with the two halves
-at the sides. Floating: 60 % wide on the overlay layer, moved by dragging the handle (layer-shell margins).
+Docked: bottom edge, full width, on the overlay layer with an exclusive zone so the app is not covered. Split: the
+same with the two halves at the sides. Floating: 60 % wide, moved by dragging the handle (layer-shell margins).
 Top bar: emoji, clipboard, suggestions, layout (full/split/floating), hide.
 """
 from __future__ import annotations
@@ -51,7 +51,9 @@ class OskWindow(Gtk.ApplicationWindow):
 
     def place(self) -> None:
         floating = self.kb.mode == "floating"
-        LS.set_layer(self, LS.Layer.OVERLAY if floating else LS.Layer.TOP)
+        # Overlay, docked too: Labwc hides the top layer while a full-screen window is on top, and the shell's window
+        # is one whenever it is lifted over the apps (launcher, Settings…): a top-layer keyboard vanished then.
+        LS.set_layer(self, LS.Layer.OVERLAY)
         for edge in (LS.Edge.LEFT, LS.Edge.RIGHT):
             LS.set_anchor(self, edge, not floating)
         LS.set_anchor(self, LS.Edge.BOTTOM, True)
