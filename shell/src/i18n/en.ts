@@ -1626,6 +1626,27 @@ const en = {
   'polkit.cancel': 'Cancel',
   'polkit.authenticate': 'Authenticate',
   'polkit.checking': 'Checking…',
+  // Kiosk mode (WSOS-AUTH-002): exit prompt and status screen
+  'kiosk.exitTitle': "Leave kiosk mode",
+  'kiosk.exitBody': "Enter the exit PIN, or sign in as an administrator. The device returns to the sign-in screen.",
+  'kiosk.exitBodyAdmin': "An administrator must sign in to leave kiosk mode. The device returns to the sign-in screen.",
+  'kiosk.pinLabel': "Exit PIN",
+  'kiosk.keypad': "PIN keypad",
+  'kiosk.deleteDigit': "Delete digit",
+  'kiosk.leave': "Leave kiosk mode",
+  'kiosk.useAdmin': "Use an administrator password",
+  'kiosk.cancel': "Cancel",
+  'kiosk.checking': "Checking…",
+  'kiosk.wrongPin': "That PIN is not right. Try again.",
+  'kiosk.lockedOut': "Too many wrong PINs. Try again in 15 minutes, or use an administrator password.",
+  'kiosk.pinDisabled': "The exit PIN is turned off for this device. Use an administrator password.",
+  'kiosk.cancelled': "Administrator sign-in was cancelled.",
+  'kiosk.failed': "Kiosk mode could not be left. Try again, or ask your IT team.",
+  'kiosk.leaving': "Returning to the sign-in screen…",
+  'kiosk.autoClose': "Closes by itself after a minute without input.",
+  'kiosk.starting': "Starting…",
+  'kiosk.unavailableTitle': "This kiosk will be back shortly",
+  'kiosk.unavailableBody': "The app could not be reached. It is tried again automatically.",
 } as const
 
 export type MessageKey = keyof typeof en

@@ -1600,6 +1600,27 @@ const si: Partial<Record<MessageKey, string>> = {
   'polkit.cancel': 'අවලංගු කරන්න',
   'polkit.authenticate': 'සත්\u200dයාපනය කරන්න',
   'polkit.checking': 'පරීක්ෂා කරමින්…',
+  // Kiosk mode (WSOS-AUTH-002): exit prompt and status screen
+  'kiosk.exitTitle': "කියෝස්ක් ප්‍රකාරයෙන් ඉවත් වන්න",
+  'kiosk.exitBody': "පිටවීමේ PIN අංකය ඇතුළත් කරන්න, නැතහොත් පරිපාලකයෙකු ලෙස පුරනය වන්න. උපාංගය පිවිසුම් තිරයට ආපසු යයි.",
+  'kiosk.exitBodyAdmin': "කියෝස්ක් ප්‍රකාරයෙන් ඉවත් වීමට පරිපාලකයෙකු පුරනය විය යුතුය. උපාංගය පිවිසුම් තිරයට ආපසු යයි.",
+  'kiosk.pinLabel': "පිටවීමේ PIN",
+  'kiosk.keypad': "PIN යතුරු පුවරුව",
+  'kiosk.deleteDigit': "ඉලක්කම මකන්න",
+  'kiosk.leave': "කියෝස්ක් ප්‍රකාරයෙන් ඉවත් වන්න",
+  'kiosk.useAdmin': "පරිපාලක මුරපදයක් භාවිත කරන්න",
+  'kiosk.cancel': "අවලංගු කරන්න",
+  'kiosk.checking': "පරීක්ෂා කරමින්…",
+  'kiosk.wrongPin': "එම PIN අංකය නිවැරදි නැත. නැවත උත්සාහ කරන්න.",
+  'kiosk.lockedOut': "වැරදි PIN බොහෝ ගණනකි. මිනිත්තු 15කින් නැවත උත්සාහ කරන්න, නැතහොත් පරිපාලක මුරපදයක් භාවිත කරන්න.",
+  'kiosk.pinDisabled': "මෙම උපාංගයට පිටවීමේ PIN අක්‍රියයි. පරිපාලක මුරපදයක් භාවිත කරන්න.",
+  'kiosk.cancelled': "පරිපාලක පුරනය අවලංගු කරන ලදී.",
+  'kiosk.failed': "කියෝස්ක් ප්‍රකාරයෙන් ඉවත් විය නොහැකි විය. නැවත උත්සාහ කරන්න, නැතහොත් ඔබගේ IT කණ්ඩායමෙන් විමසන්න.",
+  'kiosk.leaving': "පිවිසුම් තිරයට ආපසු යමින්…",
+  'kiosk.autoClose': "ආදානයක් නොමැතිව මිනිත්තුවකට පසු ස්වයංක්‍රීයව වැසේ.",
+  'kiosk.starting': "ආරම්භ කරමින්…",
+  'kiosk.unavailableTitle': "මෙම කියෝස්කය ඉක්මනින් නැවත ලැබේ",
+  'kiosk.unavailableBody': "යෙදුමට ළඟා විය නොහැකි විය. එය ස්වයංක්‍රීයව නැවත උත්සාහ කෙරේ.",
 }
 
 export default si

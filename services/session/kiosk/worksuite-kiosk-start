@@ -1,0 +1,36 @@
+#!/bin/sh
+# Runs inside the kiosk Labwc (worksuite-kiosk-session): helpers, then the kiosk app, restarted whenever it exits
+# (a crash), with a back-off when it keeps failing. KIOSK_IDLE_RESET_S and KIOSK_OSK come from the session.
+set -u
+RUN=${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk
+mkdir -p -m 0700 "$RUN"
+LIB=${WORKSUITE_LIB:-/usr/lib/worksuite}
+APP=${WORKSUITE_KIOSK_APP:-/usr/lib/worksuite/shell/electron/electron --ozone-platform=wayland /usr/lib/worksuite/shell/dist-electron/kiosk.cjs}
+
+# Polkit agent: the administrator-password way out (worksuite-kiosk-exit --admin) asks through it.
+[ -x "$LIB/worksuite-polkit-agent" ] && "$LIB/worksuite-polkit-agent" &
+
+# On-screen keyboard. Hook point: the touch/OSK work installs worksuite-osk; until then wvkbd if it is installed.
+if [ "${KIOSK_OSK:-0}" = 1 ]; then
+    if [ -x "$LIB/worksuite-osk" ]; then "$LIB/worksuite-osk" --kiosk &
+    elif command -v wvkbd-mobintl >/dev/null 2>&1; then wvkbd-mobintl --hidden &
+    fi
+fi
+
+# Idle reset: after the policy's idle time the app is reset to a clean state (worksuite-kiosk-ctl reset).
+if [ "${KIOSK_IDLE_RESET_S:-0}" -gt 0 ] 2>/dev/null; then
+    swayidle -w timeout "$KIOSK_IDLE_RESET_S" "$LIB/worksuite-kiosk-ctl reset" &
+fi
+
+fails=0
+while [ ! -e "$RUN/exiting" ]; do
+    started=$(date +%s)
+    # shellcheck disable=SC2086
+    $APP
+    rc=$?
+    [ -e "$RUN/exiting" ] && break
+    logger -t worksuite-kiosk -- "kiosk app exited ($rc); restarting" 2>/dev/null || true
+    if [ $(( $(date +%s) - started )) -lt 30 ]; then fails=$((fails + 1)); else fails=0; fi
+    if [ "$fails" -ge 5 ]; then sleep "${WORKSUITE_KIOSK_BACKOFF:-30}"; else sleep "${WORKSUITE_KIOSK_RESTART_DELAY:-1}"; fi
+    [ -n "${WORKSUITE_KIOSK_MAX_RESTARTS:-}" ] && { WORKSUITE_KIOSK_MAX_RESTARTS=$((WORKSUITE_KIOSK_MAX_RESTARTS - 1)); [ "$WORKSUITE_KIOSK_MAX_RESTARTS" -le 0 ] && break; }
+done

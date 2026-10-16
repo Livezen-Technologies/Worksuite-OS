@@ -775,6 +775,26 @@ components:
         update_mirror: { type: string, description: 'WSOS-AUP-009 enterprise mirror (https) for manifests; WorkSuite signatures still required' }
         vpn_required: { type: boolean, description: 'WSOS-INT-001 the managed VPN connects at boot and reconnects (always-on) even if the VPN config does not ask for it' }
         user_vpn: { type: string, enum: [allow, block], description: 'WSOS-INT-001 block = Settings offers no VPN import and the agent removes every VPN profile except the managed one; absent = allow' }
+        kiosk:
+          type: object
+          description: 'WSOS-AUTH-002 / SRS §2.3 kiosk mode for the listed devices (services/server/src/kiosk.ts). The admin sends exit_pin once; the server stores and signs only exit_pin_verifier (scrypt), and the admin API returns exit_pin_set instead.'
+          required: [enabled]
+          properties:
+            enabled: { type: boolean }
+            user: { type: string, description: 'local kiosk account; not root or wsadmin' }
+            devices: { type: array, items: { type: string } }
+            app:
+              oneOf:
+                - { type: object, required: [type, url], properties: { type: { const: url }, url: { type: string, format: uri, description: https only } } }
+                - { type: object, required: [type, id], properties: { type: { const: module }, id: { type: string, enum: [home, mail, chat, calendar, tasks, files, crm, hr] } } }
+                - { type: object, required: [type, id], properties: { type: { const: desktop }, id: { type: string, description: '.desktop file id' } } }
+            allowed_urls: { type: array, maxItems: 100, items: { type: string, description: 'https://host[:port][/path-prefix], host may start with *.' } }
+            idle_reset_minutes: { type: integer, minimum: 0, maximum: 1440, description: '0 = never' }
+            show_on_screen_keyboard: { type: boolean }
+            allow_exit_pin: { type: boolean }
+            exit_pin: { type: string, writeOnly: true, pattern: '^\\d{6,12}$' }
+            exit_pin_set: { type: boolean, readOnly: true }
+            exit_pin_verifier: { type: string, description: 'in the signed device policy only' }
         signature: { type: string, description: '"<key_id>:<base64 Ed25519>" over the canonical JSON (sorted keys) of the policy without this field' }
 
     CatalogItem:

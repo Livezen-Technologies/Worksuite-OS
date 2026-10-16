@@ -150,6 +150,26 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
         writePublic(path, content);
         changed.add(path);
       }
+      // Kiosk exit PIN verifier: root-only (worksuite-kiosk-exit reads it as root).
+      for (const [path, content] of Object.entries(e.secret_files ?? {})) {
+        let now: string | null = null;
+        try { now = readFileSync(path, 'utf8'); } catch { /* absent */ }
+        if (content === null) { if (now !== null) rmSync(path, { force: true }); continue; }
+        if (now === content) continue;
+        writeFileSync(path + '.tmp', content, { mode: 0o600 });
+        renameSync(path + '.tmp', path);
+      }
+      // Kiosk account, greetd autologin, Ctrl+Alt+Del and logind VTs live outside the agent's sandbox: the root helper
+      // runs as its own transient unit (fixed argv; the user name was validated in kiosk.ts).
+      if (changed.has(ENFORCED_PATHS.sessionEnv)) {
+        const args = e.kiosk_user ? ['enable', e.kiosk_user] : ['disable'];
+        try {
+          await run('systemd-run', ['--quiet', '--wait', '--collect', '--unit=worksuite-kiosk-apply', '--', '/usr/lib/worksuite/worksuite-kiosk-apply', ...args]);
+        } catch (err) {
+          rmSync(ENFORCED_PATHS.sessionEnv, { force: true });   // rewritten (and the helper retried) at the next enforcement
+          throw err;
+        }
+      }
       if (changed.has(ENFORCED_PATHS.usbUdev) || changed.has(ENFORCED_PATHS.usbModprobe)) {
         await run('udevadm', ['control', '--reload']).catch(() => {});
         // Re-evaluate disks already plugged in: read-only is applied, ignored disks drop out of UDisks2.

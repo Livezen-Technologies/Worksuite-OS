@@ -34,7 +34,8 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
       // pkexec with a computed program would make it a general runner
       expect(s, f).not.toMatch(/['"`]pkexec['"`]\s*,\s*\[\s*[^'\s]/)
     }
-    expect(elevations).toEqual(['device.ts:/usr/bin/worksuite-device-agent'])
+    // kioskMain.ts: leaving kiosk mode (PIN or administrator password, polkit lk.worksuite.kiosk.exit-*).
+    expect(elevations).toEqual(['device.ts:/usr/bin/worksuite-device-agent', 'kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit'])
   })
 
   it('every IPC handler goes through the sender check', () => {
@@ -44,6 +45,11 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
         expect(raw.length, f).toBe(1)
         expect(s).toMatch(/ipcMain\.handle\(channel, \(e, \.\.\.args\) => \{\s*if \(!validSender\(e\)\) throw new Error\('Rejected IPC sender'\)/)
         expect(s).toMatch(/shellContents\.has\(e\.sender\) && e\.senderFrame\?\.url\.startsWith\('file:\/\/'\) === true/)
+      } else if (f === 'kioskMain.ts') {
+        // The kiosk app is its own main process: each handler checks the sender window itself.
+        for (const m of s.matchAll(/ipcMain\.(?:handle|on)\('[^']+', (?:async )?\(e[^)]*\) => \{?\s*(.{0,60})/g))
+          expect(m[1], f).toMatch(/^(if \(!?fromPrompt\(e\)|\(?fromPrompt\(e\)|if \(main && e\.sender === main\.webContents\))/)
+        expect(raw.length, f).toBe([...s.matchAll(/ipcMain\.(?:handle|on)\('[^']+', (?:async )?\(e/g)].length)
       } else expect(raw.length, f).toBe(0)
     }
   })

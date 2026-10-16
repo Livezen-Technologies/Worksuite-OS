@@ -45,6 +45,9 @@ case "${1:-}" in
     --ready)  ready ;;
     --logout) cleanup; [ -n "${LABWC_PID:-}" ] && kill -TERM "$LABWC_PID" ;;
     "")
+        # Kiosk mode (device policy, WSOS-AUTH-002): the kiosk account gets the kiosk session, never the full shell.
+        kiosk=$(sed -n 's/^KIOSK_USER=//p' "${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}" 2>/dev/null | head -n 1)
+        if [ -n "$kiosk" ] && [ "$kiosk" = "$(id -un)" ]; then exec "${WORKSUITE_KIOSK_SESSION:-/usr/lib/worksuite/worksuite-kiosk-session}"; fi
         # Clear stale variables from a previous session before starting.
         # shellcheck disable=SC2086
         systemctl --user unset-environment $VARS 2>/dev/null

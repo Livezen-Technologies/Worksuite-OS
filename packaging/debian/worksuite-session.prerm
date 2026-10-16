@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 if [ "$1" = remove ]; then
-  pam-auth-update --package --remove worksuite-faillock worksuite-faillock-preauth worksuite-offline-access
+  pam-auth-update --package --remove worksuite-faillock worksuite-faillock-preauth worksuite-offline-access worksuite-kiosk-signin
 fi
 #DEBHELPER#
 exit 0

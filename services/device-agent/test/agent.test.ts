@@ -316,3 +316,25 @@ test('WSOS-IDN-007: revocation stops management but never locks or blocks local 
   assert.ok((w.log as string[]).includes('offline unblock'));
   w.cleanup();
 });
+
+test('kiosk mode: only listed devices become kiosks; USB blocked; verifier kept off the public policy (WSOS-AUTH-002)', async () => {
+  const verifier = 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$' + 'B'.repeat(43) + '=';
+  const kiosk = { enabled: true, user: 'kiosk', devices: ['dev-1'], app: { type: 'url', url: 'https://visitors.example.com/' }, allow_exit_pin: true, exit_pin_verifier: verifier, idle_reset_minutes: 5 };
+  const w = await enrolled({ policy: signedPolicy({ version: 'p1', usb_storage: 'allow', kiosk }) });
+  const e = w.s.enforced.at(-1)!;
+  assert.equal(e.kiosk_user, 'kiosk');
+  assert.equal(e.usb_storage, 'block');
+  assert.equal(e.secret_files![ENFORCED_PATHS.exitVerifier], verifier + '\n');
+  assert.ok(!e.files[ENFORCED_PATHS.config]!.includes('scrypt'));
+  assert.ok(!JSON.stringify(w.s.published.policy).includes('scrypt'), 'world-readable policy has no verifier');
+  assert.equal((w.s.published.policy!.kiosk as { exit_pin_set: boolean }).exit_pin_set, true);
+  assert.equal(w.agent.status().policies?.kiosk, true);
+  // Another device of the same org is not a kiosk.
+  w.s.policy = signedPolicy({ version: 'p2', kiosk: { ...kiosk, devices: ['dev-2'] } });
+  await w.agent.refreshPolicy();
+  assert.equal(w.s.enforced.at(-1)!.kiosk_user, null);
+  assert.equal(w.s.enforced.at(-1)!.files[ENFORCED_PATHS.config], null);
+  assert.equal(w.s.enforced.at(-1)!.secret_files![ENFORCED_PATHS.exitVerifier], null);
+  assert.equal(w.s.enforced.at(-1)!.usb_storage, 'allow');
+  w.cleanup();
+});

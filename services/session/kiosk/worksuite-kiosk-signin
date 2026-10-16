@@ -1,0 +1,13 @@
+#!/bin/sh
+# PAM account check (pam_exec, /usr/share/pam-configs/worksuite-kiosk-signin): on a kiosk device the greeter signs in
+# only the kiosk account (autologin) and administrators (to leave kiosk mode or service the device). Other services
+# (sudo, su, cron, polkit) and devices without kiosk mode are not affected.
+ENV=${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}
+[ -r "$ENV" ] || exit 0
+case "${PAM_SERVICE:-}" in greetd|worksuite-greeter) ;; *) exit 0 ;; esac
+kiosk=$(sed -n 's/^KIOSK_USER=//p' "$ENV" | head -n 1)
+[ -n "$kiosk" ] || exit 0
+[ "${PAM_USER:-}" = "$kiosk" ] && exit 0
+id -nG -- "${PAM_USER:-}" 2>/dev/null | tr ' ' '\n' | grep -qx sudo && exit 0
+logger -p authpriv.notice -t worksuite-kiosk -- "greeter sign-in refused for ${PAM_USER:-?}: kiosk mode" 2>/dev/null || true
+exit 1

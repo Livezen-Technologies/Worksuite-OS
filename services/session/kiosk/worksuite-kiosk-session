@@ -1,0 +1,31 @@
+#!/bin/sh
+# The kiosk session (WSOS-AUTH-002). worksuite-session hands over to this when the signed-in account is the policy's
+# kiosk account (normally through greetd autologin). Labwc runs with the agent-written locked config
+# (/etc/worksuite/kiosk/labwc: one keybinding, the admin exit gesture) and starts only the kiosk app; there is no
+# WorkSuite shell, taskbar, Start menu, notifications, Settings, terminal or file manager.
+set -u
+ENV=${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}
+CONF=${WORKSUITE_KIOSK_LABWC:-/etc/worksuite/kiosk/labwc}
+START=${WORKSUITE_KIOSK_START:-/usr/lib/worksuite/worksuite-kiosk-start}
+
+# Only values of the expected shape are taken from the file.
+val() { sed -n "s/^$1=\\($2\\)\$/\\1/p" "$ENV" 2>/dev/null | head -n 1; }
+KIOSK_USER=$(val KIOSK_USER '[a-z_][a-z0-9_.@-]*')
+KIOSK_IDLE_RESET_S=$(val KIOSK_IDLE_RESET_S '[0-9]\{1,6\}'); KIOSK_IDLE_RESET_S=${KIOSK_IDLE_RESET_S:-0}
+KIOSK_OSK=$(val KIOSK_OSK '[01]'); KIOSK_OSK=${KIOSK_OSK:-0}
+if [ -z "$KIOSK_USER" ] || [ "$KIOSK_USER" != "$(id -un)" ]; then
+    echo "worksuite-kiosk-session: this account is not the device's kiosk account" >&2; exit 1
+fi
+
+# Every session starts clean: nothing the last visitor typed or opened survives (app data, caches, the web profile).
+wipe() {
+    case "${HOME:-/}" in /|"") return ;; esac
+    rm -rf "$HOME/.cache" "$HOME/.config" "$HOME/.local/share" "$HOME/.local/state" "${XDG_RUNTIME_DIR:-/nonexistent}/worksuite-kiosk" 2>/dev/null
+}
+wipe
+export KIOSK_IDLE_RESET_S KIOSK_OSK WORKSUITE_KIOSK=1 XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=WorkSuite-Kiosk:wlroots
+. "${WORKSUITE_WLR_ENV:-/usr/lib/worksuite/wlr-env}"
+labwc -C "$CONF" -s "$START"
+rc=$?
+wipe
+exit "$rc"

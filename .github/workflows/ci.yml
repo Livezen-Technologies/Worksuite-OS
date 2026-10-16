@@ -63,6 +63,8 @@ jobs:
       - run: tests/perf/gates.test.sh
       # Session scripts with stubbed programs: lock, idle, greeter, polkit agent fallback, screen-sharing consent.
       - run: sh tests/session/session-test.sh
+      # Kiosk mode session scripts (WSOS-AUTH-002).
+      - run: sh tests/session/kiosk-test.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -84,6 +86,7 @@ jobs:
       - run: python3 -m unittest discover -s installer/tests
       - run: python3 -m unittest discover -s tests/hw
       - run: cd services/session/greeter && python3 -m unittest discover -s tests -t .
+      - run: cd services/session/kiosk && python3 -m unittest discover -s tests -t .
 
   portals:
     # Portal acceptance (SRS §7.1): each portal interface WorkSuite uses, against xdg-desktop-portal with the -wlr and

@@ -54,7 +54,7 @@ button:disabled{opacity:.5;cursor:default}:focus-visible{outline:2px solid var(-
 .secret{font-family:ui-monospace,monospace;word-break:break-all;background:var(--chip);padding:10px;border-radius:8px}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;max-width:min(420px,90vw)}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:0}dt{color:var(--muted)}dd{margin:0}
-.grow{flex:1;margin:0}.modal-back{position:fixed;inset:0;background:rgba(2,6,16,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.grow{flex:1;margin:0}fieldset{border:1px solid var(--line);border-radius:12px;padding:12px 14px}legend{color:var(--muted);font-size:13px;padding:0 6px}.modal-back{position:fixed;inset:0;background:rgba(2,6,16,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
 .wipe-dlg{width:min(520px,100%);border-radius:20px;background:#0F2350;color:#E8EEFA;border:1px solid rgba(255,138,122,.5);box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}
 .wipe-dlg .muted{color:#8FA3C8}.wipe-head{padding:24px 24px 14px;display:flex;gap:16px}.wipe-head h2{margin:0 0 6px;font-size:20px}
 .wipe-head p{margin:0;font-size:14px;color:#C9D6EE;line-height:1.5}.wipe-head p.muted{color:#8FA3C8;margin-top:4px}
@@ -184,12 +184,14 @@ const views = {
         h('dt', {}, 'Inventory'), h('dd', {}, d.inventory ? d.inventory.software_count + ' packages, ' + ago(d.inventory.at) : 'not yet received'),
         h('dt', {}, 'Break-glass password'), h('dd', {}, d.break_glass_escrowed ? 'Escrowed' : 'Not escrowed'),
         h('dt', {}, 'Ownership'), h('dd', {}, d.ownership === 'personal' ? 'Personal' : 'Corporate'),
+        h('dt', {}, 'Kiosk'), h('dd', {}, d.kiosk ? h('span', { class: 'chip' }, 'Kiosk: ' + d.kiosk.user + ' · ' + kioskAppLabel(d.kiosk.app)) : 'No'),
         h('dt', {}, 'Status'), h('dd', {}, d.wiped_at ? h('span', { class: 'bad' }, 'Wiped ' + when(d.wiped_at) + ' (must enroll again)') : d.revoked ? h('span', { class: 'bad' }, 'Revoked') : 'Managed'))),
       d.revoked ? null : [h('h2', {}, 'Actions'), h('div', { class: 'row' },
         h('button', { onclick: () => send('RequestLock') }, 'Lock screen'), h('button', { onclick: () => send('RefreshPolicy') }, 'Refresh policy'),
         h('button', { onclick: () => send('ScheduleUpdate') }, 'Install updates'), h('button', { onclick: () => send('RebootDuringWindow') }, 'Restart in maintenance window'),
         h('button', { onclick: () => send('CollectApprovedDiagnostics', { bundle_profile: 'basic' }) }, 'Collect diagnostics'),
         h('button', { class: 'danger', onclick: () => { if (confirm('Revoke this device? It stops receiving policy and its credential stops working.')) act(() => api('POST', 'devices/' + id + '/revoke'), 'Device revoked.'); } }, 'Revoke')),
+      kioskDevice(id, d.kiosk),
       h('h2', {}, 'Erase'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
         h('button', { class: 'danger', onclick: () => wipeDialog({ request: true, hostname: d.hostname, label: 'Erase device', meta: 'Last seen ' + ago(d.last_seen) + ' · ' + (d.ownership === 'personal' ? 'personal' : 'corporate') + ' device.', note: 'Logged to the audit trail',
           submit: (c, x) => wipeSubmit(() => api('POST', 'wipes', { device_id: id, ...x, ...c }), (r) => r.waived_second_approver ? 'Erase sent. It runs the next time the device connects.' : 'Erase requested. Another administrator must approve it.') }) }, 'Erase device…'))],
@@ -239,7 +241,7 @@ const views = {
     const f = h('form', { class: 'card form', onsubmit: (e) => { e.preventDefault();
       const num = (n) => f[n].value === '' ? null : Number(f[n].value);
       const list = (n) => f[n].value.split(/[\s,]+/).filter(Boolean);
-      act(() => api('PUT', 'policy', { policy: { update_ring: f.update_ring.value || null, update_mode: f.update_mode.value || null, maintenance_window: f.maintenance_window.value || null,
+      act(() => api('PUT', 'policy', { policy: { ...p, update_ring: f.update_ring.value || null, update_mode: f.update_mode.value || null, maintenance_window: f.maintenance_window.value || null,
         usb_storage: f.usb_storage.value || null, bluetooth: f.bluetooth.value === '' ? null : f.bluetooth.value === 'true', lock_timeout_max_s: num('lock_timeout_max_s'),
         offline_access_days: num('offline_access_days'), offline_wipe_days: num('offline_wipe_days'),
         login_failures_max: num('login_failures_max'), login_lockout_s: num('login_lockout_s'), update_mirror: f.update_mirror.value || null,
@@ -260,7 +262,7 @@ const views = {
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),
       h('div', {}, h('button', { class: 'primary' }, 'Save and sign policy')));
     if (p.bluetooth !== undefined) f.bluetooth.value = String(p.bluetooth);
-    return [h('h1', {}, 'Policy'), h('p', { class: 'muted' }, 'Current version ' + version + '. Devices verify the signature before applying it.'), f];
+    return [h('h1', {}, 'Policy'), h('p', { class: 'muted' }, 'Current version ' + version + '. Devices verify the signature before applying it.'), f, kioskForm(p)];
   },
   async apps() {
     const { items } = await api('GET', 'catalog');
@@ -288,6 +290,56 @@ const views = {
       h('td', { class: 'muted' }, Object.entries(l.detail || {}).map(([k, v]) => k + ': ' + v).join(', ')))))];
   },
 };
+
+// ---- kiosk mode (WSOS-AUTH-002): set on the Policy page, turned on per device on the device page ----
+const KIOSK_MODULES = ['home', 'mail', 'chat', 'calendar', 'tasks', 'files', 'crm', 'hr'];
+function kioskAppLabel(a) { return !a ? '—' : a.type === 'url' ? a.url : a.type === 'module' ? 'WorkSuite ' + a.id : a.id; }
+function kioskForm(p) {
+  const k = p.kiosk || { enabled: false };
+  const a = k.app || { type: 'url', url: '' };
+  const f = h('form', { class: 'card form', id: 'kiosk', 'aria-labelledby': 'kiosk-h', onsubmit: (e) => { e.preventDefault();
+    const type = f.app_type.value;
+    const app = type === 'url' ? { type, url: f.app_url.value.trim() } : type === 'module' ? { type, id: f.app_module.value } : { type, id: f.app_desktop.value.trim() };
+    const pinOn = f.allow_exit_pin.checked;
+    const kiosk = { enabled: f.enabled.checked, user: f.user.value.trim(), devices: k.devices || [], app,
+      allowed_urls: f.allowed_urls.value.split(/[\s,]+/).filter(Boolean), idle_reset_minutes: Number(f.idle_reset_minutes.value || 0),
+      show_on_screen_keyboard: f.osk.checked, allow_exit_pin: pinOn };
+    if (pinOn) { if (f.exit_pin.value) kiosk.exit_pin = f.exit_pin.value; else kiosk.exit_pin_set = !!k.exit_pin_set; }
+    if (kiosk.enabled && !kiosk.devices.length) kiosk.enabled = false;
+    act(() => api('PUT', 'policy', { policy: { ...p, kiosk } }).then((r) => toast('Kiosk settings saved in policy version ' + r.version + '.')));
+  } },
+    h('p', { class: 'muted' }, 'Kiosk devices sign in automatically as one local account and run a single app full screen: no taskbar, Start menu, Settings, terminal or file manager. USB storage is blocked and only administrators can sign in at the greeter. Turn kiosk mode on for a device on its device page.'),
+    h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'enabled', checked: !!k.enabled }), ' Kiosk mode on for the chosen devices (' + (k.devices || []).length + ')')),
+    h('div', { class: 'row' }, h('label', {}, 'Kiosk account', h('input', { name: 'user', placeholder: 'kiosk', value: k.user || '', autocomplete: 'off' })),
+      h('label', {}, 'Reset after idle (minutes, 0 = never)', h('input', { name: 'idle_reset_minutes', type: 'number', min: 0, max: 1440, value: k.idle_reset_minutes ?? 10 }))),
+    h('fieldset', { class: 'form' }, h('legend', {}, 'App'),
+      h('label', {}, 'Runs', h('select', { name: 'app_type' }, h('option', { value: 'url', selected: a.type === 'url' }, 'A web address'), h('option', { value: 'module', selected: a.type === 'module' }, 'A WorkSuite module'), h('option', { value: 'desktop', selected: a.type === 'desktop' }, 'An installed app'))),
+      h('label', {}, 'Web address (https)', h('input', { name: 'app_url', type: 'url', placeholder: 'https://visitors.example.com/check-in', value: a.type === 'url' ? a.url : '' })),
+      h('label', {}, 'WorkSuite module', h('select', { name: 'app_module' }, KIOSK_MODULES.map((m) => h('option', { value: m, selected: a.type === 'module' && a.id === m }, m)))),
+      h('label', {}, 'Installed app (.desktop ID)', h('input', { name: 'app_desktop', placeholder: 'org.example.Viewer.desktop', value: a.type === 'desktop' ? a.id : '' }))),
+    h('label', {}, 'Other allowed web addresses (one per line; https://host/path, *.host allowed)', h('textarea', { name: 'allowed_urls' }, (k.allowed_urls || []).join('\n'))),
+    h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'osk', checked: !!k.show_on_screen_keyboard }), ' Show the on-screen keyboard')),
+    h('fieldset', { class: 'form' }, h('legend', {}, 'Leaving kiosk mode'),
+      h('p', { class: 'muted' }, 'On the device: Ctrl+Alt+Shift+K, or tap the top-left corner five times. An administrator password always works.'),
+      h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'allow_exit_pin', checked: !!k.allow_exit_pin }), ' Also allow an exit PIN')),
+      h('label', {}, k.exit_pin_set ? 'New exit PIN (leave empty to keep the current one)' : 'Exit PIN (6–12 digits)', h('input', { name: 'exit_pin', type: 'password', inputmode: 'numeric', autocomplete: 'new-password', pattern: '[0-9]{6,12}' })),
+      h('p', { class: 'muted' }, 'The PIN is stored only as a salted hash, on the server and on kiosk devices.')),
+    h('div', {}, h('button', { class: 'primary' }, 'Save kiosk settings')));
+  return [h('h2', { id: 'kiosk-h' }, 'Kiosk mode'), f];
+}
+function kioskDevice(id, on) {
+  const toggle = async (enable) => {
+    const { policy: p } = await api('GET', 'policy');
+    const k = p.kiosk;
+    if (!k || !k.user || !k.app) { toast('Set the kiosk account and app on the Policy page first.'); location.hash = 'policy'; return; }
+    const devices = (k.devices || []).filter((x) => x !== id).concat(enable ? [id] : []);
+    const kiosk = { ...k, devices, enabled: devices.length ? (enable || k.enabled) : false };
+    await act(() => api('PUT', 'policy', { policy: { ...p, kiosk } }), enable ? 'Kiosk mode turned on. The device restarts into it at its next check-in.' : 'Kiosk mode turned off for this device.');
+  };
+  return [h('h2', {}, 'Kiosk'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, on ? 'This device runs ' + kioskAppLabel(on.app) + ' as ' + on.user + '.' : 'This device runs the full WorkSuite desktop.'),
+    on ? h('button', { onclick: () => toggle(false) }, 'Turn off kiosk mode') : h('button', { onclick: () => toggle(true) }, 'Turn on kiosk mode'),
+    h('a', { href: '#policy' }, 'Kiosk settings'))];
+}
 
 async function route() {
   const [view, arg] = (location.hash.slice(1) || 'overview').split('/');

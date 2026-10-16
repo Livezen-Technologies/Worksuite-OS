@@ -6,6 +6,7 @@
 //   /etc/worksuite/offline-access-expired  pam_nologin file= refuses sign-in after the offline period (WSOS-AUTH-003, DIR-005)
 // Bluetooth is a switch (rfkill + bluetooth.service), not a file (WSOS-INT-003).
 import type { Policy } from './state.ts';
+import { activeKiosk, kioskFiles, KIOSK_PATHS } from './kiosk.ts';
 
 export const ENFORCED_PATHS = {
   lockPolicy: '/etc/worksuite/lock-policy.conf',
@@ -13,6 +14,7 @@ export const ENFORCED_PATHS = {
   usbModprobe: '/etc/modprobe.d/worksuite-usb-storage.conf',
   usbUdev: '/etc/udev/rules.d/71-worksuite-usb-storage.rules',
   offlineExpired: '/etc/worksuite/offline-access-expired',
+  ...KIOSK_PATHS,
 } as const;
 
 export interface Enforcement {
@@ -20,6 +22,10 @@ export interface Enforcement {
   files: Record<string, string | null>;
   usb_storage: 'allow' | 'read_only' | 'block';
   bluetooth: 'allow' | 'block';
+  /** Like files, written 0600 (kiosk exit PIN verifier). */
+  secret_files?: Record<string, string | null>;
+  /** Kiosk account for this device (worksuite-kiosk-apply enable), or null (kiosk off). */
+  kiosk_user?: string | null;
 }
 
 const HEADER = '# Written by worksuite-device-agent from the signed device policy. Local changes are replaced.\n';
@@ -40,8 +46,11 @@ const MODPROBE_BLOCK = HEADER +
   'install usb_storage /bin/false\ninstall uas /bin/false\nblacklist usb_storage\nblacklist uas\n';
 
 /** null policy = not managed: every WorkSuite restriction removed, packaged defaults back. */
-export function policyEnforcement(p: Policy | null | undefined): Enforcement {
-  const usb = p?.usb_storage ?? 'allow';
+export function policyEnforcement(p: Policy | null | undefined, deviceId?: string): Enforcement {
+  const kiosk = activeKiosk(p, deviceId);
+  const kf = kioskFiles(kiosk);
+  // A kiosk never mounts USB storage, whatever the rest of the policy says.
+  const usb = kiosk ? 'block' : p?.usb_storage ?? 'allow';
   const lock = p && Number.isInteger(p.lock_timeout_max_s) && (p.lock_timeout_max_s as number) > 0 ? p.lock_timeout_max_s as number : null;
   const deny = p && Number.isInteger(p.login_failures_max) ? p.login_failures_max as number : 5;
   const unlock = p && Number.isInteger(p.login_lockout_s) ? p.login_lockout_s as number : 600;
@@ -51,7 +60,10 @@ export function policyEnforcement(p: Policy | null | undefined): Enforcement {
       [ENFORCED_PATHS.faillock]: faillockConf(deny, unlock),
       [ENFORCED_PATHS.usbModprobe]: usb === 'block' ? MODPROBE_BLOCK : null,
       [ENFORCED_PATHS.usbUdev]: usb === 'block' ? UDEV_BLOCK : usb === 'read_only' ? UDEV_READ_ONLY : null,
+      ...kf.files,
     },
+    secret_files: kf.secret,
+    kiosk_user: kiosk?.user ?? null,
     usb_storage: usb,
     bluetooth: p?.bluetooth === false ? 'block' : 'allow',
   };
