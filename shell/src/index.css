@@ -181,3 +181,9 @@
 :root[data-touch] #ws-launcher .ws-pins > button { padding: 16px 4px; }
 :root[data-touch] #ws-launcher .ws-pins > button > span:first-child { width: 64px; height: 64px; font-size: 22px; border-radius: 16px; }
 :root[data-touch] input[type='range'] { height: 32px; }
+
+/* Taskbar app list: scrolls sideways when it overflows, without a scrollbar over the icons. */
+.ws-taskbar-apps { scrollbar-width: none; }
+.ws-taskbar-apps::-webkit-scrollbar { display: none; }
+/* High contrast: the running dot takes the theme's ink (the grey one would fall below 3:1). */
+[data-high-contrast] .ws-run-dot { background: #ffffff !important; }

@@ -115,6 +115,24 @@ describe('keyboard walk-through (WSOS-ACC-001/002)', () => {
     expect(tabbable(el).filter((e) => !focusIndicator(e))).toHaveLength(1)
   })
 
+  it('taskbar: Start, Search, apps, then the tray in tab order, centred by default and at the start edge when set to Left', async () => {
+    for (const align of ['center', 'left'] as const) {
+      localStorage.setItem('ws.taskbarAlign', align)
+      const el = await render(<DesktopHost />)
+      await settle()
+      const nav = el.querySelector<HTMLElement>('nav.ws-taskbar')!
+      expect(nav.dataset.align).toBe(align)
+      expect(!!nav.querySelector('[data-testid="taskbar-lead"]')).toBe(align === 'center')
+      const parts = [...nav.children].map((c) => (c as HTMLElement).dataset.testid).filter(Boolean)
+      expect(parts).toEqual(align === 'center' ? ['taskbar-lead', 'taskbar-main', 'taskbar-end'] : ['taskbar-main', 'taskbar-end'])
+      const main = nav.querySelector('[data-testid="taskbar-main"]')!
+      const first = [...main.querySelectorAll('button')].slice(0, 2).map((b) => b.getAttribute('aria-label') ?? b.textContent)
+      expect(first).toEqual(['Open launcher', 'Search'])
+      act(() => root?.unmount()); host?.remove()
+    }
+    localStorage.removeItem('ws.taskbarAlign')
+  })
+
   it('launcher and App Center close with Escape', async () => {
     let closed = 0
     await render(<AppCenter onClose={() => { closed++ }} />)

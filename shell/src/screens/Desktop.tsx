@@ -168,7 +168,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const align = alignOverride ?? taskbarAlign(prefs)
   const centered = align === 'center'
   const searchButton = (
-    <button type="button" onClick={() => setLauncher(true)} className="box-border hidden h-9 w-[200px] shrink-0 cursor-text items-center gap-2 rounded-[9px] bg-white/[0.06] px-3 text-[13px] text-[#8FA3C8] hover:bg-white/10 md:flex">
+    <button type="button" onClick={() => setLauncher(true)} className={`box-border hidden h-9 shrink-0 ${centered ? 'w-[160px]' : 'w-[200px]'} cursor-text items-center gap-2 rounded-[9px] bg-white/[0.06] px-3 text-[13px] text-[#8FA3C8] hover:bg-white/10 md:flex`}>
       <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={14} width={2.2} />{t('launcher.search')}
     </button>
   )
@@ -363,17 +363,20 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           onSettings={() => { setQsOpen(false); onOpen('settings') }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
       )}
 
-      <nav aria-label={t('panel.taskbar')} data-align={align} className={`ws-taskbar absolute inset-x-0 bottom-0 z-40 box-border h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px] ${centered ? 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'flex'}`}>
-        {/* Start and the app icons: one group, centred (canvas G02) or at the start edge. Start comes first in tab order. */}
-        <div className={`flex min-w-0 items-center gap-1.5 ${centered ? 'col-start-2 row-start-1' : ''}`}>
+      {/* Taskbar (canvas G01/G02, "Centered" is the default style in Taskbar · styles): 52 px, edge-attached glass bar.
+          Centre: [space][Start, Search, apps][space · tray]; Left: [Start, Search | apps][tray]. Flex, not a grid, so on a
+          narrow screen the app list shrinks and scrolls instead of running under the tray. */}
+      <nav aria-label={t('panel.taskbar')} data-align={align} className="ws-taskbar absolute inset-x-0 bottom-0 z-40 box-border flex h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px]">
+        {centered && <span aria-hidden="true" data-testid="taskbar-lead" className="min-w-0 flex-[1_1_0]" />}
+        {/* Start and the app icons: one group. Start comes first in tab order. */}
+        <div data-testid="taskbar-main" className="flex min-w-0 flex-[0_1_auto] items-center gap-1.5">
           <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
             className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
-          {!centered && searchButton}
-          {!centered && <span aria-hidden="true" className="mx-1 h-6 w-px bg-[rgba(127,178,255,0.15)]" />}
+          {searchButton}
+          <span aria-hidden="true" className="mx-1 hidden h-6 w-px shrink-0 bg-[rgba(127,178,255,0.15)] md:block" />
           <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => { const a = allApps.find((x) => x.id === id) ?? appForWindow(allApps, id); return a && { ...a, bg: tileColor(a), fg: '#FFFFFF' } }} onLaunch={launch} only={onPrimary} />
         </div>
-        {centered && <div className="col-start-1 row-start-1 flex min-w-0 items-center">{searchButton}</div>}
-        <div className={`flex items-center gap-1.5 ${centered ? 'col-start-3 row-start-1 justify-self-end' : 'ms-auto'}`}>
+        <div data-testid="taskbar-end" className={`flex shrink-0 items-center justify-end gap-1.5 ${centered ? 'flex-[1_0_0]' : 'ms-auto'}`}>
           <WorkspaceSwitcher />
           {managed && (
             <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? t('panel.managedBy', { org: device.org_name }) : undefined}

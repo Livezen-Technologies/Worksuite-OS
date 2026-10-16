@@ -1,5 +1,5 @@
 import { AppGlyph } from './AppGlyph'
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent, type WheelEvent } from 'react'
 import { clickAction, onWorkspace, panel, taskbarEntries, updateBadge, type PanelWindow, type ShellAction, type TrayItem, type Workspaces } from '../lib/panel'
 import { os, type OsUpdateStatus, type VpnState } from '../lib/os'
 import { activeVpn, vpnErrorText } from '../lib/vpn'
@@ -71,6 +71,12 @@ export function rovingKeys(e: KeyboardEvent<HTMLElement>) {
   items[(next + items.length) % items.length]?.focus()
 }
 
+/** A vertical wheel scrolls the overflowing app list sideways. */
+function wheelScroll(e: WheelEvent<HTMLElement>) {
+  const el = e.currentTarget
+  if (el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += document.dir === 'rtl' ? -e.deltaY : e.deltaY
+}
+
 /** `only` limits the windows to one monitor's (per-monitor taskbars, WSOS-DSK-005). */
 export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]; info: (id: string) => AppInfo | undefined; onLaunch: (id: string) => void; only?: (w: PanelWindow[]) => PanelWindow[] }) {
   const t = useT()
@@ -87,7 +93,9 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
     else void panel.minimize(a.handle, true)
   }
   return (
-    <div role="toolbar" aria-label={t('panel.taskbar')} onKeyDown={rovingKeys} className="flex items-center gap-2">
+    // Many apps on a narrow screen: the list shrinks and scrolls sideways (no scrollbar; focus and the wheel bring items in).
+    <div role="toolbar" aria-label={t('panel.taskbar')} onKeyDown={rovingKeys} onWheel={wheelScroll} data-testid="taskbar-apps"
+      className="ws-taskbar-apps flex min-w-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden py-1">
       {entries.map((e) => {
         // A window with no launcher entry still tries its app_id as an icon name (most apps name both alike).
         const a = info(e.id) ?? { id: e.id, name: e.title || e.id, mark: (e.title || e.id).slice(0, 2), bg: '#E2E8F0', fg: '#0F172A', icon: /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(e.id) ? e.id : null }
@@ -96,10 +104,11 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
           <button key={e.id} type="button" aria-label={label} aria-pressed={e.running ? e.active : undefined} title={e.title || a.name} onClick={() => click(e.id)}
             aria-haspopup={ws.supported && e.running ? 'menu' : undefined}
             onContextMenu={(ev) => { if (!ws.supported || !e.running) return; ev.preventDefault(); const w = e.windows.find((x) => x.flags & 1) ?? e.windows[0]; setMenu({ handle: w.handle, x: ev.currentTarget.getBoundingClientRect().left }) }}
-            className={`relative flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${e.active ? 'bg-white/10' : 'hover:bg-white/10'}`}>
+            className={`relative flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${e.active ? 'bg-white/10' : 'hover:bg-white/10'}`}>
             {/* The mark is an icon drawn by CSS (not text), so the button's name is the app's name alone (WCAG 2.5.3). */}
-            <AppGlyph app={{ ...a, id: a.id ?? e.id }} size={28} radius={7} font={11} css />
-            {e.running && <span aria-hidden="true" className={`absolute bottom-[2px] h-[3px] rounded-sm bg-[#18D4F0] ${e.active ? 'w-3.5' : 'w-1.5'}`} />}
+            <AppGlyph app={{ ...a, id: a.id ?? e.id }} size={26} radius={7} font={11} css />
+            {/* Canvas G01: a 16 px cyan bar under the focused app, a 5 px grey dot under one that runs in the background. */}
+            {e.running && <span aria-hidden="true" data-indicator={e.active ? 'active' : 'running'} className={`ws-run-dot absolute bottom-[2px] h-[3px] rounded-sm ${e.active ? 'w-4 bg-[#18D4F0]' : 'w-[5px] bg-[var(--ws-g-muted)]'}`} />}
           </button>
         )
       })}
