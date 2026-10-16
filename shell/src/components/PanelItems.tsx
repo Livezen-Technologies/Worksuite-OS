@@ -1,6 +1,6 @@
 import { AppGlyph } from './AppGlyph'
 import { useEffect, useMemo, useState, type KeyboardEvent, type WheelEvent } from 'react'
-import { clickAction, onWorkspace, panel, taskbarEntries, updateBadge, type PanelWindow, type ShellAction, type TrayItem, type Workspaces } from '../lib/panel'
+import { clickAction, onWorkspace, panel, taskbarEntries, taskbarUnread, updateBadge, type PanelWindow, type ShellAction, type TrayItem, type Workspaces } from '../lib/panel'
 import { os, type OsUpdateStatus, type VpnState } from '../lib/os'
 import { activeVpn, vpnErrorText } from '../lib/vpn'
 import { useT } from '../i18n'
@@ -99,7 +99,9 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
       {entries.map((e) => {
         // A window with no launcher entry still tries its app_id as an icon name (most apps name both alike).
         const a = info(e.id) ?? { id: e.id, name: e.title || e.id, mark: (e.title || e.id).slice(0, 2), bg: '#E2E8F0', fg: '#0F172A', icon: /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(e.id) ? e.id : null }
-        const label = e.windows.length > 1 ? t('panel.windows', { name: a.name, count: e.windows.length }) : e.active ? t('panel.active', { name: a.name }) : e.running ? t('panel.running', { name: a.name }) : a.name
+        const unread = taskbarUnread(e.id, e.windows)
+        const base = e.windows.length > 1 ? t('panel.windows', { name: a.name, count: e.windows.length }) : e.active ? t('panel.active', { name: a.name }) : e.running ? t('panel.running', { name: a.name }) : a.name
+        const label = unread ? t('panel.unread', { name: base, count: unread }) : base
         return (
           <button key={e.id} type="button" aria-label={label} aria-pressed={e.running ? e.active : undefined} title={e.title || a.name} onClick={() => click(e.id)}
             aria-haspopup={ws.supported && e.running ? 'menu' : undefined}
@@ -107,6 +109,7 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
             className={`relative flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${e.active ? 'bg-white/10' : 'hover:bg-white/10'}`}>
             {/* The mark is an icon drawn by CSS (not text), so the button's name is the app's name alone (WCAG 2.5.3). */}
             <AppGlyph app={{ ...a, id: a.id ?? e.id }} size={26} radius={7} font={11} css />
+            {unread > 0 && <span aria-hidden="true" data-testid="taskbar-unread" className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#25D366] px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#06102A]">{unread > 99 ? '99+' : unread}</span>}
             {/* Canvas G01: a 16 px cyan bar under the focused app, a 5 px grey dot under one that runs in the background. */}
             {e.running && <span aria-hidden="true" data-indicator={e.active ? 'active' : 'running'} className={`ws-run-dot absolute bottom-[2px] h-[3px] rounded-sm ${e.active ? 'w-4 bg-[#18D4F0]' : 'w-[5px] bg-[var(--ws-g-muted)]'}`} />}
           </button>

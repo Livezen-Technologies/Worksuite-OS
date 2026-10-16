@@ -162,6 +162,8 @@ test('policy: validated, versioned, signed, and active devices are nudged', asyn
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { ai_assistant: 'no' } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { desktop_widgets: 'off' } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { desktop_widgets: false } } })).status, 200);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { whatsapp: 'off' } } })).status, 400);
+  assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { whatsapp: false } } })).status, 200);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { ai_models: ['../../etc/passwd'] } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { ai_models: 'qwen3.5-2b-q4' } } })).status, 400);
   assert.equal((await call('PUT', 'policy', { cookie: alice, body: { policy: { ai_assistant: true, ai_models: ['qwen3.5-2b-q4', 'qwen3.5-4b-q4'] } } })).status, 200);

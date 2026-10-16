@@ -72,6 +72,9 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   ai_assistant: (v) => typeof v === 'boolean',
   // Desktop widgets (WorkSuite Desktop's Home on the OS wallpaper): false turns them off for every user. Kiosk: always off.
   desktop_widgets: (v) => typeof v === 'boolean',
+  // WhatsApp (WhatsApp Web in its own window, pinned by default): false removes it from Start and the taskbar and the
+  // window shows that the organization turned it off. Kiosk: never shown (the kiosk runs its own app list).
+  whatsapp: (v) => typeof v === 'boolean',
   ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 

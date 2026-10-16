@@ -40,3 +40,24 @@ Right-click the wallpaper (or the pencil above the widgets) for **Edit widgets**
 object (`widgets`), with a local copy. Signed out: one "Sign in to WorkSuite to see your widgets" card. Policy
 `desktop_widgets: false` (admin console › Policy) turns them off; a kiosk never shows them. UI:
 `shell/src/components/DesktopWidgets.tsx`, model `shell/src/lib/widgets.ts`, strings `shell/src/i18n/widgets.ts`.
+
+### WhatsApp
+
+WhatsApp has no native Linux app, so WorkSuite OS ships the official WhatsApp Web (https://web.whatsapp.com) as an
+app: `worksuite-app whatsapp` (`lk.worksuite.whatsapp.desktop`, Network › Instant messaging) opens it in its own
+window, app_id `lk.worksuite.whatsapp`, one instance. It is pinned to Start and the taskbar for new users (saved pins
+are left alone) and listed in All apps and search. The window (`shell/electron/whatsappwindow.ts`, rules in
+`shell/electron/whatsapp.ts`) uses its own persistent partition `persist:whatsapp`, so the QR link survives restarts
+and nothing is shared with WorkSuite sign-in; it carries no WorkSuite token. Only WhatsApp's own https hosts
+(`whatsapp.com`, `*.whatsapp.com`, `*.whatsapp.net`) load in the window; other links open in the default browser.
+Notifications are allowed, camera and microphone are asked for (once per run), screen sharing goes through the
+ScreenCast portal, nothing else is granted. Downloads go to ~/Downloads. The unread count from the page title
+"(N) WhatsApp" shows as a badge on the taskbar button and as a notification that focuses the window. Closing the
+window quits it, like the WorkSuite app windows. Policy `whatsapp: false` (admin console › Policy) removes it; a
+kiosk never shows it.
+
+## Third-party notices
+
+- WhatsApp and the WhatsApp logo are trademarks of WhatsApp LLC (Meta Platforms, Inc.). WorkSuite OS is not
+  affiliated with or endorsed by them; the logo (`shell/apps/icons/lk.worksuite.whatsapp.svg`, glyph from Simple
+  Icons, CC0) is used only as the launcher icon that identifies the WhatsApp Web app.

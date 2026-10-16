@@ -846,6 +846,7 @@ components:
         update_mirror: { type: string, description: 'WSOS-AUP-009 enterprise mirror (https) for manifests; WorkSuite signatures still required' }
         vpn_required: { type: boolean, description: 'WSOS-INT-001 the managed VPN connects at boot and reconnects (always-on) even if the VPN config does not ask for it' }
         user_vpn: { type: string, enum: [allow, block], description: 'WSOS-INT-001 block = Settings offers no VPN import and the agent removes every VPN profile except the managed one; absent = allow' }
+        whatsapp: { type: boolean, description: 'WhatsApp (WhatsApp Web in its own window, lk.worksuite.whatsapp) pinned to Start and the taskbar by default. false = removed from Start, the taskbar and search, and the window says the organization turned it off; absent or true = allowed. Never on a kiosk' }
         kiosk:
           type: object
           description: 'WSOS-AUTH-002 / SRS §2.3 kiosk mode for the listed devices (services/server/src/kiosk.ts). The admin sends exit_pin once; the server stores and signs only exit_pin_verifier (scrypt), and the admin API returns exit_pin_set instead.'

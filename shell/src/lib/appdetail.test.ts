@@ -38,11 +38,11 @@ describe('Start menu (G02)', () => {
     const apps = buildLauncherApps([{ id: 'mail', name: 'Mail' }, { id: 'tasks', name: 'Tasks' }], [desk('firefox-esr', 'Firefox ESR')], null)
     const settings = { ...apps[0], id: 'settings', name: 'Settings' }
     const pins = startPins(apps, 5, [settings])
-    expect(pins.map((p) => p.id)).toEqual(['worksuite-mail', 'firefox-esr', 'appcenter', 'settings', 'monitor'])
+    expect(pins.map((p) => p.id)).toEqual(['worksuite-mail', 'lk.worksuite.whatsapp', 'appcenter', 'settings', 'monitor'])
   })
   it('groups all apps by letter and picks the darker mark colour for tiles', () => {
     const apps = buildLauncherApps([], [desk('a', 'alpha'), desk('b', 'Beta'), desk('c', '3D Viewer')], null)
-    expect(alphaGroups(apps).map((g) => g.letter)).toEqual(['#', 'A', 'B', 'S'])
+    expect(alphaGroups(apps).map((g) => g.letter)).toEqual(['#', 'A', 'B', 'S', 'W'])
     expect(tileColor({ bg: '#dbeafe', fg: '#1d4ed8' })).toBe('#1d4ed8')
     expect(tileColor({ bg: '#0f172a', fg: '#e2e8f0' })).toBe('#0f172a')
   })

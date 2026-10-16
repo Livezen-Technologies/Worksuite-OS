@@ -27,3 +27,11 @@ describe('Shell ENH-01 preferences (WSOS-DSK-001)', () => {
     expect(toggleFavorite(p1, apps, 'worksuite-crm').favorites).not.toContain('worksuite-crm')
   })
 })
+
+describe('default taskbar pins', () => {
+  it('pin WhatsApp for new users only', () => {
+    const defaults = ['worksuite-mail', 'lk.worksuite.whatsapp']
+    expect(taskbarPins({}, defaults)).toContain('lk.worksuite.whatsapp')
+    expect(taskbarPins({ taskbar: ['worksuite-mail'] }, defaults)).toEqual(['worksuite-mail'])
+  })
+})

@@ -32,6 +32,7 @@ import ShellRestartNotice from '../components/ShellRestartNotice'
 import AuthPrompt from '../components/AuthPrompt'
 import type { SearchHit } from '../../electron/search'
 import DesktopWidgets, { useWidgetData } from '../components/DesktopWidgets'
+import { WHATSAPP_APP_ID, whatsappAllowed } from '../../electron/whatsapp'
 import { DEFAULT_LAYOUT, loadLocalLayout, saveLocalLayout, widgetsAllowed, type WidgetLayout } from '../lib/widgets'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
@@ -47,7 +48,7 @@ const SETTINGS_PAGES: [MessageKey, string][] = [
 const RECENT_MAX = 6
 
 // Taskbar pins (running windows from the Wayland bridge join them, components/PanelItems.tsx); entries the org hasn't enabled or that aren't installed drop out.
-const TASKBAR = ['worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office', 'firefox-esr']
+const TASKBAR = ['worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office', WHATSAPP_APP_ID, 'firefox-esr']
 
 // Settings as a Start menu tile (G02); it opens the Settings window like the footer button.
 const SETTINGS_TILE: LauncherApp = { id: 'settings', get name() { return t0('launcher.settings') }, mark: '⚙', bg: '#5E739C', fg: '#ffffff', kind: 'System', launch: { screen: 'settings' }, keywords: [] }
@@ -138,7 +139,9 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   // The user's favourites, taskbar pins and order (Shell ENH-01 preferences, synced; WSOS-DSK-001).
   const [prefs, setPrefs] = useState<ShellPrefs>({})
   const [appsCached, setAppsCached] = useState(false)
-  const allApps = useMemo(() => applyShellPrefs(baseApps, prefs), [baseApps, prefs])
+  // WhatsApp leaves the launcher and taskbar when policy turns it off (or on a kiosk, which runs its own app list).
+  const waOn = whatsappAllowed(device?.policies)
+  const allApps = useMemo(() => applyShellPrefs(waOn ? baseApps : baseApps.filter((a) => a.id !== WHATSAPP_APP_ID), prefs), [baseApps, prefs, waOn])
   const toggleFav = (id: string) => {
     const next = toggleFavorite(prefs, allApps, id)
     setPrefs(next)

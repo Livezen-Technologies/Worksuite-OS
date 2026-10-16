@@ -32,6 +32,8 @@ export interface Policy {
   ai_models?: string[];
   /** Desktop widgets on the OS wallpaper: false = off for everyone (the shell also turns them off on a kiosk). */
   desktop_widgets?: boolean;
+  /** WhatsApp (WhatsApp Web window, pinned by default): false = off on the device (Start, taskbar and the window). */
+  whatsapp?: boolean;
   [k: string]: unknown;
 }
 

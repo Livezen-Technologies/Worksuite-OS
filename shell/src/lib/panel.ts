@@ -1,6 +1,7 @@
 // Renderer side of the panel: running windows from the Wayland bridge, tray items and the update badge
 // (SRS §5.1, WSOS-DSK-003, WSOS-INT-008, WSOS-AUP-011). In a plain browser a stub answers instead.
 import type { OsUpdateStatus } from './os'
+import { unreadFromTitle, WHATSAPP_APP_ID } from '../../electron/whatsapp'
 
 export interface PanelWindow { handle: string; appId: string; title: string; output: string; flags: number }
 export interface TrayItem { key: string; id: string; title: string; icon: string; status: string }
@@ -78,6 +79,12 @@ export function taskbarEntries(pinned: string[], windows: PanelWindow[]): Taskba
   for (const w of mine) if (!used.has(w.handle)) rest.set(w.appId || w.handle, [...(rest.get(w.appId || w.handle) ?? []), w])
   for (const [id, ws] of rest) out.push(entry(id, false, ws))
   return out
+}
+
+/** Unread count a taskbar entry shows: WhatsApp's from its window title ("(3) WhatsApp"); 0 for other apps. */
+export function taskbarUnread(id: string, windows: PanelWindow[]): number {
+  if (id.toLowerCase() !== WHATSAPP_APP_ID) return 0
+  return windows.reduce((n, w) => Math.max(n, unreadFromTitle(w.title)), 0)
 }
 
 export type ClickAction = { kind: 'launch' } | { kind: 'activate'; handle: string } | { kind: 'minimize'; handle: string }

@@ -2,6 +2,7 @@
 // Office when installed, and installed Linux apps.
 import type { InstalledApp } from './os'
 import { t } from '../i18n'
+import { WHATSAPP_APP_ID } from '../../electron/whatsapp'
 
 export type Kind = 'WorkSuite' | 'Linux app' | 'System'
 
@@ -48,6 +49,13 @@ const OFFICE_STYLE = { bg: '#ffedd5', fg: '#c2410c' }
 const LINUX_FAV = new Set(['firefox-esr', 'firefox', 'org.mozilla.firefox'])
 
 export const APP_CENTER: LauncherApp = { id: 'appcenter', name: 'App Center', mark: 'A', bg: '#2563eb', fg: '#ffffff', kind: 'System', launch: { screen: 'appcenter' }, keywords: ['software', 'install'] }
+/** WhatsApp Web in its own window (lk.worksuite.whatsapp.desktop, `worksuite-app whatsapp`); pinned by default. */
+export const WHATSAPP: LauncherApp = {
+  id: WHATSAPP_APP_ID, name: 'WhatsApp', mark: 'Wa', bg: '#25D366', fg: '#ffffff', kind: 'Linux app', fav: true,
+  launch: { desktop: WHATSAPP_APP_ID }, icon: WHATSAPP_APP_ID, appIds: [WHATSAPP_APP_ID, 'whatsapp'],
+  keywords: ['whatsapp', 'chat', 'messages', 'messenger', 'InstantMessaging'],
+}
+
 export const MONITOR: LauncherApp = { id: 'monitor', get name() { return t('monitor.title') }, mark: '~', bg: '#dcfce7', fg: '#15803d', kind: 'System', launch: { screen: 'monitor' }, keywords: ['task manager', 'processes', 'cpu', 'memory', 'performance'] }
 
 function initials(name: string) {
@@ -61,9 +69,9 @@ function initials(name: string) {
  * webApps: the org's enabled modules, or null when unknown (fallback list). installed: XDG entries, or null when
  * the bridge isn't available. office: the detected WorkSuite Office desktop id, or null when it isn't installed.
  * desktop: the WorkSuite Desktop entry id when it is installed: its modules open there (`--module=<id>`), the rest
- * in worksuite-app web windows.
+ * in worksuite-app web windows. whatsapp: false when policy turns WhatsApp off (or on a kiosk).
  */
-export function buildLauncherApps(webApps: { id: string; name: string; offline_level?: OfflineLevel }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null): LauncherApp[] {
+export function buildLauncherApps(webApps: { id: string; name: string; offline_level?: OfflineLevel }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null, whatsapp = true): LauncherApp[] {
   const out: LauncherApp[] = []
   if (desktop) {
     out.push({ id: 'worksuite-desktop', name: 'WorkSuite', mark: 'W', bg: '#2563eb', fg: '#ffffff', kind: 'WorkSuite', fav: true, launch: { worksuite: 'home' }, keywords: ['worksuite', 'home', 'desktop'] })
@@ -85,8 +93,9 @@ export function buildLauncherApps(webApps: { id: string; name: string; offline_l
       { id: 'office-slides', name: t('launcher.presentations'), mark: 'Sl', ...OFFICE_STYLE, kind: 'WorkSuite', launch: { office: 'slides' }, keywords: ['office', 'powerpoint', 'pptx', 'slides', 'new presentation'] },
     )
   }
+  if (whatsapp) out.push(WHATSAPP)
   for (const e of installed ?? []) {
-    if (e.id === office || e.id === desktop || e.id.startsWith('worksuite-')) continue
+    if (e.id === office || e.id === desktop || e.id.startsWith('worksuite-') || e.id === WHATSAPP_APP_ID) continue
     const terminal = e.categories.includes('TerminalEmulator')
     out.push({
       id: e.id, name: e.name, mark: terminal ? '>_' : initials(e.name), bg: terminal ? '#0f172a' : '#f1f5f9', fg: terminal ? '#e2e8f0' : '#334155',
@@ -162,7 +171,8 @@ export function appForWindow(apps: LauncherApp[], appId: string): LauncherApp | 
   const w = appId.trim().toLowerCase()
   if (!w) return undefined
   const ws = /^lk\.worksuite\.(.+)$/.exec(w)
-  if (ws) return apps.find((a) => a.id === `worksuite-${ws[1]}`)
+  const hit = ws && apps.find((a) => a.id === `worksuite-${ws[1]}`)
+  if (hit) return hit
   const last = (s: string) => s.split('.').pop() ?? s
   return apps.find((a) => a.id.toLowerCase() === w)
     ?? apps.find((a) => a.appIds?.some((x) => x.toLowerCase() === w))

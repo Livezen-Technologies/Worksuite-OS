@@ -296,6 +296,17 @@ test('a failure applying the policy is audited and does not reject the verified 
   w.cleanup();
 });
 
+test('whatsapp policy reaches the shell through the status (off, or not set)', async () => {
+  const w = world({ policy: signedPolicy({ version: 'p1', whatsapp: false }) });
+  await w.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(w.agent.status().policies?.whatsapp, false);
+  w.cleanup();
+  const v = world({ policy: signedPolicy({ version: 'p2' }) });
+  await v.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(v.agent.status().policies?.whatsapp, null);
+  v.cleanup();
+});
+
 test('desktop widgets policy reaches the shell through the status (off, or not set)', async () => {
   const w = world({ policy: signedPolicy({ version: 'p1', desktop_widgets: false }) });
   await w.agent.enroll('https://work.livezentech.com', 'tok-123');

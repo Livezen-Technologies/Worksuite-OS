@@ -19,6 +19,8 @@ import { checkOwnPassword, localUsers } from './users'
 import { ask, signinHost, type SignInMethod } from './signin'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
+import { prepareWhatsApp, runWhatsApp } from './whatsappwindow'
+import { WHATSAPP_ID } from './whatsapp'
 import { shellPrefsFrom } from '../src/lib/shellPrefs'
 import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
@@ -119,7 +121,11 @@ function createWindow() {
 app.commandLine.appendSwitch('enable-wayland-ime')
 // `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
 const appRequest = parseAppArgs(process.argv)
-if (appRequest) {
+if (appRequest?.id === WHATSAPP_ID) {
+  // WhatsApp Web: its own window, partition and app_id; no WorkSuite account involved (whatsappwindow.ts).
+  if (prepareWhatsApp()) runWhatsApp()
+  else app.quit()
+} else if (appRequest) {
   if (prepareAppMode(appRequest)) runAppMode(appRequest)
   else app.quit()
 } else startShell()

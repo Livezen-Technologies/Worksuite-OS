@@ -327,6 +327,8 @@ export interface DevicePolicies {
   ai_assistant?: boolean | null; ai_models?: string[] | null
   /** Desktop widgets (WorkSuite Desktop's Home on the wallpaper): false = off for everyone. Kiosk: always off. */
   desktop_widgets?: boolean | null; kiosk?: boolean
+  /** WhatsApp (WhatsApp Web window): false = off on this device. */
+  whatsapp?: boolean | null
 }
 export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
 export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean
@@ -364,6 +366,7 @@ export function policyLines(p: DevicePolicies | null): string[] {
   else if (p.usb_storage === 'read_only') out.push(t('mdm.usbRO'))
   if (p.bluetooth === false) out.push(t('mdm.btOff'))
   if (p.desktop_widgets === false) out.push(t('mdm.widgetsOff'))
+  if (p.whatsapp === false) out.push(t('mdm.whatsappOff'))
   if (p.ai_assistant === false) out.push(t('mdm.aiOff'))
   else if (p.ai_models?.length) out.push(t('mdm.aiLimited', { count: p.ai_models.length }))
   return out

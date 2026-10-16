@@ -64,6 +64,9 @@ override_dh_auto_install:
 	# worksuite-shell: 256 px PNGs of the WorkSuite app icons (Electron window icons can't be SVG).
 	for f in shell/apps/icons/*.svg; do n=$$(basename $$f .svg); install -d debian/worksuite-shell/usr/share/icons/hicolor/256x256/apps && \
 	  rsvg-convert -w 256 -h 256 $$f -o debian/worksuite-shell/usr/share/icons/hicolor/256x256/apps/$$n.png || exit 1; done
+	# WhatsApp (lk.worksuite.whatsapp): the launcher icon at every hicolor size, beside the scalable SVG.
+	for s in 16 24 32 48 64 128 512; do install -d debian/worksuite-shell/usr/share/icons/hicolor/$${s}x$${s}/apps && \
+	  rsvg-convert -w $$s -h $$s shell/apps/icons/lk.worksuite.whatsapp.svg -o debian/worksuite-shell/usr/share/icons/hicolor/$${s}x$${s}/apps/lk.worksuite.whatsapp.png || exit 1; done
 	# worksuite-branding
 	d=debian/worksuite-branding; p=$$d/usr/share/plymouth/themes/worksuite; g=$$d/usr/share/grub/themes/worksuite; \
 	install -D -m 0644 -t $$p branding/plymouth/worksuite.plymouth branding/plymouth/worksuite.script build-branding/plymouth/*.png && \

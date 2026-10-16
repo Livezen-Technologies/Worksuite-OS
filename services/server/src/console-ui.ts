@@ -254,6 +254,7 @@ const views = {
         allow_pin: f.allow_pin.value === '' ? null : f.allow_pin.value === 'true', pin_min_length: num('pin_min_length'), update_mirror: f.update_mirror.value || null,
         ai_assistant: f.ai_assistant.value === '' ? null : f.ai_assistant.value === 'true', ai_models: list('ai_models').length ? list('ai_models') : null,
         desktop_widgets: f.desktop_widgets.value === '' ? null : f.desktop_widgets.value === 'true',
+        whatsapp: f.whatsapp.value === '' ? null : f.whatsapp.value === 'true',
         app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
     } },
       h('div', { class: 'row' }, h('label', {}, 'Update ring', sel('update_ring', [['stable', 'Stable'], ['pilot', 'Pilot'], ['development', 'Development']])),
@@ -270,7 +271,8 @@ const views = {
         h('label', {}, 'Shortest PIN (digits)', h('input', { name: 'pin_min_length', type: 'number', min: 4, max: 12, value: p.pin_min_length ?? '' }))),
       h('div', { class: 'row' }, h('label', {}, 'On-device AI assistant', sel('ai_assistant', [['true', 'Allowed'], ['false', 'Off']])),
         h('label', {}, 'AI models allowed (catalog IDs; empty = all)', h('textarea', { name: 'ai_models' }, (p.ai_models || []).join('\n')))),
-      h('div', { class: 'row' }, h('label', {}, 'Desktop widgets (WorkSuite Home on the desktop)', sel('desktop_widgets', [['true', 'Allowed'], ['false', 'Off']]))),
+      h('div', { class: 'row' }, h('label', {}, 'Desktop widgets (WorkSuite Home on the desktop)', sel('desktop_widgets', [['true', 'Allowed'], ['false', 'Off']])),
+        h('label', {}, 'WhatsApp (WhatsApp Web app, pinned by default)', sel('whatsapp', [['true', 'Allowed'], ['false', 'Off']]))),
       h('label', {}, 'Update mirror (https, optional)', h('input', { name: 'update_mirror', value: p.update_mirror || '' })),
       h('label', {}, 'Allowed apps (catalog IDs, one per line)', h('textarea', { name: 'app_allowlist' }, (p.app_allowlist || []).join('\n'))),
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),
@@ -279,6 +281,7 @@ const views = {
     if (p.allow_pin !== undefined) f.allow_pin.value = String(p.allow_pin);
     if (p.ai_assistant !== undefined) f.ai_assistant.value = String(p.ai_assistant);
     if (p.desktop_widgets !== undefined) f.desktop_widgets.value = String(p.desktop_widgets);
+    if (p.whatsapp !== undefined && p.whatsapp !== null) f.whatsapp.value = String(p.whatsapp);
     return [h('h1', {}, 'Policy'), h('p', { class: 'muted' }, 'Current version ' + version + '. Devices verify the signature before applying it.'), f, kioskForm(p)];
   },
   async apps() {

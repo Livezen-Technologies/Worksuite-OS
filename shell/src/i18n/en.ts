@@ -2,11 +2,13 @@
 // Add a key here first; other locales may lag and fall back to English.
 import { aiEn } from './ai'
 import { widgetsEn } from './widgets'
+import { whatsappEn } from './whatsapp'
 
 const en = {
   // On-device AI assistant (services/ai): src/i18n/ai.ts
   ...aiEn,
   ...widgetsEn,
+  ...whatsappEn,
   // Panel / taskbar
   'panel.taskbar': 'Taskbar',
   'panel.openLauncher': 'Open launcher',

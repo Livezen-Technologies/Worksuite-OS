@@ -363,6 +363,7 @@ export class Agent {
         vpn_required: p.vpn_required ?? null, user_vpn: p.user_vpn ?? null,
         ai_assistant: p.ai_assistant ?? null, ai_models: p.ai_models ?? null,
         desktop_widgets: p.desktop_widgets ?? null,
+        whatsapp: p.whatsapp ?? null,
         kiosk: this.s.enrolled && activeKiosk(p, this.s.device_id) !== null,
       } : null,
       // Settings › Managed › Kiosk mode (board KioskSettings): what this device's kiosk runs. Never the exit PIN or its verifier.

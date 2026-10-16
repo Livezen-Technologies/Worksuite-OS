@@ -5,6 +5,7 @@
 import worksuitePng from '../assets/brand/worksuite.png'
 import officeSvg from '../assets/brand/worksuite-office.svg'
 import { GLYPHS } from './appGlyphs'
+import whatsappSvg from '../../apps/icons/lk.worksuite.whatsapp.svg'
 
 /** WorkSuite module id → [glyph, colour], as WorkSuite Desktop draws the module. Drive is its Files. */
 export const MODULE_ICONS: Record<string, [string, string]> = {
@@ -54,6 +55,7 @@ const tile = (k: string, [g, c]: [string, string]) => { if (!tiles.has(k)) tiles
 export function brandIcon(id: string): string | null {
   if (id === 'worksuite-desktop') return worksuitePng
   if (id === 'office') return officeSvg
+  if (id === 'lk.worksuite.whatsapp') return whatsappSvg
   if (SYSTEM_ICONS[id]) return tile(id, SYSTEM_ICONS[id])
   const m = /^worksuite-(.+)$/.exec(id)
   if (m && MODULE_ICONS[m[1]]) return tile(`m:${m[1]}`, MODULE_ICONS[m[1]])

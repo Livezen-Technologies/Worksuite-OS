@@ -2,6 +2,7 @@
 import type { LocaleReview, MessageKey } from './en'
 import { aiTa } from './ai'
 import { widgetsTa } from './widgets'
+import { whatsappTa } from './whatsapp'
 
 /** Machine-drafted: not yet reviewed by a native Tamil speaker. See docs/i18n/README.md before changing. */
 export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedKeys: {} }
@@ -9,6 +10,7 @@ export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedK
 const ta: Partial<Record<MessageKey, string>> = {
   ...aiTa,
   ...widgetsTa,
+  ...whatsappTa,
   'panel.taskbar': 'பணிப்பட்டி',
   'panel.openLauncher': 'தொடக்கியைத் திற',
   'panel.running': '{name}, இயங்குகிறது',
