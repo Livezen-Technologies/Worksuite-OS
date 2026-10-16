@@ -12,7 +12,7 @@ import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
 import { xdgDirs } from './xdgDirs'
 import {
   chromeUserAgent, downloadPath, mediaKind, unreadFromTitle, whatsappAllowed, whatsappHost, whatsappNav, whatsappPermission, whatsappPopup,
-  WHATSAPP_APP_ID, WHATSAPP_FOCUS_CHANNEL, WHATSAPP_ID, WHATSAPP_PARTITION, WHATSAPP_URL,
+  WHATSAPP_APP_ID, WHATSAPP_FOCUS_CHANNEL, WHATSAPP_NAMES, WHATSAPP_ID, WHATSAPP_PARTITION, WHATSAPP_URL,
 } from './whatsapp'
 
 const tr = (key: MessageKey, vars?: Record<string, string | number>) => translate(pickLocale(app.isReady() ? app.getLocale() : process.env.LANG), key, vars)
@@ -20,9 +20,10 @@ const ICON = `/usr/share/icons/hicolor/256x256/apps/${WHATSAPP_APP_ID}.png`
 
 /** Must run before app 'ready'. False when WhatsApp is already open (that window is focused instead). */
 export function prepareWhatsApp(): boolean {
-  app.setName(WHATSAPP_APP_ID)
-  ;(app as unknown as { setDesktopName?: (n: string) => void }).setDesktopName?.(`${WHATSAPP_APP_ID}.desktop`)
-  app.commandLine.appendSwitch('class', WHATSAPP_APP_ID)
+  // app_name and the desktop-entry hint of its notifications (Chromium's libnotify path), and the Wayland app_id.
+  app.setName(WHATSAPP_NAMES.name)
+  ;(app as unknown as { setDesktopName?: (n: string) => void }).setDesktopName?.(WHATSAPP_NAMES.desktop)
+  app.commandLine.appendSwitch('class', WHATSAPP_NAMES.wmClass)
   app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer')
   app.setPath('userData', path.join(xdgDirs(os.homedir()).data, 'worksuite/apps', WHATSAPP_ID))
   return app.requestSingleInstanceLock()

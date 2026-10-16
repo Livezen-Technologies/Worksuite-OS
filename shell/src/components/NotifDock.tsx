@@ -6,7 +6,7 @@ import { useState, type ReactNode } from 'react'
 import BIcon from './BIcon'
 import { Icon, P } from './Ws'
 import type { TimedNotice } from '../lib/useNotices'
-import { AppNoticeActions, dismissAppNotices } from './AppNoticeActions'
+import { AppNoticeActions, dismissAppNotices, openAppNotice } from './AppNoticeActions'
 import { appIdOf, notificationsApi } from '../lib/appNotifications'
 import { ageLabel } from '../lib/power'
 import { localeTag, useT } from '../i18n'
@@ -102,11 +102,22 @@ export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd 
             <section key={name as string} aria-label={name as string} className="flex flex-col gap-2">
               <h3 className="m-0 px-1.5 pt-1 text-[11px] font-semibold tracking-[0.08em] uppercase" style={{ color: c as string }}>{name as string}</h3>
               {(items as TimedNotice[]).map((x) => (
-                <div key={x.id} className="relative flex gap-3 rounded-2xl border p-3" style={{ background: x.tone !== 'ok' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.045)', borderColor: 'rgba(255,255,255,0.07)' }}>
+                // An app's notification opens on a click anywhere on the card except its buttons (mouse), or with Enter or
+                // Space on its text, which is a button (keyboard); Open, the other actions and dismiss stay separate.
+                <div key={x.id} data-testid={x.app ? 'app-notice' : undefined} onClick={x.app ? (e) => { if (!(e.target as HTMLElement).closest('button')) openAppNotice(x, () => setNotices(notices.filter((n) => n.id !== x.id))) } : undefined}
+                  className={`relative flex gap-3 rounded-2xl border p-3 ${x.app ? 'cursor-pointer' : ''}`} style={{ background: x.tone !== 'ok' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.045)', borderColor: 'rgba(255,255,255,0.07)' }}>
                   <NoticeIcon icon={x.icon}><span className="flex h-[38px] w-[38px] flex-none items-center justify-center rounded-[10px] text-white" style={{ background: TONE_BG[x.tone] }}><BIcon name={x.tone === 'ok' ? 'check' : 'alert'} size={18} /></span></NoticeIcon>
                   <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                    {x.app ? (
+                      <button type="button" data-testid="app-notice-open" onClick={() => openAppNotice(x, () => setNotices(notices.filter((n) => n.id !== x.id)))}
+                        className="flex cursor-pointer flex-col gap-[3px] rounded-md text-left">
+                        <span className="flex w-full items-baseline gap-1.5"><span className="truncate text-[13px] font-semibold">{x.title}</span><span className="ml-auto flex-none text-[11px] text-[#8FA3C8]">{ageLabel(x.at, now.getTime())}</span></span>
+                        <span className="text-xs leading-[1.4] text-[#C9D6EE]">{x.body}</span>
+                      </button>
+                    ) : (<>
                     <span className="flex items-baseline gap-1.5"><span className="truncate text-[13px] font-semibold">{x.title}</span><span className="ml-auto flex-none text-[11px] text-[#8FA3C8]">{ageLabel(x.at, now.getTime())}</span></span>
                     <span className="text-xs leading-[1.4] text-[#C9D6EE]">{x.body}</span>
+                    </>)}
                     {x.value != null && <span className="mt-1 flex items-center gap-2"><AnimatedProgress value={x.value} label={x.title} height={4} className="flex-1" tone={x.value >= 100 ? 'success' : 'default'} /><span className="font-mono text-[11px] text-[#8FA3C8]"><CountUp value={Math.round(x.value)} /></span></span>}
                     {x.app && <AppNoticeActions notice={x} onDone={() => setNotices(notices.filter((n) => n.id !== x.id))} />}
                   </span>
