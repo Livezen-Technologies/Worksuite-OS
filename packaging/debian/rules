@@ -19,7 +19,10 @@ override_dh_auto_build:
 	# here or on the device). The CUDA builds and other architectures are dropped; no model is ever packaged.
 	cd services/ai && npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 	a=$$(case $(DEB_HOST_ARCH) in amd64) echo x64;; arm64) echo arm64;; esac); \
-	  find services/ai/node_modules/@node-llama-cpp -mindepth 1 -maxdepth 1 ! -name "linux-$$a" ! -name "linux-$$a-vulkan" -exec rm -rf {} +
+	  find services/ai/node_modules/@node-llama-cpp -mindepth 1 -maxdepth 1 ! -name "linux-$$a" ! -name "linux-$$a-vulkan" -exec rm -rf {} + && \
+	  find services/ai/node_modules/@reflink -mindepth 1 -maxdepth 1 -name "reflink-*" ! -name "reflink-linux-$$a-gnu" -exec rm -rf {} +
+	# npm installs optional prebuilds regardless of libc: drop every musl build (dpkg-shlibdeps can't resolve them).
+	find services/ai/node_modules -depth -type d -name "*-musl*" -exec rm -rf {} +
 	find services/ai/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore -o -name "*.gguf" \) -delete
 	# Shell: renderer + Electron main, and the Electron runtime for this architecture.
 	cd shell && npm ci --no-audit --no-fund && npm run build
@@ -103,5 +106,6 @@ override_dh_auto_test:
 override_dh_strip:
 	dh_strip --exclude=usr/lib/worksuite/shell/electron
 override_dh_shlibdeps:
+	# node-llama-cpp's addon finds its bundled libllama/libggml*.so through RUNPATH $$ORIGIN, so no -l is needed.
 	dh_shlibdeps --exclude=usr/lib/worksuite/shell/electron
 override_dh_dwz:
