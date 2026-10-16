@@ -109,6 +109,30 @@ describe('Task View (WSOS-DSK-003)', () => {
     expect(panel.moveWorkspace).toHaveBeenCalledWith(1, 3)
   })
 
+  it('moves a window with a plain pointer drag too (when the native drag never starts), but not after pointercancel', async () => {
+    panel.moveToWorkspace = ok()
+    await view()
+    const card = $$('[data-desktop="3"]')[0]
+    const orig = document.elementFromPoint
+    document.elementFromPoint = (() => card) as typeof document.elementFromPoint
+    try {
+      const ptr = (target: EventTarget, type: string, x: number, y: number) => act(() => {
+        const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 })
+        target.dispatchEvent(e)
+      })
+      await ptr($$('[data-window]')[0], 'pointerdown', 10, 10)
+      await ptr(window, 'pointermove', 200, 300)
+      expect(card.className).toContain('border-[#18D4F0]')        // the desktop under the pointer lights up
+      await ptr(window, 'pointerup', 200, 300)
+      expect(panel.moveToWorkspace).toHaveBeenCalledWith('w1', 3)
+      await ptr($$('[data-window]')[0], 'pointerdown', 10, 10)
+      await ptr(window, 'pointermove', 200, 300)
+      await ptr(window, 'pointercancel', 200, 300)               // the native drag took over: its drop moves it
+      await ptr(window, 'pointerup', 200, 300)
+      expect(panel.moveToWorkspace).toHaveBeenCalledTimes(1)
+    } finally { document.elementFromPoint = orig }
+  })
+
   it('desktop menu: rename, background, move left/right and close', async () => {
     panel.removeWorkspace = ok(); panel.moveWorkspace = ok()
     const onBackground = vi.fn()

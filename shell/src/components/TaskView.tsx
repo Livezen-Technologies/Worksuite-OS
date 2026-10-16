@@ -108,6 +108,38 @@ export default function TaskView({ ws, windows, info, wallpaper, capture, onClos
     if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const r = cards[i].getBoundingClientRect(); setMenu({ kind: 'desktop', n, x: r.left, y: r.top - 8 }) }
   }
 
+  // Pointer drag as well as HTML5 drag and drop: when the native drag starts, Chromium cancels the pointer stream
+  // (pointercancel) and the drop handlers below move the window; when it never starts (it did not with some pointer
+  // devices under Wayland), the release over a desktop card moves it here.
+  const pointerDrag = (e: { button: number; clientX: number; clientY: number }, handle: string) => {
+    if (e.button !== 0 || !(dynamic || ws.count > 1)) return
+    const x0 = e.clientX, y0 = e.clientY
+    let moved = false
+    const over = (x: number, y: number): number | 'new' | null => {
+      const el = (document.elementFromPoint?.(x, y) as HTMLElement | null)?.closest<HTMLElement>('[data-desktop]')
+      if (!el) return null
+      const n = Number(el.dataset.desktop)
+      return n > 0 ? n : 'new'
+    }
+    const stop = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', cancel) }
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return
+      moved = true
+      setDropOn(over(ev.clientX, ev.clientY))
+    }
+    const up = (ev: PointerEvent) => {
+      stop()
+      if (!moved) return
+      setDropOn(null)
+      const target = over(ev.clientX, ev.clientY)
+      if (target !== null) void moveWindow(handle, target)
+    }
+    const cancel = () => { stop(); if (moved) setDropOn(null) }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+  }
+
   const dropProps = (target: number | 'new') => ({
     onDragOver: (e: DragEvent) => {
       if (e.dataTransfer.types.includes(DRAG_WINDOW) || (target !== 'new' && e.dataTransfer.types.includes(DRAG_DESKTOP))) { e.preventDefault(); setDropOn(target) }
@@ -141,6 +173,7 @@ export default function TaskView({ ws, windows, info, wallpaper, capture, onClos
                 <div key={w.handle} role="listitem" className="group relative">
                   <button type="button" data-window={w.handle} draggable={dynamic || ws.count > 1}
                     onDragStart={(e) => { e.dataTransfer.setData(DRAG_WINDOW, w.handle); e.dataTransfer.effectAllowed = 'move' }}
+                    onPointerDown={(e) => pointerDrag(e, w.handle)}
                     onClick={() => pickWindow(w)}
                     onContextMenu={(e) => { e.preventDefault(); setMenu({ kind: 'window', w, x: e.clientX, y: e.clientY }) }}
                     aria-label={`${w.title || app.name}, ${app.name}${sticky ? `, ${t('desktops.onAll')}` : ''}`}
