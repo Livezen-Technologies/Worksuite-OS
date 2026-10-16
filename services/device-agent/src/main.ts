@@ -4,14 +4,15 @@
 //   worksuite-device-agent status | refresh
 import { publicPolicy } from './kiosk.ts';
 import { createPublicKey, type KeyObject } from 'node:crypto';
-import { chmodSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { createConnection, createServer } from 'node:net';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { Agent } from './agent.ts';
 import { httpApi } from './api.ts';
 import { DEFAULT_PATHS, linuxHost } from './host.ts';
 import { StateFile } from './state.ts';
 import { forwardPackageAudit } from './auditForward.ts';
+import { serveControl } from './control.ts';
 
 const KEY_DIR = '/usr/share/worksuite/keys/device-commands';   // from worksuite-archive-keyring
 const SOCKET = join(DEFAULT_PATHS.runtimeDir, 'control.sock');
@@ -46,30 +47,12 @@ async function daemon() {
   const serial = <T>(fn: () => Promise<T>) => { const p = busy.then(fn, fn); busy = p.catch(() => {}); return p; };
   const safe = (what: string, fn: () => Promise<unknown>) => serial(fn).catch((e) => host.audit(`${what}_failed`, { error: String(e?.message ?? e) }));
 
-  const server = createServer((sock) => {
-    let buf = '';
-    sock.setEncoding('utf8');
-    sock.on('data', async (c) => {
-      buf += c;
-      if (buf.length > 16 * 1024) return sock.destroy();
-      const nl = buf.indexOf('\n'); if (nl < 0) return;
-      let req: { method?: string; params?: Record<string, unknown> };
-      try { req = JSON.parse(buf.slice(0, nl)); } catch { return sock.end('{"error":"bad_request"}\n'); }
-      const p = req.params ?? {};
-      try {
-        if (req.method === 'Enroll' && typeof p.server_url === 'string' && typeof p.enrollment_token === 'string') {
-          const id = await serial(() => agent.enroll(p.server_url as string, p.enrollment_token as string));
-          return sock.end(JSON.stringify({ result: id }) + '\n');
-        }
-        if (req.method === 'Refresh') { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); return sock.end(JSON.stringify({ result: agent.status() }) + '\n'); }
-        if (req.method === 'Status') return sock.end(JSON.stringify({ result: agent.status() }) + '\n');
-        sock.end('{"error":"unknown_method"}\n');
-      } catch (e) { sock.end(JSON.stringify({ error: String((e as Error).message) }) + '\n'); }
-    });
-    sock.on('error', () => {});
+  // Root only (0600); pkexec runs the CLI as root.
+  const server = serveControl(SOCKET, {
+    enroll: (url, token) => serial(() => agent.enroll(url, token)),
+    refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); return agent.status(); },
+    status: () => agent.status(),
   });
-  rmSync(SOCKET, { force: true });
-  server.listen(SOCKET, () => chmodSync(SOCKET, 0o600));   // root only; pkexec runs the CLI as root
 
   const jitter = (ms: number) => ms + Math.floor(Math.random() * ms * 0.2);
   const every = (ms: number, what: string, fn: () => Promise<unknown>) => {
