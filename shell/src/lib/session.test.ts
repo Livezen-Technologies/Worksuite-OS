@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { nextState, shouldEnterRecovery } from './session'
+import { describe, expect, it, vi } from 'vitest'
+import { nextState, requestLock, shouldEnterRecovery } from './session'
 
 describe('session lifecycle', () => {
   it('follows greeter → starting → active', () => {
@@ -36,5 +36,20 @@ describe('managedLabel', () => {
     expect(managedLabel({ ...base, managed: false, policies: null })).toBeNull()
     expect(managedLabel({ ...base, managed: true, policies: null })).toBe('Managed')
     expect(managedLabel({ ...base, managed: true, policies: { version: 'v', update_ring: 'pilot', update_mode: null, maintenance_window: null, lock_timeout_max_s: null, offline_access_days: null, usb_storage: null, bluetooth: null, app_allowlist_size: 0 } })).toBe('Managed · pilot ring')
+  })
+})
+
+describe('requestLock (one lock screen)', () => {
+  it('shows no shell lock board when the system locker took the screen', async () => {
+    const show = vi.fn()
+    await requestLock(async () => true, show)
+    expect(show).not.toHaveBeenCalled()
+  })
+  it('falls back to the shell lock board without a system locker', async () => {
+    const show = vi.fn()
+    await requestLock(async () => false, show)
+    await requestLock(async () => { throw new Error('no logind') }, show)
+    await requestLock(async () => undefined, show)
+    expect(show).toHaveBeenCalledTimes(3)
   })
 })

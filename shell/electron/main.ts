@@ -135,7 +135,11 @@ app.whenReady().then(() => {
     if (method === 'key') return { ok: false, message: 'Use your password.' }
     return checkOwnPassword(user, secret)
   })
-  handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
+  // true = the system locker (swayidle → worksuite-lock → gtklock) has the screen; the shell then shows no lock board.
+  handle('ws:lock', async () => {
+    await brokerCall('Lock')
+    return new Promise<boolean>((resolve) => execFile('loginctl', ['lock-session'], (err) => resolve(!err)))
+  })
   handle('ws:logout', () => run(...logoutCommand()))
   handle('ws:power', (action) => {
     const verbs: Record<string, string> = { suspend: 'suspend', restart: 'reboot', shutdown: 'poweroff' }

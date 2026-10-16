@@ -3,7 +3,8 @@
 export interface WorkSuiteApi {
   /** method 'pin' sends the PIN where the password goes; 'key' sends no secret (pam_u2f asks for a touch). */
   authenticate(user: string, password: string, method?: SignInMethod): Promise<{ ok: boolean; message?: string }>
-  lock(): Promise<void>
+  /** Locks through the system locker; true when it took the screen (the shell then shows no lock board of its own). */
+  lock(): Promise<boolean>
   logout(): Promise<void>
   power(action: 'suspend' | 'restart' | 'shutdown'): Promise<void>
   launchApp(appId: string): Promise<void>
@@ -392,7 +393,7 @@ const stub: WorkSuiteApi = {
     if (password === 'wrong') return { ok: false, message: 'Incorrect password. Try again.' }
     return password.length > 0 ? { ok: true } : { ok: false, message: 'Enter your password.' }
   },
-  async lock() {},
+  async lock() { return false },
   async logout() {},
   async power() {},
   async launchApp() {},

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { nextState, type SessionEvent, type SessionState } from './lib/session'
+import { nextState, requestLock, type SessionEvent, type SessionState } from './lib/session'
 import { os } from './lib/os'
 import type { WindowApp } from './screens/types'
 import Greeter from './screens/Greeter'
@@ -61,7 +61,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (state !== 'active') return
-      if (e.metaKey && e.key.toLowerCase() === 'l') { e.preventDefault(); void os.lock(); send('lock') }
+      if (e.metaKey && e.key.toLowerCase() === 'l') { e.preventDefault(); void requestLock(() => os.lock(), () => send('lock')) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -86,7 +86,7 @@ export default function App() {
     case 'active':
       if (firstRun) return <FirstRun userName={realName || displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
       return (
-        <Desktop user={user} onLock={() => { void os.lock(); send('lock') }} onLogout={() => { void os.logout(); send('logout') }} onOpen={setWin} notes={notes}>
+        <Desktop user={user} onLock={() => { void requestLock(() => os.lock(), () => send('lock')) }} onLogout={() => { void os.logout(); send('logout') }} onOpen={setWin} notes={notes}>
           {win === 'files' && <Files archive={archive} onClose={() => { setWin(null); setArchive(null) }} />}
           {win === 'appcenter' && <AppCenter onClose={() => setWin(null)} />}
           {win === 'settings' && <Settings onClose={() => setWin(null)} />}
