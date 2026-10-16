@@ -208,5 +208,13 @@ P=$ROOT/services/session/portals/worksuite-portals.conf
 grep -qx 'org.freedesktop.impl.portal.ScreenCast=wlr' "$P" && grep -qx 'org.freedesktop.impl.portal.Screenshot=wlr' "$P" && grep -qx 'default=gtk' "$P" \
   && ok "portals.conf: ScreenCast/Screenshot on wlr, the rest on gtk" || bad "portals.conf: ScreenCast/Screenshot on wlr, the rest on gtk"
 
+# ---- sign-in speed: no Python for "was a PIN used?" when no PIN profile is on ----
+export WORKSUITE_PAM_COMMON_AUTH="$T/common-auth"
+printf 'auth\t[success=1 default=ignore]\tpam_unix.so nullok\n' > "$WORKSUITE_PAM_COMMON_AUTH"
+PATH="$T/nopy:$PATH" sh "$BIN/worksuite-signin" pam-pin-used; check "pam-pin-used answers no without a PIN profile" "$?" 1
+printf 'auth\t[success=end default=ignore]\tpam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-pin\n' >> "$WORKSUITE_PAM_COMMON_AUTH"
+grep -Eqs 'worksuite-signin pam-pin([[:space:]]|$)' "$WORKSUITE_PAM_COMMON_AUTH" && ok "pam-pin-used asks the daemon with a PIN profile on" || bad "pam-pin-used asks the daemon with a PIN profile on"
+unset WORKSUITE_PAM_COMMON_AUTH
+
 echo "1..$n"
 exit $fail
