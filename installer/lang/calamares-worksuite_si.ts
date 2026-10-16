@@ -526,4 +526,139 @@
       <translation>ඔබට ඔබේ තැටි මුරවැකිය අමතක වුවහොත්, ඔබේ ගොනු අගුළු හැරීමට ඇති එකම මාර්ගය මෙම යතුරයි. එය එක් වරක් පමණක් පෙන්වන අතර මෙම පරිගණකයේ ගබඩා නොකෙරේ.</translation>
     </message>
   </context>
+  <context>
+    <name>WsStyle</name>
+    <message>
+      <source>Unpartitioned space</source>
+      <translation>කොටස් නොකළ ඉඩ</translation>
+    </message>
+    <message>
+      <source>EFI system</source>
+      <translation>EFI පද්ධතිය</translation>
+    </message>
+    <message>
+      <source>STEP 2 · DISK</source>
+      <translation>පියවර 2 · තැටිය</translation>
+    </message>
+    <message>
+      <source>Where should WorkSuite go?</source>
+      <translation>WorkSuite ස්ථාපනය කළ යුත්තේ කොතැනද?</translation>
+    </message>
+    <message>
+      <source>WorkSuite OS uses the whole disk. Check that this is the right one.</source>
+      <translation>WorkSuite OS සම්පූර්ණ තැටියම භාවිත කරයි. මෙය නිවැරදි තැටිය දැයි පරීක්ෂා කරන්න.</translation>
+    </message>
+    <message>
+      <source>Storage device</source>
+      <translation>ගබඩා උපාංගය</translation>
+    </message>
+    <message>
+      <source>Erase disk</source>
+      <translation>තැටිය මකන්න</translation>
+    </message>
+    <message>
+      <source>Deletes &lt;b style="color:#FFB98A"&gt;all data&lt;/b&gt; on the selected device.</source>
+      <translation>තෝරාගත් උපාංගයේ &lt;b style="color:#FFB98A"&gt;සියලු දත්ත&lt;/b&gt; මකා දමයි.</translation>
+    </message>
+    <message>
+      <source>Before</source>
+      <translation>පෙර</translation>
+    </message>
+    <message>
+      <source>After</source>
+      <translation>පසු</translation>
+    </message>
+    <message>
+      <source>STEP 2 · ENCRYPTION</source>
+      <translation>පියවර 2 · සංකේතනය</translation>
+    </message>
+    <message>
+      <source>Encrypt your disk?</source>
+      <translation>ඔබේ තැටිය සංකේතනය කරන්නද?</translation>
+    </message>
+    <message>
+      <source>Keeps your files safe if the computer is lost or stolen. You'll type this passphrase each time it starts.</source>
+      <translation>පරිගණකය නැති වුවහොත් හෝ සොරකම් කළහොත් ඔබේ ගොනු ආරක්ෂිතව තබයි. එය ආරම්භ වන සෑම විටම ඔබ මෙම මුරවැකිය ටයිප් කරනු ඇත.</translation>
+    </message>
+    <message>
+      <source>Encrypt (recommended)</source>
+      <translation>සංකේතනය කරන්න (නිර්දේශිතයි)</translation>
+    </message>
+    <message>
+      <source>LUKS2 full-disk encryption</source>
+      <translation>LUKS2 සම්පූර්ණ තැටි සංකේතනය</translation>
+    </message>
+    <message>
+      <source>Don't encrypt</source>
+      <translation>සංකේතනය නොකරන්න</translation>
+    </message>
+    <message>
+      <source>Faster setup, no passphrase at startup</source>
+      <translation>වේගවත් සැකසුම, ආරම්භයේදී මුරවැකියක් නැත</translation>
+    </message>
+    <message>
+      <source>Passphrase</source>
+      <translation>මුරවැකිය</translation>
+    </message>
+    <message>
+      <source>Confirm passphrase</source>
+      <translation>මුරවැකිය තහවුරු කරන්න</translation>
+    </message>
+    <message>
+      <source>If you forget this passphrase, the recovery key (shown at the end of install) is the only way back in.</source>
+      <translation>ඔබට මෙම මුරවැකිය අමතක වුවහොත්, (ස්ථාපනය අවසානයේ පෙන්වන) ප්‍රතිසාධන යතුර නැවත ඇතුළු වීමට ඇති එකම මාර්ගයයි.</translation>
+    </message>
+    <message>
+      <source>Weak</source>
+      <translation>දුර්වලයි</translation>
+    </message>
+    <message>
+      <source>Fair</source>
+      <translation>සාමාන්‍යයි</translation>
+    </message>
+    <message>
+      <source>Good</source>
+      <translation>හොඳයි</translation>
+    </message>
+    <message>
+      <source>Strong</source>
+      <translation>ශක්තිමත්</translation>
+    </message>
+    <message>
+      <source>Strength: %1</source>
+      <translation>ශක්තිය: %1</translation>
+    </message>
+    <message>
+      <source>At least 8 characters</source>
+      <translation>අවම වශයෙන් අක්ෂර 8ක්</translation>
+    </message>
+    <message>
+      <source>Passphrases do not match</source>
+      <translation>මුරවැකි නොගැළපේ</translation>
+    </message>
+    <message>
+      <source>Passphrases match</source>
+      <translation>මුරවැකි ගැළපේ</translation>
+    </message>
+    <message>
+      <source>Quit the installer?</source>
+      <translation>ස්ථාපකයෙන් ඉවත් වන්නද?</translation>
+    </message>
+    <message>
+      <source>The installation did not finish. You can start again any time from the boot menu.</source>
+      <translation>ස්ථාපනය අවසන් නොවීය. ඔබට ඕනෑම වේලාවක ආරම්භක මෙනුවෙන් නැවත ආරම්භ කළ හැක.</translation>
+    </message>
+    <message>
+      <source>Nothing has been installed yet, and your disk hasn't changed. You can start again any time from the boot menu.</source>
+      <translation>තවම කිසිවක් ස්ථාපනය කර නැත, ඔබේ තැටිය වෙනස් වී නැත. ඔබට ඕනෑම වේලාවක ආරම්භක මෙනුවෙන් නැවත ආරම්භ කළ හැක.</translation>
+    </message>
+    <message>
+      <source>Keep installing</source>
+      <translation>ස්ථාපනය දිගටම කරන්න</translation>
+    </message>
+    <message>
+      <source>Quit installer</source>
+      <translation>ස්ථාපකයෙන් ඉවත් වන්න</translation>
+    </message>
+  </context>
 </TS>

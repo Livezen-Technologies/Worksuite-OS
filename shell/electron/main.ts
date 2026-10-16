@@ -2,6 +2,7 @@ import { findBundles } from './bundles'
 import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
 import { bootMode } from './bootmode'
@@ -10,8 +11,8 @@ import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broke
 import { deviceCredential, deviceInfo, enrollDevice } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
 import { listDevices } from './hardware'
-import { localUsers } from './users'
-import { signinHost, type SignInMethod } from './signin'
+import { checkOwnPassword, localUsers } from './users'
+import { ask, signinHost, type SignInMethod } from './signin'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
 import { loadSession, parseAppArgs, resolveLink } from './webapps'
@@ -118,7 +119,15 @@ app.whenReady().then(() => {
   // Administrator grants for exact HTTPS origins of WorkSuite apps (/etc/worksuite/web-permissions.json).
   const webGrants = loadGrants()
 
-  handle('ws:authenticate', async () => ({ ok: false, message: 'Authentication is handled by the greeter (greetd/PAM).' }))
+  // Sign-in is greetd/PAM's; the shell only re-checks the signed-in user's own password to unlock its lock screen.
+  handle('ws:authenticate', async (user, secret, method) => {
+    if (method === 'pin') {
+      const r = await ask({ op: 'verify', user: os.userInfo().username, pin: secret })
+      return r.ok ? { ok: true } : { ok: false }
+    }
+    if (method === 'key') return { ok: false, message: 'Use your password.' }
+    return checkOwnPassword(user, secret)
+  })
   handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
   handle('ws:logout', () => run(...logoutCommand()))
   handle('ws:power', (action) => {

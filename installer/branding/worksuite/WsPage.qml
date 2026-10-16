@@ -41,6 +41,8 @@ Item {
     function arrive() {
         if (active) return
         active = true
+        // A request made on an earlier page (the Disk page's sub-steps too) is not one for this page.
+        lastRequest = state.get("subRequest", "")
         var i = ViewManager.currentStepIndex
         var last = state.get("lastStep", -1)
         // Coming back from a later step lands on the last sub-step.

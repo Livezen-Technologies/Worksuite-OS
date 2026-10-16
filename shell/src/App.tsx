@@ -22,8 +22,13 @@ const mode = new URLSearchParams(location.search).get('mode')
 export default function App() {
   // Re-render every screen when the language changes (screens read strings through t()).
   useT()
-  const [state, setState] = useState<SessionState>(mode === 'recovery' ? 'recovery' : 'greeter')
+  // In the installed session greetd/PAM has already signed the person in, so the shell opens straight on the
+  // desktop: its own sign-in board cannot authenticate (ws:authenticate always refuses) and would strand the
+  // session. The sign-in board stays for the browser preview, which has no Electron bridge.
+  const [state, setState] = useState<SessionState>(mode === 'recovery' ? 'recovery' : window.worksuite ? 'starting' : 'greeter')
   const [user, setUser] = useState('')
+  // The account's full name from /etc/passwd (GECOS), shown on the lock screen and the first-run greeting.
+  const [realName, setRealName] = useState('')
   const [firstRun, setFirstRun] = useState(() => localStorageGet('ws.firstRunDone') !== '1')
   const [win, setWin] = useState<WindowApp | null>(null)
   // An archive opened from elsewhere (Files is the default handler for archive types): open it in Files.
@@ -38,7 +43,12 @@ export default function App() {
   // when the session started without the shell's own sign-in.
   useEffect(() => {
     let live = true
-    os.sysUsers().then((r) => { if (live && r.available && r.value.current) setUser((u) => u || r.value.current) }).catch(() => {})
+    os.sysUsers().then((r) => {
+      if (!live || !r.available || !r.value.current) return
+      setUser((u) => u || r.value.current)
+      const me = r.value.users.find((u) => u.login === r.value.current)
+      if (me && me.name && me.name !== me.login) setRealName(me.name)
+    }).catch(() => {})
     return () => { live = false }
   }, [])
 
@@ -62,18 +72,19 @@ export default function App() {
   if (mode === 'safe') return <SafeLauncher />
 
   switch (state) {
-    case 'greeter':
     case 'starting':
+      return null
+    case 'greeter':
       return <Greeter onSignIn={(u) => { setUser(u); send('authSuccess') }} />
     case 'locked':
     case 'suspending':
-      return <Lock user={user} notices={notes.notices} onUnlock={() => send('unlock')} />
+      return <Lock user={user} name={realName || undefined} notices={notes.notices} onUnlock={() => send('unlock')} />
     case 'recovery':
       return <Recovery onRestartShell={() => send('shellRestarted')} onLogout={() => send('logout')} />
     case 'loggingOut':
       return null
     case 'active':
-      if (firstRun) return <FirstRun userName={displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
+      if (firstRun) return <FirstRun userName={realName || displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
       return (
         <Desktop user={user} onLock={() => { void os.lock(); send('lock') }} onLogout={() => { void os.logout(); send('logout') }} onOpen={setWin} notes={notes}>
           {win === 'files' && <Files archive={archive} onClose={() => { setWin(null); setArchive(null) }} />}
