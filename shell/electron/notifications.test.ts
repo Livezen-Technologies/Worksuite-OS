@@ -86,3 +86,27 @@ describe('notification icons', () => {
     expect(notifyIcon(undefined, undefined)).toBeNull()
   })
 })
+
+describe('clicking a notification focuses the sender', () => {
+  const wins = [{ handle: 'w1', appId: 'firefox-esr' }, { handle: 'w2', appId: 'lk.worksuite.whatsapp' }, { handle: 'w3', appId: 'org.gnome.Nautilus' }]
+  it('finds the window by desktop-entry hint, app_name or app_id', async () => {
+    const { windowForNotification } = await import('./notifications')
+    expect(windowForNotification({ app: 'WhatsApp', desktopEntry: 'lk.worksuite.whatsapp' }, wins)?.handle).toBe('w2')
+    expect(windowForNotification({ app: 'lk.worksuite.whatsapp' }, wins)?.handle).toBe('w2')
+    expect(windowForNotification({ app: 'Files', desktopEntry: 'org.gnome.Nautilus.desktop' }, wins)?.handle).toBe('w3')
+    expect(windowForNotification({ app: 'nautilus' }, wins)?.handle).toBe('w3')
+    expect(windowForNotification({ app: 'Thunderbird' }, wins)).toBeUndefined()
+  })
+  it('focuses on the default action, still sends ActionInvoked, and not for other actions', async () => {
+    const { NotificationCenter } = await import('./notifications')
+    const focused: string[] = [], invoked: string[] = []
+    const c = new NotificationCenter(() => {}, (id, k) => invoked.push(`${id}:${k}`), () => 1, (n) => focused.push(n.desktopEntry ?? n.app))
+    const a = c.notify('lk.worksuite.whatsapp', 0, 'Ama', 'hi', [], 1, null, 'lk.worksuite.whatsapp')
+    const b = c.notify('Mail', 0, 's', 'b', ['reply', 'Reply'], 1)
+    expect(c.invoke(b, 'reply')).toBe(true)
+    expect(focused).toEqual([])
+    expect(c.invoke(a, 'default')).toBe(true)
+    expect(focused).toEqual(['lk.worksuite.whatsapp'])
+    expect(invoked).toEqual([`${b}:reply`, `${a}:default`])
+  })
+})

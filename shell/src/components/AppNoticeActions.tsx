@@ -13,6 +13,8 @@ export function AppNoticeActions({ notice, onDone }: { notice: Notice; onDone: (
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1.5">
       <span className="mr-auto text-[11px] text-[#8FA3C8]">{notice.app}</span>
+      {/* Open: the notification's default action; the shell also brings the app's window forward. */}
+      <button type="button" className={btn} onClick={() => { void api.invoke(id, 'default'); onDone() }}>{t('common.open')}</button>
       {(notice.actions ?? []).filter((a) => a.key !== 'default').map((a) => (
         <button key={a.key} type="button" className={btn} onClick={() => { void api.invoke(id, a.key); onDone() }}>{a.label}</button>
       ))}

@@ -42,7 +42,7 @@ import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
 import { startTouchHost } from './touch'
-import { startNotifications } from './notifications'
+import { startNotifications, windowForNotification } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
@@ -550,7 +550,7 @@ app.whenReady().then(() => {
   handle('ws:displayWallpaper', (output, id) => displays.setWallpaper(output, id))
   void displays.applySaved()
   // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
-  startPanel(handle, broadcast, () => void displays.applySaved(), (full) => {
+  const panelClient = startPanel(handle, broadcast, () => void displays.applySaved(), (full) => {
     // An archive opened from elsewhere (worksuite-open-archive, the default handler): browse it in Files.
     const at = locate(files, full)
     if (at) { broadcast('ws:openArchive', at); win?.show(); win?.focus() }
@@ -563,7 +563,11 @@ app.whenReady().then(() => {
   startPeripheralsHost(handle, app.getPath('home'))
   startTouchHost(handle, broadcast, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
-  const notices = startNotifications(handle, broadcast)
+  // Clicking one (its "default" action) also raises the sender's window through the bridge, whatever the app does.
+  const notices = startNotifications(handle, broadcast, (n) => {
+    const w = panelClient && windowForNotification(n, panelClient.windows)
+    if (w) void panelClient.activate(w.handle)
+  })
   // Files' "Notify me when done" (FO1): a notice in the shell's own notification centre, text only.
   handle('ws:filesNotify', (summary, body) => notices.notify('Files', 0, String(summary).slice(0, 200), String(body).slice(0, 400), [], 1))
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
