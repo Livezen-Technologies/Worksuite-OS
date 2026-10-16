@@ -184,7 +184,8 @@ class StepIndexTest(unittest.TestCase):
 
     def test_footer_counts_from_the_end_and_hides_back_after_install(self):
         qml = (ROOT / "branding" / "worksuite" / "calamares-navigation.qml").read_text()
-        self.assertIn("ViewManager.rowCount() - 1", qml)
+        last = int(re.search(r"readonly property int lastStep: (\d+)", qml).group(1))
+        self.assertEqual(last, self.steps() - 1)
         self.assertNotRegex(qml, r"currentStepIndex >= \d")
         self.assertIn("visible: ViewManager.backAndNextVisible && !nav.afterInstall", qml)
 

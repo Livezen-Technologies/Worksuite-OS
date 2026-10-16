@@ -16,9 +16,10 @@ Rectangle {
     property int subStep: 0
     property bool subNextOk: true
     property bool installFailed: false
-    // settings.conf sequence ends: ... install, recovery key (last - 1), finished (last). Counted from the end so an
-    // added page before the install (e.g. enroll) never shifts these.
-    readonly property int lastStep: ViewManager.rowCount() - 1
+    // settings.conf sequence ends: ... install, recovery key (last - 1), finished (last). lastStep is the index of
+    // the last step (finished); tests/test_config.py checks it against settings.conf so an added page can't shift it.
+    // (ViewManager.rowCount() is not callable from this QML: it broke the footer's bindings.)
+    readonly property int lastStep: 10
     readonly property bool afterInstall: ViewManager.currentStepIndex >= lastStep - 1
     readonly property bool atEnd: ViewManager.currentStepIndex >= lastStep
     Timer {
