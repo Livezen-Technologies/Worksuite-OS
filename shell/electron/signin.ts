@@ -64,7 +64,7 @@ export function signinMethods(user = os.userInfo().username, paths: SigninPaths 
 export type Runner = (args: string[], stdin: string) => Promise<{ status: number | null; out: string }>
 
 const pkexec: Runner = (args, stdin) => new Promise((resolve) => {
-  const child = spawn('pkexec', [HELPER, ...args], { stdio: ['pipe', 'pipe', 'ignore'] })
+  const child = spawn('pkexec', ['/usr/lib/worksuite/worksuite-signin', ...args], { stdio: ['pipe', 'pipe', 'ignore'] })
   let out = ''
   child.stdout.on('data', (d) => { out += d })
   child.on('error', () => resolve({ status: -1, out: '' }))

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { LockProps } from './types'
-import { os } from '../lib/os'
+import { os, type SignInMethod } from '../lib/os'
+import { METHOD_LABEL } from './settings/SignIn'
 import { ageLabel } from '../lib/power'
 import { useANow, aTime } from '../components/AClock'
 import { Avatar, BG, Icon, P, glassBtn } from '../components/Ws'
 import { formatDate, t } from '../i18n'
 
 // Lock board: date, big clock, notification previews (content hidden), "Press any key or click to unlock".
-// Any key or click reveals the password field; unlocking always needs the password.
+// Any key or click reveals the password field. AuthLockPin board: people who set up a PIN or a security key in
+// Settings › Users get a Password / PIN / Security key switcher; the password always works.
 export default function Lock({ user, onUnlock, notices = [] }: LockProps) {
   const now = useANow()
   const [asking, setAsking] = useState(false)
@@ -15,6 +17,18 @@ export default function Lock({ user, onUnlock, notices = [] }: LockProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLInputElement>(null)
+  const [methods, setMethods] = useState<SignInMethod[]>(['password'])
+  const [method, setMethod] = useState<SignInMethod>('password')
+  useEffect(() => {
+    let live = true
+    void os.signinMethods().then((r) => {
+      if (!live || !r.available) return
+      setMethods(['password', ...(r.value.pin && r.value.allow_pin ? ['pin' as const] : []), ...(r.value.keys.length ? ['key' as const] : [])])
+      if (r.value.default !== 'pin' || r.value.allow_pin) setMethod(r.value.default)
+    }, () => {})
+    return () => { live = false }
+  }, [])
+  const pick = (m: SignInMethod) => { setMethod(m); setPassword(''); setError(null); if (m !== 'key') setTimeout(() => ref.current?.focus(), 0) }
   const display = user ? user.replace(/^.*\\/, '').replace(/@.*$/, '') : t('lock.user')
   const name = display.charAt(0).toUpperCase() + display.slice(1)
   const day = formatDate(now, { weekday: 'long', day: 'numeric', month: 'long' }).replace(',', '')
@@ -39,12 +53,12 @@ export default function Lock({ user, onUnlock, notices = [] }: LockProps) {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (busy) return
-    if (!password) { setError(t('greeter.enterPassword')); ref.current?.focus(); return }
+    if (method !== 'key' && !password) { setError(t('greeter.enterPassword')); ref.current?.focus(); return }
     setBusy(true); setError(null)
     try {
-      const res = await os.authenticate(user, password)
+      const res = await os.authenticate(user, method === 'key' ? '' : password, method)
       if (res.ok) onUnlock()
-      else { setError(t('greeter.wrongPassword')); setPassword(''); ref.current?.focus() }
+      else { setError(t(method === 'pin' ? 'signin.wrongPin' : method === 'key' ? 'signin.keyFailed' : 'greeter.wrongPassword')); setPassword(''); ref.current?.focus() }
     } catch {
       setError(t('lock.verifyFailed'))
     } finally { setBusy(false) }
@@ -91,10 +105,18 @@ export default function Lock({ user, onUnlock, notices = [] }: LockProps) {
         <form aria-label={t('lock.unlock')} onSubmit={submit} noValidate className="absolute top-[330px] right-0 left-0 flex flex-col items-center gap-3 px-4">
           <Avatar name={name} size={88} font={32} style={{ boxShadow: '0 0 0 4px rgba(255,255,255,0.14), 0 20px 50px rgba(0,0,0,0.45)' }} />
           <div className="text-[22px] font-semibold">{name}</div>
+          {method === 'key' ? (
+            <div className="mt-1 flex flex-col items-center gap-2.5">
+              <span className="relative flex h-14 w-14 items-center justify-center"><span className="absolute inset-0 animate-ping rounded-full border-2 border-[#18D4F0] opacity-50" />
+                <Icon d={['M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM10.5 9.5L20 19M16 15l2-2M18 17l2-2']} size={26} stroke="#18D4F0" /></span>
+              <button type="submit" disabled={busy} className="cursor-pointer rounded-xl bg-[#1F6BFF] px-6 py-2.5 text-sm font-semibold hover:bg-[#3A7DFF] disabled:opacity-70">{t('lock.unlock')}</button>
+            </div>
+          ) : (
           <div className={`mt-1 flex h-12 w-[340px] max-w-full items-center rounded-xl border bg-[rgba(8,20,48,0.6)] pr-1.5 pl-4 backdrop-blur-[16px] ${error ? 'border-[#FF8A7A]' : 'border-white/[0.18] focus-within:border-[#7FB2FF]'}`}>
-            <label htmlFor="ws-lock-pw" className="sr-only">{t('greeter.password')}</label>
-            <input id="ws-lock-pw" ref={ref} type="password" placeholder={t('greeter.password')} autoComplete="current-password"
-              value={password} onChange={(e) => { setPassword(e.target.value); setError(null) }}
+            <label htmlFor="ws-lock-pw" className="sr-only">{t(METHOD_LABEL[method])}</label>
+            <input id="ws-lock-pw" ref={ref} type="password" placeholder={t(METHOD_LABEL[method])} autoComplete={method === 'pin' ? 'off' : 'current-password'}
+              inputMode={method === 'pin' ? 'numeric' : undefined} maxLength={method === 'pin' ? 12 : undefined}
+              value={password} onChange={(e) => { setPassword(method === 'pin' ? e.target.value.replace(/\D/g, '') : e.target.value); setError(null) }}
               aria-invalid={!!error || undefined} aria-describedby="ws-lock-hint"
               className="min-w-0 flex-1 border-0 bg-transparent text-[15px] text-white outline-none placeholder:text-white/50" />
             <button type="submit" aria-label={t('lock.unlock')} disabled={busy}
@@ -102,7 +124,19 @@ export default function Lock({ user, onUnlock, notices = [] }: LockProps) {
               <Icon d={P.arrow} size={18} width={2.5} />
             </button>
           </div>
-          <span id="ws-lock-hint" role={error ? 'alert' : undefined} className={`text-[13px] ${error ? 'text-[#FFB4A8]' : 'text-white/60'}`}>{error ?? t('lock.hint')}</span>
+          )}
+          <span id="ws-lock-hint" role={error ? 'alert' : undefined} className={`max-w-[420px] text-center text-[13px] ${error ? 'text-[#FFB4A8]' : 'text-white/60'}`}>{error ?? (method === 'key' ? t('signin.lockKeyWait') : t('lock.hint'))}</span>
+          {methods.length > 1 && (
+            <div className="mt-2 flex flex-col items-center gap-2">
+              <span className="text-xs text-white/60">{t('signin.title')}</span>
+              <div role="radiogroup" aria-label={t('signin.method')} className="flex gap-2">
+                {methods.map((m) => (
+                  <button key={m} type="button" role="radio" aria-checked={m === method} onClick={() => pick(m)}
+                    className={`cursor-pointer rounded-xl border px-3.5 py-2 text-[13px] backdrop-blur-[16px] ${m === method ? 'border-[#1F6BFF] bg-[rgba(31,107,255,0.35)]' : 'border-white/[0.18] bg-[rgba(8,20,48,0.6)] hover:bg-[rgba(8,20,48,0.8)]'}`}>{t(METHOD_LABEL[m])}</button>
+                ))}
+              </div>
+            </div>
+          )}
         </form>
       ) : (
         <button type="button" onClick={() => setAsking(true)} className="absolute bottom-11 left-1/2 flex -translate-x-1/2 cursor-pointer flex-col items-center gap-2.5 rounded-lg px-3 py-1 text-sm text-white/80">

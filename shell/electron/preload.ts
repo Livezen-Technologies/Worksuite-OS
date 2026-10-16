@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 // Named functions only; the renderer never sees ipcRenderer (WSOS-SEC-001, §10.3).
 contextBridge.exposeInMainWorld('worksuite', {
-  authenticate: (user: string, password: string) => ipcRenderer.invoke('ws:authenticate', String(user), String(password)),
+  authenticate: (user: string, password: string, method?: string) => ipcRenderer.invoke('ws:authenticate', String(user), String(password), String(method ?? 'password')),
   lock: () => ipcRenderer.invoke('ws:lock'),
   logout: () => ipcRenderer.invoke('ws:logout'),
   power: (action: string) => ipcRenderer.invoke('ws:power', String(action)),
@@ -112,6 +112,12 @@ contextBridge.exposeInMainWorld('worksuite', {
   hwDriverUpdates: () => ipcRenderer.invoke('ws:hwDriverUpdates'),
   hwInstallDrivers: (ids: string[]) => ipcRenderer.invoke('ws:hwInstallDrivers', ...(Array.isArray(ids) ? ids.map(String) : [])),
   sysUsers: () => ipcRenderer.invoke('ws:sysUsers'),
+  signinMethods: () => ipcRenderer.invoke('ws:signinMethods'),
+  signinPinSet: (pin: string) => ipcRenderer.invoke('ws:signinPinSet', String(pin)),
+  signinPinRemove: () => ipcRenderer.invoke('ws:signinPinRemove'),
+  signinKeyAdd: (name: string) => ipcRenderer.invoke('ws:signinKeyAdd', String(name)),
+  signinKeyRemove: (id: string) => ipcRenderer.invoke('ws:signinKeyRemove', String(id)),
+  signinSetDefault: (method: string) => ipcRenderer.invoke('ws:signinSetDefault', String(method)),
   cloudAccounts: () => ipcRenderer.invoke('ws:cloudAccounts'),
   pkgRepair: () => ipcRenderer.invoke('ws:pkgRepair'),
   pkgCatalog: () => ipcRenderer.invoke('ws:pkgCatalog'),

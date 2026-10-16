@@ -178,7 +178,7 @@ class Greeter(Gtk.ApplicationWindow):
         self.new2_field = self._field(_("Confirm new password"), self.new2)
 
         self.method = "password"
-        self.key_wait = label(_("Touch your security key when it blinks, then choose Sign in."), "key-wait", justify=Gtk.Justification.CENTER,
+        self.key_wait = label(_("Insert your security key, choose Sign in, then touch it when it blinks."), "key-wait", justify=Gtk.Justification.CENTER,
                               max_width_chars=40, visible=False)
         self.card.append(self.key_wait)
         self.methods = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)

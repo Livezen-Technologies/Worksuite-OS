@@ -1,7 +1,8 @@
 // Typed renderer API. In Electron the preload exposes `window.worksuite` with named functions only
 // (WSOS-SEC-001, §10.3); in a plain browser (dev/design review) a local stub answers instead.
 export interface WorkSuiteApi {
-  authenticate(user: string, password: string): Promise<{ ok: boolean; message?: string }>
+  /** method 'pin' sends the PIN where the password goes; 'key' sends no secret (pam_u2f asks for a touch). */
+  authenticate(user: string, password: string, method?: SignInMethod): Promise<{ ok: boolean; message?: string }>
   lock(): Promise<void>
   logout(): Promise<void>
   power(action: 'suspend' | 'restart' | 'shutdown'): Promise<void>
@@ -93,6 +94,14 @@ export interface WorkSuiteApi {
   hwInstallDrivers(ids: string[]): Promise<CloudResult<string>>
   /** Settings › Users: accounts on this computer (electron/users.ts). */
   sysUsers(): Promise<Avail<{ current: string; users: LocalUser[] }>>
+  /** Settings › Users › Sign-in options: this device's PIN and security keys (electron/signin.ts). Changes go
+   *  through pkexec (the person types their password); the PIN travels on stdin only. */
+  signinMethods(): Promise<Avail<SignInMethods>>
+  signinPinSet(pin: string): Promise<SigninResult>
+  signinPinRemove(): Promise<SigninResult>
+  signinKeyAdd(name: string): Promise<SigninResult>
+  signinKeyRemove(id: string): Promise<SigninResult>
+  signinSetDefault(method: SignInMethod): Promise<SigninResult>
   /** Package repair (§9.2): finishes interrupted dpkg/apt changes; result arrives through onPkgJob. */
   pkgRepair(): Promise<CloudResult<string>>
   /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
@@ -191,8 +200,9 @@ import { withAppCenterPreview } from './appcenterPreview'
 import type { DesktopModule } from './launcher'
 import type { HwDevice, HwKind } from '../../electron/hardware'
 import type { LocalUser } from '../../electron/users'
+import type { SecurityKey, SignInMethod, SignInMethods, SigninResult } from '../../electron/signin'
 import type { SearchHit, SearchResponse, SourceState } from '../../electron/search'
-export type { HwDevice, HwKind, LocalUser }
+export type { HwDevice, HwKind, LocalUser, SecurityKey, SignInMethod, SignInMethods, SigninResult }
 export interface DriverOffer {
   id: string; device_id: string | null; name: string; summary: string
   from_version: string | null; to_version: string
@@ -333,9 +343,17 @@ declare global {
   interface Window { worksuite?: WorkSuiteApi }
 }
 
+// Preview only (no helper in a plain browser): a PIN set up and one security key, so every state can be reviewed.
+const previewSignin: SignInMethods = {
+  pin: true, keys: [{ id: 'a1b2c3d4e5f60718', name: 'YubiKey 5 NFC', added: Date.UTC(2026, 8, 2) }], default: 'pin',
+  allow_pin: true, pin_min_length: 6, pin_max_length: 12, attempt_limit: 3,
+}
+
 const stub: WorkSuiteApi = {
-  async authenticate(_user, password) {
-    // Preview: the password "wrong" is rejected so the error state can be reviewed.
+  async authenticate(_user, password, method) {
+    // Preview: the password "wrong" and the PIN 000000 are rejected so the error states can be reviewed.
+    if (method === 'key') return { ok: true }
+    if (method === 'pin') return password === '000000' || !/^[0-9]{4,12}$/.test(password) ? { ok: false, message: 'Incorrect PIN.' } : { ok: true }
     if (password === 'wrong') return { ok: false, message: 'Incorrect password. Try again.' }
     return password.length > 0 ? { ok: true } : { ok: false, message: 'Enter your password.' }
   },
@@ -505,6 +523,16 @@ const stub: WorkSuiteApi = {
     })
     return { ok: true, value: job }
   },
+  async signinMethods() { return stubAvail({ ...previewSignin, keys: [...previewSignin.keys] }) },
+  async signinPinSet(pin) { if (!/^[0-9]{4,12}$/.test(pin)) return { ok: false, error: 'digits_only' }; previewSignin.pin = true; return { ok: true } },
+  async signinPinRemove() { previewSignin.pin = false; if (previewSignin.default === 'pin') previewSignin.default = 'password'; return { ok: true } },
+  async signinKeyAdd(name) {
+    await new Promise((r) => setTimeout(r, 1200))
+    const id = Math.random().toString(16).slice(2, 10).padEnd(16, '0')
+    previewSignin.keys.push({ id, name: name || 'Security key', added: Date.now() }); return { ok: true, id }
+  },
+  async signinKeyRemove(id) { previewSignin.keys = previewSignin.keys.filter((k) => k.id !== id); if (!previewSignin.keys.length && previewSignin.default === 'key') previewSignin.default = 'password'; return { ok: true } },
+  async signinSetDefault(method) { previewSignin.default = method; return { ok: true } },
   async sysUsers() { return stubAvail({ current: 'preview', users: [{ login: 'preview', name: 'Preview User', uid: 1000, admin: true }, { login: 'second', name: 'Second User', uid: 1001, admin: false }] }) },
   async pkgRepair() { return stubJob('repair', 'repair') },
   // Browser preview: there is no package service or server here, so these answer honestly instead of inventing apps.
