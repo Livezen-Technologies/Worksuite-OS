@@ -1,0 +1,31 @@
+# greetd for WorkSuite OS (installed to /etc/systemd/system, replacing Debian's unit). Debian's greetd.service waits
+# for plymouth-quit-wait, i.e. for the boot splash to be gone, so a black console showed between the splash and the
+# greeter. Here, as GDM does, the greeter takes the screen from the splash directly:
+# - no plymouth-quit (it would clear the splash): Conflicts=, and OnFailure= runs it if greetd cannot start;
+# - the splash stops drawing and lets go of the display (plymouth deactivate), keeping its last frame on screen;
+# - greetd runs on VT 1, the splash's VT, so no VT switch shows a text console in between;
+# - the greeter's first frame repeats the splash (worksuite_greeter/veil.py); once it is drawn the greeter marks
+#   /run/worksuite/greeter/ready and worksuite-greeter-handoff ends Plymouth with quit --retain-splash.
+[Unit]
+Description=Greeter daemon
+After=systemd-user-sessions.service plymouth-start.service getty@tty1.service getty@tty7.service
+Conflicts=getty@tty1.service getty@tty7.service plymouth-quit.service
+OnFailure=plymouth-quit.service
+
+[Service]
+Type=simple
+ExecStartPre=-/bin/rm -f /run/worksuite/greeter/ready
+ExecStartPre=-/usr/bin/plymouth deactivate
+ExecStart=greetd
+ExecStartPost=-/usr/lib/worksuite/worksuite-greeter-handoff
+IgnoreSIGPIPE=no
+SendSIGHUP=yes
+TimeoutStopSec=30s
+KeyringMode=shared
+Restart=always
+RestartSec=1
+StartLimitBurst=5
+StartLimitInterval=30
+
+[Install]
+Alias=display-manager.service

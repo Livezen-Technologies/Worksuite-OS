@@ -1,0 +1,18 @@
+#!/bin/sh
+# greetd's ExecStartPost (services/session/systemd/greetd/greetd.service): ends the boot splash once the greeter (or
+# the live installer's veil) has drawn its first frame, which repeats the splash's last frame, so the splash hands
+# over without a black screen. --retain-splash: Plymouth leaves the picture alone (the greeter owns the display now).
+# Without a sign from the greeter (gtkgreet fallback, a crash) Plymouth is ended after the timeout all the same.
+set -u
+READY=${WORKSUITE_GREETER_READY:-/run/worksuite/greeter/ready}
+TIMEOUT=${WORKSUITE_HANDOFF_TIMEOUT:-15}
+PLYMOUTH=${WORKSUITE_PLYMOUTH:-plymouth}
+command -v "$PLYMOUTH" >/dev/null 2>&1 || exit 0
+"$PLYMOUTH" --ping 2>/dev/null || exit 0
+n=0
+while [ ! -e "$READY" ] && [ "$n" -lt $((TIMEOUT * 10)) ]; do
+    sleep 0.1
+    n=$((n + 1))
+done
+[ -e "$READY" ] || echo "worksuite-greeter-handoff: no first frame from the greeter after ${TIMEOUT}s; ending the splash" >&2
+exec "$PLYMOUTH" quit --retain-splash

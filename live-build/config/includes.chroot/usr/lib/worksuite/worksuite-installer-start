@@ -1,0 +1,8 @@
+#!/bin/sh
+# Live ISO only (greetd's initial_session, inside cage): the boot splash's last frame first (worksuite_greeter.veil,
+# which also tells greetd's ExecStartPost to end Plymouth), then Calamares in front of it, so the installer comes up
+# from the splash without a black screen. Without GTK 4 Calamares starts directly.
+if PYTHONPATH=/usr/lib/worksuite/greeter python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_foreign("cairo"); import worksuite_greeter.veil' >/dev/null 2>&1; then
+    PYTHONPATH=/usr/lib/worksuite/greeter exec python3 -m worksuite_greeter.veil --installer -- calamares "$@"
+fi
+exec calamares "$@"

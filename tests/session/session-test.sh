@@ -245,8 +245,69 @@ grep -q '^ReadWritePaths=-%h/.local/share/worksuite -%t/worksuite$' "$ROOT/servi
 # ---- no console text: the session's output goes to the journal, never the VT ----
 grep -q 'exec systemd-cat -t worksuite-session "$0"' "$BIN/worksuite-session" && ok "session output goes to the journal" || bad "session output goes to the journal"
 H=$ROOT/live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot
-grep -q 'ShowDelay=0' "$H" && grep -q 'After=plymouth-quit-wait.service' "$H" && grep -q 'systemd.show_status=false' "$ROOT/live-build/auto/config" \
-  && ok "splash from the first frame until the greeter; live boot quiet" || bad "splash from the first frame until the greeter; live boot quiet"
+GU=$ROOT/services/session/systemd/greetd/greetd.service
+grep -q 'ShowDelay=0' "$H" && grep -q 'systemd.show_status=false' "$ROOT/live-build/auto/config" \
+  && ok "splash from the first frame; live boot quiet" || bad "splash from the first frame; live boot quiet"
+
+# ---- splash -> greeter handoff with no black screen ----
+grep -q '^Conflicts=.*plymouth-quit.service' "$GU" && grep -q '^OnFailure=plymouth-quit.service' "$GU" && ! grep -v '^#' "$GU" | grep -q 'plymouth-quit-wait' \
+  && grep -q '^ExecStartPre=-/usr/bin/plymouth deactivate$' "$GU" && grep -q '^ExecStartPost=-/usr/lib/worksuite/worksuite-greeter-handoff$' "$GU" \
+  && grep -q '^Alias=display-manager.service$' "$GU" \
+  && ok "greetd: deactivates the splash, never plymouth-quit, hands over after the first frame" || bad "greetd: deactivates the splash, never plymouth-quit, hands over after the first frame"
+grep -q '^vt = 1$' "$H" && grep -q 'systemctl mask getty@tty1.service' "$H" && grep -q '^Conflicts=getty@tty1.service' "$GU" \
+  && grep -q '^vt = 1$' "$ROOT/live-build/config/includes.chroot/usr/lib/live/config/2000-worksuite-installer" \
+  && ok "greeter on the splash's VT (no text console between)" || bad "greeter on the splash's VT (no text console between)"
+grep -q '^services/session/systemd/greetd/greetd.service etc/systemd/system/$' "$ROOT/packaging/debian/worksuite-session.install" \
+  && grep -q '^d /run/worksuite/greeter 0755 _greetd _greetd' "$ROOT/services/session/tmpfiles/worksuite-session.conf" \
+  && ok "greetd unit and handoff directory packaged" || bad "greetd unit and handoff directory packaged"
+stub plymouth 'case "$1" in --ping) [ -e "$T/ply-up" ] ;; *) echo "plymouth $*" >> "$LOG" ;; esac'
+: > "$LOG"; : > "$T/ply-up"; rm -f "$T/ready"
+( sleep 0.3; : > "$T/ready" ) &
+WORKSUITE_GREETER_READY="$T/ready" WORKSUITE_HANDOFF_TIMEOUT=5 sh "$BIN/worksuite-greeter-handoff"
+check "handoff: splash ends with its picture kept once the greeter has drawn" "$(cat "$LOG")" "plymouth quit --retain-splash"
+: > "$LOG"; rm -f "$T/ready"
+WORKSUITE_GREETER_READY="$T/ready" WORKSUITE_HANDOFF_TIMEOUT=1 sh "$BIN/worksuite-greeter-handoff" 2>/dev/null
+check "handoff: no sign from the greeter, the splash still ends after the timeout" "$(cat "$LOG")" "plymouth quit --retain-splash"
+: > "$LOG"; rm -f "$T/ply-up"
+WORKSUITE_GREETER_READY="$T/ready" WORKSUITE_HANDOFF_TIMEOUT=1 sh "$BIN/worksuite-greeter-handoff"
+check "handoff: nothing to do without a splash" "$(cat "$LOG")" ""
+IS=$ROOT/live-build/config/includes.chroot/usr/lib/worksuite/worksuite-installer-start
+grep -q 'worksuite_greeter.veil --installer -- calamares' "$IS" && grep -q '^exec calamares' "$IS" && [ -x "$IS" ] \
+  && grep -q 'worksuite-installer-start' "$ROOT/live-build/config/includes.chroot/usr/lib/live/config/2000-worksuite-installer" \
+  && ok "live installer starts from the splash's last frame" || bad "live installer starts from the splash's last frame"
+
+# ---- greeter: system keyboard layout and language ----
+printf 'XKBMODEL="pc105"\nXKBLAYOUT="us,lk"\nXKBVARIANT=""\nXKBOPTIONS="grp:alt_shift_toggle"\n' > "$T/keyboard"
+check "compositor gets the system keyboard layout" "$(env -u XKB_DEFAULT_LAYOUT WORKSUITE_KEYBOARD_CONF="$T/keyboard" WLR_RENDERER=pixman sh -c ". '$BIN/wlr-env'; echo \$XKB_DEFAULT_LAYOUT/\$XKB_DEFAULT_OPTIONS")" "us,lk/grp:alt_shift_toggle"
+check "an explicit layout wins" "$(XKB_DEFAULT_LAYOUT=de WORKSUITE_KEYBOARD_CONF="$T/keyboard" WLR_RENDERER=pixman sh -c ". '$BIN/wlr-env'; echo \$XKB_DEFAULT_LAYOUT")" "de"
+grep -q 'WORKSUITE_LOCALE_CONF:-/etc/default/locale' "$BIN/worksuite-greeter" && ok "greeter uses the system language" || bad "greeter uses the system language"
+
+# ---- shutdown and sign-out: session services stop within 10 s; stop-job text only in the journal ----
+grep -qx 'DefaultTimeoutStopSec=10s' "$ROOT/services/session/systemd/user.conf.d/worksuite-stop.conf" \
+  && grep -q '^services/session/systemd/user.conf.d/worksuite-stop.conf usr/lib/systemd/user.conf.d/$' "$ROOT/packaging/debian/worksuite-session.install" \
+  && grep -q 'systemd.show_status=false' "$ROOT/branding/grub/worksuite.cfg" \
+  && ok "user session stop timeout 10 s, no systemd status on the console" || bad "user session stop timeout 10 s, no systemd status on the console"
+
+# ---- administrators' diagnostics helper (pkexec, polkit auth_admin_keep) ----
+D=$BIN/worksuite-diagnostics
+stub journalctl 'echo "journalctl $*"'
+stub update-grub 'echo update-grub >> "$LOG"'
+check "diagnostics: this boot's journal" "$(sh "$D" journal boot 50)" "journalctl -b 0 -o short-iso -n 50 --no-pager -q"
+check "diagnostics: previous boot" "$(sh "$D" journal previous)" "journalctl -b -1 -o short-iso -n 500 --no-pager -q"
+case "$(sh "$D" journal greeter 20)" in *"-t worksuite-greeter -t greetd"*) ok "diagnostics: greeter and splash messages" ;; *) bad "diagnostics: greeter and splash messages" ;; esac
+sh "$D" journal boot "5; rm -rf /" >/dev/null 2>&1 && bad "diagnostics: line count is a number" || ok "diagnostics: line count is a number"
+sh "$D" journal secrets >/dev/null 2>&1 && bad "diagnostics: unknown journal refused" || ok "diagnostics: unknown journal refused"
+: > "$LOG"
+export WORKSUITE_BOOT_DETAILS_FLAG="$T/etc/boot-details"
+check "boot details off by default" "$(sh "$D" boot-details status)" "off"
+check "boot details on" "$(sh "$D" boot-details on)/$(sh "$D" boot-details status)/$(cat "$LOG")" "on/on/update-grub"
+check "boot details off" "$(sh "$D" boot-details off)/$(sh "$D" boot-details status)" "off/off"
+unset WORKSUITE_BOOT_DETAILS_FLAG
+P=$ROOT/services/session/polkit/lk.worksuite.diagnostics.policy
+grep -q '<allow_active>auth_admin_keep</allow_active>' "$P" && grep -q '<allow_any>no</allow_any>' "$P" \
+  && grep -q 'exec.path">/usr/lib/worksuite/worksuite-diagnostics<' "$P" \
+  && grep -q '^services/session/polkit/lk.worksuite.diagnostics.policy usr/share/polkit-1/actions/$' "$ROOT/packaging/debian/worksuite-session.install" \
+  && ok "diagnostics need an administrator (polkit)" || bad "diagnostics need an administrator (polkit)"
 
 echo "1..$n"
 exit $fail

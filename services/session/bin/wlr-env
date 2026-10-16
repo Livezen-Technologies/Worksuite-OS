@@ -13,3 +13,13 @@ if [ -z "${WLR_RENDERER:-}" ]; then
         esac
     done
 fi
+# The system keyboard layout (Settings, the installer: /etc/default/keyboard) for the greeter and the live installer,
+# whose compositor would otherwise start with US English. An explicit XKB_DEFAULT_LAYOUT wins.
+if [ -z "${XKB_DEFAULT_LAYOUT:-}" ] && [ -r "${WORKSUITE_KEYBOARD_CONF:-/etc/default/keyboard}" ]; then
+    XKBLAYOUT=; XKBVARIANT=; XKBOPTIONS=; XKBMODEL=
+    . "${WORKSUITE_KEYBOARD_CONF:-/etc/default/keyboard}"
+    [ -n "$XKBLAYOUT" ] && export XKB_DEFAULT_LAYOUT="$XKBLAYOUT"
+    [ -n "$XKBVARIANT" ] && export XKB_DEFAULT_VARIANT="$XKBVARIANT"
+    [ -n "$XKBOPTIONS" ] && export XKB_DEFAULT_OPTIONS="$XKBOPTIONS"
+    [ -n "$XKBMODEL" ] && export XKB_DEFAULT_MODEL="$XKBMODEL"
+fi
