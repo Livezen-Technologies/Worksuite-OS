@@ -5,6 +5,8 @@ import type { OsUpdateStatus } from './os'
 export interface PanelWindow { handle: string; appId: string; title: string; output: string; flags: number }
 export interface TrayItem { key: string; id: string; title: string; icon: string; status: string }
 export type PanelResult = { ok: true; value: true } | { ok: false; error: string }
+/** Labwc desktops via the bridge (WSOS-DSK-003). */
+export interface Workspaces { supported: boolean; current: number; count: number; windows: Record<string, number> }
 
 export const ACTIVATED = 1
 export const MINIMIZED = 2
@@ -20,6 +22,16 @@ export interface PanelApi {
   onTray(cb: (t: TrayItem[]) => void): () => void
   /** Super key via lk.worksuite.Shell1. */
   onLauncher(cb: (action: 'toggle' | 'show') => void): () => void
+  workspaces?(): Promise<Workspaces>
+  activateWorkspace?(n: number): Promise<PanelResult>
+  moveToWorkspace?(handle: string, n: number): Promise<PanelResult>
+  onWorkspaces?(cb: (w: Workspaces) => void): () => void
+}
+
+/** Taskbar shows the windows of the current workspace; windows the bridge has not placed count as current. */
+export function onWorkspace(windows: PanelWindow[], ws: Workspaces): PanelWindow[] {
+  if (!ws.supported) return windows
+  return windows.filter((w) => (ws.windows[w.handle] ?? ws.current) === ws.current)
 }
 
 declare global {
@@ -107,6 +119,8 @@ const stub: PanelApi = {
   onWindows(cb) { stubListeners.add(cb); return () => { stubListeners.delete(cb) } },
   onTray() { return () => {} },
   onLauncher() { return () => {} },
+  // No workspaces in a plain browser: the switcher only appears where Labwc and the bridge provide them.
+  async workspaces() { return { supported: false, current: 1, count: 1, windows: {} } },
 }
 
 export const panel: PanelApi = (typeof window !== 'undefined' && window.worksuitePanel) || stub

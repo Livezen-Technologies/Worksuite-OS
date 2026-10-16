@@ -1972,6 +1972,8 @@ const ta: Partial<Record<MessageKey, string>> = {
   'kiosk.orient.portrait-flipped': "செங்குத்து (தலைகீழ்)",
   'kiosk.screenOff': "திரை அணைப்பு",
   'kiosk.screenOffRange': "{from} – {until}",
+  'panel.workspaceWindows': "பணியிடம் {n}, {count} சாளரங்கள்",
+  'panel.moveTo': "பணியிடத்துக்கு நகர்த்து",
 }
 
 export default ta

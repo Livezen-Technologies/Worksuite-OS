@@ -1972,6 +1972,8 @@ const si: Partial<Record<MessageKey, string>> = {
   'kiosk.orient.portrait-flipped': "සිරස් (උඩු යටිකුරු)",
   'kiosk.screenOff': "තිරය අක්‍රිය",
   'kiosk.screenOffRange': "{from} – {until}",
+  'panel.workspaceWindows': "වැඩ අවකාශය {n}, කවුළු {count}",
+  'panel.moveTo': "වැඩ අවකාශයට ගෙන යන්න",
 }
 
 export default si

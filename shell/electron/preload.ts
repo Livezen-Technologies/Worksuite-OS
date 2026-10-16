@@ -172,6 +172,10 @@ contextBridge.exposeInMainWorld('worksuitePanel', {
   onWindows: on('ws:panelWindowsChanged'),
   onTray: on('ws:panelTrayChanged'),
   onLauncher: on('ws:launcher'),
+  workspaces: () => ipcRenderer.invoke('ws:panelWorkspaces'),
+  activateWorkspace: (n: number) => ipcRenderer.invoke('ws:panelWorkspaceActivate', String(Number(n) | 0)),
+  moveToWorkspace: (handle: string, n: number) => ipcRenderer.invoke('ws:panelMoveToWorkspace', String(handle), String(Number(n) | 0)),
+  onWorkspaces: on('ws:panelWorkspacesChanged'),
 })
 
 // Default apps, clipboard history, problem report — see electron/desktopHost.ts.

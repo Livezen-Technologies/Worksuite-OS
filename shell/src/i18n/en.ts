@@ -1998,6 +1998,8 @@ const en = {
   'kiosk.orient.portrait-flipped': "Portrait (upside down)",
   'kiosk.screenOff': "Screen off",
   'kiosk.screenOffRange': "{from} – {until}",
+  'panel.workspaceWindows': "Workspace {n}, {count} windows",
+  'panel.moveTo': "Move to workspace",
 } as const
 
 export type MessageKey = keyof typeof en
