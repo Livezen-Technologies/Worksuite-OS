@@ -26,6 +26,8 @@ export interface WorkSuiteApi {
   shellPrefs(): Promise<CloudResult<unknown>>
   setShellPrefs(prefs: unknown): Promise<CloudResult<boolean>>
   /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
+  /** App icons for desktop entries' Icon= values at a size (CSS px) and scale: data: URLs, null when none exists. */
+  appIcons?(names: string[], size: number, scale: number): Promise<Record<string, string | null>>
   installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null }>
   /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
   launchOffice(kind: 'start' | 'docs' | 'sheets' | 'slides'): Promise<void>
@@ -374,7 +376,7 @@ export function lockChoiceLabel(s: number): string {
   if (s < 3600) return t('time.min', { n: Math.round(s / 60) })
   return s === 3600 ? t('time.hour') : t('time.hours', { n: formatNumber(Math.round(s / 360) / 10) })
 }
-export interface InstalledApp { id: string; name: string; generic_name: string | null; comment: string | null; icon: string | null; categories: string[]; keywords: string[] }
+export interface InstalledApp { id: string; name: string; generic_name: string | null; comment: string | null; icon: string | null; categories: string[]; keywords: string[]; wm_class?: string | null }
 
 export type SignOutChoice = 'none' | 'export' | 'discard'
 

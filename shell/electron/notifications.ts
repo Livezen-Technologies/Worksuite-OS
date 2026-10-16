@@ -15,6 +15,18 @@ const IFACE = 'org.freedesktop.Notifications'
 export interface AppNotification {
   id: number; app: string; summary: string; body: string
   actions: { key: string; label: string }[]; urgency: 0 | 1 | 2; at: number
+  /** The sender's icon: app_icon (theme name or icon file path), else its desktop-entry hint; resolved like app icons. */
+  icon?: string | null
+}
+
+/** Notify's app_icon, else the desktop-entry hint: a theme name or an absolute path (file:// stripped), else null. */
+export function notifyIcon(appIcon: unknown, desktopEntry: unknown): string | null {
+  for (const v of [appIcon, desktopEntry]) {
+    if (typeof v !== 'string') continue
+    const s = v.replace(/^file:\/\//, '').trim()
+    if (s && s.length <= 512 && (/^[A-Za-z0-9][A-Za-z0-9._+@-]*$/.test(s) || s.startsWith('/'))) return s
+  }
+  return null
 }
 /** Spec close reasons. */
 export const CLOSED = { expired: 1, dismissed: 2, closedByCall: 3 } as const
@@ -47,12 +59,13 @@ export class NotificationCenter {
   onChange(cb: (list: AppNotification[]) => void): () => void { this.listeners.add(cb); return () => { this.listeners.delete(cb) } }
   private emit() { const l = this.list(); for (const cb of this.listeners) cb(l) }
 
-  notify(app: string, replacesId: number, summary: string, body: string, actions: unknown, urgency: number): number {
+  notify(app: string, replacesId: number, summary: string, body: string, actions: unknown, urgency: number, icon: string | null = null): number {
     const keep = replacesId > 0 && this.items.some((n) => n.id === replacesId)
     const id = keep ? replacesId : this.next++
     const n: AppNotification = {
       id, app: clip(app, 80) || 'App', summary: clip(summary, 200), body: clip(plainBody(String(body ?? '')), 1000),
       actions: actionPairs(actions), urgency: urgency === 0 || urgency === 2 ? urgency : 1, at: this.now(),
+      ...(icon ? { icon } : {}),
     }
     this.items = [n, ...this.items.filter((x) => x.id !== id)].slice(0, MAX_KEEP)
     this.emit()
@@ -85,9 +98,9 @@ export async function serveNotifications(bus: Bus, center: NotificationCenter): 
       case 'GetCapabilities': return ret('as', [['actions', 'body', 'persistence']])
       case 'GetServerInformation': return ret('ssss', ['WorkSuite', 'WorkSuite', '1.0', '1.2'])
       case 'Notify': {
-        const [app, replaces, , summary, body, actions, hints] = m.body as [string, number, string, string, string, string[], Record<string, { value: unknown }>]
+        const [app, replaces, appIcon, summary, body, actions, hints] = m.body as [string, number, string, string, string, string[], Record<string, { value: unknown }>]
         const urgency = Number(hints?.urgency?.value ?? 1)
-        return ret('u', [center.notify(app, Number(replaces) || 0, summary, body, actions, urgency)])
+        return ret('u', [center.notify(app, Number(replaces) || 0, summary, body, actions, urgency, notifyIcon(appIcon, hints?.['desktop-entry']?.value))])
       }
       case 'CloseNotification': center.close(Number(m.body[0]), CLOSED.closedByCall); return ret('', [])
       default: return false

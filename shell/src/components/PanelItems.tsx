@@ -1,3 +1,4 @@
+import { AppGlyph } from './AppGlyph'
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { clickAction, onWorkspace, panel, taskbarEntries, updateBadge, type PanelWindow, type ShellAction, type TrayItem, type Workspaces } from '../lib/panel'
 import { os, type OsUpdateStatus, type VpnState } from '../lib/os'
@@ -6,7 +7,8 @@ import { useT } from '../i18n'
 
 // Panel contents fed by the Wayland bridge (SRS §5.1): running windows, tray and update badge.
 
-export interface AppInfo { name: string; mark: string; bg: string; fg: string }
+/** id: launcher id (for its bundled icon); icon: theme icon name / Icon= value. */
+export interface AppInfo { id?: string; name: string; mark: string; bg: string; fg: string; icon?: string | null }
 
 export function usePanelWindows(): PanelWindow[] {
   const [windows, setWindows] = useState<PanelWindow[]>([])
@@ -87,7 +89,8 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
   return (
     <div role="toolbar" aria-label={t('panel.taskbar')} onKeyDown={rovingKeys} className="flex items-center gap-2">
       {entries.map((e) => {
-        const a = info(e.id) ?? { name: e.title || e.id, mark: (e.title || e.id).slice(0, 2), bg: '#E2E8F0', fg: '#0F172A' }
+        // A window with no launcher entry still tries its app_id as an icon name (most apps name both alike).
+        const a = info(e.id) ?? { id: e.id, name: e.title || e.id, mark: (e.title || e.id).slice(0, 2), bg: '#E2E8F0', fg: '#0F172A', icon: /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(e.id) ? e.id : null }
         const label = e.windows.length > 1 ? t('panel.windows', { name: a.name, count: e.windows.length }) : e.active ? t('panel.active', { name: a.name }) : e.running ? t('panel.running', { name: a.name }) : a.name
         return (
           <button key={e.id} type="button" aria-label={label} aria-pressed={e.running ? e.active : undefined} title={e.title || a.name} onClick={() => click(e.id)}
@@ -95,7 +98,7 @@ export function RunningApps({ pinned, info, onLaunch, only }: { pinned: string[]
             onContextMenu={(ev) => { if (!ws.supported || !e.running) return; ev.preventDefault(); const w = e.windows.find((x) => x.flags & 1) ?? e.windows[0]; setMenu({ handle: w.handle, x: ev.currentTarget.getBoundingClientRect().left }) }}
             className={`relative flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${e.active ? 'bg-white/10' : 'hover:bg-white/10'}`}>
             {/* The mark is an icon drawn by CSS (not text), so the button's name is the app's name alone (WCAG 2.5.3). */}
-            <span aria-hidden="true" data-mark={a.mark} className="ws-mark flex size-7 items-center justify-center whitespace-nowrap rounded-[7px] leading-none font-bold before:content-[attr(data-mark)]" style={{ background: a.bg, color: a.fg, fontSize: 11 }} />
+            <AppGlyph app={{ ...a, id: a.id ?? e.id }} size={28} radius={7} font={11} css />
             {e.running && <span aria-hidden="true" className={`absolute bottom-[2px] h-[3px] rounded-sm bg-[#18D4F0] ${e.active ? 'w-3.5' : 'w-1.5'}`} />}
           </button>
         )

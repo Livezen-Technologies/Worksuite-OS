@@ -75,3 +75,14 @@ describe.skipIf(!haveDbus)('org.freedesktop.Notifications on a private bus', () 
     expect(center.list().some((n) => n.id === id)).toBe(false)
   })
 })
+
+describe('notification icons', () => {
+  it('keeps app_icon, else desktop-entry, as a name or absolute path', async () => {
+    const { notifyIcon } = await import('./notifications')
+    expect(notifyIcon('firefox-esr', 'x')).toBe('firefox-esr')
+    expect(notifyIcon('', 'org.gnome.Nautilus')).toBe('org.gnome.Nautilus')
+    expect(notifyIcon('file:///usr/share/icons/hicolor/48x48/apps/a.png', null)).toBe('/usr/share/icons/hicolor/48x48/apps/a.png')
+    expect(notifyIcon('../etc/passwd', 'bad name')).toBeNull()
+    expect(notifyIcon(undefined, undefined)).toBeNull()
+  })
+})

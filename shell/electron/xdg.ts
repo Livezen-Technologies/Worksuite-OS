@@ -15,6 +15,8 @@ export interface DesktopEntry {
   exec: string | null
   /** MimeType= of the entry (WSOS-DSK-009). */
   mime_types: string[]
+  /** StartupWMClass=: the Wayland app_id / X11 class its windows carry when it differs from the id. */
+  wm_class?: string | null
 }
 
 /** Main [Desktop Entry] group as key → value (unlocalised keys plus Name[<lang>] when it matches). */
@@ -56,6 +58,7 @@ export function toEntry(id: string, kv: Record<string, string>, desktops: string
     keywords: list(kv['Keywords@l'] ?? kv.Keywords),
     exec: kv.Exec ?? null,
     mime_types: list(kv.MimeType),
+    wm_class: kv.StartupWMClass ?? null,
   }
 }
 

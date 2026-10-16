@@ -1,7 +1,8 @@
 // Notification dock (NotifDock board): clock and focus mode, the month, and the shell's notices. Notices come from
 // the system sources in lib/useNotices; chat and mail don't post here yet, so "Mentions" stays empty and says why.
 // There is no media-session (MPRIS) bridge, so the board's now-playing card is left out.
-import { useState } from 'react'
+import { useThemeIcon } from '../lib/appIcons'
+import { useState, type ReactNode } from 'react'
 import BIcon from './BIcon'
 import { Icon, P } from './Ws'
 import type { TimedNotice } from '../lib/useNotices'
@@ -102,7 +103,7 @@ export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd 
               <h3 className="m-0 px-1.5 pt-1 text-[11px] font-semibold tracking-[0.08em] uppercase" style={{ color: c as string }}>{name as string}</h3>
               {(items as TimedNotice[]).map((x) => (
                 <div key={x.id} className="relative flex gap-3 rounded-2xl border p-3" style={{ background: x.tone !== 'ok' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.045)', borderColor: 'rgba(255,255,255,0.07)' }}>
-                  <span className="flex h-[38px] w-[38px] flex-none items-center justify-center rounded-[10px] text-white" style={{ background: TONE_BG[x.tone] }}><BIcon name={x.tone === 'ok' ? 'check' : 'alert'} size={18} /></span>
+                  <NoticeIcon icon={x.icon}><span className="flex h-[38px] w-[38px] flex-none items-center justify-center rounded-[10px] text-white" style={{ background: TONE_BG[x.tone] }}><BIcon name={x.tone === 'ok' ? 'check' : 'alert'} size={18} /></span></NoticeIcon>
                   <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                     <span className="flex items-baseline gap-1.5"><span className="truncate text-[13px] font-semibold">{x.title}</span><span className="ml-auto flex-none text-[11px] text-[#8FA3C8]">{ageLabel(x.at, now.getTime())}</span></span>
                     <span className="text-xs leading-[1.4] text-[#C9D6EE]">{x.body}</span>
@@ -122,3 +123,9 @@ export default function NotifDock({ now, time, notices, setNotices, dnd, setDnd 
 }
 
 export { MOON }
+
+/** The sending app's icon when it resolves; otherwise the tone mark (children). */
+function NoticeIcon({ icon, children }: { icon?: string; children: ReactNode }) {
+  const src = useThemeIcon(icon, 38)
+  return src ? <img aria-hidden="true" alt="" src={src} width={38} height={38} className="ws-icon size-[38px] flex-none object-contain" /> : <>{children}</>
+}

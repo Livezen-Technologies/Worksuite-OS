@@ -57,7 +57,7 @@ const OWN = new Set(['worksuite', 'worksuite-shell', 'electron'])
 
 export function matchesApp(appId: string, windowAppId: string): boolean {
   const w = windowAppId.toLowerCase()
-  return w === appId.toLowerCase() || (ALIASES[appId] ?? []).some((a) => a.toLowerCase() === w) || w === `lk.worksuite.${appId}`
+  return w === appId.toLowerCase() || (ALIASES[appId] ?? []).some((a) => a.toLowerCase() === w) || w === `lk.worksuite.${appId}` || w === `lk.worksuite.${appId.replace(/^worksuite-/, '')}`
 }
 
 export interface TaskbarEntry { id: string; pinned: boolean; windows: PanelWindow[]; running: boolean; active: boolean; title: string }

@@ -19,7 +19,12 @@ export const DESKTOP_MODULE_FOR: Record<string, DesktopModule> = {
   mail: 'mail', chat: 'chat', calendar: 'calendar', tasks: 'tasks', drive: 'files', files: 'files', crm: 'crm', hr: 'hr',
 }
 
-export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[]; offline?: OfflineLevel }
+/**
+ * icon: the desktop entry's Icon= (theme name or path), resolved by the main process; apps the OS knows by id use
+ * bundled icons (lib/brandIcons.ts). mark/bg/fg: the letter mark drawn when there is no icon. appIds: Wayland
+ * app_ids / StartupWMClass its windows carry besides its id.
+ */
+export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[]; offline?: OfflineLevel; icon?: string | null; appIds?: string[] }
 /** Offline level the app declares (WSOS-SYN-009); shown in the launcher. */
 export type OfflineLevel = 'full_offline' | 'cached_read' | 'online_only'
 
@@ -85,7 +90,7 @@ export function buildLauncherApps(webApps: { id: string; name: string; offline_l
     const terminal = e.categories.includes('TerminalEmulator')
     out.push({
       id: e.id, name: e.name, mark: terminal ? '>_' : initials(e.name), bg: terminal ? '#0f172a' : '#f1f5f9', fg: terminal ? '#e2e8f0' : '#334155',
-      kind: 'Linux app', fav: LINUX_FAV.has(e.id), launch: { desktop: e.id },
+      kind: 'Linux app', fav: LINUX_FAV.has(e.id), launch: { desktop: e.id }, icon: e.icon, ...(e.wm_class ? { appIds: [e.wm_class] } : {}),
       keywords: [e.generic_name ?? '', e.comment ?? '', ...e.keywords, ...e.categories].filter(Boolean),
     })
   }
@@ -146,6 +151,22 @@ export function safeApps<T extends InstalledApp>(apps: T[]): T[] {
   const TERMINAL = new Set(['TerminalEmulator', 'ConsoleOnly'])
   return apps.filter((a) => !a.categories.some((c) => TERMINAL.has(c)) && !a.id.startsWith('worksuite-'))
     .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * The launcher app a running window belongs to, from its Wayland app_id: the desktop id itself, the entry's
+ * StartupWMClass, a WorkSuite app window (lk.worksuite.<module>), or a reverse-DNS id's last part (org.gnome.Nautilus
+ * → nautilus, and the other way round). Case is ignored. Undefined when nothing matches.
+ */
+export function appForWindow(apps: LauncherApp[], appId: string): LauncherApp | undefined {
+  const w = appId.trim().toLowerCase()
+  if (!w) return undefined
+  const ws = /^lk\.worksuite\.(.+)$/.exec(w)
+  if (ws) return apps.find((a) => a.id === `worksuite-${ws[1]}`)
+  const last = (s: string) => s.split('.').pop() ?? s
+  return apps.find((a) => a.id.toLowerCase() === w)
+    ?? apps.find((a) => a.appIds?.some((x) => x.toLowerCase() === w))
+    ?? apps.find((a) => a.kind === 'Linux app' && (last(a.id.toLowerCase()) === w || a.id.toLowerCase() === last(w)))
 }
 
 /** Taskbar pins that exist in the current list (an app the org disabled or that isn't installed drops out). */

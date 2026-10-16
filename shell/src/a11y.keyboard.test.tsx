@@ -137,8 +137,10 @@ describe('accessibility settings are wired in CSS (WSOS-ACC-004/005/006)', () =>
     expect(css).toMatch(/:has\(> :is\(input, textarea, select\)\.outline-none:focus-visible\)/)
   })
   it('app marks are fixed-size logos in fixed-size tiles: never wrap or scale out of the tile at 200 %', () => {
-    for (const f of ['src/screens/Desktop.tsx', 'src/components/PanelItems.tsx']) {
-      const marks = [...readFileSync(f, 'utf8').matchAll(/className="ws-mark [^"]*"/g)].map((m) => m[0])
+    // Desktop, the taskbar, search and App Center draw marks through AppGlyph (the letter mark when an app has no icon).
+    for (const f of ['src/screens/Desktop.tsx', 'src/components/PanelItems.tsx', 'src/components/GlobalSearch.tsx']) expect(readFileSync(f, 'utf8'), f).toMatch(/<AppGlyph /)
+    for (const f of ['src/components/AppGlyph.tsx']) {
+      const marks = [...readFileSync(f, 'utf8').matchAll(/`ws-mark [^`]*`/g)].map((m) => m[0])
       expect(marks.length, f).toBeGreaterThan(0)
       for (const m of marks) { expect(m).toMatch(/whitespace-nowrap/); expect(m).not.toMatch(/\btext-(xs|sm|base|\[)/) }
     }
