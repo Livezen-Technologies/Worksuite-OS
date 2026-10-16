@@ -51,6 +51,16 @@ export function formatDate(value: Date | number | string, opts: Intl.DateTimeFor
   return new Date(value).toLocaleString(TAGS[l], opts)
 }
 
+/** A clock time (hours:minutes, 24-hour) in the current locale. */
+export function formatTime(value: Date | number | string, l: Locale = current): string {
+  return new Date(value).toLocaleTimeString(TAGS[l], { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+/** A number with a fixed count of fraction digits, with the locale's separators (replaces toFixed in UI text). */
+export function formatDecimal(n: number, digits: number, l: Locale = current): string {
+  return new Intl.NumberFormat(TAGS[l], { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n)
+}
+
 /** LKR, AED, USD, EUR, GBP per SRS §11.5. */
 export function formatCurrency(amount: number, currency: 'LKR' | 'AED' | 'USD' | 'EUR' | 'GBP', l: Locale = current): string {
   return new Intl.NumberFormat(TAGS[l], { style: 'currency', currency }).format(amount)

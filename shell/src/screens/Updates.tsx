@@ -28,11 +28,11 @@ const TONE: Record<Tone, { icon: string; color: string; bg: string }> = {
 }
 /** SetUpdates board hero colours per state. */
 const HERO: Record<Tone, { icon: string; bg: string; border: string }> = {
-  ok: { icon: '#2E9E6A', bg: 'linear-gradient(120deg, rgba(46,158,106,0.25), rgba(14,32,72,0.7))', border: 'rgba(95,211,154,0.35)' },
-  download: { icon: '#1F6BFF', bg: 'linear-gradient(120deg, rgba(31,107,255,0.3), rgba(14,32,72,0.7))', border: 'rgba(127,178,255,0.35)' },
-  busy: { icon: '#0E8FA8', bg: 'linear-gradient(120deg, rgba(14,143,168,0.25), rgba(14,32,72,0.7))', border: 'rgba(24,212,240,0.35)' },
-  ready: { icon: '#B7791F', bg: 'linear-gradient(120deg, rgba(183,121,31,0.25), rgba(14,32,72,0.7))', border: 'rgba(255,185,138,0.4)' },
-  warn: { icon: '#D9572B', bg: 'linear-gradient(120deg, rgba(217,87,43,0.22), rgba(14,32,72,0.7))', border: 'rgba(255,159,90,0.4)' },
+  ok: { icon: '#2E9E6A', bg: 'linear-gradient(120deg, rgba(46,158,106,0.25), var(--ws-g-card))', border: 'rgba(95,211,154,0.35)' },
+  download: { icon: '#1F6BFF', bg: 'linear-gradient(120deg, rgba(31,107,255,0.3), var(--ws-g-card))', border: 'rgba(127,178,255,0.35)' },
+  busy: { icon: '#0E8FA8', bg: 'linear-gradient(120deg, rgba(14,143,168,0.25), var(--ws-g-card))', border: 'rgba(24,212,240,0.35)' },
+  ready: { icon: '#B7791F', bg: 'linear-gradient(120deg, rgba(183,121,31,0.25), var(--ws-g-card))', border: 'rgba(255,185,138,0.4)' },
+  warn: { icon: '#D9572B', bg: 'linear-gradient(120deg, rgba(217,87,43,0.22), var(--ws-g-card))', border: 'rgba(255,159,90,0.4)' },
 }
 const ACTION_LABEL: Record<Action, string> = messages({ check: 'upd.action.check', later: 'upd.action.later', install: 'upd.action.install', schedule: 'upd.action.schedule', restart: 'upd.action.restart' })
 const RING: Record<string, string> = messages({ development: 'upd.ring.development', pilot: 'upd.ring.pilot', stable: 'upd.ring.stable' })

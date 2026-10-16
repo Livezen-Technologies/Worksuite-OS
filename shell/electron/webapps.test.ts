@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allowedOrigins, linkRequest, loadSession, navDecision, parseAppArgs, resolveLink, safeUrl, screenShareAllowed, signInTarget, startUrl, wantsToken, webAppsFrom, type Fetch } from './webapps'
+import { allowedOrigins, appCacheText, isPrintShortcut, cachedApps, launcherApps, linkRequest, loadSession, navDecision, parseAppArgs, resolveLink, safeUrl, screenShareAllowed, signInTarget, startUrl, wantsToken, webAppsFrom, type Fetch } from './webapps'
 
 const mail = { id: 'mail', name: 'Mail', web_url: 'https://apps.example.com/mail/' }
 
@@ -99,5 +99,39 @@ describe('screen sharing (SRS §7.1)', () => {
     expect(screenShareAllowed('meet', 'https://evil.example/room', origins)).toBe(false)
     expect(screenShareAllowed('chat', 'https://meet.example.lk/room/1', origins)).toBe(false)
     expect(screenShareAllowed('meet', '', origins)).toBe(false)
+  })
+})
+
+describe('org app list cached for offline use (WSOS-DSK-001)', () => {
+  const signedIn = { ok: true as const, value: [{ id: 'acct', server_url: 'https://ws.test', state: 'signed_in' }] }
+  const broker = async (m: string) => (m === 'Status' ? signedIn : { ok: true as const, value: 'tok' })
+  const json = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body })
+  const online: Fetch = async (u) => (u.includes('bootstrap') ? json(200, { apps: [{ ...mail, offline_level: 'cached_read' }] }) : json(404, {}))
+  const offline: Fetch = async () => { throw new Error('ENETUNREACH') }
+  it('stores the live list (no URLs, no token) and serves it when the server is unreachable', async () => {
+    let text: string | null = null
+    const cache = { read: () => text, write: (s: string) => { text = s } }
+    expect(await launcherApps(broker, online, cache)).toEqual({ ok: true, value: [{ id: 'mail', name: 'Mail', offline_level: 'cached_read' }] })
+    expect(text).not.toContain('tok')
+    expect(text).not.toContain('https://')
+    expect(await launcherApps(broker, offline, cache)).toEqual({ ok: true, value: [{ id: 'mail', name: 'Mail', offline_level: 'cached_read' }], cached: true })
+  })
+  it('never shows another account’s list, and reports offline without a cache', async () => {
+    const other = appCacheText('someone-else', [mail])
+    expect(cachedApps(other, 'acct')).toBeNull()
+    expect(cachedApps('{bad', 'acct')).toBeNull()
+    expect(cachedApps(JSON.stringify({ v: 1, account_id: 'acct', apps: [{ id: '../x' }, { id: 'chat' }] }), 'acct')).toEqual([{ id: 'chat', name: 'chat' }])
+    expect(await launcherApps(broker, offline, { read: () => other, write: () => {} })).toEqual({ ok: false, error: 'offline' })
+  })
+})
+
+describe('printing in app windows (WSOS-DSK-013)', () => {
+  const k = (key: string, mods: Partial<{ control: boolean; meta: boolean; alt: boolean; shift: boolean }> = {}, type = 'keyDown') => ({ type, key, control: false, meta: false, alt: false, shift: false, ...mods })
+  it('Ctrl+P / Cmd+P opens the print dialog; nothing else does', () => {
+    expect(isPrintShortcut(k('p', { control: true }))).toBe(true)
+    expect(isPrintShortcut(k('P', { meta: true }))).toBe(true)
+    expect(isPrintShortcut(k('p'))).toBe(false)
+    expect(isPrintShortcut(k('p', { control: true, shift: true }))).toBe(false)
+    expect(isPrintShortcut(k('p', { control: true }, 'keyUp'))).toBe(false)
   })
 })

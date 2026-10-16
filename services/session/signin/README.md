@@ -20,7 +20,7 @@ a PIN and FIDO2 security keys to their account on this device. The password alwa
 
 - **The PIN stays on the device.** Only an scrypt verifier (N=2^15, r=8, p=1, 16-byte salt) is stored, in
   `/var/lib/worksuite/signin/pin/<uid>.json` (0600, directory 0700, root). The PIN is never written, logged or put in
-  argv: Settings hands it to `pkexec worksuite-signin pin-set` on stdin, pam_exec passes it with `expose_authtok` on
+  argv: Settings passes it to the D-Bus method `lk.worksuite.SignIn1.SetPin` (polkit `lk.worksuite.signin.manage`), pam_exec passes it with `expose_authtok` on
   stdin, and the helper forwards it to the root daemon over a Unix socket. The daemon answers only for the caller's own
   account (`SO_PEERCRED`), so gtklock, which runs as the user, can check that user's PIN and no one else's.
 - **Lower lockout than the password.** The PIN stops working after `deny − 2` wrong tries (at most 5, at least 1;

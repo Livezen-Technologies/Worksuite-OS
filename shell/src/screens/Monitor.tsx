@@ -7,14 +7,14 @@ import type { WindowProps } from './types'
 import { C, card, Svg } from '../components/Dk'
 import { formatBytes } from '../lib/os'
 import { monitorApi, niceTop, pushHistory, sparkPoints, type HealthItem, type MonitorGroup, type MonitorSnapshot, type StartupEntry } from '../lib/monitorApi'
-import { formatNumber, t, useT, type MessageKey } from '../i18n'
+import { formatDecimal, formatNumber, t, useT, type MessageKey } from '../i18n'
 
 type Tab = 'overview' | 'processes' | 'startup' | 'health'
 const TABS: Tab[] = ['overview', 'processes', 'startup', 'health']
 const SAMPLE_MS = 2000
 const ENERGY_COLOR = { high: C.amber, medium: C.soft, low: C.green } as const
 
-const pct = (v: number | null) => (v == null ? '—' : `${formatNumber(Number(v.toFixed(v < 10 ? 1 : 0)))}%`)
+const pct = (v: number | null) => (v == null ? '—' : `${formatDecimal(v, v < 10 ? 1 : 0)}%`)
 const rate = (v: number | null) => (v == null ? '—' : t('monitor.perSecond', { size: formatBytes(Math.max(v, 1000)) }))
 
 function groupName(g: MonitorGroup) {
@@ -25,7 +25,7 @@ function groupName(g: MonitorGroup) {
 
 function healthValue(h: HealthItem): string {
   if (h.value == null) return t('monitor.notMeasured')
-  if (h.unit === 's') return t('monitor.seconds', { n: formatNumber(Number(h.value.toFixed(1))) })
+  if (h.unit === 's') return t('monitor.seconds', { n: formatDecimal(h.value, 1) })
   if (h.unit === 'bytes') return formatBytes(h.value)
   if (h.unit === 'pct') return pct(h.value)
   return formatNumber(h.value)
@@ -82,7 +82,7 @@ export default function Monitor({ onClose }: WindowProps) {
 
   const graphs = useMemo(() => {
     if (!snap) return []
-    const ghz = snap.cpu.mhz ? formatNumber(Number((snap.cpu.mhz / 1000).toFixed(1))) : null
+    const ghz = snap.cpu.mhz ? formatDecimal(snap.cpu.mhz / 1000, 1) : null
     const memPct = Math.round((snap.memory.used / snap.memory.total) * 100)
     return [
       { id: 'cpu', label: t('monitor.cpu'), value: pct(snap.cpu.percent), detail: ghz ? t('monitor.coresGhz', { n: snap.cpu.cores, ghz }) : t('monitor.cores', { n: snap.cpu.cores }), color: C.cyan, meter: snap.cpu.percent, pts: sparkPoints(hist.cpu, 100) },
@@ -125,7 +125,7 @@ export default function Monitor({ onClose }: WindowProps) {
 
   return (
     <div role="dialog" aria-modal="false" aria-label={t('monitor.title')} className="fixed inset-x-0 top-0 bottom-[52px] z-50 flex flex-col gap-4 overflow-hidden px-8 py-[26px] font-sans"
-      style={{ color: C.ink, background: 'radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)' }}>
+      style={{ color: C.ink, background: 'radial-gradient(ellipse 80% 50% at 80% 0%, var(--ws-g-glow) 0%, var(--ws-g-page) 60%)' }}>
       <div className="flex items-center gap-3">
         <h1 className="m-0 text-2xl font-bold">{t('monitor.title')}</h1>
         <div role="tablist" aria-label={t('monitor.title')} className="ml-5 flex overflow-hidden rounded-[9px] border border-[rgba(127,178,255,0.2)] text-[13px]">{TABS.map(tabBtn)}</div>

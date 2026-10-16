@@ -15,11 +15,12 @@ import A11yPanel from '../components/A11yPanel'
 import NotifDock, { MOON } from '../components/NotifDock'
 import { CaptureBadge } from '../components/CaptureBadge'
 import { useDnd } from '../lib/dnd'
-import { localeTag, t as t0, useT } from '../i18n'
+import { formatTime, localeTag, t as t0, useT } from '../i18n'
 import { UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
 import { markLauncherRequest, reportLauncherFirstFrame } from '../lib/perfProbe'
+import { applyShellPrefs, shellPrefsFrom, taskbarPins, toggleFavorite, type ShellPrefs } from '../lib/shellPrefs'
 import { alphaGroups, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
 import GlobalSearch from '../components/GlobalSearch'
@@ -80,7 +81,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   const searchRef = useRef<HTMLInputElement>(null)
   const name = displayName(user) || user
 
-  const time = now.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit', hour12: false })
+  const time = formatTime(now)
   const longDate = now.toLocaleDateString(localeTag(), { weekday: 'long', day: 'numeric', month: 'long' })
   const shortDate = now.toLocaleDateString(localeTag(), { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
 
@@ -119,15 +120,27 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
   }, [launcher])
 
   // Start menu list: the org's WorkSuite apps (fallback list when not signed in/offline) and installed XDG apps.
-  const [allApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
+  const [baseApps, setAllApps] = useState<LauncherApp[]>(() => buildLauncherApps(null, null, null))
+  // The user's favourites, taskbar pins and order (Shell ENH-01 preferences, synced; WSOS-DSK-001).
+  const [prefs, setPrefs] = useState<ShellPrefs>({})
+  const [appsCached, setAppsCached] = useState(false)
+  const allApps = useMemo(() => applyShellPrefs(baseApps, prefs), [baseApps, prefs])
+  const toggleFav = (id: string) => {
+    const next = toggleFavorite(prefs, allApps, id)
+    setPrefs(next)
+    void os.setShellPrefs(next).catch(() => undefined)
+  }
   const appsLoaded = useRef(false)
   useEffect(() => {
     // On start, then again each time the launcher opens (sign-in, installs and org changes show up).
     if (!launcher && appsLoaded.current) return
     appsLoaded.current = true
     let live = true
-    void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null)]).then(([w, i]) => {
-      if (live) setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null))
+    void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null), os.shellPrefs().catch(() => null)]).then(([w, i, p]) => {
+      if (!live) return
+      setAllApps(buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null))
+      setAppsCached(!!(w?.ok && w.cached))
+      if (p?.ok) setPrefs(shellPrefsFrom(p.value))
     })
     return () => { live = false }
   }, [launcher])
@@ -153,7 +166,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
     else if ('worksuite' in a.launch) void os.launchWorkSuite(a.launch.worksuite)
     else void os.launchApp(a.launch.desktop)
   }
-  const taskbar = taskbarApps(allApps, TASKBAR)
+  const taskbar = taskbarApps(allApps, taskbarPins(prefs, TASKBAR))
   // This window is the primary monitor's desktop; other monitors have their own (OutputDesktop, WSOS-DSK-005).
   const display = useDisplayState()
   const primaryOut = display?.layout.primary ?? null
@@ -164,7 +177,8 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
 
   return (
     <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: wallpaperFor(display, primaryOut, BG.desktop) }}>
-      <div className="absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
+      {/* On the wallpaper: keeps its light text in the light theme (ws-dark-zone). */}
+      <div className="ws-dark-zone absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
         <div className="text-sm text-[#8FA3C8]">{longDate}</div>
         <div className="text-[44px] font-light tracking-[-1px]">{time}</div>
       </div>
@@ -212,7 +226,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                 <span aria-hidden="true" className="rounded border border-[#3D5280] px-1.5 py-0.5 font-mono text-[10px]">Super</span>
               </label>
               <div className="flex items-center justify-between">
-                <h2 className="m-0 text-sm font-semibold">{allView ? t('launcher.tab.all') : t('launcher.pinned')}</h2>
+                <h2 className="m-0 text-sm font-semibold">{allView ? t('launcher.tab.all') : t('launcher.pinned')}{appsCached && <span className="ml-2 text-xs font-normal text-[#8FA3C8]">{t('launcher.cachedList')}</span>}</h2>
                 <button type="button" onClick={() => setAllView((v) => !v)} className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/[0.07] px-3 py-[5px] text-xs hover:bg-white/[0.12]">
                   {allView ? t('common.back') : t('launcher.tab.all')}<Icon d={[allView ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6']} size={12} width={2.4} stroke="#C9D6EE" />
                 </button>
@@ -221,8 +235,8 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                 <>
                   <div className="ws-pins grid grid-cols-6 gap-x-1.5 gap-y-1">
                     {pins.map((a) => (
-                      <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] rounded-xl px-1 py-2.5 hover:bg-white/[0.07] focus-visible:bg-white/[0.07]">
-                        <span aria-hidden="true" className="flex size-11 items-center justify-center rounded-xl text-base font-bold text-white shadow-[0_6px_14px_rgba(0,0,0,0.25)]" style={{ background: tileColor(a) }}>{a.mark}</span>
+                      <button key={a.id} type="button" onClick={() => launch(a.id)} onContextMenu={(e) => { if (a.id === SETTINGS_TILE.id) return; e.preventDefault(); toggleFav(a.id) }} aria-description={a.fav ? t('launcher.unpinHint') : t('launcher.pinHint')} className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] rounded-xl px-1 py-2.5 hover:bg-white/[0.07] focus-visible:bg-white/[0.07]">
+                        <span aria-hidden="true" className="ws-mark flex size-11 items-center justify-center whitespace-nowrap rounded-xl leading-none font-bold text-white shadow-[0_6px_14px_rgba(0,0,0,0.25)]" style={{ background: tileColor(a), fontSize: 16 }}>{a.mark}</span>
                         <span className="max-w-full truncate text-xs">{a.name}</span>
                       </button>
                     ))}
@@ -253,7 +267,7 @@ export default function Desktop({ user, onLock, onLogout, onOpen, notes, childre
                       <span aria-hidden="true" className="px-2.5 pt-2 pb-1 text-xs font-bold text-[#18D4F0]">{g.letter}</span>
                       {g.apps.map((a) => (
                         <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex cursor-pointer items-center gap-3 rounded-[9px] px-2.5 py-[7px] text-left hover:bg-white/[0.07]">
-                          <span aria-hidden="true" className="flex size-[30px] items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: tileColor(a) }}>{a.mark}</span>
+                          <span aria-hidden="true" className="ws-mark flex size-[30px] items-center justify-center whitespace-nowrap rounded-lg leading-none font-bold text-white" style={{ fontSize: 12, background: tileColor(a) }}>{a.mark}</span>
                           <span className="text-[13px]">{a.name}</span>
                           <span className="ml-auto text-[11px] text-[#8FA3C8]">{a.kind === 'WorkSuite' ? '' : t(`launcher.kind.${a.kind}` as MessageKey)}</span>
                         </button>

@@ -38,6 +38,9 @@ const en = {
   'launcher.tab.linux': 'Linux apps',
   'launcher.tab.fav': 'Favorites',
   'launcher.pinned': 'Pinned',
+  'launcher.pinHint': 'Menu key: pin to Start',
+  'launcher.unpinHint': 'Menu key: unpin from Start',
+  'launcher.cachedList': 'Offline — last saved list',
   'launcher.apps': 'Apps',
   'launcher.settings': 'Settings',
   'launcher.recent': 'Recent',
@@ -859,6 +862,7 @@ const en = {
   'appc.waitingApproval': 'Waiting for approval…',
   'appc.working': 'Working…',
   // Files
+  'files.dropRejected': 'Some items could not be copied here. Only files from your folders and drives can be dropped.',
   'files.cantOpen': 'This folder can’t be opened.',
   'files.col.kind': 'Kind',
   'files.col.modified': 'Modified',

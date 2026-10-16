@@ -9,7 +9,7 @@ import path from 'node:path'
 import { brokerCall } from './broker'
 import { deviceCredential, deviceInfo } from './device'
 import {
-  allowedOrigins, appAuthHeaders, linkRequest, loadSession, navDecision, resolveLink, screenShareAllowed, signInTarget, startUrl, wantsToken,
+  allowedOrigins, appAuthHeaders, isPrintShortcut, linkRequest, loadSession, navDecision, resolveLink, screenShareAllowed, signInTarget, startUrl, wantsToken,
   type AppRequest, type Fetch, type Session, type WebApp,
 } from './webapps'
 import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
@@ -65,6 +65,8 @@ export function runAppMode(req: AppRequest) {
       return { action: 'deny' }
     })
     wc.on('did-create-window', (child) => guard(child, origins))
+    // Printing like any desktop app: Ctrl+P (and window.print() from the page) opens the system print dialog.
+    wc.on('before-input-event', (e, input) => { if (isPrintShortcut(input)) { e.preventDefault(); wc.print({}) } })
   }
 
   function webPrefs(accountId?: string) {

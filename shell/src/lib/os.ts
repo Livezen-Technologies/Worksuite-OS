@@ -18,7 +18,10 @@ export interface WorkSuiteApi {
   /** Open a search result (worksuite:// or file://), or its location. */
   openSearchResult(link: string, where?: 'open' | 'location'): Promise<{ ok: boolean; error?: string }>
   /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
-  webApps(): Promise<CloudResult<{ id: string; name: string; offline_level?: 'full_offline' | 'cached_read' | 'online_only' }[]>>
+  webApps(): Promise<CloudResult<{ id: string; name: string; offline_level?: 'full_offline' | 'cached_read' | 'online_only' }[]> & { cached?: true }>
+  /** The user's synced shell preferences (favourites, taskbar pins, order); null when none are saved. */
+  shellPrefs(): Promise<CloudResult<unknown>>
+  setShellPrefs(prefs: unknown): Promise<CloudResult<boolean>>
   /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
   installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null }>
   /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
@@ -76,6 +79,11 @@ export interface WorkSuiteApi {
   filesTrashRestore(ids: string[]): Promise<CloudResult<{ restored: number; skipped: number }>>
   filesTrashDelete(ids: string[] | 'all'): Promise<CloudResult<number>>
   /** Start a copy/move/duplicate job; progress and conflicts arrive through onFilesJob. */
+  /** Files dropped from another app: copied into root/rel; paths outside the user's places are rejected. */
+  filesDrop(paths: string[], dstRoot: string, dstRel: string): Promise<CloudResult<{ jobs: number; rejected: number }>>
+  /** Drag files out to another app (native drag with the real paths). */
+  filesStartDrag(root: string, rels: string[]): Promise<CloudResult<number>>
+  pathForFile(f: File): string
   filesPaste(op: 'copy' | 'move' | 'duplicate', srcRoot: string, rels: string[], dstRoot: string, dstRel: string): Promise<CloudResult<string>>
   /** Answer a job: conflict (replace/skip/keep), error (retry/skip), pause/resume (copy and move), or cancel. */
   filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel' | 'continue' | 'retry' | 'pause' | 'resume', all: boolean): Promise<CloudResult<true>>
@@ -285,7 +293,7 @@ export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; p
 export function formatBytes(n: number | null): string {
   if (n == null) return '—'
   const a = Math.abs(n)
-  const s = a >= 1e9 ? `${formatNumber(Number((a / 1e9).toFixed(1)))} GB` : a >= 1e6 ? `${formatNumber(Math.round(a / 1e6))} MB` : `${formatNumber(Math.max(1, Math.round(a / 1e3)))} kB`
+  const s = a >= 1e9 ? `${formatDecimal(a / 1e9, 1)} GB` : a >= 1e6 ? `${formatNumber(Math.round(a / 1e6))} MB` : `${formatNumber(Math.max(1, Math.round(a / 1e3)))} kB`
   return n < 0 ? t('bytes.freed', { size: s }) : s
 }
 
@@ -303,7 +311,7 @@ export function packageErrorText(code: string): string {
 
 import type { SyncStatus } from './syncNotices'
 import type { CheckId, CheckResult, SnapshotInfo } from './recovery'
-import { formatNumber, t } from '../i18n'
+import { formatDecimal, formatNumber, t } from '../i18n'
 
 export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
@@ -396,6 +404,8 @@ const stub: WorkSuiteApi = {
   async recentFiles() { return { local: [], cloud: { state: 'not_signed_in', hits: [] } } },
   async openSearchResult() { return { ok: true } },
   async webApps() { return { ok: false, error: 'not_signed_in' } },
+  async shellPrefs() { return { ok: false, error: 'not_signed_in' } },
+  async setShellPrefs() { return { ok: false, error: 'not_signed_in' } },
   async installedApps() {
     return { apps: [
       { id: 'firefox-esr', name: 'Firefox ESR', generic_name: 'Web Browser', comment: null, icon: 'firefox-esr', categories: ['Network', 'WebBrowser'], keywords: ['internet', 'web'] },
@@ -489,6 +499,9 @@ const stub: WorkSuiteApi = {
   },
   async filesTrashRestore(ids) { return { ok: true, value: { restored: ids.length, skipped: 0 } } },
   async filesTrashDelete(ids) { return { ok: true, value: ids === 'all' ? 0 : ids.length } },
+  async filesDrop(paths) { return { ok: true, value: { jobs: 0, rejected: paths.length } } },
+  async filesStartDrag() { return { ok: false, error: 'unavailable' } },
+  pathForFile() { return '' },
   async filesPaste(op, _s, rels, dstRoot) {
     // Preview: a job that stops on one conflict, then runs to the end; Pause holds it, like the real job service.
     const id = `stubjob${++stubJobSeq}`

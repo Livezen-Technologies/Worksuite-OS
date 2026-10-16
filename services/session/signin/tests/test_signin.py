@@ -19,7 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
 
-from worksuite_signin import cli, core  # noqa: E402
+from worksuite_signin import bus, cli, core  # noqa: E402
 
 core.SCRYPT = {"n": 1 << 10, "r": 8, "p": 1}  # fast in tests; the shipped cost is checked below
 PIN = "582947"
@@ -349,3 +349,45 @@ class DiskTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BusTests(ManageTests):
+    """lk.worksuite.SignIn1 (WSOS-ARC-002): named methods, polkit per call, caller's UID from the bus only."""
+
+    def d(self, member, args, uid=1000, allow=True, seen=None):
+        async def authorized(action):
+            (seen if seen is not None else []).append(action)
+            return allow
+        import asyncio
+        return asyncio.run(bus.dispatch(member, args, uid, authorized, self.run_, self.state, lambda u: {1000: USERS["alex"], 0: Pw("root", 0)}[u]))
+
+    def test_every_method_needs_the_signin_action(self):
+        self.assertEqual(set(bus.ACTIONS), {"SetPin", "RemovePin", "AddKey", "RemoveKey"})
+        self.assertEqual(set(bus.ACTIONS.values()), {"lk.worksuite.signin.manage"})
+        seen = []
+        with self.assertRaises(bus.NotAuthorized):
+            self.d("SetPin", [PIN], allow=False, seen=seen)
+        self.assertEqual(seen, ["lk.worksuite.signin.manage"])
+        self.assertNotIn(self.me, core.read_methods(self.state).get("users", {}))
+
+    def test_set_and_remove_pin_for_the_bus_caller(self):
+        old = core.POLICY_FILE
+        core.POLICY_FILE = os.path.join(self.tmp.name, "none.conf")
+        try:
+            self.assertEqual(self.d("SetPin", [PIN]), {"ok": True})
+        finally:
+            core.POLICY_FILE = old
+        self.assertTrue(core.read_methods(self.state)["users"][self.me]["pin"])
+        self.assertNotIn(PIN, json.dumps(self.calls))
+        self.assertEqual(self.d("RemovePin", []), {"ok": True})
+        self.assertIsNone(core.read_pin(1000, self.state))
+
+    def test_root_unknown_methods_and_bad_ids_are_refused(self):
+        self.assertEqual(self.d("SetPin", [PIN], uid=0), {"ok": False, "error": "not_allowed"})
+        self.assertEqual(self.d("Wipe", []), {"ok": False, "error": "bad_request"})
+        self.assertEqual(self.d("RemoveKey", ["../x"]), {"ok": False, "error": "bad_request"})
+
+    def test_interface_xml_lists_exactly_the_methods(self):
+        xml = Path(__file__).resolve().parents[2].joinpath("dbus", "lk.worksuite.SignIn1.xml").read_text()
+        import re
+        self.assertEqual(sorted(re.findall(r'<method name="(\w+)"', xml)), sorted(bus.METHODS))

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- System bus: lk.worksuite.SignIn1 at /lk/worksuite/SignIn1 (services/session/signin/worksuite_signin/bus.py).
+     Settings › Users › Sign-in options. Every method needs polkit lk.worksuite.signin.manage (auth_self) and acts on
+     the calling user only. Each returns a JSON result: {"ok": true[, "id"]} or {"ok": false, "error": code}. -->
+<node name="/lk/worksuite/SignIn1">
+  <interface name="lk.worksuite.SignIn1">
+    <method name="SetPin"><arg name="pin" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+    <method name="RemovePin"><arg name="result" type="s" direction="out"/></method>
+    <method name="AddKey"><arg name="name" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+    <method name="RemoveKey"><arg name="id" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+  </interface>
+</node>

@@ -1,7 +1,10 @@
 import { findBundles } from './bundles'
-import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
+
+// Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
+const DRAG_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4nGNgoCaQz/7/nxiM1wBCYNSAUQNGigEUZSZyAAAnXe3wcJ4r8wAAAABJRU5ErkJggg=='
 import { execFile, spawn } from 'node:child_process'
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
@@ -15,13 +18,14 @@ import { checkOwnPassword, localUsers } from './users'
 import { ask, signinHost, type SignInMethod } from './signin'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
-import { loadSession, parseAppArgs, resolveLink } from './webapps'
+import { shellPrefsFrom } from '../src/lib/shellPrefs'
+import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
 import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { archiveJobs, listIn, locate } from './archives'
-import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
+import { defaultEnv, driveDir, dropPlan, freeBytes, list, resolveIn, roots } from './files'
 import { eject, jobs as fileJobs, mkdirIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel } from './panelHost'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
@@ -151,8 +155,12 @@ app.whenReady().then(() => {
   handle('ws:setLockTimeout', (s) => writeLockTimeout(lock, Number(s)))
   // Launcher data: the org's WorkSuite web apps (no token leaves the main process) and installed XDG apps.
   handle('ws:webApps', async () => {
-    const r = await loadSession((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }))
-    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name, offline_level }) => ({ id, name, offline_level })) } : r
+    // Cached per account in the user's cache dir so the launcher keeps the org's list offline (WSOS-DSK-001).
+    const file = path.join(app.getPath('home'), '.cache', 'worksuite', 'launcher-apps.json')
+    return launcherApps((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }), {
+      read: () => (existsSync(file) ? readFileSync(file, 'utf8') : null),
+      write: (text) => { mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 }); writeFileSync(file, text, { mode: 0o600 }) },
+    })
   })
   handle('ws:installedApps', () => {
     const all = installedApps()
@@ -250,6 +258,9 @@ app.whenReady().then(() => {
   })
   handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:syncStatus', () => syncCall('Status'))
+  // Shell ENH-01 preferences (favourites, taskbar pins, order): the user's synced 'preferences/shell' object.
+  handle('ws:shellPrefs', () => syncCall('GetPreference', { object_id: 'shell' }))
+  handle('ws:setShellPrefs', (prefs) => syncCall('SetPreference', { object_id: 'shell', data: shellPrefsFrom(prefs) }))
   // WSOS-SYN-004: rejected changes are shown against their record; retry only when the user asks.
   handle('ws:syncFailed', () => syncCall('ListFailed'))
   handle('ws:syncRetry', (mutationId) => syncCall('RetryFailed', { mutation_id: mutationId }))
@@ -452,6 +463,20 @@ app.whenReady().then(() => {
   handle('ws:filesTrashList', () => trashList(files))
   handle('ws:filesTrashRestore', (ids) => trashRestore(files, strs(ids)))
   handle('ws:filesTrashDelete', (ids) => trashDelete(files, ids === 'all' ? 'all' : strs(ids)))
+  // Drag and drop with other apps (WSOS-DSK-013): dropped paths inside the user's places are copied here by the
+  // same jobs as paste; dragging files out hands real file paths to the compositor (text/uri-list for the target).
+  handle('ws:filesDrop', (paths, dstRoot, dstRel) => {
+    const plan = dropPlan(files, strs(paths))
+    const jobs = plan.groups.map((g) => fjobs.start('copy', g.root, g.rels, dstRoot, dstRel)).filter((r) => r.ok).length
+    return { ok: true, value: { jobs, rejected: plan.rejected } }
+  })
+  handle('ws:filesStartDrag', (root, rels) => {
+    const paths = strs(rels).slice(0, 500).map((r) => resolveIn(files, root, r)?.full).filter((p): p is string => !!p && existsSync(p))
+    const wc = [...shellContents].find((c) => !c.isDestroyed() && c.isFocused())
+    if (!paths.length || !wc) return { ok: false, error: 'not_found' }
+    wc.startDrag({ file: paths[0], files: paths, icon: nativeImage.createFromDataURL(DRAG_ICON) })
+    return { ok: true, value: paths.length }
+  })
   handle('ws:filesPaste', (op, srcRoot, rels, dstRoot, dstRel) => fjobs.start(op, srcRoot, strs(rels), dstRoot, dstRel))
   // Archives (electron/archives.ts): passwords arrive here only to go to 7z's stdin; they are never logged or sent back.
   const ajobs = archiveJobs(files, (e) => broadcast('ws:filesJob', e))

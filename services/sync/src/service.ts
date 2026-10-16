@@ -68,6 +68,22 @@ export class SyncService {
     };
   }
 
+  /** The user's synced preference object (module 'preferences', last write wins, full offline): e.g. the shell's pins. */
+  getPreference(objectId: string): unknown {
+    const a = this.accounts()[0];
+    return a ? this.o.store.read(a, 'preferences', objectId) ?? null : null;
+  }
+
+  /** Save a preference locally and queue it for the server; false when no account is signed in. */
+  setPreference(objectId: string, data: unknown): boolean {
+    const a = this.accounts()[0];
+    if (!a) return false;
+    const exists = this.o.store.read(a, 'preferences', objectId) !== undefined;
+    this.o.store.write({ accountId: a, module: 'preferences', objectId, operation: exists ? 'update' : 'create', data });
+    void this.syncNow();
+    return true;
+  }
+
   listFailed() { return this.accounts().flatMap((a) => this.o.store.failed(a)); }
 
   /** Unsent = pending or failed outbox rows (WSOS-SYN-008). */

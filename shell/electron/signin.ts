@@ -1,10 +1,11 @@
 // Settings › Users › Sign-in options (boards AuthMethods, AuthPin, AuthPasskey): this device's PIN and FIDO2 security
 // keys, managed by the root helper worksuite-signin (services/session/signin).
 // - What is set up comes from the public index /var/lib/worksuite/signin/methods.json (no secrets) and the policy files.
-// - Changes run the helper through pkexec (polkit lk.worksuite.signin.manage, auth_self: the person types their own
-//   password each time). Fixed arguments; the PIN goes on stdin only, never argv, never logged.
+// - Changes are named methods of lk.worksuite.SignIn1 on the system bus (WSOS-ARC-002), each behind polkit
+//   lk.worksuite.signin.manage (auth_self: the person types their own password each time); the service acts on the
+//   bus caller's account only. The PIN is a D-Bus argument, never argv, never logged.
 // - The default method is a preference: one request on the helper's socket, answered for the caller's own account.
-import { spawn } from 'node:child_process'
+import dbus from 'dbus-next'
 import { readFileSync } from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
@@ -63,18 +64,36 @@ export function signinMethods(user = os.userInfo().username, paths: SigninPaths 
 
 export type Runner = (args: string[], stdin: string) => Promise<{ status: number | null; out: string }>
 
-const pkexec: Runner = (args, stdin) => new Promise((resolve) => {
-  const child = spawn('pkexec', ['/usr/lib/worksuite/worksuite-signin', ...args], { stdio: ['pipe', 'pipe', 'ignore'] })
-  let out = ''
-  child.stdout.on('data', (d) => { out += d })
-  child.on('error', () => resolve({ status: -1, out: '' }))
-  child.on('close', (status) => resolve({ status, out }))
-  child.stdin.end(stdin)
-})
+/** The helper command (as before) → its lk.worksuite.SignIn1 method. Unknown commands never reach the bus. */
+export function busCall(args: string[], stdin: string): { member: 'SetPin' | 'RemovePin' | 'AddKey' | 'RemoveKey'; body: string[] } | null {
+  const opt = (k: string) => { const i = args.indexOf(k); return i >= 0 && i + 1 < args.length ? args[i + 1] : '' }
+  switch (args[0]) {
+    case 'pin-set': return { member: 'SetPin', body: [stdin.replace(/\n$/, '')] }
+    case 'pin-remove': return { member: 'RemovePin', body: [] }
+    case 'key-add': return { member: 'AddKey', body: [opt('--name')] }
+    case 'key-remove': return { member: 'RemoveKey', body: [opt('--id')] }
+    default: return null
+  }
+}
 
-async function manage(args: string[], stdin = '', run: Runner = pkexec): Promise<SigninResult> {
+/** Status like the old pkexec runner: 0 with the JSON result, 126 when polkit refused, -1 when the service is missing. */
+const busRunner: Runner = async (args, stdin) => {
+  const c = busCall(args, stdin)
+  if (!c) return { status: 1, out: '{"ok":false,"error":"bad_request"}' }
+  const bus = dbus.systemBus()
+  try {
+    const obj = await bus.getProxyObject('lk.worksuite.SignIn1', '/lk/worksuite/SignIn1')
+    const iface = obj.getInterface('lk.worksuite.SignIn1') as unknown as Record<string, (...a: string[]) => Promise<string>>
+    return { status: 0, out: String(await iface[c.member](...c.body)) }
+  } catch (e) {
+    const type = (e as { type?: string }).type ?? ''
+    return type === 'lk.worksuite.Error.NotAuthorized' ? { status: 126, out: '' } : /ServiceUnknown|NameHasNoOwner|Spawn|NoReply|Disconnected/.test(type) || !type ? { status: -1, out: '' } : { status: 1, out: '' }
+  } finally { bus.disconnect() }
+}
+
+async function manage(args: string[], stdin = '', run: Runner = busRunner): Promise<SigninResult> {
   const r = await run(args, stdin)
-  // pkexec: 126 = authentication dismissed or failed, 127 = not authorized.
+  // 126 = authentication dismissed or failed (polkit), 127 = not authorized.
   if (r.status === 126 || r.status === 127) return { ok: false, error: 'auth_cancelled' }
   if (r.status === -1) return { ok: false, error: 'unavailable' }
   try {
@@ -84,7 +103,7 @@ async function manage(args: string[], stdin = '', run: Runner = pkexec): Promise
   } catch { return { ok: false, error: 'failed' } }
 }
 
-export function signinHost(run: Runner = pkexec, paths: SigninPaths = PATHS) {
+export function signinHost(run: Runner = busRunner, paths: SigninPaths = PATHS) {
   return {
     methods: () => signinMethods(undefined, paths),
     pinSet: (pin: string) => {

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { os, packageErrorText, type PackageJobEvent } from '../../lib/os'
 import { initialChecks, repairPercent, repairSummary, type CheckId, type CheckRow, type CheckState, type DoneInfo } from '../../lib/recovery'
 import { Footer, Header, Page, link, small } from './Frame'
-import { localeTag, messages, t } from '../../i18n'
+import { formatDate, messages, t } from '../../i18n'
 
 /** Start a package job and wait for its JobFinished event (events that arrive before the job id are kept). */
 async function runJob(start: () => Promise<{ ok: true; value: string } | { ok: false; error: string }>): Promise<{ ok: boolean; error?: string }> {
@@ -47,7 +47,7 @@ export default function Repair({ onBack, onDone }: { onBack: () => void; onDone:
       if (!alive) return
       setRows((rs) => rs.map((r) => (r.id === id ? { ...r, state, note } : r)))
     }
-    const say = (line: string) => { if (alive) setLog((l) => [...l, `${new Date().toLocaleTimeString(localeTag())}  ${line}`]) }
+    const say = (line: string) => { if (alive) setLog((l) => [...l, `${formatDate(new Date(), { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}  ${line}`]) }
     void (async () => {
       const final: CheckRow[] = initialChecks()
       for (const row of final) {

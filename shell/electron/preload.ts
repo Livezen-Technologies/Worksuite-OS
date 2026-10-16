@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 // Named functions only; the renderer never sees ipcRenderer (WSOS-SEC-001, §10.3).
 contextBridge.exposeInMainWorld('worksuite', {
@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('worksuite', {
   lockSettings: () => ipcRenderer.invoke('ws:lockSettings'),
   setLockTimeout: (seconds: number) => ipcRenderer.invoke('ws:setLockTimeout', String(seconds)),
   webApps: () => ipcRenderer.invoke('ws:webApps'),
+  shellPrefs: () => ipcRenderer.invoke('ws:shellPrefs'),
+  setShellPrefs: (prefs: unknown) => ipcRenderer.invoke('ws:setShellPrefs', prefs),
   installedApps: () => ipcRenderer.invoke('ws:installedApps'),
   launchOffice: (kind: string) => ipcRenderer.invoke('ws:launchOffice', String(kind)),
   launchWorkSuite: (module: string) => ipcRenderer.invoke('ws:launchWorkSuite', String(module)),
@@ -86,6 +88,10 @@ contextBridge.exposeInMainWorld('worksuite', {
   filesTrashList: () => ipcRenderer.invoke('ws:filesTrashList'),
   filesTrashRestore: (ids: string[]) => ipcRenderer.invoke('ws:filesTrashRestore', JSON.stringify(ids.map(String))),
   filesTrashDelete: (ids: string[] | 'all') => ipcRenderer.invoke('ws:filesTrashDelete', ids === 'all' ? 'all' : JSON.stringify(ids.map(String))),
+  filesDrop: (paths: string[], dstRoot: string, dstRel: string) => ipcRenderer.invoke('ws:filesDrop', JSON.stringify(paths.map(String)), String(dstRoot), String(dstRel)),
+  filesStartDrag: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesStartDrag', String(root), JSON.stringify(rels.map(String))),
+  // A dropped File's path on disk (Electron 32+: File.path is gone); '' for data that isn't a file.
+  pathForFile: (f: File) => { try { return webUtils.getPathForFile(f) } catch { return '' } },
   filesPaste: (op: string, srcRoot: string, rels: string[], dstRoot: string, dstRel: string) => ipcRenderer.invoke('ws:filesPaste', String(op), String(srcRoot), JSON.stringify(rels.map(String)), String(dstRoot), String(dstRel)),
   filesResolve: (id: string, r: string, all: boolean) => ipcRenderer.invoke('ws:filesResolve', String(id), String(r), all ? '1' : '0'),
   filesCompress: (root: string, rels: string[], opts: { format: string; name: string; level: number; password?: string | null }) =>

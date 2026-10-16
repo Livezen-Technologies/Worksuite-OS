@@ -210,7 +210,7 @@ def main(argv=None, env=None, stdin=None):
     env = os.environ if env is None else env
     stdin = sys.stdin.buffer if stdin is None else stdin
     if not argv:
-        print("usage: worksuite-signin pam-pin|pam-pin-used|pam-reset|serve|pin-set|pin-remove|key-add|key-remove", file=sys.stderr)
+        print("usage: worksuite-signin pam-pin|pam-pin-used|pam-reset|serve|dbus|pin-set|pin-remove|key-add|key-remove", file=sys.stderr)
         return 2
     cmd = argv[0]
     if cmd == "pam-pin":
@@ -219,6 +219,12 @@ def main(argv=None, env=None, stdin=None):
         return pam_simple("pin_used", env)
     if cmd == "pam-reset":
         return pam_simple("reset", env)
+    if cmd == "dbus":
+        if env.get("PKEXEC_UID") or os.geteuid() != 0:
+            return 1
+        from .bus import serve_bus
+        serve_bus()
+        return 0
     if cmd == "serve":
         if env.get("PKEXEC_UID"):
             return 1

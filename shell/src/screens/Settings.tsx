@@ -342,7 +342,7 @@ function PrivacyPanel() {
   return <>
     <H1>{navLabel('Privacy & security')}</H1>
     <section aria-label={t('settings.priv.summary')} className="flex items-center gap-[22px] rounded-2xl border px-[22px] py-[18px]"
-      style={allGood ? { background: 'linear-gradient(120deg, rgba(46,158,106,0.22), rgba(14,32,72,0.7))', borderColor: 'rgba(95,211,154,0.35)' } : { background: 'linear-gradient(120deg, rgba(255,159,90,0.14), rgba(14,32,72,0.7))', borderColor: 'rgba(255,159,90,0.3)' }}>
+      style={allGood ? { background: 'linear-gradient(120deg, rgba(46,158,106,0.22), var(--ws-g-card))', borderColor: 'rgba(95,211,154,0.35)' } : { background: 'linear-gradient(120deg, rgba(255,159,90,0.14), var(--ws-g-card))', borderColor: 'rgba(255,159,90,0.3)' }}>
       <div className="relative h-[72px] w-[72px] shrink-0">
         <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">
           <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(127,178,255,0.18)" strokeWidth="7" />
@@ -416,7 +416,7 @@ function UsersPanel() {
     <H1>{t('settings.nav.Users')}</H1>
     {r.state === 'unavailable' && <Unavail what={t('settings.users.list')} />}
     {r.state === 'ok' && (
-      <div className="flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.18)] px-6 py-[22px]" style={{ background: 'radial-gradient(circle at 90% 10%, rgba(24,212,240,0.25), transparent 45%), rgba(14,32,72,0.75)' }}>
+      <div className="flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.18)] px-6 py-[22px]" style={{ background: 'radial-gradient(circle at 90% 10%, rgba(24,212,240,0.25), transparent 45%), var(--ws-g-card)' }}>
         <Avatar name={me?.name ?? r.value.current} size={96} font={34} />
         <span className="flex flex-1 flex-col gap-1.5">
           <span className="text-[22px] font-bold">{me?.name ?? r.value.current}</span>
@@ -835,7 +835,7 @@ export default function Settings({ onClose }: WindowProps) {
     <div role="dialog" aria-modal="false" aria-label={t('launcher.settings')} className="fixed inset-0 z-50 flex bg-[#0A1A3D] font-sans text-[#E8EEFA]">
       <SetNav section={section} onPick={setSection} badges={badges} user={user} />
       {/* Page frame from the Set* boards: 26/36 px padding, 14 px gap; Privacy & security has its own green tint. */}
-      <main className="relative flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-9 pt-[26px] pb-[82px] [&>*]:shrink-0" style={{ background: `radial-gradient(ellipse 80% 50% at 80% 0%, ${section === 'Privacy & security' ? '#0F3A3A' : '#12306B'} 0%, #0A1A3D 60%)` }}>
+      <main className="relative flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-9 pt-[26px] pb-[82px] [&>*]:shrink-0" style={{ background: `radial-gradient(ellipse 80% 50% at 80% 0%, ${section === 'Privacy & security' ? 'var(--ws-g-glow-green)' : 'var(--ws-g-glow)'} 0%, var(--ws-g-page) 60%)` }}>
         <button type="button" aria-label={t('settings.close')} onClick={onClose} className="absolute top-4 right-4 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#8FA3C8] hover:bg-white/10 hover:text-white">
           <Svg d="M6 6l12 12M18 6L6 18" size={16} />
         </button>
