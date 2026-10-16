@@ -14,7 +14,7 @@ jobs:
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -35,7 +35,7 @@ jobs:
       run:
         working-directory: services/${{ matrix.package }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -56,7 +56,7 @@ jobs:
   os-scripts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # GRUB recovery/previous-kernel entries, kernel retention, boot-time repair (WSOS-BOOT-003, SRS §9.2).
       - run: tests/boot/recovery-boot.test.sh
       # Reinstall keeping /home (SRS §9.2-R6): directory run, then a loop-device disk with /home in LUKS2.
@@ -89,7 +89,7 @@ jobs:
   wayland-bridge:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -111,7 +111,7 @@ jobs:
     # -gtk backends in a headless Labwc, with WorkSuite's portals.conf, xdpw config and screen-sharing consent chooser.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends dbus-daemon dbus-x11 labwc xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk grim pipewire wireplumber python3-dbus-next gsettings-desktop-schemas dconf-service libglib2.0-bin xwayland x11-utils procps
       - run: timeout 300 sh tests/portals/run.sh
       # X11 apps through on-demand XWayland in headless Labwc with WorkSuite's rc.xml (WSOS-LCH-002).
@@ -120,7 +120,7 @@ jobs:
   apt-repo:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
