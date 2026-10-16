@@ -302,6 +302,8 @@ export interface DevicePolicies {
   lock_timeout_max_s: number | null; offline_access_days: number | null; usb_storage: string | null; bluetooth: boolean | null
   app_allowlist_size: number
 }
+export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
+export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean }
 export interface DeviceInfo {
   agent: boolean
   device: { hostname: string; os_version: string; arch: string; kernel_version: string; encrypted: boolean | null } | null
@@ -310,6 +312,8 @@ export interface DeviceInfo {
   server: string | null
   last_check_in: number | null
   policies: DevicePolicies | null
+  /** Settings › Managed › Kiosk mode: this device's kiosk as the policy sets it (never the exit PIN); null = not a kiosk. */
+  kiosk?: KioskSummary | null
   /** WSOS-IDN-004: provisioning requires enrollment (and so a connection) before first use. */
   provisioning?: { require_enrollment: boolean; server: string | null }
 }
@@ -534,6 +538,7 @@ const stub: WorkSuiteApi = {
       agent: true, managed: stubManaged, org_name: stubManaged ? 'Livezen Technologies' : null, server: stubManaged ? 'work.livezentech.com' : null, last_check_in: stubManaged ? Date.now() - 4 * 60_000 : null,
       device: { hostname: 'LZT-LAP-0142', os_version: 'WorkSuite OS 1.0 (preview)', arch: 'amd64', kernel_version: '6.12', encrypted: true },
       policies: !stubManaged ? null : { version: 'preview', update_ring: 'pilot', update_mode: 'automatic', maintenance_window: '02:00-04:00', lock_timeout_max_s: 300, offline_access_days: 7, usb_storage: 'read_only', bluetooth: null, app_allowlist_size: 42 },
+      kiosk: stubManaged && typeof location !== 'undefined' && new URLSearchParams(location.search).get('kiosk') === '1' ? { user: 'kiosk', app: { type: 'url', url: 'https://work.livezentech.com/reception' }, allowed_urls: ['https://work.livezentech.com/'], idle_reset_minutes: 2, show_on_screen_keyboard: true, exit_pin: true } : null,
     }
   },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
@@ -741,7 +746,7 @@ function stubJob(_id: string, _kind: string): CloudResult<string> {
 let stubUnsent = 3
 let stubPolls = 0
 // Preview only: unmanaged until enrolled (first-run or Settings).
-let stubManaged = false
+let stubManaged = typeof location !== 'undefined' && new URLSearchParams(location.search).get('managed') === '1'
 
 /** Broker error codes → text for the user. */
 export function cloudErrorText(code: string): string {
