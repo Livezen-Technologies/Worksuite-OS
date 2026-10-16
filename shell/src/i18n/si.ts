@@ -1275,6 +1275,8 @@ const si: Partial<Record<MessageKey, string>> = {
   'files.ejectFailed': '{name} ඉවත් කළ නොහැකි විය. එහි ගොනුවක් තවමත් විවෘතව තිබිය හැක.',
   'files.storage': '{used} / {total}',
   'files.storageUnknown': 'තැටි භාවිතය ලබා ගත නොහැක',
+  'files.diskEncrypted': 'WorkSuite OS (සංකේතනය කළ)',
+  'files.diskSystem': 'WorkSuite OS',
   'files.storageLabel': 'තැටි භාවිතය',
   'files.back': 'ආපසු',
   'files.forward': 'ඉදිරියට',

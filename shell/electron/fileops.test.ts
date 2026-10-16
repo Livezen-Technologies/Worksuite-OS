@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { errCode, freeName, jobs, mkdirIn, removeIn, recent, renameIn, search, setStar, starredHits, trash, trashDelete, trashList, trashRestore, type JobEvent } from './fileops'
+import { deviceInfo, errCode, freeName, jobs, mkdirIn, removeIn, recent, renameIn, search, setStar, starredHits, trash, trashDelete, trashList, trashRestore, type JobEvent } from './fileops'
 
 describe('fileops', () => {
   let home: string
@@ -110,5 +110,16 @@ describe('fileops', () => {
   it('maps errno codes to the reasons Files explains', () => {
     const e = (code: string) => Object.assign(new Error(code), { code })
     expect(['ENOSPC', 'EACCES', 'EROFS', 'EIO', 'EBUSY', 'ENOENT', 'EXDEV'].map((c) => errCode(e(c)))).toEqual(['no_space', 'permission', 'permission', 'io', 'busy', 'missing', 'failed'])
+  })
+})
+
+describe('storage card device name', () => {
+  it('marks a LUKS mapping as encrypted instead of showing luks-<uuid>', () => {
+    const d = deviceInfo('/dev/mapper/luks-3f1c9a', {}, (p) => p)
+    expect(d.encrypted).toBe(true)
+    expect(d.label).toBe('')
+  })
+  it('uses the filesystem label when there is one', () => {
+    expect(deviceInfo('/dev/vda2', { '/dev/vda2': 'WORKSUITE' }, (p) => p)).toEqual({ device: 'vda2', label: 'WORKSUITE', encrypted: false })
   })
 })

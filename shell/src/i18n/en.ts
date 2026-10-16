@@ -919,6 +919,8 @@ const en = {
   'files.ejectFailed': 'Couldn’t eject {name}. A file on it may still be open.',
   'files.storage': '{used} / {total}',
   'files.storageUnknown': 'Disk usage unavailable',
+  'files.diskEncrypted': 'WorkSuite OS (encrypted)',
+  'files.diskSystem': 'WorkSuite OS',
   'files.storageLabel': 'Disk usage',
   'files.back': 'Back',
   'files.forward': 'Forward',

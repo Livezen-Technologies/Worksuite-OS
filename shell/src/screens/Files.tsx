@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { formatBytes, os, type FileEntry, type FileHit, type FileJob, type FilePlaces, type TrashItem } from '../lib/os'
 import { formatDate, formatDecimal, formatNumber, messages, t } from '../i18n'
-import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place } from './files/parts'
+import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place, START_PLACE, startFallback } from './files/parts'
 import { requestAssistant } from '../lib/assistantNav'
 import { ArchiveView, CompressDialog, LargeDialog, PasswordDialog, archiveError, archiveKind, stemOf } from './files/archive'
 import { ConflictDialog, DeleteDialog, JobErrorCard, JobsChip, JobsWindow, Toasts, finishedToast, useFileJobs, type Toast } from './files/ops'
@@ -25,7 +25,7 @@ const iconBtn = `${btn} flex h-[34px] w-[34px] items-center justify-center round
 /** archive: an archive opened with Files from elsewhere (the default handler for archive types); n changes per request. */
 export default function Files({ onClose, archive }: WindowProps & { archive?: { root: string; rel: string; n: number } | null }) {
   const [places, setPlaces] = useState<FilePlaces | null>(null)
-  const [hist, setHist] = useState<{ list: Place[]; i: number }>({ list: [{ kind: 'dir', root: 'home', rel: 'Documents' }], i: 0 })
+  const [hist, setHist] = useState<{ list: Place[]; i: number }>({ list: [START_PLACE], i: 0 })
   const place = hist.list[hist.i]
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [entries, setEntries] = useState<FileEntry[] | null>(null)
@@ -82,7 +82,11 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
     setError(null)
     if (place.kind === 'dir') {
       setEntries(null)
-      void os.filesList(place.root, place.rel).then((r) => (r.ok ? setEntries(r.value) : setError(t('files.cantOpen'))))
+      void os.filesList(place.root, place.rel).then((r) => {
+        if (r.ok) { setEntries(r.value); return }
+        const home = hist.i === 0 ? startFallback(place, false) : null
+        if (home) setHist({ list: [home], i: 0 }); else setError(t('files.cantOpen'))
+      })
       void os.filesStatus(place.root).then(setStatus)
     } else if (place.kind === 'recent') { setHits(null); void os.filesRecent().then(setHits) }
     else if (place.kind === 'starred') { setHits(null); void os.filesStarred().then((s) => setHits(s.hits)) }

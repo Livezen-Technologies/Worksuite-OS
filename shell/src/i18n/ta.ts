@@ -1275,6 +1275,8 @@ const ta: Partial<Record<MessageKey, string>> = {
   'files.ejectFailed': '{name} ஐ வெளியேற்ற முடியவில்லை. அதிலுள்ள கோப்பு இன்னும் திறந்திருக்கலாம்.',
   'files.storage': '{used} / {total}',
   'files.storageUnknown': 'வட்டு பயன்பாடு கிடைக்கவில்லை',
+  'files.diskEncrypted': 'WorkSuite OS (மறையாக்கப்பட்டது)',
+  'files.diskSystem': 'WorkSuite OS',
   'files.storageLabel': 'வட்டு பயன்பாடு',
   'files.back': 'பின்',
   'files.forward': 'முன்',

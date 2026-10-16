@@ -67,6 +67,8 @@ case "${1:-}" in
         else
             CONF=$SYSCONF
         fi
+        # XDG user folders (Documents, Downloads, …) exist from the first sign-in; Files opens on Documents.
+        xdg-user-dirs-update >/dev/null 2>&1 || true
         labwc -C "$CONF"
         rc=$?
         cleanup

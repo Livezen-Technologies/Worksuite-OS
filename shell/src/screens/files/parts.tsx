@@ -60,6 +60,15 @@ export function day(ms: number | null): string {
 export const sizeOf = (e: Pick<FileEntry, 'dir' | 'size' | 'items'>) => (e.dir ? (e.items != null ? t('files.itemsShort', { count: e.items }) : '—') : formatBytes(e.size))
 
 /** archive: browsing an archive file read-only; inner is the folder inside it ("" for the top). */
+/** Files opens on Documents; when that folder is missing it opens Home instead of an error. */
+export const START_PLACE = { kind: 'dir', root: 'home', rel: 'Documents' } as const satisfies Place
+export function startFallback(p: Place, listed: boolean): Place | null {
+  return !listed && p.kind === 'dir' && p.root === START_PLACE.root && p.rel === START_PLACE.rel ? { kind: 'dir', root: 'home', rel: '' } : null
+}
+/** The storage card's name for the home disk: its filesystem label, else a friendly name, never a raw luks-… mapping. */
+export function diskName(d: { device: string; label?: string; encrypted?: boolean }) {
+  return d.label || (d.encrypted ? t('files.diskEncrypted') : d.device || t('files.diskSystem'))
+}
 export type Place = { kind: 'dir'; root: string; rel: string } | { kind: 'recent' } | { kind: 'starred' } | { kind: 'trash' } | { kind: 'archive'; root: string; rel: string; inner: string }
 
 const FOLDER_ICON: Record<string, [string, MessageKey]> = {
@@ -117,7 +126,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
       ))}
       <div role="group" aria-label={t('files.storageLabel')} className="mt-auto flex flex-col gap-2 rounded-[10px] px-2.5 py-3" style={{ background: C.card }}>
         {disk ? <>
-          <div className="flex justify-between text-xs"><span>{disk.device}</span><span style={{ color: C.muted }}>{t('files.storage', { used: formatBytes(disk.used), total: formatBytes(disk.total) })}</span></div>
+          <div className="flex justify-between text-xs"><span>{diskName(disk)}</span><span style={{ color: C.muted }}>{t('files.storage', { used: formatBytes(disk.used), total: formatBytes(disk.total) })}</span></div>
           <AnimatedProgress value={Math.round((disk.used / Math.max(1, disk.total)) * 100)} label={t('files.storageLabel')} height={5} shimmer={false} />
         </> : <span className="text-xs" style={{ color: C.muted }}>{t('files.storageUnknown')}</span>}
       </div>

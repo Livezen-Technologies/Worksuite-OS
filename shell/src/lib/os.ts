@@ -266,7 +266,7 @@ export interface AppImageRecord {
   approved: boolean; imported_at: string; approved_at: string | null; categories: string[]
 }
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
-export interface FilePlaces { user: string; folders: string[]; media: { id: string; label: string }[]; disk: { device: string; used: number; total: number } | null }
+export interface FilePlaces { user: string; folders: string[]; media: { id: string; label: string }[]; disk: { device: string; label?: string; encrypted?: boolean; used: number; total: number } | null }
 export interface FileHit { root: string; rel: string; name: string; dir: boolean; size: number | null; modified: number | null; where: string }
 export interface TrashItem { id: string; name: string; dir: boolean; size: number; orig: string; where: string; deleted: number | null }
 export interface FileStamp { size: number; modified: number }
@@ -484,7 +484,7 @@ const stub: WorkSuiteApi = {
     return { ok: true, value: [f('Invoice INV-2026-0418.pdf', 'local', 182_000), f('worksuite-agent-2.4.1.zip', 'local', 38_200_000)] }
   },
   async filesOpen() { return { ok: true, value: true } },
-  async filesPlaces() { return { user: 'alex', folders: ['Documents', 'Downloads', 'Pictures', 'Music', 'Videos'], media: [{ id: 'media:KINGSTON', label: 'KINGSTON' }], disk: { device: 'vda', used: 12.8e9, total: 39.5e9 } } },
+  async filesPlaces() { return { user: 'alex', folders: ['Documents', 'Downloads', 'Pictures', 'Music', 'Videos'], media: [{ id: 'media:KINGSTON', label: 'KINGSTON' }], disk: { device: 'luks-3f1c', label: '', encrypted: true, used: 12.8e9, total: 39.5e9 } } },
   async filesStarred() { return { keys: [], hits: [] } },
   async filesStar() { return { ok: true, value: [] } },
   async filesRecent() { return [] },

@@ -2,7 +2,7 @@
 // search, new folder, rename, freedesktop.org Trash, copy/move jobs with conflict prompts, and eject.
 // The renderer only names roots and relative paths; everything is resolved through resolveIn and stays inside a root.
 import { execFile } from 'node:child_process'
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statfsSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statfsSync, writeFileSync } from 'node:fs'
 import { copyFile, lstat, mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { resolveIn, roots, type FileEnv } from './files'
@@ -35,12 +35,32 @@ function mountOf(p: string): { source: string; target: string } | null {
   } catch { return null }
 }
 
+/** Filesystem labels by resolved device path (/dev/disk/by-label). */
+function fsLabels(): Record<string, string> {
+  const out: Record<string, string> = {}
+  try {
+    for (const n of readdirSync('/dev/disk/by-label')) {
+      try { out[realpathSync(path.join('/dev/disk/by-label', n))] = n.replace(/\\x([0-9a-f]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16))) } catch { /* gone */ }
+    }
+  } catch { /* none */ }
+  return out
+}
+
+/** What the storage card calls the device: its filesystem label, else "encrypted" for a LUKS mapping (luks-<uuid>),
+ *  never the raw mapper name. */
+export function deviceInfo(source: string, labels: Record<string, string>, resolve: (p: string) => string = (p) => { try { return realpathSync(p) } catch { return p } }) {
+  const real = source.startsWith('/') ? resolve(source) : source
+  const name = path.basename(source)
+  return { device: name, label: labels[real] ?? labels[source] ?? '', encrypted: /^luks-/.test(name) || /^\/dev\/mapper\/luks-/.test(source) }
+}
+
 export function places(env: Env) {
-  let disk: { device: string; used: number; total: number } | null = null
+  let disk: { device: string; label: string; encrypted: boolean; used: number; total: number } | null = null
   try {
     const s = statfsSync(env.home)
     const m = mountOf(env.home)
-    disk = { device: m ? path.basename(m.source) : '', used: (s.blocks - s.bfree) * s.bsize, total: s.blocks * s.bsize }
+    const info = m ? deviceInfo(m.source, fsLabels()) : { device: '', label: '', encrypted: false }
+    disk = { ...info, used: (s.blocks - s.bfree) * s.bsize, total: s.blocks * s.bsize }
   } catch { /* unknown */ }
   return {
     user: env.user,

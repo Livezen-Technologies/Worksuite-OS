@@ -126,7 +126,9 @@ sh "$BIN/worksuite-greeter" -c /usr/bin/worksuite-session
 grep -q gtkgreet "$LOG" && ok "gtkgreet is the fallback without GTK 4" || bad "gtkgreet is the fallback without GTK 4"
 rm -f "$T/stub/python3"
 stub labwc 'exit 0'
+stub xdg-user-dirs-update 'echo "xdg-user-dirs-update" >> "$LOG"'
 WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"
+grep -q "^xdg-user-dirs-update" "$LOG" && ok "session start creates the XDG user folders" || bad "session start creates the XDG user folders"
 [ -e "$T/notice/uid-$(id -u)" ] && bad "clean exit leaves no notice" || ok "clean exit leaves no notice"
 
 # ---- unit wiring ----
