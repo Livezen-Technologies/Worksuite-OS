@@ -135,3 +135,30 @@ test('Drive file states are listed per folder, including online-only items', asy
   assert.deepEqual(svc.driveSummary().states, { conflict: 1, 'online-only': 1, synced: 1, syncing: 1 });
   await svc.stop();
 });
+
+test('§13.1 malicious IPC: hostile lines on the control socket are refused and the service keeps serving', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ws-sync-'));
+  const { svc } = setup();
+  const path = join(dir, 'sync.sock');
+  const srv = serveControl(path, svc);
+  await new Promise((r) => srv.once('listening', r));
+  const call = (line: string) => new Promise<any>((resolve) => {
+    const s = createConnection(path);
+    let buf = '';
+    s.on('data', (c) => { buf += c; if (buf.includes('\n')) { s.end(); resolve(JSON.parse(buf)); } });
+    s.write(line + '\n');
+  });
+  for (const line of ['null', '1', '"Status"', '[{"method":"Status"}]', '{"method":{"x":1}}']) assert.equal((await call(line)).error, 'bad_request', line);
+  for (const line of ['{"method":"FileStates","params":null}', '{"method":"FileStates","params":"../.."}', '{"method":"FileStates","params":{"dir":"a/../../etc"}}',
+    '{"method":"FileStates","params":{"dir":"/etc"}}', '{"method":"LockFile","params":{"path":"../x"}}', '{"method":"Forget","params":{"account_id":["a"]}}',
+    '{"method":"RetryFailed","params":{"mutation_id":"' + 'a'.repeat(65) + '"}}']) {
+    assert.equal((await call(line)).error, 'invalid_argument', line);
+  }
+  assert.equal((await call('{"method":"__proto__"}')).error, 'unknown_method');
+  assert.equal((await call('{"id":{"evil":true},"method":"Status"}')).id, null);
+  await new Promise<void>((resolve) => { const s = createConnection(path); s.on('close', () => resolve()); s.on('error', () => {}); s.write('x'.repeat(70 * 1024)); });
+  assert.equal((await call('{"id":2,"method":"Status"}')).result.state, 'idle');
+  srv.close();
+  await svc.stop();
+  rmSync(dir, { recursive: true, force: true });
+});

@@ -21,7 +21,9 @@ export function serveControl(path: string, svc: SyncService, exportDir = '.', lo
       let nl: number;
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
-        sock.write(JSON.stringify(await dispatch(svc, line, exportDir, locks)) + '\n');
+        let res: unknown;
+        try { res = await dispatch(svc, line, exportDir, locks); } catch { res = { error: 'internal_error' }; }
+        if (!sock.destroyed) sock.write(JSON.stringify(res) + '\n');
       }
     });
     sock.on('error', () => {});
@@ -33,7 +35,10 @@ export function serveControl(path: string, svc: SyncService, exportDir = '.', lo
 async function dispatch(svc: SyncService, line: string, exportDir: string, locks: FileLocks | null = null) {
   let req: Request;
   try { req = JSON.parse(line); } catch { return { error: 'bad_request' }; }
-  const id = req.id ?? null;
+  // §13.1 malicious IPC: anything but a plain object with a string method is refused, never dereferenced.
+  if (!req || typeof req !== 'object' || Array.isArray(req) || typeof req.method !== 'string') return { error: 'bad_request' };
+  if (req.params !== undefined && (req.params === null || typeof req.params !== 'object' || Array.isArray(req.params))) return { id: null, error: 'invalid_argument' };
+  const id = typeof req.id === 'number' || typeof req.id === 'string' ? req.id : null;
   switch (req.method) {
     case 'Status': return { id, result: svc.status() };
     case 'DriveSummary': return { id, result: svc.driveSummary() };
