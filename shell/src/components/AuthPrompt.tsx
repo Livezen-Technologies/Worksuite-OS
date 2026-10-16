@@ -8,7 +8,8 @@ import { formatNumber, useT } from '../i18n'
 
 const RED = '#FF8A7A'
 
-export default function AuthPrompt() {
+/** onOpen: a prompt is up (the desktop lifts the shell over the apps so it shows; electron/panelHost.ts). */
+export default function AuthPrompt({ onOpen }: { onOpen?: (open: boolean) => void } = {}) {
   const t = useT()
   const api = polkitApi()
   const [p, setP] = useState<PolkitPrompt | null>(null)
@@ -34,6 +35,8 @@ export default function AuthPrompt() {
   }, [p?.locked, p?.lockedUntil])
   useEffect(() => { if (p && !locked && !p.busy) input.current?.focus() }, [p, locked])
 
+  const shown = !!api && !!p
+  useEffect(() => { onOpen?.(shown) }, [shown, onOpen])
   if (!api || !p) return null
   const cancel = () => { void api.cancel(p.id) }
   const submit = (e: FormEvent) => {
@@ -60,7 +63,7 @@ export default function AuthPrompt() {
   const iconColor = locked ? RED : '#7FB2FF'
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center font-sans text-[#E8EEFA]">
+    <div className="fixed inset-0 z-[97] flex items-center justify-center font-sans text-[#E8EEFA]">
       <div className="absolute inset-0 bg-[rgba(2,6,16,0.6)] backdrop-blur-[8px]" aria-hidden="true" />
       <form role="alertdialog" aria-modal="true" aria-labelledby="au-t" aria-describedby="au-d" onSubmit={submit}
         onKeyDown={(e) => { if (e.key === 'Escape') cancel() }}

@@ -59,3 +59,5 @@ services/session/bin/worksuite-greeter-handoff usr/lib/worksuite/
 services/session/systemd/user.conf.d/worksuite-stop.conf usr/lib/systemd/user.conf.d/
 services/session/bin/worksuite-diagnostics usr/lib/worksuite/
 services/session/polkit/lk.worksuite.diagnostics.policy usr/share/polkit-1/actions/
+services/session/bin/worksuite-power-force usr/lib/worksuite/
+services/session/polkit/lk.worksuite.power-force.policy usr/share/polkit-1/actions/

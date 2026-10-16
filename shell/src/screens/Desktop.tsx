@@ -236,6 +236,8 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   // below the apps, so its menus close and its windows (Files, Settings…) stay open behind the app until they are
   // opened again from the taskbar or the launcher, which lifts the shell again (liftSeq: also when nothing changed here).
   const [behind, setBehind] = useState(false)
+  // An administrator prompt (polkit, WorkSuite's agent) over the apps and over the restart overlay.
+  const [authOpen, setAuthOpen] = useState(false)
   const [liftSeq, setLiftSeq] = useState(0)
   const openWin = (screen: Parameters<typeof onOpen>[0]) => { setBehind(false); setLiftSeq((n) => n + 1); onOpen(screen) }
   useEffect(() => panel.onShellBehind?.(() => {
@@ -245,7 +247,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const hasWindow = Children.toArray(children).length > 0
   useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
-    || flyout || widgetPicker || (hasWindow && !behind)
+    || flyout || widgetPicker || authOpen || (hasWindow && !behind)
   useEffect(() => { void panel.shellOnTop?.(shellOnTop) }, [shellOnTop, liftSeq])
   useEffect(() => {
     if (!launcher) return
@@ -327,7 +329,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
       {/* G12: the shell was restarted by systemd; apps in their own scopes kept running */}
       <ShellRestartNotice />
-      <AuthPrompt />
+      <AuthPrompt onOpen={setAuthOpen} />
 
       {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
       <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">

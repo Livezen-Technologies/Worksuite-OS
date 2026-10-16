@@ -367,5 +367,18 @@ grep -q 'Gio.ApplicationFlags.NON_UNIQUE' "$ROOT/services/session/toasts/worksui
   && ok "toasts: one helper per shell (NON_UNIQUE)" || bad "toasts: one helper per shell (NON_UNIQUE)"
 for p in libnotify-bin foot; do grep -qx "$p" "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && ok "image ships $p" || bad "image ships $p"; done
 
+# ---- "Restart anyway": one root helper behind one polkit action; WorkSuite's polkit agent on the image ----
+stub systemctl 'echo "systemctl $*" >> "$LOG"'
+: > "$LOG"; sh "$BIN/worksuite-power-force" reboot; sh "$BIN/worksuite-power-force" poweroff
+check "worksuite-power-force skips inhibitors as root" "$(cat "$LOG" | tr '\n' ';')" "systemctl reboot --check-inhibitors=no;systemctl poweroff --check-inhibitors=no;"
+: > "$LOG"; sh "$BIN/worksuite-power-force" 'reboot;id' 2>/dev/null; rc=$?
+check "worksuite-power-force refuses anything else" "$rc:$(cat "$LOG")" "2:"
+grep -q 'lk.worksuite.power-force' "$ROOT/services/session/polkit/lk.worksuite.power-force.policy" \
+  && grep -q '^services/session/bin/worksuite-power-force ' "$ROOT/packaging/debian/worksuite-session.install" \
+  && grep -q '^services/session/polkit/lk.worksuite.power-force.policy ' "$ROOT/packaging/debian/worksuite-session.install" \
+  && ok "power-force helper and policy installed" || bad "power-force helper and policy installed"
+grep -qx 'gir1.2-polkit-1.0' "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && grep -A2 '^Package: worksuite-session' "$ROOT/packaging/debian/control" | grep -q 'gir1.2-polkit-1.0' \
+  && ok "WorkSuite's polkit agent (PolkitAgent typelib) is installed, not lxpolkit's fallback" || bad "WorkSuite's polkit agent (PolkitAgent typelib) is installed, not lxpolkit's fallback"
+
 echo "1..$n"
 exit $fail

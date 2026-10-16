@@ -67,6 +67,10 @@ gir1.2-gtk-4.0
 gir1.2-gtk4layershell-1.0
 # The library itself: Debian's typelib package does not depend on it, and worksuite-osk preloads it.
 libgtk4-layer-shell0
+# WorkSuite's own polkit agent (WSOS-INT-010, services/session/polkit): the shell draws the administrator prompt and
+# asks the person at the desk when they are an administrator. Without the PolkitAgent typelib (a Recommends, and the
+# build installs none) the session fell back to lxpolkit's generic window, which offered the first administrator.
+gir1.2-polkit-1.0
 # Smart-card sign-in, off until enabled (WSOS-DIR-011)
 pcscd
 opensc

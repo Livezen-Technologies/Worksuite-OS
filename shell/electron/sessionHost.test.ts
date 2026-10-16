@@ -1,6 +1,6 @@
 // electron/sessionHost.ts: inhibitors, forced power, crashed apps, administrator check, diagnostics IPC.
 import { describe, expect, it, vi } from 'vitest'
-import { COREDUMP_MESSAGE_ID, CRASH_JOURNAL_ARGS, appIdFromScope, blockingInhibitors, clampLines, crashDeduper, crashFromJournal, isAdminUser, listInhibitors, pkexecError, powerArgs, startSessionHost } from './sessionHost'
+import { COREDUMP_MESSAGE_ID, CRASH_JOURNAL_ARGS, appIdFromScope, blockingInhibitors, clampLines, crashDeduper, crashFromJournal, forcePower, isAdminUser, listInhibitors, pkexecError, powerArgs, startSessionHost } from './sessionHost'
 import type { DesktopEntry } from './xdg'
 
 const app = (id: string, name: string, exec: string): DesktopEntry => ({ id, name, exec, generic_name: null, comment: null, icon: null, categories: [], keywords: [], mime_types: [] })
@@ -92,7 +92,19 @@ describe('administrators and diagnostics', () => {
     expect(exec).toHaveBeenLastCalledWith('pkexec', ['/usr/lib/worksuite/worksuite-diagnostics', 'boot-details', 'on'])
     expect(await handlers.get('ws:bootDetails')!('rm')).toEqual({ ok: false, error: 'invalid_argument' })
     expect(await handlers.get('ws:powerForce')!('shutdown')).toEqual({ ok: true, value: true })
-    expect(exec).toHaveBeenLastCalledWith('systemctl', ['poweroff', '--check-inhibitors=no'])
+    expect(exec).toHaveBeenLastCalledWith('systemctl', ['poweroff', '--check-inhibitors=no', '--no-ask-password'])
+  })
+  it('"Restart anyway" asks at most once: logind without interaction first, then one prompt for the root helper', async () => {
+    const calls: string[][] = []
+    const run = (codes: number[]) => { let i = 0; return async (cmd: string, args: string[]) => { calls.push([cmd, ...args]); return { code: codes[i++] ?? 0, stdout: '', stderr: '' } } }
+    expect(await forcePower(run([0]), 'restart')).toEqual({ ok: true, value: true })   // no admin needed: no prompt
+    expect(calls).toEqual([['systemctl', 'reboot', '--check-inhibitors=no', '--no-ask-password']])
+    calls.length = 0
+    expect(await forcePower(run([1, 0]), 'shutdown')).toEqual({ ok: true, value: true })
+    expect(calls).toEqual([['systemctl', 'poweroff', '--check-inhibitors=no', '--no-ask-password'], ['pkexec', '/usr/lib/worksuite/worksuite-power-force', 'poweroff']])
+    expect(await forcePower(run([1, 126]), 'restart')).toEqual({ ok: false, error: 'auth_cancelled' })
+    expect(await forcePower(run([1, 1]), 'restart')).toEqual({ ok: false, error: 'not_authorized' })
+    expect(await forcePower(run([]), 'suspend')).toEqual({ ok: false, error: 'invalid_argument' })
   })
   it('the overlay state goes to every display', async () => {
     const handlers = new Map<string, (...a: string[]) => unknown>()

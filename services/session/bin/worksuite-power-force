@@ -1,0 +1,11 @@
+#!/bin/sh
+# "Restart anyway" / "Shut down anyway" when logind wants an administrator (other people signed in, or another
+# user's or a service's inhibitor). Run as root through pkexec, polkit action lk.worksuite.power-force: ONE
+# administrator prompt in WorkSuite's own agent, instead of systemctl asking polkit once per reason.
+#   worksuite-power-force reboot|poweroff
+set -eu
+SYSTEMCTL=${WORKSUITE_SYSTEMCTL:-systemctl}
+case "${1:-}" in
+    reboot|poweroff) exec "$SYSTEMCTL" "$1" --check-inhibitors=no ;;
+    *) echo "usage: worksuite-power-force reboot|poweroff" >&2; exit 2 ;;
+esac

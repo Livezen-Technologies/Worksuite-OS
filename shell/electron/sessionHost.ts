@@ -30,6 +30,23 @@ export function powerArgs(action: string, force: boolean): string[] | null {
   return force && verb !== 'suspend' ? [verb, '--check-inhibitors=no'] : [verb]
 }
 
+export const POWER_FORCE = '/usr/lib/worksuite/worksuite-power-force'
+
+/** "Restart anyway" / "Shut down anyway": at most ONE question, and none when logind allows it.
+ *  1. logind without interaction (systemctl --no-ask-password): an ordinary user restarting with no other sessions
+ *     signed in, past inhibitors of their own apps, needs no administrator (logind ignores the caller's own ones).
+ *  2. Otherwise one administrator prompt (polkit lk.worksuite.power-force, through our agent): the helper runs as root,
+ *     which logind does not ask about. systemctl itself asks polkit once per action (other sessions signed in, then
+ *     inhibitors), which showed two administrator prompts in a row. */
+export async function forcePower(exec: Exec, action: string): Promise<{ ok: true; value: true } | { ok: false; error: string }> {
+  const a = powerArgs(action, true)
+  if (!a || action === 'suspend') return { ok: false, error: 'invalid_argument' }
+  const quiet = await exec('systemctl', [...a, '--no-ask-password'])
+  if (quiet.code === 0) return { ok: true, value: true }
+  const r = await exec('pkexec', [POWER_FORCE, a[0]])
+  return r.code === 0 ? { ok: true, value: true } : { ok: false, error: pkexecError(r.code) === 'failed' ? 'not_authorized' : pkexecError(r.code) }
+}
+
 export async function listInhibitors(bus: { getProxyObject: (n: string, p: string) => Promise<{ getInterface: (i: string) => { ListInhibitors(): Promise<unknown[][]> } }>; disconnect?: () => void } = dbus.systemBus()): Promise<Inhibitor[]> {
   try {
     const obj = await bus.getProxyObject('org.freedesktop.login1', '/org/freedesktop/login1')
@@ -144,10 +161,7 @@ export function startSessionHost(handle: Handle, broadcast: Broadcast, o: { apps
       return { ok: true, value: blockingInhibitors(all, (['shutdown', 'restart', 'logout'].includes(action) ? action : 'shutdown') as EndAction) }
     } catch { return { ok: false, error: 'service_unavailable' } }
   })
-  handle('ws:powerForce', (action) => {
-    const a = powerArgs(action, true)
-    return a ? exec('systemctl', a).then((r) => (r.code === 0 ? { ok: true, value: true } : { ok: false, error: 'not_authorized' })) : { ok: false, error: 'invalid_argument' }
-  })
+  handle('ws:powerForce', (action) => forcePower(exec, action))
   // The main window runs the overlay; every display mirrors it.
   handle('ws:sessionEndState', (json) => {
     let s: unknown = null
