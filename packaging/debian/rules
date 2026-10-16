@@ -75,6 +75,7 @@ override_dh_auto_test:
 	sh tests/session/autologin-test.sh
 	cd services/session/greeter && python3 -m unittest discover -s tests -t .
 	cd services/session/gestures && python3 -m unittest discover -s tests -t .
+	cd services/session/osk && python3 -m unittest discover -s tests -t .
 	cd services/sync && npm test
 	cd services/credentials && npm test
 	cd services/device-agent && npm test

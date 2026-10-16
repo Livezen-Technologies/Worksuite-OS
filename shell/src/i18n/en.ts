@@ -1891,7 +1891,7 @@ const en = {
   'osk.size.small': 'Small',
   'osk.size.medium': 'Medium',
   'osk.size.large': 'Large',
-  'osk.layoutsNote': 'The keyboard follows your keyboard layouts. For Sinhala and Tamil it shows English letters and your Sinhala or Tamil input method turns them into Sinhala or Tamil text.',
+  'osk.layoutsNote': "The WorkSuite keyboard has Sinhala and Tamil keys of its own (the language key switches) and changes its keys for numbers, e-mail addresses and web addresses. Where only wvkbd is installed, it shows English letters and your Sinhala or Tamil input method turns them into Sinhala or Tamil text.",
   'osk.showNow': 'Show on-screen keyboard',
   'osk.hide': 'Hide on-screen keyboard',
   'signin.title': 'Sign-in options',
@@ -2019,6 +2019,13 @@ const en = {
   'touch.g.hold': "Long-press for right-click",
   'touch.g.holdSub': "How long to touch and hold",
   'touch.g.ms': "{n} ms",
+  'osk.layoutTitle': "Layout",
+  'osk.layoutSub': "Split puts half the keys under each thumb; floating can be dragged anywhere",
+  'osk.layout.full': "Full",
+  'osk.layout.split': "Split",
+  'osk.layout.floating': "Floating",
+  'osk.suggest': "Word suggestions",
+  'osk.suggestSub': "Learns words you type, on this device only; never in password fields",
 } as const
 
 export type MessageKey = keyof typeof en

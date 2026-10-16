@@ -179,6 +179,7 @@ export function KeyboardPanel() {
   const { state, reason, set } = useTouch()
   const s: TouchSettings | null = state?.settings ?? null
   const modes: { id: OskMode; label: string }[] = [{ id: 'off', label: t('common.off') }, { id: 'touch', label: t('osk.touchOnly') }, { id: 'always', label: t('osk.always') }]
+  const layouts: { id: 'full' | 'split' | 'floating'; label: string }[] = (['full', 'split', 'floating'] as const).map((id) => ({ id, label: t(`osk.layout.${id}` as MessageKey) }))
   const sizes: { id: OskSize; label: string }[] = (['small', 'medium', 'large'] as const).map((id) => ({ id, label: t(`osk.size.${id}` as MessageKey) }))
   return <>
     <H1>{t('settings.nav.Keyboard')}</H1>
@@ -187,6 +188,8 @@ export function KeyboardPanel() {
       <div className={card}>
         <Row title={t('osk.show')} sub={t('osk.showSub')}><Segmented label={t('osk.show')} value={s.osk} options={modes} onChange={(v) => void set({ osk: v })} /></Row>
         <Row title={t('osk.sizeTitle')}><Segmented label={t('osk.sizeTitle')} value={s.oskSize} options={sizes} onChange={(v) => void set({ oskSize: v })} /></Row>
+        <Row title={t('osk.layoutTitle')} sub={t('osk.layoutSub')}><Segmented label={t('osk.layoutTitle')} value={s.oskLayout ?? 'full'} options={layouts} onChange={(v) => void set({ oskLayout: v })} /></Row>
+        <Row title={t('osk.suggest')} sub={t('osk.suggestSub')}><BigSwitch label={t('osk.suggest')} checked={s.oskSuggestions !== false} onChange={(v) => void set({ oskSuggestions: v })} /></Row>
       </div>
       <Note>{t('osk.layoutsNote')}</Note>
     </>}

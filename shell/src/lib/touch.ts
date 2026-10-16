@@ -13,7 +13,7 @@ export interface GestureSettings {
   threeHorizontal: 'workspaces' | 'switch-apps' | 'off'; threeDown: 'desktop' | 'off'
 }
 export const DEFAULT_GESTURES: GestureSettings = { enabled: true, edgeSwipes: true, edgeBottom: 'launcher', edgeRight: 'notifications', edgeLeft: 'switch-apps', threeHorizontal: 'workspaces', threeDown: 'desktop' }
-export interface TouchSettings { touchEnabled: boolean; mapToOutput: Record<string, string>; tabletMode: TabletMode; rotationLock: boolean; osk: OskMode; oskSize: OskSize; calibration: Record<string, number[]>; gestures?: GestureSettings; longPressMs?: number }
+export interface TouchSettings { touchEnabled: boolean; mapToOutput: Record<string, string>; tabletMode: TabletMode; rotationLock: boolean; osk: OskMode; oskSize: OskSize; calibration: Record<string, number[]>; gestures?: GestureSettings; longPressMs?: number; oskLayout?: 'full' | 'split' | 'floating'; oskSuggestions?: boolean }
 export interface TouchState {
   devices: InputDev[]; settings: TouchSettings; tabletSwitch: boolean; touchMode: boolean
   orientation: string | null; hasAccelerometer: boolean; osk: { available: boolean; visible: boolean }; outputs: string[]
@@ -23,7 +23,7 @@ export type PenEvent = { pressure?: number; button?: string; pressed?: boolean; 
 export interface TouchApi {
   state(): Promise<Avail<TouchState>>
   set(patch: Partial<TouchSettings>): Promise<Avail<TouchState>>
-  osk(show: boolean): Promise<Avail<boolean>>
+  osk(show: boolean, purpose?: number, hints?: number): Promise<Avail<boolean>>
   penTest(on: boolean): Promise<Avail<true>>
   onChange(cb: (s: unknown) => void): () => void
   onPen(cb: (e: unknown) => void): () => void
@@ -76,10 +76,31 @@ export function installLongPress(root: HTMLElement | Document, ms: number): () =
   return () => { cancel(); root.removeEventListener('touchstart', down); root.removeEventListener('touchmove', move); root.removeEventListener('touchend', cancel); root.removeEventListener('touchcancel', cancel) }
 }
 
+/**
+ * The field's type for the on-screen keyboard, as text-input-v3 content purpose and hints (what worksuite-osk takes):
+ * number/PIN pad, phone pad, e-mail and URL keys, no suggestions or learning in password and one-time-code fields.
+ */
+export function contentHintFor(el: Element | null): { purpose: number; hints: number } {
+  const SENSITIVE = 0x80, HIDDEN = 0x40, AUTOCAP = 0x4, LOWER = 0x8, COMPLETION = 0x1
+  if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) return { purpose: 0, hints: COMPLETION }
+  const type = el instanceof HTMLInputElement ? el.type : 'textarea'
+  const mode = (el.getAttribute('inputmode') ?? '').toLowerCase()
+  const ac = (el.getAttribute('autocomplete') ?? '').toLowerCase()
+  if (type === 'password') return { purpose: mode === 'numeric' || /0-9|\\d/.test(el.getAttribute('pattern') ?? '') ? 9 : 8, hints: HIDDEN | SENSITIVE }
+  if (ac === 'one-time-code') return { purpose: 9, hints: SENSITIVE }
+  if (type === 'email' || mode === 'email') return { purpose: 6, hints: LOWER }
+  if (type === 'url' || mode === 'url') return { purpose: 5, hints: LOWER }
+  if (type === 'tel' || mode === 'tel') return { purpose: 4, hints: 0 }
+  if (type === 'number' || mode === 'numeric' || mode === 'decimal') return { purpose: 3, hints: 0 }
+  if (type === 'date' || type === 'time' || type === 'datetime-local') return { purpose: type === 'date' ? 10 : type === 'time' ? 11 : 12, hints: 0 }
+  if (type === 'search') return { purpose: 0, hints: COMPLETION }
+  return { purpose: 0, hints: COMPLETION | (ac === 'off' ? 0 : AUTOCAP) }
+}
+
 export const oskWanted = (s: TouchSettings, touchMode: boolean) => s.osk === 'always' || (s.osk === 'touch' && touchMode)
 
 // ---------- preview stub (?touch=1) ----------
-const DEFAULTS: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium', calibration: {}, gestures: { ...DEFAULT_GESTURES }, longPressMs: 600 }
+const DEFAULTS: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium', calibration: {}, gestures: { ...DEFAULT_GESTURES }, longPressMs: 600, oskLayout: 'full', oskSuggestions: true }
 function stubApi(): TouchApi {
   const subs = new Set<(s: unknown) => void>()
   const st: TouchState = {
@@ -140,7 +161,7 @@ export function useTouchMode(): TouchState | null {
   useEffect(() => {
     if (!state || !oskWanted(state.settings, state.touchMode)) return
     const api = touchApi()
-    const focus = (e: FocusEvent) => { if (isTextField(e.target as Element)) void api?.osk(true) }
+    const focus = (e: FocusEvent) => { const el = e.target as Element; if (isTextField(el)) { const h = contentHintFor(el); void api?.osk(true, h.purpose, h.hints) } }
     const blur = (e: FocusEvent) => { if (isTextField(e.target as Element) && !isTextField(e.relatedTarget as Element | null)) void api?.osk(false) }
     document.addEventListener('focusin', focus)
     document.addEventListener('focusout', blur)
