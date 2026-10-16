@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>On-screen keyboard · variants</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button{font-family:inherit} button:focus-visible{outline:2px solid #18D4F0;outline-offset:2px} .k:active{background:#2A4A8F!important;transform:translateY(1px)} @keyframes blink{50%{opacity:0}}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 36px 44px; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: linear-gradient(160deg, #12306B, #050E24); display: grid; grid-template-columns: 1.35fr 1fr; grid-template-rows: auto 1fr 1fr; gap: 20px 28px">
+<div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: .08em">ON-SCREEN KEYBOARD · VARIANTS</span><span style="font-size: 14px; color: #8FA3C8">The layout follows the field type · drag the handle to float · long-press for accents</span></div>
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 10px; min-height: 0"><span style="font-size: 13px; font-weight: 600; color: #C9D6EE">{{c.t}} <span style="font-weight: 400; color: #8FA3C8">· {{c.d}}</span></span>
+<div style="flex: 1; border-radius: 16px; background: rgba(7,19,48,0.95); border: 1px solid rgba(127,178,255,0.18); padding: 12px; display: flex; flex-direction: column; gap: 7px; justify-content: center; position: relative">
+<span style="align-self: center; width: 40px; height: 4px; border-radius: 2px; background: rgba(127,178,255,0.35); visibility: {{c.handle}}"></span>
+<sc-for list="{{c.rows}}" as="r" hint-placeholder-count="4"><div style="display: flex; gap: 6px; justify-content: center"><sc-for list="{{r}}" as="k" hint-placeholder-count="5"><span style="flex: {{k.f}}; max-width: {{c.max}}; height: {{c.h}}; border-radius: 9px; background: {{k.bg}}; display: flex; align-items: center; justify-content: center; font-size: {{c.fs}}; font-weight: 500">{{k.l}}</span></sc-for></div></sc-for>
+<span style="position: absolute; left: 76px; top: 4px; padding: 6px 14px; border-radius: 10px; background: #E8EEFA; color: #0A1A3D; font-size: 24px; font-weight: 600; box-shadow: 0 8px 20px rgba(0,0,0,0.4); visibility: {{c.bubble}}">g</span>
+</div></div>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals(){
+    const dk='rgba(127,178,255,0.07)', n='rgba(127,178,255,0.16)', K=(l,f,bg)=>({l,f:f||1,bg:bg||n}), row=s=>s.split(' ').map(c=>K(c));
+    const qw=[row('q w e r t y u i o p'),row('a s d f g h j k l'),[K('⇧',1.5,dk)].concat(row('z x c v b n m'),[K('⌫',1.5,dk)]),[K('?123',1.5,dk),K('space',5),K('↵',1.6,'#1F6BFF')]];
+    return {cards:[
+      {t:'Floating',d:'drag anywhere, 60% width, key preview',rows:qw,h:'40px',fs:'15px',max:'60px',handle:'visible',bubble:'visible'},
+      {t:'Number / PIN',d:'inputmode=numeric, big targets',rows:[row('1 2 3'),row('4 5 6'),row('7 8 9'),[K('.',1,dk),K('0'),K('⌫',1,dk)]],h:'48px',fs:'20px',max:'120px',handle:'hidden',bubble:'hidden'},
+      {t:'URL / email',d:'adds .com @ / keys',rows:[row('q w e r t y u i o p'),row('a s d f g h j k l'),[K('⇧',1.5,dk)].concat(row('z x c v b n m'),[K('⌫',1.5,dk)]),[K('?123',1.5,dk),K('@'),K('/'),K('space',3),K('.com',1.5),K('Go',1.6,'#1F6BFF')]],h:'40px',fs:'15px',max:'60px',handle:'hidden',bubble:'hidden'},
+      {t:'Thumb / split',d:'for tablets held in landscape',rows:[[K('q'),K('w'),K('e'),K('r'),K('t'),K(' ',3,'transparent'),K('y'),K('u'),K('i'),K('o'),K('p')],[K('a'),K('s'),K('d'),K('f'),K('g'),K(' ',3,'transparent'),K('h'),K('j'),K('k'),K('l'),K('⌫',1,dk)],[K('⇧',1,dk),K('z'),K('x'),K('c'),K('v'),K(' ',3,'transparent'),K('b'),K('n'),K('m'),K('.'),K('↵',1,'#1F6BFF')]],h:'44px',fs:'15px',max:'52px',handle:'hidden',bubble:'hidden'}]};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Touch calibration</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button{font-family:inherit} button:focus-visible{outline:2px solid #18D4F0;outline-offset:2px} @keyframes ripple{0%{transform:scale(.4);opacity:.9}100%{transform:scale(1.8);opacity:0}}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: #050E24">
+<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; width: 520px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #18D4F0; letter-spacing: .08em">{{label}}</span>
+<h1 style="margin: 0; font-size: 26px; font-weight: 700">{{title}}</h1>
+<p style="margin: 0; font-size: 14px; color: #8FA3C8; line-height: 1.5">{{sub}}</p>
+<div style="display: flex; gap: 8px; margin-top: 8px"><sc-for list="{{pips}}" as="p" hint-placeholder-count="4"><span style="width: 30px; height: 4px; border-radius: 2px; background: {{p}}"></span></sc-for></div>
+<div style="display: flex; gap: 10px; margin-top: 14px"><button onClick="{{restart}}" style="all: unset; padding: 10px 18px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); font-size: 14px; cursor: pointer">{{leftBtn}}</button><sc-if value="{{done}}" hint-placeholder-val="{{false}}"><button style="all: unset; padding: 10px 22px; border-radius: 10px; background: #1F6BFF; font-size: 14px; font-weight: 600; cursor: pointer">Save calibration</button></sc-if></div>
+</div>
+<sc-for list="{{targets}}" as="t" hint-placeholder-count="4">
+<button aria-label="{{t.aria}}" onClick="{{t.tap}}" style="all: unset; position: absolute; left: {{t.x}}; top: {{t.y}}; width: 64px; height: 64px; margin: -32px 0 0 -32px; cursor: pointer; opacity: {{t.op}}">
+<span style="position: absolute; inset: 0; border-radius: 50%; border: 2px solid {{t.col}}; animation: {{t.anim}}"></span>
+<span style="position: absolute; left: 31px; top: 8px; width: 2px; height: 48px; background: {{t.col}}"></span><span style="position: absolute; top: 31px; left: 8px; height: 2px; width: 48px; background: {{t.col}}"></span>
+<span style="position: absolute; left: 26px; top: 26px; width: 12px; height: 12px; border-radius: 50%; background: {{t.dot}}"></span>
+</button>
+</sc-for>
+<div style="position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; font-size: 12px; color: #5E739C">Press Esc to cancel · built-in display 2560×1600</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p){super(p);this.state={n:0};}
+  renderVals(){
+    const n=this.state.n, done=n>=4, P=[['8%','10%'],['92%','10%'],['92%','90%'],['8%','90%']];
+    return {done,label:done?'CALIBRATED':'CALIBRATION · POINT '+(n+1)+' OF 4',title:done?'Touch is lined up':'Tap the centre of the target',
+      sub:done?'Average error 1.8 px · well within 4 px. Try drawing a line to check.':'Use your finger, then repeat with the pen for best accuracy. Hold still until the ring fills.',
+      pips:[0,1,2,3].map(i=>i<n?'#5FD39A':i===n?'#1F6BFF':'rgba(127,178,255,0.2)'),leftBtn:done?'Start over':'Cancel',restart:()=>this.setState({n:0}),
+      targets:P.map((p,i)=>({x:p[0],y:p[1],aria:'Calibration target '+(i+1),op:i<=n||done?1:0.25,col:i<n||done?'#5FD39A':i===n?'#18D4F0':'#5E739C',dot:i<n||done?'#5FD39A':i===n?'#18D4F0':'transparent',anim:i===n&&!done?'ripple 1.4s ease-out infinite':'none',tap:()=>{if(i===n)this.setState({n:n+1});}}))};
+  }
+}
+</script>
+</body>
+</html>

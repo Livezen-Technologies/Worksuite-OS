@@ -50,6 +50,8 @@ export interface AgentState {
   vpn?: VpnConfig;
   /** When the current WireGuard keypair was generated (rotation). The private key itself is in host storage. */
   vpn_key_created_at?: number;
+  /** WSOS-SEC-008: how far the package-service audit log has been forwarded to the server. */
+  package_audit?: { offset: number; head?: string };
 }
 
 export const emptyState = (): AgentState => ({ enrolled: false, seen_commands: {}, pending_acks: [] });

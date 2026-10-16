@@ -72,6 +72,15 @@ export function packageClient(exec: Exec = realExec) {
       const r = await call(exec, 'InstallUpdateNow', '', [])
       return r.ok ? { ok: true, value: true } : r
     },
+    /** WSOS-APT-006: the service's State property ('interrupted' = dpkg was interrupted and needs Repair). No polkit. */
+    async serviceState(): Promise<Reply<'idle' | 'busy' | 'interrupted'>> {
+      const r = await exec('busctl', ['--system', '--json=short', 'get-property', NAME, PATH, NAME, 'State'])
+      if (r.code !== 0) return { ok: false, error: failure(r.stderr) }
+      try {
+        const v = (JSON.parse(r.stdout) as { data?: unknown }).data
+        return v === 'idle' || v === 'busy' || v === 'interrupted' ? { ok: true, value: v } : { ok: false, error: 'failed' }
+      } catch { return { ok: false, error: 'failed' } }
+    },
     /** Repair (§9.2): dpkg --configure -a, then apt-get -f install; polkit lk.worksuite.repair. */
     async repair(): Promise<Reply<string>> {
       const r = await call(exec, 'Repair', '', [])

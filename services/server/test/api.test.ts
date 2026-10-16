@@ -10,6 +10,10 @@ import * as admin from '../src/admin.ts';
 import { purgeTombstones, TOMBSTONE_WINDOW } from '../src/api.ts';
 import { openDb } from '../src/db.ts';
 import { createHandler } from '../src/main.ts';
+import { setLogSink } from '../src/log.ts';
+
+const logLines: string[] = [];
+setLogSink((l) => { logLines.push(l); });
 import { issueTokens } from '../src/oauth.ts';
 
 let dir: string, server: Server, base: string, db: ReturnType<typeof openDb>;
@@ -160,6 +164,21 @@ test('directory authenticate is device-bound, refuses disabled accounts; break-g
   assert.deepEqual(rows.map((r) => r.type), ['break_glass.used']);
 });
 
+test('WSOS-SEC-008: device package-change audit events are stored against the device, retries are ignored', async () => {
+  const d = await enroll();
+  const post = (events: unknown) => call('POST', '/desktop/v1/os/audit', { device: d.credential, idem: randomUUID(), body: { events } });
+  const ev = { id: 'pkg-1', type: 'package.installed', at: '2026-10-16T10:00:00.000Z', data: { caller: 1000, source: 'flatpak', name: 'org.gnome.Calculator' } };
+  assert.equal((await post([ev])).status, 202);
+  assert.equal((await post([ev])).status, 202);
+  assert.equal((await post([{ ...ev, id: 'x', type: 'directory.password_changed' }])).status, 400);
+  assert.equal((await post([{ ...ev, id: 'y', at: 'yesterday' }])).status, 400);
+  assert.equal((await post([])).status, 400);
+  assert.equal((await call('POST', '/desktop/v1/os/audit', { idem: randomUUID(), body: { events: [ev] } })).status, 403);
+  const rows = db.prepare('SELECT type, data FROM audit WHERE principal = ? AND type LIKE ?').all(`device:${d.device_id}`, 'package.%') as { type: string; data: string }[];
+  assert.equal(rows.length, 1);
+  assert.equal(JSON.parse(rows[0].data).name, 'org.gnome.Calculator');
+});
+
 test('expired commands are not delivered', async () => {
   const d = await enroll();
   const id = admin.issueCommand(db, d.device_id, 'RefreshPolicy');
@@ -208,4 +227,32 @@ test('search, file search and recent files cover only the caller\'s records', as
   assert.deepEqual(benS.body.results.map((r: { id: string }) => r.id), ['mail:m9']);
   assert.equal((await call('GET', '/desktop/v1/search?q=', { token: ana })).status, 400);
   assert.equal((await call('GET', '/desktop/v1/search?q=x')).status, 401);
+});
+
+test('§11.6-d problem reports: stored for the user\'s org with the device, unknown sections refused', async () => {
+  const d = await enroll();
+  const post = (body: unknown) => call('POST', '/desktop/v1/problem-reports', { token: ana, device: d.credential, idem: randomUUID(), body });
+  assert.equal((await post({ id: 'rep-00001', description: 'Wi-Fi drops', sections: [{ id: 'system', text: 'OS: WorkSuite OS' }] })).status, 202);
+  assert.equal((await post({ id: 'rep-00002', sections: [{ id: 'shadow', text: 'x' }] })).status, 400);
+  assert.equal((await post({ id: 'rep-00003', sections: [{ id: 'system', text: 'x'.repeat(80_000) }] })).status, 400);
+  assert.equal((await call('POST', '/desktop/v1/problem-reports', { device: d.credential, idem: randomUUID(), body: { id: 'rep-00004', sections: [] } })).status, 401);
+  const row = db.prepare('SELECT device_id, body FROM problem_reports WHERE id = ?').get('rep-00001') as { device_id: string; body: string };
+  assert.equal(row.device_id, d.device_id);
+  assert.equal(JSON.parse(row.body).description, 'Wi-Fi drops');
+});
+
+test('§11.6-c structured logs: one JSON line per request with the caller\'s request id, no query string', async () => {
+  logLines.length = 0;
+  const rid = 'req-' + randomUUID();
+  await fetch(new URL('/desktop/v1/bootstrap?access_token=secret', base), { headers: { 'x-request-id': rid, authorization: 'Bearer nope' } });
+  await new Promise((r) => setTimeout(r, 20));
+  const lines = logLines.map((l) => JSON.parse(l));
+  const req = lines.find((l) => l.request_id === rid);
+  assert.ok(req, 'request logged');
+  assert.equal(req.service, 'worksuite-server');
+  assert.equal(req.event, 'request');
+  assert.equal(req.path, '/desktop/v1/bootstrap');
+  assert.equal(req.status, 401);
+  assert.ok(typeof req.ts === 'string' && typeof req.ms === 'number' && req.level === 'info');
+  assert.ok(!logLines.join('\n').includes('secret') && !logLines.join('\n').includes('nope'));
 });

@@ -526,4 +526,139 @@
       <translation>உங்கள் வட்டுக் கடவுச்சொற்றொடரை மறந்தால், உங்கள் கோப்புகளைத் திறக்க இந்த விசை மட்டுமே வழி. இது ஒருமுறை மட்டுமே காட்டப்படும், இந்தக் கணினியில் சேமிக்கப்படாது.</translation>
     </message>
   </context>
+  <context>
+    <name>WsStyle</name>
+    <message>
+      <source>Unpartitioned space</source>
+      <translation>பகிர்வு செய்யப்படாத இடம்</translation>
+    </message>
+    <message>
+      <source>EFI system</source>
+      <translation>EFI முறைமை</translation>
+    </message>
+    <message>
+      <source>STEP 2 · DISK</source>
+      <translation>படி 2 · வட்டு</translation>
+    </message>
+    <message>
+      <source>Where should WorkSuite go?</source>
+      <translation>WorkSuite எங்கே நிறுவப்பட வேண்டும்?</translation>
+    </message>
+    <message>
+      <source>WorkSuite OS uses the whole disk. Check that this is the right one.</source>
+      <translation>WorkSuite OS முழு வட்டையும் பயன்படுத்தும். இது சரியான வட்டுதானா எனச் சரிபார்க்கவும்.</translation>
+    </message>
+    <message>
+      <source>Storage device</source>
+      <translation>சேமிப்புச் சாதனம்</translation>
+    </message>
+    <message>
+      <source>Erase disk</source>
+      <translation>வட்டை அழி</translation>
+    </message>
+    <message>
+      <source>Deletes &lt;b style="color:#FFB98A"&gt;all data&lt;/b&gt; on the selected device.</source>
+      <translation>தேர்ந்தெடுத்த சாதனத்திலுள்ள &lt;b style="color:#FFB98A"&gt;எல்லாத் தரவையும்&lt;/b&gt; அழிக்கும்.</translation>
+    </message>
+    <message>
+      <source>Before</source>
+      <translation>முன்</translation>
+    </message>
+    <message>
+      <source>After</source>
+      <translation>பின்</translation>
+    </message>
+    <message>
+      <source>STEP 2 · ENCRYPTION</source>
+      <translation>படி 2 · மறையாக்கம்</translation>
+    </message>
+    <message>
+      <source>Encrypt your disk?</source>
+      <translation>உங்கள் வட்டை மறையாக்கவா?</translation>
+    </message>
+    <message>
+      <source>Keeps your files safe if the computer is lost or stolen. You'll type this passphrase each time it starts.</source>
+      <translation>கணினி தொலைந்தாலோ திருடப்பட்டாலோ உங்கள் கோப்புகளைப் பாதுகாக்கும். ஒவ்வொரு முறை தொடங்கும்போதும் இந்தக் கடவுச்சொற்றொடரைத் தட்டச்சிடுவீர்கள்.</translation>
+    </message>
+    <message>
+      <source>Encrypt (recommended)</source>
+      <translation>மறையாக்கு (பரிந்துரைக்கப்படுகிறது)</translation>
+    </message>
+    <message>
+      <source>LUKS2 full-disk encryption</source>
+      <translation>LUKS2 முழு வட்டு மறையாக்கம்</translation>
+    </message>
+    <message>
+      <source>Don't encrypt</source>
+      <translation>மறையாக்க வேண்டாம்</translation>
+    </message>
+    <message>
+      <source>Faster setup, no passphrase at startup</source>
+      <translation>விரைவான அமைப்பு, தொடக்கத்தில் கடவுச்சொற்றொடர் இல்லை</translation>
+    </message>
+    <message>
+      <source>Passphrase</source>
+      <translation>கடவுச்சொற்றொடர்</translation>
+    </message>
+    <message>
+      <source>Confirm passphrase</source>
+      <translation>கடவுச்சொற்றொடரை உறுதிப்படுத்து</translation>
+    </message>
+    <message>
+      <source>If you forget this passphrase, the recovery key (shown at the end of install) is the only way back in.</source>
+      <translation>இந்தக் கடவுச்சொற்றொடரை மறந்தால், (நிறுவலின் முடிவில் காட்டப்படும்) மீட்பு விசை மட்டுமே மீண்டும் உள்நுழைய ஒரே வழி.</translation>
+    </message>
+    <message>
+      <source>Weak</source>
+      <translation>பலவீனம்</translation>
+    </message>
+    <message>
+      <source>Fair</source>
+      <translation>சுமார்</translation>
+    </message>
+    <message>
+      <source>Good</source>
+      <translation>நன்று</translation>
+    </message>
+    <message>
+      <source>Strong</source>
+      <translation>வலிமையானது</translation>
+    </message>
+    <message>
+      <source>Strength: %1</source>
+      <translation>வலிமை: %1</translation>
+    </message>
+    <message>
+      <source>At least 8 characters</source>
+      <translation>குறைந்தது 8 எழுத்துகள்</translation>
+    </message>
+    <message>
+      <source>Passphrases do not match</source>
+      <translation>கடவுச்சொற்றொடர்கள் பொருந்தவில்லை</translation>
+    </message>
+    <message>
+      <source>Passphrases match</source>
+      <translation>கடவுச்சொற்றொடர்கள் பொருந்துகின்றன</translation>
+    </message>
+    <message>
+      <source>Quit the installer?</source>
+      <translation>நிறுவியிலிருந்து வெளியேறவா?</translation>
+    </message>
+    <message>
+      <source>The installation did not finish. You can start again any time from the boot menu.</source>
+      <translation>நிறுவல் முடியவில்லை. துவக்க மெனுவிலிருந்து எப்போது வேண்டுமானாலும் மீண்டும் தொடங்கலாம்.</translation>
+    </message>
+    <message>
+      <source>Nothing has been installed yet, and your disk hasn't changed. You can start again any time from the boot menu.</source>
+      <translation>இன்னும் எதுவும் நிறுவப்படவில்லை, உங்கள் வட்டு மாறவில்லை. துவக்க மெனுவிலிருந்து எப்போது வேண்டுமானாலும் மீண்டும் தொடங்கலாம்.</translation>
+    </message>
+    <message>
+      <source>Keep installing</source>
+      <translation>நிறுவலைத் தொடர்</translation>
+    </message>
+    <message>
+      <source>Quit installer</source>
+      <translation>நிறுவியிலிருந்து வெளியேறு</translation>
+    </message>
+  </context>
 </TS>

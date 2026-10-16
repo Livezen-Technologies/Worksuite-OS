@@ -6,6 +6,7 @@ import path from 'node:path'
 import { clipboardHistory, wlClipboardIo } from './clipboard'
 import { defaultApps, setDefaultApp } from './mimeapps'
 import { installedApps } from './xdg'
+import { xdgDirs } from './xdgDirs'
 
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 type Broadcast = (channel: string, payload: unknown) => void
@@ -46,7 +47,7 @@ export function startDesktopHost(handle: Handle, broadcast: Broadcast, home: str
   handle('ws:defaultApps', () => ({ ok: true, value: defaultApps(installedApps()) }))
   handle('ws:setDefaultApp', (category, id) => setDefaultApp(category, id, installedApps()))
 
-  const clip = clipboardHistory(wlClipboardIo(), path.join(home, '.config', 'worksuite', 'clipboard.json'))
+  const clip = clipboardHistory(wlClipboardIo(), path.join(xdgDirs(home).config, 'worksuite', 'clipboard.json'))
   clip.onChange(() => broadcast('ws:clipboardChanged', clip.state()))
   clip.start()
   handle('ws:clipboardState', () => clip.state())

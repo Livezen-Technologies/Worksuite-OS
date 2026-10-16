@@ -3,6 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { xdgDirs } from './xdgDirs'
 
 export const APP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/   // never starts with '-': not an option
 
@@ -40,7 +41,7 @@ export const LOCK_CHOICES = [60, 120, 300, 600, 900, 1800, 3600, 0] as const
 export const DEFAULT_LOCK_S = 300
 
 export interface LockPaths { user: string; policy: string }
-export const lockPaths = (home: string, configHome = process.env.XDG_CONFIG_HOME || path.join(home, '.config')): LockPaths => ({
+export const lockPaths = (home: string, configHome = xdgDirs(home).config): LockPaths => ({
   user: path.join(configHome, 'worksuite', 'lock.conf'),
   policy: '/etc/worksuite/lock-policy.conf',
 })

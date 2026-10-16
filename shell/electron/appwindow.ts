@@ -13,6 +13,7 @@ import {
   type AppRequest, type Fetch, type Session, type WebApp,
 } from './webapps'
 import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
+import { xdgDirs } from './xdgDirs'
 
 const fetchFn: Fetch = (url, init) => fetch(url, { headers: init?.headers, redirect: 'follow' })
 const broker = (m: string, p?: Record<string, unknown>) => brokerCall(m, p ?? {}, m === 'SignIn' ? 6 * 60_000 : 15_000)
@@ -28,7 +29,7 @@ export function prepareAppMode(req: AppRequest): boolean {
   app.commandLine.appendSwitch('class', `worksuite-${req.id}`)
   // Screen capture on Wayland goes through the xdg-desktop-portal ScreenCast path (PipeWire), SRS §7.1.
   app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer')
-  app.setPath('userData', path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 'worksuite/apps', req.id))
+  app.setPath('userData', path.join(xdgDirs(os.homedir()).data, 'worksuite/apps', req.id))
   return app.requestSingleInstanceLock(req)
 }
 

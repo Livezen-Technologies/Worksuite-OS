@@ -14,7 +14,9 @@ import { VpnPanel } from './settings/Vpn'
 import { PowerPanel, PrintersPanel } from './settings/Devices'
 import { BigSwitch } from './settings/ui'
 import { SignInOptions } from './settings/SignIn'
+import { ReportProblem } from './settings/ReportProblem'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
+import { KioskPanel } from './settings/Kiosk'
 import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
@@ -568,18 +570,22 @@ function AboutPanel() {
         ))}
       </div>
     </div>
+    <ReportProblem />
   </>
 }
 
 /** Settings › Managed: WSOS-MDM-007 management disclosure from the device agent, or enrollment when unmanaged. */
 function ManagedPanel() {
   const [showWipe, setShowWipe] = useState(false)
+  const [kioskOpen, setKioskOpen] = useState(false)
   const [info, setInfo] = useState<DeviceInfo | null>(null)
   useEffect(() => { void os.deviceInfo().then(setInfo).catch(() => {}) }, [])
   if (!info) return <><H1>{t('settings.nav.Managed')}</H1><Empty title={t('settings.about.loading')} /></>
   const d = info.device
   const lines = policyLines(info.policies)
   const checked = info.last_check_in ? formatDate(info.last_check_in) : t('settings.about.notYet')
+  const org = info.org_name ?? info.server ?? t('settings.about.yourOrg')
+  if (kioskOpen && info.managed) return <KioskPanel kiosk={info.kiosk ?? null} org={org} onBack={() => setKioskOpen(false)} />
   return <>
     <H1>{t('settings.nav.Managed')}</H1>
     {info.managed ? (
@@ -600,7 +606,15 @@ function ManagedPanel() {
           </div>
         )}
       </section>
-    ) : info.agent ? <EnrollCard onEnrolled={() => void os.deviceInfo().then(setInfo)} />
+    ) : null}
+    {info.managed && (
+      <button type="button" onClick={() => setKioskOpen(true)} className="flex min-h-14 cursor-pointer items-center gap-4 rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(14,32,72,0.6)] px-5 py-3 text-left hover:bg-[rgba(14,32,72,0.85)]">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="text-sm font-semibold">{t('kiosk.title')}</span><span className="text-xs text-[#8FA3C8]">{info.kiosk ? t('kiosk.rowOn', { user: info.kiosk.user }) : t('kiosk.rowOff')}</span></span>
+        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${info.kiosk ? 'bg-[rgba(95,211,154,0.16)] text-[#5FD39A]' : 'bg-white/10 text-[#C9D6EE]'}`}>{info.kiosk ? t('common.on') : t('common.off')}</span>
+        <Svg d="M9 6l6 6-6 6" size={16} stroke="#8FA3C8" />
+      </button>
+    )}
+    {info.managed ? null : info.agent ? <EnrollCard onEnrolled={() => void os.deviceInfo().then(setInfo)} />
       : <Empty title={t('settings.about.mgmtUnavailable')}>{t('settings.about.agentDown')}</Empty>}
   </>
 }

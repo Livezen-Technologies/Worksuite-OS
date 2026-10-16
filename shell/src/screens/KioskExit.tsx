@@ -2,6 +2,7 @@
 // taps in the top-left corner). The exit PIN is checked by the root helper against the policy's verifier (never here);
 // "administrator password" asks through polkit. Both end the kiosk session and return to the greeter.
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { AnimatedProgress } from '../components/AnimatedProgress'
 import { kioskApi, type KioskApi, type KioskExitResult } from '../lib/kioskApi'
 import { useT } from '../i18n'
 
@@ -91,18 +92,64 @@ export default function KioskExit({ api = kioskApi() }: { api?: KioskApi | null 
   )
 }
 
-/** Shown by the kiosk app while the app starts, restarts after a crash, or cannot be reached. */
-export function KioskStatus({ state }: { state: 'starting' | 'unavailable' }) {
+export type KioskStatusState = 'starting' | 'unavailable' | 'restarting' | 'offline' | 'idle'
+/** Reads `?state=…&host=…&secs=…&attempt=…` as the kiosk app sets them (electron/kioskMain.ts). */
+export function kioskStatusFrom(q: URLSearchParams): { state: KioskStatusState; host: string; secs: number; attempt: number } {
+  const st = q.get('state')
+  const state: KioskStatusState = st === 'unavailable' || st === 'restarting' || st === 'offline' || st === 'idle' ? st : 'starting'
+  const n = (k: string) => { const v = Number(q.get(k)); return Number.isFinite(v) && v > 0 ? Math.min(3600, Math.round(v)) : 0 }
+  const host = (q.get('host') ?? '').replace(/[^A-Za-z0-9.:-]/g, '').slice(0, 120)
+  return { state, host, secs: n('secs'), attempt: n('attempt') }
+}
+
+const ICON = {
+  restarting: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5',
+  offline: 'M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M12 19h.01M3 3l18 18',
+  unavailable: 'M12 8v5M12 16h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+  idle: 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15',
+}
+
+/** Counts down from `from` seconds, one step a second. */
+function useCountdown(from: number) {
+  const [left, setLeft] = useState(from)
+  useEffect(() => { setLeft(from); if (!from) return; const iv = setInterval(() => setLeft((n) => Math.max(0, n - 1)), 1000); return () => clearInterval(iv) }, [from])
+  return left
+}
+
+/** The kiosk's own full-screen states (board KioskStates); never shows the desktop. */
+export function KioskStatus({ state, host = '', secs = 0, attempt = 0 }: { state: KioskStatusState; host?: string; secs?: number; attempt?: number }) {
   const t = useT()
-  return (
+  const left = useCountdown(secs)
+  const light = state === 'idle'
+  if (state === 'starting') return (
     <main className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-[#0A1A3D] px-6 text-center font-sans text-[#E8EEFA]">
       <svg width="64" height="80" viewBox="0 0 30 38" aria-hidden="true"><rect x="10" y="0" width="20" height="20" fill="#0A6CFF" /><rect x="0" y="10" width="10" height="10" fill="#00DAF2" /><rect x="10" y="10" width="10" height="10" fill="#0B2A66" /><rect x="10" y="20" width="10" height="10" fill="#00DAF2" /><rect x="0" y="33" width="30" height="5" rx="2.5" fill="#E2E8F0" /></svg>
-      {state === 'starting' ? <p role="status" className="m-0 text-base text-[#C9D6EE]">{t('kiosk.starting')}</p> : (
-        <>
-          <h1 className="m-0 text-2xl font-bold">{t('kiosk.unavailableTitle')}</h1>
-          <p role="status" className="m-0 max-w-[480px] text-sm text-[#C9D6EE]">{t('kiosk.unavailableBody')}</p>
-        </>
+      <p role="status" className="m-0 text-base text-[#C9D6EE]">{t('kiosk.starting')}</p>
+    </main>
+  )
+  const title = state === 'idle' ? t('kiosk.st.idleTitle') : state === 'restarting' ? t('kiosk.st.restartTitle') : state === 'offline' ? t('kiosk.st.offlineTitle') : t('kiosk.unavailableTitle')
+  const body = state === 'idle' ? t('kiosk.st.idleBody', { n: String(left) })
+    : state === 'restarting' ? t('kiosk.st.restartBody')
+    : state === 'offline' ? (host ? t('kiosk.st.offlineBody', { host, n: String(Math.max(1, left)) }) : t('kiosk.st.offlineBodyNoHost', { n: String(Math.max(1, left)) }))
+    : t('kiosk.unavailableBody')
+  const meta = state === 'idle' ? t('kiosk.st.idleMeta') : state === 'restarting' ? (attempt > 1 ? t('kiosk.st.restartMetaN', { n: String(attempt) }) : t('kiosk.st.restartMeta')) : state === 'offline' ? t('kiosk.st.offlineMeta') : ''
+  const tint = light ? 'bg-[rgba(31,107,255,0.12)]' : state === 'offline' || state === 'unavailable' ? 'bg-[rgba(255,159,90,0.16)]' : 'bg-[rgba(31,107,255,0.2)]'
+  const stroke = light ? '#1F6BFF' : state === 'offline' || state === 'unavailable' ? '#FFB98A' : '#7FB2FF'
+  return (
+    <main className={`fixed inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center font-sans ${light ? 'bg-[#F4F7FC] text-[#0A1A3D]' : 'bg-[linear-gradient(160deg,#12306B,#050E24)] text-[#E8EEFA]'}`}>
+      <span className={`mb-1 flex size-[72px] items-center justify-center rounded-[20px] ${tint}`}>
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+          className={state === 'restarting' ? 'motion-safe:animate-spin [animation-duration:2.4s]' : ''}><path d={ICON[state]} /></svg>
+      </span>
+      <h1 className="m-0 text-[28px] font-bold">{title}</h1>
+      <p role="status" className={`m-0 max-w-[460px] text-base leading-normal ${light ? 'text-[#3B4F75]' : 'text-[#C9D6EE]'}`}>{body}</p>
+      {state === 'idle' && secs > 0 && (
+        <div className="mt-2 h-[5px] w-[260px] overflow-hidden rounded-[3px] bg-[rgba(31,107,255,0.15)]" aria-hidden="true">
+          <div className="h-full rounded-[3px] bg-[#1F6BFF] transition-[width] duration-1000 ease-linear" style={{ width: `${(left / secs) * 100}%` }} />
+        </div>
       )}
+      {state === 'restarting' && <AnimatedProgress value={null} label={title} height={5} className="mt-2 w-[260px]" />}
+      {meta && <span className={`mt-1 font-mono text-xs ${light ? 'text-[#3B4F75]' : 'text-[#8FA3C8]'}`}>{meta}</span>}
     </main>
   )
 }

@@ -8,7 +8,7 @@ export interface InputDev { name: string; node: string; kinds: DevKind[]; tablet
 export type OskMode = 'off' | 'touch' | 'always'
 export type TabletMode = 'auto' | 'on' | 'off'
 export type OskSize = 'small' | 'medium' | 'large'
-export interface TouchSettings { touchEnabled: boolean; mapToOutput: Record<string, string>; tabletMode: TabletMode; rotationLock: boolean; osk: OskMode; oskSize: OskSize }
+export interface TouchSettings { touchEnabled: boolean; mapToOutput: Record<string, string>; tabletMode: TabletMode; rotationLock: boolean; osk: OskMode; oskSize: OskSize; calibration: Record<string, number[]> }
 export interface TouchState {
   devices: InputDev[]; settings: TouchSettings; tabletSwitch: boolean; touchMode: boolean
   orientation: string | null; hasAccelerometer: boolean; osk: { available: boolean; visible: boolean }; outputs: string[]
@@ -44,7 +44,7 @@ export function isTextField(el: Element | null): boolean {
 export const oskWanted = (s: TouchSettings, touchMode: boolean) => s.osk === 'always' || (s.osk === 'touch' && touchMode)
 
 // ---------- preview stub (?touch=1) ----------
-const DEFAULTS: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium' }
+const DEFAULTS: TouchSettings = { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium', calibration: {} }
 function stubApi(): TouchApi {
   const subs = new Set<(s: unknown) => void>()
   const st: TouchState = {

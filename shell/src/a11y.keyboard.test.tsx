@@ -107,7 +107,7 @@ describe('keyboard walk-through (WSOS-ACC-001/002)', () => {
     }
     await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
     expect(closed).toBe(1)
-  })
+  }, 60_000)   // every section plus an axe run each
 
   it('the checks catch mouse-only controls and hidden focus', async () => {
     const el = await render(<div><div className="cursor-pointer">x</div><button type="button" className="outline-none">y</button></div>)

@@ -61,7 +61,14 @@ export function serve(path: string, broker: Broker): Server {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
         let req: Req;
         try { req = JSON.parse(line); } catch { sock.write('{"error":"bad_request"}\n'); continue; }
-        sock.write(JSON.stringify(await dispatch(broker, req)) + '\n');
+        // §13.1 malicious IPC: non-object requests and non-object params are refused, never dereferenced.
+        if (!req || typeof req !== 'object' || Array.isArray(req) || typeof req.method !== 'string' ||
+            (req.params !== undefined && (req.params === null || typeof req.params !== 'object' || Array.isArray(req.params)))) {
+          sock.write('{"error":"bad_request"}\n'); continue;
+        }
+        let res: unknown;
+        try { res = await dispatch(broker, req); } catch { res = { error: 'internal_error' }; }
+        if (!sock.destroyed) sock.write(JSON.stringify(res) + '\n');
       }
     });
     sock.on('error', () => {});
@@ -143,4 +150,4 @@ async function main() {
   log('started', { accounts: accounts.length });
 }
 
-if (import.meta.main) main().catch((e) => { process.stderr.write(`${e?.stack ?? e}\n`); process.exit(1); });
+if (import.meta.main) main().catch((e) => { process.stdout.write(JSON.stringify({ ts: new Date().toISOString(), service: 'worksuite-credentials', level: 'error', event: 'fatal', error: String(e?.stack ?? e) }) + '\n'); process.exit(1); });

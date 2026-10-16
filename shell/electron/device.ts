@@ -40,12 +40,12 @@ export function deviceInfo(statusPath = STATUS_PATH, provisioningPath = PROVISIO
 function agentInfo(statusPath: string) {
   try {
     const st = JSON.parse(readFileSync(statusPath, 'utf8'))
-    return { agent: true, device: st.device ?? null, managed: !!st.managed, org_name: st.org_name ?? null, server: st.server ?? null, last_check_in: st.last_check_in ?? null, policies: st.policies ?? null }
+    return { agent: true, device: st.device ?? null, managed: !!st.managed, org_name: st.org_name ?? null, server: st.server ?? null, last_check_in: st.last_check_in ?? null, policies: st.policies ?? null, kiosk: st.kiosk ?? null }
   } catch {
     let osVersion = 'unknown'
     try { osVersion = /^PRETTY_NAME="?([^"\n]*)/m.exec(readFileSync('/etc/os-release', 'utf8'))?.[1] ?? osVersion } catch { /* keep unknown */ }
     return {
-      agent: false, managed: false, org_name: null, server: null, last_check_in: null, policies: null,
+      agent: false, managed: false, org_name: null, server: null, last_check_in: null, policies: null, kiosk: null,
       device: { hostname: os.hostname(), os_version: osVersion, arch: process.arch === 'arm64' ? 'arm64' : 'amd64', kernel_version: os.release(), encrypted: null },
     }
   }

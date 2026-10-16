@@ -15,12 +15,17 @@ APP=${WORKSUITE_KIOSK_APP:-/usr/lib/worksuite/shell/electron/electron --ozone-pl
 # it with $LIB/worksuite-osk (hook).
 if [ "${KIOSK_OSK:-0}" = 1 ]; then
     if [ -x "$LIB/worksuite-osk" ]; then "$LIB/worksuite-osk" --kiosk &
-    elif command -v wvkbd-mobintl >/dev/null 2>&1; then wvkbd-mobintl -H 260 -L 208 -l full,special --fn "IBM Plex Sans 16" &
+    elif command -v wvkbd-mobintl >/dev/null 2>&1; then wvkbd-mobintl -H 260 -L 208 -l full,special --fn "IBM Plex Sans 16" \
+        --bg 071330f7 --fg 1a2c51 --fg-sp 0f1e3e --press 2a4a8f --press-sp 1f6bff --text e8eefa --text-sp c9d6ee &
     fi
 fi
 
-# Idle reset: after the policy's idle time the app is reset to a clean state (worksuite-kiosk-ctl reset).
-if [ "${KIOSK_IDLE_RESET_S:-0}" -gt 0 ] 2>/dev/null; then
+# Idle reset: after the policy's idle time the app is reset to a clean state (worksuite-kiosk-ctl reset). From 30 s up,
+# a "Still there?" screen (board KioskStates) comes 15 s before, and goes again on any touch or key.
+if [ "${KIOSK_IDLE_RESET_S:-0}" -ge 30 ] 2>/dev/null; then
+    swayidle -w timeout $((KIOSK_IDLE_RESET_S - 15)) "$LIB/worksuite-kiosk-ctl warn" resume "$LIB/worksuite-kiosk-ctl active" \
+        timeout "$KIOSK_IDLE_RESET_S" "$LIB/worksuite-kiosk-ctl reset" &
+elif [ "${KIOSK_IDLE_RESET_S:-0}" -gt 0 ] 2>/dev/null; then
     swayidle -w timeout "$KIOSK_IDLE_RESET_S" "$LIB/worksuite-kiosk-ctl reset" &
 fi
 

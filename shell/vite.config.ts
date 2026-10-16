@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -21,4 +22,6 @@ export default defineConfig({
     transformIndexHtml: (html: string) => html.replace(/(http-equiv="Content-Security-Policy" content=")[^"]*"/, `$1${SHELL_CSP}"`),
   }],
   build: { outDir: 'dist', emptyOutDir: true },
+  // Tests isolate the XDG base directories from the runner's environment (electron/testEnv.ts).
+  test: { setupFiles: ['./electron/testEnv.ts'] },
 })

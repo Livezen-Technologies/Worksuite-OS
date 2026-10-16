@@ -6,7 +6,8 @@ import type { AddressInfo } from 'node:net';
 import { Broker, type Account } from '../src/broker.ts';
 import { memoryStore } from '../src/keyring.ts';
 import { checkUrl, OidcError } from '../src/oidc.ts';
-import { dispatch, importLoginHandoff } from '../src/main.ts';
+import { dispatch, importLoginHandoff, serve } from '../src/main.ts';
+import { createConnection } from 'node:net';
 import { writeFileSync } from 'node:fs';
 import { buildSyncConfig, fetchBootstrap, removeSyncConfig, writeSyncConfig } from '../src/syncconfig.ts';
 import { mkdtempSync, readFileSync, rmSync, statSync, existsSync } from 'node:fs';
@@ -263,4 +264,28 @@ test('WSOS-DIR-008: the greeter login code signs the session in without a prompt
   assert.equal(existsSync(path), false);
   rmSync(dir, { recursive: true, force: true });
   s.server.close();
+});
+
+test('§13.1 malicious IPC: hostile lines on the broker socket get errors and the broker keeps serving', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ws-cred-'));
+  const path = join(dir, 'c.sock');
+  const broker = new Broker({ clientId: 'worksuite-os', secrets: memoryStore(), saveAccounts: () => {}, openBrowser: async () => {} } as ConstructorParameters<typeof Broker>[0]);
+  const srv = serve(path, broker);
+  await new Promise((r) => srv.once('listening', r));
+  const call = (line: string) => new Promise<any>((resolve) => {
+    const s = createConnection(path);
+    let buf = '';
+    s.on('data', (c) => { buf += c; if (buf.includes('\n')) { s.end(); resolve(JSON.parse(buf)); } });
+    s.write(line + '\n');
+  });
+  for (const line of ['null', '42', '"x"', '[]', '{"method":1}', '{"method":"GetAccessToken","params":null}', '{"method":"GetAccessToken","params":[1]}', '{"__proto__":{"method":"Status"}}']) {
+    assert.equal((await call(line)).error, 'bad_request', line);
+  }
+  assert.equal((await call('{"method":"GetAccessToken","params":{"account_id":{"toString":1}}}')).error, 'invalid_argument');
+  assert.equal((await call('{"method":"constructor"}')).error, 'unknown_method');
+  // An oversized line closes the connection without answering.
+  await new Promise<void>((resolve) => { const s = createConnection(path); s.on('close', () => resolve()); s.on('error', () => {}); s.write('x'.repeat(20 * 1024)); });
+  assert.deepEqual((await call('{"id":7,"method":"Status"}')), { id: 7, result: [] });
+  srv.close();
+  rmSync(dir, { recursive: true, force: true });
 });

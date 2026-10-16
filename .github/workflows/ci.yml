@@ -69,6 +69,8 @@ jobs:
       - run: sh tests/session/signin-pam-test.sh
       # pam_worksuite.so through real libpam with a stand-in helper (WSOS-DIR-009).
       - run: sudo apt-get install -y --no-install-recommends libpam0g-dev gcc make && sh native/pam-worksuite/test.sh
+      # File-system layout (SRS §11.6-b): packaged paths, XDG base directories for user state.
+      - run: sh tests/session/fs-layout-test.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -100,8 +102,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends dbus-daemon dbus-x11 labwc xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk grim pipewire wireplumber python3-dbus-next gsettings-desktop-schemas dconf-service libglib2.0-bin
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends dbus-daemon dbus-x11 labwc xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk grim pipewire wireplumber python3-dbus-next gsettings-desktop-schemas dconf-service libglib2.0-bin xwayland x11-utils procps
       - run: timeout 300 sh tests/portals/run.sh
+      # X11 apps through on-demand XWayland in headless Labwc with WorkSuite's rc.xml (WSOS-LCH-002).
+      - run: timeout 120 sh tests/session/xwayland-test.sh
 
   apt-repo:
     runs-on: ubuntu-latest

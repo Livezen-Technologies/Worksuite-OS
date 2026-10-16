@@ -4,20 +4,23 @@
 //   worksuite-device-agent status | refresh
 import { publicPolicy } from './kiosk.ts';
 import { createPublicKey, type KeyObject } from 'node:crypto';
-import { chmodSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { createConnection, createServer } from 'node:net';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { Agent } from './agent.ts';
 import { httpApi } from './api.ts';
 import { DEFAULT_PATHS, linuxHost } from './host.ts';
 import { StateFile } from './state.ts';
 import { serveBus } from './dbus.ts';
+import { forwardPackageAudit } from './auditForward.ts';
+import { serveControl } from './control.ts';
 
 const KEY_DIR = '/usr/share/worksuite/keys/device-commands';   // from worksuite-archive-keyring
 const SOCKET = join(DEFAULT_PATHS.runtimeDir, 'control.sock');
 const CHECK_IN_MS = 15 * 60_000;
 const POLICY_MS = 60 * 60_000;
 const INVENTORY_MS = 24 * 60 * 60_000;
+const PACKAGE_AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';   // written by worksuite-package-service
 
 /** Server signing keys by id: <KEY_DIR>/<key_id>.pem. */
 export function loadKeys(dir: string): (id: string) => KeyObject | undefined {
@@ -45,30 +48,12 @@ async function daemon() {
   const serial = <T>(fn: () => Promise<T>) => { const p = busy.then(fn, fn); busy = p.catch(() => {}); return p; };
   const safe = (what: string, fn: () => Promise<unknown>) => serial(fn).catch((e) => host.audit(`${what}_failed`, { error: String(e?.message ?? e) }));
 
-  const server = createServer((sock) => {
-    let buf = '';
-    sock.setEncoding('utf8');
-    sock.on('data', async (c) => {
-      buf += c;
-      if (buf.length > 16 * 1024) return sock.destroy();
-      const nl = buf.indexOf('\n'); if (nl < 0) return;
-      let req: { method?: string; params?: Record<string, unknown> };
-      try { req = JSON.parse(buf.slice(0, nl)); } catch { return sock.end('{"error":"bad_request"}\n'); }
-      const p = req.params ?? {};
-      try {
-        if (req.method === 'Enroll' && typeof p.server_url === 'string' && typeof p.enrollment_token === 'string') {
-          const id = await serial(() => agent.enroll(p.server_url as string, p.enrollment_token as string));
-          return sock.end(JSON.stringify({ result: id }) + '\n');
-        }
-        if (req.method === 'Refresh') { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); return sock.end(JSON.stringify({ result: agent.status() }) + '\n'); }
-        if (req.method === 'Status') return sock.end(JSON.stringify({ result: agent.status() }) + '\n');
-        sock.end('{"error":"unknown_method"}\n');
-      } catch (e) { sock.end(JSON.stringify({ error: String((e as Error).message) }) + '\n'); }
-    });
-    sock.on('error', () => {});
+  // Root only (0600); pkexec runs the CLI as root.
+  const server = serveControl(SOCKET, {
+    enroll: (url, token) => serial(() => agent.enroll(url, token)),
+    refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); return agent.status(); },
+    status: () => agent.status(),
   });
-  rmSync(SOCKET, { force: true });
-  server.listen(SOCKET, () => chmodSync(SOCKET, 0o600));   // root only; pkexec runs the CLI as root
 
   // lk.worksuite.DeviceAgent1 (WSOS-ARC-002): what Settings and first-run call, each privileged method behind polkit.
   // The root-only socket stays for the admin CLI. No bus (rescue shell) just means no D-Bus API.
@@ -86,6 +71,11 @@ async function daemon() {
   };
   every(CHECK_IN_MS, 'check_in', () => agent.checkIn());
   every(POLICY_MS, 'policy', () => agent.refreshPolicy());
+  every(5 * 60_000, 'package_audit', async () => {
+    if (!state.state.enrolled) return;
+    const api = httpApi(() => state.state);
+    await forwardPackageAudit({ path: PACKAGE_AUDIT_LOG, cursor: state.state.package_audit ?? { offset: 0 }, send: (ev) => api.audit(ev), save: (c) => state.update((s) => { s.package_audit = c; }) });
+  });
   every(INVENTORY_MS, 'inventory', async () => { if (state.state.enrolled) await httpApi(() => state.state).inventory(await host.inventory()); });
 
   process.on('SIGTERM', () => { server.close(); process.exit(0); });

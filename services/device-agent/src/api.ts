@@ -21,6 +21,8 @@ export interface DeviceApi {
   ack(commandId: string, state: string, reason?: string): Promise<void>;
   inventory(body: unknown): Promise<void>;
   diagnostics(body: unknown): Promise<void>;
+  /** WSOS-SEC-008: package-change audit events (package.<event>). */
+  audit(events: unknown[]): Promise<void>;
   /** Signed per-device WireGuard config; 409 VPN_PEER_KEY_REQUIRED until a public key is registered. */
   vpn(): Promise<VpnConfig>;
   /** Registers (or rotates) the device's WireGuard public key. Only the public key is ever sent. */
@@ -60,6 +62,7 @@ export function httpApi(state: () => { server_url?: string; credential?: string 
     ack: async (id, st, reason) => { await call('POST', `desktop/v1/devices/commands/${encodeURIComponent(id)}/ack`, { body: { state: st, ...(reason ? { reason } : {}) }, idem: true }); },
     inventory: async (body) => { await call('POST', 'desktop/v1/os/inventory', { body, idem: true }); },
     diagnostics: async (body) => { await call('POST', 'desktop/v1/os/diagnostics', { body, idem: true }); },
+    audit: async (events) => { await call('POST', 'desktop/v1/os/audit', { body: { events }, idem: true }); },
     vpn: () => call('GET', 'desktop/v1/os/vpn'),
     vpnPeer: (public_key) => call('PUT', 'desktop/v1/os/vpn/peer', { body: { public_key }, idem: true }),
   };

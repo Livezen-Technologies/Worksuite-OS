@@ -49,6 +49,7 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
     },
     async inventory() {},
     async diagnostics() { log.push('diagnostics uploaded'); },
+    async audit() {},
     async vpn() { throw new ApiError(404, 'NOT_FOUND'); },
     async vpnPeer() { throw new ApiError(404, 'NOT_FOUND'); },
   };
@@ -337,6 +338,8 @@ test('kiosk mode: only listed devices become kiosks; USB blocked; verifier kept 
   assert.ok(!JSON.stringify(w.s.published.policy).includes('scrypt'), 'world-readable policy has no verifier');
   assert.equal((w.s.published.policy!.kiosk as { exit_pin_set: boolean }).exit_pin_set, true);
   assert.equal(w.agent.status().policies?.kiosk, true);
+  assert.deepEqual(w.agent.status().kiosk, { user: 'kiosk', app: { type: 'url', url: 'https://visitors.example.com/' }, allowed_urls: [], idle_reset_minutes: 5, show_on_screen_keyboard: false, exit_pin: true });
+  assert.ok(!JSON.stringify(w.agent.status()).includes('scrypt'), 'status has no verifier');
   // Another device of the same org is not a kiosk.
   w.s.policy = signedPolicy({ version: 'p2', kiosk: { ...kiosk, devices: ['dev-2'] } });
   await w.agent.refreshPolicy();

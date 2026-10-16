@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kiosk · running</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button{font-family:inherit} button:focus-visible{outline:2px solid #18D4F0;outline-offset:2px}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #0A1A3D; background: #F4F7FC">
+<header style="height: 92px; display: flex; align-items: center; padding: 0 56px; gap: 16px; background: #FFFFFF; border-bottom: 1px solid #E1E8F5"><span style="width: 44px; height: 44px; border-radius: 12px; background: #1F6BFF; color: #FFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px">[C]</span><span style="font-size: 22px; font-weight: 700; flex: 1">[Company] Reception</span><span style="font-size: 18px; color: #5E739C">9:41 · Fri 16 Oct</span></header>
+<main style="padding: 60px 56px; display: flex; flex-direction: column; gap: 34px; align-items: center">
+<h1 style="margin: 0; font-size: 44px; font-weight: 700; letter-spacing: -.02em">Welcome! Tap to check in</h1>
+<div style="display: grid; grid-template-columns: repeat(3, 300px); gap: 24px">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="3"><button style="all: unset; height: 240px; border-radius: 26px; background: {{t.bg}}; color: {{t.col}}; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding: 28px; box-sizing: border-box; box-shadow: 0 16px 40px rgba(10,26,61,0.12); cursor: pointer"><span style="font-size: 48px">{{t.i}}</span><span style="font-size: 24px; font-weight: 700">{{t.n}}</span><span style="font-size: 15px; opacity: .8">{{t.d}}</span></button></sc-for>
+</div>
+</main>
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: 40px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 13px; color: #8FA3C8"><span style="width: 6px; height: 6px; border-radius: 50%; background: #5FD39A"></span>Session resets after 2 minutes idle · your info is cleared</div>
+<button onClick="{{tap}}" aria-label="Administrator exit area" style="all: unset; position: absolute; top: 0; right: 0; width: 72px; height: 72px; cursor: pointer"><span style="position: absolute; top: 10px; right: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: rgba(10,26,61,0.25)">{{tapHint}}</span></button>
+<sc-if value="{{exit}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; inset: 0; background: rgba(3,8,22,0.6); display: flex; align-items: center; justify-content: center; color: #E8EEFA">
+<section role="dialog" aria-labelledby="kx" style="width: 420px; padding: 28px; border-radius: 20px; background: #10244F; border: 1px solid rgba(127,178,255,0.2); display: flex; flex-direction: column; gap: 16px; align-items: center; text-align: center">
+<span style="width: 52px; height: 52px; border-radius: 14px; background: rgba(31,107,255,0.2); display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 10h14v10H5zM8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>
+<h2 id="kx" style="margin: 0; font-size: 20px; font-weight: 700">Exit kiosk mode</h2>
+<span style="font-size: 13px; color: #8FA3C8">Enter the administrator PIN. Closes in {{secs}} s.</span>
+<div style="display: flex; gap: 12px"><sc-for list="{{dots}}" as="d" hint-placeholder-count="6"><span style="width: 14px; height: 14px; border-radius: 50%; border: 2px solid #1F6BFF; box-sizing: border-box; background: {{d}}"></span></sc-for></div>
+<div style="display: grid; grid-template-columns: repeat(3, 64px); gap: 10px"><sc-for list="{{keys}}" as="k" hint-placeholder-count="12"><button onClick="{{k.p}}" aria-label="{{k.a}}" style="all: unset; height: 50px; border-radius: 12px; background: {{k.bg}}; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; visibility: {{k.v}}">{{k.l}}</button></sc-for></div>
+<div style="display: flex; gap: 10px; width: 100%"><button onClick="{{close}}" style="all: unset; flex: 1; padding: 11px; border-radius: 10px; border: 1px solid rgba(127,178,255,0.25); font-size: 14px; cursor: pointer">Back to kiosk</button></div>
+<span style="font-size: 11px; color: #5E739C">Every exit attempt is logged and sent to WorkSuite admin</span>
+</section></div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p){super(p);this.state={taps:0,pin:''};}
+  renderVals(){
+    const {taps,pin}=this.state, exit=taps>=5;
+    const p=d=>()=>this.setState({pin:(pin+d).slice(0,6)});
+    return {exit,secs:30,tapHint:exit?'':taps?taps+'/5':'',tap:()=>this.setState({taps:taps+1}),close:()=>this.setState({taps:0,pin:''}),
+      tiles:[['📝','Check in','I have an appointment','#1F6BFF','#FFFFFF'],['📦','Delivery','Drop off a parcel','#FFFFFF','#0A1A3D'],['🙋','Ask for help','Call the front desk','#FFFFFF','#0A1A3D']].map(t=>({i:t[0],n:t[1],d:t[2],bg:t[3],col:t[4]})),
+      dots:[0,1,2,3,4,5].map(i=>i<pin.length?'#1F6BFF':'transparent'),
+      keys:['1','2','3','4','5','6','7','8','9','','0','⌫'].map(k=>({l:k,a:k==='⌫'?'Delete':k||'blank',v:k?'visible':'hidden',bg:k==='⌫'?'transparent':'rgba(127,178,255,0.1)',p:k==='⌫'?()=>this.setState({pin:pin.slice(0,-1)}):p(k)}))};
+  }
+}
+</script>
+</body>
+</html>

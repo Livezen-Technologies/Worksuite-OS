@@ -7,6 +7,7 @@ import { rmSync } from 'node:fs';
 import { extractBundle, inspectBundle, type BundleManifest } from './bundle.ts';
 import { bundlePath, stageFile, stagedCopy } from './staging.ts';
 import { checkSources, isCritical, parseCatalogId, parseDiskChange, parseSimulation, parseUpgradable, ServiceError, type Plan } from './apt.ts';
+import { debFieldsUnprivileged, type Unprivileged } from './untrusted.ts';
 
 export type Source = 'apt' | 'flatpak';
 export interface RunResult { code: number; stdout: string; stderr: string }
@@ -32,6 +33,8 @@ export interface Env {
   bundleRoots?: string[];
   /** Release keys, device arch and installed OS version for offline bundles (WSOS-AUP-010). */
   release?: { keys(id: string): KeyObject | undefined; arch: string; installed(): string };
+  /** WSOS-SEC-005: account untrusted files are parsed as (default nobody/nogroup). */
+  unprivileged?: Unprivileged;
   /** Backoff between download attempts (tests make it instant). */
   sleep?(ms: number): Promise<void>;
 }
@@ -178,7 +181,8 @@ export class PackageService extends EventEmitter {
   }
 
   private async inspectLocalDeb(path: string, token: string): Promise<LocalDebPreview> {
-    const f = await this.env.runner.run('dpkg-deb', ['--field', path, 'Package', 'Version', 'Architecture', 'Maintainer', 'Description']);
+    // WSOS-SEC-005: parsed as nobody first; apt only sees a file that is a well-formed package.
+    const f = await debFieldsUnprivileged(this.env.runner, path, ['Package', 'Version', 'Architecture', 'Maintainer', 'Description'], this.env.unprivileged);
     if (f.code !== 0) throw new ServiceError('InvalidArgs', 'not a valid Debian package');
     const field = (k: string) => new RegExp(`^${k}: (.*)$`, 'm').exec(f.stdout)?.[1]?.trim() ?? '';
     const pkg = field('Package');

@@ -8,7 +8,7 @@ import { KeyboardPanel, TouchPanel } from '../screens/settings/Touch'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const base: TouchState = {
-  devices: [], settings: { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium' },
+  devices: [], settings: { touchEnabled: true, mapToOutput: {}, tabletMode: 'auto', rotationLock: false, osk: 'touch', oskSize: 'medium', calibration: {} },
   tabletSwitch: false, touchMode: false, orientation: null, hasAccelerometer: false, osk: { available: true, visible: false }, outputs: ['eDP-1'],
 }
 function fakeApi(st: TouchState): TouchApi & { set: ReturnType<typeof vi.fn> } {

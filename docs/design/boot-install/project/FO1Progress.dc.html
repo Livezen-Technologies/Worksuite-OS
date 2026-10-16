@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File operations · progress</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button{font-family:inherit} button:focus-visible{outline:2px solid #18D4F0;outline-offset:2px} @keyframes stripe{to{background-position:28px 0}}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: linear-gradient(160deg, #12306B, #050E24)"><div aria-hidden="true" style="position: absolute; inset: 40px 60px; border-radius: 14px; background: #0E2048; border: 1px solid rgba(127,178,255,0.12); display: flex; overflow: hidden"><div style="width: 200px; background: #0A1A3D"></div><div style="flex: 1; padding: 70px 30px; display: grid; grid-template-columns: repeat(7, 1fr); gap: 26px; align-content: start"><span style="height: 80px; border-radius: 10px; background: rgba(127,178,255,0.08)"></span><span style="height: 80px; border-radius: 10px; background: rgba(127,178,255,0.08)"></span><span style="height: 80px; border-radius: 10px; background: rgba(127,178,255,0.08)"></span><span style="height: 80px; border-radius: 10px; background: rgba(127,178,255,0.08)"></span><span style="height: 80px; border-radius: 10px; background: rgba(127,178,255,0.08)"></span><span style="height: 80px; border-radius: 10px; background: rgba(127,178,255,0.08)"></span><span style="height: 80px; border-radius: 10px; background: rgba(127,178,255,0.08)"></span></div></div><div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(3,8,22,0.55)"></div>
+<section aria-label="File operations" style="position: absolute; border-radius: 16px; background: #10244F; border: 1px solid rgba(127,178,255,0.2); box-shadow: 0 30px 80px rgba(0,0,0,0.5); left: 50%; top: 50%; transform: translate(-50%,-50%); width: 620px">
+<header style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid rgba(127,178,255,0.12)"><span style="font-size: 15px; font-weight: 600; flex: 1">{{headline}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FA3C8">{{overall}}</span><button aria-label="Minimize to panel" style="all: unset; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #8FA3C8; cursor: pointer">—</button></header>
+<div style="display: flex; flex-direction: column">
+<sc-for list="{{jobs}}" as="j" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; border-bottom: 1px solid rgba(127,178,255,0.08)">
+<div style="display: flex; align-items: center; gap: 12px">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: {{j.iconBg}}; display: flex; align-items: center; justify-content: center; flex: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{j.col}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{j.icon}}"></path></svg></span>
+<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{j.title}}</span><span style="font-size: 12px; color: #8FA3C8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{j.route}}</span></span>
+<button onClick="{{j.toggle}}" aria-label="{{j.pauseLabel}}" title="{{j.pauseLabel}}" style="all: unset; width: 32px; height: 32px; border-radius: 8px; border: 1px solid rgba(127,178,255,0.2); display: flex; align-items: center; justify-content: center; cursor: pointer; visibility: {{j.ctlVis}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="#C9D6EE" aria-hidden="true"><path d="{{j.pauseIcon}}"></path></svg></button>
+<button aria-label="Cancel" title="Cancel" style="all: unset; width: 32px; height: 32px; border-radius: 8px; border: 1px solid rgba(127,178,255,0.2); display: flex; align-items: center; justify-content: center; cursor: pointer; visibility: {{j.ctlVis}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9D6EE" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+<div role="progressbar" aria-valuenow="{{j.pct}}" aria-valuemin="0" aria-valuemax="100" style="height: 6px; border-radius: 3px; background: rgba(127,178,255,0.12); overflow: hidden"><div style="height: 100%; width: {{j.w}}; border-radius: 3px; background: {{j.bar}}; background-size: 28px 6px; animation: {{j.anim}}"></div></div>
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #8FA3C8; font-family: 'IBM Plex Mono', monospace"><span>{{j.left}}</span><span style="color: {{j.stateCol}}">{{j.right}}</span></div>
+</div>
+</sc-for>
+</div>
+<sc-if value="{{showDetail}}" hint-placeholder-val="{{true}}">
+<div style="padding: 14px 20px; display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 12px; background: rgba(4,10,26,0.35)">
+<span style="color: #8FA3C8">Now copying</span><span style="font-family: 'IBM Plex Mono', monospace">IMG_2041.HEIC · 4.2 MB</span>
+<span style="color: #8FA3C8">Speed</span><span style="font-family: 'IBM Plex Mono', monospace">86 MB/s <span style="color: #5E739C">▁▃▅▆▅▇▆▅</span></span>
+<span style="color: #8FA3C8">Destination</span><span>USB drive “KINGSTON” · 21.4 GB free</span>
+</div>
+</sc-if>
+<footer style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px"><button onClick="{{toggleDetail}}" style="all: unset; font-size: 13px; color: #7FB2FF; cursor: pointer">{{detailLabel}}</button><label style="display: flex; gap: 8px; align-items: center; font-size: 12px; color: #8FA3C8"><input type="checkbox" checked style="accent-color: #1F6BFF">Notify me when done</label></footer>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p){super(p);this.state={paused:{},detail:true};}
+  renderVals(){
+    const {paused,detail}=this.state;
+    const J=[
+      {k:'c',title:'Copying 248 items',route:'Pictures/Trip 2026 → KINGSTON/Backup',pct:64,left:'2.1 GB of 3.3 GB · 182 of 248',eta:'About 14 s left',icon:'M8 8h11v11H8zM5 16V5h11',col:'#7FB2FF',bg:'rgba(31,107,255,0.2)',bar:'#1F6BFF'},
+      {k:'m',title:'Moving “Invoices Q3”',route:'Downloads → Documents/Finance',pct:30,left:'Waiting · same drive, instant after copy finishes',eta:'Queued',icon:'M4 12h14M13 6l6 6-6 6',col:'#18D4F0',bg:'rgba(24,212,240,0.16)',bar:'#18D4F0',queued:true},
+      {k:'d',title:'Deleting 1,204 items permanently',route:'Trash',pct:100,left:'1,204 items · 812 MB freed',eta:'Done',icon:'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',col:'#5FD39A',bg:'rgba(95,211,154,0.14)',bar:'#5FD39A',done:true}];
+    const jobs=J.map(j=>{const p=!!paused[j.k];return {...j,iconBg:j.bg,w:j.pct+'%',
+      bar:p?'#FFB98A':j.queued?'repeating-linear-gradient(45deg,rgba(24,212,240,.5) 0 7px,rgba(24,212,240,.2) 7px 14px)':j.bar,
+      anim:j.queued&&!p?'stripe 0.8s linear infinite':'none',right:p?'Paused':j.eta,stateCol:p?'#FFB98A':j.done?'#5FD39A':'#C9D6EE',
+      ctlVis:j.done?'hidden':'visible',pauseLabel:p?'Resume':'Pause',pauseIcon:p?'M7 5l12 7-12 7z':'M7 5h4v14H7zM13 5h4v14h-4z',
+      toggle:()=>this.setState({paused:{...paused,[j.k]:!p}})};});
+    const active=J.filter(j=>!j.done).length;
+    return {jobs,headline:active+' operations in progress',overall:'47% overall',showDetail:detail,detailLabel:detail?'Hide details':'Show details',toggleDetail:()=>this.setState({detail:!detail})};
+  }
+}
+</script>
+</body>
+</html>

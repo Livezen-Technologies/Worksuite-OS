@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Desktop · touch mode</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0} button{font-family:inherit} button:focus-visible{outline:2px solid #18D4F0;outline-offset:2px} @keyframes ripple{0%{transform:scale(.4);opacity:.9}100%{transform:scale(1.8);opacity:0}}</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #E8EEFA; background: radial-gradient(ellipse 80% 70% at 30% 20%, #1F4FB8 0%, #0A1A3D 60%, #050E24 100%)">
+<div style="position: absolute; top: 0; left: 0; right: 0; height: 40px; display: flex; align-items: center; padding: 0 24px; gap: 16px; font-size: 14px; font-weight: 500"><span>9:41</span><span style="flex: 1; text-align: center; color: #C9D6EE; font-size: 13px">Fri 16 Oct</span><span aria-label="Wi-Fi, battery 82%">◉ 82%</span></div>
+<div style="position: absolute; left: 50%; top: 4px; transform: translateX(-50%); width: 120px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.35)" aria-hidden="true"></div>
+<sc-if value="{{grid}}" hint-placeholder-val="{{true}}">
+<div style="position: absolute; top: 76px; left: 50%; transform: translateX(-50%); width: 980px; display: flex; flex-direction: column; gap: 26px">
+<div style="height: 56px; border-radius: 28px; background: rgba(255,255,255,0.12); display: flex; align-items: center; gap: 12px; padding: 0 22px; font-size: 17px; color: #C9D6EE"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9D6EE" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>Search apps, files, WorkSuite</div>
+<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 26px 18px">
+<sc-for list="{{apps}}" as="a" hint-placeholder-count="12"><button style="all: unset; display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer"><span style="width: 84px; height: 84px; border-radius: 24px; background: {{a.c}}; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; box-shadow: 0 10px 24px rgba(0,0,0,0.3)">{{a.i}}</span><span style="font-size: 14px">{{a.n}}</span></button></sc-for>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{kbd}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); width: 720px; border-radius: 16px; background: #10244F; border: 1px solid rgba(127,178,255,0.2); padding: 18px; display: flex; flex-direction: column; gap: 10px"><span style="font-size: 15px; font-weight: 600">New note</span><div style="height: 44px; border-radius: 10px; border: 2px solid #1F6BFF; display: flex; align-items: center; padding: 0 12px; font-size: 16px">Meeting with [Client]|</div></div>
+<div role="group" aria-label="On-screen keyboard" style="position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: rgba(7,19,48,0.96); border-top: 1px solid rgba(127,178,255,0.2); padding: 14px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; gap: 10px; justify-content: center; font-size: 14px; color: #C9D6EE; height: 26px"><span>with</span><span style="color: #7FB2FF; font-weight: 600">[Client]</span><span>tomorrow</span></div>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="4"><div style="display: flex; gap: 8px; justify-content: center"><sc-for list="{{r}}" as="k" hint-placeholder-count="10"><span style="height: 52px; min-width: {{k.w}}; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: {{k.bg}}; display: flex; align-items: center; justify-content: center; font-size: 19px">{{k.l}}</span></sc-for></div></sc-for>
+</div>
+</sc-if>
+<sc-if value="{{grid}}" hint-placeholder-val="{{true}}">
+<nav aria-label="Dock" style="position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); display: flex; gap: 14px; padding: 12px 18px; border-radius: 26px; background: rgba(14,32,72,0.75); border: 1px solid rgba(127,178,255,0.2); backdrop-filter: blur(20px)">
+<sc-for list="{{dock}}" as="a" hint-placeholder-count="6"><span style="width: 60px; height: 60px; border-radius: 18px; background: {{a.c}}; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700">{{a.i}}</span></sc-for>
+<span style="width: 1px; background: rgba(127,178,255,0.25)"></span>
+<button aria-label="Keyboard" onClick="{{showKbd}}" style="all: unset; width: 60px; height: 60px; border-radius: 18px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer">⌨</button>
+</nav>
+<div aria-hidden="true" style="position: absolute; right: 60px; bottom: 140px; width: 70px; height: 70px"><span style="position: absolute; inset: 0; border-radius: 50%; border: 3px solid #18D4F0; animation: ripple 1.4s ease-out infinite"></span><span style="position: absolute; inset: 24px; border-radius: 50%; background: rgba(24,212,240,0.6)"></span></div>
+</sc-if>
+<button onClick="{{toggle}}" style="all: unset; position: absolute; top: 52px; right: 24px; padding: 10px 16px; border-radius: 999px; background: rgba(31,107,255,0.3); border: 1px solid #1F6BFF; font-size: 13px; cursor: pointer; z-index: 2">{{toggleLabel}}</button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p){super(p);this.state={kbd:false};}
+  renderVals(){
+    const k=this.state.kbd;
+    const A=[['Files','F','#1F6BFF'],['Browser','B','#0E8FA8'],['Mail','M','#D9452B'],['Calendar','16','#7A4FE0'],['Projects','P','#2E9E6A'],['Invoices','₹','#B7791F'],['Clients','C','#1F6BFF'],['Docs','D','#0E8FA8'],['Sheets','S','#2E9E6A'],['Chat','💬','#7A4FE0'],['Settings','⚙','#5E739C'],['App Center','A','#D9572B']];
+    const key=(l,w,bg)=>({l,w:w||'64px',bg:bg||'rgba(127,178,255,0.14)'}), dk='rgba(127,178,255,0.06)';
+    return {kbd:k,grid:!k,apps:A.map(a=>({n:a[0],i:a[1],c:a[2]})),dock:A.slice(0,6).map(a=>({i:a[1],c:a[2]})),
+      rows:['qwertyuiop','asdfghjkl'].map(r=>r.split('').map(c=>key(c))).concat([[key('⇧','96px',dk)].concat('zxcvbnm'.split('').map(c=>key(c)),[key('⌫','96px',dk)]),[key('123','96px',dk),key('🌐','64px',dk),key('space','420px'),key('.'),key('↵','128px','#1F6BFF')]]),
+      showKbd:()=>this.setState({kbd:true}),toggle:()=>this.setState({kbd:!k}),toggleLabel:k?'Show app grid':'Tap a text field →'};
+  }
+}
+</script>
+</body>
+</html>

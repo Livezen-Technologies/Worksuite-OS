@@ -6,6 +6,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Exec } from './system'
+import { xdgDirs } from './xdgDirs'
 
 export interface CpuStat { total: number; idle: number; cores: number }
 export interface MemStat { total: number; available: number }
@@ -264,7 +265,7 @@ export function parseAutostart(files: { dir: 'user' | 'system'; name: string; te
 
 export function readAutostart(home: string): StartupEntry[] {
   const files: { dir: 'user' | 'system'; name: string; text: string }[] = []
-  for (const [dir, path] of [['system', '/etc/xdg/autostart'], ['user', join(home, '.config', 'autostart')]] as const) {
+  for (const [dir, path] of [['system', '/etc/xdg/autostart'], ['user', join(xdgDirs(home).config, 'autostart')]] as const) {
     let names: string[] = []
     try { names = readdirSync(path).filter((n) => n.endsWith('.desktop')) } catch { continue }
     for (const name of names) { try { files.push({ dir, name, text: readFileSync(join(path, name), 'utf8') }) } catch { /* unreadable */ } }

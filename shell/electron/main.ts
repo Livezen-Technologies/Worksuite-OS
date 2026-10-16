@@ -26,11 +26,12 @@ import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { archiveJobs, listIn, locate } from './archives'
 import { defaultEnv, driveDir, dropPlan, freeBytes, list, resolveIn, roots } from './files'
-import { eject, jobs as fileJobs, mkdirIn, places, recent, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
+import { eject, jobs as fileJobs, mkdirIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel } from './panelHost'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
+import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
@@ -41,6 +42,7 @@ import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
 import { externalAllowed, loadGrants, permissionAllowed, shellWebPreferences } from './webSecurity'
+import { xdgDirs } from './xdgDirs'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 // URL scheme allow-list, renderer prefs and per-origin permission grants: ./webSecurity (WSOS-SEC-001/003/006).
@@ -193,7 +195,7 @@ app.whenReady().then(() => {
     const home = app.getPath('home')
     let local: ReturnType<typeof localRecentHits> = []
     try {
-      const xbel = path.join(process.env.XDG_DATA_HOME || path.join(home, '.local/share'), 'recently-used.xbel')
+      const xbel = path.join(xdgDirs(home).data, 'recently-used.xbel')
       local = localRecentHits(parseXbel(readFileSync(xbel, 'utf8')).filter((r) => existsSync(r.path)), home)
     } catch { /* no history yet */ }
     const cloud = await searcher.recent().catch(() => ({ state: 'offline' as const, hits: [] }))
@@ -304,6 +306,7 @@ app.whenReady().then(() => {
   handle('ws:signinKeyRemove', (id) => signin.keyRemove(id))
   handle('ws:signinSetDefault', (m) => ['password', 'pin', 'key'].includes(m) ? signin.setDefault(m as SignInMethod) : { ok: false, error: 'bad_method' })
   handle('ws:pkgRepair', () => pkg.repair())
+  handle('ws:pkgState', () => pkg.serviceState())
   handle('ws:pkgCatalog', () => pkg.catalog())
   // Files for local installs come only from the user's own choice in a file dialog: the renderer gets an opaque
   // handle, never the ability to name a path (WSOS-APT-005, WSOS-AIM-001, WSOS-AUP-010).
@@ -320,6 +323,29 @@ app.whenReady().then(() => {
     const handleId = `${kind}:${picked.size + 1}:${Date.now()}`
     picked.set(handleId, r.filePaths[0])
     return { ok: true, value: { handle: handleId, name: path.basename(r.filePaths[0]) } }
+  })
+  // §11.6-d Report a problem: collected only when asked, reviewed by the person, then saved or sent.
+  const reports = new Map<string, ProblemReport>()
+  handle('ws:reportCollect', async () => {
+    const r = await collectReport({ exec: realExec, readFile: (p) => { try { return readFileSync(p, 'utf8') } catch { return null } }, home: app.getPath('home') })
+    reports.clear(); reports.set(r.id, r)
+    return { ok: true, value: r }
+  })
+  const finalOf = (id: string, keep: string, desc: string) => { const r = reports.get(id); return r ? finalReport(r, keep.split(',').filter(Boolean), desc) : null }
+  handle('ws:reportSave', async (id, keep, desc) => {
+    const f = finalOf(id, keep, desc)
+    if (!f || !win) return { ok: false, error: 'invalid_argument' }
+    const d = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('documents'), `worksuite-problem-report-${f.created_at.slice(0, 10)}.txt`) })
+    if (d.canceled || !d.filePath) return { ok: false, error: 'cancelled' }
+    try { writeFileSync(d.filePath, reportText(f), { mode: 0o600 }) } catch { return { ok: false, error: 'failed' } }
+    return { ok: true, value: d.filePath }
+  })
+  handle('ws:reportSend', async (id, keep, desc) => {
+    const f = finalOf(id, keep, desc)
+    if (!f) return { ok: false, error: 'invalid_argument' }
+    const s = await loadSession(brokerFn, (url, init) => fetch(url, { headers: init?.headers }), () => deviceCredential())
+    const r = await sendReport(f, s.ok ? s.value : null, (url, init) => fetch(url, init), deviceCredential())
+    return r.ok ? { ok: true, value: f.id } : (!s.ok && s.error !== 'not_signed_in' ? { ok: false, error: s.error } : r)
   })
   const pickedPath = (h: string, kind: string) => (h.startsWith(`${kind}:`) ? picked.get(h) ?? null : null)
   const noFile = { ok: false, error: 'invalid_argument' }
@@ -433,6 +459,7 @@ app.whenReady().then(() => {
   handle('ws:filesMkdir', (root, rel, name) => mkdirIn(files, root, rel, name))
   handle('ws:filesRename', (root, rel, name) => renameIn(files, root, rel, name))
   handle('ws:filesTrash', (root, rels) => trash(files, root, strs(rels)))
+  handle('ws:filesDelete', (root, rels) => removeIn(files, root, strs(rels)))
   handle('ws:filesTrashList', () => trashList(files))
   handle('ws:filesTrashRestore', (ids) => trashRestore(files, strs(ids)))
   handle('ws:filesTrashDelete', (ids) => trashDelete(files, ids === 'all' ? 'all' : strs(ids)))
@@ -470,7 +497,7 @@ app.whenReady().then(() => {
   // and re-applied at login and on hotplug, which also re-plans the per-monitor windows (DSK-005/007).
   const displays = displayManager({
     exec: realExec,
-    storeFile: path.join(app.getPath('home'), '.config', 'worksuite', 'displays.json'),
+    storeFile: path.join(xdgDirs(app.getPath('home')).config, 'worksuite', 'displays.json'),
     spawn: (cmd, args) => { const p = spawn(cmd, args, { stdio: 'ignore' }); p.on('error', () => undefined); return { kill: () => p.kill() } },
     onChange: (st: DisplayState) => { broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)) },
   })
@@ -496,7 +523,9 @@ app.whenReady().then(() => {
   startPeripheralsHost(handle, app.getPath('home'))
   startTouchHost(handle, broadcast, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
-  startNotifications(handle, broadcast)
+  const notices = startNotifications(handle, broadcast)
+  // Files' "Notify me when done" (FO1): a notice in the shell's own notification centre, text only.
+  handle('ws:filesNotify', (summary, body) => notices.notify('Files', 0, String(summary).slice(0, 200), String(body).slice(0, 400), [], 1))
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
   startPolkitBridge(handle, broadcast)
 })

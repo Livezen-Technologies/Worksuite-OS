@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { DesktopEntry } from './xdg'
+import { xdgDirs } from './xdgDirs'
 
 export interface Category { id: string; mimes: string[] }
 
@@ -76,9 +77,9 @@ export function setDefaults(text: string, mimes: string[], desktopFile: string):
  */
 export function lookupFiles(env: NodeJS.ProcessEnv = process.env): string[] {
   const home = env.HOME || '/'
-  const configHome = env.XDG_CONFIG_HOME || path.join(home, '.config')
+  const configHome = xdgDirs(home, env).config
   const configDirs = (env.XDG_CONFIG_DIRS || '/etc/xdg').split(':').filter(Boolean)
-  const dataHome = env.XDG_DATA_HOME || path.join(home, '.local/share')
+  const dataHome = xdgDirs(home, env).data
   const dataDirs = (env.XDG_DATA_DIRS || '/usr/local/share:/usr/share').split(':').filter(Boolean)
   const desktops = (env.XDG_CURRENT_DESKTOP || '').split(':').filter(Boolean).map((d) => d.toLowerCase())
   const names = [...desktops.map((d) => `${d}-mimeapps.list`), 'mimeapps.list']
@@ -122,7 +123,7 @@ export function setDefaultApp(category: string, id: string, entries: DesktopEntr
   const c = CATEGORIES.find((x) => x.id === category)
   if (!c || !DESKTOP_ID.test(id)) return { ok: false, error: 'invalid_argument' }
   if (!entries.some((e) => e.id === id && e.mime_types.includes(c.mimes[0]))) return { ok: false, error: 'not_a_candidate' }
-  const configHome = env.XDG_CONFIG_HOME || path.join(env.HOME || '/', '.config')
+  const configHome = xdgDirs(env.HOME || '/', env).config
   const desktops = (env.XDG_CURRENT_DESKTOP || '').split(':').filter(Boolean).map((d) => `${d.toLowerCase()}-mimeapps.list`)
   try {
     mkdirSync(configHome, { recursive: true })

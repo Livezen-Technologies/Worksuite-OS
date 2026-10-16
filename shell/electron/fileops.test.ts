@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { freeName, jobs, mkdirIn, recent, renameIn, search, setStar, starredHits, trash, trashDelete, trashList, trashRestore, type JobEvent } from './fileops'
+import { errCode, freeName, jobs, mkdirIn, removeIn, recent, renameIn, search, setStar, starredHits, trash, trashDelete, trashList, trashRestore, type JobEvent } from './fileops'
 
 describe('fileops', () => {
   let home: string
@@ -33,7 +33,7 @@ describe('fileops', () => {
   })
 
   it('moves to the freedesktop Trash, lists, restores and deletes', async () => {
-    expect(await trash(env(), 'home', ['Documents/notes.md', 'Documents/Projects'])).toEqual({ ok: true, value: 2 })
+    expect(await trash(env(), 'home', ['Documents/notes.md', 'Documents/Projects'])).toEqual({ ok: true, value: { count: 2, ids: ['notes.md', 'Projects'] } })
     expect(existsSync(path.join(home, 'Documents', 'notes.md'))).toBe(false)
     const items = await trashList(env())
     expect(items.map((i) => [i.name, i.where, i.dir]).sort()).toEqual([['Projects', '~/Documents', true], ['notes.md', '~/Documents', false]])
@@ -69,5 +69,46 @@ describe('fileops', () => {
     expect(readFileSync(path.join(home, 'Backup', 'Budget 2027.xlsx'), 'utf8')).toBe('old')
     expect(readFileSync(path.join(home, 'Backup', 'Budget 2027 (2).xlsx'), 'utf8')).toBe('new!')
     expect(events.at(-1)).toMatchObject({ state: 'done', done: 2, total: 2 })
+  })
+
+  it('pauses and resumes a job, and reports the source, free space and the file being copied', async () => {
+    const events: JobEvent[] = []
+    let paused = false
+    const done = new Promise<void>((resolve) => {
+      const j = jobs(env(), (e) => {
+        events.push(e)
+        if (e.state === 'conflict') j.resolve(e.id, 'skip', false)
+        if (e.state === 'paused' && !paused) { paused = true; setTimeout(() => j.resolve(e.id, 'resume', false), 20) }
+        if (e.state === 'done') resolve()
+      })
+      const r = j.start('copy', 'home', ['Documents/Budget 2027.xlsx', 'Documents/notes.md'], 'home', 'Backup')
+      if (r.ok) j.resolve(r.value, 'pause', false)
+    })
+    await done
+    expect(paused).toBe(true)
+    expect(events[0]).toMatchObject({ src: '~/Documents', dest: '~/Backup', error: null })
+    expect(typeof events[0].free).toBe('number')
+    expect(events.at(-1)).toMatchObject({ state: 'done', current: null })
+    expect(readFileSync(path.join(home, 'Backup', 'notes.md'), 'utf8')).toBeTruthy()
+  })
+
+  it('cancels a paused job', async () => {
+    const last = await new Promise<JobEvent>((resolve) => {
+      const j = jobs(env(), (e) => { if (e.state === 'paused') j.resolve(e.id, 'cancel', false); if (e.state === 'cancelled') resolve(e) })
+      const r = j.start('copy', 'home', ['Documents/notes.md'], 'home', 'Backup')
+      if (r.ok) j.resolve(r.value, 'pause', false)
+    })
+    expect(last.state).toBe('cancelled')
+  })
+
+  it('deletes permanently inside a root only', async () => {
+    expect(await removeIn(env(), 'home', ['Documents/notes.md'])).toEqual({ ok: true, value: 1 })
+    expect(existsSync(path.join(home, 'Documents/notes.md'))).toBe(false)
+    expect(await removeIn(env(), 'home', ['../../etc/passwd', ''])).toEqual({ ok: false, error: 'not_found' })
+  })
+
+  it('maps errno codes to the reasons Files explains', () => {
+    const e = (code: string) => Object.assign(new Error(code), { code })
+    expect(['ENOSPC', 'EACCES', 'EROFS', 'EIO', 'EBUSY', 'ENOENT', 'EXDEV'].map((c) => errCode(e(c)))).toEqual(['no_space', 'permission', 'permission', 'io', 'busy', 'missing', 'failed'])
   })
 })

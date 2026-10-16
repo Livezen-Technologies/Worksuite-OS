@@ -70,7 +70,11 @@ export interface WorkSuiteApi {
   filesMkdir(root: string, rel: string, name: string): Promise<CloudResult<string>>
   filesRename(root: string, rel: string, name: string): Promise<CloudResult<string>>
   /** Move to the freedesktop.org Trash. */
-  filesTrash(root: string, rels: string[]): Promise<CloudResult<number>>
+  filesTrash(root: string, rels: string[]): Promise<CloudResult<{ count: number; ids: string[] }>>
+  /** Shift+Delete: remove for good, skipping the Trash (FO3). */
+  filesDelete(root: string, rels: string[]): Promise<CloudResult<number>>
+  /** "Notify me when done" (FO1): a text notice in the shell's notification centre. */
+  filesNotify(summary: string, body: string): Promise<unknown>
   filesTrashList(): Promise<TrashItem[]>
   filesTrashRestore(ids: string[]): Promise<CloudResult<{ restored: number; skipped: number }>>
   filesTrashDelete(ids: string[] | 'all'): Promise<CloudResult<number>>
@@ -81,7 +85,8 @@ export interface WorkSuiteApi {
   filesStartDrag(root: string, rels: string[]): Promise<CloudResult<number>>
   pathForFile(f: File): string
   filesPaste(op: 'copy' | 'move' | 'duplicate', srcRoot: string, rels: string[], dstRoot: string, dstRel: string): Promise<CloudResult<string>>
-  filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel' | 'continue', all: boolean): Promise<CloudResult<true>>
+  /** Answer a job: conflict (replace/skip/keep), error (retry/skip), pause/resume (copy and move), or cancel. */
+  filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel' | 'continue' | 'retry' | 'pause' | 'resume', all: boolean): Promise<CloudResult<true>>
   /** Start a compress job (zip / 7z / tar.gz / tar.xz; a password for zip and 7z only); progress arrives through onFilesJob. */
   filesCompress(root: string, rels: string[], opts: CompressOptions): Promise<CloudResult<string>>
   /** Start an extract job: "here" or into "<name>/", all entries or the given ones. */
@@ -112,6 +117,12 @@ export interface WorkSuiteApi {
   signinSetDefault(method: SignInMethod): Promise<SigninResult>
   /** Package repair (§9.2): finishes interrupted dpkg/apt changes; result arrives through onPkgJob. */
   pkgRepair(): Promise<CloudResult<string>>
+  /** WSOS-APT-006: package service state; 'interrupted' means an interrupted dpkg run needs Repair. */
+  pkgState(): Promise<CloudResult<'idle' | 'busy' | 'interrupted'>>
+  /** §11.6-d Report a problem: collect (nothing leaves the computer), then save or send only the sections kept. */
+  reportCollect(): Promise<CloudResult<ProblemReport>>
+  reportSave(id: string, keep: string[], description: string): Promise<CloudResult<string>>
+  reportSend(id: string, keep: string[], description: string): Promise<CloudResult<string>>
   /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
   pkgCatalog(): Promise<CloudResult<AppCatalog>>
   /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
@@ -259,9 +270,13 @@ export interface FileHit { root: string; rel: string; name: string; dir: boolean
 export interface TrashItem { id: string; name: string; dir: boolean; size: number; orig: string; where: string; deleted: number | null }
 export interface FileStamp { size: number; modified: number }
 export interface FileJob {
-  id: string; op: 'copy' | 'move' | 'compress' | 'extract'; dest: string; state: 'running' | 'conflict' | 'password' | 'confirm' | 'done' | 'failed' | 'cancelled'
+  id: string; op: 'copy' | 'move' | 'compress' | 'extract'; dest: string; state: 'running' | 'paused' | 'conflict' | 'error' | 'password' | 'confirm' | 'done' | 'failed' | 'cancelled'
   done: number; total: number; bytes_done: number; bytes_total: number
-  conflict: { name: string; incoming: FileStamp; existing: FileStamp; remaining: number } | null
+  conflict: { name: string; incoming: FileStamp; existing: FileStamp; remaining: number; index?: number; count?: number } | null
+  /** Copy and move: source folder (display form), the file being copied now, the destination's free bytes, start time. */
+  src?: string; current?: string | null; free?: number | null; started?: number
+  /** state 'error': no_space | permission | io | busy | missing | failed, and the file it stopped at. */
+  error_name?: string | null
   /** Archive jobs: the archive's name, the prompt's details and why it failed. */
   name?: string; ask?: { wrong?: boolean; bytes?: number | null; ratio?: number | null } | null; error?: string | null
 }
@@ -271,6 +286,8 @@ export interface ArchiveEntry { path: string; type: 'file' | 'dir' | 'symlink' |
 export interface ArchiveListing { kind: string; entries: ArchiveEntry[]; encrypted: boolean; total: number | null; packed: number }
 /** state: Drive sync state (WSOS-DRV-002), "folder", "local" outside Drive, or "unknown" when sync isn't running. */
 export interface FileEntry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean; items?: number | null }
+export type ReportSectionId = 'system' | 'services' | 'session_services' | 'session_log' | 'system_log' | 'packages'
+export interface ProblemReport { id: string; created_at: string; sections: { id: ReportSectionId; text: string; available: boolean }[] }
 export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; percent?: number; phase?: string; result?: string; error?: string }
 
 export function formatBytes(n: number | null): string {
@@ -301,6 +318,8 @@ export interface DevicePolicies {
   lock_timeout_max_s: number | null; offline_access_days: number | null; usb_storage: string | null; bluetooth: boolean | null
   app_allowlist_size: number
 }
+export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
+export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean }
 export interface DeviceInfo {
   agent: boolean
   device: { hostname: string; os_version: string; arch: string; kernel_version: string; encrypted: boolean | null } | null
@@ -309,6 +328,8 @@ export interface DeviceInfo {
   server: string | null
   last_check_in: number | null
   policies: DevicePolicies | null
+  /** Settings › Managed › Kiosk mode: this device's kiosk as the policy sets it (never the exit PIN); null = not a kiosk. */
+  kiosk?: KioskSummary | null
   /** WSOS-IDN-004: provisioning requires enrollment (and so a connection) before first use. */
   provisioning?: { require_enrollment: boolean; server: string | null }
 }
@@ -466,7 +487,9 @@ const stub: WorkSuiteApi = {
   },
   async filesMkdir(_r, rel, name) { return { ok: true, value: rel ? `${rel}/${name}` : name } },
   async filesRename(_r, rel, name) { return { ok: true, value: name || rel } },
-  async filesTrash(_r, rels) { return { ok: true, value: rels.length } },
+  async filesTrash(_r, rels) { return { ok: true, value: { count: rels.length, ids: rels.map((r) => r.split('/').pop()!) } } },
+  async filesDelete(_r, rels) { return { ok: true, value: rels.length } },
+  async filesNotify() { return true },
   async filesTrashList() {
     const d = (days: number) => Date.now() - days * 86_400_000
     return [['Old logo.png', '~/Pictures', 0, 640_000], ['Draft v1.docx', '~/Documents/Projects', 1, 312_000], ['Invoice copy.pdf', '~/Downloads', 9, 220_000]]
@@ -478,13 +501,31 @@ const stub: WorkSuiteApi = {
   async filesStartDrag() { return { ok: false, error: 'unavailable' } },
   pathForFile() { return '' },
   async filesPaste(op, _s, rels, dstRoot) {
-    // Preview: a copy that stops on one conflict, like the real job service.
-    const base: FileJob = { id: 'stubjob', op: op === 'move' ? 'move' : 'copy', dest: dstRoot.startsWith('media:') ? dstRoot.slice(6) : '~', state: 'running', done: 0, total: rels.length, bytes_done: 0, bytes_total: rels.length * 2_400_000, conflict: null }
-    setTimeout(() => stubFileJobs.forEach((l) => l({ ...base, state: 'conflict', conflict: { name: rels[0].split('/').pop()!, incoming: { size: 2_400_000, modified: Date.now() - 600_000 }, existing: { size: 2_100_000, modified: Date.now() - 12 * 86_400_000 }, remaining: rels.length - 1 } })), 50)
-    return { ok: true, value: base.id }
+    // Preview: a job that stops on one conflict, then runs to the end; Pause holds it, like the real job service.
+    const id = `stubjob${++stubJobSeq}`
+    const total = rels.length, bytes = rels.length * 2_400_000
+    const base: FileJob = { id, op: op === 'move' ? 'move' : 'copy', dest: dstRoot.startsWith('media:') ? dstRoot.slice(6) : '~/Documents', state: 'running', done: 0, total, bytes_done: 0, bytes_total: bytes, conflict: null,
+      src: '~/Documents', current: rels[0].split('/').pop()!, free: 21_400_000_000, started: Date.now(), error: null, error_name: null }
+    stubJobs.set(id, { job: base, paused: false, step: 0 })
+    setTimeout(() => stubEmit({ ...base, state: 'conflict', conflict: { name: rels[0].split('/').pop()!, incoming: { size: 2_400_000, modified: Date.now() - 600_000 }, existing: { size: 2_100_000, modified: Date.now() - 12 * 86_400_000 }, remaining: rels.length - 1, index: 1, count: rels.length } }), 50)
+    return { ok: true, value: id }
   },
   async filesResolve(id, r) {
-    stubFileJobs.forEach((l) => l({ id, op: 'copy', dest: 'KINGSTON', state: r === 'cancel' ? 'cancelled' : 'done', done: 1, total: 1, bytes_done: 2_400_000, bytes_total: 2_400_000, conflict: null }))
+    const s = stubJobs.get(id)
+    if (!s) return { ok: false, error: 'not_found' }
+    if (r === 'cancel') { stubJobs.delete(id); stubEmit({ ...s.job, state: 'cancelled' }); return { ok: true, value: true } }
+    if (r === 'pause') { s.paused = true; stubEmit({ ...s.job, state: 'paused' }); return { ok: true, value: true } }
+    s.paused = false
+    const tick = () => {
+      const cur = stubJobs.get(id)
+      if (!cur || cur.paused) return
+      cur.step++
+      const f = Math.min(1, cur.step / 20)
+      cur.job = { ...cur.job, state: f >= 1 ? 'done' : 'running', conflict: null, done: Math.round(cur.job.total * f), bytes_done: Math.round(cur.job.bytes_total * f), current: f >= 1 ? null : cur.job.current }
+      stubEmit(cur.job)
+      if (f < 1) setTimeout(tick, 300); else stubJobs.delete(id)
+    }
+    setTimeout(tick, 100)
     return { ok: true, value: true }
   },
   async filesCompress(_root, rels, o) {
@@ -518,6 +559,7 @@ const stub: WorkSuiteApi = {
       agent: true, managed: stubManaged, org_name: stubManaged ? 'Livezen Technologies' : null, server: stubManaged ? 'work.livezentech.com' : null, last_check_in: stubManaged ? Date.now() - 4 * 60_000 : null,
       device: { hostname: 'LZT-LAP-0142', os_version: 'WorkSuite OS 1.0 (preview)', arch: 'amd64', kernel_version: '6.12', encrypted: true },
       policies: !stubManaged ? null : { version: 'preview', update_ring: 'pilot', update_mode: 'automatic', maintenance_window: '02:00-04:00', lock_timeout_max_s: 300, offline_access_days: 7, usb_storage: 'read_only', bluetooth: null, app_allowlist_size: 42 },
+      kiosk: stubManaged && typeof location !== 'undefined' && new URLSearchParams(location.search).get('kiosk') === '1' ? { user: 'kiosk', app: { type: 'url', url: 'https://work.livezentech.com/reception' }, allowed_urls: ['https://work.livezentech.com/'], idle_reset_minutes: 2, show_on_screen_keyboard: true, exit_pin: true } : null,
     }
   },
   async cloudAccounts() { return { ok: true, value: stubAccounts } },
@@ -548,6 +590,11 @@ const stub: WorkSuiteApi = {
   async signinSetDefault(method) { previewSignin.default = method; return { ok: true } },
   async sysUsers() { return stubAvail({ current: 'preview', users: [{ login: 'preview', name: 'Preview User', uid: 1000, admin: true }, { login: 'second', name: 'Second User', uid: 1001, admin: false }] }) },
   async pkgRepair() { return stubJob('repair', 'repair') },
+  async pkgState() { return { ok: false, error: 'service_unavailable' } },
+  // Browser preview: no system to read, so no report (never sample logs).
+  async reportCollect() { return { ok: false, error: 'service_unavailable' } },
+  async reportSave() { return { ok: false, error: 'service_unavailable' } },
+  async reportSend() { return { ok: false, error: 'service_unavailable' } },
   // Browser preview: there is no package service or server here, so these answer honestly instead of inventing apps.
   async pkgCatalog() { return { ok: true, value: { state: 'not_enrolled', arch: 'amd64', items: [], error: 'Preview mode: no package service, so there is no app catalog.' } } },
   async pickFile() { return { ok: false, error: 'service_unavailable' } },
@@ -702,6 +749,9 @@ if (typeof window !== 'undefined') {
   if (k === 'forced') { setTimeout(() => setOs({ state: 'installing', reason: null, restart_at: null }), 600); setTimeout(() => emitJob(50, 'applying'), 800) }
   if (k === 'failed') { setTimeout(() => emitJob(50, 'applying'), 400); setTimeout(() => setOs({ state: 'failed', reason: 'dpkg: error processing package linux-image-6.12 (--configure)' }), 700) }
 }
+const stubJobs = new Map<string, { job: FileJob; paused: boolean; step: number }>()
+let stubJobSeq = 0
+const stubEmit = (e: FileJob) => stubFileJobs.forEach((l) => l(e))
 const stubFileJobs = new Set<(e: FileJob) => void>()
 function STUB_DOCS(): FileEntry[] {
   const day = 86_400_000, now = Date.now()
@@ -722,7 +772,7 @@ function stubJob(_id: string, _kind: string): CloudResult<string> {
 let stubUnsent = 3
 let stubPolls = 0
 // Preview only: unmanaged until enrolled (first-run or Settings).
-let stubManaged = false
+let stubManaged = typeof location !== 'undefined' && new URLSearchParams(location.search).get('managed') === '1'
 
 /** Broker error codes → text for the user. */
 export function cloudErrorText(code: string): string {
