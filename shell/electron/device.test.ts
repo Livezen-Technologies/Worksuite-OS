@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { deviceInfo, enrollDevice, type EnrollCall } from './device'
+import { deviceInfo, enrollDevice, hostSpecs, type EnrollCall } from './device'
 
 // A stand-in for the lk.worksuite.DeviceAgent1.Enroll call: records its arguments and answers as told.
 describe('enrollDevice (lk.worksuite.DeviceAgent1.Enroll, WSOS-ARC-002)', () => {
@@ -53,5 +53,15 @@ describe('deviceInfo', () => {
     writeFileSync(p, JSON.stringify({ require_enrollment: 'yes', server: 'http://insecure.example' }))
     expect(deviceInfo('/nonexistent/status.json', p).provisioning).toEqual({ require_enrollment: false, server: null })
     rmSync(dir, { recursive: true, force: true })
+  })
+})
+
+describe('Settings › About processor and memory', () => {
+  it('reports the CPU model, core count and memory', () => {
+    expect(hostSpecs(() => [{ model: ' Intel(R)  Core(TM) i5 ' }, { model: 'x' }], () => 8e9)).toEqual({ cpu_model: 'Intel(R) Core(TM) i5', cpu_cores: 2, memory_bytes: 8e9 })
+    expect(hostSpecs(() => { throw new Error('no /proc') }, () => 0)).toEqual({ cpu_model: null, cpu_cores: null, memory_bytes: null })
+  })
+  it('comes with deviceInfo', () => {
+    expect(deviceInfo('/nonexistent', '/nonexistent').specs.cpu_cores).toBeGreaterThan(0)
   })
 })

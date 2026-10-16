@@ -425,6 +425,7 @@ const en = {
   'settings.about.copied': 'Copied',
   'settings.about.copyInfo': 'Copy system info',
   'settings.about.cpu': 'Processor',
+  'settings.about.cores': '{count} cores',
   'settings.about.desktop': 'Desktop',
   'settings.about.freeHome': '{size} free in your home folder',
   'settings.about.storageUsed': '{used} of {total} used',

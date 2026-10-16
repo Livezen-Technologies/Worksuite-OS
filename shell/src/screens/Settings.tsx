@@ -510,7 +510,7 @@ function batteryText(b: BatteryState): string {
   return `${b.percentage == null ? '—' : `${formatNumber(b.percentage)}%`} · ${what}${eta ? ` · ${b.state === 'charging' ? t('settings.bat.toFull', { eta }) : t('settings.bat.left', { eta })}` : ''}`
 }
 
-/** SetAbout board. Processor and memory have no bridge source yet, so those tiles say so. */
+/** SetAbout board. Processor and memory come from the main process (DeviceInfo.specs). */
 function AboutPanel() {
   const { r: disks } = useAvail(os.sysDisks)
   const { r: battery } = useAvail(os.sysBattery, 60_000)
@@ -534,8 +534,8 @@ function AboutPanel() {
   const screen = displays.state === 'ok' ? displays.value.find((x) => x.enabled) ?? null : null
   const na = t('common.unavailable')
   const specs: { k: string; v: string; d: string; icon: string }[] = [
-    { k: t('settings.about.cpu'), v: na, d: t('settings.about.noSource'), icon: 'M7 7h10v10H7zM9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3' },
-    { k: t('settings.about.memory'), v: na, d: t('settings.about.noSource'), icon: 'M3 7h18v10H3zM7 11v2M11 11v2M15 11v2' },
+    { k: t('settings.about.cpu'), v: info.specs?.cpu_model ?? na, d: info.specs?.cpu_cores ? t('settings.about.cores', { count: formatNumber(info.specs.cpu_cores) }) : info.specs ? '' : t('settings.about.noSource'), icon: 'M7 7h10v10H7zM9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3' },
+    { k: t('settings.about.memory'), v: info.specs?.memory_bytes ? formatBytes(info.specs.memory_bytes) : na, d: info.specs ? '' : t('settings.about.noSource'), icon: 'M3 7h18v10H3zM7 11v2M11 11v2M15 11v2' },
     { k: t('settings.about.graphics'), v: gpus === null ? '…' : gpus[0] ?? na, d: gpus && gpus.length > 1 ? `+ ${gpus.slice(1).join(', ')}` : '', icon: 'M3 6h18v12H3zM7 10h4v4H7z' },
     { k: t('settings.nav.Display'), v: screen?.width && screen.height ? `${formatNumber(screen.width)} × ${formatNumber(screen.height)}` : displays.state === 'loading' ? '…' : na, d: screen ? [screen.refresh ? `${formatNumber(Math.round(screen.refresh))} Hz` : null, screen.scale ? `${formatNumber(Math.round(screen.scale * 100))}%` : null].filter(Boolean).join(' · ') || screen.description : '', icon: 'M3 4h18v12H3zM8 20h8M12 16v4' },
     { k: t('settings.about.desktop'), v: t('settings.about.shell'), d: t('settings.about.wayland'), icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
@@ -550,7 +550,7 @@ function AboutPanel() {
   const upToDate = status?.state === 'up_to_date'
   const copy = () => {
     const text = [`WorkSuite OS ${d?.os_version ?? ''}`.trim(), `${t('settings.about.name')}: ${d?.hostname ?? '—'}`, `${t('settings.about.kernel')}: ${d?.kernel_version ?? '—'} (${d?.arch ?? '—'})`,
-      ...specs.slice(2, 4).map((s) => `${s.k}: ${s.v}${s.d ? ` (${s.d})` : ''}`), `${t('settings.about.battery')}: ${battery.state === 'ok' ? batteryText(battery.value) : t('settings.about.noBattery')}`,
+      ...specs.slice(0, 4).map((s) => `${s.k}: ${s.v}${s.d ? ` (${s.d})` : ''}`), `${t('settings.about.battery')}: ${battery.state === 'ok' ? batteryText(battery.value) : t('settings.about.noBattery')}`,
       ...sec.map((s) => `${s.k}: ${s.v}`)].join('\n')
     void navigator.clipboard?.writeText(text).then(() => setCopied(true)).catch(() => {})
   }

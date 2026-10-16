@@ -34,7 +34,17 @@ export function provisioning(path = PROVISIONING_PATH): { require_enrollment: bo
 
 /** Device agent status file (0644, written by worksuite-device-agent); local facts if the agent isn't running. */
 export function deviceInfo(statusPath = STATUS_PATH, provisioningPath = PROVISIONING_PATH) {
-  return { ...agentInfo(statusPath), provisioning: provisioning(provisioningPath) }
+  return { ...agentInfo(statusPath), provisioning: provisioning(provisioningPath), specs: hostSpecs() }
+}
+
+/** Settings › About: processor and memory, from the main process (the renderer is sandboxed and can't read /proc). */
+export function hostSpecs(cpus: () => { model: string }[] = os.cpus, totalmem: () => number = os.totalmem) {
+  let list: { model: string }[] = []
+  try { list = cpus() } catch { /* not reported */ }
+  let mem: number | null = null
+  try { mem = totalmem() || null } catch { /* not reported */ }
+  const model = list[0]?.model.replace(/\s+/g, ' ').trim() || null
+  return { cpu_model: model, cpu_cores: list.length || null, memory_bytes: mem }
 }
 
 function agentInfo(statusPath: string) {

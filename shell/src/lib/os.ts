@@ -353,6 +353,8 @@ export interface DeviceInfo {
   kiosk?: KioskSummary | null
   /** WSOS-IDN-004: provisioning requires enrollment (and so a connection) before first use. */
   provisioning?: { require_enrollment: boolean; server: string | null }
+  /** Processor and memory (electron/device.ts hostSpecs). */
+  specs?: { cpu_model: string | null; cpu_cores: number | null; memory_bytes: number | null }
 }
 
 /** Taskbar chip text: null when the device isn't managed (WSOS-MDM-007). */

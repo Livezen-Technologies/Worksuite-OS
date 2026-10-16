@@ -195,6 +195,7 @@ const si: Partial<Record<MessageKey, string>> = {
   'settings.about.copied': 'පිටපත් කළා',
   'settings.about.copyInfo': 'පද්ධති තොරතුරු පිටපත් කරන්න',
   'settings.about.cpu': 'සකසනය',
+  'settings.about.cores': 'හර {count}',
   'settings.about.desktop': 'ඩෙස්ක්ටොප්',
   'settings.about.freeHome': 'ඔබේ නිවෙස් ෆෝල්ඩරයේ {size} නිදහස්',
   'settings.about.storageUsed': '{total} න් {used} භාවිතයේ',

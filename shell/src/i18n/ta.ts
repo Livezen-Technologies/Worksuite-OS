@@ -195,6 +195,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'settings.about.copied': 'நகலெடுக்கப்பட்டது',
   'settings.about.copyInfo': 'கணினித் தகவலை நகலெடு',
   'settings.about.cpu': 'செயலி',
+  'settings.about.cores': '{count} கோர்கள்',
   'settings.about.desktop': 'மேசைத்தளம்',
   'settings.about.freeHome': 'உங்கள் முகப்புக் கோப்புறையில் {size} காலி',
   'settings.about.storageUsed': '{total} இல் {used} பயன்படுத்தப்பட்டது',

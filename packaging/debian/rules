@@ -78,6 +78,8 @@ override_dh_auto_install:
 	install -D -m 0644 -t $$g branding/grub/theme.txt branding/grub/theme-failed.txt build-branding/grub/*.png build-branding/grub/*.pf2 && \
 	install -D -m 0644 -t $$g/icons build-branding/grub/icons/*.png && \
 	install -D -m 0644 branding/grub/worksuite.cfg $$d/etc/default/grub.d/worksuite.cfg && \
+	install -D -m 0644 branding/os-release $$d/usr/lib/os-release && \
+	sed -i "s/@VERSION@/$$(dpkg-parsechangelog -SVersion | sed -E 's/^([0-9]+\.[0-9]+).*/\1/')/g" $$d/usr/lib/os-release && \
 	install -D -m 0755 branding/grub/worksuite-grub-theme $$d/usr/libexec/worksuite/worksuite-grub-theme && \
 	install -D -m 0644 branding/initramfs/worksuite-splash.conf $$d/etc/initramfs-tools/conf.d/worksuite-splash && \
 	install -D -m 0755 branding/initramfs/worksuite-plymouth-fonts $$d/usr/share/initramfs-tools/hooks/worksuite-plymouth-fonts && \

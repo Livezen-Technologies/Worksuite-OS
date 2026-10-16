@@ -249,3 +249,19 @@ class LocaleTest(unittest.TestCase):
         seq = load(ROOT / "settings.conf")["sequence"]
         exec_jobs = [j for s in seq if "exec" in s for j in s["exec"]]
         self.assertLess(exec_jobs.index("unpackfs"), exec_jobs.index("localecfg"))
+
+
+class OsReleaseTest(unittest.TestCase):
+    """Settings › About and other tools read /etc/os-release: WorkSuite OS, still Debian-compatible."""
+
+    def test_os_release_names_worksuite_like_debian(self):
+        kv = dict(l.split("=", 1) for l in (REPO / "branding/os-release").read_text().splitlines() if "=" in l)
+        self.assertEqual(kv["ID"], "worksuite")
+        self.assertEqual(kv["ID_LIKE"], "debian")
+        self.assertEqual(kv["NAME"], '"WorkSuite OS"')
+        self.assertEqual(kv["PRETTY_NAME"], '"WorkSuite OS @VERSION@"')
+        self.assertEqual(kv["VERSION_CODENAME"], "trixie")
+        rules = (REPO / "packaging/debian/rules").read_text()
+        self.assertIn("branding/os-release $$d/usr/lib/os-release", rules)
+        self.assertIn("--divert /usr/lib/os-release.debian /usr/lib/os-release", (REPO / "packaging/debian/worksuite-branding.preinst").read_text())
+        self.assertIn("--remove", (REPO / "packaging/debian/worksuite-branding.postrm").read_text())
