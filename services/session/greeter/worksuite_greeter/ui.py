@@ -865,8 +865,9 @@ class Greeter(Gtk.ApplicationWindow):
 
         v, u = self.view, self.user()
         self.stack.set_visible_child_name({"tiles": "tiles", "user": "user"}.get(v, "card"))
-        self.other_pill.set_visible(v == "user" and (len(self.users) > 1 or self.joined) or v == "directory" and len(self.users) > 1)
-        self.other_pill_label.set_text(_("Switch user") if v == "user" and len(self.users) > 1 else (_("Other user") if v == "user" else _("Back")))
+        # Password view only: the directory and break-glass cards have their own Back link.
+        self.other_pill.set_visible(v == "user" and (len(self.users) > 1 or self.joined))
+        self.other_pill_label.set_text(_("Switch user") if len(self.users) > 1 else _("Other user"))
         tone, note, cta, pw_label, links = None, "", _("Sign in"), _("Password"), ()
         if v == "user":
             self.set_person(u)
