@@ -20,6 +20,8 @@ export interface Env {
   policy(): DevicePolicy | null;
   /** APT source files to validate before every operation: [path, contents]. */
   sources(): [string, string][];
+  /** Hosts of the configured Update Center / organisation mirror, approved as https APT sources besides ALLOWED_HOSTS. */
+  updateHosts?(): string[];
   /** AC power, battery percent (null if no battery) and free bytes on / for WSOS-UPD-001. */
   power(): { ac: boolean; battery: number | null };
   freeBytes(): number;
@@ -400,7 +402,8 @@ export class PackageService extends EventEmitter {
   }
 
   private checkSources() {
-    const issues = this.env.sources().flatMap(([f, t]) => checkSources(t, f));
+    const extra = this.env.updateHosts?.() ?? [];
+    const issues = this.env.sources().flatMap(([f, t]) => checkSources(t, f, extra));
     if (issues.length) { this.env.audit('sources_rejected', { issues }); throw new ServiceError('SourcesInvalid', issues[0]); }
   }
 

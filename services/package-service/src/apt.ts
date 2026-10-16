@@ -36,7 +36,8 @@ export const ALLOWED_HOSTS = ['deb.debian.org', 'security.debian.org', 'download
 const BAD_SUITES = /^(testing|unstable|sid|experimental|forky)(-|$)/;
 const OK_SUITES = /^trixie(-updates|-security|-backports|-dev|-pilot|-stable)?$/;
 
-export function checkSources(text: string, file: string): string[] {
+/** extraHosts: the configured Update Center / organisation mirror (https only) from /etc/worksuite/updates.json or policy. */
+export function checkSources(text: string, file: string, extraHosts: string[] = []): string[] {
   const issues: string[] = [];
   // deb822 (.sources) stanzas
   if (file.endsWith('.sources')) {
@@ -44,7 +45,7 @@ export function checkSources(text: string, file: string): string[] {
       const f = Object.fromEntries(stanza.split('\n').map((l) => /^([A-Za-z-]+):\s*(.*)$/.exec(l)).filter(Boolean).map((m) => [m![1].toLowerCase(), m![2].trim()]));
       if (!f.uris) continue;
       if ((f.enabled ?? 'yes').toLowerCase() === 'no') continue;
-      checkEntry(f.uris.split(/\s+/), (f.suites ?? '').split(/\s+/), !!f['signed-by'], file, issues);
+      checkEntry(f.uris.split(/\s+/), (f.suites ?? '').split(/\s+/), !!f['signed-by'], file, issues, extraHosts);
     }
     return issues;
   }
@@ -53,16 +54,17 @@ export function checkSources(text: string, file: string): string[] {
     if (!/^deb(-src)?\s/.test(line)) continue;
     const opts = /\[([^\]]*)\]/.exec(line)?.[1] ?? '';
     const rest = line.replace(/\[[^\]]*\]/, '').split(/\s+/).slice(1);
-    checkEntry([rest[0]], [rest[1]], /signed-by=/.test(opts), file, issues);
+    checkEntry([rest[0]], [rest[1]], /signed-by=/.test(opts), file, issues, extraHosts);
   }
   return issues;
 }
 
-function checkEntry(uris: string[], suites: string[], signedBy: boolean, file: string, issues: string[]) {
+function checkEntry(uris: string[], suites: string[], signedBy: boolean, file: string, issues: string[], extraHosts: string[] = []) {
   for (const uri of uris) {
-    let host = '';
-    try { host = new URL(uri).host; } catch { issues.push(`${file}: bad URI ${uri}`); continue; }
-    if (!ALLOWED_HOSTS.includes(host)) issues.push(`${file}: repository ${host} is not an approved source`);
+    let u: URL;
+    try { u = new URL(uri); } catch { issues.push(`${file}: bad URI ${uri}`); continue; }
+    const host = u.host;
+    if (!ALLOWED_HOSTS.includes(host) && !(u.protocol === 'https:' && extraHosts.includes(host))) issues.push(`${file}: repository ${host} is not an approved source`);
   }
   for (const s of suites) {
     if (BAD_SUITES.test(s)) issues.push(`${file}: suite ${s} is not allowed (testing/unstable)`);
