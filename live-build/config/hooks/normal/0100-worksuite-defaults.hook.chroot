@@ -22,6 +22,15 @@ if [ -e /usr/lib/systemd/system/seatd.service ]; then systemctl disable seatd.se
 # Smart-card sign-in is off by default (worksuite-smartcard-setup); libpam-pkcs11's card event manager fails
 # without a reader and is not needed for pam_pkcs11 sign-in, so it stays disabled.
 if [ -e /usr/lib/systemd/system/pkcs11-eventmgr.service ]; then systemctl disable pkcs11-eventmgr.service >/dev/null 2>&1 || true; fi
+# Locales: the shell's languages (English, Sinhala, Tamil) and the installer's default English variants. The installer
+# (localecfg) adds and generates the one chosen on the target.
+for l in en_US.UTF-8 en_GB.UTF-8 si_LK.UTF-8 ta_LK.UTF-8; do
+  if grep -q "^# *$l UTF-8" /etc/locale.gen; then sed -i "s/^# *$l UTF-8/$l UTF-8/" /etc/locale.gen
+  elif ! grep -q "^$l UTF-8" /etc/locale.gen; then echo "$l UTF-8" >> /etc/locale.gen; fi
+done
+locale-gen
+for l in en_US.utf8 en_GB.utf8 si_LK.utf8 ta_LK.utf8; do locale -a | grep -qx "$l" || { echo "locale $l not generated" >&2; exit 1; }; done
+[ -f /etc/default/locale ] || echo 'LANG=en_US.UTF-8' > /etc/default/locale
 # WSOS-INS-007: no machine-id baked into the image.
 : > /etc/machine-id
 rm -f /var/lib/dbus/machine-id

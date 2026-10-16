@@ -5,6 +5,10 @@ worksuite-desktop
 worksuite-ai
 libvulkan1
 mesa-vulkan-drivers
+# Locales: locale-gen and /etc/locale.gen. Without it only C.utf8 exists, so LANG=en_US.UTF-8 made foot and Firefox
+# warn "locale not supported", and Calamares' localecfg (which runs locale-gen only when /etc/locale.gen exists) could
+# not generate the language chosen in the installer. The image's locales: hook 0100-worksuite-defaults.
+locales
 # Installer (live only; Calamares removes itself from the installed system)
 calamares
 calamares-settings-worksuite

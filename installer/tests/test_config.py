@@ -234,3 +234,18 @@ class BootPartitionTest(unittest.TestCase):
         self.assertFalse(layout["/"].get("noEncrypt", False))
         hook = (ROOT.parent / "live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot").read_text()
         self.assertIn("/etc/grub.d/10_linux", hook)
+
+
+class LocaleTest(unittest.TestCase):
+    """E2E: LANG=en_US.UTF-8 with only C.utf8 generated ("locale not supported" in foot and Firefox)."""
+
+    def test_image_generates_the_locales_and_the_installer_can_generate_more(self):
+        pkgs = (REPO / "live-build/config/package-lists/worksuite.list.chroot").read_text().split()
+        self.assertIn("locales", pkgs)   # /etc/locale.gen: Calamares' localecfg runs locale-gen only when it exists
+        hook = (REPO / "live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot").read_text()
+        for loc in ("en_US.UTF-8", "en_GB.UTF-8", "si_LK.UTF-8", "ta_LK.UTF-8"):
+            self.assertIn(loc, hook)
+        self.assertIn("locale-gen", hook)
+        seq = load(ROOT / "settings.conf")["sequence"]
+        exec_jobs = [j for s in seq if "exec" in s for j in s["exec"]]
+        self.assertLess(exec_jobs.index("unpackfs"), exec_jobs.index("localecfg"))
