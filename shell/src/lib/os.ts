@@ -16,6 +16,8 @@ export interface WorkSuiteApi {
   search(q: string, types?: string[]): Promise<SearchResponse>
   /** Recent files: local (recently-used.xbel) and WorkSuite Drive. */
   recentFiles(): Promise<{ local: SearchHit[]; cloud: { state: SourceState; hits: SearchHit[] } }>
+  /** Desktop widgets' data (WorkSuite Desktop's Home), fetched and cached by the main process; never a token. */
+  widgets(): Promise<WidgetsSnapshot>
   /** Open a search result (worksuite:// or file://), or its location. */
   openSearchResult(link: string, where?: 'open' | 'location'): Promise<{ ok: boolean; error?: string }>
   /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
@@ -222,6 +224,7 @@ import type { HwDevice, HwKind } from '../../electron/hardware'
 import type { LocalUser } from '../../electron/users'
 import type { SecurityKey, SignInMethod, SignInMethods, SigninResult } from '../../electron/signin'
 import type { SearchHit, SearchResponse, SourceState } from '../../electron/search'
+import { emptySnapshot, ymd, type WidgetsSnapshot } from '../../electron/widgets'
 export type { HwDevice, HwKind, LocalUser, SecurityKey, SignInMethod, SignInMethods, SigninResult }
 export interface DriverOffer {
   id: string; device_id: string | null; name: string; summary: string
@@ -320,6 +323,8 @@ export interface DevicePolicies {
   app_allowlist_size: number
   /** On-device AI assistant (services/ai): false = off for everyone; ai_models = catalog ids allowed. */
   ai_assistant?: boolean | null; ai_models?: string[] | null
+  /** Desktop widgets (WorkSuite Desktop's Home on the wallpaper): false = off for everyone. Kiosk: always off. */
+  desktop_widgets?: boolean | null; kiosk?: boolean
 }
 export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
 export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean
@@ -356,6 +361,7 @@ export function policyLines(p: DevicePolicies | null): string[] {
   if (p.usb_storage === 'block') out.push(t('mdm.usbBlocked'))
   else if (p.usb_storage === 'read_only') out.push(t('mdm.usbRO'))
   if (p.bluetooth === false) out.push(t('mdm.btOff'))
+  if (p.desktop_widgets === false) out.push(t('mdm.widgetsOff'))
   if (p.ai_assistant === false) out.push(t('mdm.aiOff'))
   else if (p.ai_models?.length) out.push(t('mdm.aiLimited', { count: p.ai_models.length }))
   return out
@@ -407,6 +413,8 @@ const stub: WorkSuiteApi = {
     return { query, sources: query ? [{ source: 'worksuite', state: 'not_signed_in', hits: [] }, { source: 'drive', state: 'not_signed_in', hits: [] }] : [], hits: [] }
   },
   async recentFiles() { return { local: [], cloud: { state: 'not_signed_in', hits: [] } } },
+  // Preview: signed out, so the widgets offer sign-in instead of inventing data.
+  async widgets() { return emptySnapshot('not_signed_in', ymd(new Date())) },
   async openSearchResult() { return { ok: true } },
   async webApps() { return { ok: false, error: 'not_signed_in' } },
   async shellPrefs() { return { ok: false, error: 'not_signed_in' } },

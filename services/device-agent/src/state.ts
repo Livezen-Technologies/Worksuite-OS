@@ -30,6 +30,8 @@ export interface Policy {
   /** On-device AI assistant (services/ai): false = off for everyone; ai_models = the catalog ids allowed. */
   ai_assistant?: boolean;
   ai_models?: string[];
+  /** Desktop widgets on the OS wallpaper: false = off for everyone (the shell also turns them off on a kiosk). */
+  desktop_widgets?: boolean;
   [k: string]: unknown;
 }
 

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   launchWorkSuite: (module: string) => ipcRenderer.invoke('ws:launchWorkSuite', String(module)),
   search: (q: string, types?: string[]) => ipcRenderer.invoke('ws:search', String(q), (types ?? []).map(String).join(',')),
   recentFiles: () => ipcRenderer.invoke('ws:recentFiles'),
+  widgets: () => ipcRenderer.invoke('ws:widgets'),
   openSearchResult: (link: string, where?: string) => ipcRenderer.invoke('ws:openSearchResult', String(link), where === 'location' ? 'location' : 'open'),
   openLink: (url: string) =>ipcRenderer.invoke('ws:openLink', String(url)),
   cloudSignIn: (serverUrl: string, mode: string) => ipcRenderer.invoke('ws:cloudSignIn', String(serverUrl), String(mode)),

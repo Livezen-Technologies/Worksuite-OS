@@ -30,6 +30,8 @@ import { onAssistantRequest, type AssistantRequest } from '../lib/assistantNav'
 import ShellRestartNotice from '../components/ShellRestartNotice'
 import AuthPrompt from '../components/AuthPrompt'
 import type { SearchHit } from '../../electron/search'
+import DesktopWidgets, { useWidgetData } from '../components/DesktopWidgets'
+import { DEFAULT_LAYOUT, loadLocalLayout, saveLocalLayout, widgetsAllowed, type WidgetLayout } from '../lib/widgets'
 
 const TONE_BG: Record<Notice['tone'], string> = { ok: '#2E9E6A', warn: '#B7791F', error: '#D9452B' }
 
@@ -141,6 +143,20 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     setPrefs(next)
     void os.setShellPrefs(next).catch(() => undefined)
   }
+  // Desktop widgets (WorkSuite Desktop's Home on the wallpaper): on when policy allows (never on a kiosk); the layout
+  // is the synced shell preferences' `widgets`, else this computer's copy, else the default.
+  const widgetsOn = widgetsAllowed(device?.policies)
+  const widgetData = useWidgetData(widgetsOn)
+  const [widgetEdit, setWidgetEdit] = useState(false)
+  const [widgetPicker, setWidgetPicker] = useState(false)
+  const [wallMenu, setWallMenu] = useState<{ x: number; y: number } | null>(null)
+  const widgetLayout: WidgetLayout = prefs.widgets ?? loadLocalLayout(user) ?? DEFAULT_LAYOUT
+  const setWidgetLayout = (l: WidgetLayout) => {
+    const next = { ...prefs, widgets: l }
+    setPrefs(next)
+    saveLocalLayout(user, l)
+    void os.setShellPrefs(next).catch(() => undefined)
+  }
   const appsLoaded = useRef(false)
   useEffect(() => {
     // On start, then again each time the launcher opens (sign-in, installs and org changes show up).
@@ -187,12 +203,29 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
 
   return (
-    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: wallpaperFor(display, primaryOut, BG.desktop) }}>
+    <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: wallpaperFor(display, primaryOut, BG.desktop) }}
+      onContextMenu={(e) => { if (e.target !== e.currentTarget || !widgetsOn) return; e.preventDefault(); setWallMenu({ x: e.clientX, y: e.clientY }) }}
+      onMouseDown={(e) => { if (wallMenu && !(e.target as HTMLElement).closest?.('#ws-wall-menu')) setWallMenu(null) }}>
       {/* On the wallpaper: keeps its light text in the light theme (ws-dark-zone). */}
       <div className="ws-dark-zone absolute top-7 left-8 flex flex-col gap-1.5 text-[#E8EEFA]">
         <div className="text-sm text-[#8FA3C8]">{longDate}</div>
         <div className="text-[44px] font-light tracking-[-1px]">{time}</div>
       </div>
+
+      {widgetsOn && (
+        <DesktopWidgets snap={widgetData.snap} loading={widgetData.loading} online={widgetData.online} layout={widgetLayout} onLayout={setWidgetLayout}
+          editing={widgetEdit} onEditing={(v) => { setWidgetEdit(v); if (!v) setWidgetPicker(false) }} picker={widgetPicker} onPicker={setWidgetPicker}
+          onRefresh={widgetData.refresh} onSignIn={() => openSettingsAt('Users')} now={now} />
+      )}
+      {wallMenu && (
+        <div id="ws-wall-menu" role="menu" aria-label={t('widgets.menu')} className="absolute z-50 flex min-w-[180px] flex-col rounded-xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] p-1 text-[13px] text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+          style={{ left: Math.min(wallMenu.x, window.innerWidth - 200), top: Math.min(wallMenu.y, window.innerHeight - 140) }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setWallMenu(null) }}>
+          <button type="button" role="menuitem" autoFocus onClick={() => { setWallMenu(null); setWidgetEdit(true) }} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10">{t('widgets.edit')}</button>
+          <button type="button" role="menuitem" onClick={() => { setWallMenu(null); setWidgetEdit(true); setWidgetPicker(true) }} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10">{t('widgets.add')}</button>
+          <button type="button" role="menuitem" onClick={() => { setWallMenu(null); openSettingsAt('Appearance') }} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10">{t('settings.nav.Appearance')}</button>
+        </div>
+      )}
 
       {/* Work area for open windows, above the taskbar */}
       {children && <div className="absolute inset-x-0 top-0 bottom-[52px] z-10 px-6 pt-5 pb-5">{children}</div>}

@@ -4,7 +4,8 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notificati
 // Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
 const DRAG_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4nGNgoCaQz/7/nxiM1wBCYNSAUQNGigEUZSZyAAAnXe3wcJ4r8wAAAABJRU5ErkJggg=='
 import { execFile, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
@@ -21,6 +22,7 @@ import { prepareAppMode, runAppMode } from './appwindow'
 import { shellPrefsFrom } from '../src/lib/shellPrefs'
 import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
+import { createWidgets } from './widgets'
 import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
@@ -201,6 +203,21 @@ app.whenReady().then(() => {
   const brokerFn = (m: string, p?: Record<string, unknown>) => brokerCall(m, p ?? {})
   const searcher = createSearch({ broker: brokerFn, device: () => deviceCredential(), fetch: (url, init) => fetch(url, { headers: init.headers, signal: init.signal }) })
   handle('ws:search', (q, types) => searcher.search(q, types ? types.split(',').filter(Boolean) : []))
+  // Desktop widgets (WorkSuite Desktop's Home on the wallpaper): the same token path as search; the renderer gets
+  // parsed data only. Cached per account (hashed id) under ~/.cache/worksuite/widgets for offline use; policy
+  // desktop_widgets: false, or a kiosk device, turns them off here too, so no request is made.
+  const widgetDir = path.join(app.getPath('home'), '.cache', 'worksuite', 'widgets')
+  const widgetFile = (id: string) => path.join(widgetDir, `${createHash('sha256').update(id).digest('hex').slice(0, 32)}.json`)
+  const widgets = createWidgets({
+    broker: brokerFn, device: () => deviceCredential(), fetch: (url, init) => fetch(url, { headers: init.headers, signal: init.signal }),
+    enabled: () => { const p = deviceInfo().policies as { desktop_widgets?: boolean | null; kiosk?: boolean } | null; return p?.desktop_widgets !== false && p?.kiosk !== true },
+    cache: {
+      read: (id) => { try { return JSON.parse(readFileSync(widgetFile(id), 'utf8')) } catch { return null } },
+      write: (id, snap) => { try { mkdirSync(widgetDir, { recursive: true, mode: 0o700 }); writeFileSync(widgetFile(id), JSON.stringify(snap), { mode: 0o600 }) } catch { /* a convenience */ } },
+      clear: () => { try { rmSync(widgetDir, { recursive: true, force: true }) } catch { /* nothing cached */ } },
+    },
+  })
+  handle('ws:widgets', () => widgets.load())
   handle('ws:recentFiles', async () => {
     const home = app.getPath('home')
     let local: ReturnType<typeof localRecentHits> = []

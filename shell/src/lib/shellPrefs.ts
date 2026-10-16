@@ -1,9 +1,12 @@
 // Shell ENH-01 preferences (WSOS-DSK-001): the user's favourites, taskbar pins and Start order, stored in the synced
 // 'preferences/shell' object so they follow the user and work offline. Unknown or bad data falls back to defaults.
+import { normaliseLayout, type WidgetLayout } from './widgets'
+
 const ID = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/
 const MAX = 64
 
-export interface ShellPrefs { favorites?: string[]; taskbar?: string[]; order?: string[] }
+/** widgets: the desktop widgets' layout (lib/widgets.ts), saved alongside the pins. */
+export interface ShellPrefs { favorites?: string[]; taskbar?: string[]; order?: string[]; widgets?: WidgetLayout }
 
 const ids = (v: unknown): string[] | undefined =>
   Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && ID.test(x)))].slice(0, MAX) : undefined
@@ -14,6 +17,7 @@ export function shellPrefsFrom(v: unknown): ShellPrefs {
   const o = v as Record<string, unknown>
   const out: ShellPrefs = {}
   for (const k of ['favorites', 'taskbar', 'order'] as const) { const l = ids(o[k]); if (l) out[k] = l }
+  if (o.widgets && typeof o.widgets === 'object') out.widgets = normaliseLayout(o.widgets)
   return out
 }
 

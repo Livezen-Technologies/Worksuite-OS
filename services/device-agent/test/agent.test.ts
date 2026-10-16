@@ -296,6 +296,17 @@ test('a failure applying the policy is audited and does not reject the verified 
   w.cleanup();
 });
 
+test('desktop widgets policy reaches the shell through the status (off, or not set)', async () => {
+  const w = world({ policy: signedPolicy({ version: 'p1', desktop_widgets: false }) });
+  await w.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(w.agent.status().policies?.desktop_widgets, false);
+  w.cleanup();
+  const v = world({ policy: signedPolicy({ version: 'p2' }) });
+  await v.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(v.agent.status().policies?.desktop_widgets, null);
+  v.cleanup();
+});
+
 test('offline access period: sign-in refused and sessions locked after N days offline, restored on check-in (WSOS-AUTH-003)', async () => {
   assert.equal(offlineAccessExpired({ version: 'p', signature: 'x' }, NOW - 400 * DAY, NOW), false);
   const w = await enrolled({ policy: signedPolicy({ version: 'p1', offline_access_days: 7 }) });

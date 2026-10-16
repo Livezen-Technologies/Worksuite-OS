@@ -1,12 +1,14 @@
 // Tamil (தமிழ்) — draft translation, to be reviewed by a native speaker before release (SRS §11.5, P2).
 import type { LocaleReview, MessageKey } from './en'
 import { aiTa } from './ai'
+import { widgetsTa } from './widgets'
 
 /** Machine-drafted: not yet reviewed by a native Tamil speaker. See docs/i18n/README.md before changing. */
 export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedKeys: {} }
 
 const ta: Partial<Record<MessageKey, string>> = {
   ...aiTa,
+  ...widgetsTa,
   'panel.taskbar': 'பணிப்பட்டி',
   'panel.openLauncher': 'தொடக்கியைத் திற',
   'panel.running': '{name}, இயங்குகிறது',
