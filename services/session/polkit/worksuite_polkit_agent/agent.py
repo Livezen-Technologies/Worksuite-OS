@@ -106,6 +106,7 @@ class Request:
         self.locked_text = False
         self.asking = False
         self.timer = None
+        self.retired = []  # finished sessions kept alive until their signal emission is over
 
     def payload(self):
         return {**self.msg, **self.agent.lockout.state(self.identity[1])}
@@ -132,8 +133,23 @@ class Request:
             self.locked_text = True
         self.agent.shell.send({"type": "info", "id": self.id, "text": text, "error": True})
 
+    def _retire(self, s):
+        """Drop a PolkitAgent.Session only after its signal handlers have returned: freeing it while it is still
+        emitting "completed" crashes libpolkit-agent-1 (use after free, SIGSEGV after every password)."""
+        if s is None:
+            return
+        self.retired.append(s)
+
+        def release():
+            if s in self.retired:
+                self.retired.remove(s)
+            return False
+        GLib.idle_add(release)
+
     def _on_completed(self, s, gained):
-        self.session = None
+        if self.session is s:
+            self.session = None
+        self._retire(s)
         user = self.identity[1]
         if gained:
             self.agent.lockout.succeeded(user)
@@ -143,7 +159,14 @@ class Request:
         st = self.agent.lockout.failed(user, self.locked_text)
         self.locked_text = False
         self.agent.shell.send({"type": "result", "id": self.id, "ok": False, **st})
-        self.start_session()  # ready for the next try (PAM keeps refusing while faillock holds the lock)
+        # Ready for the next try (PAM keeps refusing while faillock holds the lock), once the old session has
+        # finished emitting.
+        GLib.idle_add(self._restart_after_failure)
+
+    def _restart_after_failure(self):
+        if self.task is not None and self.session is None:
+            self.start_session()
+        return False
 
     def respond(self, password):
         if self.session is None:
@@ -164,8 +187,9 @@ class Request:
             GLib.source_remove(self.timer)
             self.timer = None
         if self.session is not None:
-            self.session.cancel()
-            self.session = None
+            s, self.session = self.session, None
+            s.cancel()
+            self._retire(s)
         task, self.task = self.task, None
         if error is None:
             task.return_boolean(True)
