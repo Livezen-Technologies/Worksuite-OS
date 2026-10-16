@@ -20,6 +20,19 @@ if [ "${KIOSK_OSK:-0}" = 1 ]; then
     fi
 fi
 
+# Orientation (policy kiosk.orientation, board KioskSettings): every output turned to the policy's transform. The
+# accelerometer is not followed: a kiosk stays as mounted.
+if [ "${KIOSK_TRANSFORM:-0}" != 0 ] && command -v wlr-randr >/dev/null 2>&1; then
+    case "$KIOSK_TRANSFORM" in 90|180|270)
+        for o in $(wlr-randr 2>/dev/null | sed -n 's/^\([A-Za-z0-9-]\{1,32\}\) .*/\1/p'); do wlr-randr --output "$o" --transform "$KIOSK_TRANSFORM"; done ;;
+    esac
+fi
+
+# Nightly screen-off (policy kiosk.screen_off): outputs off in the window, a touch wakes them for a minute.
+if [ -n "${KIOSK_SCREEN_OFF_FROM:-}" ] && [ -n "${KIOSK_SCREEN_OFF_UNTIL:-}" ]; then
+    "$LIB/worksuite-kiosk-screen" "$KIOSK_SCREEN_OFF_FROM" "$KIOSK_SCREEN_OFF_UNTIL" &
+fi
+
 # Idle reset: after the policy's idle time the app is reset to a clean state (worksuite-kiosk-ctl reset). From 30 s up,
 # a "Still there?" screen (board KioskStates) comes 15 s before, and goes again on any touch or key.
 if [ "${KIOSK_IDLE_RESET_S:-0}" -ge 30 ] 2>/dev/null; then

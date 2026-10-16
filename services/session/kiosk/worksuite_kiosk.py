@@ -78,3 +78,90 @@ def read_env(path):
     except OSError:
         pass
     return out
+
+
+# ---- nightly screen-off (policy kiosk.screen_off; board KioskStates "Screen off until 07:00") ----------------------
+def hhmm(text):
+    """'2200' or '22:00' → minutes after midnight, or None."""
+    m = re.fullmatch(r"([01]\d|2[0-3]):?([0-5]\d)", (text or "").strip())
+    return int(m.group(1)) * 60 + int(m.group(2)) if m else None
+
+
+def screen_off_now(minute, start, end):
+    """True when minute-of-day lies in [start, end); the window may span midnight (22:00–07:00)."""
+    if start is None or end is None or start == end:
+        return False
+    return start <= minute < end if start < end else minute >= start or minute < end
+
+
+def seconds_to_change(now, start, end):
+    """Seconds from the datetime `now` until the window next opens or closes (at least 1)."""
+    minute = now.hour * 60 + now.minute
+    target = end if screen_off_now(minute, start, end) else start
+    delta = (target - minute) % (24 * 60) or 24 * 60
+    return max(1, delta * 60 - now.second)
+
+
+class ScreenSchedule:
+    """Turns the kiosk's outputs off for the night window and back on in the morning.
+
+    In the window: outputs off (wlr-output-power-management via wlopm), and swayidle turns them back on at a touch or key
+    for one minute (WAKE_S), showing "Screen off until HH:MM" (worksuite-kiosk-ctl screen-off), then off again. The
+    commands are fixed argument lists; `run` and `spawn` are injectable for tests.
+    """
+
+    WAKE_S = 60
+
+    def __init__(self, start, end, lib="/usr/lib/worksuite", run=None, spawn=None):
+        import subprocess
+        self.start, self.end, self.lib = start, end, lib
+        self.run = run or (lambda argv: subprocess.run(argv, check=False))
+        self.spawn = spawn or (lambda argv: subprocess.Popen(argv))
+        self.idle = None
+        self.off = None
+
+    def until_text(self):
+        return "%02d:%02d" % divmod(self.end, 60)
+
+    def apply(self, minute):
+        want = screen_off_now(minute, self.start, self.end)
+        if want == self.off:
+            return
+        self.off = want
+        ctl = os.path.join(self.lib, "worksuite-kiosk-ctl")
+        if want:
+            self.run([ctl, "screen-off", self.until_text()])
+            self.run(["wlopm", "--off", "*"])
+            self.idle = self.spawn(["swayidle", "-w", "timeout", str(self.WAKE_S), "wlopm --off '*'",
+                                    "resume", "wlopm --on '*'"])
+        else:
+            if self.idle is not None:
+                self.idle.terminate()
+                self.idle = None
+            self.run(["wlopm", "--on", "*"])
+            self.run([ctl, "screen-on"])
+
+    def loop(self, now=None, sleep=time.sleep):  # pragma: no cover - runs for the whole session
+        import datetime
+        now = now or datetime.datetime.now
+        while True:
+            t = now()
+            self.apply(t.hour * 60 + t.minute)
+            sleep(seconds_to_change(t, self.start, self.end))
+
+
+def main(argv=None):  # pragma: no cover - entry point
+    import sys
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) == 3 and args[0] == "screen-schedule":
+        start, end = hhmm(args[1]), hhmm(args[2])
+        if start is None or end is None or start == end:
+            print("worksuite-kiosk-screen: bad window", file=sys.stderr)
+            return 2
+        ScreenSchedule(start, end, lib=os.environ.get("WORKSUITE_LIB", "/usr/lib/worksuite")).loop()
+    print("usage: worksuite_kiosk.py screen-schedule HHMM HHMM", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

@@ -31,7 +31,7 @@ test('unsafe values turn kiosk mode off or are dropped (defence in depth on top 
 test('session config: kiosk.json, session.env, locked labwc rc.xml and environment', () => {
   const { files, secret } = kioskFiles(activeKiosk(pol(K), 'dev-1'));
   const cfg = JSON.parse(files[KIOSK_PATHS.config]!);
-  assert.deepEqual(cfg, { user: 'kiosk', app: K.app, allowed_urls: K.allowed_urls, idle_reset_minutes: 10, show_on_screen_keyboard: true, exit_pin: true });
+  assert.deepEqual(cfg, { user: 'kiosk', app: K.app, allowed_urls: K.allowed_urls, idle_reset_minutes: 10, show_on_screen_keyboard: true, exit_pin: true, orientation: 'landscape', screen_off: null });
   assert.match(files[KIOSK_PATHS.sessionEnv]!, /^KIOSK_USER=kiosk$/m);
   assert.match(files[KIOSK_PATHS.sessionEnv]!, /^KIOSK_IDLE_RESET_S=600$/m);
   assert.match(files[KIOSK_PATHS.sessionEnv]!, /^KIOSK_OSK=1$/m);
@@ -45,6 +45,23 @@ test('session config: kiosk.json, session.env, locked labwc rc.xml and environme
   const off = kioskFiles(null);
   assert.ok(Object.values(off.files).every((v) => v === null));
   assert.equal(off.secret[KIOSK_PATHS.exitVerifier], null);
+});
+
+test('orientation and nightly screen-off reach kiosk.json and session.env; bad values fall back', () => {
+  const k = activeKiosk(pol({ ...K, orientation: 'portrait', screen_off: { from: '22:00', until: '07:00' } }), 'dev-1');
+  assert.equal(k!.orientation, 'portrait');
+  assert.deepEqual(k!.screen_off, { from: '22:00', until: '07:00' });
+  const env = kioskFiles(k).files[KIOSK_PATHS.sessionEnv]!;
+  assert.match(env, /^KIOSK_TRANSFORM=90$/m);
+  assert.match(env, /^KIOSK_SCREEN_OFF_FROM=2200$/m);
+  assert.match(env, /^KIOSK_SCREEN_OFF_UNTIL=0700$/m);
+  assert.equal(JSON.parse(kioskFiles(k).files[KIOSK_PATHS.config]!).orientation, 'portrait');
+  for (const bad of [{ orientation: 'constructor' }, { orientation: 'sideways' }, { screen_off: { from: '25:00', until: '07:00' } }, { screen_off: { from: '07:00', until: '07:00' } }, { screen_off: 'nightly' }]) {
+    const b = activeKiosk(pol({ ...K, ...bad }), 'dev-1')!;
+    assert.equal(b.orientation, 'landscape'); assert.equal(b.screen_off, null);
+    const e = kioskFiles(b).files[KIOSK_PATHS.sessionEnv]!;
+    assert.match(e, /^KIOSK_TRANSFORM=0$/m); assert.doesNotMatch(e, /SCREEN_OFF/);
+  }
 });
 
 test('enforcement: kiosk forces USB storage off and names the account', () => {

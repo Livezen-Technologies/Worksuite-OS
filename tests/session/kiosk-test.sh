@@ -62,14 +62,32 @@ grep -q wvkbd "$LOG" && bad "no on-screen keyboard unless the policy asks" || ok
 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" sh "$K/worksuite-kiosk-start"
 check "no restart once leaving kiosk mode" "$(grep -c '^app-run$' "$LOG")" 0
 rm -f "$T/run/worksuite-kiosk/exiting"
+# Orientation and nightly screen-off from the session.
+: > "$LOG"; stub wlr-randr 'if [ $# -eq 0 ]; then printf "eDP-1 \"BOE 0x0BCA\"\n  Enabled: yes\nHDMI-A-1 \"Dell\"\n"; else echo "wlr-randr $*" >> "$LOG"; fi'
+printf '#!/bin/sh\necho "screen $*" >> "$LOG"\n' > "$T/lib/worksuite-kiosk-screen"; chmod +x "$T/lib/worksuite-kiosk-screen"
+KIOSK_TRANSFORM=90 KIOSK_SCREEN_OFF_FROM=2200 KIOSK_SCREEN_OFF_UNTIL=0700 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" WORKSUITE_KIOSK_RESTART_DELAY=0 WORKSUITE_KIOSK_MAX_RESTARTS=1 sh "$K/worksuite-kiosk-start"
+sleep 0.2
+check "orientation: every output turned" "$(grep '^wlr-randr' "$LOG" | tr '\n' ' ')" "wlr-randr --output eDP-1 --transform 90 wlr-randr --output HDMI-A-1 --transform 90 "
+grep -q '^screen 2200 0700$' "$LOG" && ok "nightly screen-off scheduler started" || bad "nightly screen-off scheduler started"
+: > "$LOG"; KIOSK_TRANSFORM=0 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" WORKSUITE_KIOSK_RESTART_DELAY=0 WORKSUITE_KIOSK_MAX_RESTARTS=1 sh "$K/worksuite-kiosk-start"
+sleep 0.2
+grep -q '^wlr-randr\|^screen' "$LOG" && bad "landscape and no schedule: outputs left alone" || ok "landscape and no schedule: outputs left alone"
+: > "$LOG"; printf 'KIOSK_USER=%s\nKIOSK_TRANSFORM=45\nKIOSK_SCREEN_OFF_FROM=22:00;x\n' "$ME" > "$T/session.env"
+stub labwc 'echo "labwc T=$KIOSK_TRANSFORM F=$KIOSK_SCREEN_OFF_FROM" >> "$LOG"'
+WORKSUITE_KIOSK_LABWC="$T/labwc" sh "$K/worksuite-kiosk-session"
+check "session.env: bad orientation and window ignored" "$(cat "$LOG")" "labwc T=0 F="
 
 # ---- worksuite-kiosk-ctl ----
+mkdir -p "$T/run/worksuite-kiosk"
 sh -c 'trap "echo USR1 >> \"$LOG\"" USR1; trap "echo USR2 >> \"$LOG\"" USR2; trap "echo HUP >> \"$LOG\"" HUP; i=0; while [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done' & P=$!
 sleep 0.2; echo "$P" > "$T/run/worksuite-kiosk/app.pid"
 : > "$LOG"; sh "$K/worksuite-kiosk-ctl" exit-prompt; sleep 0.3; sh "$K/worksuite-kiosk-ctl" reset; sleep 0.3
 check "ctl signals the kiosk app (USR1 exit prompt, USR2 reset)" "$(tr '\n' ' ' < "$LOG")" "USR1 USR2 "
 : > "$LOG"; XDG_RUNTIME_DIR="$T/run" sh "$K/worksuite-kiosk-ctl" warn; sleep 0.3
 check "ctl warn: idle file and HUP" "$(cat "$T/run/worksuite-kiosk/idle") $(tr '\n' ' ' < "$LOG")" "warn HUP "
+sleep 0.2; : > "$LOG"; sh "$K/worksuite-kiosk-ctl" screen-off 07:00; sleep 0.3
+check "ctl screen-off: screen file and HUP" "$(cat "$T/run/worksuite-kiosk/screen") $(tr '\n' ' ' < "$LOG")" "off 07:00 HUP "
+sh "$K/worksuite-kiosk-ctl" screen-off 'x; reboot' 2>/dev/null && bad "ctl screen-off refuses a bad time" || ok "ctl screen-off refuses a bad time"
 echo '1; reboot' > "$T/run/worksuite-kiosk/app.pid"
 sh "$K/worksuite-kiosk-ctl" reset 2>/dev/null && bad "ctl refuses a bad pid file" || ok "ctl refuses a bad pid file"
 kill "$P" 2>/dev/null

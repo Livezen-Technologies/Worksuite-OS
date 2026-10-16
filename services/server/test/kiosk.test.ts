@@ -25,6 +25,18 @@ test('a complete kiosk policy is accepted and normalised', () => {
   assert.deepEqual(normalizeKiosk({ enabled: false }), { enabled: false });
 });
 
+test('kiosk orientation and nightly screen-off', () => {
+  const k = normalizeKiosk({ ...base, orientation: 'portrait', screen_off: { from: '22:00', until: '07:00' } });
+  assert.equal(k.orientation, 'portrait');
+  assert.deepEqual(k.screen_off, { from: '22:00', until: '07:00' });
+  assert.equal(normalizeKiosk({ ...base, orientation: null, screen_off: null }).screen_off, undefined);
+  bad({ ...base, orientation: 'sideways' }, /kiosk.orientation/);
+  bad({ ...base, screen_off: { from: '22:00' } }, /kiosk.screen_off/);
+  bad({ ...base, screen_off: { from: '24:00', until: '07:00' } }, /kiosk.screen_off/);
+  bad({ ...base, screen_off: { from: '07:00', until: '07:00' } }, /kiosk.screen_off/);
+  bad({ ...base, screen_off: { from: '22:00', until: '07:00', cmd: 'x' } }, /kiosk.screen_off/);
+});
+
 test('kiosk policy rejects unsafe or incomplete values', () => {
   bad({ ...base, user: 'root' }, /kiosk.user/);
   bad({ ...base, user: 'wsadmin' }, /kiosk.user/);

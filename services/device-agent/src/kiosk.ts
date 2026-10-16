@@ -26,7 +26,13 @@ export interface KioskConfig {
   idle_reset_minutes: number;
   show_on_screen_keyboard: boolean;
   exit_pin: boolean;
+  orientation: KioskOrientation;
+  screen_off: { from: string; until: string } | null;
 }
+export type KioskOrientation = 'landscape' | 'portrait' | 'landscape-flipped' | 'portrait-flipped';
+/** wlr-randr --transform for each orientation (a landscape panel turned clockwise for portrait). */
+export const KIOSK_TRANSFORM: Record<KioskOrientation, number> = { landscape: 0, portrait: 90, 'landscape-flipped': 180, 'portrait-flipped': 270 };
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const USER = /^[a-z_][a-z0-9_.@-]{0,63}$/;
 const DESKTOP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,150}\.desktop$/;
@@ -62,8 +68,16 @@ export function activeKiosk(p: Policy | null | undefined, deviceId: string | und
     idle_reset_minutes: idle,
     show_on_screen_keyboard: k.show_on_screen_keyboard === true,
     exit_pin: verifier !== null,
+    orientation: typeof k.orientation === 'string' && Object.hasOwn(KIOSK_TRANSFORM, k.orientation) ? k.orientation as KioskOrientation : 'landscape',
+    screen_off: screenOff(k.screen_off),
     verifier,
   };
+}
+
+function screenOff(v: unknown): { from: string; until: string } | null {
+  const so = v as Record<string, unknown> | null;
+  if (!so || typeof so !== 'object' || typeof so.from !== 'string' || typeof so.until !== 'string') return null;
+  return HHMM.test(so.from) && HHMM.test(so.until) && so.from !== so.until ? { from: so.from, until: so.until } : null;
 }
 
 const HEADER = '# Written by worksuite-device-agent from the signed device policy (kiosk mode). Local changes are replaced.\n';
@@ -106,7 +120,8 @@ export function kioskFiles(k: ReturnType<typeof activeKiosk>): { files: Record<s
   return {
     files: {
       [KIOSK_PATHS.config]: JSON.stringify(pub, null, 2) + '\n',
-      [KIOSK_PATHS.sessionEnv]: HEADER + `KIOSK_USER=${k.user}\nKIOSK_IDLE_RESET_S=${k.idle_reset_minutes * 60}\nKIOSK_OSK=${k.show_on_screen_keyboard ? 1 : 0}\nKIOSK_EXIT_PIN=${k.exit_pin ? 1 : 0}\n`,
+      [KIOSK_PATHS.sessionEnv]: HEADER + `KIOSK_USER=${k.user}\nKIOSK_IDLE_RESET_S=${k.idle_reset_minutes * 60}\nKIOSK_OSK=${k.show_on_screen_keyboard ? 1 : 0}\nKIOSK_EXIT_PIN=${k.exit_pin ? 1 : 0}\n` +
+        `KIOSK_TRANSFORM=${KIOSK_TRANSFORM[k.orientation]}\n` + (k.screen_off ? `KIOSK_SCREEN_OFF_FROM=${k.screen_off.from.replace(':', '')}\nKIOSK_SCREEN_OFF_UNTIL=${k.screen_off.until.replace(':', '')}\n` : ''),
       [KIOSK_PATHS.labwcRc]: KIOSK_RC_XML,
       [KIOSK_PATHS.labwcEnv]: KIOSK_LABWC_ENV,
     },

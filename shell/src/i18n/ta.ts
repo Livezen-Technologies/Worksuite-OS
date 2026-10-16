@@ -1961,6 +1961,17 @@ const ta: Partial<Record<MessageKey, string>> = {
   'kiosk.st.offlineBody': '{host} ஐ அடைய முடியவில்லை. {n} வி இல் மீண்டும் முயலும். உதவிக்கு ஊழியர் ஒருவரைக் கேளுங்கள்.',
   'kiosk.st.offlineBodyNoHost': 'பிணையத்தை அடைய முடியவில்லை. {n} வி இல் மீண்டும் முயலும். உதவிக்கு ஊழியர் ஒருவரைக் கேளுங்கள்.',
   'kiosk.st.offlineMeta': 'இணைய கியோஸ்க் · பிணையம் இழந்தது',
+  'kiosk.st.screenOffTitle': "{time} வரை திரை அணைக்கப்பட்டுள்ளது",
+  'kiosk.st.screenOffTitleNoTime': "இரவுக்குத் திரை அணைக்கப்பட்டுள்ளது",
+  'kiosk.st.screenOffBody': "திரையைப் பயன்படுத்தத் தட்டவும். ஒரு நிமிடம் தொடாவிட்டால் மீண்டும் அணையும்.",
+  'kiosk.st.screenOffMeta': "திட்டமிடப்பட்டது · இரவுத் திரை அணைப்பு",
+  'kiosk.orientation': "திசையமைவு",
+  'kiosk.orient.landscape': "கிடைமட்டம்",
+  'kiosk.orient.portrait': "செங்குத்து",
+  'kiosk.orient.landscape-flipped': "கிடைமட்டம் (தலைகீழ்)",
+  'kiosk.orient.portrait-flipped': "செங்குத்து (தலைகீழ்)",
+  'kiosk.screenOff': "திரை அணைப்பு",
+  'kiosk.screenOffRange': "{from} – {until}",
 }
 
 export default ta

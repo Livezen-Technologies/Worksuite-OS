@@ -110,3 +110,48 @@ class ExitHelper(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScreenOffTest(unittest.TestCase):
+    def test_window_parsing_and_midnight(self):
+        self.assertEqual(k.hhmm("2200"), 1320)
+        self.assertEqual(k.hhmm("07:00"), 420)
+        for bad in ("2400", "7:0", "", None, "22:60", "22:00;reboot"):
+            self.assertIsNone(k.hhmm(bad), bad)
+        start, end = 22 * 60, 7 * 60
+        self.assertTrue(k.screen_off_now(23 * 60, start, end))
+        self.assertTrue(k.screen_off_now(3 * 60, start, end))
+        self.assertFalse(k.screen_off_now(7 * 60, start, end))
+        self.assertFalse(k.screen_off_now(12 * 60, start, end))
+        self.assertTrue(k.screen_off_now(13 * 60, 12 * 60, 14 * 60))
+        self.assertFalse(k.screen_off_now(10, 5, 5))
+
+    def test_seconds_to_change(self):
+        import datetime
+        start, end = 22 * 60, 7 * 60
+        self.assertEqual(k.seconds_to_change(datetime.datetime(2026, 10, 16, 21, 59, 30), start, end), 30)
+        self.assertEqual(k.seconds_to_change(datetime.datetime(2026, 10, 16, 23, 0, 0), start, end), 8 * 3600)
+        self.assertEqual(k.seconds_to_change(datetime.datetime(2026, 10, 17, 7, 0, 0), start, end), 15 * 3600)
+
+    def test_schedule_turns_outputs_off_and_on_once(self):
+        ran, spawned = [], []
+
+        class P:
+            terminated = False
+
+            def terminate(self):
+                P.terminated = True
+
+        s = k.ScreenSchedule(22 * 60, 7 * 60, lib="/lib/ws", run=ran.append, spawn=lambda a: spawned.append(a) or P())
+        s.apply(12 * 60)
+        self.assertEqual(ran, [["wlopm", "--on", "*"], ["/lib/ws/worksuite-kiosk-ctl", "screen-on"]])
+        ran.clear()
+        s.apply(22 * 60)
+        s.apply(23 * 60)   # no change inside the window
+        self.assertEqual(ran, [["/lib/ws/worksuite-kiosk-ctl", "screen-off", "07:00"], ["wlopm", "--off", "*"]])
+        self.assertEqual(spawned[0][:4], ["swayidle", "-w", "timeout", "60"])
+        self.assertIn("resume", spawned[0])
+        ran.clear()
+        s.apply(7 * 60)
+        self.assertTrue(P.terminated)
+        self.assertEqual(ran[-1], ["/lib/ws/worksuite-kiosk-ctl", "screen-on"])

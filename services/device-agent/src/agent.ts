@@ -6,7 +6,7 @@ import { offlineAccessExpired, offlineNotice, policyEnforcement, type Enforcemen
 import { activeKiosk, publicPolicy } from './kiosk.ts';
 
 function kioskSummary(k: ReturnType<typeof activeKiosk>) {
-  return k ? { user: k.user, app: k.app, allowed_urls: k.allowed_urls, idle_reset_minutes: k.idle_reset_minutes, show_on_screen_keyboard: k.show_on_screen_keyboard, exit_pin: k.verifier !== null } : null;
+  return k ? { user: k.user, app: k.app, allowed_urls: k.allowed_urls, idle_reset_minutes: k.idle_reset_minutes, show_on_screen_keyboard: k.show_on_screen_keyboard, exit_pin: k.verifier !== null, orientation: k.orientation, screen_off: k.screen_off } : null;
 }
 import type { AgentState, Policy, StateFile } from './state.ts';
 import { rotationDue, userVpnsToRemove, vpnPlan, type NmConnection, type VpnConfig, type VpnPlan } from './vpn.ts';

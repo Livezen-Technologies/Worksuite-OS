@@ -1961,6 +1961,17 @@ const si: Partial<Record<MessageKey, string>> = {
   'kiosk.st.offlineBody': '{host} වෙත ළඟා විය නොහැක. තත්පර {n} කින් නැවත උත්සාහ කරයි. කරුණාකර කාර්ය මණ්ඩලයේ සාමාජිකයෙකුගෙන් උදව් ඉල්ලන්න.',
   'kiosk.st.offlineBodyNoHost': 'ජාලයට ළඟා විය නොහැක. තත්පර {n} කින් නැවත උත්සාහ කරයි. කරුණාකර කාර්ය මණ්ඩලයේ සාමාජිකයෙකුගෙන් උදව් ඉල්ලන්න.',
   'kiosk.st.offlineMeta': 'වෙබ් කියොස්කය · ජාලය නැති විය',
+  'kiosk.st.screenOffTitle': "{time} දක්වා තිරය අක්‍රියයි",
+  'kiosk.st.screenOffTitleNoTime': "රාත්‍රිය සඳහා තිරය අක්‍රියයි",
+  'kiosk.st.screenOffBody': "තිරය භාවිත කිරීමට තට්ටු කරන්න. ස්පර්ශයකින් තොරව විනාඩියකට පසු එය නැවත අක්‍රිය වේ.",
+  'kiosk.st.screenOffMeta': "කාලසටහන්ගත · රාත්‍රී තිර අක්‍රිය කිරීම",
+  'kiosk.orientation': "දිශානතිය",
+  'kiosk.orient.landscape': "තිරස්",
+  'kiosk.orient.portrait': "සිරස්",
+  'kiosk.orient.landscape-flipped': "තිරස් (උඩු යටිකුරු)",
+  'kiosk.orient.portrait-flipped': "සිරස් (උඩු යටිකුරු)",
+  'kiosk.screenOff': "තිරය අක්‍රිය",
+  'kiosk.screenOffRange': "{from} – {until}",
 }
 
 export default si

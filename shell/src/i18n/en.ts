@@ -1987,6 +1987,17 @@ const en = {
   'kiosk.st.offlineBody': 'Can’t reach {host}. Trying again in {n} s. Please ask a member of staff for help.',
   'kiosk.st.offlineBodyNoHost': 'Can’t reach the network. Trying again in {n} s. Please ask a member of staff for help.',
   'kiosk.st.offlineMeta': 'Web kiosk · network lost',
+  'kiosk.st.screenOffTitle': "Screen off until {time}",
+  'kiosk.st.screenOffTitleNoTime': "Screen off for the night",
+  'kiosk.st.screenOffBody': "Tap to use the screen. It turns off again after a minute without a touch.",
+  'kiosk.st.screenOffMeta': "Scheduled · night screen-off",
+  'kiosk.orientation': "Orientation",
+  'kiosk.orient.landscape': "Landscape",
+  'kiosk.orient.portrait': "Portrait",
+  'kiosk.orient.landscape-flipped': "Landscape (upside down)",
+  'kiosk.orient.portrait-flipped': "Portrait (upside down)",
+  'kiosk.screenOff': "Screen off",
+  'kiosk.screenOffRange': "{from} – {until}",
 } as const
 
 export type MessageKey = keyof typeof en
