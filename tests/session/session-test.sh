@@ -230,5 +230,9 @@ PS=$ROOT/services/package-service/systemd
   && grep -q 'worksuite-package-service.timer' "$ROOT/packaging/debian/worksuite-package-service.install" \
   && ok "package service starts from a timer after boot, not at boot" || bad "package service starts from a timer after boot, not at boot"
 
+# ---- GTK icons: the SVG pixbuf loader (gtklock, greeter and polkit icons are SVG; without it: missing-image) ----
+awk '/^Package: worksuite-session$/{p=1} p&&/^Depends:/{print; exit}' "$ROOT/packaging/debian/control" | grep -q 'librsvg2-common' \
+  && ok "worksuite-session depends on the SVG icon loader" || bad "worksuite-session depends on the SVG icon loader"
+
 echo "1..$n"
 exit $fail
