@@ -35,6 +35,12 @@ plymouth-set-default-theme worksuite
 if [ -f /etc/grub.d/10_linux ]; then
   sed -i '/echo.*\$(echo "\$message" | grub_quote)/d' /etc/grub.d/10_linux
   ! grep -q 'echo "\$message" | grub_quote' /etc/grub.d/10_linux || { echo "GRUB loading messages still in 10_linux" >&2; exit 1; }
+  # Boot entries and the "Advanced options" submenu stay bootable without a GRUB login once 01_worksuite_lock puts the
+  # command line and the entry editor behind a superuser (repeated Esc reached "grub>").
+  sed -i -e 's/^CLASS="--class gnu-linux /CLASS="--unrestricted --class gnu-linux /' \
+    -e "s/echo \"submenu '\(.*\)' \\\\\$menuentry_id_option/echo \"submenu '\\1' --unrestricted \\\\\$menuentry_id_option/" /etc/grub.d/10_linux
+  grep -q '^CLASS="--unrestricted ' /etc/grub.d/10_linux && grep -q "submenu .* --unrestricted" /etc/grub.d/10_linux \
+    || { echo "10_linux entries not --unrestricted" >&2; exit 1; }
 fi
 # The splash from the first frame, and kept until the greeter takes the screen: no console text in between.
 mkdir -p /etc/plymouth

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Copies the WorkSuite GRUB theme (and its fonts) to /boot/grub/themes/worksuite, which GRUB can read before the disk
+# is unlocked: /boot is its own unencrypted partition, while /usr/share is on the LUKS root that GRUB never opens
+# (GRUB_ENABLE_CRYPTODISK=n). With the theme left on /usr, grub-mkconfig skipped it and the menu was GRUB's stock
+# text menu. Run by worksuite-branding's postinst and by the installer before update-grub.
+# Test hooks: WORKSUITE_GRUB_THEME_SRC, WORKSUITE_BOOT_DIR.
+set -eu
+src=${WORKSUITE_GRUB_THEME_SRC:-/usr/share/grub/themes/worksuite}
+boot=${WORKSUITE_BOOT_DIR:-/boot}
+[ -f "$src/theme.txt" ] || { echo "worksuite-grub-theme: no theme in $src" >&2; exit 0; }
+dst="$boot/grub/themes/worksuite"
+mkdir -p "$dst.new"
+cp -R "$src/." "$dst.new/"
+rm -rf "$dst.old"
+[ ! -d "$dst" ] || mv "$dst" "$dst.old"
+mv "$dst.new" "$dst"
+rm -rf "$dst.old"

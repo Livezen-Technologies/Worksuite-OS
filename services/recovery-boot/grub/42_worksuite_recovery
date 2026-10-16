@@ -35,7 +35,8 @@ args="root=$root ro ${GRUB_CMDLINE_LINUX:-}"
 
 entry() { # title version extra-args id icon-class
   rel=$(make_system_path_relative_to_its_root "$boot")
-  echo "menuentry '$1' --class $5 --class worksuite --class gnu-linux --id '$4' {"
+  # --unrestricted: bootable without the GRUB superuser (01_worksuite_lock locks only editing and the command line).
+  echo "menuentry '$1' --unrestricted --class $5 --class worksuite --class gnu-linux --id '$4' {"
   echo "	load_video"
   echo "	insmod gzio"
   [ -n "${GRUB_DEVICE_BOOT:-}" ] && prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | sed 's/^/	/'

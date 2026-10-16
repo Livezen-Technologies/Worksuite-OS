@@ -1,0 +1,20 @@
+#!/bin/sh
+# /etc/grub.d/01_worksuite_lock — GRUB's command line and entry editor behind a GRUB superuser nobody signs in as.
+# Repeated Esc in the menu used to drop GRUB to its "grub>" prompt (E2E); with a superuser set, GRUB asks for that
+# user instead, and 'e' / 'c' do the same. Every boot entry stays bootable: 10_linux's entries and submenu carry
+# --unrestricted (live-build hook 0100-worksuite-defaults), and so do WorkSuite Recovery and the previous kernel
+# (42_worksuite_recovery). The password is random and new on each update-grub.
+# If 10_linux was not patched (an upgrade replaced it), nothing is locked: locking then would lock the normal boot.
+# Test hooks: WORKSUITE_GRUB_D (default /etc/grub.d), WORKSUITE_GRUB_PBKDF2 (the grub-mkpasswd-pbkdf2 to run).
+set -e
+grubd=${WORKSUITE_GRUB_D:-/etc/grub.d}
+mkpw=${WORKSUITE_GRUB_PBKDF2:-grub-mkpasswd-pbkdf2}
+grep -q -- '--unrestricted' "$grubd/10_linux" 2>/dev/null || exit 0
+command -v "$mkpw" >/dev/null 2>&1 || exit 0
+pw=$(od -An -tx1 -N24 /dev/urandom | tr -d ' \n')
+hash=$(printf '%s\n%s\n' "$pw" "$pw" | "$mkpw" 2>/dev/null | sed -n 's/^.* is \(grub\.pbkdf2\..*\)$/\1/p')
+[ -n "$hash" ] || exit 0
+cat <<EOF2
+set superusers="worksuite-boot"
+password_pbkdf2 worksuite-boot $hash
+EOF2

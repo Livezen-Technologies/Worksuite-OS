@@ -1,3 +1,4 @@
+services/recovery-boot/grub/01_worksuite_lock etc/grub.d/
 services/recovery-boot/grub/05_worksuite_bootcheck etc/grub.d/
 services/recovery-boot/grub/42_worksuite_recovery etc/grub.d/
 services/recovery-boot/kernel/zz-worksuite-kernel-retention etc/kernel/postinst.d/

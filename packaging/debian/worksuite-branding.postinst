@@ -8,6 +8,8 @@ if [ "$1" = configure ]; then
   if command -v plymouth-set-default-theme >/dev/null 2>&1; then
     plymouth-set-default-theme -R worksuite || true
   elif command -v update-initramfs >/dev/null 2>&1; then update-initramfs -u || true; fi
+  # The GRUB theme where GRUB can read it on an encrypted install (/boot is not encrypted), then the menu.
+  if [ -d /boot ]; then /usr/libexec/worksuite/worksuite-grub-theme || true; fi
   if command -v update-grub >/dev/null 2>&1 && [ -d /boot/grub ]; then update-grub || true; fi
 fi
 #DEBHELPER#
