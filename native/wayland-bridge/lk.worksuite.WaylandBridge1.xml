@@ -45,10 +45,11 @@
     </method>
     <!-- Desktops in full: names ("" = no name of its own; the shell shows "Desktop N" in the user's language), windows
          on all desktops (sticky handles), apps whose windows are on all desktops, and whether Alt+Tab shows windows from
-         all desktops. -->
+         all desktops; ids: a stable id per desktop that follows it when desktops move or close. -->
     <method name="WorkspaceDetails">
       <arg name="current" type="u" direction="out"/><arg name="names" type="as" direction="out"/><arg name="windows" type="a{su}" direction="out"/>
       <arg name="sticky" type="as" direction="out"/><arg name="sticky_apps" type="as" direction="out"/><arg name="switcher_all" type="b" direction="out"/>
+      <arg name="ids" type="as" direction="out"/>
     </method>
     <!-- Dynamic desktops ("dynamic-workspaces" in SupportedOperations): Labwc 0.8 reads the count and names from rc.xml,
          so these rewrite the user's rc.xml and reload Labwc; windows are moved first so none changes desktop by the

@@ -125,7 +125,7 @@ describe('panel workspaces (WSOS-DSK-003)', () => {
     const workspaces = vi.fn()
     const c = new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn(), workspaces })
     await c.start()
-    expect(workspaces).toHaveBeenLastCalledWith({ supported: true, current: 1, count: 4, windows: { w1: 1, w2: 3 } })
+    expect(workspaces).toHaveBeenLastCalledWith({ supported: true, current: 1, count: 4, windows: { w1: 1, w2: 3 }, dynamic: false, capture: false })
     current = 3
     f.emit(new Message({ type: 4, path: BRIDGE_PATH, interface: BRIDGE, member: 'WorkspacesChanged', signature: 'uu', body: [3, 4] }))
     await new Promise((r) => setTimeout(r, 10))
@@ -136,11 +136,13 @@ describe('panel workspaces (WSOS-DSK-003)', () => {
     expect(sent.map((m) => [m.member, m.signature, m.body])).toEqual([['ActivateWorkspace', 'u', [2]], ['MoveWindowToWorkspace', 'su', ['w1', 4]]])
   })
 
-  it('is unsupported without the bridge operation or with one desktop', () => {
+  it('is unsupported without the bridge operation; one desktop is still supported (Task View adds more)', () => {
     expect(toWorkspaces([1, 4, {}], ['activate']).supported).toBe(false)
-    expect(toWorkspaces([1, 1, {}], ['workspaces']).supported).toBe(false)
+    expect(toWorkspaces([1, 1, {}], ['workspaces']).supported).toBe(true)
+    const d = toWorkspaces(null, ['workspaces', 'dynamic-workspaces'], [2, ['Mail', ''], { w1: 2, 'x;': 1 }, ['w1', 'bad'], ['foot'], true, ['d1', 'd2']])
+    expect(d).toMatchObject({ count: 2, current: 2, names: ['Mail', ''], windows: { w1: 2 }, sticky: ['w1'], stickyApps: ['foot'], switcherAll: true, dynamic: true })
     expect(toWorkspaces([9, 4, {}], ['workspaces']).current).toBe(4)
-    expect(toWorkspaces(null, ['workspaces'])).toEqual({ supported: false, current: 1, count: 1, windows: {} })
+    expect(toWorkspaces(null, ['activate'])).toEqual({ supported: false, current: 1, count: 1, windows: {}, dynamic: false, capture: false })
   })
 
   it('reports NotFound from the bridge as not_found', async () => {

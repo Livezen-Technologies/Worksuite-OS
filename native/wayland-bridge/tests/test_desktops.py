@@ -145,7 +145,9 @@ class ControllerTest(unittest.IsolatedAsyncioTestCase):
         self.r.ws.names = ["", "Mail", "Code", ""]
         self.r._activate(self.r.reg.get(h["b"]))   # Labwc follows focus to desktop 2
         self.assertEqual(self.r.ws.current, 2)
+        ids = list(self.r.ws.ids)
         await self.r.d.remove(2)
+        self.assertEqual(self.r.ws.ids, [ids[0], ids[2], ids[3]])
         self.assertEqual(self.r.ws.count, 3)
         self.assertEqual(self.r.where(h), {"a": 1, "b": 1, "c": 2, "d": 3})
         self.assertEqual(self.r.ws.names, ["", "Code", ""])
@@ -162,8 +164,10 @@ class ControllerTest(unittest.IsolatedAsyncioTestCase):
     async def test_reorder_moves_windows_and_names(self):
         h = self.r.place({"a": 1, "b": 2, "c": 3})
         self.r.ws.names = ["One", "Two", "Three", ""]
+        ids = list(self.r.ws.ids)
         await self.r.d.reorder(3, 1)
         self.assertEqual(self.r.ws.names, ["Three", "One", "Two", ""])
+        self.assertEqual(self.r.ws.ids, [ids[2], ids[0], ids[1], ids[3]])
         self.assertEqual(self.r.where(h), {"a": 2, "b": 3, "c": 1})
         self.assertEqual(self.r.ws.current, 2)  # desktop 1 (current) is now second
         self.assertEqual(parse_desktops(self.r.rc.read_text())[1][:3], ["Three", "One", "Two"])
@@ -296,7 +300,8 @@ class DesktopsDbusTest(unittest.IsolatedAsyncioTestCase):
         r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "SetWindowOnAllWorkspaces", "sb", [w.handle, True])
         self.assertEqual(r.message_type, MessageType.METHOD_RETURN, r.body)
         r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "WorkspaceDetails")
-        self.assertEqual(r.body, [1, ["Research", "", ""], {w.handle: 2}, [w.handle], [], False])
+        self.assertEqual(r.body[:6], [1, ["Research", "", ""], {w.handle: 2}, [w.handle], [], False])
+        self.assertEqual(r.body[6], self.ws.ids)
         r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "RemoveWorkspace", "u", [1])
         self.assertEqual(r.message_type, MessageType.METHOD_RETURN, r.body)
         r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "RestoreWorkspaces", "ass", [["A", "B", "C"], "Desktop"])

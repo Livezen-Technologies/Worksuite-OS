@@ -301,9 +301,9 @@ class Bridge:
     async def _workspace_details(self, _m: Message) -> tuple[str, list[Any]]:
         ws = self.workspaces
         if ws is None:
-            return "uasa{su}asasb", [1, [""], {}, [], [], False]
+            return "uasa{su}asasbas", [1, [""], {}, [], [], False, ["d1"]]
         names = (ws.names + [""] * ws.count)[: ws.count]
-        return "uasa{su}asasb", [ws.current, names, ws.windows(), sorted(ws.sticky), sorted(ws.sticky_apps), ws.switcher_all]
+        return "uasa{su}asasbas", [ws.current, names, ws.windows(), sorted(ws.sticky), sorted(ws.sticky_apps), ws.switcher_all, list(ws.ids)]
 
     async def _create_workspace(self, _m: Message) -> tuple[str, list[Any]]:
         return "u", [await self._need_desktops().create()]

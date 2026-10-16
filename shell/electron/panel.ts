@@ -25,6 +25,8 @@ export const SHELL_XML = `<node name="${SHELL_PATH}">
     <!-- Touch gestures (worksuite-gestures): edge swipe from the right, three-finger swipe down. -->
     <method name="ToggleNotifications"/>
     <method name="ShowDesktop"/>
+    <!-- Super+Tab (rc.xml), the three-finger swipe up: open or close Task View (desktops, WSOS-DSK-003). -->
+    <method name="ToggleTaskView"/>
     <!-- Super+A (rc.xml): open or close the AI assistant (services/ai). -->
     <method name="ToggleAssistant"/>
     <!-- Files is the default handler for archives (shell/apps/worksuite-files.desktop): browse this one. -->
@@ -34,8 +36,17 @@ export const SHELL_XML = `<node name="${SHELL_PATH}">
 
 export interface PanelWindow { handle: string; appId: string; title: string; output: string; flags: number }
 export interface TrayItem { key: string; id: string; title: string; icon: string; status: string }
-/** Labwc desktops through the bridge (WSOS-DSK-003): current and count are 1-based; windows maps handle → workspace. */
-export interface Workspaces { supported: boolean; current: number; count: number; windows: Record<string, number> }
+/** Labwc desktops through the bridge (WSOS-DSK-003): current and count are 1-based; windows maps handle → workspace.
+ *  names: per desktop, "" = no name of its own; sticky: windows on all desktops; stickyApps: apps whose windows are;
+ *  switcherAll: Alt+Tab shows every desktop's windows; dynamic: desktops can be added, closed, moved and renamed;
+ *  capture: the bridge can capture an output for Task View. */
+export interface Workspaces {
+  supported: boolean; current: number; count: number; windows: Record<string, number>
+  names?: string[]; sticky?: string[]; stickyApps?: string[]; switcherAll?: boolean; dynamic?: boolean; capture?: boolean; ids?: string[]
+}
+export const MAX_DESKTOPS = 16
+/** ListWindows flags bit: the window has focus. */
+export const ACTIVATED_FLAG = 1
 export type PanelResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 /** The part of a dbus-next MessageBus the panel uses (tests pass a fake). */
@@ -69,7 +80,7 @@ function errorCode(e: unknown): string {
 export interface PanelEvents {
   windows(list: PanelWindow[]): void
   tray(items: TrayItem[]): void
-  launcher(action: 'toggle' | 'show' | 'notifications' | 'desktop' | 'assistant'): void
+  launcher(action: 'toggle' | 'show' | 'notifications' | 'desktop' | 'assistant' | 'taskview'): void
   /** A monitor was plugged, unplugged or reconfigured (bridge OutputsChanged, WSOS-DSK-007). */
   outputs?(): void
   /** OpenArchive(path) from worksuite-open-archive. */
@@ -77,13 +88,29 @@ export interface PanelEvents {
   workspaces?(w: Workspaces): void
 }
 
-export function toWorkspaces(body: unknown, ops: string[]): Workspaces {
-  const b = Array.isArray(body) ? body : []
-  const count = Math.max(1, Math.min(9, Number(b[1]) || 1))
+const HANDLE = /^w[0-9a-f]{1,32}$/
+const strings = (v: unknown, ok: (s: string) => boolean, max: number) => (Array.isArray(v) ? v.map(String).filter(ok).slice(0, max) : [])
+
+/** ListWorkspaces (current, count, windows) or WorkspaceDetails (current, names, windows, sticky, sticky apps, Alt+Tab
+ *  scope) from the bridge, validated. */
+export function toWorkspaces(body: unknown, ops: string[], details?: unknown): Workspaces {
+  const d = Array.isArray(details) && Array.isArray(details[1]) ? details : null
+  const b = d ? [d[0], (d[1] as unknown[]).length, d[2]] : Array.isArray(body) ? body : []
+  const count = Math.max(1, Math.min(MAX_DESKTOPS, Number(b[1]) || 1))
   const current = Math.max(1, Math.min(count, Number(b[0]) || 1))
   const windows: Record<string, number> = {}
-  if (b[2] && typeof b[2] === 'object') for (const [h, n] of Object.entries(b[2] as Record<string, unknown>)) if (/^w[0-9a-f]{1,32}$/.test(h) && Number.isInteger(n)) windows[h] = n as number
-  return { supported: ops.includes('workspaces') && count > 1, current, count, windows }
+  if (b[2] && typeof b[2] === 'object') for (const [h, n] of Object.entries(b[2] as Record<string, unknown>)) if (HANDLE.test(h) && Number.isInteger(n)) windows[h] = n as number
+  const out: Workspaces = { supported: ops.includes('workspaces'), current, count, windows }
+  if (d) {
+    out.names = strings(d[1], () => true, MAX_DESKTOPS).map((s) => s.slice(0, 40))
+    out.sticky = strings(d[3], (h) => HANDLE.test(h), 256)
+    out.stickyApps = strings(d[4], (a) => a.length > 0 && a.length < 256, 64)
+    out.switcherAll = d[5] === true
+    out.ids = strings(d[6], (x) => /^[A-Za-z0-9]{1,16}$/.test(x), MAX_DESKTOPS)
+  }
+  out.dynamic = out.supported && ops.includes('dynamic-workspaces')
+  out.capture = ops.includes('capture-output')
+  return out
 }
 
 export class PanelClient {
@@ -126,7 +153,7 @@ export class PanelClient {
 
   private onMethod(msg: Msg): boolean {
     if (msg.path !== SHELL_PATH) return false
-    const shellAction = ({ ToggleLauncher: 'toggle', ShowLauncher: 'show', ToggleNotifications: 'notifications', ShowDesktop: 'desktop', ToggleAssistant: 'assistant' } as const)[msg.member as 'ToggleLauncher']
+    const shellAction = ({ ToggleLauncher: 'toggle', ShowLauncher: 'show', ToggleNotifications: 'notifications', ShowDesktop: 'desktop', ToggleAssistant: 'assistant', ToggleTaskView: 'taskview' } as const)[msg.member as 'ToggleLauncher']
     if (msg.interface === SHELL && shellAction) {
       this.events.launcher(shellAction)
       this.bus.send(Message.newMethodReturn(msg, '', []))
@@ -172,10 +199,11 @@ export class PanelClient {
 
   async refreshWorkspaces(): Promise<Workspaces> {
     try {
-      const [r, p] = await Promise.all([this.call(BRIDGE_PATH, BRIDGE, 'ListWorkspaces'),
-        this.call(BRIDGE_PATH, 'org.freedesktop.DBus.Properties', 'Get', 'ss', [BRIDGE, 'SupportedOperations'])])
+      const [r, p, d] = await Promise.all([this.call(BRIDGE_PATH, BRIDGE, 'ListWorkspaces'),
+        this.call(BRIDGE_PATH, 'org.freedesktop.DBus.Properties', 'Get', 'ss', [BRIDGE, 'SupportedOperations']),
+        this.call(BRIDGE_PATH, BRIDGE, 'WorkspaceDetails').catch(() => null)])  // older bridges: no details
       const ops = (p?.body?.[0] as { value?: unknown } | undefined)?.value
-      this.workspaces = toWorkspaces(r?.body, Array.isArray(ops) ? ops.map(String) : [])
+      this.workspaces = toWorkspaces(r?.body, Array.isArray(ops) ? ops.map(String) : [], d?.body)
     } catch {
       this.workspaces = { supported: false, current: 1, count: 1, windows: {} }
     }
@@ -208,5 +236,31 @@ export class PanelClient {
   minimize(handle: string, state: boolean) { return this.op('SetMinimized', 'sb', [handle, state]) }
   activateWorkspace(n: number) { return this.op('ActivateWorkspace', 'u', [n]) }
   moveToWorkspace(handle: string, n: number) { return this.op('MoveWindowToWorkspace', HANDLE_INDEX, [handle, n]) }
+  createWorkspace() { return this.op('CreateWorkspace', '', []) }
+  removeWorkspace(n: number) { return this.op('RemoveWorkspace', 'u', [n]) }
+  moveWorkspace(from: number, to: number) { return this.op('MoveWorkspace', 'uu', [from, to]) }
+  renameWorkspace(n: number, name: string) { return this.op('RenameWorkspace', 'us', [n, name.slice(0, 40)]) }
+  restoreWorkspaces(names: string[], prefix: string) { return this.op('RestoreWorkspaces', 'ass', [names.slice(0, MAX_DESKTOPS).map((x) => x.slice(0, 40)), prefix.slice(0, 40)]) }
+  setWindowOnAllWorkspaces(handle: string, on: boolean) { return this.op('SetWindowOnAllWorkspaces', 'sb', [handle, on]) }
+  setAppOnAllWorkspaces(appId: string, on: boolean) { return this.op('SetAppOnAllWorkspaces', 'sb', [appId, on]) }
+  setSwitcherAllWorkspaces(on: boolean) { return this.op('SetSwitcherAllWorkspaces', 'b', [on]) }
+
+  /** A small JPEG of an output for Task View, as a data: URL held in memory only; null when the bridge can't. */
+  async captureOutput(output: string, maxWidth: number): Promise<string | null> {
+    try {
+      const r = await this.call(BRIDGE_PATH, BRIDGE, 'CaptureOutput', HANDLE_INDEX, [output, Math.max(64, Math.min(640, Math.round(maxWidth)))])
+      const data = r?.body?.[0]
+      if (!(data instanceof Uint8Array) || !data.length || data.length > 2 * 1024 * 1024) return null
+      return `data:image/jpeg;base64,${Buffer.from(data).toString('base64')}`
+    } catch {
+      return null
+    }
+  }
+
+  /** The shell's own main window (app_id worksuite-shell; the per-monitor desktops are "WorkSuite desktop <output>"). */
+  shellWindow(): PanelWindow | undefined {
+    return this.windows.find((w) => w.appId === 'worksuite-shell' && !w.title.startsWith('WorkSuite desktop '))
+  }
+
   trayActivate(key: string, x: number, y: number) { return this.op('Activate', 'sii', [key, Math.round(x), Math.round(y)], TRAY_PATH, TRAY_IFACE) }
 }

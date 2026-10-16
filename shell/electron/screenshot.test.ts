@@ -81,7 +81,9 @@ describe('Labwc key bindings (WSOS-DSK-011)', () => {
     expect(bind('C-A-Right')).toContain('GoToDesktop" to="right"')
     expect(bind('Print')).toContain('command="worksuite-screenshot"')
     expect(bind('S-Print')).toContain('command="worksuite-screenshot --interactive"')
-    expect(rc).toMatch(/<desktops number="4"/)
+    expect(rc).toMatch(/<desktops number="1"/)  // one desktop to start with, like Windows 11; Task View adds more
+    expect(bind('W-Tab')).toContain('ToggleTaskView')
+    expect(bind('C-W-d')).toContain('worksuite-workspace-event new')
   })
 })
 

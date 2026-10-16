@@ -184,6 +184,18 @@ contextBridge.exposeInMainWorld('worksuitePanel', {
   activateWorkspace: (n: number) => ipcRenderer.invoke('ws:panelWorkspaceActivate', String(Number(n) | 0)),
   moveToWorkspace: (handle: string, n: number) => ipcRenderer.invoke('ws:panelMoveToWorkspace', String(handle), String(Number(n) | 0)),
   onWorkspaces: on('ws:panelWorkspacesChanged'),
+  // Desktops (Task View, WSOS-DSK-003)
+  createWorkspace: () => ipcRenderer.invoke('ws:panelWorkspaceCreate'),
+  removeWorkspace: (n: number) => ipcRenderer.invoke('ws:panelWorkspaceRemove', String(Number(n) | 0)),
+  moveWorkspace: (from: number, to: number) => ipcRenderer.invoke('ws:panelWorkspaceMove', String(Number(from) | 0), String(Number(to) | 0)),
+  renameWorkspace: (n: number, name: string) => ipcRenderer.invoke('ws:panelWorkspaceRename', String(Number(n) | 0), String(name)),
+  restoreWorkspaces: (names: string[], prefix: string) => ipcRenderer.invoke('ws:panelWorkspacesRestore', JSON.stringify(names.map(String)), String(prefix)),
+  setWindowOnAllDesktops: (handle: string, on: boolean) => ipcRenderer.invoke('ws:panelWindowAllDesktops', String(handle), on ? '1' : '0'),
+  setAppOnAllDesktops: (appId: string, on: boolean) => ipcRenderer.invoke('ws:panelAppAllDesktops', String(appId), on ? '1' : '0'),
+  setSwitcherAllDesktops: (on: boolean) => ipcRenderer.invoke('ws:panelSwitcherAll', on ? '1' : '0'),
+  openTaskView: () => ipcRenderer.invoke('ws:panelTaskView', 'open'),
+  taskViewState: (open: boolean) => ipcRenderer.invoke('ws:panelTaskView', open ? '1' : '0'),
+  onTaskView: on('ws:taskView'),
 })
 
 // On-device AI assistant — see electron/ai.ts and services/ai. Answers stream back as onEvent.

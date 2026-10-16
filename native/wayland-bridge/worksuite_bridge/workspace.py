@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import time
@@ -60,6 +61,8 @@ class WorkspaceTracker:
         self.current = 1
         self.names: list[str] = [clean_name(n) for n in (names or [])][:count] + [""] * max(0, count - len(names or []))
         self.prefix = "Desktop"
+        # A stable id per desktop that follows it through moves and closes (the shell keys wallpapers by it).
+        self.ids: list[str] = [self.new_id() for _ in range(count)]
         self.of: dict[str, int] = {}
         self.sticky: set[str] = set()         # windows shown on every desktop (Labwc omnipresent)
         self.sticky_apps: set[str] = set()    # app_ids whose windows are shown on every desktop
@@ -75,6 +78,10 @@ class WorkspaceTracker:
         registry.listeners.append(self._window_event)
         for w in registry.list():
             self.of[w.handle] = 1
+
+    @staticmethod
+    def new_id() -> str:
+        return "d" + secrets.token_hex(4)
 
     def _changed(self) -> None:
         for fn in list(self.listeners):
@@ -367,6 +374,7 @@ class Desktops:
             names = ws.names + [""]
             await self._reload(self._labwc_names(names))
             ws.names, ws.count = names, ws.count + 1
+            ws.ids = ws.ids + [ws.new_id()]
             await self._go(ws.count)  # Windows switches to the new desktop
             ws._changed()
             return ws.count
@@ -381,6 +389,7 @@ class Desktops:
             await self._go(current if current < ws.count else max(1, ws.count - 1))
             await self._reload(self._labwc_names(names))
             ws.names, ws.count = names, ws.count - 1
+            ws.ids = ws.ids[: n - 1] + ws.ids[n:]
             ws.of = {h: min(d, ws.count) for h, d in ws.of.items()}
             ws.current = min(current, ws.count)
             ws._changed()
@@ -396,6 +405,7 @@ class Desktops:
             names = [ws.names[i - 1] for i in order]
             await self._reload(self._labwc_names(names))
             ws.names = names
+            ws.ids = [ws.ids[i - 1] for i in order]
             await self._go(current)
             ws._changed()
 
@@ -427,6 +437,7 @@ class Desktops:
                     await self._go(n)
             await self._reload(self._labwc_names(clean))
             ws.names, ws.count = clean, n
+            ws.ids = (ws.ids + [ws.new_id() for _ in range(n)])[:n]
             ws.of = {h: min(d, n) for h, d in ws.of.items()}
             ws.current = min(ws.current, n)
             ws._changed()
