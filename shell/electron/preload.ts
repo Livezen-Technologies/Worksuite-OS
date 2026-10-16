@@ -279,7 +279,7 @@ contextBridge.exposeInMainWorld('worksuitePeripherals', {
   volEject: (device: string) => ipcRenderer.invoke('ws:volEject', String(device)),
   powerProfiles: () => ipcRenderer.invoke('ws:powerProfiles'),
   setPowerProfile: (name: string) => ipcRenderer.invoke('ws:setPowerProfile', String(name)),
-  inhibitors: () => ipcRenderer.invoke('ws:inhibitors'),
+  inhibitors: () => ipcRenderer.invoke('ws:powerInhibitors'),
   findPrinters: () => ipcRenderer.invoke('ws:findPrinters'),
   addPrinter: (uri: string, name: string) => ipcRenderer.invoke('ws:addPrinter', String(uri), String(name)),
   removePrinter: (name: string) => ipcRenderer.invoke('ws:removePrinter', String(name)),

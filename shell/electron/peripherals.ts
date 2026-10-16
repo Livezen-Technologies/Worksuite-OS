@@ -366,7 +366,7 @@ export function startPeripheralsHost(handle: Handle, home: string, b: Peripheral
   handle('ws:volEject', (d) => b.eject(d))
   handle('ws:powerProfiles', () => b.powerProfiles())
   handle('ws:setPowerProfile', (n) => b.setPowerProfile(n))
-  handle('ws:inhibitors', () => b.inhibitors())
+  handle('ws:powerInhibitors', () => b.inhibitors())   // 'ws:inhibitors' is the session-end overlay's (sessionHost.ts)
   handle('ws:findPrinters', () => b.findPrinters())
   handle('ws:addPrinter', (u, n) => b.addPrinter(u, n))
   handle('ws:removePrinter', (n) => b.removePrinter(n))
