@@ -1,5 +1,6 @@
 // Devices and drivers (boards H1–H6, HwSettings). Devices are read from sysfs by the bridge; there is no driver
 // catalog or driver installer service yet, so driver choices and driver updates show an honest empty state.
+import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useRef, useState } from 'react'
 import { formatBytes, os, type Avail, type DriverOffer, type HwDevice, type Printer } from '../lib/os'
 import { KIND_ICON, deviceStatus, deviceSub, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerVersion } from '../lib/hardware'
@@ -198,7 +199,7 @@ export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]
                   {st === 'active' && <Spinner size={20} />}
                   {st === 'wait' && <span className="h-5 w-5 rounded-full border-2 border-[rgba(127,178,255,0.3)]" />}
                   <span className="flex-1 text-sm font-medium">{o.name} {o.to_version}</span>
-                  <span className="text-xs text-[#8FA3C8]">{st === 'done' ? t('common.installed') : st === 'active' ? t('hw.installingPct', { percent: formatNumber(p) }) : `${t('hw.waiting')}${o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}`}</span>
+                  <span className="text-xs text-[#8FA3C8]">{st === 'done' ? t('common.installed') : st === 'active' ? <CountUp value={p} render={(n) => t('hw.installingPct', { percent: n })} /> : `${t('hw.waiting')}${o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}`}</span>
                 </div>
                 {st === 'active' && <div className="ml-8"><Progress value={p} label={t('hw.progressOf', { name: o.name })} height={4} /></div>}
               </li>

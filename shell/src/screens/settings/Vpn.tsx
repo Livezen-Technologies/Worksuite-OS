@@ -1,6 +1,7 @@
 // Settings › VPN (boards V1Settings, V2Add, V4Trouble; WSOS-INT-001). Everything comes from os.sysVpn() (NetworkManager
 // via the bridge). NetworkManager doesn't report handshakes, traffic or peer keys to the shell, so those places show
 // what it does report (interface, type, who set it up) instead of sample values.
+import { AnimatedProgress } from '../../components/AnimatedProgress'
 import { useState } from 'react'
 import { os, type VpnConnection, type VpnState } from '../../lib/os'
 import { useSystem } from '../../lib/useSystem'
@@ -130,6 +131,7 @@ function LeadCard({ c, required, busy, onToggle }: { c: VpnConnection; required:
         </span>
         <BigSwitch label={t('vpn.connectName', { name: c.name })} checked={on} disabled={busy || locked} color="#2E9E6A" onChange={onToggle} />
       </div>
+      {busy && <AnimatedProgress value={null} label={on ? t('common.disconnecting') : t('common.connecting')} height={3} className="mx-5 mb-3" />}
       {on && (
         <div className="grid grid-cols-4 border-t border-[rgba(127,178,255,0.12)]">
           {stats.map(([k, v], i) => (

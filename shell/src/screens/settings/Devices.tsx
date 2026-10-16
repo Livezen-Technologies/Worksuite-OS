@@ -1,4 +1,5 @@
 // Settings › Power (UPower via os.sysBattery) and Settings › Printers (CUPS lpstat via os.sysPrinters).
+import { AnimatedProgress, CountUp } from '../../components/AnimatedProgress'
 import { formatDuration, os, type BatteryState, type Printer } from '../../lib/os'
 import { useSystem } from '../../lib/useSystem'
 import { C, Svg, card, chip, rowLine } from '../../components/Dk'
@@ -16,7 +17,6 @@ export function PowerPanel() {
   const charging = b?.state === 'charging'
   const status = !b ? null : charging ? t('settings.bat.charging') : b.on_battery ? t('settings.bat.onBattery') : b.state === 'fully-charged' ? t('settings.bat.full') : t('settings.bat.plugged')
   const eta = !b ? null : charging ? formatDuration(b.time_to_full_s) : b.on_battery ? formatDuration(b.time_to_empty_s) : null
-  const tone = pct == null ? C.muted : pct <= 15 && b?.on_battery ? '#FF8A7A' : C.green
   return <>
     <H1>{t('settings.nav.Power')}</H1>
     {!state ? <Empty title={t('settings.power.reading')} /> : !state.available ? <Unavail what={t('settings.about.battery')} reason={state.reason} /> : !b?.present ? (
@@ -28,8 +28,8 @@ export function PowerPanel() {
       <div className="flex items-center gap-5 rounded-[18px] border border-[rgba(127,178,255,0.18)] bg-[rgba(14,32,72,0.7)] px-6 py-[22px]">
         <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-2xl" style={{ background: charging ? '#B7791F' : 'rgba(127,178,255,0.18)' }}><Svg d={BOLT} size={30} stroke="#FFFFFF" /></span>
         <span className="flex min-w-0 flex-1 flex-col gap-2">
-          <span className="text-xl font-bold">{pct == null ? '—' : `${formatNumber(pct)}%`} · {status}</span>
-          <span className="h-2 overflow-hidden rounded bg-white/15" aria-hidden="true"><span className="block h-full" style={{ width: `${pct ?? 0}%`, background: tone }} /></span>
+          <span className="text-xl font-bold">{pct == null ? '—' : <CountUp value={pct} />} · {status}</span>
+          <AnimatedProgress decorative value={pct ?? 0} height={8} trackColor="rgba(255,255,255,0.15)" shimmer={charging} tone={pct != null && pct <= 15 && b?.on_battery ? 'error' : charging ? 'default' : 'success'} />
           <span className="text-[13px] text-[#C9D6EE]">{eta ? (charging ? t('settings.bat.toFull', { eta }) : t('settings.bat.left', { eta })) : t('settings.power.noEstimate')}</span>
         </span>
       </div>

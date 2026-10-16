@@ -1,6 +1,7 @@
 // Dark navy pieces shared by Settings, update and device screens (boot-install boards: Set*, Upd*, Hw*, U*, H*).
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { AnimatedProgress, type ProgressTone } from './AnimatedProgress'
 
 export const C = {
   ink: '#E8EEFA', soft: '#C9D6EE', muted: '#8FA3C8', dim: '#8FA3C8', blue: '#1F6BFF', link: '#7FB2FF', cyan: '#18D4F0',
@@ -40,16 +41,9 @@ export function Switch({ label, checked, onChange, disabled, small }: { label: s
   )
 }
 
-/** Gradient bar; `value` null = indeterminate shimmer. */
-export function Progress({ value, label, height = 8, shine }: { value: number | null; label: string; height?: number; shine?: boolean }) {
-  return (
-    <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value ?? undefined} aria-valuetext={value == null ? 'In progress' : `${value}%`}
-      className="relative overflow-hidden rounded-full bg-[rgba(127,178,255,0.14)]" style={{ height }}>
-      <div className="absolute inset-y-0 left-0 overflow-hidden rounded-full bg-[linear-gradient(90deg,#1F6BFF,#18D4F0)]" style={{ width: value == null ? '35%' : `${value}%` }}>
-        {(shine || value == null) && <div className="ws-shine absolute inset-y-0 w-[40%] bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.35),transparent)]" />}
-      </div>
-    </div>
-  )
+/** Gradient bar; `value` null = indeterminate. Thin wrapper over the shared AnimatedProgress. */
+export function Progress({ value, label, height = 8, shine = true, tone }: { value: number | null; label: string; height?: number; shine?: boolean; tone?: ProgressTone }) {
+  return <AnimatedProgress value={value} label={label} height={height} shimmer={shine} tone={tone} />
 }
 
 export function Tag({ text, bg, color }: { text: string; bg: string; color: string }) {

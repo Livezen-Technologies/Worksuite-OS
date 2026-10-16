@@ -1,6 +1,7 @@
 // App Center (G08 browse, G09 app detail, G10 install from file). The organization's catalog through the package
 // service (WSOS-APP-001/002), the user's AppImages (WSOS-AIM-001…004), local .deb files (WSOS-APT-005) and Flatpak
 // permissions (WSOS-FLP-002…004). Nothing here is sample data: what the services don't report is left out or says so.
+import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useState } from 'react'
 import type { WindowProps } from './types'
 import { C, card, Dialog, dialogFooter, btnGhost, btnPrimary, Svg, Switch } from '../components/Dk'
@@ -236,8 +237,7 @@ export default function AppCenter({ onClose }: WindowProps) {
             <span className="rounded px-[5px] py-px font-mono text-[9px]" style={{ background: 'rgba(127,178,255,0.14)', color: C.soft }}>{formatLabel(a.source)}</span>
             <span className="truncate">{a.needsApproval ? t('appc.needsApproval') : a.blocked ?? a.category}</span>
           </span>
-          {job && <span className="mt-[3px] h-1 overflow-hidden rounded-sm bg-[rgba(127,178,255,0.15)]" role="progressbar" aria-label={a.name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress[job[0]] ?? 0}>
-            <span className="block h-full bg-[linear-gradient(90deg,#1F6BFF,#18D4F0)]" style={{ width: `${progress[job[0]] ?? 0}%` }} /></span>}
+          {job && <AnimatedProgress className="mt-[3px]" value={progress[job[0]] ?? null} label={a.name} height={4} />}
         </span>
         <button type="button" disabled={c.disabled} onClick={c.act} aria-label={t('appc.ctaLabel', { action: c.label, name: a.name })}
           className="relative cursor-pointer rounded-lg border px-3 py-[7px] text-xs font-semibold disabled:cursor-default disabled:opacity-60"
@@ -303,7 +303,7 @@ export default function AppCenter({ onClose }: WindowProps) {
           {Object.entries(jobs).filter(([, j]) => !j.key).map(([path, j]) => (
             <div key={path} aria-live="polite" className={`${card} flex items-center gap-3 px-4 py-2.5 text-[13px]`}>
               <span className="grow">{j.op === 'update' ? t('appc.job.updates') : j.op === 'prune' ? t('appc.job.prune') : t('appc.job.install', { name: j.name })}</span>
-              <span className="h-1.5 w-40 overflow-hidden rounded-full bg-[rgba(127,178,255,0.15)]" role="progressbar" aria-label={j.name} aria-valuenow={progress[path] ?? 0} aria-valuemin={0} aria-valuemax={100}><span className="block h-full bg-[linear-gradient(90deg,#1F6BFF,#18D4F0)]" style={{ width: `${progress[path] ?? 0}%` }} /></span>
+              <AnimatedProgress className="w-40" value={progress[path] ?? null} label={j.name} height={6} />
             </div>
           ))}
 
