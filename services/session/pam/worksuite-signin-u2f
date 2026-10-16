@@ -1,0 +1,8 @@
+Name: WorkSuite: sign in with a FIDO2 security key (pam_u2f; turned on by Settings > Users when someone adds a key)
+Default: no
+Priority: 340
+Auth-Type: Primary
+Auth:
+	[success=end default=ignore]	pam_u2f.so authfile=/etc/worksuite/u2f_mappings origin=pam://worksuite appid=pam://worksuite cue nouserok
+Auth-Initial:
+	[success=end default=ignore]	pam_u2f.so authfile=/etc/worksuite/u2f_mappings origin=pam://worksuite appid=pam://worksuite cue nouserok

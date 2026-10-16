@@ -2,6 +2,7 @@
 // mapping is testable without root. Consumers of the files:
 //   /etc/worksuite/lock-policy.conf      worksuite-idle (swayidle) caps the user's idle-lock timeout (WSOS-LOCK-003)
 //   /etc/worksuite/faillock.conf         pam_faillock conf= (worksuite-session PAM profiles, WSOS-AUTH-004)
+//   /etc/worksuite/signin-policy.conf    worksuite-signin: device PIN allowed, minimum length (Settings > Users)
 //   /etc/modprobe.d, /etc/udev/rules.d   USB mass storage blocked or read-only (WSOS-INT-004)
 //   /etc/worksuite/offline-access-expired  pam_nologin file= refuses sign-in after the offline period (WSOS-AUTH-003, DIR-005)
 // Bluetooth is a switch (rfkill + bluetooth.service), not a file (WSOS-INT-003).
@@ -10,6 +11,7 @@ import type { Policy } from './state.ts';
 export const ENFORCED_PATHS = {
   lockPolicy: '/etc/worksuite/lock-policy.conf',
   faillock: '/etc/worksuite/faillock.conf',
+  signinPolicy: '/etc/worksuite/signin-policy.conf',
   usbModprobe: '/etc/modprobe.d/worksuite-usb-storage.conf',
   usbUdev: '/etc/udev/rules.d/71-worksuite-usb-storage.rules',
   offlineExpired: '/etc/worksuite/offline-access-expired',
@@ -39,16 +41,24 @@ const MODPROBE_BLOCK = HEADER +
   '# usb_storage=block: USB mass-storage drivers cannot load. Keyboards, mice and other USB classes are unaffected.\n' +
   'install usb_storage /bin/false\ninstall uas /bin/false\nblacklist usb_storage\nblacklist uas\n';
 
+/** Device PIN rules for worksuite-signin (services/session/signin/worksuite_signin/core.py policy()). */
+export function signinPolicyConf(allowPin = true, minLength = 6): string {
+  return HEADER + `ALLOW_PIN=${allowPin ? 1 : 0}\nPIN_MIN_LENGTH=${minLength}\n`;
+}
+
 /** null policy = not managed: every WorkSuite restriction removed, packaged defaults back. */
 export function policyEnforcement(p: Policy | null | undefined): Enforcement {
   const usb = p?.usb_storage ?? 'allow';
   const lock = p && Number.isInteger(p.lock_timeout_max_s) && (p.lock_timeout_max_s as number) > 0 ? p.lock_timeout_max_s as number : null;
   const deny = p && Number.isInteger(p.login_failures_max) ? p.login_failures_max as number : 5;
   const unlock = p && Number.isInteger(p.login_lockout_s) ? p.login_lockout_s as number : 600;
+  const pinMin = p && Number.isInteger(p.pin_min_length) && (p.pin_min_length as number) >= 4 && (p.pin_min_length as number) <= 12 ? p.pin_min_length as number : 6;
   return {
     files: {
       [ENFORCED_PATHS.lockPolicy]: lock ? HEADER + `LOCK_TIMEOUT_MAX_S=${lock}\n` : null,
       [ENFORCED_PATHS.faillock]: faillockConf(deny, unlock),
+      // Unmanaged: no file, worksuite-signin's defaults (PIN allowed, 6 digits) apply.
+      [ENFORCED_PATHS.signinPolicy]: p ? signinPolicyConf(p.allow_pin !== false, pinMin) : null,
       [ENFORCED_PATHS.usbModprobe]: usb === 'block' ? MODPROBE_BLOCK : null,
       [ENFORCED_PATHS.usbUdev]: usb === 'block' ? UDEV_BLOCK : usb === 'read_only' ? UDEV_READ_ONLY : null,
     },

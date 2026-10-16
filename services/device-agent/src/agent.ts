@@ -353,6 +353,7 @@ export class Agent {
         maintenance_window: p.maintenance_window ?? null, lock_timeout_max_s: p.lock_timeout_max_s ?? null,
         offline_access_days: p.offline_access_days ?? null, usb_storage: p.usb_storage ?? null, bluetooth: p.bluetooth ?? null,
         login_failures_max: p.login_failures_max ?? null, login_lockout_s: p.login_lockout_s ?? null,
+        allow_pin: p.allow_pin ?? null, pin_min_length: p.pin_min_length ?? null,
         app_allowlist_size: p.app_allowlist?.length ?? 0,
         vpn_required: p.vpn_required ?? null, user_vpn: p.user_vpn ?? null,
       } : null,

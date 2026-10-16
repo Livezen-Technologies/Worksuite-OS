@@ -1,7 +1,9 @@
 #!/bin/sh
 set -e
 if [ "$1" = remove ]; then
-  pam-auth-update --package --remove worksuite-faillock worksuite-faillock-preauth worksuite-offline-access
+  pam-auth-update --package --remove worksuite-faillock worksuite-faillock-preauth worksuite-offline-access \
+    worksuite-signin-pin worksuite-signin-pin-final worksuite-signin-u2f
+  if [ -d /run/systemd/system ]; then systemctl disable --now worksuite-signin.socket >/dev/null 2>&1 || true; fi
 fi
 #DEBHELPER#
 exit 0

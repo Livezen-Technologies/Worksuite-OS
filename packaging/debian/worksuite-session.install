@@ -24,3 +24,11 @@ services/session/greeter/worksuite_greeter usr/lib/worksuite/greeter/
 services/session/greeter/gtkgreet.css usr/share/worksuite/
 services/session/bin/worksuite-autologin usr/sbin/
 services/session/polkit/worksuite_polkit_agent usr/lib/worksuite/polkit/
+services/session/bin/worksuite-signin usr/lib/worksuite/
+services/session/signin/worksuite_signin usr/lib/worksuite/signin/
+services/session/pam/worksuite-signin-pin usr/share/pam-configs/
+services/session/pam/worksuite-signin-pin-final usr/share/pam-configs/
+services/session/pam/worksuite-signin-u2f usr/share/pam-configs/
+services/session/systemd/system/worksuite-signin.socket usr/lib/systemd/system/
+services/session/systemd/system/worksuite-signin@.service usr/lib/systemd/system/
+services/session/polkit/lk.worksuite.signin.policy usr/share/polkit-1/actions/

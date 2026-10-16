@@ -63,7 +63,7 @@ profile worksuite-device-agent flags=(attach_disconnected) {
   /run/cryptsetup/** rwk,
   # Policy enforcement files (services/device-agent/src/enforce.ts ENFORCED_PATHS), written via <path>.tmp + rename.
   /etc/worksuite/ rw,
-  /etc/worksuite/{lock-policy.conf,faillock.conf,offline-access-expired}{,.tmp} rw,
+  /etc/worksuite/{lock-policy.conf,faillock.conf,signin-policy.conf,offline-access-expired}{,.tmp} rw,
   /etc/modprobe.d/worksuite-usb-storage.conf{,.tmp} rw,
   /etc/udev/rules.d/71-worksuite-usb-storage.rules{,.tmp} rw,
   /usr/bin/udevadm rix,

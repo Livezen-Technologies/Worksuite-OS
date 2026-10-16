@@ -60,12 +60,13 @@ Package: worksuite-session
 Architecture: all
 Depends: labwc, systemd, dbus-user-session, gtklock, swayidle, zenity, lxpolkit | mate-polkit,
  libpam-modules, libpam-runtime, ${misc:Depends}
-Recommends: python3, python3-gi, gir1.2-gtk-4.0, gir1.2-polkit-1.0
+Recommends: python3, python3-gi, gir1.2-gtk-4.0, gir1.2-polkit-1.0, libpam-u2f, pamu2fcfg
 Description: WorkSuite Wayland session file, systemd user units and launcher
  Session entry for the display manager, the worksuite-session launcher and the
  systemd user units bound to worksuite-session.target, plus Labwc and portal
  configuration, the gtklock/swayidle screen lock, the polkit authentication
- agent, the greeter wrapper and the pam_faillock sign-in lockout.
+ agent, the greeter wrapper, the pam_faillock sign-in lockout and the device PIN
+ and FIDO2 security-key sign-in (off until someone sets one up).
 
 Package: worksuite-user-services
 Architecture: amd64 arm64

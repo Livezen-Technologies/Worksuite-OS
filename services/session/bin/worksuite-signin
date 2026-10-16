@@ -1,0 +1,5 @@
+#!/bin/sh
+# Device PIN and security-key sign-in helper (services/session/signin). Installed as /usr/lib/worksuite/worksuite-signin.
+# Run by pam_exec, by the socket-activated root daemon and through pkexec from Settings > Users. Secrets come on stdin
+# only (see worksuite_signin/cli.py). -I: no PYTHONPATH or user site from the caller's environment.
+exec /usr/bin/python3 -I -c 'import sys; sys.path.insert(0, "/usr/lib/worksuite/signin"); from worksuite_signin.cli import main; sys.exit(main())' "$@"

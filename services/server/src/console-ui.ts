@@ -242,7 +242,8 @@ const views = {
       act(() => api('PUT', 'policy', { policy: { update_ring: f.update_ring.value || null, update_mode: f.update_mode.value || null, maintenance_window: f.maintenance_window.value || null,
         usb_storage: f.usb_storage.value || null, bluetooth: f.bluetooth.value === '' ? null : f.bluetooth.value === 'true', lock_timeout_max_s: num('lock_timeout_max_s'),
         offline_access_days: num('offline_access_days'), offline_wipe_days: num('offline_wipe_days'),
-        login_failures_max: num('login_failures_max'), login_lockout_s: num('login_lockout_s'), update_mirror: f.update_mirror.value || null,
+        login_failures_max: num('login_failures_max'), login_lockout_s: num('login_lockout_s'),
+        allow_pin: f.allow_pin.value === '' ? null : f.allow_pin.value === 'true', pin_min_length: num('pin_min_length'), update_mirror: f.update_mirror.value || null,
         app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
     } },
       h('div', { class: 'row' }, h('label', {}, 'Update ring', sel('update_ring', [['stable', 'Stable'], ['pilot', 'Pilot'], ['development', 'Development']])),
@@ -255,11 +256,14 @@ const views = {
         h('label', {}, 'Wipe after offline (days)', h('input', { name: 'offline_wipe_days', type: 'number', min: 1, value: p.offline_wipe_days ?? '' }))),
       h('div', { class: 'row' }, h('label', {}, 'Failed sign-ins before lockout', h('input', { name: 'login_failures_max', type: 'number', min: 3, max: 20, value: p.login_failures_max ?? '' })),
         h('label', {}, 'Lockout duration (s, 0 = until reset)', h('input', { name: 'login_lockout_s', type: 'number', min: 0, value: p.login_lockout_s ?? '' }))),
+      h('div', { class: 'row' }, h('label', {}, 'Device PIN sign-in', sel('allow_pin', [['true', 'Allowed'], ['false', 'Off']])),
+        h('label', {}, 'Shortest PIN (digits)', h('input', { name: 'pin_min_length', type: 'number', min: 4, max: 12, value: p.pin_min_length ?? '' }))),
       h('label', {}, 'Update mirror (https, optional)', h('input', { name: 'update_mirror', value: p.update_mirror || '' })),
       h('label', {}, 'Allowed apps (catalog IDs, one per line)', h('textarea', { name: 'app_allowlist' }, (p.app_allowlist || []).join('\n'))),
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),
       h('div', {}, h('button', { class: 'primary' }, 'Save and sign policy')));
     if (p.bluetooth !== undefined) f.bluetooth.value = String(p.bluetooth);
+    if (p.allow_pin !== undefined) f.allow_pin.value = String(p.allow_pin);
     return [h('h1', {}, 'Policy'), h('p', { class: 'muted' }, 'Current version ' + version + '. Devices verify the signature before applying it.'), f];
   },
   async apps() {

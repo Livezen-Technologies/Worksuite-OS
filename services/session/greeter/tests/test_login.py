@@ -145,6 +145,63 @@ class SignInTests(unittest.TestCase):
         self.assertEqual(login.load_config(self.run), CFG)
 
 
+class KeyGreetd(FakeGreetd):
+    """pam_u2f first: an info cue, then success on touch, or a password prompt when no key answered."""
+
+    def __init__(self, touched):
+        super().__init__()
+        self.touched = touched
+
+    def create_session(self, username):
+        self.log.append(("create", username))
+        return {"type": "auth_message", "auth_message_type": "info", "auth_message": "Please touch the device."}
+
+    def respond(self, response):
+        self.secrets.append(response)
+        if self.touched:
+            return {"type": "success"}
+        return {"type": "auth_message", "auth_message_type": "secret", "auth_message": "Password: "}
+
+
+class MethodTests(unittest.TestCase):
+    def test_methods_index(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "methods.json")
+            self.assertEqual(login.signin_methods("alex", p), {"pin": False, "key": False, "default": "password"})
+            with open(p, "w") as f:
+                json.dump({"users": {"alex": {"pin": True, "keys": [{"id": "a"}], "default": "key"},
+                                     "sam": {"pin": False, "keys": [], "default": "pin"}}}, f)
+            self.assertEqual(login.signin_methods("alex", p), {"pin": True, "key": True, "default": "key"})
+            self.assertEqual(login.available_methods(login.signin_methods("alex", p)), ["password", "pin", "key"])
+            # a default the account no longer has falls back to the password
+            self.assertEqual(login.signin_methods("sam", p)["default"], "password")
+            self.assertEqual(login.available_methods(login.signin_methods("sam", p)), ["password"])
+
+    def test_pin_goes_where_the_password_goes(self):
+        g = FakeGreetd(good="582947")
+        r = login.sign_in(g, "alex", "582947", method="pin", otp="123456")
+        self.assertTrue(r.ok)
+        self.assertEqual(g.secrets, ["582947"])  # no code appended to a PIN
+
+    def test_pin_shape_is_checked_before_pam(self):
+        g = FakeGreetd()
+        for bad in ("", "123", "12ab56", "1234567890123"):
+            self.assertEqual(login.sign_in(g, "alex", bad, method="pin").reason, "bad_pin")
+        self.assertEqual(g.log, [])
+
+    def test_security_key_sends_no_secret(self):
+        g = KeyGreetd(touched=True)
+        r = login.sign_in(g, "alex", "", method="key")
+        self.assertTrue(r.ok)
+        self.assertEqual(r.messages, ["Please touch the device."])
+        self.assertEqual(g.secrets, [None])
+        g = KeyGreetd(touched=False)
+        r = login.sign_in(g, "alex", "typed-by-mistake", method="key")
+        self.assertEqual(r.reason, "key_failed")
+        self.assertNotIn("typed-by-mistake", g.secrets)
+        self.assertIn(("cancel",), g.log)
+
+
 class IpcTests(unittest.TestCase):
     def test_length_prefixed_json(self):
         a, b = socket.socketpair()

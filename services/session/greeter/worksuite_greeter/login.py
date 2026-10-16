@@ -4,6 +4,8 @@
 - WSOS-DIR-002: "Other user" accepts user, user@domain and DOMAIN\\user; the directory domain is shown.
 - WSOS-DIR-007: an expired password is changed here (the PAM helper receives a framed old/new pair).
 - WSOS-DIR-009: accounts with a second factor type a verification code, sent after the password.
+- Sign-in options (AuthLockPin board): Password, this device's PIN, or a FIDO2 security key, for accounts that set
+  them up in Settings > Users (services/session/signin). PAM decides; the greeter only picks what to send.
 """
 import hashlib
 import json
@@ -22,6 +24,8 @@ DIRECTORY_UID_MIN = 200_000
 BREAK_GLASS_USER = "wsadmin"  # services/directory/src/directory.ts BREAK_GLASS_USER
 BREAK_GLASS_DIR = os.environ.get("WORKSUITE_BREAK_GLASS_DIR", "/run/worksuite/break-glass")
 DAY = 86_400
+SIGNIN_METHODS = os.environ.get("WORKSUITE_SIGNIN_METHODS", "/var/lib/worksuite/signin/methods.json")
+METHODS = ("password", "pin", "key")
 
 _LOCAL = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 _EMAIL = re.compile(r"^[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,63}$")
@@ -127,6 +131,27 @@ def users(getpwall=pwd.getpwall, min_uid=1000):
     return sorted(out, key=lambda u: u["display"].lower())
 
 
+def signin_methods(name, path=None):
+    """{'pin': bool, 'key': bool, 'default': 'password'|'pin'|'key'} from the public index worksuite-signin keeps."""
+    out = {"pin": False, "key": False, "default": "password"}
+    try:
+        with open(path or SIGNIN_METHODS, encoding="utf-8") as f:
+            u = (json.load(f).get("users") or {}).get(name) or {}
+    except (OSError, ValueError, AttributeError):
+        return out
+    out["pin"] = u.get("pin") is True
+    out["key"] = bool(u.get("keys"))
+    d = u.get("default")
+    if d in METHODS and (d == "password" or out[d]):
+        out["default"] = d
+    return out
+
+
+def available_methods(m):
+    """The switcher shows only what the account has; Password is always there."""
+    return ["password"] + [k for k in ("pin", "key") if m.get(k)]
+
+
 def secret_for(password, otp=None, new_password=None):
     if new_password is not None:
         return CHANGE_PREFIX + password + SEP + new_password
@@ -141,13 +166,19 @@ class Result:
         return f"Result({self.ok!r}, {self.reason!r}, {self.messages!r})"
 
 
-def sign_in(greetd, name, password, otp=None, new_password=None, cmd=None, run_dir=RUN_DIR):
+def sign_in(greetd, name, password, otp=None, new_password=None, cmd=None, run_dir=RUN_DIR, method="password"):
     """Runs one PAM conversation through greetd and starts the session on success.
 
-    reason on failure: 'expired' (ask for a new password), 'mfa' (ask for a code), 'denied', 'error'.
+    reason on failure: 'expired' (ask for a new password), 'mfa' (ask for a code), 'denied', 'error',
+    'bad_pin' (not 4-12 digits), 'key_failed' (no key touched: PAM moved on to a password prompt).
+    method="key" sends no secret: pam_u2f answers first; method="pin" sends the PIN where the password goes.
     """
     if otp is not None and not re.fullmatch(r"\d{6}", otp):
         return Result(False, "bad_code")
+    if method == "pin":
+        if not re.fullmatch(r"[0-9]{4,12}", password or ""):
+            return Result(False, "bad_pin")
+        otp = new_password = None
     secret = secret_for(password, otp, new_password)
     messages = []
     try:
@@ -156,6 +187,10 @@ def sign_in(greetd, name, password, otp=None, new_password=None, cmd=None, run_d
         while r.get("type") == "auth_message":
             kind = r.get("auth_message_type")
             if kind == "secret":
+                if method == "key":
+                    # pam_u2f did not accept a touch and PAM now wants a password: do not send anything.
+                    greetd.cancel_session()
+                    return Result(False, "key_failed", messages)
                 if answered:
                     # A second secret prompt (e.g. a PAM module we do not drive): stop instead of re-sending.
                     greetd.cancel_session()
