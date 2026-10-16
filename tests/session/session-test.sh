@@ -218,5 +218,17 @@ printf 'auth\t[success=end default=ignore]\tpam_exec.so quiet expose_authtok /us
 grep -Eqs 'worksuite-signin pam-pin([[:space:]]|$)' "$WORKSUITE_PAM_COMMON_AUTH" && ok "pam-pin-used asks the daemon with a PIN profile on" || bad "pam-pin-used asks the daemon with a PIN profile on"
 unset WORKSUITE_PAM_COMMON_AUTH
 
+# ---- login keyring (WSOS-INT-009): one pam_gnome_keyring pass for greetd ----
+G=$ROOT/services/session/pam/greetd
+grep -q '^@include login$' "$G" && ! grep -q '^[^#]*pam_gnome_keyring' "$G" && ok "greetd PAM: login stack only, no second keyring pass" || bad "greetd PAM: login stack only, no second keyring pass"
+grep -q 'dpkg-divert --package worksuite-session --add --rename --divert /etc/pam.d/greetd.distrib /etc/pam.d/greetd' "$ROOT/packaging/debian/worksuite-session.preinst" \
+  && grep -q '^services/session/pam/greetd etc/pam.d/$' "$ROOT/packaging/debian/worksuite-session.install" && ok "greetd PAM file diverted and installed" || bad "greetd PAM file diverted and installed"
+
+# ---- boot speed: the package service is not in the boot rush ----
+PS=$ROOT/services/package-service/systemd
+! grep -q '^WantedBy=multi-user.target' "$PS/worksuite-package-service.service" && grep -q '^OnBootSec=2min' "$PS/worksuite-package-service.timer" \
+  && grep -q 'worksuite-package-service.timer' "$ROOT/packaging/debian/worksuite-package-service.install" \
+  && ok "package service starts from a timer after boot, not at boot" || bad "package service starts from a timer after boot, not at boot"
+
 echo "1..$n"
 exit $fail

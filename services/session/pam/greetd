@@ -1,0 +1,7 @@
+#%PAM-1.0
+# WorkSuite sign-in through greetd (installed over greetd's own file, which dpkg-divert keeps as greetd.distrib).
+# Everything comes from login → common-auth / common-session, where the worksuite-keyring profile runs
+# pam_gnome_keyring once (and not after a PIN sign-in). greetd's own file added a second pam_gnome_keyring auth and
+# session pass: the login keyring was unlocked by the first and the second logged "couldn't unlock the login
+# keyring" (WSOS-INT-009).
+@include login

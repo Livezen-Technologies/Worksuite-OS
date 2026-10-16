@@ -8,3 +8,4 @@ services/package-service/package.json usr/lib/worksuite/package-service/
 services/package-service/node_modules usr/lib/worksuite/package-service/
 services/package-service/bin/worksuite-appimage usr/bin/
 security/apparmor/worksuite-package-service etc/apparmor.d/
+services/package-service/systemd/worksuite-package-service.timer usr/lib/systemd/system/

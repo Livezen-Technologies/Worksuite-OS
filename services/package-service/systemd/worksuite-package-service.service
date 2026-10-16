@@ -38,6 +38,6 @@ RuntimeDirectory=worksuite-package-service
 RuntimeDirectoryMode=0755
 StateDirectoryMode=0700
 
-[Install]
-# Also started at boot so the update coordinator checks 15 min after boot and every 6 h (WSOS-AUP-001).
-WantedBy=multi-user.target
+# Not started in the boot rush (it is a Node process; at boot it competed with the greeter for CPU): bus activation
+# starts it on demand, and worksuite-package-service.timer starts it 2 min after boot so the update coordinator
+# still checks soon after boot and every 6 h (WSOS-AUP-001).
