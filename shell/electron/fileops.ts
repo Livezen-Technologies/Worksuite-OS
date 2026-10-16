@@ -259,16 +259,31 @@ export async function trashList(env: Env): Promise<TrashItem[]> {
 }
 
 const validId = (id: string) => okName(id) && !id.endsWith('.trashinfo')
+
+/** The original path an item's .trashinfo records (Path=, percent-encoded; relative ones are under home), or null. */
+function trashInfoPath(env: Env, id: string): string | null {
+  let txt: string
+  try { txt = readFileSync(path.join(trashDir(env), 'info', `${id}.trashinfo`), 'utf8') } catch { return null }
+  if (!/^\[Trash Info\]$/m.test(txt)) return null
+  let orig = /^Path=(.*)$/m.exec(txt)?.[1] ?? ''
+  if (!orig) return null
+  try { orig = decodeURIComponent(orig) } catch { /* keep raw */ }
+  return path.resolve(env.home, orig)
+}
+
+/** Puts items back where their .trashinfo files say they came from (Undo after Delete, Trash › Restore). Each item is
+ *  read from its own info file, so one unreadable entry elsewhere in the Trash (or a large Trash) can't stop it; only
+ *  places Files may write to are restored to, and an item never replaces a file that has appeared there since. */
 export async function trashRestore(env: Env, ids: string[]): Promise<Reply<{ restored: number; skipped: number }>> {
-  const items = await trashList(env)
   const bases = roots(env).filter((r) => r.id !== 'drive').map((r) => r.path)
   let restored = 0, skipped = 0
   for (const id of ids) {
-    const it = items.find((x) => x.id === id)
-    if (!it || !validId(id) || !bases.some((b) => it.orig.startsWith(b + '/')) || existsSync(it.orig)) { skipped++; continue }
+    const orig = validId(id) ? trashInfoPath(env, id) : null
+    const from = path.join(trashDir(env), 'files', id)
+    if (!orig || !bases.some((b) => orig.startsWith(b + '/')) || orig.split('/').includes('..') || !existsSync(from) || existsSync(orig)) { skipped++; continue }
     try {
-      mkdirSync(path.dirname(it.orig), { recursive: true })
-      await moveAcross(path.join(trashDir(env), 'files', id), it.orig)
+      mkdirSync(path.dirname(orig), { recursive: true })
+      await moveAcross(from, orig)
       await rm(path.join(trashDir(env), 'info', `${id}.trashinfo`), { force: true })
       restored++
     } catch { skipped++ }

@@ -32,6 +32,31 @@ describe('fileops', () => {
     expect((await renameIn(env(), 'home', 'Documents/Meeting notes.md', 'Budget 2027.xlsx')).ok).toBe(false)
   })
 
+  it('Undo after Delete restores from the .trashinfo files, whatever else is in the Trash', async () => {
+    writeFileSync(path.join(home, 'Documents', 'ශ්‍රී 100% #1.txt'), 's')
+    const r = await trash(env(), 'home', ['Documents/ශ්‍රී 100% #1.txt', 'Documents/Projects'])
+    expect(r.ok).toBe(true)
+    const ids = r.ok ? r.value.ids : []
+    // Another app's broken entry (unreadable info, a folder where a file should be) used to make the whole restore fail.
+    mkdirSync(path.join(home, '.local/share/Trash/info/broken.trashinfo'))
+    writeFileSync(path.join(home, '.local/share/Trash/info/nofile.trashinfo'), '[Trash Info]\nPath=/etc/passwd\n')
+    expect(await trashRestore(env(), ids)).toEqual({ ok: true, value: { restored: 2, skipped: 0 } })
+    expect(readFileSync(path.join(home, 'Documents', 'ශ්‍රී 100% #1.txt'), 'utf8')).toBe('s')
+    expect(readFileSync(path.join(home, 'Documents', 'Projects', 'Marketing budget.xlsx'), 'utf8')).toBe('m')
+    expect(existsSync(path.join(home, '.local/share/Trash/info/Projects.trashinfo'))).toBe(false)
+    // Same name trashed twice: each Undo restores its own copy, and never over a file that came back meanwhile.
+    const a = await trash(env(), 'home', ['Documents/notes.md'])
+    writeFileSync(path.join(home, 'Documents', 'notes.md'), 'second')
+    const b = await trash(env(), 'home', ['Documents/notes.md'])
+    expect(a.ok && b.ok && a.value.ids[0] !== b.value.ids[0]).toBe(true)
+    expect(await trashRestore(env(), b.ok ? b.value.ids : [])).toEqual({ ok: true, value: { restored: 1, skipped: 0 } })
+    expect(readFileSync(path.join(home, 'Documents', 'notes.md'), 'utf8')).toBe('second')
+    expect(await trashRestore(env(), a.ok ? a.value.ids : [])).toEqual({ ok: true, value: { restored: 0, skipped: 1 } })
+    // Outside the places Files writes to, or a made-up id: skipped.
+    writeFileSync(path.join(home, '.local/share/Trash/files/nofile'), 'x')
+    expect(await trashRestore(env(), ['nofile', '../x', 'missing'])).toEqual({ ok: true, value: { restored: 0, skipped: 3 } })
+  })
+
   it('moves to the freedesktop Trash, lists, restores and deletes', async () => {
     expect(await trash(env(), 'home', ['Documents/notes.md', 'Documents/Projects'])).toEqual({ ok: true, value: { count: 2, ids: ['notes.md', 'Projects'] } })
     expect(existsSync(path.join(home, 'Documents', 'notes.md'))).toBe(false)

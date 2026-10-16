@@ -130,10 +130,22 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
   }
   const paste = () => { if (clip && dir) { const to: Place = { ...dir }; void act(() => os.filesPaste(clip.op, clip.root, clip.rels, dir.root, dir.rel)).then((r) => started(r, to)); if (clip.op === 'move') setClip(null) } }
   // FO3: Delete asks first (Trash, or permanently with Shift+Delete); FO4: the toast offers Undo for the Trash.
+  // Undo (the toast's button, or Ctrl+Z like Windows' Explorer): puts the last items moved to the Trash back where their
+  // .trashinfo files say they came from (electron/fileops.ts trashRestore).
+  const lastTrash = useRef<string[] | null>(null)
+  const undoTrash = (ids: string[]) => {
+    if (lastTrash.current === ids) lastTrash.current = null
+    void os.filesTrashRestore(ids).then((x) => {
+      if (!x.ok) setNotice(t('files.err.generic'))
+      else if (x.value.skipped) setNotice(t('files.trash.skipped', { count: x.value.skipped }))
+      reload()
+    })
+  }
   const askDelete = (names: string[], permanent: boolean) => { if (dir && names.length) setAsk({ kind: 'delete', names, permanent }) }
   const doDelete = async (names: string[], permanent: boolean) => {
     if (!dir) return
     setAsk(null); setSel([])
+    rootRef.current?.focus()   // the dialog had focus: keys (Ctrl+Z, Delete…) work again at once
     if (permanent) {
       const r = await os.filesDelete(dir.root, names.map(relOf))
       if (r.ok) toast({ kind: 'trash', text: r.value === 1 ? t('files.ops.toastDeletedOne') : t('files.ops.toastDeleted', { count: formatNumber(r.value) }) })
@@ -142,8 +154,9 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
       const r = await os.filesTrash(dir.root, names.map(relOf))
       if (r.ok) {
         const ids = r.value.ids
+        lastTrash.current = ids
         toast({ kind: 'trash', text: names.length === 1 ? t('files.ops.toastTrashedOne', { name: names[0] }) : t('files.ops.toastTrashed', { count: formatNumber(r.value.count) }),
-          action: { label: t('files.ops.undo'), run: () => void os.filesTrashRestore(ids).then((x) => { if (x.ok && x.value.skipped) setNotice(t('files.trash.skipped', { count: x.value.skipped })); reload() }) } })
+          action: { label: t('files.ops.undo'), run: () => undoTrash(ids) } })
       } else setNotice(t('files.err.generic'))
     }
     reload()
@@ -172,6 +185,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
     else if (ev.ctrlKey && (ev.key === 'c' || ev.key === 'x') && sel.length) setClip({ op: ev.key === 'c' ? 'copy' : 'move', root: dir.root, rels: sel.map(relOf) })
     else if (ev.ctrlKey && ev.key === 'v') paste()
     else if (ev.ctrlKey && ev.key === 'a') setSel(shown.map((e) => e.name))
+    else if (ev.ctrlKey && !ev.shiftKey && ev.key === 'z' && lastTrash.current) undoTrash(lastTrash.current)
     else return
     ev.preventDefault()
   }
