@@ -3,7 +3,7 @@
 // sandboxed, context-isolated, no preload, closing the window quits it. Differences: no WorkSuite account or token at
 // all, its own persistent partition (persist:whatsapp) so the QR link survives restarts and no cookie is shared with
 // WorkSuite, navigation kept on WhatsApp's hosts (whatsapp.ts), and a Chrome user agent WhatsApp Web accepts.
-import { app, BrowserWindow, desktopCapturer, dialog, Notification, session, shell } from 'electron'
+import { app, BrowserWindow, desktopCapturer, dialog, session, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -30,8 +30,6 @@ export function prepareWhatsApp(): boolean {
 
 export function runWhatsApp() {
   let win: BrowserWindow | null = null
-  let unread = 0
-  let note: Notification | null = null
   // Camera/microphone answers for this run only; asked again after a restart.
   const consent = new Map<string, boolean>()
 
@@ -57,18 +55,8 @@ export function runWhatsApp() {
     return ok
   }
 
-  function setUnread(n: number) {
-    const prev = unread
-    unread = n
-    app.setBadgeCount(n)
-    if (n > prev && win && !win.isFocused() && Notification.isSupported()) {
-      note?.close()
-      note = new Notification({ title: 'WhatsApp', body: tr('whatsapp.unread', { count: n }), icon: existsSync(ICON) ? ICON : undefined })
-      note.on('click', focus)
-      note.show()
-    }
-    if (n === 0) { note?.close(); note = null }
-  }
+  // The taskbar badge reads the title itself; WhatsApp Web's own per-message notifications are the only ones shown.
+  function setUnread(n: number) { app.setBadgeCount(n) }
 
   function setup() {
     const ses = session.fromPartition(WHATSAPP_PARTITION)
@@ -116,7 +104,6 @@ export function runWhatsApp() {
     wc.on('will-frame-navigate', (e) => { if (e.isMainFrame) onNav(e, e.url) })
     wc.setWindowOpenHandler(({ url }) => { if (whatsappPopup(url) === 'external') void shell.openExternal(url); return { action: 'deny' } })
     w.on('page-title-updated', (_e, title) => setUnread(unreadFromTitle(title)))
-    w.on('focus', () => { note?.close(); note = null })
     return w
   }
 

@@ -52,7 +52,7 @@ and nothing is shared with WorkSuite sign-in; it carries no WorkSuite token. Onl
 (`whatsapp.com`, `*.whatsapp.com`, `*.whatsapp.net`) load in the window; other links open in the default browser.
 Notifications are allowed, camera and microphone are asked for (once per run), screen sharing goes through the
 ScreenCast portal, nothing else is granted. Downloads go to ~/Downloads. The unread count from the page title
-"(N) WhatsApp" shows as a badge on the taskbar button and as a notification that focuses the window. Closing the
+"(N) WhatsApp" shows as a badge on the taskbar button; notifications are WhatsApp Web's own, one per message. Closing the
 window quits it, like the WorkSuite app windows. Policy `whatsapp: false` (admin console › Policy) removes it; a
 kiosk never shows it.
 

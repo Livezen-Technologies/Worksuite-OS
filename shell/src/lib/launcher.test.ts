@@ -79,6 +79,7 @@ describe('WhatsApp in the launcher', () => {
     expect(alphaGroups(apps).flatMap((g) => g.apps.map((a) => a.id))).toContain(WHATSAPP.id)
     expect(filterApps(apps, 'all', 'whats').map((a) => a.id)).toEqual([WHATSAPP.id])
     expect(filterApps(apps, 'all', 'messenger').map((a) => a.id)).toContain(WHATSAPP.id)
+    expect(WHATSAPP.kindLabel).toBe('launcher.kind.chat')
   })
   it('keeps a user\'s saved favourites (no WhatsApp forced in)', async () => {
     const { applyShellPrefs } = await import('./shellPrefs')

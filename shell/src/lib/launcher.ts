@@ -25,7 +25,7 @@ export const DESKTOP_MODULE_FOR: Record<string, DesktopModule> = {
  * bundled icons (lib/brandIcons.ts). mark/bg/fg: the letter mark drawn when there is no icon. appIds: Wayland
  * app_ids / StartupWMClass its windows carry besides its id.
  */
-export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[]; offline?: OfflineLevel; icon?: string | null; appIds?: string[] }
+export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[]; offline?: OfflineLevel; kindLabel?: 'launcher.kind.chat'; icon?: string | null; appIds?: string[] }
 /** Offline level the app declares (WSOS-SYN-009); shown in the launcher. */
 export type OfflineLevel = 'full_offline' | 'cached_read' | 'online_only'
 
@@ -51,7 +51,7 @@ const LINUX_FAV = new Set(['firefox-esr', 'firefox', 'org.mozilla.firefox'])
 export const APP_CENTER: LauncherApp = { id: 'appcenter', name: 'App Center', mark: 'A', bg: '#2563eb', fg: '#ffffff', kind: 'System', launch: { screen: 'appcenter' }, keywords: ['software', 'install'] }
 /** WhatsApp Web in its own window (lk.worksuite.whatsapp.desktop, `worksuite-app whatsapp`); pinned by default. */
 export const WHATSAPP: LauncherApp = {
-  id: WHATSAPP_APP_ID, name: 'WhatsApp', mark: 'Wa', bg: '#25D366', fg: '#ffffff', kind: 'Linux app', fav: true,
+  id: WHATSAPP_APP_ID, name: 'WhatsApp', mark: 'Wa', bg: '#25D366', fg: '#ffffff', kind: 'Linux app', kindLabel: 'launcher.kind.chat', fav: true,
   launch: { desktop: WHATSAPP_APP_ID }, icon: WHATSAPP_APP_ID, appIds: [WHATSAPP_APP_ID, 'whatsapp'],
   keywords: ['whatsapp', 'chat', 'messages', 'messenger', 'InstantMessaging'],
 }

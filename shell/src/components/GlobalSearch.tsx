@@ -88,7 +88,7 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
     ? [['search.action.open', 'Enter'], ['search.action.location', 'Ctrl Enter'], ...(selected.hit.source === 'local' ? [['search.action.copyPath', 'Ctrl C'] as [MessageKey, string]] : [])]
     : [['search.action.open', 'Enter']]
   const label = (it: Item) => it.kind === 'app' ? it.app.name : it.kind === 'setting' ? it.label : it.kind === 'more' ? t('search.more', { q: query.trim() }) : it.kind === 'ai' ? t('search.askAI', { q: query.trim() }) : it.hit.title
-  const detail = (it: Item) => it.kind === 'app' ? t(`launcher.kind.${it.app.kind}` as MessageKey) : it.kind === 'setting' ? t('search.inSettings') : it.kind === 'more' ? t('search.moreHint') : it.kind === 'ai' ? t('search.askAIHint') : (it.hit.subtitle ?? '')
+  const detail = (it: Item) => it.kind === 'app' ? t(it.app.kindLabel ?? `launcher.kind.${it.app.kind}` as MessageKey) : it.kind === 'setting' ? t('search.inSettings') : it.kind === 'more' ? t('search.moreHint') : it.kind === 'ai' ? t('search.askAIHint') : (it.hit.subtitle ?? '')
 
   let k = 0
   return (

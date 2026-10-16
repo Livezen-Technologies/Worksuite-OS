@@ -333,7 +333,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
                         <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex cursor-pointer items-center gap-3 rounded-[9px] px-2.5 py-[7px] text-left hover:bg-white/[0.07]">
                           <AppGlyph app={{ ...a, bg: tileColor(a), fg: '#FFFFFF' }} size={30} radius={8} font={12} />
                           <span className="text-[13px]">{a.name}</span>
-                          <span className="ml-auto text-[11px] text-[#8FA3C8]">{a.kind === 'WorkSuite' ? '' : t(`launcher.kind.${a.kind}` as MessageKey)}</span>
+                          <span className="ml-auto text-[11px] text-[#8FA3C8]">{a.kind === 'WorkSuite' ? '' : t(a.kindLabel ?? `launcher.kind.${a.kind}` as MessageKey)}</span>
                         </button>
                       ))}
                     </div>

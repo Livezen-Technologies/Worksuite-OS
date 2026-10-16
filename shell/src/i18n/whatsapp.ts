@@ -2,7 +2,6 @@
 // "WhatsApp" stays as is in every language. Sinhala and Tamil are machine drafts like the rest of their catalogs
 // (docs/i18n/README.md). Spread into en.ts, si.ts and ta.ts.
 export const whatsappEn = {
-  'whatsapp.unread': '{count} unread chats',
   'whatsapp.offTitle': 'WhatsApp is turned off',
   'whatsapp.offBody': 'Your organization has turned off WhatsApp on this device.',
   'whatsapp.media.camera': 'WhatsApp wants to use your camera',
@@ -13,12 +12,12 @@ export const whatsappEn = {
   'whatsapp.media.deny': 'Don\'t allow',
   'panel.unread': '{name}, {count} unread',
   'mdm.whatsappOff': 'WhatsApp is turned off',
+  'launcher.kind.chat': 'Chat app',
 }
 
 type Key = keyof typeof whatsappEn
 
 export const whatsappSi: Record<Key, string> = {
-  'whatsapp.unread': 'නොකියවූ කතාබස් {count}',
   'whatsapp.offTitle': 'WhatsApp අක්‍රිය කර ඇත',
   'whatsapp.offBody': 'ඔබේ ආයතනය මෙම උපාංගයේ WhatsApp අක්‍රිය කර ඇත.',
   'whatsapp.media.camera': 'WhatsApp ඔබේ කැමරාව භාවිත කිරීමට අවසර ඉල්ලයි',
@@ -29,10 +28,10 @@ export const whatsappSi: Record<Key, string> = {
   'whatsapp.media.deny': 'ඉඩ නොදෙන්න',
   'panel.unread': '{name}, නොකියවූ {count}',
   'mdm.whatsappOff': 'WhatsApp අක්‍රිය කර ඇත',
+  'launcher.kind.chat': 'කතාබස් යෙදුම',
 }
 
 export const whatsappTa: Record<Key, string> = {
-  'whatsapp.unread': '{count} படிக்காத உரையாடல்கள்',
   'whatsapp.offTitle': 'WhatsApp முடக்கப்பட்டுள்ளது',
   'whatsapp.offBody': 'உங்கள் நிறுவனம் இந்தச் சாதனத்தில் WhatsApp-ஐ முடக்கியுள்ளது.',
   'whatsapp.media.camera': 'WhatsApp உங்கள் கேமராவைப் பயன்படுத்த விரும்புகிறது',
@@ -43,4 +42,5 @@ export const whatsappTa: Record<Key, string> = {
   'whatsapp.media.deny': 'அனுமதிக்க வேண்டாம்',
   'panel.unread': '{name}, {count} படிக்காதவை',
   'mdm.whatsappOff': 'WhatsApp முடக்கப்பட்டுள்ளது',
+  'launcher.kind.chat': 'அரட்டை செயலி',
 }
