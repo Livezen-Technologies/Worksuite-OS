@@ -1114,10 +1114,44 @@ dimBehind( QWidget* d )
     {
         return;
     }
-    auto* dim = new QWidget( win );
+    QWidget* dim = nullptr;
+    if ( d->property( "wsEmbedded" ).toBool() )
+    {
+        // The QML pages and the sidebar (welcomeq, usersq…, calamares-sidebar.qml) are QQuickWidgets, which Qt
+        // composites over the window's other widgets: on the real installer the dim covered only the plain widgets and
+        // the card stayed hidden under the page (a dimmed window with an empty middle; Esc still answered it). So the
+        // window is captured first (grab() renders the QQuickWidgets; a page in a window container comes out dark), the dim shows that picture darkened, and the
+        // QQuickWidgets are hidden while the dialog is up (keeping their space, shown again on hide). (A native child
+        // would be a Wayland subsurface over the page, but Qt's modality then blocks the clicks on its buttons.)
+        QPixmap snap = win->grab();
+        {
+            QPainter p( &snap );
+            p.fillRect( QRect( QPoint( 0, 0 ), snap.size() ), QColor( 2, 6, 16, 158 ) );
+        }
+        auto* l = new QLabel( win );
+        l->setPixmap( snap );
+        l->setScaledContents( true );
+        dim = l;
+        for ( QWidget* q : win->findChildren< QWidget* >() )
+        {
+            if ( ( q->inherits( "QQuickWidget" ) || q->inherits( "QWindowContainer" ) ) && q->isVisible() )
+            {
+                QSizePolicy sp = q->sizePolicy();
+                q->setProperty( "wsKeepSize", sp.retainSizeWhenHidden() );
+                sp.setRetainSizeWhenHidden( true );
+                q->setSizePolicy( sp );
+                q->setProperty( "wsHiddenForDialog", true );
+                q->hide();
+            }
+        }
+    }
+    else
+    {
+        dim = new QWidget( win );
+        dim->setAttribute( Qt::WA_StyledBackground );
+        dim->setStyleSheet( QStringLiteral( "background: rgba(2,6,16,0.62);" ) );
+    }
     dim->setObjectName( QStringLiteral( "wsDlgDim" ) );
-    dim->setAttribute( Qt::WA_StyledBackground );
-    dim->setStyleSheet( QStringLiteral( "background: rgba(2,6,16,0.62);" ) );
     dim->setGeometry( win->rect() );
     dim->show();
     dim->raise();
@@ -1520,6 +1554,20 @@ dialogHidden( QWidget* w )
     if ( auto* dim = qobject_cast< QWidget* >( w->property( "wsDim" ).value< QObject* >() ) )
     {
         w->setProperty( "wsDim", QVariant() );
+        if ( QWidget* win = dim->parentWidget() )
+        {
+            for ( QWidget* q : win->findChildren< QWidget* >() )
+            {
+                if ( q->property( "wsHiddenForDialog" ).toBool() )
+                {
+                    q->setProperty( "wsHiddenForDialog", QVariant() );
+                    q->show();
+                    QSizePolicy sp = q->sizePolicy();
+                    sp.setRetainSizeWhenHidden( q->property( "wsKeepSize" ).toBool() );
+                    q->setSizePolicy( sp );
+                }
+            }
+        }
         dim->deleteLater();
     }
     // Shown again (a dialog that is reused): dim again then.

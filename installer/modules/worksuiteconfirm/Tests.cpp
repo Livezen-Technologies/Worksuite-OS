@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QMessageBox>
+#include <QWindow>
 #include <QPushButton>
 #include <QTimer>
 #include <QtTest/QtTest>
@@ -82,6 +83,10 @@ private slots:
         main.setObjectName( QStringLiteral( "mainApp" ) );
         main.resize( 1024, 768 );
         auto* page = new QWidget( &main );
+        // The QML page: a window container (and QQuickWidgets) composite over plain widgets, so it is hidden while the
+        // dialog is up and shown again after (the real installer showed a dimmed window with no card).
+        auto* qml = QWidget::createWindowContainer( new QWindow, &main );
+        qml->setGeometry( 260, 0, 764, 700 );
         main.show();
         QMessageBox mb( QMessageBox::Question, "Cancel installation?", "Do you really want to cancel?",
                         QMessageBox::Yes | QMessageBox::No, page );
@@ -96,11 +101,13 @@ private slots:
             QCoreApplication::processEvents();
             auto* dim = main.findChild< QWidget* >( QStringLiteral( "wsDlgDim" ) );
             const auto kids = main.children();
-            shownOverDim = mb.isVisible() && dim && dim->isVisible() && kids.indexOf( &mb ) > kids.indexOf( dim );
+            shownOverDim = mb.isVisible() && dim && dim->isVisible() && kids.indexOf( &mb ) > kids.indexOf( dim ) && !qml->isVisible();
             mb.button( QMessageBox::No )->click();
         } );
         QCOMPARE( mb.exec(), int( QMessageBox::No ) );
         QVERIFY( shownOverDim );
+        WsStyle::dialogHidden( &mb );   // the installer's Hide filter
+        QVERIFY( qml->isVisible() );
     }
     void sizeText()
     {
