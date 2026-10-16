@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { list, resolveIn, type FileEnv } from './files'
+import { dropPlan, list, locate, resolveIn, type FileEnv } from './files'
 
 describe('files', () => {
   let home: string, outside: string
@@ -46,5 +46,41 @@ describe('files', () => {
     expect(names).not.toContain('.hidden')
     // A symlink is listed but not followed: it is not a folder you can enter.
     expect(h.ok && h.value.find((e) => e.name === 'escape')?.dir).toBe(false)
+  })
+})
+
+describe('drag and drop from other apps (WSOS-DSK-013)', () => {
+  let home: string, outside: string
+  beforeEach(() => {
+    home = mkdtempSync(path.join(tmpdir(), 'ws-home-'))
+    outside = mkdtempSync(path.join(tmpdir(), 'ws-out-'))
+    mkdirSync(path.join(home, 'Documents'))
+    mkdirSync(path.join(home, 'WorkSuite Drive'))
+    writeFileSync(path.join(home, 'Documents', 'a.txt'), 'a')
+    writeFileSync(path.join(home, 'WorkSuite Drive', 'b.txt'), 'b')
+    writeFileSync(path.join(outside, 'secret'), 'x')
+    symlinkSync(path.join(outside, 'secret'), path.join(home, 'link'))
+  })
+  afterEach(() => { rmSync(home, { recursive: true, force: true }); rmSync(outside, { recursive: true, force: true }) })
+  const env = { user: 'nobody-test' }
+
+  it('places a dropped path in its Files root; Drive wins over home', () => {
+    const e = { ...env, home }
+    expect(locate(e, path.join(home, 'Documents', 'a.txt'))).toEqual({ root: 'home', rel: 'Documents/a.txt' })
+    expect(locate(e, path.join(home, 'WorkSuite Drive', 'b.txt'))).toEqual({ root: 'drive', rel: 'b.txt' })
+  })
+  it('rejects paths outside the user places, symlinks leading out, roots, relative paths and missing files', () => {
+    const e = { ...env, home }
+    expect(locate(e, path.join(outside, 'secret'))).toBeNull()
+    expect(locate(e, path.join(home, 'link'))).toBeNull()
+    expect(locate(e, home)).toBeNull()
+    expect(locate(e, 'Documents/a.txt')).toBeNull()
+    expect(locate(e, path.join(home, 'nope'))).toBeNull()
+    expect(locate(e, 42)).toBeNull()
+  })
+  it('groups a drop by root for copy jobs and counts what it refused', () => {
+    const e = { ...env, home }
+    expect(dropPlan(e, [path.join(home, 'Documents', 'a.txt'), path.join(home, 'WorkSuite Drive', 'b.txt'), '/etc/passwd']))
+      .toEqual({ groups: [{ root: 'home', rels: ['Documents/a.txt'] }, { root: 'drive', rels: ['b.txt'] }], rejected: 1 })
   })
 })

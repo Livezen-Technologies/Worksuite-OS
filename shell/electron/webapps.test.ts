@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allowedOrigins, appCacheText, cachedApps, launcherApps, linkRequest, loadSession, navDecision, parseAppArgs, resolveLink, safeUrl, screenShareAllowed, signInTarget, startUrl, wantsToken, webAppsFrom, type Fetch } from './webapps'
+import { allowedOrigins, appCacheText, isPrintShortcut, cachedApps, launcherApps, linkRequest, loadSession, navDecision, parseAppArgs, resolveLink, safeUrl, screenShareAllowed, signInTarget, startUrl, wantsToken, webAppsFrom, type Fetch } from './webapps'
 
 const mail = { id: 'mail', name: 'Mail', web_url: 'https://apps.example.com/mail/' }
 
@@ -122,5 +122,16 @@ describe('org app list cached for offline use (WSOS-DSK-001)', () => {
     expect(cachedApps('{bad', 'acct')).toBeNull()
     expect(cachedApps(JSON.stringify({ v: 1, account_id: 'acct', apps: [{ id: '../x' }, { id: 'chat' }] }), 'acct')).toEqual([{ id: 'chat', name: 'chat' }])
     expect(await launcherApps(broker, offline, { read: () => other, write: () => {} })).toEqual({ ok: false, error: 'offline' })
+  })
+})
+
+describe('printing in app windows (WSOS-DSK-013)', () => {
+  const k = (key: string, mods: Partial<{ control: boolean; meta: boolean; alt: boolean; shift: boolean }> = {}, type = 'keyDown') => ({ type, key, control: false, meta: false, alt: false, shift: false, ...mods })
+  it('Ctrl+P / Cmd+P opens the print dialog; nothing else does', () => {
+    expect(isPrintShortcut(k('p', { control: true }))).toBe(true)
+    expect(isPrintShortcut(k('P', { meta: true }))).toBe(true)
+    expect(isPrintShortcut(k('p'))).toBe(false)
+    expect(isPrintShortcut(k('p', { control: true, shift: true }))).toBe(false)
+    expect(isPrintShortcut(k('p', { control: true }, 'keyUp'))).toBe(false)
   })
 })

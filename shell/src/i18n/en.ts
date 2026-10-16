@@ -828,6 +828,7 @@ const en = {
   'appc.waitingApproval': 'Waiting for approval…',
   'appc.working': 'Working…',
   // Files
+  'files.dropRejected': 'Some items could not be copied here. Only files from your folders and drives can be dropped.',
   'files.cantOpen': 'This folder can’t be opened.',
   'files.col.kind': 'Kind',
   'files.col.modified': 'Modified',

@@ -110,6 +110,12 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
   const toTrash = (names: string[]) => { if (dir && names.length) { void act(() => os.filesTrash(dir.root, names.map(relOf))); setSel([]) } }
   const star = (name: string) => { if (!dir) return; const on = !stars.includes(`${dir.root}:${relOf(name)}`); void os.filesStar(dir.root, relOf(name), on).then((r) => { if (r.ok) setStars(r.value) }) }
 
+  // Drag files out to another app: a native drag with the real paths (text/uri-list on Wayland).
+  const dragOut = (ev: React.DragEvent, name: string) => {
+    ev.preventDefault()
+    if (dir) void os.filesStartDrag(dir.root, (sel.includes(name) ? sel : [name]).map(relOf))
+  }
+
   // Keyboard: Enter, F2, Delete, Ctrl+X/C/V (FM3 shortcuts).
   const mainRef = useRef<HTMLDivElement>(null)
   const onKey = (ev: React.KeyboardEvent) => {
@@ -136,7 +142,15 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
     <div role="dialog" aria-modal="false" aria-label={t('files.title')} className="fixed inset-0 z-50 flex font-sans" style={{ background: C.page, color: C.text }} onKeyDown={onKey}>
       <FilesSide place={place} places={places} drive={driveState ? DRIVE_META[driveState as keyof typeof DRIVE_META] ?? driveState : null} onGo={go}
         onEject={(id, label) => void os.filesEject(id).then((r) => { if (!r.ok) setNotice(t('files.ejectFailed', { name: label })); else go({ kind: 'dir', root: 'home', rel: '' }); reload() })} />
-      <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col" onClick={() => setMenu(null)}>
+      <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col" onClick={() => setMenu(null)}
+        onDragOver={(ev) => { if (dir && ev.dataTransfer.types.includes('Files')) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy' } }}
+        onDrop={(ev) => {
+          // Files dropped from another app (WSOS-DSK-013) are copied here, like Paste.
+          if (!dir || !ev.dataTransfer.files.length) return
+          ev.preventDefault()
+          const paths = [...ev.dataTransfer.files].map((f) => os.pathForFile(f)).filter(Boolean)
+          void os.filesDrop(paths, dir.root, dir.rel).then((r) => { if (!r.ok || r.value.rejected) setNotice(t('files.dropRejected')) })
+        }}>
         {/* Header: FM1/FM2 toolbar, FM5 search bar, FM6 trash actions */}
         <header className="box-border flex h-[60px] shrink-0 items-center gap-2.5 px-5" style={{ borderBottom: `1px solid ${C.line}`, background: C.bar }}>
           {search && dir ? <>
@@ -215,7 +229,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
               {folders.length > 0 && <><span className="text-xs" style={{ color: C.muted }}>{t('files.foldersSection')}</span>
                 <div className="grid grid-cols-6 gap-3">
                   {folders.map((f, i) => (
-                    <button key={f.name} type="button" onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)} onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
+                    <button key={f.name} type="button" draggable onDragStart={(ev) => dragOut(ev, f.name)} onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)} onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
                       aria-pressed={sel.includes(f.name)} className={`${btn} flex items-center gap-2.5 rounded-[10px] p-3 text-left`}
                       style={{ background: sel.includes(f.name) ? 'rgba(31,107,255,0.18)' : C.card, border: `1px solid ${sel.includes(f.name) ? C.blue : C.line}` }}>
                       <Svg d={P.folder} size={22} fill={folderColor(i)} />
@@ -228,7 +242,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
                   {files.map((f) => {
                     const k = kindOf(f.name, false), on = sel.includes(f.name)
                     return (
-                      <button key={f.name} type="button" onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)} onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
+                      <button key={f.name} type="button" draggable onDragStart={(ev) => dragOut(ev, f.name)} onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)} onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
                         aria-pressed={on} title={!f.local ? t('files.onlineOnly') : undefined} className={`${btn} flex flex-col gap-2 rounded-xl p-2.5 text-left`}
                         style={{ background: on ? 'rgba(31,107,255,0.18)' : 'var(--ws-g-card)', border: `1px solid ${on ? C.blue : 'var(--ws-g-line)'}`, opacity: f.local ? 1 : 0.7 }}>
                         <span className="flex h-24 items-center justify-center rounded-lg" style={{ background: thumbBg(k.image) }}>
@@ -254,7 +268,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
                 {rows.map((f, i) => {
                   const k = kindOf(f.name, f.dir), on = sel.includes(f.name)
                   return (
-                    <button key={f.name} type="button" onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)}
+                    <button key={f.name} type="button" draggable onDragStart={(ev) => dragOut(ev, f.name)} onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)}
                       onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
                       aria-pressed={on} className={`${btn} grid grid-cols-[minmax(0,1fr)_110px_90px_120px] items-center gap-3 px-6 py-[9px] text-left text-[13px]`}
                       style={{ background: on ? 'rgba(31,107,255,0.22)' : f.state === 'conflict' ? 'rgba(255,185,138,0.08)' : i % 2 ? 'rgba(255,255,255,0.015)' : 'transparent', opacity: f.local ? 1 : 0.7 }}>

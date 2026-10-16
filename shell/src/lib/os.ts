@@ -75,6 +75,11 @@ export interface WorkSuiteApi {
   filesTrashRestore(ids: string[]): Promise<CloudResult<{ restored: number; skipped: number }>>
   filesTrashDelete(ids: string[] | 'all'): Promise<CloudResult<number>>
   /** Start a copy/move/duplicate job; progress and conflicts arrive through onFilesJob. */
+  /** Files dropped from another app: copied into root/rel; paths outside the user's places are rejected. */
+  filesDrop(paths: string[], dstRoot: string, dstRel: string): Promise<CloudResult<{ jobs: number; rejected: number }>>
+  /** Drag files out to another app (native drag with the real paths). */
+  filesStartDrag(root: string, rels: string[]): Promise<CloudResult<number>>
+  pathForFile(f: File): string
   filesPaste(op: 'copy' | 'move' | 'duplicate', srcRoot: string, rels: string[], dstRoot: string, dstRel: string): Promise<CloudResult<string>>
   filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel' | 'continue', all: boolean): Promise<CloudResult<true>>
   /** Start a compress job (zip / 7z / tar.gz / tar.xz; a password for zip and 7z only); progress arrives through onFilesJob. */
@@ -469,6 +474,9 @@ const stub: WorkSuiteApi = {
   },
   async filesTrashRestore(ids) { return { ok: true, value: { restored: ids.length, skipped: 0 } } },
   async filesTrashDelete(ids) { return { ok: true, value: ids === 'all' ? 0 : ids.length } },
+  async filesDrop(paths) { return { ok: true, value: { jobs: 0, rejected: paths.length } } },
+  async filesStartDrag() { return { ok: false, error: 'unavailable' } },
+  pathForFile() { return '' },
   async filesPaste(op, _s, rels, dstRoot) {
     // Preview: a copy that stops on one conflict, like the real job service.
     const base: FileJob = { id: 'stubjob', op: op === 'move' ? 'move' : 'copy', dest: dstRoot.startsWith('media:') ? dstRoot.slice(6) : '~', state: 'running', done: 0, total: rels.length, bytes_done: 0, bytes_total: rels.length * 2_400_000, conflict: null }

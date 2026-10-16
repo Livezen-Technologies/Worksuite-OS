@@ -758,6 +758,7 @@ const si: Partial<Record<MessageKey, string>> = {
   'appc.resetPerms': 'අවසර යළි සකසන්න',
   'appc.level.Review': 'සමාලෝචනය',
   'appc.level.Broad': 'පුළුල්',
+  'files.dropRejected': 'සමහර අයිතම මෙහි පිටපත් කළ නොහැකි විය. ඔබගේ ෆෝල්ඩර සහ ධාවක වලින් ගොනු පමණක් දැමිය හැක.',
   'files.sync.synced': 'සමමුහුර්තයි',
   'files.sync.syncing': 'සමමුහුර්ත වෙමින්',
   'files.sync.pending': 'සමමුහුර්ත වීමට රැඳී සිටී',

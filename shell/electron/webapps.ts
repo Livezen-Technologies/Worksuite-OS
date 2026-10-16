@@ -170,6 +170,11 @@ export async function loadSession(broker: Broker, fetchFn: Fetch, device?: Devic
   } catch { return { ok: false, error: 'offline' } }
 }
 
+/** Ctrl+P (Cmd+P) in a WorkSuite app window opens the system print dialog (CUPS via GTK; WSOS-DSK-013). */
+export function isPrintShortcut(i: { type: string; key: string; control: boolean; meta: boolean; alt: boolean; shift: boolean }): boolean {
+  return i.type === 'keyDown' && i.key.toLowerCase() === 'p' && (i.control || i.meta) && !i.alt && !i.shift
+}
+
 /** The org's app list as the launcher sees it; no URLs or tokens (WSOS-DSK-001). */
 export type LauncherWebApp = { id: string; name: string; offline_level?: OfflineLevel }
 export interface AppListCache { read(): string | null; write(text: string): void }

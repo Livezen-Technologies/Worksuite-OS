@@ -758,6 +758,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'appc.resetPerms': 'அனுமதிகளை மீட்டமை',
   'appc.level.Review': 'மதிப்பாய்வு',
   'appc.level.Broad': 'விரிவானது',
+  'files.dropRejected': 'சில உருப்படிகளை இங்கே நகலெடுக்க முடியவில்லை. உங்கள் கோப்புறைகள் மற்றும் இயக்ககங்களிலிருந்து மட்டுமே கோப்புகளை இழுத்துவிடலாம்.',
   'files.sync.synced': 'ஒத்திசைக்கப்பட்டது',
   'files.sync.syncing': 'ஒத்திசைக்கிறது',
   'files.sync.pending': 'ஒத்திசைக்கக் காத்திருக்கிறது',
