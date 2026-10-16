@@ -160,6 +160,16 @@ class TilesTest(unittest.TestCase):
         self.assertIsNone(tiles[1]["icon"])
         self.assertTrue(tiles[0]["directory"])
 
+    def test_kiosk_and_locked_accounts_get_no_tile(self):
+        rows = [Pw("nimali", 1001, "Nimali", "/bin/bash"), Pw("kiosk", 1002, "WorkSuite kiosk", "/bin/sh"), Pw("old", 1003, "Old", "/bin/bash")]
+        env = os.path.join(self.dir, "session.env")
+        with open(env, "w", encoding="utf-8") as f:
+            f.write("KIOSK_USER=kiosk\nKIOSK_EXIT_PIN=1\n")
+        hidden = {login.kiosk_user(env)} | {"old"}
+        tiles = login.user_tiles(login.users(lambda: rows), accounts_dir=self.dir, hidden=hidden)
+        self.assertEqual([t["name"] for t in tiles], ["nimali"])
+        self.assertIsNone(login.kiosk_user(os.path.join(self.dir, "none")))
+
     def test_last_user_first(self):
         rows = [Pw("nimali", 1001, "Nimali", "/bin/bash"), Pw("kamal", 1003, "Kamal", "/bin/bash")]
         tiles = login.user_tiles(login.users(lambda: rows), accounts_dir=self.dir, last="nimali")

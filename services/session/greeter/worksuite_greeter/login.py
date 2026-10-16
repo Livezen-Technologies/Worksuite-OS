@@ -133,6 +133,46 @@ def users(getpwall=pwd.getpwall, min_uid=1000):
     return sorted(out, key=lambda u: u["display"].lower())
 
 
+KIOSK_ENV = os.environ.get("WORKSUITE_KIOSK_ENV", "/etc/worksuite/kiosk/session.env")
+
+
+def kiosk_user(path=None):
+    """The kiosk account (worksuite-kiosk-apply): it signs in automatically and its password is locked, so it gets no
+    tile on the sign-in screen."""
+    try:
+        with open(path or KIOSK_ENV, encoding="utf-8") as f:
+            for line in f:
+                m = re.fullmatch(r"KIOSK_USER=([a-z_][a-z0-9_.@-]{0,63})", line.strip())
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return None
+
+
+def accounts_locked(names, timeout_ms=800):
+    """Names AccountsService reports as locked (passwd --lock, or disabled): no tile, they cannot sign in. The greeter
+    cannot read /etc/shadow itself. Empty when AccountsService does not answer."""
+    try:
+        from gi.repository import Gio, GLib
+        bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    except Exception:  # noqa: BLE001
+        return set()
+    out = set()
+    for n in names:
+        try:
+            path = bus.call_sync("org.freedesktop.Accounts", "/org/freedesktop/Accounts", "org.freedesktop.Accounts", "FindUserByName",
+                                 GLib.Variant("(s)", (n,)), GLib.VariantType("(o)"), Gio.DBusCallFlags.NONE, timeout_ms, None).unpack()[0]
+            locked = bus.call_sync("org.freedesktop.Accounts", path, "org.freedesktop.DBus.Properties", "Get",
+                                   GLib.Variant("(ss)", ("org.freedesktop.Accounts.User", "Locked")), GLib.VariantType("(v)"),
+                                   Gio.DBusCallFlags.NONE, timeout_ms, None).unpack()[0]
+            if locked:
+                out.add(n)
+        except Exception:  # noqa: BLE001  (no AccountsService, unknown user: keep the tile)
+            continue
+    return out
+
+
 ACCOUNTS_DIR = os.environ.get("WORKSUITE_ACCOUNTS_DIR", "/var/lib/AccountsService")
 LAST_USER = os.environ.get("WORKSUITE_GREETER_LAST_USER", "/var/cache/worksuite-greeter/last-user")
 
@@ -155,12 +195,15 @@ def _accounts_entry(name, accounts_dir):
     return out
 
 
-def user_tiles(accounts, accounts_dir=None, last=None):
-    """User tiles (LoginUsers board): the people from users(), without AccountsService system accounts, with
-    AccountsService's real name and picture when it has them, the last person to sign in first."""
+def user_tiles(accounts, accounts_dir=None, last=None, hidden=()):
+    """User tiles (LoginUsers board): the people from users(), without AccountsService system accounts and without
+    `hidden` (the kiosk account, locked accounts), with AccountsService's real name and picture when it has them, the
+    last person to sign in first."""
     accounts_dir = accounts_dir or ACCOUNTS_DIR
     out = []
     for u in accounts:
+        if u["name"] in hidden:
+            continue
         a = _accounts_entry(u["name"], accounts_dir)
         if a.get("SystemAccount", "").lower() == "true":
             continue

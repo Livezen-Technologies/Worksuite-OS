@@ -352,7 +352,11 @@ class Greeter(Gtk.ApplicationWindow):
         undecorate(self)
         self.cfg = login.load_config() if cfg is None else cfg
         last = login.read_last_user()
-        self.users = login.user_tiles(login.users() if users is None else users, last=last)
+        accounts = login.users() if users is None else users
+        hidden = set()
+        if users is None:   # the real accounts: the kiosk account and locked accounts can't sign in here
+            hidden = {login.kiosk_user()} | login.accounts_locked([u["name"] for u in accounts if not u["directory"]])
+        self.users = login.user_tiles(accounts, last=last, hidden=hidden)
         self.probe = reachable_probe or (lambda: login.directory_reachable(self.cfg))
         self.joined = bool(login.suffixes(self.cfg))
         self.reachable = None  # None: not joined / unknown, True, False
