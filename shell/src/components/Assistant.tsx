@@ -134,7 +134,7 @@ export default function Assistant({ onClose, onOpenSettings, request, onRequestH
         <div className={`flex items-end gap-1 rounded-[12px] border px-2 py-1.5 ${canAsk ? 'border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.5)] focus-within:border-[#1F6BFF]' : 'border-[rgba(127,178,255,0.12)] bg-[rgba(4,10,26,0.3)]'}`}>
           <textarea ref={input} value={st.text} rows={1} disabled={!canAsk} onChange={(e) => assistantStore.setText(e.target.value)} onKeyDown={onKey}
             placeholder={tr('ai.placeholder')} aria-label={tr('ai.question')}
-            className="field-sizing-content max-h-40 min-h-[34px] min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-[7px] text-[13.5px] text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8] disabled:cursor-not-allowed" />
+            className="field-sizing-content max-h-40 min-h-[34px] min-w-0 flex-1 resize-none border-0 bg-transparent focus-visible:shadow-none focus-visible:outline-none px-1 py-[7px] text-[13.5px] text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8] disabled:cursor-not-allowed" />
           {st.busy && (
             <button type="button" onClick={cancel} aria-label={tr('ai.stop')} title={tr('ai.stop')} className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-[rgba(127,178,255,0.25)] text-white hover:bg-white/10"><Svg d={D.stop} size={13} /></button>
           )}

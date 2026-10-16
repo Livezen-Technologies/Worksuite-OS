@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [sync, device-agent, credentials, package-service, server, directory]
+        package: [sync, device-agent, credentials, package-service, server, directory, ai]
     defaults:
       run:
         working-directory: services/${{ matrix.package }}
@@ -45,6 +45,12 @@ jobs:
       # package-service tests start a private dbus-daemon.
       - if: matrix.package == 'package-service'
         run: sudo apt-get install -y --no-install-recommends dbus-daemon
+      # ai: real llama.cpp inference on a generated random-weight GGUF (~0.5 MB; no model is downloaded or committed).
+      - if: matrix.package == 'ai'
+        run: |
+          pip install --quiet gguf numpy
+          python3 tools/make-tiny-gguf.py "$RUNNER_TEMP/tiny.gguf"
+          echo "WORKSUITE_AI_SMOKE_MODEL=$RUNNER_TEMP/tiny.gguf" >> "$GITHUB_ENV"
       - run: npm test
 
   os-scripts:

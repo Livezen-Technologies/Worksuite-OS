@@ -7,7 +7,7 @@ and stays usable when the WorkSuite backend is unreachable. Requirements: SRS-WS
 | --- | --- |
 | `shell/` | worksuite-shell — React 19 / TypeScript / Tailwind v4 renderer + hardened Electron main/preload. Screens: greeter, lock, first-run, desktop + launcher, Files, App Center, Settings, recovery launcher, installer |
 | `native/wayland-bridge/`, `native/panel/` | Wayland bridge service (window list, tray watcher; Python) and notes on the panel, which is the shell's taskbar |
-| `services/` | session units, user services, sync engine (SQLite outbox), package service, device agent |
+| `services/` | session units, user services, sync engine (SQLite outbox), package service, device agent, on-device AI assistant (`services/ai`) |
 | `api-contracts/` | OpenAPI for `desktop/v1` and the new `desktop/v1/os` group |
 | `packaging/` | Debian packages incl. the `worksuite-desktop` metapackage |
 | `live-build/`, `installer/` | ISO build (amd64, arm64, UEFI) and Calamares configuration |
