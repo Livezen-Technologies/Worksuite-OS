@@ -1,6 +1,10 @@
 #include "WorksuiteConfirmViewStep.h"
 #include "WsStyle.h"
 
+#include <QApplication>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QTimer>
 #include <QtTest/QtTest>
 
 class WorksuiteConfirmTests : public QObject
@@ -70,6 +74,34 @@ private slots:
         QCOMPARE( WsStyle::passphraseScore( "abcdefghijk1" ), 3 );
         QCOMPARE( WsStyle::passphraseScore( "correct-horse-42" ), 4 );
     }
+    // The Quit dialog under cage: a dialog in a window of its own never showed (only the dim did). It is embedded in the
+    // installer's main window, over the dim, and still returns its answer from exec().
+    void dialogsEmbedInTheMainWindow()
+    {
+        QWidget main;
+        main.setObjectName( QStringLiteral( "mainApp" ) );
+        main.resize( 1024, 768 );
+        auto* page = new QWidget( &main );
+        main.show();
+        QMessageBox mb( QMessageBox::Question, "Cancel installation?", "Do you really want to cancel?",
+                        QMessageBox::Yes | QMessageBox::No, page );
+        WsStyle::prepareDialog( &mb );   // Calamares' constructor-time title change runs this in the installer
+        QVERIFY( !mb.isWindow() );
+        QCOMPARE( mb.parentWidget(), &main );
+        QVERIFY( WsStyle::isDialogSurface( &mb ) );
+        QVERIFY( !WsStyle::isDialogSurface( page ) );
+        bool shownOverDim = false;
+        QTimer::singleShot( 50, &mb, [ & ] {
+            WsStyle::styleDialog( &mb );   // the installer's Show filter
+            QCoreApplication::processEvents();
+            auto* dim = main.findChild< QWidget* >( QStringLiteral( "wsDlgDim" ) );
+            const auto kids = main.children();
+            shownOverDim = mb.isVisible() && dim && dim->isVisible() && kids.indexOf( &mb ) > kids.indexOf( dim );
+            mb.button( QMessageBox::No )->click();
+        } );
+        QCOMPARE( mb.exec(), int( QMessageBox::No ) );
+        QVERIFY( shownOverDim );
+    }
     void sizeText()
     {
         QCOMPARE( WsStyle::sizeText( 512ll * 1024 * 1024 ), QStringLiteral( "512 MiB" ) );
@@ -78,5 +110,16 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN( WorksuiteConfirmTests )
+// Widgets (the dialog test) need a QApplication; offscreen, so the package build needs no display.
+int
+main( int argc, char** argv )
+{
+    if ( qEnvironmentVariableIsEmpty( "QT_QPA_PLATFORM" ) )
+    {
+        qputenv( "QT_QPA_PLATFORM", "offscreen" );
+    }
+    QApplication app( argc, argv );
+    WorksuiteConfirmTests t;
+    return QTest::qExec( &t, argc, argv );
+}
 #include "Tests.moc"

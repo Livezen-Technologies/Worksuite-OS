@@ -20,6 +20,8 @@ void prepareDialog( QWidget* dialog );
 void styleDialog( QWidget* dialog );
 /// When a styled dialog hides: removes the dimmed backdrop over the main window.
 void dialogHidden( QWidget* dialog );
+// A dialog's own window, or a dialog embedded in the main window by prepareDialog (under cage a dialog window never showed).
+bool isDialogSurface( QWidget* w );
 
 /// Passphrase strength as the design scores it: 0 (empty) to 4 (Strong).
 int passphraseScore( const QString& passphrase );

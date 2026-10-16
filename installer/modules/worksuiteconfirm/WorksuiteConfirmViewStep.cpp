@@ -255,12 +255,12 @@ public:
                 {
                     WsStyle::styleChoicePage( w );
                 }
-                else if ( w->isWindow() )
+                else if ( WsStyle::isDialogSurface( w ) )
                 {
                     WsStyle::styleDialog( w );
                 }
             }
-            else if ( e->type() == QEvent::Hide && w->isWindow() )
+            else if ( e->type() == QEvent::Hide && WsStyle::isDialogSurface( w ) )
             {
                 WsStyle::dialogHidden( w );
             }

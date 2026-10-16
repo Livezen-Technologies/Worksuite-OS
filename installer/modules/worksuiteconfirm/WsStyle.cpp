@@ -1089,8 +1089,8 @@ setRole( QAbstractButton* b, const char* role )
     repolish( b );
 }
 
-void
-dimBehind( QWidget* d )
+QWidget*
+mainWindowFor( QWidget* d )
 {
     QWidget* win = d->parentWidget() ? d->parentWidget()->window() : nullptr;
     if ( !win )
@@ -1103,6 +1103,13 @@ dimBehind( QWidget* d )
             }
         }
     }
+    return win == d ? nullptr : win;
+}
+
+void
+dimBehind( QWidget* d )
+{
+    QWidget* win = mainWindowFor( d );
     if ( !win )
     {
         return;
@@ -1115,6 +1122,10 @@ dimBehind( QWidget* d )
     dim->show();
     dim->raise();
     d->setProperty( "wsDim", QVariant::fromValue( static_cast< QObject* >( dim ) ) );
+    if ( !d->isWindow() )
+    {
+        d->raise();   // embedded (prepareDialog): over the dim, in the same window
+    }
 }
 
 // QMessageBox fixes its own size again whenever its style or contents change (updateSize); this puts the design's back.
@@ -1161,7 +1172,12 @@ fitDialog( QDialog* d )
         const int h = d->layout()->hasHeightForWidth() ? d->layout()->totalHeightForWidth( w ) : d->layout()->sizeHint().height();
         guard->target = QSize( w, h );
         d->setFixedSize( w, h );
-        if ( auto* p = d->parentWidget() ? d->parentWidget()->window() : nullptr )
+        if ( !d->isWindow() && d->parentWidget() )
+        {
+            d->move( d->parentWidget()->rect().center() - QPoint( w / 2, h / 2 ) );   // embedded: parent coordinates
+            d->raise();
+        }
+        else if ( auto* p = d->parentWidget() ? d->parentWidget()->window() : nullptr )
         {
             d->move( p->geometry().center() - QPoint( w / 2, h / 2 ) );
         }
@@ -1446,8 +1462,24 @@ prepareDialog( QWidget* w )
         return;
     }
     w->setProperty( "wsPrepared", true );
+    // In the installer's main window, not a window of its own. Under cage (the live ISO's installer session) a dialog
+    // window never showed, only the dim behind it in the main window: the Quit dialog was invisible and the installer
+    // looked frozen. Embedded, the card sits over the dim on any compositor; exec() works the same.
+    if ( QWidget* win = mainWindowFor( w ) )
+    {
+        w->setParent( win, Qt::Widget );
+        w->setProperty( "wsEmbedded", true );
+        w->setAttribute( Qt::WA_TranslucentBackground );
+        return;
+    }
     w->setWindowFlag( Qt::FramelessWindowHint, true );
     w->setAttribute( Qt::WA_TranslucentBackground );
+}
+
+bool
+isDialogSurface( QWidget* w )
+{
+    return w->isWindow() || ( w->property( "wsEmbedded" ).toBool() && isStyledDialog( w ) );
 }
 
 void
