@@ -189,9 +189,11 @@ export function oskLayouts(methods: string[]): string[] {
   return [...out, 'special']
 }
 export const OSK_HEIGHT = { small: 200, medium: 260, large: 340 } as const
+/** wvkbd colours from the OSKeyboard board (keys over rgba(7,19,48,.97), pressed #2A4A8F, text #E8EEFA). */
+export const OSK_COLORS = ['--bg', '071330f7', '--fg', '1a2c51', '--fg-sp', '0f1e3e', '--press', '2a4a8f', '--press-sp', '1f6bff', '--text', 'e8eefa', '--text-sp', 'c9d6ee']
 export function oskArgs(s: TouchSettings, methods: string[]): string[] {
   const h = OSK_HEIGHT[s.oskSize]
-  return ['--hidden', '-H', String(h), '-L', String(Math.round(h * 0.8)), '-l', oskLayouts(methods).join(','), '--fn', 'IBM Plex Sans 16']
+  return ['--hidden', '-H', String(h), '-L', String(Math.round(h * 0.8)), '-l', oskLayouts(methods).join(','), '--fn', 'IBM Plex Sans 16', ...OSK_COLORS]
 }
 
 // ---------- host ----------

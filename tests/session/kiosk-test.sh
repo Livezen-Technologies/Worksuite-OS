@@ -54,7 +54,7 @@ grep -q '^osk --kiosk$' "$LOG" && ok "on-screen keyboard hook started" || bad "o
 : > "$LOG"; rm "$T/lib/worksuite-osk"; stub wvkbd-mobintl 'echo "wvkbd $*" >> "$LOG"'
 KIOSK_OSK=1 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" WORKSUITE_KIOSK_RESTART_DELAY=0 WORKSUITE_KIOSK_MAX_RESTARTS=1 sh "$K/worksuite-kiosk-start"
 sleep 0.2
-grep -q '^wvkbd -H 260 -L 208 -l full,special --fn IBM Plex Sans 16$' "$LOG" && ok "on-screen keyboard: the desktop's wvkbd, shown" || bad "on-screen keyboard: the desktop's wvkbd, shown"
+grep -q '^wvkbd -H 260 -L 208 -l full,special --fn IBM Plex Sans 16 --bg 071330f7 --fg 1a2c51 --fg-sp 0f1e3e --press 2a4a8f --press-sp 1f6bff --text e8eefa --text-sp c9d6ee$' "$LOG" && ok "on-screen keyboard: the desktop's wvkbd, shown" || bad "on-screen keyboard: the desktop's wvkbd, shown"
 : > "$LOG"; KIOSK_OSK=0 WORKSUITE_LIB="$T/lib" WORKSUITE_KIOSK_APP="$T/app" WORKSUITE_KIOSK_RESTART_DELAY=0 WORKSUITE_KIOSK_MAX_RESTARTS=1 sh "$K/worksuite-kiosk-start"
 sleep 0.2
 grep -q wvkbd "$LOG" && bad "no on-screen keyboard unless the policy asks" || ok "no on-screen keyboard unless the policy asks"

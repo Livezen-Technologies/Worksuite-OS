@@ -78,7 +78,7 @@ describe('settings', () => {
   })
   it('picks wvkbd layouts from fcitx5 methods (Sinhala/Tamil use the Latin layout)', () => {
     expect(oskLayouts(['keyboard-us', 'm17n_si_wijesekara', 'keyboard-ru'])).toEqual(['full', 'cyrillic', 'special'])
-    expect(oskArgs({ ...DEFAULT_TOUCH, oskSize: 'large' }, [])).toEqual(expect.arrayContaining(['--hidden', '-H', '340', '-l', 'full,special']))
+    expect(oskArgs({ ...DEFAULT_TOUCH, oskSize: 'large' }, [])).toEqual(expect.arrayContaining(['--hidden', '-H', '340', '-l', 'full,special', '--bg', '071330f7', '--press', '2a4a8f']))
   })
 })
 
