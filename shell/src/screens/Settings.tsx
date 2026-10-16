@@ -16,6 +16,7 @@ import { PowerPanel, PrintersPanel } from './settings/Devices'
 import { BigSwitch } from './settings/ui'
 import { SignInOptions } from './settings/SignIn'
 import { ReportProblem } from './settings/ReportProblem'
+import { Diagnostics } from './settings/Diagnostics'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
 import { KioskPanel } from './settings/Kiosk'
 import { AIPanel } from './settings/AI'
@@ -603,6 +604,7 @@ function AboutPanel() {
         ))}
       </div>
     </div>
+    <Diagnostics />
     <ReportProblem />
   </>
 }

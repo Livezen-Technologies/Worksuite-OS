@@ -39,7 +39,9 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
     expect(all.find(([f]) => f === 'device.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.DeviceAgent1'\)\.Enroll\(/)
     // Sign-in methods are lk.worksuite.SignIn1 methods (polkit lk.worksuite.signin.manage).
     expect(all.find(([f]) => f === 'signin.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.SignIn1'\)/)
-    expect(elevations.sort()).toEqual(['kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit'])
+    // sessionHost.ts: Settings › About › Diagnostics, the system journal and the boot-details entry, through the fixed
+    // helper behind polkit lk.worksuite.diagnostics (auth_admin_keep); its arguments are checked there and here.
+    expect(elevations.sort()).toEqual(['kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics'])
   })
 
   it('every IPC handler goes through the sender check', () => {

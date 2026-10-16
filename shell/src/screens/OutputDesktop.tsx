@@ -2,6 +2,7 @@
 // The main process opens one of these per extra output (electron/outputWindows.ts) and closes it on unplug.
 import { useCallback, useEffect, useState } from 'react'
 import { RunningApps } from '../components/PanelItems'
+import { EndMirror } from '../components/SessionEnd'
 import { BG } from '../components/Ws'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
 import type { PanelWindow } from '../lib/panel'
@@ -20,6 +21,7 @@ export default function OutputDesktop({ output }: { output: string }) {
         <RunningApps pinned={[]} info={() => undefined} onLaunch={() => undefined} only={only} />
         <time className="ml-auto text-[13px]" dateTime={now.toISOString()}>{time}</time>
       </nav>
+      <EndMirror />
     </div>
   )
 }

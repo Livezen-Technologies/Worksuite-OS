@@ -4,6 +4,7 @@ import { aiEn } from './ai'
 import { widgetsEn } from './widgets'
 import { whatsappEn } from './whatsapp'
 import { desktopsEn } from './desktops'
+import { bootuiEn } from './bootui'
 
 const en = {
   // On-device AI assistant (services/ai): src/i18n/ai.ts
@@ -11,6 +12,7 @@ const en = {
   ...widgetsEn,
   ...whatsappEn,
   ...desktopsEn,
+  ...bootuiEn,
   // Panel / taskbar
   'panel.taskbar': 'Taskbar',
   'panel.openLauncher': 'Open launcher',

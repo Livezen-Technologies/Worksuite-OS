@@ -13,10 +13,12 @@ export interface PowerMenuProps {
   onSignOut?: () => void
   /** Opens the shutdown confirmation. */
   onShutdown: () => void
+  /** Restart through the shell's overlay (components/SessionEnd.tsx); without it, systemd restarts directly. */
+  onRestart?: () => void
   className?: string
 }
 
-export function PowerMenu({ user, onClose, onLock, onSignOut, onShutdown, className = '' }: PowerMenuProps) {
+export function PowerMenu({ user, onClose, onLock, onSignOut, onShutdown, onRestart, className = '' }: PowerMenuProps) {
   const t = useT()
   const ref = useRef<HTMLDivElement>(null)
   const items: { label: string; d: readonly string[]; key?: string; sep?: boolean; run: () => void }[] = []
@@ -24,7 +26,7 @@ export function PowerMenu({ user, onClose, onLock, onSignOut, onShutdown, classN
   if (onSignOut) items.push({ label: t('power.signOut'), d: P.signOut, run: onSignOut })
   items.push(
     { label: t('power.sleep'), d: P.sleep, sep: items.length > 0, run: () => void os.power('suspend') },
-    { label: t('power.restart'), d: P.restart, run: () => void os.power('restart') },
+    { label: t('power.restart'), d: P.restart, run: onRestart ?? (() => void os.power('restart')) },
     { label: t('power.shutDown'), d: P.power, run: onShutdown },
   )
 
@@ -75,7 +77,7 @@ export function PowerMenu({ user, onClose, onLock, onSignOut, onShutdown, classN
   )
 }
 
-export function ShutdownConfirm({ onCancel, seconds = SHUTDOWN_SECONDS }: { onCancel: () => void; seconds?: number }) {
+export function ShutdownConfirm({ onCancel, onEnd, seconds = SHUTDOWN_SECONDS }: { onCancel: () => void; onEnd?: (action: 'shutdown' | 'restart') => void; seconds?: number }) {
   const t = useT()
   const [secs, setSecs] = useState(seconds)
   const [pending, setPending] = useState(0)
@@ -95,13 +97,14 @@ export function ShutdownConfirm({ onCancel, seconds = SHUTDOWN_SECONDS }: { onCa
     if (done.current) return
     done.current = true
     if (installUpdates && pending > 0) {
-      setBusy('Installing updates…')
+      setBusy(t('end.installingUpdates'))
       const r = await os.pkgApplyUpdate()
       if (r.ok) await new Promise<void>((resolve) => {
         const off = os.onPkgJob((e) => { if (e.job === r.value && e.kind === 'finished') { off(); resolve() } })
       })
     }
-    setBusy(action === 'shutdown' ? 'Shutting down…' : 'Restarting…')
+    if (onEnd) { onEnd(action); return }
+    setBusy(action === 'shutdown' ? t('end.shutdown') : t('end.restart'))
     await os.power(action)
   }
   const actRef = useRef(act)

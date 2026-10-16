@@ -235,6 +235,20 @@ contextBridge.exposeInMainWorld('worksuiteDesktop', {
   shellRestartSeen: (n: number) => ipcRenderer.invoke('ws:shellRestartSeen', String(Math.max(0, Math.floor(Number(n)) || 0))),
 })
 
+// Shutdown/restart/sign-out overlay, inhibitors, crashed apps, administrators' diagnostics — see electron/sessionHost.ts.
+contextBridge.exposeInMainWorld('worksuiteSession', {
+  inhibitors: (action: string) => ipcRenderer.invoke('ws:inhibitors', String(action)),
+  powerForce: (action: string) => ipcRenderer.invoke('ws:powerForce', String(action)),
+  setEndState: (state: unknown) => ipcRenderer.invoke('ws:sessionEndState', JSON.stringify(state ?? null)),
+  onEndState: on('ws:sessionEnd'),
+  onCrash: on('ws:appCrashed'),
+  reopen: (id: string) => ipcRenderer.invoke('ws:reopenApp', String(id)),
+  isAdmin: () => ipcRenderer.invoke('ws:isAdmin'),
+  sessionJournal: (lines: number) => ipcRenderer.invoke('ws:sessionJournal', String(lines)),
+  systemJournal: (kind: string, lines: number) => ipcRenderer.invoke('ws:systemJournal', String(kind), String(lines)),
+  bootDetails: (op: string) => ipcRenderer.invoke('ws:bootDetails', String(op)),
+})
+
 // System monitor (G11) and quick settings brightness / power mode (G01).
 contextBridge.exposeInMainWorld('worksuiteMonitor', {
   sysBrightness: () => ipcRenderer.invoke('ws:sysBrightness'),

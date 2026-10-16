@@ -4,6 +4,7 @@ import { aiSi } from './ai'
 import { widgetsSi } from './widgets'
 import { whatsappSi } from './whatsapp'
 import { desktopsSi } from './desktops'
+import { bootuiSi } from './bootui'
 
 /** Machine-drafted: not yet reviewed by a native Sinhala speaker. See docs/i18n/README.md before changing. */
 export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedKeys: {} }
@@ -13,6 +14,7 @@ const si: Partial<Record<MessageKey, string>> = {
   ...widgetsSi,
   ...whatsappSi,
   ...desktopsSi,
+  ...bootuiSi,
   'panel.taskbar': 'කාර්ය තීරුව',
   'panel.openLauncher': 'දියත්කරනය විවෘත කරන්න',
   'panel.running': '{name}, ධාවනය වෙමින්',
