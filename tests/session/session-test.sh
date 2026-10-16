@@ -234,5 +234,11 @@ PS=$ROOT/services/package-service/systemd
 awk '/^Package: worksuite-session$/{p=1} p&&/^Depends:/{print; exit}' "$ROOT/packaging/debian/control" | grep -q 'librsvg2-common' \
   && ok "worksuite-session depends on the SVG icon loader" || bad "worksuite-session depends on the SVG icon loader"
 
+# ---- AI service sandbox: its read-write directories exist (else 226/NAMESPACE restart loop) ----
+grep -q '^ReadWritePaths=-%h/.local/share/worksuite -%t/worksuite$' "$ROOT/services/ai/systemd/worksuite-ai.service" \
+  && grep -q '^d %h/.local/share/worksuite ' "$ROOT/services/ai/systemd/user-tmpfiles.d/worksuite-ai.conf" \
+  && grep -q 'user-tmpfiles.d/worksuite-ai.conf usr/share/user-tmpfiles.d/' "$ROOT/packaging/debian/worksuite-ai.install" \
+  && ok "worksuite-ai: data dirs created by user tmpfiles, optional in the sandbox" || bad "worksuite-ai: data dirs created by user tmpfiles, optional in the sandbox"
+
 echo "1..$n"
 exit $fail

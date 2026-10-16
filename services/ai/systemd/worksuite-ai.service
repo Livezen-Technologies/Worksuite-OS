@@ -18,7 +18,8 @@ PrivateTmp=yes
 ProtectSystem=strict
 # Its own data only: $XDG_DATA_HOME/worksuite/ai (models, settings) and the runtime socket.
 ProtectHome=read-only
-ReadWritePaths=%h/.local/share/worksuite %t/worksuite
+# Created by user-tmpfiles.d/worksuite-ai.conf; "-" so a missing one never stops the service from starting.
+ReadWritePaths=-%h/.local/share/worksuite -%t/worksuite
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes

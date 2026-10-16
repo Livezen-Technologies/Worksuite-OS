@@ -8,3 +8,4 @@ services/ai/bin/worksuite-ai usr/sbin/
 services/ai/README.md usr/share/doc/worksuite-ai/
 security/apparmor/worksuite-ai etc/apparmor.d/
 security/apparmor/worksuite-ai-engine etc/apparmor.d/
+services/ai/systemd/user-tmpfiles.d/worksuite-ai.conf usr/share/user-tmpfiles.d/
