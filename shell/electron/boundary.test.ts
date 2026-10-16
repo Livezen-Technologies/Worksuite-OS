@@ -54,6 +54,10 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
         for (const m of s.matchAll(/ipcMain\.(?:handle|on)\('[^']+', (?:async )?\(e[^)]*\) => \{?\s*(.{0,60})/g))
           expect(m[1], f).toMatch(/^(if \(!?fromPrompt\(e\)|\(?fromPrompt\(e\)|if \(main && e\.sender === main\.webContents\))/)
         expect(raw.length, f).toBe([...s.matchAll(/ipcMain\.(?:handle|on)\('[^']+', (?:async )?\(e/g)].length)
+      } else if (f === 'whatsappwindow.ts') {
+        // WhatsApp window: one bare "focus" message, accepted only from its own window's page.
+        expect(raw.length, f).toBe(1)
+        expect(s).toMatch(/ipcMain\.on\(WHATSAPP_FOCUS_CHANNEL, \(e\) => \{ if \(win && e\.sender === win\.webContents\) focus\(\) \}\)/)
       } else expect(raw.length, f).toBe(0)
     }
   })

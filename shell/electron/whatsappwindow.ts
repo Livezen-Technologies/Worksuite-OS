@@ -3,7 +3,7 @@
 // sandboxed, context-isolated, no preload, closing the window quits it. Differences: no WorkSuite account or token at
 // all, its own persistent partition (persist:whatsapp) so the QR link survives restarts and no cookie is shared with
 // WorkSuite, navigation kept on WhatsApp's hosts (whatsapp.ts), and a Chrome user agent WhatsApp Web accepts.
-import { app, BrowserWindow, desktopCapturer, dialog, session, shell } from 'electron'
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, session, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -12,7 +12,7 @@ import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
 import { xdgDirs } from './xdgDirs'
 import {
   chromeUserAgent, downloadPath, mediaKind, unreadFromTitle, whatsappAllowed, whatsappHost, whatsappNav, whatsappPermission, whatsappPopup,
-  WHATSAPP_APP_ID, WHATSAPP_ID, WHATSAPP_PARTITION, WHATSAPP_URL,
+  WHATSAPP_APP_ID, WHATSAPP_FOCUS_CHANNEL, WHATSAPP_ID, WHATSAPP_PARTITION, WHATSAPP_URL,
 } from './whatsapp'
 
 const tr = (key: MessageKey, vars?: Record<string, string | number>) => translate(pickLocale(app.isReady() ? app.getLocale() : process.env.LANG), key, vars)
@@ -87,6 +87,7 @@ export function runWhatsApp() {
       width: 1200, height: 820, minWidth: 480, minHeight: 360, autoHideMenuBar: true, backgroundColor: '#f0f2f5', title: 'WhatsApp',
       icon: existsSync(ICON) ? ICON : undefined,
       webPreferences: {
+        preload: path.join(__dirname, 'whatsappPreload.cjs'),
         partition: WHATSAPP_PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true,
         nodeIntegrationInSubFrames: false, webviewTag: false, spellcheck: true,
       },
@@ -108,6 +109,8 @@ export function runWhatsApp() {
   }
 
   app.on('second-instance', focus)
+  // A click on one of WhatsApp Web's notifications (whatsappPreload.ts); only from this window's page.
+  ipcMain.on(WHATSAPP_FOCUS_CHANNEL, (e) => { if (win && e.sender === win.webContents) focus() })
   void app.whenReady().then(() => {
     session.defaultSession.setPermissionRequestHandler((_wc, _p, cb) => cb(false))
     setup()

@@ -79,3 +79,28 @@ export function downloadPath(dir: string, suggested: string, exists: (p: string)
   for (let i = 1; exists(p) && i < 1000; i++) p = join(`${base} (${i})${ext}`)
   return p
 }
+
+/** IPC channel the WhatsApp preload uses to ask main to show and focus the window; it carries no data. */
+export const WHATSAPP_FOCUS_CHANNEL = 'whatsapp:focus'
+/** Main-world global the preload exposes: a no-argument function that only asks for focus. */
+export const WHATSAPP_FOCUS_GLOBAL = '__worksuiteWhatsAppFocus'
+
+/**
+ * Runs in the page's world (contextBridge.executeInMainWorld): replaces window.Notification with a subclass that,
+ * on click, asks for the window to be focused and then lets the page's own onclick/listeners run (WhatsApp opens the
+ * chat). Self-contained: it is serialised into the page.
+ */
+export function wrapNotification(w: { Notification?: unknown; [k: string]: unknown } = globalThis as never, focusKey: string = '__worksuiteWhatsAppFocus'): boolean {
+  if (!w) w = globalThis as never
+  const N = w.Notification as (new (title: string, opts?: unknown) => EventTarget) | undefined
+  const focus = w[focusKey] as (() => void) | undefined
+  if (typeof N !== 'function' || typeof focus !== 'function') return false
+  class FocusNotification extends N {
+    constructor(title: string, opts?: unknown) {
+      super(title, opts)
+      this.addEventListener('click', () => { try { focus!() } catch { /* the page's handler still runs */ } })
+    }
+  }
+  w.Notification = FocusNotification
+  return true
+}

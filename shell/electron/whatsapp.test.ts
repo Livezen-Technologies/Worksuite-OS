@@ -88,3 +88,28 @@ describe('WhatsApp policy and downloads', () => {
     expect(downloadPath('/h/Downloads', '', () => false)).toBe('/h/Downloads/download')
   })
 })
+
+describe('WhatsApp notification click', () => {
+  it('focuses the window, then still runs the page\'s own handler', async () => {
+    const { wrapNotification, WHATSAPP_FOCUS_GLOBAL } = await import('./whatsapp')
+    const calls: string[] = []
+    class FakeNotification extends EventTarget {
+      static permission = 'granted'
+      onclick: (() => void) | null = null
+      constructor(public title: string, public opts?: unknown) { super(); this.addEventListener('click', () => this.onclick?.()) }
+    }
+    const w: Record<string, unknown> = { Notification: FakeNotification, [WHATSAPP_FOCUS_GLOBAL]: (...a: unknown[]) => calls.push(`focus:${a.length}`) }
+    expect(wrapNotification(w as never, WHATSAPP_FOCUS_GLOBAL)).toBe(true)
+    const N = w.Notification as typeof FakeNotification
+    expect((N as unknown as { permission: string }).permission).toBe('granted')
+    const n = new N('Ama', { body: 'hi' })
+    expect(n).toBeInstanceOf(FakeNotification)
+    n.onclick = () => calls.push('page')
+    n.dispatchEvent(new Event('click'))
+    expect(calls).toEqual(['page', 'focus:0'])
+  })
+  it('leaves the page alone without Notification or the focus bridge', async () => {
+    const { wrapNotification } = await import('./whatsapp')
+    expect(wrapNotification({} as never, 'x')).toBe(false)
+  })
+})
