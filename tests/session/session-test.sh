@@ -87,6 +87,7 @@ kill "$(cat "$T/run/worksuite-lock.guard/pid")" 2>/dev/null; sleep 0.3; rm -rf "
 : > "$LOG"
 sleep 30 & labwc=$!; echo $labwc >> "$T/pids"
 LABWC_PID=$labwc sh "$BIN/worksuite-session" --logout
+grep -q "systemctl --user stop gnome-keyring-daemon.service" "$LOG" && ok "logout stops the locked keyring daemon (next sign-in unlocks a fresh one)" || bad "logout stops the locked keyring daemon (next sign-in unlocks a fresh one)"
 sleep 0.1
 for want in "systemctl --user stop worksuite-sync.service" "systemctl --user stop worksuite-credentials.service" \
             "org.freedesktop.Secret.Service.Lock" "systemctl --user stop worksuite-session.target" "systemctl --user unset-environment"; do
