@@ -104,6 +104,7 @@ jobs:
       - run: cd services/session/kiosk && python3 -m unittest discover -s tests -t .
       - run: cd services/session/toasts && python3 -m unittest discover -s tests -t .
       - run: cd services/session/signin && python3 -m unittest discover -s tests -t .
+      - run: cd services/session/polkit && python3 -m unittest discover -s tests -t .
 
   portals:
     # Portal acceptance (SRS §7.1): each portal interface WorkSuite uses, against xdg-desktop-portal with the -wlr and
