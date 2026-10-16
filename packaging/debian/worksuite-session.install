@@ -32,3 +32,4 @@ services/session/pam/worksuite-signin-u2f usr/share/pam-configs/
 services/session/systemd/system/worksuite-signin.socket usr/lib/systemd/system/
 services/session/systemd/system/worksuite-signin@.service usr/lib/systemd/system/
 services/session/polkit/lk.worksuite.signin.policy usr/share/polkit-1/actions/
+services/session/udev/70-worksuite-touch.rules usr/lib/udev/rules.d/

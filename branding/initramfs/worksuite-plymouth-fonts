@@ -1,0 +1,19 @@
+#!/bin/sh
+# Installed by worksuite-branding as /usr/share/initramfs-tools/hooks/worksuite-plymouth-fonts.
+# The WorkSuite Plymouth theme draws its text with Image.Text (plymouth-label, Pango) in IBM Plex Sans / Mono.
+# Debian's plymouth hook only copies the default fallback font, so without this the splash renders in DejaVu.
+PREREQ="plymouth"
+prereqs() { echo "$PREREQ"; }
+case "$1" in prereqs) prereqs; exit 0 ;; esac
+. /usr/share/initramfs-tools/hook-functions
+
+src=/usr/share/fonts/truetype/ibm-plex
+[ -d "$src" ] || exit 0
+mkdir -p "${DESTDIR}${src}" "${DESTDIR}/etc/fonts/conf.d" "${DESTDIR}/var/cache/fontconfig"
+for f in IBMPlexSans-Regular IBMPlexSans-Medium IBMPlexMono-Regular; do
+  [ -f "$src/$f.ttf" ] && cp -p "$src/$f.ttf" "${DESTDIR}${src}/"
+done
+# fonts.conf normally comes from the plymouth hook; make sure there is one that reads conf.d.
+[ -f "${DESTDIR}/etc/fonts/fonts.conf" ] || cp -p /etc/fonts/fonts.conf "${DESTDIR}/etc/fonts/"
+cp -p /usr/share/worksuite/plymouth/61-worksuite-plymouth.conf "${DESTDIR}/etc/fonts/conf.d/"
+exit 0

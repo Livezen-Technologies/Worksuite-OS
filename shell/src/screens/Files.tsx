@@ -1,10 +1,12 @@
 // Files (§7.2, boards FMSide and FM1–FM6): real folders through the Electron bridge, WorkSuite Drive with sync states
-// from the sync service, Recent (recently-used.xbel), Starred, freedesktop.org Trash, search, and copy/move jobs.
+// from the sync service, Recent (recently-used.xbel), Starred, freedesktop.org Trash, search, copy/move jobs, and
+// archives: Compress…, Extract here / to a folder, and Open archive (read-only browsing, files/archive.tsx).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { formatBytes, os, type FileEntry, type FileHit, type FileJob, type FilePlaces, type TrashItem } from '../lib/os'
 import { formatDate, formatNumber, messages, t } from '../i18n'
-import { C, FilesSide, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place } from './files/parts'
+import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place } from './files/parts'
+import { ArchiveView, CompressDialog, LargeDialog, PasswordDialog, archiveError, archiveKind, stemOf } from './files/archive'
 
 const SYNC_LABEL = messages({ synced: 'files.sync.synced', syncing: 'files.sync.syncing', pending: 'files.sync.pending', conflict: 'files.sync.conflict', 'online-only': 'files.sync.online', error: 'files.sync.error', unknown: 'files.sync.unknown' })
 const SYNC_DOT: Record<string, string> = { synced: '#4ADE80', syncing: C.link, pending: C.muted, conflict: '#FFB98A', 'online-only': '#C4B5FD', error: '#FF8A7A', unknown: C.dim }
@@ -17,7 +19,8 @@ type Ask = { kind: 'mkdir' } | { kind: 'rename'; name: string } | { kind: 'empty
 const btn = 'cursor-pointer disabled:cursor-default'
 const iconBtn = `${btn} flex h-[34px] w-[34px] items-center justify-center rounded-lg hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent`
 
-export default function Files({ onClose }: WindowProps) {
+/** archive: an archive opened with Files from elsewhere (the default handler for archive types); n changes per request. */
+export default function Files({ onClose, archive }: WindowProps & { archive?: { root: string; rel: string; n: number } | null }) {
   const [places, setPlaces] = useState<FilePlaces | null>(null)
   const [hist, setHist] = useState<{ list: Place[]; i: number }>({ list: [{ kind: 'dir', root: 'home', rel: 'Documents' }], i: 0 })
   const place = hist.list[hist.i]
@@ -40,10 +43,16 @@ export default function Files({ onClose }: WindowProps) {
   const [tick, setTick] = useState(0)
   const [winApp, setWinApp] = useState<string | null>(null)
   const [readOnly, setReadOnly] = useState<string | null>(null)
+  const [compressing, setCompressing] = useState<string[] | null>(null)
+  // The password of the archive being browsed; kept only while it is open, for extracting from it.
+  const [arcPw, setArcPw] = useState<string | null>(null)
   const reload = useCallback(() => setTick((n) => n + 1), [])
 
   const go = (p: Place) => { setHist((h) => ({ list: [...h.list.slice(0, h.i + 1), p], i: h.i + 1 })); setSel([]); setSearch(null); setMenu(null) }
   const dir = place.kind === 'dir' ? place : null
+  const arc = place.kind === 'archive' ? place : null
+  useEffect(() => { if (archive) go({ kind: 'archive', root: archive.root, rel: archive.rel, inner: '' }) }, [archive?.n]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!arc) setArcPw(null) }, [arc?.root, arc?.rel]) // eslint-disable-line react-hooks/exhaustive-deps
   const cloud = dir?.root === 'drive'
 
   useEffect(() => { void os.filesPlaces().then(setPlaces); void os.filesStatus('drive').then((s) => setDriveState(s.drive ? s.drive.service_state : 'off')) }, [tick])
@@ -58,6 +67,7 @@ export default function Files({ onClose }: WindowProps) {
       void os.filesStatus(place.root).then(setStatus)
     } else if (place.kind === 'recent') { setHits(null); void os.filesRecent().then(setHits) }
     else if (place.kind === 'starred') { setHits(null); void os.filesStarred().then((s) => setHits(s.hits)) }
+    else if (place.kind === 'archive') return
     else { setTrashItems(null); void os.filesTrashList().then(setTrashItems) }
   }, [place, tick])
 
@@ -68,6 +78,7 @@ export default function Files({ onClose }: WindowProps) {
   }, [search, dir?.root, dir?.rel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const folderName = (p: Place) => p.kind === 'recent' ? t('files.recent') : p.kind === 'starred' ? t('files.starred') : p.kind === 'trash' ? t('files.trash')
+    : p.kind === 'archive' ? [p.rel.split('/').pop()!, ...p.inner.split('/').filter(Boolean)].join(' › ')
     : p.rel ? folderLabel(p.rel.split('/').pop()!) : p.root === 'home' ? (places?.user ?? t('files.home')) : p.root === 'drive' ? 'WorkSuite Drive' : places?.media.find((m) => m.id === p.root)?.label ?? p.root
   const crumbs = dir ? [{ label: folderName({ ...dir, rel: '' }), rel: '' }, ...dir.rel.split('/').filter(Boolean).map((s, i, all) => ({ label: i === 0 && dir.root === 'home' ? folderLabel(s) : s, rel: all.slice(0, i + 1).join('/') }))] : []
 
@@ -76,9 +87,16 @@ export default function Files({ onClose }: WindowProps) {
   const relOf = (n: string) => (dir!.rel ? `${dir!.rel}/${n}` : n)
   // Windows programs are never run; the main process refuses them and this explains why (WSOS-LCH-003).
   const openFile = (root: string, rel: string, name: string) => void os.filesOpen(root, rel).then((r) => { if (!r.ok && r.error === 'windows_program') setWinApp(name); if (r.ok && (r.value as unknown) === 'read_only_copy') setReadOnly(name) })
-  const open = (e: FileEntry) => { if (e.dir) go({ kind: 'dir', root: dir!.root, rel: relOf(e.name) }); else if (e.local) openFile(dir!.root, relOf(e.name), e.name) }
-  const openHit = (h: FileHit) => { if (h.dir) go({ kind: 'dir', root: h.root, rel: h.rel }); else openFile(h.root, h.rel, h.name) }
-  const pick = (name: string, ev: React.MouseEvent) => setSel((s) => (ev.ctrlKey || ev.metaKey ? (s.includes(name) ? s.filter((x) => x !== name) : [...s, name]) : [name]))
+  // Archives open in Files' own read-only view.
+  const open = (e: FileEntry) => { if (e.dir) go({ kind: 'dir', root: dir!.root, rel: relOf(e.name) }); else if (e.local && archiveKind(e.name)) go({ kind: 'archive', root: dir!.root, rel: relOf(e.name), inner: '' }); else if (e.local) openFile(dir!.root, relOf(e.name), e.name) }
+  const openHit = (h: FileHit) => { if (h.dir) go({ kind: 'dir', root: h.root, rel: h.rel }); else if (archiveKind(h.name)) go({ kind: 'archive', root: h.root, rel: h.rel, inner: '' }); else openFile(h.root, h.rel, h.name) }
+  // Selection: click, Ctrl+click to add or remove, Shift+click for a range (in the order shown), Ctrl+A for all.
+  const pick = (name: string, ev: React.MouseEvent) => setSel((s) => {
+    if (ev.shiftKey && s.length) { const order = shown.map((e) => e.name), a = order.indexOf(s[s.length - 1]), b = order.indexOf(name); if (a >= 0 && b >= 0) return order.slice(Math.min(a, b), Math.max(a, b) + 1) }
+    return ev.ctrlKey || ev.metaKey ? (s.includes(name) ? s.filter((x) => x !== name) : [...s, name]) : [name]
+  })
+  const arcJob = (p: Promise<{ ok: boolean; error?: string }>) => void p.then((r) => { if (!r.ok) setNotice(archiveError(r.error)) })
+  const extract = (root: string, rel: string, mode: 'here' | 'folder', items: string[] = [], pw: string | null = null) => arcJob(os.filesExtract(root, rel, mode, items, pw))
   const targets = (name: string | null) => (name && !sel.includes(name) ? [name] : sel)
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
@@ -102,11 +120,13 @@ export default function Files({ onClose }: WindowProps) {
     else if (ev.key === 'Delete' && sel.length) toTrash(sel)
     else if (ev.ctrlKey && (ev.key === 'c' || ev.key === 'x') && sel.length) setClip({ op: ev.key === 'c' ? 'copy' : 'move', root: dir.root, rels: sel.map(relOf) })
     else if (ev.ctrlKey && ev.key === 'v') paste()
+    else if (ev.ctrlKey && ev.key === 'a') setSel(shown.map((e) => e.name))
     else return
     ev.preventDefault()
   }
 
   const folders = rows.filter((e) => e.dir), files = rows.filter((e) => !e.dir)
+  const shown = view === 'grid' ? [...folders, ...files] : rows
   const selBytes = sel.map(byName).reduce((a, e) => a + (e && !e.dir ? e.size ?? 0 : 0), 0)
   const conflicts = rows.filter((e) => e.state === 'conflict').length
   const selected = sel.length === 1 ? byName(sel[0]) : undefined
@@ -158,7 +178,7 @@ export default function Files({ onClose }: WindowProps) {
             </div>}
             {dir && view === 'grid' && <button type="button" onClick={() => setAsk({ kind: 'mkdir' })} title={t('files.newFolder')} className={`${btn} flex h-[34px] items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold`} style={{ background: C.blue }}>{`+ ${t('files.new')}`}</button>}
           </>}
-          {!search && <button type="button" aria-label={t('files.close')} onClick={onClose} className={`${iconBtn} ${dir ? '' : 'ml-1'}`} style={{ color: C.muted }}><Svg d={P.close} /></button>}
+          {!search && <button type="button" aria-label={t('files.close')} onClick={onClose} className={`${iconBtn} ${dir ? '' : arc ? 'ml-auto' : 'ml-1'}`} style={{ color: C.muted }}><Svg d={P.close} /></button>}
         </header>
 
         {readOnly && (
@@ -179,7 +199,10 @@ export default function Files({ onClose }: WindowProps) {
           </div>
         )}
 
-        {search && dir ? <SearchView search={search} setSearch={setSearch} found={found} openHit={openHit} />
+        {arc ? <ArchiveView root={arc.root} rel={arc.rel} inner={arc.inner} password={arcPw} setPassword={setArcPw}
+            onGo={(inner) => go({ ...arc, inner })} onLeave={() => (hist.i > 0 ? setHist((h) => ({ ...h, i: h.i - 1 })) : go({ kind: 'dir', root: arc.root, rel: arc.rel.split('/').slice(0, -1).join('/') }))}
+            onExtract={(items) => extract(arc.root, arc.rel, items.length ? 'here' : 'folder', items, arcPw)} />
+          : search && dir ? <SearchView search={search} setSearch={setSearch} found={found} openHit={openHit} />
           : place.kind === 'trash' ? <TrashView items={trashItems} act={act} setNotice={setNotice} />
           : place.kind !== 'dir' ? <HitList hits={hits} empty={place.kind === 'recent' ? t('files.recentNone') : t('files.starredNone')} openHit={openHit} />
           : error ? <p className="p-6 text-sm" style={{ color: '#FF8A7A' }}>{error}</p>
@@ -262,7 +285,7 @@ export default function Files({ onClose }: WindowProps) {
           </footer>
         )}
 
-        {menu && dir && <ContextMenu menu={menu} entry={menu.name ? byName(menu.name) : undefined} starred={!!menu.name && stars.includes(`${dir.root}:${relOf(menu.name)}`)} canPaste={!!clip}
+        {menu && dir && <ContextMenu menu={menu} entry={menu.name ? byName(menu.name) : undefined} starred={!!menu.name && stars.includes(`${dir.root}:${relOf(menu.name)}`)} canPaste={!!clip} multi={targets(menu.name).length > 1}
           onPick={(a) => {
             const names = targets(menu.name), one = menu.name ? byName(menu.name) : undefined
             setMenu(null)
@@ -272,7 +295,9 @@ export default function Files({ onClose }: WindowProps) {
             else if (a === 'duplicate') void act(() => os.filesPaste('duplicate', dir.root, names.map(relOf), dir.root, dir.rel))
             else if (a === 'rename' && one) setAsk({ kind: 'rename', name: one.name })
             else if (a === 'star' && one) star(one.name)
-            else if (a === 'compress') void act(() => os.filesCompress(dir.root, names.map(relOf)))
+            else if (a === 'compress') setCompressing(names)
+            else if (a === 'openArchive' && one) open(one)
+            else if ((a === 'extractHere' || a === 'extractTo') && one) extract(dir.root, relOf(one.name), a === 'extractHere' ? 'here' : 'folder')
             else if (a === 'properties' && one) { setView('list'); setSel([one.name]) }
             else if (a === 'trash') toTrash(names)
             else if (a === 'mkdir') setAsk({ kind: 'mkdir' })
@@ -287,6 +312,10 @@ export default function Files({ onClose }: WindowProps) {
       </main>
 
       {job?.state === 'conflict' && job.conflict && <ConflictDialog job={job} />}
+      {job?.state === 'password' && <PasswordDialog key={`${job.id}:${job.ask?.wrong}`} name={job.name ?? ''} wrong={!!job.ask?.wrong} onCancel={() => void os.filesArchivePassword(job.id, null)} onSubmit={(pw) => void os.filesArchivePassword(job.id, pw)} />}
+      {job?.state === 'confirm' && <LargeDialog job={job} />}
+      {compressing && dir && <CompressDialog names={compressing} onCancel={() => setCompressing(null)}
+        onSubmit={(o) => { setCompressing(null); arcJob(os.filesCompress(dir.root, compressing.map(relOf), o)) }} />}
       {ask && dir && ask.kind !== 'empty' && <NameDialog title={ask.kind === 'mkdir' ? t('files.newFolder') : t('files.renameTitle', { name: ask.name })} initial={ask.kind === 'rename' ? ask.name : ''}
         action={ask.kind === 'mkdir' ? t('files.create') : t('files.rename')} onCancel={() => setAsk(null)}
         onSubmit={async (name) => {
@@ -324,18 +353,23 @@ function Preview({ entry, dirLabel, cloud, onOpen }: { entry: FileEntry | undefi
 }
 
 // FM3 right-click menu.
-type MenuAction = 'open' | 'cut' | 'copy' | 'paste' | 'duplicate' | 'rename' | 'star' | 'compress' | 'properties' | 'trash' | 'mkdir'
-function ContextMenu({ menu, entry, starred, canPaste, onPick }: { menu: Menu; entry: FileEntry | undefined; starred: boolean; canPaste: boolean; onPick: (a: MenuAction) => void }) {
+type MenuAction = 'open' | 'cut' | 'copy' | 'paste' | 'duplicate' | 'rename' | 'star' | 'compress' | 'openArchive' | 'extractHere' | 'extractTo' | 'properties' | 'trash' | 'mkdir'
+function ContextMenu({ menu, entry, starred, canPaste, multi, onPick }: { menu: Menu; entry: FileEntry | undefined; starred: boolean; canPaste: boolean; multi: boolean; onPick: (a: MenuAction) => void }) {
   type It = [MenuAction | null, string, string, string, boolean?, string?] | null
-  const items: It[] = entry ? [
+  // Archives: open (browse) and extract, for a single archive.
+  const archive: It[] = entry && !entry.dir && !multi && archiveKind(entry.name) ? [
+    ['openArchive', t('files.arc.open'), P.open, '', !entry.local], ['extractHere', t('files.arc.extractHere'), P.download, '', !entry.local],
+    ['extractTo', t('files.arc.extractTo', { name: stemOf(entry.name) }), P.folder, '', !entry.local], null,
+  ] : []
+  const items: It[] = entry ? [...archive,
     ['open', t('files.open'), P.open, 'Enter', !entry.dir && !entry.local], [null, t('files.openWith'), P.chevron, '', true, t('files.openWithNone')], null,
     ['cut', t('files.cut'), P.cut, 'Ctrl X', !entry.local], ['copy', t('files.copy'), P.copy, 'Ctrl C', !entry.local], ['duplicate', t('files.duplicate'), P.duplicate, '', !entry.local], null,
-    ['rename', t('files.rename'), P.rename, 'F2', !entry.local], ['star', starred ? t('files.unstar') : t('files.star'), P.star, '', !entry.local], [null, t('files.share'), P.share, '', true, t('files.shareNone')], ['compress', t('files.compress'), P.compress, '', !entry.local], null,
+    ['rename', t('files.rename'), P.rename, 'F2', !entry.local], ['star', starred ? t('files.unstar') : t('files.star'), P.star, '', !entry.local], [null, t('files.share'), P.share, '', true, t('files.shareNone')], ['compress', t('files.compressMore'), P.compress, '', !entry.local], null,
     ['properties', t('files.properties'), P.info, ''], ['trash', t('files.moveToTrash'), P.trash, 'Del', !entry.local],
   ] : [['mkdir', t('files.newFolder'), P.folder, ''], ['paste', t('files.paste'), P.paste, 'Ctrl V', !canPaste]]
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => { ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus() }, [])
-  const x = Math.min(menu.x, window.innerWidth - 270), y = Math.min(menu.y, window.innerHeight - (entry ? 420 : 100))
+  const x = Math.min(menu.x, window.innerWidth - 270), y = Math.max(8, Math.min(menu.y, window.innerHeight - (entry ? 420 + archive.length * 34 : 100)))
   return (
     <div ref={ref} role="menu" aria-label={entry ? t('files.menuFor', { name: entry.name }) : t('files.new')} onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
@@ -357,25 +391,32 @@ function ContextMenu({ menu, entry, starred, canPaste, onPick }: { menu: Menu; e
   )
 }
 
-// FM4 progress card.
+// FM4 progress card: copy / move, compress and extract jobs, with Cancel while they run.
 function JobPanel({ job, onClose }: { job: FileJob; onClose: () => void }) {
-  const pct = job.bytes_total ? Math.round((job.bytes_done / job.bytes_total) * 100) : job.total ? Math.round((job.done / job.total) * 100) : 0
-  const paused = job.state === 'conflict'
+  const pct = job.bytes_total ? Math.min(100, Math.round((job.bytes_done / job.bytes_total) * 100)) : job.total ? Math.round((job.done / job.total) * 100) : 0
+  const paused = job.state === 'conflict' || job.state === 'password' || job.state === 'confirm'
   const finished = job.state === 'done' || job.state === 'failed' || job.state === 'cancelled'
+  const archive = job.op === 'compress' || job.op === 'extract'
   useEffect(() => { if (job.state === 'done') { const id = setTimeout(onClose, 4000); return () => clearTimeout(id) } }, [job.state, onClose])
+  const title = job.op === 'compress' ? t('files.job.compressing', { name: job.name ?? '' }) : job.op === 'extract' ? t('files.job.extracting', { name: job.name ?? '', dest: job.dest })
+    : t(job.op === 'move' ? 'files.job.moving' : 'files.job.copying', { count: formatNumber(job.total), dest: job.dest })
   return (
-    <div role="status" className="absolute right-4 bottom-11 z-40 box-border flex w-[340px] flex-col gap-2 rounded-[14px] px-4 py-3.5" style={{ background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)' }}>
+    <div role="status" className="absolute right-4 bottom-11 z-40 box-border flex w-[360px] flex-col gap-2 rounded-[14px] px-4 py-3.5" style={{ background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)' }}>
       <div className="flex justify-between gap-2 text-[13px]">
-        <span className="truncate font-semibold">{t(job.op === 'move' ? 'files.job.moving' : 'files.job.copying', { count: formatNumber(job.total), dest: job.dest })}</span>
+        <span className="truncate font-semibold" title={title}>{title}</span>
         <span className="shrink-0" style={{ color: job.state === 'failed' ? '#FF8A7A' : C.muted }}>
           {paused ? t('files.job.paused') : job.state === 'done' ? t('files.job.done') : job.state === 'cancelled' ? t('files.job.cancelled') : `${pct}%`}
         </span>
       </div>
-      <div className="h-[5px] overflow-hidden rounded-[3px]" style={{ background: 'rgba(127,178,255,0.15)' }}><div className="h-full" style={{ width: `${pct}%`, background: paused ? '#FFB98A' : C.blue }} /></div>
-      <span className="font-mono text-[11px]" style={{ color: C.muted }}>
-        {job.state === 'failed' ? t('files.job.failed') : t('files.job.progress', { done: formatNumber(job.done), total: formatNumber(job.total), bytes: formatBytes(job.bytes_done), bytesTotal: formatBytes(job.bytes_total) }) + (paused ? ` · ${t('files.job.waiting')}` : '')}
+      <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={title} className="h-[5px] overflow-hidden rounded-[3px]" style={{ background: 'rgba(127,178,255,0.15)' }}>
+        <div className="h-full transition-[width]" style={{ width: `${pct}%`, background: paused ? '#FFB98A' : C.blue }} />
+      </div>
+      <span className="font-mono text-[11px]" style={{ color: job.state === 'failed' ? '#FFB4A8' : C.muted }}>
+        {job.state === 'failed' ? (archive ? archiveError(job.error) : t('files.job.failed'))
+          : (archive && !job.total ? `${formatBytes(job.bytes_done)} / ${formatBytes(job.bytes_total || null)}` : t('files.job.progress', { done: formatNumber(job.done), total: formatNumber(job.total), bytes: formatBytes(job.bytes_done), bytesTotal: formatBytes(job.bytes_total) })) + (paused ? ` · ${t('files.job.waiting')}` : '')}
       </span>
-      {finished && <button type="button" onClick={onClose} className="self-end text-xs" style={{ color: C.link }}>{t('common.dismiss')}</button>}
+      {finished ? <button type="button" onClick={onClose} className="self-end text-xs" style={{ color: C.link }}>{t('common.dismiss')}</button>
+        : <button type="button" onClick={() => void os.filesResolve(job.id, 'cancel', false)} className="self-end text-xs" style={{ color: C.link }}>{t('files.job.cancel')}</button>}
     </div>
   )
 }
@@ -389,7 +430,7 @@ function ConflictDialog({ job }: { job: FileJob }) {
   const newer = c.incoming.modified > c.existing.modified
   const send = (r: 'replace' | 'skip' | 'keep' | 'cancel') => void os.filesResolve(job.id, r, all)
   const cards = [
-    { tag: newer ? t('files.cf.incomingNewer') : t('files.cf.incoming'), s: c.incoming, border: C.blue, tagColor: C.link },
+    { tag: job.op === 'extract' ? t('files.cf.fromArchive') : job.op === 'compress' ? t('files.cf.newArchive') : newer ? t('files.cf.incomingNewer') : t('files.cf.incoming'), s: c.incoming, border: C.blue, tagColor: C.link },
     { tag: t('files.cf.existing', { dest: job.dest }), s: c.existing, border: 'rgba(127,178,255,0.14)', tagColor: C.muted },
   ]
   const k = kindOf(c.name, false)
@@ -415,7 +456,7 @@ function ConflictDialog({ job }: { job: FileJob }) {
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} className="size-4" style={{ accentColor: C.blue }} />{t('files.cf.all', { count: formatNumber(c.remaining) })}
         </label>}
         <div className="flex justify-between gap-2.5 px-[18px] py-3.5" style={{ background: 'rgba(4,10,26,0.35)', borderTop: `1px solid ${C.line}` }}>
-          <button type="button" onClick={() => send('cancel')} className={`${btn} rounded-[10px] px-3.5 py-2.5 text-sm`} style={{ color: C.muted }}>{t('files.cf.cancel')}</button>
+          <button type="button" onClick={() => send('cancel')} className={`${btn} rounded-[10px] px-3.5 py-2.5 text-sm`} style={{ color: C.muted }}>{job.op === 'copy' || job.op === 'move' ? t('files.cf.cancel') : t('files.cf.cancelJob')}</button>
           <div className="flex gap-2">
             <button type="button" onClick={() => send('skip')} className={`${btn} rounded-[10px] px-4 py-2.5 text-sm font-medium`} style={{ border: '1px solid rgba(127,178,255,0.25)' }}>{t('files.cf.skip')}</button>
             <button type="button" onClick={() => send('keep')} className={`${btn} rounded-[10px] px-4 py-2.5 text-sm font-medium`} style={{ border: '1px solid rgba(127,178,255,0.25)' }}>{t('files.cf.keep')}</button>
@@ -514,16 +555,6 @@ function TrashView({ items, act, setNotice }: { items: TrashItem[] | null; act: 
           })}
       </div>
     </>
-  )
-}
-
-function Modal({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(2,6,16,0.5)' }}>
-      <div role="dialog" aria-modal="true" aria-label={label} className="box-border flex w-[440px] flex-col gap-4 rounded-[18px] p-6" style={{ background: '#0F2350', border: '1px solid rgba(127,178,255,0.2)', boxShadow: '0 30px 80px rgba(0,0,0,0.6)', color: C.text }}>
-        {children}
-      </div>
-    </div>
   )
 }
 

@@ -18,6 +18,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from . import login  # noqa: E402
+from . import osk  # noqa: E402
 from .greetd import Greetd, GreetdError  # noqa: E402
 
 _ = gettext.translation("worksuite-greeter", fallback=True).gettext
@@ -91,6 +92,11 @@ def undecorate(win):
 
 
 class Greeter(Gtk.ApplicationWindow):
+    def _focus_changed(self, *_a):
+        w = self.get_focus()
+        if isinstance(w, Gtk.Editable):
+            self.typing_into = w
+
     def __init__(self, app, cfg=None, users=None, reachable_probe=None):
         super().__init__(application=app, title="WorkSuite", css_classes=["ws-greeter"])
         undecorate(self)
@@ -106,6 +112,9 @@ class Greeter(Gtk.ApplicationWindow):
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS)
         Gtk.StyleContext.add_provider_for_display(self.get_display(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        osk_css = Gtk.CssProvider()
+        osk_css.load_from_data(osk.CSS)
+        Gtk.StyleContext.add_provider_for_display(self.get_display(), osk_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
         overlay = Gtk.Overlay()
         self.set_child(overlay)
@@ -118,7 +127,18 @@ class Greeter(Gtk.ApplicationWindow):
         self.net_label = label("")
         self.net.append(self.net_label)
         top.append(self.net)
+        # On-screen keyboard for touch-only devices (osk.py): typed into the field that last had focus.
+        self.typing_into = None
+        self.connect("notify::focus-widget", self._focus_changed)
+        kbd = Gtk.Button(icon_name="input-keyboard-symbolic", tooltip_text=_("On-screen keyboard"), css_classes=["osk-toggle"], valign=Gtk.Align.CENTER)
+        kbd.set_focus_on_click(False)
+        kbd.update_property([Gtk.AccessibleProperty.LABEL], [_("On-screen keyboard")])
+        top.append(kbd)
         overlay.add_overlay(top)
+        self.osk = Gtk.Revealer(child=osk.build(Gtk, lambda: self.typing_into), valign=Gtk.Align.END,
+                                transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
+        kbd.connect("clicked", lambda _b: self.osk.set_reveal_child(not self.osk.get_reveal_child()))
+        overlay.add_overlay(self.osk)
 
         self.card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16, css_classes=["card"], halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
         self.card.set_size_request(420, -1)

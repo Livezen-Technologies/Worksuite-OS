@@ -1,0 +1,12 @@
+#!/bin/sh
+# Default handler for archives (shell/apps/worksuite-files.desktop): asks the running shell over the session bus
+# (lk.worksuite.Shell1.OpenArchive) to show the archive in Files. The shell browses only archives inside the user's
+# home, WorkSuite Drive or mounted removable drives, read-only; extracting is the user's choice there.
+set -u
+[ -n "${1:-}" ] || exit 0
+case "$1" in
+    file://*) f=$(printf '%s' "${1#file://}" | sed 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g'); f=$(printf '%b' "$f") ;;
+    /*) f=$1 ;;
+    *) f=$(pwd)/$1 ;;
+esac
+exec busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 OpenArchive s "$f" >/dev/null

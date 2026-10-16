@@ -31,3 +31,8 @@ grep -q pam_gnome_keyring.so /etc/pam.d/common-auth && grep -q pam_gnome_keyring
 # Boot splash: the WorkSuite Plymouth theme, with the DRM/framebuffer drivers in the initramfs (WSOS-BOOT splash).
 plymouth-set-default-theme worksuite
 grep -qx 'FRAMEBUFFER=y' /etc/initramfs-tools/conf.d/worksuite-splash || { echo "initramfs splash config missing" >&2; exit 1; }
+[ -x /usr/share/initramfs-tools/hooks/worksuite-plymouth-fonts ] || { echo "splash font initramfs hook missing" >&2; exit 1; }
+# The same splash on shutdown and restart: plymouth ships these statically wanted by poweroff/reboot.target.
+for t in poweroff reboot; do
+  [ -e /usr/lib/systemd/system/$t.target.wants/plymouth-$t.service ] || { echo "plymouth-$t.service not wanted by $t.target" >&2; exit 1; }
+done

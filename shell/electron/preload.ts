@@ -86,8 +86,17 @@ contextBridge.exposeInMainWorld('worksuite', {
   filesTrashDelete: (ids: string[] | 'all') => ipcRenderer.invoke('ws:filesTrashDelete', ids === 'all' ? 'all' : JSON.stringify(ids.map(String))),
   filesPaste: (op: string, srcRoot: string, rels: string[], dstRoot: string, dstRel: string) => ipcRenderer.invoke('ws:filesPaste', String(op), String(srcRoot), JSON.stringify(rels.map(String)), String(dstRoot), String(dstRel)),
   filesResolve: (id: string, r: string, all: boolean) => ipcRenderer.invoke('ws:filesResolve', String(id), String(r), all ? '1' : '0'),
-  filesCompress: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesCompress', String(root), JSON.stringify(rels.map(String))),
+  filesCompress: (root: string, rels: string[], opts: { format: string; name: string; level: number; password?: string | null }) =>
+    ipcRenderer.invoke('ws:filesCompress', String(root), JSON.stringify(rels.map(String)), JSON.stringify({ format: String(opts.format), name: String(opts.name), level: Number(opts.level) || 0, password: opts.password ? String(opts.password) : null })),
+  filesExtract: (root: string, rel: string, mode: string, items: string[], password: string | null) => ipcRenderer.invoke('ws:filesExtract', String(root), String(rel), String(mode), JSON.stringify(items.map(String)), password ? String(password) : ''),
+  filesArchivePassword: (id: string, pw: string | null) => ipcRenderer.invoke('ws:filesArchivePassword', String(id), pw ?? '', pw === null ? '1' : '0'),
+  filesArchiveList: (root: string, rel: string, password: string | null) => ipcRenderer.invoke('ws:filesArchiveList', String(root), String(rel), password ? String(password) : ''),
   filesEject: (id: string) => ipcRenderer.invoke('ws:filesEject', String(id)),
+  onOpenArchive: (cb: (e: unknown) => void) => {
+    const listener = (_e: unknown, payload: unknown) => cb(payload)
+    ipcRenderer.on('ws:openArchive', listener)
+    return () => { ipcRenderer.removeListener('ws:openArchive', listener) }
+  },
   onFilesJob: (cb: (e: unknown) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on('ws:filesJob', listener)
@@ -217,4 +226,14 @@ contextBridge.exposeInMainWorld('worksuiteNotifications', {
   invoke: (id: number, key: string) => ipcRenderer.invoke('ws:notificationInvoke', String(Number(id)), String(key)),
   dismiss: (id: number) => ipcRenderer.invoke('ws:notificationDismiss', String(Number(id))),
   onChange: on('ws:notificationsChanged'),
+})
+
+// Touchscreen, pen, touch mode and the on-screen keyboard — see electron/touch.ts.
+contextBridge.exposeInMainWorld('worksuiteTouch', {
+  state: () => ipcRenderer.invoke('ws:touchState'),
+  set: (patch: unknown) => ipcRenderer.invoke('ws:touchSet', JSON.stringify(patch)),
+  osk: (show: boolean) => ipcRenderer.invoke('ws:oskShow', show ? '1' : '0'),
+  penTest: (on: boolean) => ipcRenderer.invoke('ws:penTest', on ? '1' : '0'),
+  onChange: on('ws:touchChanged'),
+  onPen: on('ws:penEvent'),
 })

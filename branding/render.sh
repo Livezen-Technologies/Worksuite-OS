@@ -8,6 +8,7 @@ for f in ring-track ring-arc; do rsvg-convert -w 120 -h 120 "$here/plymouth/$f.s
 rsvg-convert -w 48 -h 48 "$here/plymouth/mark.svg" -o "$out/plymouth/mark.png"
 rsvg-convert "$here/plymouth/progress-track.svg" -o "$out/plymouth/progress-track.png"
 rsvg-convert "$here/plymouth/progress-bar.svg" -o "$out/plymouth/progress-bar.png"
+rsvg-convert "$here/plymouth/field.svg" -o "$out/plymouth/field.png"   # disk-unlock passphrase field
 sh "$here/grub/render.sh" "$out/grub"                  # G13 boot menu: artwork, row icons, selection pill, IBM Plex fonts
 for s in 16 24 32 48 64 128 256 512; do
   rsvg-convert -w $s -h $s "$here/icons/worksuite.svg" -o "$out/icons/worksuite-$s.png"
