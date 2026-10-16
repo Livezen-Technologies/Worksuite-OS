@@ -1,6 +1,7 @@
 // App Center (G08 browse, G09 app detail, G10 install from file). The organization's catalog through the package
 // service (WSOS-APP-001/002), the user's AppImages (WSOS-AIM-001…004), local .deb files (WSOS-APT-005) and Flatpak
 // permissions (WSOS-FLP-002…004). Nothing here is sample data: what the services don't report is left out or says so.
+import { AppGlyph } from '../components/AppGlyph'
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useState } from 'react'
 import type { WindowProps } from './types'
@@ -34,8 +35,16 @@ const errText = (e: string) => (e === 'cancelled' ? '' : packageErrorText(e))
 type Op = 'install' | 'remove' | 'update' | 'reset' | 'prune'
 type View = { kind: 'section'; section: Section; category: string } | { kind: 'detail'; key: string }
 
-function AppIcon({ a, size, radius, font }: { a: Pick<AppView, 'name'>; size: number; radius: number; font: number }) {
-  return <span aria-hidden="true" className="flex flex-none items-center justify-center font-bold text-white" style={{ width: size, height: size, borderRadius: radius, fontSize: font, background: appColor(a.name) }}>{initials(a.name)}</span>
+/** Theme icon name for a catalog row: a Flatpak's app id, a Debian package's name (most install an icon so named). */
+export function catalogIconName(a: Partial<Pick<AppView, 'catalogId'>>): string | null {
+  const m = /^(?:flatpak|apt):([A-Za-z0-9][A-Za-z0-9._+-]{0,127})$/.exec(a.catalogId ?? '')
+  return m ? m[1] : null
+}
+
+interface IconRow { name: string; catalogId?: string | null; builtin?: AppView['builtin']; key?: string }
+
+function AppIcon({ a, size, radius, font }: { a: IconRow; size: number; radius: number; font: number }) {
+  return <AppGlyph app={{ id: a.builtin === 'office' ? 'office' : `appc:${a.key ?? a.name}`, name: a.name, mark: initials(a.name), bg: appColor(a.name), fg: '#FFFFFF', icon: catalogIconName(a) }} size={size} radius={radius} font={font} className="flex-none" />
 }
 
 export default function AppCenter({ onClose }: WindowProps) {

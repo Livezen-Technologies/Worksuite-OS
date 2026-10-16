@@ -46,6 +46,7 @@ import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
 import { externalAllowed, loadGrants, permissionAllowed, shellWebPreferences } from './webSecurity'
 import { xdgDirs } from './xdgDirs'
+import { IconCache } from './icons'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 // URL scheme allow-list, renderer prefs and per-origin permission grants: ./webSecurity (WSOS-SEC-001/003/006).
@@ -74,6 +75,9 @@ const monitors = outputWindows((r) => {
   void w.loadFile(path.join(__dirname, '../dist/index.html'), { query: { mode: 'output', output: r.name } })
   return w
 }, () => win)
+
+const appIcons = new IconCache()
+const parseJson = (s: string): unknown => { try { return JSON.parse(s) } catch { return null } }
 
 function handle(channel: string, fn: (...args: string[]) => unknown) {
   ipcMain.handle(channel, (e, ...args) => {
@@ -174,6 +178,8 @@ app.whenReady().then(() => {
       write: (text) => { mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 }); writeFileSync(file, text, { mode: 0o600 }) },
     })
   })
+  // App icons (Icon= of desktop entries) as data: URLs, from icon directories only (electron/icons.ts).
+  handle('ws:appIcons', (names, size, scale) => appIcons.resolve(parseJson(names), size, scale))
   handle('ws:installedApps', () => {
     const all = installedApps()
     const office = findOffice(all)
@@ -287,7 +293,8 @@ app.whenReady().then(() => {
   handle('ws:syncStatus', () => syncCall('Status'))
   // Shell ENH-01 preferences (favourites, taskbar pins, order): the user's synced 'preferences/shell' object.
   handle('ws:shellPrefs', () => syncCall('GetPreference', { object_id: 'shell' }))
-  handle('ws:setShellPrefs', (prefs) => syncCall('SetPreference', { object_id: 'shell', data: shellPrefsFrom(prefs) }))
+  // The preferences come as JSON text (handle() passes strings only).
+  handle('ws:setShellPrefs', (prefs) => syncCall('SetPreference', { object_id: 'shell', data: shellPrefsFrom(parseJson(prefs)) }))
   // WSOS-SYN-004: rejected changes are shown against their record; retry only when the user asks.
   handle('ws:syncFailed', () => syncCall('ListFailed'))
   handle('ws:syncRetry', (mutationId) => syncCall('RetryFailed', { mutation_id: mutationId }))

@@ -5,8 +5,11 @@ import { normaliseLayout, type WidgetLayout } from './widgets'
 const ID = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/
 const MAX = 64
 
-/** widgets: the desktop widgets' layout (lib/widgets.ts), saved alongside the pins. */
-export interface ShellPrefs { favorites?: string[]; taskbar?: string[]; order?: string[]; widgets?: WidgetLayout }
+/** Where the Start button and app icons sit on the taskbar (Settings › Appearance); centre by default. */
+export type TaskbarAlign = 'center' | 'left'
+
+/** widgets: the desktop widgets' layout (lib/widgets.ts), saved alongside the pins. taskbarAlign: see TaskbarAlign. */
+export interface ShellPrefs { favorites?: string[]; taskbar?: string[]; order?: string[]; widgets?: WidgetLayout; taskbarAlign?: TaskbarAlign }
 
 const ids = (v: unknown): string[] | undefined =>
   Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && ID.test(x)))].slice(0, MAX) : undefined
@@ -18,6 +21,7 @@ export function shellPrefsFrom(v: unknown): ShellPrefs {
   const out: ShellPrefs = {}
   for (const k of ['favorites', 'taskbar', 'order'] as const) { const l = ids(o[k]); if (l) out[k] = l }
   if (o.widgets && typeof o.widgets === 'object') out.widgets = normaliseLayout(o.widgets)
+  if (o.taskbarAlign === 'center' || o.taskbarAlign === 'left') out.taskbarAlign = o.taskbarAlign
   return out
 }
 
@@ -38,4 +42,26 @@ export function toggleFavorite(p: ShellPrefs, apps: { id: string; fav?: boolean 
   const current = p.favorites ?? apps.filter((a) => a.fav).map((a) => a.id)
   const favorites = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
   return { ...p, favorites, order: p.order ?? favorites }
+}
+
+const ALIGN_KEY = 'ws.taskbarAlign'
+/** Fired on window when Settings changes the alignment; detail is the TaskbarAlign. */
+export const TASKBAR_ALIGN_EVENT = 'ws:taskbar-align'
+
+/** This computer's copy of the alignment (used before the synced preferences load, or when signed out). */
+export function localTaskbarAlign(): TaskbarAlign | null {
+  try { const v = globalThis.localStorage?.getItem(ALIGN_KEY); return v === 'center' || v === 'left' ? v : null } catch { return null }
+}
+
+/** The alignment to draw: the synced preference, else this computer's, else centre. */
+export const taskbarAlign = (p: ShellPrefs): TaskbarAlign => p.taskbarAlign ?? localTaskbarAlign() ?? 'center'
+
+/** Save the alignment: on this computer, in the synced preferences (merged with what is there), and to the taskbar. */
+export async function saveTaskbarAlign(align: TaskbarAlign, sync: { shellPrefs(): Promise<{ ok: boolean; value?: unknown }>; setShellPrefs(p: unknown): Promise<unknown> }): Promise<void> {
+  try { globalThis.localStorage?.setItem(ALIGN_KEY, align) } catch { /* storage blocked: the event still applies it */ }
+  globalThis.dispatchEvent?.(new CustomEvent(TASKBAR_ALIGN_EVENT, { detail: align }))
+  try {
+    const cur = await sync.shellPrefs()
+    await sync.setShellPrefs({ ...shellPrefsFrom(cur.ok ? cur.value : null), taskbarAlign: align })
+  } catch { /* not signed in or offline: kept on this computer */ }
 }

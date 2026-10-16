@@ -21,8 +21,9 @@ import { UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
 import { requestSettingsSection } from '../lib/settingsNav'
 import { markLauncherRequest, reportLauncherFirstFrame } from '../lib/perfProbe'
-import { applyShellPrefs, shellPrefsFrom, taskbarPins, toggleFavorite, type ShellPrefs } from '../lib/shellPrefs'
-import { alphaGroups, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
+import { applyShellPrefs, shellPrefsFrom, TASKBAR_ALIGN_EVENT, taskbarAlign, taskbarPins, toggleFavorite, type ShellPrefs, type TaskbarAlign } from '../lib/shellPrefs'
+import { AppGlyph } from '../components/AppGlyph'
+import { alphaGroups, appForWindow, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
 import GlobalSearch from '../components/GlobalSearch'
 import Assistant, { AI_ICON } from '../components/Assistant'
@@ -157,6 +158,20 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     saveLocalLayout(user, l)
     void os.setShellPrefs(next).catch(() => undefined)
   }
+  // Taskbar alignment (Settings › Appearance): the synced preference, else this computer's, else centre.
+  const [alignOverride, setAlignOverride] = useState<TaskbarAlign | null>(null)
+  useEffect(() => {
+    const on = (e: Event) => { const d = (e as CustomEvent).detail; if (d === 'center' || d === 'left') setAlignOverride(d) }
+    window.addEventListener(TASKBAR_ALIGN_EVENT, on)
+    return () => window.removeEventListener(TASKBAR_ALIGN_EVENT, on)
+  }, [])
+  const align = alignOverride ?? taskbarAlign(prefs)
+  const centered = align === 'center'
+  const searchButton = (
+    <button type="button" onClick={() => setLauncher(true)} className="box-border hidden h-9 w-[200px] shrink-0 cursor-text items-center gap-2 rounded-[9px] bg-white/[0.06] px-3 text-[13px] text-[#8FA3C8] hover:bg-white/10 md:flex">
+      <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={14} width={2.2} />{t('launcher.search')}
+    </button>
+  )
   const appsLoaded = useRef(false)
   useEffect(() => {
     // On start, then again each time the launcher opens (sign-in, installs and org changes show up).
@@ -261,7 +276,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
         </div>
       )}
       {launcher && !q && (
-        <div className="absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-end justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
+        <div className={`absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-end p-3 ${centered ? 'justify-center' : 'justify-start'}`} onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
           <div id="ws-launcher" role="dialog" aria-modal="true" aria-label={t('launcher.title')} className="ws-rise flex h-[660px] max-h-full w-[660px] max-w-full flex-col overflow-hidden rounded-[22px] border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] text-[#E8EEFA] shadow-[0_40px_90px_rgba(0,0,0,0.6)] backdrop-blur-[24px]">
             <div className="flex min-h-0 flex-1 flex-col gap-[18px] px-[26px] pt-[22px]">
               <label className="box-border flex h-11 shrink-0 items-center gap-2.5 rounded-[22px] border border-[rgba(127,178,255,0.18)] bg-[rgba(4,10,26,0.6)] px-4 text-[#8FA3C8] focus-within:border-[#1F6BFF]">
@@ -281,7 +296,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
                   <div className="ws-pins grid grid-cols-6 gap-x-1.5 gap-y-1">
                     {pins.map((a) => (
                       <button key={a.id} type="button" onClick={() => launch(a.id)} onContextMenu={(e) => { if (a.id === SETTINGS_TILE.id) return; e.preventDefault(); toggleFav(a.id) }} aria-description={a.fav ? t('launcher.unpinHint') : t('launcher.pinHint')} className="flex min-w-0 cursor-pointer flex-col items-center gap-[7px] rounded-xl px-1 py-2.5 hover:bg-white/[0.07] focus-visible:bg-white/[0.07]">
-                        <span aria-hidden="true" className="ws-mark flex size-11 items-center justify-center whitespace-nowrap rounded-xl leading-none font-bold text-white shadow-[0_6px_14px_rgba(0,0,0,0.25)]" style={{ background: tileColor(a), fontSize: 16 }}>{a.mark}</span>
+                        <AppGlyph app={{ ...a, bg: tileColor(a), fg: '#FFFFFF' }} size={44} radius={12} font={16} className="shadow-[0_6px_14px_rgba(0,0,0,0.25)]" />
                         <span className="max-w-full truncate text-xs">{a.name}</span>
                       </button>
                     ))}
@@ -312,7 +327,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
                       <span aria-hidden="true" className="px-2.5 pt-2 pb-1 text-xs font-bold text-[#18D4F0]">{g.letter}</span>
                       {g.apps.map((a) => (
                         <button key={a.id} type="button" onClick={() => launch(a.id)} className="flex cursor-pointer items-center gap-3 rounded-[9px] px-2.5 py-[7px] text-left hover:bg-white/[0.07]">
-                          <span aria-hidden="true" className="ws-mark flex size-[30px] items-center justify-center whitespace-nowrap rounded-lg leading-none font-bold text-white" style={{ fontSize: 12, background: tileColor(a) }}>{a.mark}</span>
+                          <AppGlyph app={{ ...a, bg: tileColor(a), fg: '#FFFFFF' }} size={30} radius={8} font={12} />
                           <span className="text-[13px]">{a.name}</span>
                           <span className="ml-auto text-[11px] text-[#8FA3C8]">{a.kind === 'WorkSuite' ? '' : t(`launcher.kind.${a.kind}` as MessageKey)}</span>
                         </button>
@@ -347,15 +362,17 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           onSettings={() => { setQsOpen(false); onOpen('settings') }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
       )}
 
-      <nav aria-label={t('panel.taskbar')} className="ws-taskbar absolute inset-x-0 bottom-0 z-40 box-border flex h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px]">
-        <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
-          className={`flex size-10 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
-        <button type="button" onClick={() => setLauncher(true)} className="box-border hidden h-9 w-[200px] cursor-text items-center gap-2 rounded-[9px] bg-white/[0.06] px-3 text-[13px] text-[#8FA3C8] hover:bg-white/10 md:flex">
-          <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={14} width={2.2} />{t('launcher.search')}
-        </button>
-        <span aria-hidden="true" className="mx-1 h-6 w-px bg-[rgba(127,178,255,0.15)]" />
-        <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => { const a = allApps.find((x) => x.id === id); return a && { ...a, bg: tileColor(a), fg: '#FFFFFF' } }} onLaunch={launch} only={onPrimary} />
-        <div className="ml-auto flex items-center gap-1.5">
+      <nav aria-label={t('panel.taskbar')} data-align={align} className={`ws-taskbar absolute inset-x-0 bottom-0 z-40 box-border h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px] ${centered ? 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'flex'}`}>
+        {/* Start and the app icons: one group, centred (canvas G02) or at the start edge. Start comes first in tab order. */}
+        <div className={`flex min-w-0 items-center gap-1.5 ${centered ? 'col-start-2 row-start-1' : ''}`}>
+          <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
+            className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
+          {!centered && searchButton}
+          {!centered && <span aria-hidden="true" className="mx-1 h-6 w-px bg-[rgba(127,178,255,0.15)]" />}
+          <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => { const a = allApps.find((x) => x.id === id) ?? appForWindow(allApps, id); return a && { ...a, bg: tileColor(a), fg: '#FFFFFF' } }} onLaunch={launch} only={onPrimary} />
+        </div>
+        {centered && <div className="col-start-1 row-start-1 flex min-w-0 items-center">{searchButton}</div>}
+        <div className={`flex items-center gap-1.5 ${centered ? 'col-start-3 row-start-1 justify-self-end' : 'ms-auto'}`}>
           <WorkspaceSwitcher />
           {managed && (
             <button type="button" onClick={() => onOpen('settings')} title={device?.org_name ? t('panel.managedBy', { org: device.org_name }) : undefined}

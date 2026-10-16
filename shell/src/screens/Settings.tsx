@@ -3,6 +3,7 @@
 // can't tell, the section says so instead of showing sample values.
 import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { localTaskbarAlign, saveTaskbarAlign, shellPrefsFrom, type TaskbarAlign } from '../lib/shellPrefs'
 import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
 import type { WindowProps } from './types'
@@ -229,12 +230,40 @@ function AppearancePanel() {
         ))}
       </div>
     </fieldset>
+    <TaskbarAlignChoice accent={accent} />
     <Rows rows={[
       { k: t('settings.app.wallpaper'), v: t('settings.app.wallpaperDefault') },
       { k: t('settings.app.font'), v: 'IBM Plex Sans' },
       { k: t('a11y.reducedMotion'), v: reduce ? t('settings.app.onSystem') : t('settings.app.offSystem') },
     ]} />
   </>
+}
+
+/** Taskbar alignment (Centre / Left), stored in the synced shell preferences. */
+function TaskbarAlignChoice({ accent }: { accent: string }) {
+  const [align, setAlign] = useState<TaskbarAlign>(() => localTaskbarAlign() ?? 'center')
+  useEffect(() => {
+    let live = true
+    void os.shellPrefs().then((r) => { if (live && r.ok) { const p = shellPrefsFrom(r.value); if (p.taskbarAlign) setAlign(p.taskbarAlign) } }).catch(() => undefined)
+    return () => { live = false }
+  }, [])
+  const pick = (a: TaskbarAlign) => { setAlign(a); void saveTaskbarAlign(a, os) }
+  return (
+    <fieldset className="m-0 flex flex-col gap-2.5 border-0 p-0">
+      <legend className="mb-2.5 p-0 text-sm font-semibold">{t('settings.app.taskbar')}</legend>
+      <div className="flex gap-3.5">
+        {(['center', 'left'] as const).map((a) => (
+          <button key={a} type="button" aria-pressed={align === a} onClick={() => pick(a)}
+            className="flex w-[180px] cursor-pointer flex-col gap-2 rounded-[14px] border-2 bg-[rgba(14,32,72,0.5)] p-2.5 text-left" style={{ borderColor: align === a ? accent : 'transparent' }}>
+            <span aria-hidden="true" className={`flex h-6 items-center gap-1 rounded-md bg-[rgba(6,14,34,0.88)] px-1.5 ${a === 'center' ? 'justify-center' : 'justify-start'}`}>
+              <span className="size-3 rounded-[3px]" style={{ background: accent }} />{[0, 1, 2].map((i) => <span key={i} className="size-3 rounded-[3px] bg-[#8FA3C8]" />)}
+            </span>
+            <span className="px-1 text-sm font-semibold">{t(a === 'center' ? 'settings.app.taskbarCenter' : 'settings.app.taskbarLeft')}</span>
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  )
 }
 
 function SoundPanel() {
