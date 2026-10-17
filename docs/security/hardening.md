@@ -38,6 +38,25 @@ paths, so we collect them first. Review the `apparmor="ALLOWED" profile="worksui
 devices, add the missing rules, then drop `complain`. `tests/security/apparmor.test.sh` allows complain mode on
 `worksuite-shell` and on no other profile.
 
+### Plan: enforcing the shell profile
+
+The recovery screens (`worksuite-recovery-shell.service`) do not get a separate enforced profile yet. That unit
+starts `worksuite-cage`, which takes the DRM device, input devices and the seat before it runs the same Electron
+shell, so an enforced profile would need the same driver-specific Chromium rules as the desktop plus the
+compositor's. A missing rule there would leave a device that cannot reach its recovery screens, which is the
+failure recovery exists to fix, and it cannot be checked without real hardware. The steps:
+
+1. **Collect.** Pilot devices keep complain mode. Gather the `apparmor="ALLOWED" profile="worksuite-shell"` journal
+   lines from the desktop and the recovery screens (`journalctl -k --grep 'profile="worksuite-shell"'`) across the
+   supported GPU drivers (i915/xe, amdgpu, nouveau, virtio-gpu, simpledrm), and add the missing rules.
+2. **Recovery first.** Split out `worksuite-recovery-shell`, a child of the shell profile with an explicit
+   `/usr/bin/worksuite-cage` rule and no `@{HOME}` or removable-media write access (the recovery user has neither
+   need). Ship it in enforce mode once a full recovery pass (unlock, repair, reinstall keeping /home) runs with no
+   denials on each driver in the hardware lab (`tests/hw`). Point the recovery unit's `AppArmorProfile=` at it and
+   make `tests/security/apparmor.test.sh` require enforce for it.
+3. **Desktop.** Enforce `worksuite-shell` on the pilot ring for one release with the journal watched for `DENIED`
+   lines, then on stable. Drop the complain exception from `tests/security/apparmor.test.sh`.
+
 Tested in CI (`os-scripts` job) by `tests/security/apparmor.test.sh`. It checks that every profile compiles with
 `apparmor_parser`, that every confined unit names its profile, and that every profile is packaged.
 
