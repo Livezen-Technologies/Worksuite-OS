@@ -139,7 +139,7 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
       case 'ResetAppPermissions': return Message.newMethodReturn(msg, 'o', [jobPath(svc.resetAppPermissions(uid, String(b[0])))]);
       case 'PruneRuntimes': return Message.newMethodReturn(msg, 'o', [jobPath(svc.pruneRuntimes(uid))]);
       case 'AddRemote': return Message.newMethodReturn(msg, 'o', [jobPath(svc.addRemote(uid, String(b[0]), String(b[1])))]);
-      case 'InspectBundle': return Message.newMethodReturn(msg, 's', [JSON.stringify(svc.inspectBundle(String(b[0])))]);
+      case 'InspectBundle': return Message.newMethodReturn(msg, 's', [JSON.stringify(svc.inspectBundle(uid, String(b[0])))]);
       case 'InstallBundle': return Message.newMethodReturn(msg, 'o', [jobPath(svc.installBundle(uid, String(b[0])))]);
       case 'CancelJob': {
         const m = /\/job\/(\d+)$/.exec(String(b[0]));

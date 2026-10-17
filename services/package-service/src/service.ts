@@ -1,11 +1,11 @@
 // Package service core: one serialized job queue in front of APT and Flatpak (WSOS-APT-004), policy and
 // critical-set checks, previews before any change (WSOS-APP-002), update preconditions (WSOS-UPD-001), repair.
 import { EventEmitter } from 'node:events';
-import type { KeyObject } from 'node:crypto';
+import { randomUUID, type KeyObject } from 'node:crypto';
 import { join } from 'node:path';
-import { rmSync } from 'node:fs';
+import { renameSync, rmSync } from 'node:fs';
 import { extractBundle, inspectBundle, type BundleManifest } from './bundle.ts';
-import { bundlePath, stageFile, stagedCopy } from './staging.ts';
+import { stageBundle, stageFile, stagedCopy } from './staging.ts';
 import { checkSources, isCritical, parseCatalogId, parseDiskChange, parseSimulation, parseUpgradable, ServiceError, type Plan } from './apt.ts';
 import { debFieldsUnprivileged, type Unprivileged } from './untrusted.ts';
 
@@ -285,15 +285,21 @@ export class PackageService extends EventEmitter {
   }
 
   /** Read-only check shown in Settings > Updates before installing. */
-  inspectBundle(path: string): { release_id: string; version: string; packages: number; bytes: number; critical: boolean; verified: true } {
-    const { manifest } = inspectBundle(bundlePath(path, this.env.bundleRoots), this.bundleOptions());
+  inspectBundle(caller: number, path: string): { release_id: string; version: string; packages: number; bytes: number; critical: boolean; verified: true } {
+    const staged = stageBundle(path, caller, this.spool('bundles'), this.env.bundleRoots);
+    let manifest: BundleManifest;
+    try { ({ manifest } = inspectBundle(staged.path, this.bundleOptions())); } finally { rmSync(staged.path, { force: true }); }
     return { release_id: manifest.release_id, version: manifest.version, packages: manifest.bundle.files.length,
       bytes: manifest.bundle.files.reduce((n, f) => n + f.size, 0), critical: !!manifest.critical, verified: true };
   }
 
   installBundle(caller: number, path: string): number {
-    const real = bundlePath(path, this.env.bundleRoots);
-    return this.enqueue('update', caller, async (job) => {
+    // Staged now, while the caller is known: the job works on the root-owned copy, never on the caller's file.
+    // Renamed per job: an inspection of the same bundle meanwhile stages (and removes) its own copy.
+    const staged = stageBundle(path, caller, this.spool('bundles'), this.env.bundleRoots);
+    const real = join(this.spool('bundles'), `job-${randomUUID()}.wsupdate`);
+    renameSync(staged.path, real);
+    const installStaged = async (job: Job) => {
       const p = this.env.power();
       if (!p.ac && (p.battery ?? 0) < 40) throw new ServiceError('PreconditionFailed', 'connect power or charge to 40%');
       job.phase = 'verifying'; this.progress(job, 5);
@@ -313,7 +319,12 @@ export class PackageService extends EventEmitter {
         this.rebootRequired = (await this.env.runner.run('test', ['-e', '/run/reboot-required'])).code === 0;
         this.env.audit('bundle_installed', { caller, release_id: manifest.release_id, version: manifest.version, packages: debs.length, reboot_required: this.rebootRequired });
       } finally { rmSync(dir, { recursive: true, force: true }); }
-    });
+    };
+    try {
+      return this.enqueue('update', caller, async (job) => {
+        try { await installStaged(job); } finally { rmSync(real, { force: true }); }
+      });
+    } catch (e) { rmSync(real, { force: true }); throw e; }
   }
 
   /** WSOS-AUP-008: download first, retrying with backoff. apt keeps partial files in /var/cache/apt/archives/partial
