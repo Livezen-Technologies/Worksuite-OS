@@ -39,7 +39,7 @@ def add_key(device, passphrase, key, run=subprocess.run):
     The new slot keeps cryptsetup's default key derivation (Argon2id on LUKS2): /boot is a separate unencrypted
     partition (partition.conf), so GRUB never has to unlock the disk and no slot needs PBKDF2."""
     out = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    with tempfile.TemporaryDirectory(dir="/run" if os.path.isdir("/run") else None) as d:
+    with tempfile.TemporaryDirectory(dir="/run" if os.access("/run", os.W_OK) else None) as d:
         old, new = os.path.join(d, "old"), os.path.join(d, "new")
         for path, value in ((old, passphrase), (new, key)):
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
