@@ -20,8 +20,6 @@ class RecoveryKeyTests(unittest.TestCase):
         self.calls = []
 
         def fake_run(argv, **_):
-            if argv[1] == "isLuks":
-                return types.SimpleNamespace(returncode=0 if self.luks2 else 1, stderr="")
             i = argv.index("--key-file")
             files = argv[i + 1:]
             call = {"argv": argv, "cmd": argv[1], "device": files[1], "old": open(files[0]).read()}
@@ -30,7 +28,6 @@ class RecoveryKeyTests(unittest.TestCase):
                 call["mode"] = oct(os.stat(files[2]).st_mode & 0o777)
             self.calls.append(call)
             return types.SimpleNamespace(returncode=self.code, stderr="No key available with this passphrase.")
-        self.luks2 = True
         self.code = 0
         self.orig = main.add_key.__defaults__
         main.add_key.__defaults__ = (fake_run,)
@@ -64,18 +61,12 @@ class RecoveryKeyTests(unittest.TestCase):
         self.assertTrue(all("correct horse" not in " ".join(c["argv"]) for c in self.calls), "no secret in argv")
         self.assertTrue(all(gs[main.GS_KEY] not in " ".join(c["argv"]) for c in self.calls), "no key in argv")
 
-    def test_luks2_slots_use_pbkdf2_for_grub(self):
+    def test_slots_keep_the_default_argon2id(self):
         gs["partitions"] = [{"device": "/dev/vda2", "luksPassphrase": "pw", "mountPoint": "/"}]
         self.assertIsNone(main.run())
-        self.assertEqual([c["cmd"] for c in self.calls], ["luksConvertKey", "luksAddKey"])
-        self.assertTrue(all(c["argv"][c["argv"].index("--pbkdf") + 1] == "pbkdf2" for c in self.calls))
-
-    def test_luks1_only_adds_the_key(self):
-        self.luks2 = False
-        gs["partitions"] = [{"device": "/dev/vda2", "luksPassphrase": "pw", "mountPoint": "/"}]
-        self.assertIsNone(main.run())
-        self.assertEqual([c["cmd"] for c in self.calls], ["luksAddKey"])
+        self.assertEqual([c["cmd"] for c in self.calls], ["luksAddKey"], "the passphrase slot is not converted")
         self.assertNotIn("--pbkdf", self.calls[0]["argv"])
+        self.assertNotIn("pbkdf2", " ".join(self.calls[0]["argv"]))
 
     def test_failure_is_reported_and_no_key_is_shown(self):
         self.code = 2
