@@ -42,6 +42,8 @@ plymouth
 systemd-coredump
 # Scripts for the installer's language list and the desktop (Sinhala, Tamil, Devanagari, Arabic, ...)
 fonts-noto-core
+# Emoji in the shell (emoji picker, clipboard history) and apps; without it they were empty boxes.
+fonts-noto-color-emoji
 # Recovery (§9.2)
 dialog
 udisks2

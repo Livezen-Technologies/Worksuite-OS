@@ -444,6 +444,9 @@ grep -qF '$(MAKE) -C services/session/polkit/listener worksuite-polkit-listener'
 # ---- Screenshots, snipping, clipboard history and Windows-style shortcuts (shell/electron/capture.ts, clipboard.ts) ----
 L=$ROOT/live-build/config/package-lists/worksuite.list.chroot
 for p in grim wl-clipboard wtype; do grep -qx "$p" "$L" && ok "image ships $p" || bad "image ships $p"; done
+grep -qx fonts-noto-color-emoji "$L" && grep -A3 '^Package: worksuite-shell$' "$ROOT/packaging/debian/control" | grep -q 'fonts-noto-color-emoji' \
+  && grep -q -- '--font-sans: .*"Noto Color Emoji"' "$ROOT/shell/src/index.css" \
+  && ok "emoji: Noto Color Emoji shipped, depended on and in the shell's font stack" || bad "emoji: Noto Color Emoji shipped, depended on and in the shell's font stack"
 grep -A3 '^Package: worksuite-shell$' "$ROOT/packaging/debian/control" | grep -q 'wl-clipboard, grim, wtype, libsecret-tools' \
   && ok "shell depends on grim, wl-clipboard, wtype and secret-tool" || bad "shell depends on grim, wl-clipboard, wtype and secret-tool"
 awk '/^Package: worksuite-desktop$/{p=1} p&&/^Depends:/{d=1} d{print} d&&!/,$/{exit}' "$ROOT/packaging/debian/control" | grep -q 'grim, wl-clipboard, wtype' \
