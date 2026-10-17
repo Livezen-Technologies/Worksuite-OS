@@ -263,8 +263,10 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     // apps, Firefox among the default taskbar pins, off the taskbar for a while after the first sign-in.
     const webP = os.webApps().catch(() => null)
     const instP = os.installedApps().catch(() => null)
-    let web: Awaited<typeof webP> | undefined
-    let inst: Awaited<typeof instP> | undefined
+    type Web = Awaited<ReturnType<typeof os.webApps>> | null
+    type Inst = Awaited<ReturnType<typeof os.installedApps>> | null
+    let web: Web | undefined
+    let inst: Inst | undefined
     const apply = () => {
       if (!live) return
       setAllApps([...buildLauncherApps(web?.ok ? web.value : null, inst?.apps ?? null, inst?.office ?? null, inst?.desktop ?? null), SNIP_TILE])
