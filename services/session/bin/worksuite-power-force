@@ -41,4 +41,4 @@ if [ -n "${PKEXEC_UID:-}" ] && [ "$(others "$PKEXEC_UID")" != own ]; then
         *) exit 127 ;;   # not authorized
     esac
 fi
-exec "$SYSTEMCTL" "$1" --check-inhibitors=no
+exec "$SYSTEMCTL" "$1" --no-wall --check-inhibitors=no

@@ -33,12 +33,16 @@ function RingMark() {
 }
 
 /** The column itself, shared by the main window and the mirrors. */
-export function EndColumn({ state, shown }: { state: EndState; shown: boolean }) {
+/** How long the fade-in may take before onOpaque is called anyway (a busy machine can drop transitionend). */
+export const OPAQUE_FALLBACK_MS = 2000
+
+export function EndColumn({ state, shown, onOpaque }: { state: EndState; shown: boolean; onOpaque?: () => void }) {
   const phase = state.phase === 'ending' ? (state.action === 'logout' ? t('end.phaseSigningOut') : t('end.phaseTurningOff'))
     : t('end.phaseClosing')
   return (
     <div className={`fixed inset-0 z-[95] flex flex-col items-center justify-center gap-7 font-sans text-[#E8EEFA] transition-opacity duration-500 ease-out ${shown ? 'opacity-100' : 'opacity-0'}`}
-      style={{ background: BG }} role="status" aria-live="polite">
+      style={{ background: BG }} role="status" aria-live="polite"
+      onTransitionEnd={(e) => { if (e.target === e.currentTarget && e.propertyName === 'opacity' && shown) onOpaque?.() }}>
       <RingMark />
       <div className="flex flex-col items-center gap-2.5">
         <h1 className="m-0 text-[28px] font-medium">{t(TITLE[state.action])}</h1>
@@ -66,8 +70,10 @@ export function EndMirror() {
 
 const prettyId = (id: string) => (id.split('.').pop() ?? id).replace(/[-_]+/g, ' ').replace(/^./, (c) => c.toUpperCase())
 
-export function SessionEnd({ action, onCancel, onLogout = () => os.logout(), nameOf = (id) => prettyId(id) }: {
-  action: EndAction; onCancel: () => void; onLogout?: () => unknown; nameOf?: (appId: string, title: string) => string
+/** onOpaque: the overlay has fully faded in. A dialog it replaces (the shutdown confirmation) stays until then: closing it
+ *  on a timer showed a frame of plain desktop through the half-faded overlay on a busy machine. */
+export function SessionEnd({ action, onCancel, onLogout = () => os.logout(), nameOf = (id) => prettyId(id), onOpaque }: {
+  action: EndAction; onCancel: () => void; onLogout?: () => unknown; nameOf?: (appId: string, title: string) => string; onOpaque?: () => void
 }) {
   const [state, setState] = useState<EndState>({ action, phase: 'closing', progress: 0 })
   const [shown, setShown] = useState(false)
@@ -78,6 +84,9 @@ export function SessionEnd({ action, onCancel, onLogout = () => os.logout(), nam
   const left = useRef<PanelWindow[]>([])
   const inhibited = useRef(false)
   const cancelBtn = useRef<HTMLButtonElement>(null)
+  const opaqueSent = useRef(false)
+  const opaque = () => { if (!opaqueSent.current) { opaqueSent.current = true; onOpaque?.() } }
+  useEffect(() => { const id = setTimeout(opaque, OPAQUE_FALLBACK_MS); return () => clearTimeout(id) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const publish = (s: EndState | null) => { void sessionApi.setEndState(s) }
   const go = async (force = false) => {
@@ -153,7 +162,7 @@ export function SessionEnd({ action, onCancel, onLogout = () => os.logout(), nam
 
   return (
     <>
-      <EndColumn state={state} shown={shown} />
+      <EndColumn state={state} shown={shown} onOpaque={opaque} />
       {blocked && (
         <div className="fixed inset-0 z-[96] flex items-center justify-center bg-[rgba(2,6,16,0.45)] p-4 font-sans">
           <div role="alertdialog" aria-modal="true" aria-labelledby="end-blocked-t" aria-describedby="end-blocked-d"

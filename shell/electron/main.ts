@@ -43,7 +43,7 @@ import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
-import { startSessionHost } from './sessionHost'
+import { powerArgs, startSessionHost } from './sessionHost'
 import { toastHost, type ToastMsg } from './toastHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
@@ -182,8 +182,8 @@ app.whenReady().then(() => {
   })
   handle('ws:logout', () => run(...logoutCommand()))
   handle('ws:power', (action) => {
-    const verbs: Record<string, string> = { suspend: 'suspend', restart: 'reboot', shutdown: 'poweroff' }
-    return verbs[action] ? run('systemctl', [verbs[action]]) : undefined
+    const args = powerArgs(String(action), false)
+    return args ? run('systemctl', args) : undefined
   })
   // WorkSuite web apps: one window and one persistent session partition per app (WSOS-SEC-004).
   const apps = appWindows({

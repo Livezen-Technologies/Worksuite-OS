@@ -25,9 +25,10 @@ describe('inhibitors', () => {
     expect(disconnect).toHaveBeenCalled()
   })
   it('forced power skips inhibitors; sleep is never forced', () => {
-    expect(powerArgs('shutdown', false)).toEqual(['poweroff'])
-    expect(powerArgs('shutdown', true)).toEqual(['poweroff', '--check-inhibitors=no'])
-    expect(powerArgs('restart', true)).toEqual(['reboot', '--check-inhibitors=no'])
+    expect(powerArgs('shutdown', false)).toEqual(['poweroff', '--no-wall'])
+    expect(powerArgs('shutdown', true)).toEqual(['poweroff', '--no-wall', '--check-inhibitors=no'])
+    expect(powerArgs('restart', true)).toEqual(['reboot', '--no-wall', '--check-inhibitors=no'])
+    expect(powerArgs('suspend', false)).toEqual(['suspend'])
     expect(powerArgs('suspend', true)).toEqual(['suspend'])
     expect(powerArgs('rm -rf', true)).toBeNull()
   })
@@ -92,16 +93,16 @@ describe('administrators and diagnostics', () => {
     expect(exec).toHaveBeenLastCalledWith('pkexec', ['/usr/lib/worksuite/worksuite-diagnostics', 'boot-details', 'on'])
     expect(await handlers.get('ws:bootDetails')!('rm')).toEqual({ ok: false, error: 'invalid_argument' })
     expect(await handlers.get('ws:powerForce')!('shutdown')).toEqual({ ok: true, value: true })
-    expect(exec).toHaveBeenLastCalledWith('systemctl', ['poweroff', '--check-inhibitors=no', '--no-ask-password'])
+    expect(exec).toHaveBeenLastCalledWith('systemctl', ['poweroff', '--no-wall', '--check-inhibitors=no', '--no-ask-password'])
   })
   it('"Restart anyway" asks at most once: logind without interaction first, then one prompt for the root helper', async () => {
     const calls: string[][] = []
     const run = (codes: number[]) => { let i = 0; return async (cmd: string, args: string[]) => { calls.push([cmd, ...args]); return { code: codes[i++] ?? 0, stdout: '', stderr: '' } } }
     expect(await forcePower(run([0]), 'restart')).toEqual({ ok: true, value: true })   // no admin needed: no prompt
-    expect(calls).toEqual([['systemctl', 'reboot', '--check-inhibitors=no', '--no-ask-password']])
+    expect(calls).toEqual([['systemctl', 'reboot', '--no-wall', '--check-inhibitors=no', '--no-ask-password']])
     calls.length = 0
     expect(await forcePower(run([1, 0]), 'shutdown')).toEqual({ ok: true, value: true })
-    expect(calls).toEqual([['systemctl', 'poweroff', '--check-inhibitors=no', '--no-ask-password'], ['pkexec', '/usr/lib/worksuite/worksuite-power-force', 'poweroff']])
+    expect(calls).toEqual([['systemctl', 'poweroff', '--no-wall', '--check-inhibitors=no', '--no-ask-password'], ['pkexec', '/usr/lib/worksuite/worksuite-power-force', 'poweroff']])
     expect(await forcePower(run([1, 126]), 'restart')).toEqual({ ok: false, error: 'auth_cancelled' })
     expect(await forcePower(run([1, 1]), 'restart')).toEqual({ ok: false, error: 'not_authorized' })
     expect(await forcePower(run([]), 'suspend')).toEqual({ ok: false, error: 'invalid_argument' })

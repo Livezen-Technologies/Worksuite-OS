@@ -23,11 +23,13 @@ export function blockingInhibitors(list: Inhibitor[], action: EndAction): Inhibi
   return list.filter((i) => i.mode === 'block' && i.what.split(':').includes('shutdown'))
 }
 
-/** systemctl argv for an action; `force` skips inhibitors (logind asks polkit, which may want an administrator). */
+/** systemctl argv for an action; `force` skips inhibitors (logind asks polkit, which may want an administrator).
+ *  --no-wall: logind's "The system will power off now!" showed on the text console before the splash. */
 export function powerArgs(action: string, force: boolean): string[] | null {
   const verb = ({ suspend: 'suspend', restart: 'reboot', shutdown: 'poweroff' } as Record<string, string>)[action]
   if (!verb) return null
-  return force && verb !== 'suspend' ? [verb, '--check-inhibitors=no'] : [verb]
+  if (verb === 'suspend') return [verb]
+  return force ? [verb, '--no-wall', '--check-inhibitors=no'] : [verb, '--no-wall']
 }
 
 export const POWER_FORCE = '/usr/lib/worksuite/worksuite-power-force'

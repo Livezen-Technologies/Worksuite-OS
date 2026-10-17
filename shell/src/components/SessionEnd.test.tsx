@@ -98,6 +98,31 @@ describe('SessionEnd overlay', () => {
     expect(host!.querySelector('[role="alertdialog"]')).toBeNull()
   })
 
+  it('reports onOpaque once the fade-in has finished, not before (the confirmation dialog stays until then)', async () => {
+    session()
+    panel([win('a', 'org.gnome.TextEditor')], 'none')
+    const onOpaque = vi.fn()
+    await render(<SessionEnd action="shutdown" onCancel={() => {}} onOpaque={onOpaque} />)
+    await tick(600)
+    expect(onOpaque).not.toHaveBeenCalled()   // a timer is no proof the overlay is opaque
+    const col = host!.querySelector('[role="status"]')!
+    const ev = new Event('transitionend', { bubbles: true }) as Event & { propertyName: string }
+    Object.defineProperty(ev, 'propertyName', { value: 'opacity' })
+    await act(async () => { col.dispatchEvent(ev) })
+    expect(onOpaque).toHaveBeenCalledTimes(1)
+    await tick(3000)
+    expect(onOpaque).toHaveBeenCalledTimes(1)
+  })
+
+  it('onOpaque still comes when transitionend never does', async () => {
+    session()
+    panel([win('a', 'org.gnome.TextEditor')], 'none')
+    const onOpaque = vi.fn()
+    await render(<SessionEnd action="restart" onCancel={() => {}} onOpaque={onOpaque} />)
+    await tick(2100)
+    expect(onOpaque).toHaveBeenCalledTimes(1)
+  })
+
   it('an inhibitor shows "These apps are preventing shutdown"; Cancel goes back to the desktop', async () => {
     const { api, ends } = session({ inhibitors: vi.fn(async () => ({ ok: true as const, value: [{ what: 'shutdown', who: 'Docs', why: 'Unsaved changes in “Q4 plan”', mode: 'block', uid: 1000, pid: 7 }] })) })
     panel([])
