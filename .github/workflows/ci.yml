@@ -15,7 +15,7 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -36,7 +36,7 @@ jobs:
         working-directory: services/${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # Node 22 runs the TypeScript tests directly; node:sqlite is built in.
@@ -80,7 +80,7 @@ jobs:
       - run: sudo apt-get install -y --no-install-recommends libpam0g-dev gcc make && sh native/pam-worksuite/test.sh
       # File-system layout (SRS §11.6-b): packaged paths, XDG base directories for user state.
       - run: sh tests/session/fs-layout-test.sh
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: node --test tools/sbom/spdx.test.mjs
@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # labwc + foot run the headless end-to-end tests (grim + wtype: the shell stays below the apps on every desktop);
@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: sudo apt-get install -y --no-install-recommends apt-utils gnupg

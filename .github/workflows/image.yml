@@ -75,7 +75,7 @@ jobs:
     steps:
       - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gh live-build debootstrap debhelper dpkg-dev fakeroot build-essential dbus-daemon ${{ matrix.qemu }} xorriso squashfs-tools mtools dosfstools
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
