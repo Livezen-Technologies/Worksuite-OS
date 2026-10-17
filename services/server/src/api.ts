@@ -8,6 +8,7 @@ import { userFromBearer, type User } from './oauth.ts';
 import { activeKey, signFlat } from './signing.ts';
 import { licenceFor, revokeDevice } from './admin.ts';
 import { issueLoginCode, setNewPassword, verifyDirectoryUser, type DirUserRow } from './identity.ts';
+import { Throttle } from './throttle.ts';
 import { deviceVpnConfig, isWgKey, registerPeer, removePeer } from './vpn.ts';
 
 export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string; webUrl: string }
@@ -145,6 +146,8 @@ function applyMutation(db: DatabaseSync, userId: number, m: Record<string, unkno
 }
 
 export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
+  // Directory sign-in guesses (wrong password or TOTP code) per client address and per account: 10 per 15 minutes.
+  const signinThrottle = new Throttle();
   r.on('GET', '/.well-known/worksuite-desktop', (ctx) =>
     send(ctx, 200, { api_base: o.publicUrl, oneauth_issuer: o.issuer, update_host: o.updateHost }));
 
@@ -465,7 +468,10 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     const username = str(b, 'username', 320).trim().toLowerCase();
     const password = str(b, 'password', 1024);
     const dir = json<DirectorySettings>((db.prepare('SELECT directory FROM orgs WHERE id = ?').get(d.org_id) as { directory: string }).directory);
+    const keys = [`addr:${ctx.req.socket.remoteAddress ?? '?'}`, `user:${d.org_id}:${username}`];
+    if (signinThrottle.blocked(keys)) throw new HttpError(429, 'RATE_LIMITED', 'too many failed sign-ins; try again later', { retryable: true });
     const v = verifyDirectoryUser(db, d.org_id, username, password, { otp: typeof b.otp === 'string' ? b.otp : undefined, maxAgeDays: dir.password_max_age_days });
+    if (!v.ok && v.code === 'INVALID_CREDENTIALS') signinThrottle.fail(keys);   // wrong password or wrong TOTP code
     if (!v.ok) {
       if (v.code === 'ACCOUNT_DISABLED') throw new HttpError(403, 'ACCOUNT_DISABLED', 'account disabled');
       if (v.code === 'PASSWORD_EXPIRED') throw new HttpError(401, 'PASSWORD_EXPIRED', 'the password has expired and must be changed');
@@ -488,7 +494,10 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     const username = str(b, 'username', 320).trim().toLowerCase();
     const oldPw = str(b, 'old_password', 1024);
     const newPw = str(b, 'new_password', 1024);
+    const keys = [`addr:${ctx.req.socket.remoteAddress ?? '?'}`, `user:${d.org_id}:${username}`];
+    if (signinThrottle.blocked(keys)) throw new HttpError(429, 'RATE_LIMITED', 'too many failed sign-ins; try again later', { retryable: true });
     const v = verifyDirectoryUser(db, d.org_id, username, oldPw, { otp: typeof b.otp === 'string' ? b.otp : undefined });
+    if (!v.ok && v.code === 'INVALID_CREDENTIALS') signinThrottle.fail(keys);
     if (!v.ok && v.code !== 'PASSWORD_EXPIRED') {
       if (v.code === 'ACCOUNT_DISABLED') throw new HttpError(403, 'ACCOUNT_DISABLED', 'account disabled');
       if (v.code === 'MFA_REQUIRED') throw new HttpError(401, 'MFA_REQUIRED', 'a verification code is required');

@@ -12,6 +12,7 @@ import { approvalsNeeded, checkApproval, requirePermission } from './approvals.t
 import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
 import { normalizeKiosk, redactKiosk, type KioskPolicy } from './kiosk.ts';
 import { qrMatrix } from './qr.ts';
+import { Throttle } from './throttle.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
 const SESSION_TTL = 8 * 3_600_000;
@@ -32,13 +33,8 @@ function cookie(ctx: Ctx, name: string): string | undefined {
 }
 
 /** Login throttling per client address: 10 failures per 15 minutes. */
-const failures = new Map<string, number[]>();
-function throttled(addr: string) {
-  const now = Date.now();
-  const recent = (failures.get(addr) ?? []).filter((t) => t > now - 15 * 60_000);
-  failures.set(addr, recent);
-  return recent.length >= 10;
-}
+const failures = new Throttle();
+const throttled = (addr: string) => failures.blocked([addr]);
 
 const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   update_ring: (v) => v === 'development' || v === 'pilot' || v === 'stable',
@@ -134,7 +130,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     if (throttled(addr)) throw new HttpError(429, 'RATE_LIMITED', 'too many failed attempts; try again later', { retryable: true });
     const u = typeof b.password === 'string' ? checkPassword(db, a.email, b.password) : undefined;
     if (!u || u.id !== a.id) {
-      failures.get(addr)!.push(Date.now());
+      failures.fail([addr]);
       log(a, 'reauth_failed', { action: 'wipe' });
       throw new HttpError(401, 'REAUTH_REQUIRED', 'enter your administrator password to confirm');
     }
@@ -163,7 +159,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const u = checkPassword(db, String(b.email ?? ''), String(b.password ?? ''));
     const role = u ? (db.prepare('SELECT role FROM users WHERE id = ?').get(u.id) as { role: string }).role : null;
     if (!u || role !== 'admin') {
-      failures.get(addr)!.push(Date.now());
+      failures.fail([addr]);
       throw new HttpError(401, 'PERMISSION_DENIED', 'email or password is incorrect, or this account is not an administrator');
     }
     const t = secret('wsadm');

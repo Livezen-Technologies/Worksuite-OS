@@ -6,6 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { escapeHtml, HttpError, send, type Ctx, type Router } from './http.ts';
 import { secret, sha256, tx } from './db.ts';
 import { redeemLoginCode, verifyDirectoryUser } from './identity.ts';
+import { Throttle } from './throttle.ts';
 
 export const TOKEN_EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange';
 export const OS_LOGIN_CODE = 'urn:worksuite:params:oauth:token-type:os-login-code';
@@ -77,6 +78,8 @@ ${hidden}<button type="submit">Sign in</button></form></body></html>`;
 }
 
 export function oauthRoutes(r: Router, db: DatabaseSync, o: OAuthOptions) {
+  // Failed sign-ins (wrong password or TOTP code) per client address and per account: 10 per 15 minutes.
+  const signinThrottle = new Throttle();
   const base = o.issuer.replace(/\/$/, '');
   r.on('GET', '/oauth/.well-known/openid-configuration', (ctx) => send(ctx, 200, {
     issuer: base,
@@ -110,8 +113,12 @@ export function oauthRoutes(r: Router, db: DatabaseSync, o: OAuthOptions) {
   r.on('POST', '/oauth/authorize', async (ctx) => {
     const p = new URLSearchParams(await ctx.body() as Record<string, string>);
     checkAuthz(p);
+    const email = (p.get('email') ?? '').trim().toLowerCase();
+    const keys = [`addr:${ctx.req.socket.remoteAddress ?? '?'}`, `user:${email}`];
+    if (signinThrottle.blocked(keys)) return send(ctx, 429, loginPage(p, 'Too many failed sign-ins. Try again later.'), html);
     // WSOS-DIR-009: TOTP when the account has one enrolled.
-    const v = verifyDirectoryUser(db, null, (p.get('email') ?? '').trim().toLowerCase(), p.get('password') ?? '', { otp: p.get('otp') ?? '' });
+    const v = verifyDirectoryUser(db, null, email, p.get('password') ?? '', { otp: p.get('otp') ?? '' });
+    if (!v.ok && v.code === 'INVALID_CREDENTIALS') signinThrottle.fail(keys);   // wrong password or wrong code
     if (!v.ok && v.code === 'MFA_REQUIRED') return send(ctx, 401, loginPage(p, 'Enter the 6-digit code from your authenticator app.'), html);
     if (!v.ok || v.user.disabled) return send(ctx, 401, loginPage(p, 'Email, password or code is incorrect.'), html);
     const user = v.user;
