@@ -66,6 +66,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends apparmor apparmor-utils
       - run: tests/security/apparmor.test.sh
       - run: tests/security/isolation-claims.test.sh
+      # Default inbound-deny nftables ruleset; nft -c needs root.
+      - run: sudo apt-get install -y --no-install-recommends nftables && sudo sh tests/security/firewall.test.sh
       - run: tests/perf/gates.test.sh
       - run: tests/image/fetch-desktop.sh
       # Session scripts with stubbed programs: lock, idle, greeter, polkit agent fallback, screen-sharing consent.

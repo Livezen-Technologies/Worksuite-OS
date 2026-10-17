@@ -41,6 +41,29 @@ devices, add the missing rules, then drop `complain`. `tests/security/apparmor.t
 Tested in CI (`os-scripts` job) by `tests/security/apparmor.test.sh`. It checks that every profile compiles with
 `apparmor_parser`, that every confined unit names its profile, and that every profile is packaged.
 
+## Default firewall
+
+The image ships `/etc/nftables.conf` (`live-build/config/includes.chroot/etc/nftables.conf`), and
+`0100-worksuite-defaults.hook.chroot` enables `nftables.service`. The rules live in their own table,
+`inet worksuite_filter`:
+
+- **Inbound: default deny.** Accepted are established and related traffic, loopback, ICMP errors and echo
+  (rate-limited), IPv6 neighbour discovery, router advertisements and MLD, DHCP and DHCPv6 client replies, and mDNS on
+  the local link (printer discovery for CUPS). Invalid packets are dropped. Nothing listens for remote connections
+  (WSOS-SEC-010: no SSH server), so nothing else is opened.
+- **Forwarding:** dropped.
+- **Outbound:** allowed.
+
+The device agent's managed VPN kill switch (`services/device-agent/src/vpn.ts`) uses its own table,
+`inet worksuite_vpn_killswitch`, with an output policy of drop. nftables evaluates every table's base chain on a hook,
+so the kill switch still blocks traffic outside the tunnel even though this table's output chain accepts. The two do
+not overwrite each other: `nftables.conf` replaces only `worksuite_filter` (no `flush ruleset`), and a drop-in
+(`/etc/systemd/system/nftables.service.d/worksuite.conf`) makes `systemctl stop` / `reload` touch only that table
+instead of Debian's default `nft flush ruleset`.
+
+Tested in CI (`os-scripts` job) by `tests/security/firewall.test.sh`: the file parses with `nft -c`, the input
+policy is drop, the whole ruleset is never flushed and the tables differ.
+
 ## Signing keys: offline / HSM process (WSOS-SEC-011)
 
 There are three key families. Only the public halves are in git (`packaging/keyring/README.md`).
