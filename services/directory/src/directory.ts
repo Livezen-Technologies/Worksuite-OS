@@ -18,7 +18,7 @@ const DAY = 86_400_000;
 /** Directory accounts are e-mail style (name@domain); anything else is a local account and is left to pam_unix. */
 export const DIRECTORY_NAME = /^[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,63}$/;
 
-export interface DirectoryUser { username: string; user_id: number; name: string; groups: string[]; offline_login_days: number; mfa?: boolean; login_code?: string }
+export interface DirectoryUser { username: string; user_id: number; name: string; groups: string[]; offline_login_days: number; mfa?: boolean; allow_offline_mfa_bypass?: boolean; login_code?: string }
 export interface CacheEntry extends Omit<DirectoryUser, 'login_code'> { salt: string; verifier: string; cached_at: number }
 /** Non-secret settings the greeter shows (WSOS-DIR-002). */
 export interface GreeterConfig { domain?: string; netbios_domain?: string; upn_suffixes?: string[]; org_name?: string; server_host?: string }
@@ -147,7 +147,12 @@ export async function authenticate(d: Deps, user: string, secretText: string): P
       d.log(`directory: ${name} refused: offline cache older than ${c.offline_login_days} days`);
       return 'expired_cache';
     }
-    // A second factor cannot be checked offline (the TOTP secret stays on the server): the password part is.
+    // A second factor cannot be checked offline (the TOTP secret stays on the server). Unless the directory policy
+    // allows it (allow_offline_mfa_bypass, default false), accounts with one do not sign in offline at all.
+    if (c.mfa && c.allow_offline_mfa_bypass !== true) {
+      d.log(`directory: ${name} refused offline: the account has a second factor and the policy needs the server`);
+      return 'unavailable';
+    }
     const offlinePw = c.mfa ? withoutCode(password) : password;
     const ok = timingSafeEqual(verifier(offlinePw, Buffer.from(c.salt, 'base64')), Buffer.from(c.verifier, 'base64'));
     if (!ok) { d.log(`directory: ${name} refused offline: wrong password`); return 'denied'; }
@@ -167,7 +172,7 @@ export async function authenticate(d: Deps, user: string, secretText: string): P
   const cache = d.store.cache();
   const plain = change ? change.next : u.mfa ? withoutCode(password) : password;
   const { login_code, ...record } = u;
-  cache[name] = { ...record, mfa: !!u.mfa, username: name, salt: salt.toString('base64'), verifier: verifier(plain, salt).toString('base64'), cached_at: now };
+  cache[name] = { ...record, mfa: !!u.mfa, allow_offline_mfa_bypass: u.allow_offline_mfa_bypass === true, username: name, salt: salt.toString('base64'), verifier: verifier(plain, salt).toString('base64'), cached_at: now };
   d.store.saveCache(cache);
   d.store.markName(name, null);
   const server = d.server.serverUrl();

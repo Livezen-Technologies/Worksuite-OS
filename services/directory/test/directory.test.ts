@@ -20,7 +20,7 @@ function fakes(o: { online?: boolean; disabled?: boolean; escrowKey?: string; fa
   let pending: AuditEvent[] = [];
   const escrowed: { encrypted_secret: string }[] = [];
   const events: AuditEvent[] = [];
-  const state = { pw: PW, mfa: false, expired: false, online: o.online ?? true, disabled: o.disabled ?? false, failEvents: o.failEvents ?? false, now: Date.UTC(2026, 9, 1) };
+  const state = { pw: PW, mfa: false, mfaBypass: false, expired: false, online: o.online ?? true, disabled: o.disabled ?? false, failEvents: o.failEvents ?? false, now: Date.UTC(2026, 9, 1) };
   const marks = new Map<string, string>();
   const handoffs: { uid: number; data: { server_url: string; login_code: string } }[] = [];
   const server: Server = {
@@ -33,7 +33,7 @@ function fakes(o: { online?: boolean; disabled?: boolean; escrowKey?: string; fa
       } else if (p !== state.pw) throw new ServerError(401, 'INVALID_CREDENTIALS');
       if (state.disabled) throw new ServerError(403, 'ACCOUNT_DISABLED');
       if (state.expired) throw new ServerError(401, 'PASSWORD_EXPIRED');
-      return { username: u, user_id: 42, name: 'Ana Silva', groups: ['worksuite-admins'], offline_login_days: 7, mfa: state.mfa, login_code: 'wsl_code' };
+      return { username: u, user_id: 42, name: 'Ana Silva', groups: ['worksuite-admins'], offline_login_days: 7, mfa: state.mfa, allow_offline_mfa_bypass: state.mfaBypass, login_code: 'wsl_code' };
     },
     async changePassword(u, old, next): Promise<DirectoryUser> {
       calls.push(`change ${u}`);
@@ -220,9 +220,20 @@ test('WSOS-DIR-007: an expired password is flagged for the greeter and changed t
   assert.equal(await authenticate(f.deps, 'ana@corp.example', `${CHANGE_PREFIX}${NEW}\x1fYet-another-pass1`), 'unavailable');
 });
 
-test('WSOS-DIR-009: accounts with a second factor need password + code; offline checks the password part', async () => {
+test('WSOS-DIR-009: accounts with a second factor do not sign in offline by default', async () => {
   const f = fakes();
   f.state.mfa = true;
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW + '123456'), 'ok');
+  assert.equal(f.getCache()['ana@corp.example'].allow_offline_mfa_bypass, false);
+  f.state.online = false;
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW + '999999'), 'unavailable');
+  assert.equal(await authenticate(f.deps, 'ana@corp.example', PW), 'unavailable');
+});
+
+test('WSOS-DIR-009: accounts with a second factor need password + code; with allow_offline_mfa_bypass offline checks the password part', async () => {
+  const f = fakes();
+  f.state.mfa = true;
+  f.state.mfaBypass = true;
   assert.equal(await authenticate(f.deps, 'ana@corp.example', PW), 'mfa_required');
   assert.equal(f.marks.get('ana@corp.example'), 'mfa');
   assert.equal(await authenticate(f.deps, 'ana@corp.example', PW + '123456'), 'ok');

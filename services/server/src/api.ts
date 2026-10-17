@@ -84,7 +84,7 @@ const limitOf = (ctx: Ctx) => {
 };
 
 /** Org directory settings (orgs.directory). */
-export interface DirectorySettings { type?: string; offline_login_days?: number; password_max_age_days?: number; domain?: string; netbios_domain?: string; upn_suffixes?: string[] }
+export interface DirectorySettings { type?: string; offline_login_days?: number; allow_offline_mfa_bypass?: boolean; password_max_age_days?: number; domain?: string; netbios_domain?: string; upn_suffixes?: string[] }
 
 export function policyFor(db: DatabaseSync, orgId: number) {
   const row = db.prepare('SELECT version, body FROM policies WHERE org_id = ?').get(orgId) as { version: number; body: string } | undefined;
@@ -482,7 +482,7 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
   });
   const loginReply = (u: DirUserRow, dir: DirectorySettings, deviceId: string) => ({
     username: u.email, user_id: u.id, name: u.name, groups: [u.role === 'admin' ? 'worksuite-admins' : 'worksuite-users'],
-    offline_login_days: dir.offline_login_days ?? 7, mfa: !!u.totp_secret,
+    offline_login_days: dir.offline_login_days ?? 7, mfa: !!u.totp_secret, allow_offline_mfa_bypass: dir.allow_offline_mfa_bypass === true,
     // WSOS-DIR-008: exchanged by the session's token broker (os-login grant), bound to this device.
     login_code: issueLoginCode(db, u.id, deviceId),
   });

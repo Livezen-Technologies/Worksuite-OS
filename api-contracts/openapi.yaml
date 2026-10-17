@@ -569,6 +569,7 @@ paths:
                   type: { type: string, enum: [ad, ldap, oneauth, none] }
                   domain: { type: string }
                   offline_login_days: { type: integer, default: 7 }
+                  allow_offline_mfa_bypass: { type: boolean, default: false, description: 'Offline sign-in for accounts with a second factor checks the password only. When false, such accounts cannot sign in offline.' }
                   group_role_map: { type: object, additionalProperties: { type: string, enum: [administrator, standard, kiosk] } }
                   escrow_public_key: { type: string, description: PEM RSA public key the break-glass password is encrypted to (RSA-OAEP-256) }
         default: { $ref: '#/components/responses/Error' }
@@ -601,6 +602,8 @@ paths:
                   name: { type: string }
                   groups: { type: array, items: { type: string } }
                   offline_login_days: { type: integer }
+                  mfa: { type: boolean, description: The account has a second factor (TOTP) }
+                  allow_offline_mfa_bypass: { type: boolean, default: false, description: 'Directory policy: when false, an account with mfa cannot sign in offline' }
         '401': { description: INVALID_CREDENTIALS }
         '403': { description: ACCOUNT_DISABLED, DEVICE_REQUIRED or DEVICE_REVOKED }
         default: { $ref: '#/components/responses/Error' }

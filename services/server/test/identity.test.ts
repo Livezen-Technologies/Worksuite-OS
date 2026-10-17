@@ -66,6 +66,7 @@ test('WSOS-DIR-009: an enrolled TOTP is required at the greeter (password + code
   const ok = await auth('password-123' + code);
   assert.equal(ok.status, 200);
   assert.equal(ok.body.mfa, true);
+  assert.equal(ok.body.allow_offline_mfa_bypass, false);   // directory default: no offline sign-in without the code
   assert.equal((await auth('password-123' + code)).status, 401);   // replay refused
 });
 
@@ -104,6 +105,9 @@ test('WSOS-DIR-007: expired and must-change passwords are changed at the greeter
   assert.equal((await auth('brand-new-pass-1')).body.error.code, 'PASSWORD_EXPIRED');
   admin.setDirectory(db, org, { offline_login_days: 7 });
   assert.throws(() => admin.setDirectory(db, org, { run: 'x' }));
+  assert.throws(() => admin.setDirectory(db, org, { allow_offline_mfa_bypass: 'yes' }));
+  assert.equal(admin.setDirectory(db, org, { offline_login_days: 7, allow_offline_mfa_bypass: true }).allow_offline_mfa_bypass, true);
+  admin.setDirectory(db, org, { offline_login_days: 7 });
   assert.throws(() => admin.setDirectory(db, org, { netbios_domain: 'bad domain' }));
 });
 
