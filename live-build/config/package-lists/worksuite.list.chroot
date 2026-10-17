@@ -75,6 +75,7 @@ libgtk4-layer-shell0
 # asks the person at the desk when they are an administrator. Without the PolkitAgent typelib (a Recommends, and the
 # build installs none) the session fell back to lxpolkit's generic window, which offered the first administrator.
 gir1.2-polkit-1.0
+libpolkit-agent-1-0
 # Smart-card sign-in, off until enabled (WSOS-DIR-011)
 pcscd
 opensc

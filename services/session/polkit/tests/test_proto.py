@@ -54,7 +54,10 @@ class ProtoTests(unittest.TestCase):
             self.assertIsNone(proto.program_name({}, d))
         ids = [(0, "root", "root"), (1000, "alex", "Alex Perera")]
         self.assertEqual(proto.pick_identity(ids, 1000), ids[1])
-        self.assertEqual(proto.pick_identity(ids, 1001), ids[0])
+        # an ordinary administrator before root or the break-glass wsadmin (uid 989)
+        self.assertEqual(proto.pick_identity(ids, 1001), ids[1])
+        self.assertEqual(proto.pick_identity([(989, "wsadmin", "wsadmin"), (1002, "sam", "Sam")], 1001)[1], "sam")
+        self.assertEqual(proto.pick_identity([(989, "wsadmin", "wsadmin")], 1001)[1], "wsadmin")
         self.assertIsNone(proto.pick_identity([], 1000))
 
     def test_line_reader(self):

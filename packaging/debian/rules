@@ -35,6 +35,8 @@ override_dh_auto_build:
 	cmake --build build-installer
 	# pam_worksuite.so: directory sign-in with a PAM conversation for the second factor (WSOS-DIR-009).
 	$(MAKE) -C native/pam-worksuite pam_worksuite.so
+	# Polkit agent: the listener in C that the Python agent runs (services/session/polkit/listener).
+	$(MAKE) -C services/session/polkit/listener worksuite-polkit-listener
 	# Wayland bridge: pywayland bindings for wlr-foreign-toplevel-management (native/wayland-bridge/Makefile).
 	$(MAKE) -C native/wayland-bridge protocols
 	# Installer translations: compiled into the Calamares branding's lang/ directory.
@@ -44,6 +46,7 @@ override_dh_auto_build:
 	dh_auto_build
 
 override_dh_auto_install:
+	install -D -m 0755 services/session/polkit/listener/worksuite-polkit-listener debian/worksuite-session/usr/lib/worksuite/worksuite-polkit-listener
 	install -D -m 0644 native/pam-worksuite/pam_worksuite.so debian/worksuite-directory/usr/lib/$(DEB_HOST_MULTIARCH)/security/pam_worksuite.so
 	dh_auto_install
 	# calamares-settings-worksuite: config, branding and the two WorkSuite modules next to the stock ones.

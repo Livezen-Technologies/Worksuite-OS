@@ -408,8 +408,13 @@ grep -q 'lk.worksuite.power-force' "$ROOT/services/session/polkit/lk.worksuite.p
   && grep -q '^services/session/bin/worksuite-power-force ' "$ROOT/packaging/debian/worksuite-session.install" \
   && grep -q '^services/session/polkit/lk.worksuite.power-force.policy ' "$ROOT/packaging/debian/worksuite-session.install" \
   && ok "power-force helper and policy installed" || bad "power-force helper and policy installed"
-grep -qx 'gir1.2-polkit-1.0' "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && grep -A2 '^Package: worksuite-session' "$ROOT/packaging/debian/control" | grep -q 'gir1.2-polkit-1.0' \
-  && ok "WorkSuite's polkit agent (PolkitAgent typelib) is installed, not lxpolkit's fallback" || bad "WorkSuite's polkit agent (PolkitAgent typelib) is installed, not lxpolkit's fallback"
+grep -qF '$(MAKE) -C services/session/polkit/listener worksuite-polkit-listener' "$ROOT/packaging/debian/rules" \
+  && grep -q 'debian/worksuite-session/usr/lib/worksuite/worksuite-polkit-listener' "$ROOT/packaging/debian/rules" \
+  && grep -A2 '^Package: worksuite-session' "$ROOT/packaging/debian/control" | grep -q 'Architecture: any' \
+  && grep -A2 '^Package: worksuite-session' "$ROOT/packaging/debian/control" | grep -q 'shlibs:Depends' \
+  && ok "WorkSuite's polkit agent: the C listener is built and installed, not lxpolkit's fallback" || bad "WorkSuite's polkit agent: the C listener is built and installed, not lxpolkit's fallback"
+! grep -q 'PolkitAgent.Listener)' "$ROOT/services/session/polkit/worksuite_polkit_agent/agent.py" \
+  && ok "no PyGObject PolkitAgent.Listener subclass (it crashed libpolkit-agent-1)" || bad "no PyGObject PolkitAgent.Listener subclass (it crashed libpolkit-agent-1)"
 
 # ---- Screenshots, snipping, clipboard history and Windows-style shortcuts (shell/electron/capture.ts, clipboard.ts) ----
 L=$ROOT/live-build/config/package-lists/worksuite.list.chroot
