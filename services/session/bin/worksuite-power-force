@@ -41,4 +41,7 @@ if [ -n "${PKEXEC_UID:-}" ] && [ "$(others "$PKEXEC_UID")" != own ]; then
         *) exit 127 ;;   # not authorized
     esac
 fi
-exec "$SYSTEMCTL" "$1" --no-wall --check-inhibitors=no
+# Root's own call to logind still goes through polkit (systemd 257 asks polkit about ignoring inhibitors, and other
+# people's sessions, even for root; polkitd 126 does not wave root through): 50-worksuite-power.rules allows root those
+# actions, and --no-ask-password keeps any leftover check from turning into a second prompt in the session's agent.
+exec "$SYSTEMCTL" "$1" --no-wall --check-inhibitors=no --no-ask-password

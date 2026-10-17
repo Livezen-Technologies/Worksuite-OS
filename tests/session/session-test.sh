@@ -401,7 +401,7 @@ for p in libnotify-bin foot; do grep -qx "$p" "$ROOT/live-build/config/package-l
 # ---- "Restart anyway": one root helper behind one polkit action; WorkSuite's polkit agent on the image ----
 stub systemctl 'echo "systemctl $*" >> "$LOG"'
 : > "$LOG"; sh "$BIN/worksuite-power-force" reboot; sh "$BIN/worksuite-power-force" poweroff
-check "worksuite-power-force skips inhibitors as root" "$(cat "$LOG" | tr '\n' ';')" "systemctl reboot --no-wall --check-inhibitors=no;systemctl poweroff --no-wall --check-inhibitors=no;"
+check "worksuite-power-force skips inhibitors as root" "$(cat "$LOG" | tr '\n' ';')" "systemctl reboot --no-wall --check-inhibitors=no --no-ask-password;systemctl poweroff --no-wall --check-inhibitors=no --no-ask-password;"
 : > "$LOG"; sh "$BIN/worksuite-power-force" 'reboot;id' 2>/dev/null; rc=$?
 check "worksuite-power-force refuses anything else" "$rc:$(cat "$LOG")" "2:"
 # systemd 257 logind obeys the caller's own "block" inhibitors: past those the helper needs no administrator; with
@@ -417,9 +417,9 @@ pf() {  # inhibitors sessions pkcheck-exit
     tr '\n' ';' < "$LOG"
 }
 PKC="pkcheck --action-id lk.worksuite.power-force-admin --process P --allow-user-interaction"
-check "power-force: own inhibitors only, no administrator" "$(pf "$OWN" "$ME" 1)" "systemctl reboot --no-wall --check-inhibitors=no;rc=0;"
-check "power-force: another user's inhibitor asks an administrator" "$(pf "$OTHER" "$ME" 0)" "$PKC;systemctl reboot --no-wall --check-inhibitors=no;rc=0;"
-check "power-force: another person signed in asks an administrator" "$(pf "$OWN" "$ANA" 0)" "$PKC;systemctl reboot --no-wall --check-inhibitors=no;rc=0;"
+check "power-force: own inhibitors only, no administrator" "$(pf "$OWN" "$ME" 1)" "systemctl reboot --no-wall --check-inhibitors=no --no-ask-password;rc=0;"
+check "power-force: another user's inhibitor asks an administrator" "$(pf "$OTHER" "$ME" 0)" "$PKC;systemctl reboot --no-wall --check-inhibitors=no --no-ask-password;rc=0;"
+check "power-force: another person signed in asks an administrator" "$(pf "$OWN" "$ANA" 0)" "$PKC;systemctl reboot --no-wall --check-inhibitors=no --no-ask-password;rc=0;"
 check "power-force: administrator prompt dismissed" "$(pf "$OTHER" "$ME" 3)" "$PKC;rc=126;"
 check "power-force: administrator refused" "$(pf "$OTHER" "$ME" 1)" "$PKC;rc=127;"
 check "power-force: logind unreadable counts as someone else" "$(pf "garbage" "$ME" 1)" "$PKC;rc=127;"
@@ -433,6 +433,13 @@ grep -q 'lk.worksuite.power-force' "$ROOT/services/session/polkit/lk.worksuite.p
   && grep -q '^services/session/bin/worksuite-power-force ' "$ROOT/packaging/debian/worksuite-session.install" \
   && grep -q '^services/session/polkit/lk.worksuite.power-force.policy ' "$ROOT/packaging/debian/worksuite-session.install" \
   && ok "power-force helper and policy installed" || bad "power-force helper and policy installed"
+# The helper's own root systemctl: logind (systemd 257) asks polkit even for root, which showed logind's
+# reboot-ignore-inhibit prompt in the session's agent. Root has those actions; nobody else gets them from this rule.
+R50="$ROOT/services/session/polkit/rules/50-worksuite-power.rules"
+grep -q '"org.freedesktop.login1.reboot-ignore-inhibit", "org.freedesktop.login1.power-off-ignore-inhibit",' "$R50" \
+  && grep -q '"org.freedesktop.login1.reboot-multiple-sessions", "org.freedesktop.login1.power-off-multiple-sessions"' "$R50" \
+  && grep -q 'root.indexOf(action.id) >= 0 && subject.user == "root"' "$R50" \
+  && ok "power-force: root may restart past inhibitors and sessions (no logind prompt)" || bad "power-force: root may restart past inhibitors and sessions (no logind prompt)"
 grep -qF '$(MAKE) -C services/session/polkit/listener worksuite-polkit-listener' "$ROOT/packaging/debian/rules" \
   && grep -q 'debian/worksuite-session/usr/lib/worksuite/worksuite-polkit-listener' "$ROOT/packaging/debian/rules" \
   && grep -A2 '^Package: worksuite-session' "$ROOT/packaging/debian/control" | grep -q 'Architecture: any' \

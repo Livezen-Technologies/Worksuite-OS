@@ -36,7 +36,7 @@ import { startPanel, type PanelHooks } from './panelHost'
 import { captureHost, imageData, runBytes, screenshotFileName, screenshotsDir, wlCopyImage, type CaptureKind, type SnipMode } from './capture'
 import { clipboardAllowed } from './clipboard'
 import { applyShortcuts } from './shortcutsHost'
-import { ACTIVATED_FLAG } from './panel'
+import { ACTIVATED_FLAG, FULLSCREEN_FLAG } from './panel'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import type { Layout } from './displays'
 import { outputWindows } from './outputWindows'
@@ -44,7 +44,7 @@ import { realExec } from './system'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
 import { powerArgs, startSessionHost } from './sessionHost'
-import { toastHost, type ToastMsg } from './toastHost'
+import { bannerAllowed, toastHost, type ToastMsg } from './toastHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
@@ -684,7 +684,12 @@ app.whenReady().then(() => {
   })
   handle('ws:toastsAvailable', () => toasts.available())
   handle('ws:toastShow', (json) => {
-    try { const t = JSON.parse(json) as ToastMsg; return toasts.show({ ...t, key: String(t.key) }) } catch { return false }
+    try {
+      const t = JSON.parse(json) as ToastMsg
+      // Held back under a full-screen window: true, so the renderer does not draw it itself (it stays in the centre).
+      if (!bannerAllowed(panelClient?.windows ?? [], ACTIVATED_FLAG, FULLSCREEN_FLAG)) return true
+      return toasts.show({ ...t, key: String(t.key) })
+    } catch { return false }
   })
   // A notification closed by its app (or from the notification centre) takes its toast away too.
   let liveIds = new Set<number>()

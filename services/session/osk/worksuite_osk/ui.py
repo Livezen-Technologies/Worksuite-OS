@@ -47,8 +47,28 @@ class OskWindow(Gtk.ApplicationWindow):
         self.drag.connect("drag-update", self._dragged)
         self.panel = panel_height(kiosk)
         self.float_pos = [0, self.panel]
+        self.zone = 0
+        self.connect("map", self._mapped)
+        self.connect("unmap", lambda *_: LS.set_exclusive_zone(self, 0))
         self.place()
         self.render()
+
+    def _mapped(self, *_a) -> None:
+        # Layer-shell applies the exclusive zone on the surface's first (buffer-less) commit, so a maximised app was
+        # shrunk while the keyboard had nothing drawn yet: an empty strip, then the keys. Map with no zone and reserve
+        # the space once the first frame is on screen.
+        LS.set_exclusive_zone(self, 0)
+        clock = self.get_frame_clock()
+        if clock is None:
+            LS.set_exclusive_zone(self, self.zone)
+            return
+        hid = [0]
+
+        def painted(c):
+            c.disconnect(hid[0])
+            if self.get_mapped():
+                LS.set_exclusive_zone(self, self.zone)
+        hid[0] = clock.connect("after-paint", painted)
 
     def place(self) -> None:
         floating = self.kb.mode == "floating"
@@ -61,7 +81,9 @@ class OskWindow(Gtk.ApplicationWindow):
         # On the taskbar, not over it (geometry.py).
         margin, zone = docked(self.size, self.panel)
         LS.set_margin(self, LS.Edge.BOTTOM, int(self.float_pos[1]) if floating else margin)
-        LS.set_exclusive_zone(self, 0 if floating else zone)
+        self.zone = 0 if floating else zone
+        # Before the first frame (_mapped) the zone stays 0.
+        LS.set_exclusive_zone(self, self.zone if self.get_mapped() else 0)
         self.set_default_size(int(self.get_display().get_monitors()[0].get_geometry().width * 0.6) if floating else -1, HEIGHT[self.size])
 
     def _dragged(self, _g, dx: float, dy: float) -> None:
@@ -131,8 +153,28 @@ class OskWindow(Gtk.ApplicationWindow):
     def _bar(self, action: str) -> None:
         self.out.apply(self.kb.press(Key("", action)))
         if action == "mode":
-            self.place()
+            self.zone = 0
+        self.connect("map", self._mapped)
+        self.connect("unmap", lambda *_: LS.set_exclusive_zone(self, 0))
+        self.place()
         self.render()
+
+    def _mapped(self, *_a) -> None:
+        # Layer-shell applies the exclusive zone on the surface's first (buffer-less) commit, so a maximised app was
+        # shrunk while the keyboard had nothing drawn yet: an empty strip, then the keys. Map with no zone and reserve
+        # the space once the first frame is on screen.
+        LS.set_exclusive_zone(self, 0)
+        clock = self.get_frame_clock()
+        if clock is None:
+            LS.set_exclusive_zone(self, self.zone)
+            return
+        hid = [0]
+
+        def painted(c):
+            c.disconnect(hid[0])
+            if self.get_mapped():
+                LS.set_exclusive_zone(self, self.zone)
+        hid[0] = clock.connect("after-paint", painted)
 
 
 def run(kb: Keyboard, size: str, kiosk: bool, control_path: str) -> int:  # pragma: no cover - needs a compositor

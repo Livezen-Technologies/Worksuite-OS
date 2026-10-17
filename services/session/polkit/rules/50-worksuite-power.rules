@@ -9,3 +9,16 @@ polkit.addRule(function (action, subject) {
         return polkit.Result.YES;
     }
 });
+
+// worksuite-power-force runs as root (pkexec) inside the person's session, after it has decided: past the caller's own
+// inhibitors without asking, or past anyone's once an administrator said yes (lk.worksuite.power-force-admin). Logind
+// (systemd 257) still asks polkit whether root may ignore inhibitors and other sessions, and polkitd sends that to the
+// session's agent: logind's own administrator prompt ("…while an application is inhibiting this", program systemctl),
+// a prompt for an ordinary user even past their own app. Root is allowed; it could restart the machine anyway.
+polkit.addRule(function (action, subject) {
+    var root = ["org.freedesktop.login1.reboot-ignore-inhibit", "org.freedesktop.login1.power-off-ignore-inhibit",
+                "org.freedesktop.login1.reboot-multiple-sessions", "org.freedesktop.login1.power-off-multiple-sessions"];
+    if (root.indexOf(action.id) >= 0 && subject.user == "root") {
+        return polkit.Result.YES;
+    }
+});

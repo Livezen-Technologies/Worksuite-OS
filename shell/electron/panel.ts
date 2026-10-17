@@ -52,6 +52,8 @@ export interface Workspaces {
 export const MAX_DESKTOPS = 16
 /** ListWindows flags bit: the window has focus. */
 export const ACTIVATED_FLAG = 1
+/** ListWindows flags bit: the window is full-screen (worksuite_bridge/model.py FULLSCREEN). */
+export const FULLSCREEN_FLAG = 8
 export type PanelResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 /** The part of a dbus-next MessageBus the panel uses (tests pass a fake). */

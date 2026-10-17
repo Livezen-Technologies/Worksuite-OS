@@ -65,3 +65,12 @@ export function toastHost(onClick: (key: string) => void, spawnFn: ToastSpawn = 
     stop() { unavailable = true; proc?.kill(); proc = null },
   }
 }
+
+/**
+ * Whether a banner shows now. As on Windows and macOS, a notification from the app in front still shows its banner
+ * (only the bell dot was left before); banners wait only while the focused window is full-screen (a video, a
+ * presentation, a game). Do not disturb is the renderer's (Desktop.tsx).
+ */
+export function bannerAllowed(windows: readonly { flags: number }[], activated = 1, fullscreen = 8): boolean {
+  return !windows.some((w) => (w.flags & activated) && (w.flags & fullscreen))
+}

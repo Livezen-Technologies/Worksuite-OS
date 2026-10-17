@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { toastHost, type ToastProc } from './toastHost'
+import { bannerAllowed, toastHost, type ToastProc } from './toastHost'
 
 function fake(code: number | null = null) {
   const lines: string[] = []
@@ -44,5 +44,14 @@ describe('toasts over the apps (worksuite-toasts)', () => {
     procs[1].exit(); vi.advanceTimersByTime(10); procs[2].exit(); vi.advanceTimersByTime(10)
     expect(h.available()).toBe(false)
     vi.useRealTimers()
+  })
+})
+
+describe('banners and the app in front', () => {
+  it('shows a banner over the focused app (as Windows and macOS do); holds it back only under a full-screen window', () => {
+    expect(bannerAllowed([])).toBe(true)
+    expect(bannerAllowed([{ flags: 1 }, { flags: 0 }])).toBe(true)          // the sender is the focused, maximised app
+    expect(bannerAllowed([{ flags: 1 | 8 }])).toBe(false)                    // focused and full-screen: a video, a talk
+    expect(bannerAllowed([{ flags: 8 }, { flags: 1 }])).toBe(true)           // full-screen behind another app
   })
 })

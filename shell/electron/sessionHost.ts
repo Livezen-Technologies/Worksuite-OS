@@ -44,8 +44,11 @@ export const POWER_FORCE = '/usr/lib/worksuite/worksuite-power-force'
 export async function forcePower(exec: Exec, action: string): Promise<{ ok: true; value: true } | { ok: false; error: string }> {
   const a = powerArgs(action, true)
   if (!a || action === 'suspend') return { ok: false, error: 'invalid_argument' }
-  const quiet = await exec('systemctl', [...a, '--no-ask-password'])
-  if (quiet.code === 0) return { ok: true, value: true }
+  // Straight to the helper (lk.worksuite.power-force, no password for the active local user): it restarts past the
+  // caller's own inhibitors without asking, and asks for an administrator once only when someone else's blocks. A
+  // `systemctl --check-inhibitors=no` as the user first could never succeed (systemd 257's logind obeys the caller's
+  // own block inhibitors too). Logind's reboot-ignore-inhibit prompt came from the helper's root systemctl; root has
+  // those logind actions in 50-worksuite-power.rules.
   const r = await exec('pkexec', ['/usr/lib/worksuite/worksuite-power-force', a[0]])   // POWER_FORCE; a[0] is reboot|poweroff
   return r.code === 0 ? { ok: true, value: true } : { ok: false, error: pkexecError(r.code) === 'failed' ? 'not_authorized' : pkexecError(r.code) }
 }
