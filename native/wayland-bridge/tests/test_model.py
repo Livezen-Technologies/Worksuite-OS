@@ -46,3 +46,32 @@ class AccessTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConnectionLostTest(unittest.TestCase):
+    """The compositor went away: the bridge exits (systemd restarts it with the session) instead of spinning."""
+
+    def test_dispatch_error_stops_reading_and_exits(self):
+        try:
+            from worksuite_bridge.wayland import WaylandBackend
+        except ImportError:
+            self.skipTest("needs pywayland")
+
+        class Display:
+            def dispatch(self, block=True):
+                raise RuntimeError("Failed with error: 32")
+
+            def get_fd(self):
+                return 7
+
+        class Loop:
+            removed = []
+
+            def remove_reader(self, fd):
+                self.removed.append(fd)
+
+        b = WaylandBackend.__new__(WaylandBackend)
+        b.display, b._loop = Display(), Loop()
+        with self.assertRaises(SystemExit):
+            b._readable()
+        self.assertEqual(Loop.removed, [7])

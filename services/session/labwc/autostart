@@ -1,2 +1,4 @@
 # Labwc runs this once the Wayland socket exists.
+# The splash colour, mark and spinner until the shell has drawn (no black screen with a pointer in between).
+/usr/lib/worksuite/worksuite-session-veil >/dev/null 2>&1 &
 /usr/bin/worksuite-session --ready

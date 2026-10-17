@@ -255,6 +255,8 @@ export function setDirectory(db: DatabaseSync, orgId: number, body: Record<strin
       case 'domain': if (typeof v !== 'string' || !DOMAIN.test(v)) throw new Error('domain: a DNS name'); out[k] = v; break;
       case 'netbios_domain': if (typeof v !== 'string' || !/^[A-Z0-9][A-Z0-9-]{0,14}$/.test(v)) throw new Error('netbios_domain: 1-15 upper-case letters/digits'); out[k] = v; break;
       case 'upn_suffixes': if (!Array.isArray(v) || v.length > 20 || !v.every((x) => typeof x === 'string' && DOMAIN.test(x))) throw new Error('upn_suffixes: DNS names'); out[k] = v; break;
+      // Offline sign-in for accounts with a second factor checks the password only; off unless the org opts in.
+      case 'allow_offline_mfa_bypass': if (typeof v !== 'boolean') throw new Error(`${k}: true or false`); out[k] = v; break;
       case 'group_role_map': case 'escrow_public_key': out[k] = v; break;
       default: throw new Error(`unknown directory field ${k}`);
     }

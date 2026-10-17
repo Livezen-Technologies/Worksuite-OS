@@ -6,7 +6,7 @@ import QtQuick 2.15
 import QtQuick.Layouts 1.15
 
 WsPage {
-    stepIndex: 5
+    stepIndex: 6
     eyebrow: qsTr("Step 5 · Summary")
     title: qsTr("Check your choices")
     subtitle: qsTr("Nothing has changed on your disk yet.")

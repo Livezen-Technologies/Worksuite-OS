@@ -1,0 +1,24 @@
+#!/bin/sh
+# WorkSuite on-screen keyboard (services/session/osk): GTK 4 + gtk4-layer-shell, output through wtype.
+# This is the worksuite-osk hook the shell and the kiosk session look for. Without GTK 4 layer-shell bindings it exits
+# 69 (the shell then uses wvkbd); in the kiosk it hands over to wvkbd itself.
+#
+# gtk4-layer-shell has to be loaded before libwayland-client. From Python (GTK through GObject introspection) that only
+# happens with LD_PRELOAD; without it GTK's window was no layer surface ("GTK4 Layer Shell may have been linked after
+# libwayland"), so the keyboard ran but showed as an ordinary window under the full-screen shell, or not at all.
+lib=${WORKSUITE_LAYER_SHELL_LIB:-}
+if [ -z "$lib" ]; then
+    for d in /usr/lib/*-linux-gnu /usr/lib64 /usr/lib; do
+        [ -e "$d/libgtk4-layer-shell.so.0" ] && { lib="$d/libgtk4-layer-shell.so.0"; break; }
+    done
+fi
+if [ -z "$lib" ] || [ ! -e "$lib" ] || \
+   ! python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Gtk4LayerShell", "1.0"); from gi.repository import Gtk4LayerShell' 2>/dev/null; then
+    case " $* " in *" --kiosk "*)
+        command -v wvkbd-mobintl >/dev/null 2>&1 && exec wvkbd-mobintl -H 260 -L 208 -l full,special --fn "IBM Plex Sans 16" \
+            --bg 071330f7 --fg 1a2c51 --fg-sp 0f1e3e --press 2a4a8f --press-sp 1f6bff --text e8eefa --text-sp c9d6ee ;;
+    esac
+    exit 69
+fi
+export LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}"
+cd "${WORKSUITE_OSK_DIR:-/usr/lib/worksuite/osk}" && exec python3 -E -s -m worksuite_osk "$@"

@@ -1,0 +1,154 @@
+{
+  "schema": 1,
+  "issuedAt": "2026-10-01T00:00:00Z",
+  "expiresAt": "2027-10-01T00:00:00Z",
+  "hosts": [
+    "cdn.worksuite.app"
+  ],
+  "models": [
+    {
+      "id": "qwen3.5-0.8b-q4",
+      "version": "1",
+      "name": "Qwen3.5 0.8B",
+      "family": "qwen3.5",
+      "purpose": "chat",
+      "url": "https://cdn.worksuite.app/local-ai/models/qwen3.5-0.8b-q4.gguf",
+      "sha256": "",
+      "bytes": 0,
+      "approxBytes": 560000000,
+      "quantization": "Q4_K_M",
+      "contextLength": 262144,
+      "minMemoryBytes": 1610612736,
+      "tiers": [
+        "minimal",
+        "basic",
+        "good",
+        "strong"
+      ],
+      "recommendedFor": [],
+      "license": {
+        "id": "Apache-2.0",
+        "name": "Apache License 2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0"
+      },
+      "languages": [
+        "en",
+        "si",
+        "ta",
+        "ar",
+        "hi",
+        "zh"
+      ],
+      "toolCalling": true
+    },
+    {
+      "id": "qwen3.5-2b-q4",
+      "version": "1",
+      "name": "Qwen3.5 2B",
+      "family": "qwen3.5",
+      "purpose": "chat",
+      "url": "https://cdn.worksuite.app/local-ai/models/qwen3.5-2b-q4.gguf",
+      "sha256": "",
+      "bytes": 0,
+      "approxBytes": 1300000000,
+      "quantization": "Q4_K_M",
+      "contextLength": 262144,
+      "minMemoryBytes": 3221225472,
+      "tiers": [
+        "minimal",
+        "basic",
+        "good",
+        "strong"
+      ],
+      "recommendedFor": [
+        "minimal"
+      ],
+      "license": {
+        "id": "Apache-2.0",
+        "name": "Apache License 2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0"
+      },
+      "languages": [
+        "en",
+        "si",
+        "ta",
+        "ar",
+        "hi",
+        "zh"
+      ],
+      "toolCalling": true
+    },
+    {
+      "id": "qwen3.5-4b-q4",
+      "version": "1",
+      "name": "Qwen3.5 4B",
+      "family": "qwen3.5",
+      "purpose": "chat",
+      "url": "https://cdn.worksuite.app/local-ai/models/qwen3.5-4b-q4.gguf",
+      "sha256": "",
+      "bytes": 0,
+      "approxBytes": 2700000000,
+      "quantization": "Q4_K_M",
+      "contextLength": 262144,
+      "minMemoryBytes": 5905580032,
+      "tiers": [
+        "basic",
+        "good",
+        "strong"
+      ],
+      "recommendedFor": [
+        "basic",
+        "good"
+      ],
+      "license": {
+        "id": "Apache-2.0",
+        "name": "Apache License 2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0"
+      },
+      "languages": [
+        "en",
+        "si",
+        "ta",
+        "ar",
+        "hi",
+        "zh"
+      ],
+      "toolCalling": true
+    },
+    {
+      "id": "qwen3.5-9b-q4",
+      "version": "1",
+      "name": "Qwen3.5 9B",
+      "family": "qwen3.5",
+      "purpose": "chat",
+      "url": "https://cdn.worksuite.app/local-ai/models/qwen3.5-9b-q4.gguf",
+      "sha256": "",
+      "bytes": 0,
+      "approxBytes": 5700000000,
+      "quantization": "Q4_K_M",
+      "contextLength": 262144,
+      "minMemoryBytes": 9663676416,
+      "tiers": [
+        "good",
+        "strong"
+      ],
+      "recommendedFor": [
+        "strong"
+      ],
+      "license": {
+        "id": "Apache-2.0",
+        "name": "Apache License 2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0"
+      },
+      "languages": [
+        "en",
+        "si",
+        "ta",
+        "ar",
+        "hi",
+        "zh"
+      ],
+      "toolCalling": true
+    }
+  ]
+}

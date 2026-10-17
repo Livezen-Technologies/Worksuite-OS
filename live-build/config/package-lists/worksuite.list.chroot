@@ -1,5 +1,14 @@
 # WorkSuite desktop (pulls labwc, greetd, portals, PipeWire, NetworkManager, ...)
 worksuite-desktop
+# On-device AI assistant (services/ai): the service and llama.cpp runtime only; models are downloaded later, never in
+# the image. Vulkan for GPUs that have it (the build installs no recommends).
+worksuite-ai
+libvulkan1
+mesa-vulkan-drivers
+# Locales: locale-gen and /etc/locale.gen. Without it only C.utf8 exists, so LANG=en_US.UTF-8 made foot and Firefox
+# warn "locale not supported", and Calamares' localecfg (which runs locale-gen only when /etc/locale.gen exists) could
+# not generate the language chosen in the installer. The image's locales: hook 0100-worksuite-defaults.
+locales
 # Installer (live only; Calamares removes itself from the installed system)
 calamares
 calamares-settings-worksuite
@@ -29,8 +38,12 @@ zstd
 tpm2-tools
 firmware-linux-free
 plymouth
+# Crashed apps: core dumps go to the journal, the shell says "X quit unexpectedly" (electron/sessionHost.ts).
+systemd-coredump
 # Scripts for the installer's language list and the desktop (Sinhala, Tamil, Devanagari, Arabic, ...)
 fonts-noto-core
+# Emoji in the shell (emoji picker, clipboard history) and apps; without it they were empty boxes.
+fonts-noto-color-emoji
 # Recovery (§9.2)
 dialog
 udisks2
@@ -54,7 +67,17 @@ iio-sensor-proxy
 wvkbd
 # WorkSuite greeter (WSOS-AUTH-001; the build installs no recommends)
 python3-gi
+python3-gi-cairo
 gir1.2-gtk-4.0
+# worksuite-osk (the WorkSuite on-screen keyboard) is a gtk4-layer-shell surface; without it the shell falls back to wvkbd.
+gir1.2-gtk4layershell-1.0
+# The library itself: Debian's typelib package does not depend on it, and worksuite-osk preloads it.
+libgtk4-layer-shell0
+# WorkSuite's own polkit agent (WSOS-INT-010, services/session/polkit): the shell draws the administrator prompt and
+# asks the person at the desk when they are an administrator. Without the PolkitAgent typelib (a Recommends, and the
+# build installs none) the session fell back to lxpolkit's generic window, which offered the first administrator.
+gir1.2-polkit-1.0
+libpolkit-agent-1-0
 # Smart-card sign-in, off until enabled (WSOS-DIR-011)
 pcscd
 opensc
@@ -70,8 +93,23 @@ zip
 unzip
 xz-utils
 bzip2
+# Terminal (the Start menu's "Terminal" in the design, docs/design/boot-install G02Start; Labwc only recommends foot and
+# the build installs no recommends) and notify-send for scripts and admins (the shell is the notification server).
+foot
+libnotify-bin
+# Screenshots, the snipping overlay and clipboard history (shell/electron/capture.ts, clipboard.ts): grim captures
+# (wlr-screencopy), wl-clipboard copies and watches the clipboard (wlr-data-control), wtype pastes from Super+V; the
+# overlay's selection is drawn by the shell itself (no slurp).
+grim
+wl-clipboard
+wtype
 # Web browser and media player (WorkSuite defaults: shell/apps/worksuite-mimeapps.list)
 firefox-esr
 celluloid
+# GTK 4 apps (Celluloid, Files' helpers) draw Adwaita's icons, most of them SVG: the theme and the SVG pixbuf loader.
+# Without the loader every SVG icon is GTK's missing-image icon (hook 0150 checks the loader is registered).
+adwaita-icon-theme
+hicolor-icon-theme
+librsvg2-common
 gstreamer1.0-plugins-good
 gstreamer1.0-libav

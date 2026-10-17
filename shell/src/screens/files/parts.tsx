@@ -4,8 +4,9 @@ import { formatBytes, type FileEntry, type FilePlaces } from '../../lib/os'
 import { formatDate, t, type MessageKey } from '../../i18n'
 
 export const C = {
-  page: '#0A1A3D', side: '#071330', bar: '#0C1E46', card: 'rgba(14,32,72,0.6)', line: 'rgba(127,178,255,0.12)',
-  text: '#E8EEFA', soft: '#C9D6EE', muted: '#8FA3C8', dim: '#5E739C', blue: '#1F6BFF', cyan: '#18D4F0', link: '#7FB2FF',
+  // Theme variables (index.css --ws-g-*): dark values by default, light ones under Settings › Appearance › Light.
+  page: 'var(--ws-g-page)', side: 'var(--ws-g-side)', bar: 'var(--ws-g-bar)', card: 'var(--ws-g-card)', line: 'var(--ws-g-line)',
+  text: 'var(--ws-g-ink)', soft: 'var(--ws-g-soft)', muted: 'var(--ws-g-muted)', dim: 'var(--ws-g-dim)', blue: '#1F6BFF', cyan: 'var(--ws-g-cyan)', link: 'var(--ws-g-link)',
 }
 
 export const P = {
@@ -28,13 +29,13 @@ export function Svg({ d, size = 16, stroke = 'currentColor', width = 2, fill = '
 // File kinds by extension: badge colour (board palette) and the kind name.
 const KINDS: [string[], string, MessageKey | null][] = [
   [['doc', 'docx', 'odt', 'rtf', 'txt'], '#1F6BFF', 'files.kind.doc'],
-  [['xls', 'xlsx', 'ods', 'csv'], '#2E9E6A', 'files.kind.sheet'],
-  [['pdf'], '#D9452B', 'files.kind.pdf'],
+  [['xls', 'xlsx', 'ods', 'csv'], '#1A7F55', 'files.kind.sheet'],
+  [['pdf'], '#B42318', 'files.kind.pdf'],
   [['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'], '#7A4FE0', 'files.kind.image'],
-  [['ppt', 'pptx', 'odp'], '#D9572B', 'files.kind.slides'],
+  [['ppt', 'pptx', 'odp'], '#C2410C', 'files.kind.slides'],
   [['md'], '#5E739C', 'files.kind.md'],
-  [['mp4', 'mkv', 'webm', 'mov', 'avi'], '#D9572B', 'files.kind.video'],
-  [['mp3', 'ogg', 'flac', 'wav', 'm4a'], '#B7791F', 'files.kind.audio'],
+  [['mp4', 'mkv', 'webm', 'mov', 'avi'], '#C2410C', 'files.kind.video'],
+  [['mp3', 'ogg', 'flac', 'wav', 'm4a'], '#8F5D12', 'files.kind.audio'],
   [['zip', 'tar', 'gz', 'xz', '7z', 'bz2', 'zst', 'rar', 'tgz', 'txz'], '#5E739C', 'files.kind.archive'],
 ]
 export function kindOf(name: string, dir: boolean) {
@@ -43,7 +44,7 @@ export function kindOf(name: string, dir: boolean) {
   const k = KINDS.find((k) => k[0].includes(x))
   return { ext: (x || '—').toUpperCase().slice(0, 4), badge: (x || '—').toUpperCase().slice(0, 4), color: k?.[1] ?? '#5E739C', label: k?.[2] ? t(k[2]) : t('files.file'), image: k?.[2] === 'files.kind.image' }
 }
-export const thumbBg = (image: boolean) => (image ? 'linear-gradient(135deg,#1F4FB0,#18D4F0)' : 'rgba(4,10,26,0.5)')
+export const thumbBg = (image: boolean) => (image ? 'linear-gradient(135deg,#1F4FB0,#18D4F0)' : 'var(--ws-g-field)')
 const FOLDER_COLORS = ['#1F6BFF', '#2E9E6A', '#B7791F', '#5E739C', '#7A4FE0', '#D9572B']
 export const folderColor = (i: number) => FOLDER_COLORS[i % FOLDER_COLORS.length]
 
@@ -59,6 +60,15 @@ export function day(ms: number | null): string {
 export const sizeOf = (e: Pick<FileEntry, 'dir' | 'size' | 'items'>) => (e.dir ? (e.items != null ? t('files.itemsShort', { count: e.items }) : '—') : formatBytes(e.size))
 
 /** archive: browsing an archive file read-only; inner is the folder inside it ("" for the top). */
+/** Files opens on Documents; when that folder is missing it opens Home instead of an error. */
+export const START_PLACE = { kind: 'dir', root: 'home', rel: 'Documents' } as const satisfies Place
+export function startFallback(p: Place, listed: boolean): Place | null {
+  return !listed && p.kind === 'dir' && p.root === START_PLACE.root && p.rel === START_PLACE.rel ? { kind: 'dir', root: 'home', rel: '' } : null
+}
+/** The storage card's name for the home disk: its filesystem label, else a friendly name, never a raw luks-… mapping. */
+export function diskName(d: { device: string; label?: string; encrypted?: boolean }) {
+  return d.label || (d.encrypted ? t('files.diskEncrypted') : d.device || t('files.diskSystem'))
+}
 export type Place = { kind: 'dir'; root: string; rel: string } | { kind: 'recent' } | { kind: 'starred' } | { kind: 'trash' } | { kind: 'archive'; root: string; rel: string; inner: string }
 
 const FOLDER_ICON: Record<string, [string, MessageKey]> = {
@@ -95,7 +105,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
       </div>
       {sections.map(([name, items]) => (
         <div key={name} className="flex flex-col gap-px">
-          <span className="px-2.5 pb-1.5 text-[11px] tracking-[0.08em] uppercase" style={{ color: C.dim }}>{name}</span>
+          <span className="px-2.5 pb-1.5 text-[11px] tracking-[0.08em] uppercase" style={{ color: C.muted }}>{name}</span>
           {items.map((n) => {
             const on = is(n.to) || (n.key !== 'home' && place.kind === 'dir' && n.to.kind === 'dir' && n.to.root === place.root && n.to.rel !== '' && place.rel.startsWith(n.to.rel + '/'))
               || (place.kind === 'dir' && n.to.kind === 'dir' && n.to.rel === '' && n.to.root !== 'home' && n.to.root === place.root)
@@ -103,10 +113,10 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
               <div key={n.key} className="flex items-center rounded-lg" style={{ background: on ? 'rgba(31,107,255,0.2)' : 'transparent' }}>
                 <button type="button" aria-current={on ? 'page' : undefined} onClick={() => onGo(n.to)}
                   className="flex min-w-0 grow cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] hover:bg-white/5"
-                  style={{ color: on ? '#FFFFFF' : C.soft, fontWeight: on ? 600 : 400 }}>
+                  style={{ color: on ? 'var(--ws-g-strong)' : C.soft, fontWeight: on ? 600 : 400 }}>
                   <Svg d={n.icon} stroke={on ? C.cyan : C.muted} />
                   <span className="truncate">{n.label}</span>
-                  {n.meta && <span className="ml-auto text-[11px]" style={{ color: C.dim }}>{n.meta}</span>}
+                  {n.meta && <span className="ml-auto text-[11px]" style={{ color: C.muted }}>{n.meta}</span>}
                 </button>
                 {n.eject && <button type="button" aria-label={t('files.eject', { name: n.label })} title={t('files.eject', { name: n.label })} onClick={n.eject} className="mr-1 cursor-pointer rounded px-1.5 text-[11px] hover:bg-white/10" style={{ color: C.dim }}>{'⏏'}</button>}
               </div>
@@ -116,7 +126,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
       ))}
       <div role="group" aria-label={t('files.storageLabel')} className="mt-auto flex flex-col gap-2 rounded-[10px] px-2.5 py-3" style={{ background: C.card }}>
         {disk ? <>
-          <div className="flex justify-between text-xs"><span>{disk.device}</span><span style={{ color: C.muted }}>{t('files.storage', { used: formatBytes(disk.used), total: formatBytes(disk.total) })}</span></div>
+          <div className="flex flex-col gap-0.5 text-xs"><span className="truncate" title={diskName(disk)}>{diskName(disk)}</span><span style={{ color: C.muted }}>{t('files.storage', { used: formatBytes(disk.used), total: formatBytes(disk.total) })}</span></div>
           <AnimatedProgress value={Math.round((disk.used / Math.max(1, disk.total)) * 100)} label={t('files.storageLabel')} height={5} shimmer={false} />
         </> : <span className="text-xs" style={{ color: C.muted }}>{t('files.storageUnknown')}</span>}
       </div>
@@ -127,7 +137,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
 export function Modal({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(2,6,16,0.5)' }}>
-      <div role="dialog" aria-modal="true" aria-label={label} className={`box-border flex ${wide ? 'w-[500px]' : 'w-[440px]'} flex-col gap-4 rounded-[18px] p-6`} style={{ background: '#0F2350', border: '1px solid rgba(127,178,255,0.2)', boxShadow: '0 30px 80px rgba(0,0,0,0.6)', color: C.text }}>
+      <div role="dialog" aria-modal="true" aria-label={label} className={`box-border flex ${wide ? 'w-[500px]' : 'w-[440px]'} flex-col gap-4 rounded-[18px] p-6`} style={{ background: 'var(--ws-g-dialog)', border: '1px solid rgba(127,178,255,0.2)', boxShadow: '0 30px 80px rgba(0,0,0,0.6)', color: C.text }}>
         {children}
       </div>
     </div>

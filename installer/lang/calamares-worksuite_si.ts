@@ -270,8 +270,12 @@
       <translation>පරිගණකය විදුලියට සම්බන්ධව තබන්න. ඔබට මෙතැනින් ආපසු යා නොහැක.</translation>
     </message>
     <message>
-      <source>Applying your choices. This usually takes under a minute.</source>
-      <translation>ඔබගේ තේරීම් යොදමින්. මෙයට සාමාන්‍යයෙන් මිනිත්තුවකට අඩු කාලයක් ගතවේ.</translation>
+      <source>Applying your choices.</source>
+      <translation>ඔබගේ තේරීම් යොදමින්.</translation>
+    </message>
+    <message>
+      <source>Applying your choices. This step is taking longer than usual; it is still working.</source>
+      <translation>ඔබගේ තේරීම් යොදමින්. මෙම පියවරට සාමාන්‍යයට වඩා වැඩි කාලයක් ගතවේ; එය තවමත් ක්‍රියා කරයි.</translation>
     </message>
     <message>
       <source>Preparing the disk</source>
@@ -458,6 +462,10 @@
       <translation>මැකීම තහවුරු කරන්න</translation>
     </message>
     <message>
+      <source>Enroll this device</source>
+      <translation>මෙම උපාංගය ලියාපදිංචි කරන්න</translation>
+    </message>
+    <message>
       <source>Recovery key</source>
       <translation>ප්‍රතිසාධන යතුර</translation>
     </message>
@@ -468,6 +476,26 @@
     <message>
       <source>Type the disk name to confirm</source>
       <translation>තහවුරු කිරීමට තැටියේ නම ටයිප් කරන්න</translation>
+    </message>
+    <message>
+      <source>Server address</source>
+      <translation>සේවාදායක ලිපිනය</translation>
+    </message>
+    <message>
+      <source>work.example.com</source>
+      <translation>work.example.com</translation>
+    </message>
+    <message>
+      <source>Enrollment code or link</source>
+      <translation>ලියාපදිංචි කේතය හෝ සබැඳිය</translation>
+    </message>
+    <message>
+      <source>Scan QR code</source>
+      <translation>QR කේතය ස්කෑන් කරන්න</translation>
+    </message>
+    <message>
+      <source>Enrollment status</source>
+      <translation>ලියාපදිංචි තත්ත්වය</translation>
     </message>
     <message>
       <source>I've saved my recovery key somewhere safe</source>
@@ -514,6 +542,14 @@
       <translation>එහි ඇති සියලු දත්ත ස්ථිරවම මැකී යන බව තහවුරු කිරීමට %1 ටයිප් කරන්න</translation>
     </message>
     <message>
+      <source>OPTIONAL · MANAGED DEVICE</source>
+      <translation>විකල්ප · කළමනාකරණය කළ උපාංගය</translation>
+    </message>
+    <message>
+      <source>If your organization manages its devices with WorkSuite, enter the enrollment code from the admin console, paste its enrollment link, or scan its QR code. The device enrolls the first time it starts with a network connection. Leave this empty to skip.</source>
+      <translation>ඔබේ සංවිධානය WorkSuite සමඟ උපාංග කළමනාකරණය කරන්නේ නම්, පරිපාලක කොන්සෝලයේ ලියාපදිංචි කේතය ඇතුළත් කරන්න, එහි ලියාපදිංචි සබැඳිය අලවන්න, හෝ එහි QR කේතය ස්කෑන් කරන්න. ජාල සම්බන්ධතාවක් සමඟ පළමු වරට ආරම්භ වන විට උපාංගය ලියාපදිංචි වේ. මඟ හැරීමට මෙය හිස්ව තබන්න.</translation>
+    </message>
+    <message>
       <source>STEP 6 · RECOVERY KEY</source>
       <translation>පියවර 6 · ප්‍රතිසාධන යතුර</translation>
     </message>
@@ -525,6 +561,34 @@
       <source>If you forget your disk passphrase, this key is the only way to unlock your files. It is shown once and is not stored on this computer.</source>
       <translation>ඔබට ඔබේ තැටි මුරවැකිය අමතක වුවහොත්, ඔබේ ගොනු අගුළු හැරීමට ඇති එකම මාර්ගය මෙම යතුරයි. එය එක් වරක් පමණක් පෙන්වන අතර මෙම පරිගණකයේ ගබඩා නොකෙරේ.</translation>
     </message>
+    <message>
+      <source>Not enrolling. You can enroll later in Settings › About this device.</source>
+      <translation>ලියාපදිංචි නොකෙරේ. පසුව සැකසුම් › මෙම උපාංගය ගැන තුළ ලියාපදිංචි විය හැක.</translation>
+    </message>
+    <message>
+      <source>Enrolls with %1 on first start.</source>
+      <translation>පළමු ආරම්භයේදී %1 සමඟ ලියාපදිංචි වේ.</translation>
+    </message>
+    <message>
+      <source>Could not keep the enrollment code. Try again, or enroll later in Settings.</source>
+      <translation>ලියාපදිංචි කේතය තබා ගත නොහැකි විය. නැවත උත්සාහ කරන්න, නැතහොත් පසුව සැකසුම් තුළ ලියාපදිංචි වන්න.</translation>
+    </message>
+    <message>
+      <source>Enter the server address (https) from your administrator.</source>
+      <translation>ඔබේ පරිපාලකගෙන් ලැබුණු සේවාදායක ලිපිනය (https) ඇතුළත් කරන්න.</translation>
+    </message>
+    <message>
+      <source>That enrollment code doesn't look right. Check it, or paste the whole link.</source>
+      <translation>එම ලියාපදිංචි කේතය නිවැරදි නොවන බව පෙනේ. එය පරීක්ෂා කරන්න, නැතහොත් සම්පූර්ණ සබැඳිය අලවන්න.</translation>
+    </message>
+    <message>
+      <source>Hold the QR code from the admin console in front of the camera…</source>
+      <translation>පරිපාලක කොන්සෝලයේ QR කේතය කැමරාව ඉදිරියේ තබාගන්න…</translation>
+    </message>
+    <message>
+      <source>No enrollment QR code was read. Try again, or type the code.</source>
+      <translation>ලියාපදිංචි QR කේතයක් කියවා නැත. නැවත උත්සාහ කරන්න, නැතහොත් කේතය ටයිප් කරන්න.</translation>
+    </message>
   </context>
   <context>
     <name>WsStyle</name>
@@ -535,6 +599,10 @@
     <message>
       <source>EFI system</source>
       <translation>EFI පද්ධතිය</translation>
+    </message>
+    <message>
+      <source>Startup files</source>
+      <translation>ආරම්භක ගොනු</translation>
     </message>
     <message>
       <source>STEP 2 · DISK</source>

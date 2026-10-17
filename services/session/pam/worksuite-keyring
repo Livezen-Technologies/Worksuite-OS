@@ -1,6 +1,6 @@
 Name: WorkSuite: unlock the login keyring with the sign-in password (WSOS-INT-009)
 Default: yes
-Priority: 0
+Priority: -1
 Auth-Type: Additional
 Auth-Final:
 	[success=1 default=ignore]	pam_exec.so quiet /usr/lib/worksuite/worksuite-signin pam-pin-used

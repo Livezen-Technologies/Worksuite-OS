@@ -11,8 +11,10 @@ import { Agent } from './agent.ts';
 import { httpApi } from './api.ts';
 import { DEFAULT_PATHS, linuxHost } from './host.ts';
 import { StateFile } from './state.ts';
+import { serveBus } from './dbus.ts';
 import { forwardPackageAudit } from './auditForward.ts';
 import { serveControl } from './control.ts';
+import { applyPendingEnrollment } from './pendingEnroll.ts';
 
 const KEY_DIR = '/usr/share/worksuite/keys/device-commands';   // from worksuite-archive-keyring
 const SOCKET = join(DEFAULT_PATHS.runtimeDir, 'control.sock');
@@ -54,11 +56,27 @@ async function daemon() {
     status: () => agent.status(),
   });
 
+  // lk.worksuite.DeviceAgent1 (WSOS-ARC-002): what Settings and first-run call, each privileged method behind polkit.
+  // The root-only socket stays for the admin CLI. No bus (rescue shell) just means no D-Bus API.
+  await serveBus({
+    status: () => agent.status(),
+    effectivePolicy: () => (state.state.enrolled && state.state.policy ? publicPolicy(state.state.policy) : null),
+    enroll: (url, token) => serial(() => agent.enroll(url, token)),
+    refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); },
+  }).catch((e) => host.audit('dbus_unavailable', { error: String(e?.message ?? e) }));
+
   const jitter = (ms: number) => ms + Math.floor(Math.random() * ms * 0.2);
   const every = (ms: number, what: string, fn: () => Promise<unknown>) => {
     const tick = () => { void safe(what, fn).finally(() => setTimeout(tick, jitter(ms))); };
     setTimeout(tick, jitter(10_000));
   };
+  // Enrollment chosen in the installer (WSOS-INS-006): tried at start and every 5 minutes until it is done or dropped.
+  let pending = true;
+  every(5 * 60_000, 'installer_enrollment', async () => {
+    if (!pending) return;
+    const r = await applyPendingEnrollment({ enrolled: () => state.state.enrolled, enroll: (u, t) => agent.enroll(u, t), audit: (e, d) => host.audit(e, d) });
+    if (r !== 'retry') pending = false;
+  });
   every(CHECK_IN_MS, 'check_in', () => agent.checkIn());
   every(POLICY_MS, 'policy', () => agent.refreshPolicy());
   every(5 * 60_000, 'package_audit', async () => {

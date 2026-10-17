@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>WorkSuite</vendor>
+  <vendor_url>https://download.worksuitecloud.com</vendor_url>
+  <!-- Settings › About › Diagnostics: the system journal and the "show boot details" boot entry, for administrators
+       only (the shell shows the area to members of sudo/admin/wheel; polkit asks for an administrator's password). -->
+  <action id="lk.worksuite.diagnostics">
+    <description>View system logs and boot settings</description>
+    <message>An administrator's password is required to view system logs</message>
+    <message xml:lang="si">පද්ධති ලොග බැලීමට පරිපාලකගේ මුරපදය අවශ්‍යයි</message>
+    <message xml:lang="ta">கணினி பதிவுகளைப் பார்க்க நிர்வாகியின் கடவுச்சொல் தேவை</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/worksuite/worksuite-diagnostics</annotate>
+  </action>
+</policyconfig>

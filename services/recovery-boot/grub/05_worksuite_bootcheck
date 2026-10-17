@@ -7,7 +7,12 @@
 # Test hook: WORKSUITE_BOOT_DIR (default /boot).
 set -e
 boot=${WORKSUITE_BOOT_DIR:-/boot}
-theme=${GRUB_THEME:-/usr/share/grub/themes/worksuite/theme.txt}
+theme=${GRUB_THEME:-/boot/grub/themes/worksuite/theme.txt}
+# As GRUB sees it: relative to the root of /boot's own partition (/grub/themes/…), like 00_header's theme.
+if [ -r /usr/share/grub/grub-mkconfig_lib ] && [ -z "${WORKSUITE_BOOT_DIR:-}" ]; then
+  . /usr/share/grub/grub-mkconfig_lib
+  theme=$(make_system_path_relative_to_its_root "$theme")
+fi
 kernels=$(for k in "$boot"/vmlinuz-*; do
   [ -f "$k" ] || continue
   v=${k#"$boot"/vmlinuz-}

@@ -16,9 +16,12 @@ Rectangle {
     property int subStep: 0
     property bool subNextOk: true
     property bool installFailed: false
-    // settings.conf sequence: ... confirm-erase (6), install (7), recovery key (8), finished (9).
-    readonly property bool afterInstall: ViewManager.currentStepIndex >= 8
-    readonly property bool atEnd: ViewManager.currentStepIndex >= 9
+    // settings.conf sequence ends: ... install, recovery key (last - 1), finished (last). lastStep is the index of
+    // the last step (finished); tests/test_config.py checks it against settings.conf so an added page can't shift it.
+    // (ViewManager.rowCount() is not callable from this QML: it broke the footer's bindings.)
+    readonly property int lastStep: 10
+    readonly property bool afterInstall: ViewManager.currentStepIndex >= lastStep - 1
+    readonly property bool atEnd: ViewManager.currentStepIndex >= lastStep
     Timer {
         interval: 150; running: true; repeat: true; triggeredOnStart: true
         onTriggered: {
@@ -89,7 +92,8 @@ Rectangle {
         Item { Layout.fillWidth: true }
         NavButton {
             label: ViewManager.backLabel
-            visible: ViewManager.backAndNextVisible; enabled: (nav.inSubs && nav.subStep > 0) || ViewManager.backEnabled
+            // Nothing to go back to once installed: no Back on the recovery key or Complete page.
+            visible: ViewManager.backAndNextVisible && !nav.afterInstall; enabled: (nav.inSubs && nav.subStep > 0) || ViewManager.backEnabled
             onActivated: nav.inSubs && nav.subStep > 0 ? nav.request("back") : ViewManager.back()
         }
         NavButton {

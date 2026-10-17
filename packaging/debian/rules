@@ -3,6 +3,10 @@
 # from the same tag (WSOS-ARM-001). Run from the repository root with packaging/debian copied to ./debian
 # (packaging/build-debs.sh does this).
 export DH_VERBOSE = 1
+# npm reads these: retry dropped registry connections (a single ECONNRESET used to fail the image build).
+export npm_config_fetch_retries = 5
+export npm_config_fetch_retry_mintimeout = 10000
+export npm_config_fetch_retry_maxtimeout = 60000
 include /usr/share/dpkg/architecture.mk
 
 %:
@@ -12,11 +16,27 @@ override_dh_auto_build:
 	# The package service's one runtime dependency (dbus-next) is vendored from its lockfile.
 	cd services/package-service && npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
 	find services/package-service/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore \) -delete
+	# The device agent serves lk.worksuite.DeviceAgent1 with the same dbus-next (WSOS-ARC-002).
+	cd services/device-agent && npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
+	find services/device-agent/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore \) -delete
+	# AI assistant: node-llama-cpp with its prebuilt llama.cpp for this architecture (CPU and Vulkan; never compiled
+	# here or on the device). The CUDA builds and other architectures are dropped; no model is ever packaged.
+	cd services/ai && npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+	a=$$(case $(DEB_HOST_ARCH) in amd64) echo x64;; arm64) echo arm64;; esac); \
+	  find services/ai/node_modules/@node-llama-cpp -mindepth 1 -maxdepth 1 ! -name "linux-$$a" ! -name "linux-$$a-vulkan" -exec rm -rf {} + && \
+	  find services/ai/node_modules/@reflink -mindepth 1 -maxdepth 1 -name "reflink-*" ! -name "reflink-linux-$$a-gnu" -exec rm -rf {} +
+	# npm installs optional prebuilds regardless of libc: drop every musl build (dpkg-shlibdeps can't resolve them).
+	find services/ai/node_modules -depth -type d -name "*-musl*" -exec rm -rf {} +
+	find services/ai/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore -o -name "*.gguf" \) -delete
 	# Shell: renderer + Electron main, and the Electron runtime for this architecture.
 	cd shell && npm ci --no-audit --no-fund && npm run build
 	# Calamares view module (installer/modules/worksuiteconfirm).
 	cmake -S installer/modules/worksuiteconfirm -B build-installer -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWORKSUITE_TESTS=ON
 	cmake --build build-installer
+	# pam_worksuite.so: directory sign-in with a PAM conversation for the second factor (WSOS-DIR-009).
+	$(MAKE) -C native/pam-worksuite pam_worksuite.so
+	# Polkit agent: the listener in C that the Python agent runs (services/session/polkit/listener).
+	$(MAKE) -C services/session/polkit/listener worksuite-polkit-listener
 	# Wayland bridge: pywayland bindings for wlr-foreign-toplevel-management (native/wayland-bridge/Makefile).
 	$(MAKE) -C native/wayland-bridge protocols
 	# Installer translations: compiled into the Calamares branding's lang/ directory.
@@ -26,6 +46,8 @@ override_dh_auto_build:
 	dh_auto_build
 
 override_dh_auto_install:
+	install -D -m 0755 services/session/polkit/listener/worksuite-polkit-listener debian/worksuite-session/usr/lib/worksuite/worksuite-polkit-listener
+	install -D -m 0644 native/pam-worksuite/pam_worksuite.so debian/worksuite-directory/usr/lib/$(DEB_HOST_MULTIARCH)/security/pam_worksuite.so
 	dh_auto_install
 	# calamares-settings-worksuite: config, branding and the two WorkSuite modules next to the stock ones.
 	d=debian/calamares-settings-worksuite; m=$$d/usr/lib/$(DEB_HOST_MULTIARCH)/calamares/modules; \
@@ -37,7 +59,9 @@ override_dh_auto_install:
 	install -D -m 0644 installer/modules/worksuiterecovery/module.desc $$m/worksuiterecovery/module.desc && \
 	install -m 0644 installer/modules/worksuiterecovery/main.py $$m/worksuiterecovery/main.py && \
 	install -D -m 0644 installer/modules/worksuitephase/module.desc $$m/worksuitephase/module.desc && \
-	install -m 0644 installer/modules/worksuitephase/main.py $$m/worksuitephase/main.py
+	install -m 0644 installer/modules/worksuitephase/main.py $$m/worksuitephase/main.py && \
+	install -D -m 0644 installer/modules/worksuiteenroll/module.desc $$m/worksuiteenroll/module.desc && \
+	install -m 0644 installer/modules/worksuiteenroll/main.py $$m/worksuiteenroll/main.py
 	# worksuite-archive-keyring: public keys only (packaging/keyring/README.md).
 	d=debian/worksuite-archive-keyring; \
 	install -d $$d/usr/share/keyrings $$d/usr/share/worksuite/keys/device-commands $$d/usr/share/worksuite/keys/release $$d/usr/share/doc/worksuite-archive-keyring && \
@@ -47,6 +71,9 @@ override_dh_auto_install:
 	# worksuite-shell: 256 px PNGs of the WorkSuite app icons (Electron window icons can't be SVG).
 	for f in shell/apps/icons/*.svg; do n=$$(basename $$f .svg); install -d debian/worksuite-shell/usr/share/icons/hicolor/256x256/apps && \
 	  rsvg-convert -w 256 -h 256 $$f -o debian/worksuite-shell/usr/share/icons/hicolor/256x256/apps/$$n.png || exit 1; done
+	# WhatsApp (lk.worksuite.whatsapp): the launcher icon at every hicolor size, beside the scalable SVG.
+	for s in 16 24 32 48 64 128 512; do install -d debian/worksuite-shell/usr/share/icons/hicolor/$${s}x$${s}/apps && \
+	  rsvg-convert -w $$s -h $$s shell/apps/icons/lk.worksuite.whatsapp.svg -o debian/worksuite-shell/usr/share/icons/hicolor/$${s}x$${s}/apps/lk.worksuite.whatsapp.png || exit 1; done
 	# worksuite-branding
 	d=debian/worksuite-branding; p=$$d/usr/share/plymouth/themes/worksuite; g=$$d/usr/share/grub/themes/worksuite; \
 	install -D -m 0644 -t $$p branding/plymouth/worksuite.plymouth branding/plymouth/worksuite.script build-branding/plymouth/*.png && \
@@ -54,6 +81,9 @@ override_dh_auto_install:
 	install -D -m 0644 -t $$g branding/grub/theme.txt branding/grub/theme-failed.txt build-branding/grub/*.png build-branding/grub/*.pf2 && \
 	install -D -m 0644 -t $$g/icons build-branding/grub/icons/*.png && \
 	install -D -m 0644 branding/grub/worksuite.cfg $$d/etc/default/grub.d/worksuite.cfg && \
+	install -D -m 0644 branding/os-release $$d/usr/lib/os-release && \
+	sed -i "s/@VERSION@/$$(dpkg-parsechangelog -SVersion | sed -E 's/^([0-9]+\.[0-9]+).*/\1/')/g" $$d/usr/lib/os-release && \
+	install -D -m 0755 branding/grub/worksuite-grub-theme $$d/usr/libexec/worksuite/worksuite-grub-theme && \
 	install -D -m 0644 branding/initramfs/worksuite-splash.conf $$d/etc/initramfs-tools/conf.d/worksuite-splash && \
 	install -D -m 0755 branding/initramfs/worksuite-plymouth-fonts $$d/usr/share/initramfs-tools/hooks/worksuite-plymouth-fonts && \
 	install -D -m 0644 branding/initramfs/61-worksuite-plymouth.conf $$d/usr/share/worksuite/plymouth/61-worksuite-plymouth.conf && \
@@ -67,22 +97,28 @@ override_dh_auto_test:
 	cd build-installer && QT_QPA_PLATFORM=offscreen ctest --output-on-failure
 	python3 -m unittest discover -s installer/modules/worksuiterecovery/tests
 	python3 -m unittest discover -s installer/modules/worksuitephase/tests
+	python3 -m unittest discover -s installer/modules/worksuiteenroll/tests
 	sh tests/session/session-test.sh
 	sh tests/session/smartcard-test.sh
 	sh tests/session/autologin-test.sh
 	cd services/session/greeter && python3 -m unittest discover -s tests -t .
+	cd services/session/gestures && python3 -m unittest discover -s tests -t .
+	cd services/session/osk && python3 -m unittest discover -s tests -t .
 	cd services/sync && npm test
 	cd services/credentials && npm test
 	cd services/device-agent && npm test
+	cd services/ai && npm test
 	cd services/directory && npm test
 	tests/boot/recovery-boot.test.sh
 	cd shell && npx vitest run
 	$(MAKE) -C native/wayland-bridge test
+	sh native/pam-worksuite/test.sh
 	python3 -m unittest discover -s installer/tests
 
 # Electron ships prebuilt and stripped; its shared-library needs are listed in debian/control.
 override_dh_strip:
 	dh_strip --exclude=usr/lib/worksuite/shell/electron
 override_dh_shlibdeps:
+	# node-llama-cpp's addon finds its bundled libllama/libggml*.so through RUNPATH $$ORIGIN, so no -l is needed.
 	dh_shlibdeps --exclude=usr/lib/worksuite/shell/electron
 override_dh_dwz:

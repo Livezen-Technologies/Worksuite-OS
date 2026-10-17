@@ -38,8 +38,50 @@ paths, so we collect them first. Review the `apparmor="ALLOWED" profile="worksui
 devices, add the missing rules, then drop `complain`. `tests/security/apparmor.test.sh` allows complain mode on
 `worksuite-shell` and on no other profile.
 
+### Plan: enforcing the shell profile
+
+The recovery screens (`worksuite-recovery-shell.service`) do not get a separate enforced profile yet. That unit
+starts `worksuite-cage`, which takes the DRM device, input devices and the seat before it runs the same Electron
+shell, so an enforced profile would need the same driver-specific Chromium rules as the desktop plus the
+compositor's. A missing rule there would leave a device that cannot reach its recovery screens, which is the
+failure recovery exists to fix, and it cannot be checked without real hardware. The steps:
+
+1. **Collect.** Pilot devices keep complain mode. Gather the `apparmor="ALLOWED" profile="worksuite-shell"` journal
+   lines from the desktop and the recovery screens (`journalctl -k --grep 'profile="worksuite-shell"'`) across the
+   supported GPU drivers (i915/xe, amdgpu, nouveau, virtio-gpu, simpledrm), and add the missing rules.
+2. **Recovery first.** Split out `worksuite-recovery-shell`, a child of the shell profile with an explicit
+   `/usr/bin/worksuite-cage` rule and no `@{HOME}` or removable-media write access (the recovery user has neither
+   need). Ship it in enforce mode once a full recovery pass (unlock, repair, reinstall keeping /home) runs with no
+   denials on each driver in the hardware lab (`tests/hw`). Point the recovery unit's `AppArmorProfile=` at it and
+   make `tests/security/apparmor.test.sh` require enforce for it.
+3. **Desktop.** Enforce `worksuite-shell` on the pilot ring for one release with the journal watched for `DENIED`
+   lines, then on stable. Drop the complain exception from `tests/security/apparmor.test.sh`.
+
 Tested in CI (`os-scripts` job) by `tests/security/apparmor.test.sh`. It checks that every profile compiles with
 `apparmor_parser`, that every confined unit names its profile, and that every profile is packaged.
+
+## Default firewall
+
+The image ships `/etc/nftables.conf` (`live-build/config/includes.chroot/etc/nftables.conf`), and
+`0100-worksuite-defaults.hook.chroot` enables `nftables.service`. The rules live in their own table,
+`inet worksuite_filter`:
+
+- **Inbound: default deny.** Accepted are established and related traffic, loopback, ICMP errors and echo
+  (rate-limited), IPv6 neighbour discovery, router advertisements and MLD, DHCP and DHCPv6 client replies, and mDNS on
+  the local link (printer discovery for CUPS). Invalid packets are dropped. Nothing listens for remote connections
+  (WSOS-SEC-010: no SSH server), so nothing else is opened.
+- **Forwarding:** dropped.
+- **Outbound:** allowed.
+
+The device agent's managed VPN kill switch (`services/device-agent/src/vpn.ts`) uses its own table,
+`inet worksuite_vpn_killswitch`, with an output policy of drop. nftables evaluates every table's base chain on a hook,
+so the kill switch still blocks traffic outside the tunnel even though this table's output chain accepts. The two do
+not overwrite each other: `nftables.conf` replaces only `worksuite_filter` (no `flush ruleset`), and a drop-in
+(`/etc/systemd/system/nftables.service.d/worksuite.conf`) makes `systemctl stop` / `reload` touch only that table
+instead of Debian's default `nft flush ruleset`.
+
+Tested in CI (`os-scripts` job) by `tests/security/firewall.test.sh`: the file parses with `nft -c`, the input
+policy is drop, the whole ruleset is never flushed and the tables differ.
 
 ## Signing keys: offline / HSM process (WSOS-SEC-011)
 

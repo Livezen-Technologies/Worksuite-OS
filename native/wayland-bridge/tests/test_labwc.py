@@ -1,6 +1,7 @@
 """End-to-end against a headless Labwc: a real foot window appears, is minimized, activated and closed.
 Skipped when labwc/foot or the generated protocol bindings are missing."""
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -181,3 +182,131 @@ class TwoOutputLabwcTest(LabwcTest):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
+def _pixel(env, x, y):
+    """The colour at (x, y) of the first output, from grim's binary PPM."""
+    data = subprocess.run(["grim", "-t", "ppm", "-"], env=env, check=True, capture_output=True, timeout=10).stdout
+    fields, pos = [], 0
+    while len(fields) < 4:
+        while data[pos:pos + 1].isspace():
+            pos += 1
+        if data[pos:pos + 1] == b"#":
+            pos = data.index(b"\n", pos)
+            continue
+        end = pos
+        while not data[end:end + 1].isspace():
+            end += 1
+        fields.append(data[pos:end])
+        pos = end
+    width = int(fields[1])
+    off = pos + 1 + (y * width + x) * 3
+    return tuple(data[off:off + 3])
+
+
+@unittest.skipUnless(shutil.which("labwc") and shutil.which("foot") and shutil.which("grim") and shutil.which("wtype"),
+                     "needs labwc, foot, grim and wtype")
+class ShellStackingTest(unittest.TestCase):
+    """WorkSuite's rc.xml in a headless Labwc: the full-screen shell (app_id worksuite-shell) stays below every app, after
+    a click on it, on every desktop and after switching desktops; Task View's binding lifts it over the apps and back.
+    (With the old omnipresent rule, a desktop switch put the shell over every app: app windows never showed.)"""
+    BLUE, RED, GREEN = (0, 0, 255), (255, 0, 0), (0, 255, 0)
+
+    def setUp(self):
+        self.rt = tempfile.mkdtemp()
+        os.chmod(self.rt, 0o700)
+        cfg = os.path.join(self.rt, "labwc")
+        os.makedirs(cfg)
+        with open(os.path.join(REPO, "services/session/labwc/rc.xml")) as f:
+            rc = f.read()
+        from worksuite_bridge.workspace import rewrite_rc
+        with open(os.path.join(cfg, "rc.xml"), "w") as f:
+            f.write(rewrite_rc(rc, ["Desktop 1", "Desktop 2"], False))
+        self.env = dict(os.environ, XDG_RUNTIME_DIR=self.rt, WLR_BACKENDS="headless", WLR_RENDERER="pixman", WLR_LIBINPUT_NO_DEVICES="1",
+                        WLR_HEADLESS_OUTPUTS="1", WAYLAND_DISPLAY="", LANG="C.UTF-8")
+        self.env.pop("DISPLAY", None)
+        self.procs = [subprocess.Popen(["labwc", "-C", cfg], env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
+        for _ in range(100):
+            socks = [f for f in os.listdir(self.rt) if f.startswith("wayland-") and not f.endswith(".lock")]
+            if socks:
+                self.env["WAYLAND_DISPLAY"] = socks[0]
+                break
+            time.sleep(0.05)
+        else:
+            self.fail("labwc did not start")
+
+    def tearDown(self):
+        for p in reversed(self.procs):
+            p.terminate()
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
+        shutil.rmtree(self.rt, ignore_errors=True)
+
+    def foot(self, app_id, colour, *extra):
+        self.procs.insert(1, subprocess.Popen(["foot", "--app-id", app_id, "--title", app_id, "-o", f"colors.background={colour}", *extra,
+                                               "sleep", "60"], env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+
+    def key(self, *argv):
+        subprocess.run(["wtype", *argv], env=self.env, check=True, timeout=10)
+
+    def bridge_key(self, k):
+        self.key("-M", "ctrl", "-M", "alt", "-M", "logo", "-k", k, "-m", "logo", "-m", "alt", "-m", "ctrl")
+
+    def wait_for(self, x, y, colour, timeout=10.0):
+        end, got = time.time() + timeout, None
+        while time.time() < end:
+            got = _pixel(self.env, x, y)
+            if got == colour:
+                return
+            time.sleep(0.1)
+        self.fail(f"pixel ({x},{y}) is {got}, expected {colour}")
+
+    @property
+    def labwc_08(self):
+        """Labwc >= 0.8 has the omnipresent window query (older ones ignore it); the bridge does not rely on it."""
+        out = subprocess.run(["labwc", "--version"], capture_output=True, text=True).stdout
+        m = re.search(r"(\d+)\.(\d+)", out)
+        return bool(m) and (int(m.group(1)), int(m.group(2))) >= (0, 8)
+
+    def test_apps_stay_above_the_shell_on_every_desktop(self):
+        self.foot("worksuite-shell", "0000ff", "--fullscreen")
+        self.wait_for(10, 400, self.BLUE)
+        self.foot("ws-app", "ff0000", "--window-size-chars=60x15")
+        self.wait_for(640, 360, self.RED)                    # the app opens over the shell
+        self.bridge_key("F2")                                # desktop 2: the shell is there too, no app
+        self.wait_for(640, 360, self.BLUE)
+        self.foot("ws-app2", "00ff00", "--window-size-chars=60x15")
+        self.wait_for(640, 360, self.GREEN)
+        self.bridge_key("F1")                                # back on 1: the app is still over the shell
+        self.wait_for(640, 360, self.RED)
+        self.wait_for(10, 400, self.BLUE)
+        if shutil.which("wlrctl"):                           # a click on the taskbar focuses (and raises) the shell
+            subprocess.run(["wlrctl", "toplevel", "focus", "app_id:worksuite-shell"], env=self.env, check=False, timeout=10)
+            time.sleep(0.5)
+            self.wait_for(640, 360, self.RED)
+            subprocess.run(["wlrctl", "toplevel", "focus", "app_id:ws-app"], env=self.env, check=False, timeout=10)
+            time.sleep(0.5)
+        # The lift and the lowering act on the shell's windows whatever has the focus (here the app: the old toggle on
+        # the focused window put the APP always on bottom), and both are idempotent.
+        self.bridge_key("F23")                               # launcher / Task View: the shell over the apps …
+        self.wait_for(640, 360, self.BLUE)
+        self.bridge_key("F21")                               # … raising again keeps it there
+        self.wait_for(640, 360, self.BLUE)
+        if self.labwc_08:
+            self.bridge_key("F23")                           # Labwc 0.8: the lift itself is idempotent too
+            self.wait_for(640, 360, self.BLUE)
+        self.bridge_key("F2")                                # … on any desktop it switches to
+        self.wait_for(640, 360, self.BLUE)
+        self.bridge_key("F22")                               # closed: below the apps again
+        self.wait_for(640, 360, self.GREEN)
+        if self.labwc_08:
+            self.bridge_key("F22")                           # lowering twice changes nothing
+            self.wait_for(640, 360, self.GREEN)
+        self.bridge_key("F1")
+        self.wait_for(640, 360, self.RED)
+        self.wait_for(10, 400, self.BLUE)

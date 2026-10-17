@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Light theme for the dark-glass screens, generated from the sources (scripts/gen-light-theme.mjs, WSOS-DSK-014). */
+@import "./theme-light.css";
 
 /* IBM Plex ships with the OS (/usr/share/fonts/truetype/ibm-plex); no network font loading (WSOS-DSK-012). */
 @font-face { font-family: "IBM Plex Sans"; src: local("IBM Plex Sans"), local("IBMPlexSans"); font-weight: 400; }
@@ -11,8 +13,9 @@
 
 /* WorkSuite UI tokens (WSOS-DSK-014): light and dark themes. */
 @theme {
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Noto Color Emoji (fonts-noto-color-emoji): emoji in the emoji picker, clipboard history and app text, not boxes. */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif, "Noto Color Emoji";
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace, "Noto Color Emoji";
   --color-ws-ink: #0f172a;
   --color-ws-muted: #475569;
   --color-ws-line: #e2e8f0;
@@ -25,11 +28,35 @@
   --color-ws-danger: #b91c1c;
 }
 
+/* Scrollbars match the shell (thin, translucent thumb, no white native track) in every scrolling panel. */
+* { scrollbar-width: thin; scrollbar-color: rgba(127, 178, 255, 0.28) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(127, 178, 255, 0.28); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(127, 178, 255, 0.45); }
+*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
+:root[data-theme="light"] * { scrollbar-color: rgba(15, 23, 42, 0.25) transparent; }
+:root[data-theme="light"] *::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.25); }
+*::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+[data-high-contrast] * { scrollbar-color: #ffffff #000000; }
+[data-high-contrast] *::-webkit-scrollbar-thumb { background: #ffffff; }
+
 @layer base {
   html, body, #root { height: 100%; margin: 0; }
   body { font-family: var(--font-sans); color: var(--color-ws-ink); background: var(--color-ws-night); }
+  /* Lifted over the apps (Desktop.tsx): the window is see-through except for what the shell draws. */
+  html.ws-see-through, html.ws-see-through body, html.ws-see-through #root { background: transparent !important; }
   /* Visible focus on every control (WSOS-ACC): blue ring with a dark halo so it shows on light and dark surfaces. */
   :focus-visible { outline: 2px solid #7FB2FF; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(2, 6, 23, 0.85); }
+  /* Headings and regions focused by script (tabIndex -1, e.g. each first-run step's title for screen readers) are not
+     controls: no ring. Keyboard focus on every control stays visible. */
+  [tabindex="-1"]:focus-visible { outline: none; box-shadow: none; }
+  /* A field inside a styled container (lock screen, greeter, search) gets its ring on the container (rule below):
+     no dark halo on the bare input, which showed as a black box inside the rounded field. Autofill keeps it clear. */
+  :is(input, textarea, select).outline-none:focus-visible { box-shadow: none; }
+  input.outline-none:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px transparent inset; transition: background-color 9999s; -webkit-text-fill-color: currentColor; }
+  /* Borderless text fields and radios that drop their own outline (outline-none) ring their field box instead,
+     so focus is never invisible (WSOS-ACC-002; shell/src/a11y.keyboard.test.tsx checks every outline-none). */
+  :where(label, div, form):has(> :is(input, textarea, select).outline-none:focus-visible) { outline: 2px solid #7FB2FF; outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation: none !important; }
   }
@@ -43,6 +70,21 @@
     --color-ws-surface: #1e293b;
     --color-ws-subtle: #0f172a;
   }
+}
+/* Shared inline palettes of the dark-glass screens (components/Dk.tsx C, screens/files/parts.tsx C). */
+:root {
+  --ws-g-ink: #E8EEFA; --ws-g-soft: #C9D6EE; --ws-g-muted: #8FA3C8; --ws-g-dim: #5E739C; --ws-g-link: #7FB2FF;
+  --ws-g-green: #5FD39A; --ws-g-amber: #FFB98A; --ws-g-red: #FF8A7A; --ws-g-cyan: #18D4F0;
+  --ws-g-page: #0A1A3D; --ws-g-side: #071330; --ws-g-bar: #0C1E46; --ws-g-card: rgba(14,32,72,0.6); --ws-g-line: rgba(127,178,255,0.12);
+  --ws-g-dialog: #0F2350; --ws-g-menu: rgba(12,28,66,0.98); --ws-g-field: rgba(4,10,26,0.5); --ws-g-strong: #FFFFFF;
+  --ws-g-glow: #12306B; --ws-g-glow-green: #0F3A3A;
+}
+:root[data-theme="light"] {
+  --ws-g-ink: #0F172A; --ws-g-soft: #24324F; --ws-g-muted: #3F5175; --ws-g-dim: #4A5B80; --ws-g-link: #1D4FC4;
+  --ws-g-green: #13653F; --ws-g-amber: #8A4B0F; --ws-g-red: #B42318; --ws-g-cyan: #0B6577;
+  --ws-g-page: #F3F6FB; --ws-g-side: #E8EDF6; --ws-g-bar: #EEF2F9; --ws-g-card: rgba(255,255,255,0.94); --ws-g-line: rgba(37,74,150,0.18);
+  --ws-g-dialog: #FFFFFF; --ws-g-menu: rgba(255,255,255,0.98); --ws-g-field: rgba(255,255,255,0.92); --ws-g-strong: #0F172A;
+  --ws-g-glow: #DCE6FB; --ws-g-glow-green: #D8F0E6;
 }
 :root[data-theme="dark"] {
   --color-ws-ink: #e2e8f0;
@@ -88,7 +130,8 @@
 }
 [data-high-contrast] svg [stroke]:not([stroke="none"]) { stroke: currentColor !important; }
 [data-high-contrast] ::placeholder { color: #d4d4d4 !important; }
-[data-high-contrast] :focus-visible { outline: 3px solid #ffd400 !important; outline-offset: 2px !important; }
+[data-high-contrast] :focus-visible:not([tabindex="-1"]) { outline: 3px solid #ffd400 !important; outline-offset: 2px !important; }
+[data-high-contrast] :has(> :is(input, textarea, select).outline-none:focus-visible) { outline: 3px solid #ffd400 !important; outline-offset: 2px !important; }
 [data-high-contrast] :disabled { color: #d4d4d4 !important; border-style: dashed !important; }
 @keyframes ws-rise { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
 .ws-rise { animation: ws-rise 0.2s ease-out; }
@@ -141,3 +184,20 @@
 :root[data-touch] #ws-launcher .ws-pins > button { padding: 16px 4px; }
 :root[data-touch] #ws-launcher .ws-pins > button > span:first-child { width: 64px; height: 64px; font-size: 22px; border-radius: 16px; }
 :root[data-touch] input[type='range'] { height: 32px; }
+
+/* Taskbar app list: scrolls sideways when it overflows, without a scrollbar over the icons. */
+.ws-taskbar-apps { scrollbar-width: none; }
+.ws-taskbar-apps::-webkit-scrollbar { display: none; }
+/* High contrast: the running dot takes the theme's ink (the grey one would fall below 3:1). */
+[data-high-contrast] .ws-run-dot { background: #ffffff !important; }
+
+/* Desktops (WSOS-DSK-003): the wallpaper slides in from the side the new desktop is on; the name shows briefly.
+   Reduced motion (system or Settings) turns both animations off through the rules above. */
+@keyframes ws-desk-from-right { from { transform: translateX(14%); opacity: 0.4 } to { transform: none; opacity: 1 } }
+@keyframes ws-desk-from-left { from { transform: translateX(-14%); opacity: 0.4 } to { transform: none; opacity: 1 } }
+.ws-desk-from-right { animation: ws-desk-from-right 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ws-desk-from-left { animation: ws-desk-from-left 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes ws-desk-toast { 0% { opacity: 0; transform: scale(0.94) } 15%, 80% { opacity: 1; transform: none } 100% { opacity: 0 } }
+.ws-desk-toast { animation: ws-desk-toast 1.4s ease-out forwards; }
+@keyframes ws-fade { from { opacity: 0 } to { opacity: 1 } }
+.ws-fade { animation: ws-fade 0.16s ease-out; }

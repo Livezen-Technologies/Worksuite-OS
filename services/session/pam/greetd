@@ -1,0 +1,9 @@
+#%PAM-1.0
+# WorkSuite sign-in through greetd (installed over greetd's own file, which dpkg-divert keeps as greetd.distrib).
+# Everything comes from login → common-auth / common-session, where the worksuite-keyring profile runs
+# pam_gnome_keyring once (and not after a PIN sign-in). greetd's own file added a second pam_gnome_keyring auth and
+# session pass: the login keyring was unlocked by the first and the second logged "couldn't unlock the login
+# keyring" (WSOS-INT-009). The profile's Priority is -1 so its session part runs after pam_systemd (Priority 0), which
+# sets XDG_RUNTIME_DIR: before it, pam_gnome_keyring found no control socket and started a daemon of its own outside
+# the user manager, and the user manager's daemon (socket-activated for the session's apps) stayed locked.
+@include login

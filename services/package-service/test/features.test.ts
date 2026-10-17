@@ -1,7 +1,7 @@
 // Catalog, local .deb, Flatpak permissions/prune, offline bundles, resumable downloads.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadCatalog, type CatalogEnv } from '../src/catalog.ts';
 import { PackageService, type Env, type Job, type RunResult } from '../src/service.ts';
@@ -205,9 +205,9 @@ function bundleWorld(installed = '1.0.0', key = releaseKey(), script: Script = (
 test('bundle: signed manifest and package hashes verified; installs offline with apt from the extracted copy', async () => {
   const b = bundleWorld();
   const file = makeBundle(b.root, { sign: b.key.signFlat });
-  const info = b.svc.inspectBundle(file);
+  const info = b.svc.inspectBundle(uid, file);
   assert.deepEqual(info, { release_id: 'rel-1.1.0', version: '1.1.0', packages: 2, bytes: 14, critical: false, verified: true });
-  const job = await b.done(b.svc.installBundle(1000, file));
+  const job = await b.done(b.svc.installBundle(uid, file));
   assert.equal(job.state, 'success', job.error);
   const dir = join(b.env.spool!, 'bundle');
   const debs = [join(dir, 'worksuite-desktop_1.1.0_amd64.deb'), join(dir, 'worksuite-shell_1.1.0_amd64.deb')].join(' ');
@@ -219,36 +219,52 @@ test('bundle: signed manifest and package hashes verified; installs offline with
 test('bundle: foreign key, edited package, extra member, wrong arch, downgrade and outside paths are refused', async () => {
   const b = bundleWorld();
   const foreign = releaseKey('ws-other');
-  assert.throws(() => b.svc.inspectBundle(makeBundle(b.root, { sign: foreign.signFlat })), { code: 'SignatureInvalid' });
+  assert.throws(() => b.svc.inspectBundle(uid, makeBundle(b.root, { sign: foreign.signFlat })), { code: 'SignatureInvalid' });
   const edited = bundleWorld();
-  assert.throws(() => edited.svc.inspectBundle(makeBundle(edited.root, { sign: edited.key.signFlat, tamper: (r) => writeFileSync(join(r, 'pool/worksuite-shell_1.1.0_amd64.deb'), 'deb TWO') })), { code: 'SignatureInvalid' });
+  assert.throws(() => edited.svc.inspectBundle(uid, makeBundle(edited.root, { sign: edited.key.signFlat, tamper: (r) => writeFileSync(join(r, 'pool/worksuite-shell_1.1.0_amd64.deb'), 'deb TWO') })), { code: 'SignatureInvalid' });
   const extra = bundleWorld();
-  assert.throws(() => extra.svc.inspectBundle(makeBundle(extra.root, { sign: extra.key.signFlat, tamper: (r) => writeFileSync(join(r, 'pool/evil_1_amd64.deb'), 'x') })), { code: 'SignatureInvalid' });
+  assert.throws(() => extra.svc.inspectBundle(uid, makeBundle(extra.root, { sign: extra.key.signFlat, tamper: (r) => writeFileSync(join(r, 'pool/evil_1_amd64.deb'), 'x') })), { code: 'SignatureInvalid' });
   const altered = bundleWorld();
-  assert.throws(() => altered.svc.inspectBundle(makeBundle(altered.root, { sign: altered.key.signFlat, tamper: (r) => {
+  assert.throws(() => altered.svc.inspectBundle(uid, makeBundle(altered.root, { sign: altered.key.signFlat, tamper: (r) => {
     const m = JSON.parse(readFileSync(join(r, 'manifest.json'), 'utf8')); m.critical = true; writeFileSync(join(r, 'manifest.json'), JSON.stringify(m));
   } })), { code: 'SignatureInvalid' });
   const arm = bundleWorld();
-  assert.throws(() => arm.svc.inspectBundle(makeBundle(arm.root, { sign: arm.key.signFlat, arch: 'arm64' })), { code: 'ArchMismatch' });
+  assert.throws(() => arm.svc.inspectBundle(uid, makeBundle(arm.root, { sign: arm.key.signFlat, arch: 'arm64' })), { code: 'ArchMismatch' });
   const newer = bundleWorld('1.2.0');
-  assert.throws(() => newer.svc.inspectBundle(makeBundle(newer.root, { sign: newer.key.signFlat })), /downgrade/);
+  assert.throws(() => newer.svc.inspectBundle(uid, makeBundle(newer.root, { sign: newer.key.signFlat })), /downgrade/);
   const rollback = bundleWorld('1.2.0');
-  rollback.svc.inspectBundle(makeBundle(rollback.root, { sign: rollback.key.signFlat, manifest: { rollback_directive: { from_version: '1.2.0', reason: 'regression' } } }));
+  rollback.svc.inspectBundle(uid, makeBundle(rollback.root, { sign: rollback.key.signFlat, manifest: { rollback_directive: { from_version: '1.2.0', reason: 'regression' } } }));
   const out = bundleWorld();
   const elsewhere = makeBundle(tmp('ws-elsewhere-'), { sign: out.key.signFlat });
-  assert.throws(() => out.svc.inspectBundle(elsewhere), /removable media/);
-  assert.throws(() => out.svc.installBundle(1000, '/etc/passwd'), { code: 'InvalidArgs' });
+  assert.throws(() => out.svc.inspectBundle(uid, elsewhere), /removable media/);
+  assert.throws(() => out.svc.installBundle(uid, '/etc/passwd'), { code: 'InvalidArgs' });
 });
 
 test('bundle: the copy is re-verified at install time, so a stick swapped after inspection is refused', async () => {
   const b = bundleWorld();
   const file = makeBundle(b.root, { sign: b.key.signFlat });
-  b.svc.inspectBundle(file);
+  b.svc.inspectBundle(uid, file);
   makeBundle(b.root, { sign: b.key.signFlat, tamper: (r) => writeFileSync(join(r, 'pool/worksuite-shell_1.1.0_amd64.deb'), 'deb TWO') });
-  const job = await b.done(b.svc.installBundle(1000, file));
+  const job = await b.done(b.svc.installBundle(uid, file));
   assert.equal(job.state, 'failed');
   assert.ok(!b.calls.some((c) => c.startsWith('apt-get -y')));
   assert.ok(b.audit.some(([e]) => e === 'bundle_rejected'));
+});
+
+test('bundle: staged like a local .deb: caller must own it, no symlink, root-owned copy removed afterwards', async () => {
+  const b = bundleWorld();
+  const file = makeBundle(b.root, { sign: b.key.signFlat });
+  const other = uid + 1;   // not the file's owner (root's own calls skip the check)
+  assert.throws(() => b.svc.inspectBundle(other, file), { code: 'NotAuthorized' });
+  assert.throws(() => b.svc.installBundle(other, file), { code: 'NotAuthorized' });
+  const link = join(b.root, 'link.wsupdate');
+  symlinkSync(file, link);
+  assert.throws(() => b.svc.inspectBundle(uid, link), { code: 'InvalidArgs' });
+  assert.throws(() => b.svc.installBundle(uid, link), { code: 'InvalidArgs' });
+  b.svc.inspectBundle(uid, file);
+  const job = await b.done(b.svc.installBundle(uid, file));
+  assert.equal(job.state, 'success', job.error);
+  assert.deepEqual(readdirSync(join(b.env.spool!, 'bundles')), [], 'staged copies removed');
 });
 
 // ---------------- resumable downloads (WSOS-AUP-008) ----------------

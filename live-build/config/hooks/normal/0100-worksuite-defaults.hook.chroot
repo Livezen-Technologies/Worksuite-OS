@@ -8,12 +8,16 @@ if dpkg -s openssh-server >/dev/null 2>&1; then echo "openssh-server must not be
 mkdir -p /etc/greetd
 cat > /etc/greetd/config.toml <<'CONF'
 [terminal]
-vt = 7
+# The splash's VT: the greeter takes the screen from Plymouth with no VT switch (no text console in between).
+vt = 1
 [default_session]
-command = "worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-session"
+command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-session"
 user = "_greetd"
 CONF
 systemctl enable greetd.service worksuite-device-agent.service worksuite-package-service.service worksuite-boot-marker.service
+# Default-deny inbound firewall (/etc/nftables.conf, docs/security/hardening.md).
+systemctl enable nftables.service
+grep -q "table inet worksuite_filter" /etc/nftables.conf || { echo "WorkSuite nftables.conf missing" >&2; exit 1; }
 systemctl set-default graphical.target
 # Seat access through logind (pam_systemd gives the active session the seat). seatd, when present, is tried first by
 # libseat and only admits the video group, which locked out the greeter (_greetd) and every user: no display at all.
@@ -21,6 +25,15 @@ if [ -e /usr/lib/systemd/system/seatd.service ]; then systemctl disable seatd.se
 # Smart-card sign-in is off by default (worksuite-smartcard-setup); libpam-pkcs11's card event manager fails
 # without a reader and is not needed for pam_pkcs11 sign-in, so it stays disabled.
 if [ -e /usr/lib/systemd/system/pkcs11-eventmgr.service ]; then systemctl disable pkcs11-eventmgr.service >/dev/null 2>&1 || true; fi
+# Locales: the shell's languages (English, Sinhala, Tamil) and the installer's default English variants. The installer
+# (localecfg) adds and generates the one chosen on the target.
+for l in en_US.UTF-8 en_GB.UTF-8 si_LK.UTF-8 ta_LK.UTF-8; do
+  if grep -q "^# *$l UTF-8" /etc/locale.gen; then sed -i "s/^# *$l UTF-8/$l UTF-8/" /etc/locale.gen
+  elif ! grep -q "^$l UTF-8" /etc/locale.gen; then echo "$l UTF-8" >> /etc/locale.gen; fi
+done
+locale-gen
+for l in en_US.utf8 en_GB.utf8 si_LK.utf8 ta_LK.utf8; do locale -a | grep -qx "$l" || { echo "locale $l not generated" >&2; exit 1; }; done
+[ -f /etc/default/locale ] || echo 'LANG=en_US.UTF-8' > /etc/default/locale
 # WSOS-INS-007: no machine-id baked into the image.
 : > /etc/machine-id
 rm -f /var/lib/dbus/machine-id
@@ -30,6 +43,30 @@ grep -q pam_faillock.so /etc/pam.d/common-auth || { echo "pam_faillock is not en
 grep -q pam_gnome_keyring.so /etc/pam.d/common-auth && grep -q pam_gnome_keyring.so /etc/pam.d/common-session || { echo "pam_gnome_keyring is not enabled" >&2; exit 1; }
 # Boot splash: the WorkSuite Plymouth theme, with the DRM/framebuffer drivers in the initramfs (WSOS-BOOT splash).
 plymouth-set-default-theme worksuite
+# No "Loading Linux …" / "Loading initial ramdisk …" text from GRUB before the splash.
+if [ -f /etc/grub.d/10_linux ]; then
+  sed -i '/echo.*\$(echo "\$message" | grub_quote)/d' /etc/grub.d/10_linux
+  ! grep -q 'echo "\$message" | grub_quote' /etc/grub.d/10_linux || { echo "GRUB loading messages still in 10_linux" >&2; exit 1; }
+  # Boot entries and the "Advanced options" submenu stay bootable without a GRUB login once 01_worksuite_lock puts the
+  # command line and the entry editor behind a superuser (repeated Esc reached "grub>").
+  sed -i -e 's/^CLASS="--class gnu-linux /CLASS="--unrestricted --class gnu-linux /' \
+    -e "s/echo \"submenu '\(.*\)' \\\\\$menuentry_id_option/echo \"submenu '\\1' --unrestricted \\\\\$menuentry_id_option/" /etc/grub.d/10_linux
+  grep -q '^CLASS="--unrestricted ' /etc/grub.d/10_linux && grep -q "submenu .* --unrestricted" /etc/grub.d/10_linux \
+    || { echo "10_linux entries not --unrestricted" >&2; exit 1; }
+  # Entries read "WorkSuite OS", not "WorkSuite OS GNU/Linux": 10_linux appends GNU/Linux to any GRUB_DISTRIBUTOR but
+  # Ubuntu's and names already ending in it.
+  sed -i 's/^\([[:space:]]*\)Ubuntu|Kubuntu|\*GNU\/Linux)$/\1Ubuntu|Kubuntu|*GNU\/Linux|"WorkSuite OS")/' /etc/grub.d/10_linux
+  grep -q '|"WorkSuite OS")$' /etc/grub.d/10_linux || { echo "10_linux still names the entries WorkSuite OS GNU/Linux" >&2; exit 1; }
+fi
+# The splash from the first frame, and kept until the greeter takes the screen: no console text in between.
+mkdir -p /etc/plymouth
+printf '[Daemon]\nTheme=worksuite\nShowDelay=0\nDeviceTimeout=8\n' > /etc/plymouth/plymouthd.conf
+# Splash to greeter with no black screen: worksuite-session's greetd.service (/etc/systemd/system) deactivates Plymouth,
+# runs on VT 1 and ends the splash once the greeter has drawn its first frame (worksuite-greeter-handoff). VT 1 is the
+# greeter's, so no getty there; Ctrl+Alt+F2… still open text consoles for administrators.
+grep -q 'plymouth deactivate' /etc/systemd/system/greetd.service || { echo "WorkSuite greetd.service (splash handoff) missing" >&2; exit 1; }
+grep -q 'After=.*plymouth-quit-wait' /etc/systemd/system/greetd.service && { echo "greetd must not wait for the splash to quit" >&2; exit 1; }
+systemctl mask getty@tty1.service
 grep -qx 'FRAMEBUFFER=y' /etc/initramfs-tools/conf.d/worksuite-splash || { echo "initramfs splash config missing" >&2; exit 1; }
 [ -x /usr/share/initramfs-tools/hooks/worksuite-plymouth-fonts ] || { echo "splash font initramfs hook missing" >&2; exit 1; }
 # The same splash on shutdown and restart: plymouth ships these statically wanted by poweroff/reboot.target.

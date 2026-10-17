@@ -4,8 +4,9 @@ import { createPortal } from 'react-dom'
 import { AnimatedProgress, type ProgressTone } from './AnimatedProgress'
 
 export const C = {
-  ink: '#E8EEFA', soft: '#C9D6EE', muted: '#8FA3C8', dim: '#8FA3C8', blue: '#1F6BFF', link: '#7FB2FF', cyan: '#18D4F0',
-  green: '#5FD39A', amber: '#FFB98A', red: '#FF8A7A', dialog: '#0F2350',
+  // Theme variables (index.css --ws-g-*): dark values by default, light ones under Settings › Appearance › Light.
+  ink: 'var(--ws-g-ink)', soft: 'var(--ws-g-soft)', muted: 'var(--ws-g-muted)', dim: 'var(--ws-g-muted)', blue: '#1F6BFF', link: 'var(--ws-g-link)', cyan: 'var(--ws-g-cyan)',
+  green: 'var(--ws-g-green)', amber: 'var(--ws-g-amber)', red: 'var(--ws-g-red)', dialog: 'var(--ws-g-dialog)',
 }
 export const card = 'rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(14,32,72,0.6)]'
 export const heroCard = 'rounded-[14px] border border-[rgba(127,178,255,0.14)] bg-[rgba(14,32,72,0.7)]'

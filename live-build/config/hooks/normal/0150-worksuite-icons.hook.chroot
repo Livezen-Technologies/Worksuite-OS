@@ -1,0 +1,15 @@
+#!/bin/sh
+# GTK apps (Celluloid…) showed missing-image icons: Adwaita's icons are SVG and need gdk-pixbuf's SVG loader. Make sure
+# the loader is registered in the image (refresh the cache, as librsvg2-common's trigger does) and fail the build
+# rather than ship an image whose GTK apps can't draw their icons.
+set -e
+for q in /usr/lib/*/gdk-pixbuf-2.0/gdk-pixbuf-query-loaders; do
+    [ -x "$q" ] || continue
+    cache=$(dirname "$q")/2.10.0/loaders.cache
+    "$q" --update-cache
+    grep -q '"image/svg+xml"' "$cache" || { echo "E: no SVG loader in $cache (librsvg2-common)" >&2; exit 1; }
+done
+# The icon caches GTK reads first; stale or missing ones only cost time, but keep them current.
+for t in /usr/share/icons/hicolor /usr/share/icons/Adwaita; do
+    [ -d "$t" ] && command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -f "$t" || true
+done

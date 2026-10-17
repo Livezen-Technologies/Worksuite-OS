@@ -18,6 +18,7 @@ profile worksuite-device-agent flags=(attach_disconnected) {
   network netlink raw,
   network unix stream,
   dbus (send, receive) bus=system,
+  dbus (bind) bus=system name=lk.worksuite.DeviceAgent1,
   unix (create, connect, send, receive, bind, listen, accept) type=stream,
 
   # Runtime: worksuite-node wrapper → Electron in Node mode.
@@ -30,6 +31,10 @@ profile worksuite-device-agent flags=(attach_disconnected) {
   /etc/** r,
   @{PROC}/** r,
   /sys/** r,
+  # lsblk reads FSTYPE (crypto_LUKS: Settings > Privacy "disk encrypted", the check-in's encrypted fact) from the
+  # udev database; without it every disk looked unencrypted.
+  /run/udev/data/ r,
+  /run/udev/data/* r,
   /dev/shm/** rwk,
   /tmp/** rwk,
 
@@ -63,7 +68,7 @@ profile worksuite-device-agent flags=(attach_disconnected) {
   /run/cryptsetup/** rwk,
   # Policy enforcement files (services/device-agent/src/enforce.ts ENFORCED_PATHS), written via <path>.tmp + rename.
   /etc/worksuite/ rw,
-  /etc/worksuite/{lock-policy.conf,faillock.conf,signin-policy.conf,offline-access-expired}{,.tmp} rw,
+  /etc/worksuite/{lock-policy.conf,faillock.conf,signin-policy.conf,offline-access-expired,ai-policy.json}{,.tmp} rw,
   # Kiosk mode (services/device-agent/src/kiosk.ts KIOSK_PATHS); the account/greetd part runs as its own unit.
   /etc/worksuite/{kiosk.json,kiosk-exit.verifier}{,.tmp} rw,
   /etc/worksuite/kiosk/ rw,

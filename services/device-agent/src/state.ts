@@ -27,6 +27,17 @@ export interface Policy {
   vpn_required?: boolean;
   /** WSOS-INT-001: block = user-imported VPN profiles are removed and Settings offers no import. */
   user_vpn?: 'allow' | 'block';
+  /** On-device AI assistant (services/ai): false = off for everyone; ai_models = the catalog ids allowed. */
+  ai_assistant?: boolean;
+  ai_models?: string[];
+  /** Desktop widgets on the OS wallpaper: false = off for everyone (the shell also turns them off on a kiosk). */
+  desktop_widgets?: boolean;
+  /** WhatsApp (WhatsApp Web window, pinned by default): false = off on the device (Start, taskbar and the window). */
+  whatsapp?: boolean;
+  /** Screenshots and the snipping tool: disabled = off on the device (kiosks: always off). */
+  screen_capture?: 'allowed' | 'disabled';
+  /** Clipboard history (Super+V): disabled = off on the device and its list dropped (kiosks: always off). */
+  clipboard_history?: 'allowed' | 'disabled';
   [k: string]: unknown;
 }
 

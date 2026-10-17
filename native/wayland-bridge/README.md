@@ -37,3 +37,12 @@ architecture-independent, so the same package serves amd64 and arm64 (WSOS-ARM-0
   Chromium sends for the shell's per-monitor windows).
 - `ListWindows` returns `a(ssssu)` — handle, app_id, title, output, flags (activated 1, minimized 2, maximized 4,
   fullscreen 8). The earlier draft declared `a(sssu)`, one field short of the documented five.
+- WSOS-DSK-003 workspaces: Debian trixie's Labwc (0.8.x) has no client workspace protocol (ext-workspace-v1 arrived in
+  Labwc 0.9.0), so the bridge uses Labwc's desktops (`worksuite_bridge/workspace.py`). `ListWorkspaces`,
+  `ActivateWorkspace`, `MoveWindowToWorkspace` and `WorkspacesChanged`; "workspaces" in `SupportedOperations` when
+  there is more than one desktop and `wtype` (virtual-keyboard) is installed. The panel's requests are sent as
+  bridge-only Labwc bindings (Ctrl+Alt+Super+F<n>, with Shift to move the focused window); every desktop binding in
+  rc.xml also runs `worksuite-workspace-event`, which reports to `lk.worksuite.WorkspaceEvents1` at
+  `/lk/worksuite/WaylandBridge1/Workspaces` (callers of the session's UID only). Labwc does not say which desktop a
+  window is on: the bridge places new windows on the current desktop and follows moves and focus. A backend on
+  ext-workspace-v1 can replace this when the distribution ships Labwc ≥ 0.9, with the same D-Bus API.

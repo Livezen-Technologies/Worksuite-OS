@@ -5,7 +5,19 @@
     <!-- Super key (services/session/labwc/rc.xml): open or close the launcher. -->
     <method name="ToggleLauncher"/>
     <method name="ShowLauncher"/>
+    <!-- Touch gestures (worksuite-gestures): edge swipe from the right, three-finger swipe down. -->
+    <method name="ToggleNotifications"/>
+    <method name="ShowDesktop"/>
+    <!-- Super+Tab (rc.xml), the three-finger swipe up: open or close Task View (desktops, WSOS-DSK-003). -->
+    <method name="ToggleTaskView"/>
+    <!-- Super+A (rc.xml): open or close the AI assistant (services/ai). -->
+    <method name="ToggleAssistant"/>
     <!-- Files is the default handler for archives (shell/apps/worksuite-files.desktop): browse this one. -->
     <method name="OpenArchive"><arg name="path" type="s" direction="in"/></method>
+    <!-- Windows-style shortcuts (rc.xml, src/lib/shortcuts.ts): files, settings, monitor, a11y, clipboard (Super+V),
+         emoji (Super+.), shortcuts (Super+/), snip (the Snipping Tool app) or app:<desktop id> (custom shortcuts). -->
+    <method name="Open"><arg name="what" type="s" direction="in"/></method>
+    <!-- worksuite-screenshot (Print, Super+Print, Alt+Print, Super+Shift+S): print, save, window or snip (electron/capture.ts). -->
+    <method name="Capture"><arg name="kind" type="s" direction="in"/></method>
   </interface>
 </node>

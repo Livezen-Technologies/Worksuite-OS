@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=WhatsApp
+GenericName=Messenger
+Comment=WhatsApp Web in its own window
+Comment[si]=WhatsApp Web තමන්ගේම කවුළුවක
+Comment[ta]=WhatsApp Web தனி சாளரத்தில்
+Exec=worksuite-app whatsapp
+TryExec=worksuite-app
+Icon=lk.worksuite.whatsapp
+Terminal=false
+Categories=Network;InstantMessaging;Chat;
+Keywords=whatsapp;chat;messages;messenger;
+StartupNotify=true
+StartupWMClass=lk.worksuite.whatsapp

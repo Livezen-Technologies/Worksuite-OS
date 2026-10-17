@@ -7,7 +7,7 @@ import QtQuick.Layouts 1.15
 
 WsPage {
     id: page
-    stepIndex: 4
+    stepIndex: 5
     eyebrow: qsTr("Step 4 · Region and city")
     title: qsTr("Where are you?")
     skipInExpress: true

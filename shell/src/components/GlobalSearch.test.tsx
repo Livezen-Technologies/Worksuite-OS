@@ -28,6 +28,13 @@ describe('global search model', () => {
     expect(buildGroups({ apps: [], settings: [], local: [], hits: [], query: 'x' }, false)).toEqual([])
   })
 
+  it('"Ask AI" closes the list when the assistant is there, and is not counted as a result', () => {
+    const gs = buildGroups({ apps: [app], settings: [], local: [], hits: [], query: 'what is a gguf' }, false, true)
+    expect(gs.at(-1)).toEqual({ id: 'ai', items: [{ kind: 'ai', id: 'ai' }] })
+    expect(categories(gs)).toEqual([{ id: 'all', n: 1 }, { id: 'apps', n: 1 }])
+    expect(buildGroups({ apps: [], settings: [], local: [], hits: [], query: ' ' }, false, true)).toEqual([])
+  })
+
   it('navigates with wrapping arrows, Home/End and Tab between categories', () => {
     const cats = ['all', 'apps', 'mail'] as const
     let s = { sel: 0, cat: 'all' as (typeof cats)[number] }

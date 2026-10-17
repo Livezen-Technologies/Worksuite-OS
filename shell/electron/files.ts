@@ -37,6 +37,36 @@ export function resolveIn(env: Pick<FileEnv, 'home' | 'user'>, root: string, rel
   return { base: r.path, full }
 }
 
+/**
+ * A path dropped on Files from another app (WSOS-DSK-013) → the Files root and relative path it lies in, or null when
+ * it is outside the user's places (e.g. /etc) or is a root itself. Symlinks are resolved first.
+ */
+export function locate(env: Pick<FileEnv, 'home' | 'user'>, abs: unknown): { root: string; rel: string } | null {
+  if (typeof abs !== 'string' || !path.isAbsolute(abs) || abs.length > 4096 || abs.includes('\0')) return null
+  let real: string
+  try { real = realpathSync(abs) } catch { return null }
+  // Longest root first: WorkSuite Drive lies inside home.
+  for (const r of [...roots(env)].sort((a, b) => b.path.length - a.path.length)) {
+    let base: string
+    try { base = realpathSync(r.path) } catch { continue }
+    if (real === base) return null
+    if (real.startsWith(base + path.sep)) return { root: r.id, rel: path.relative(base, real).split(path.sep).join('/') }
+  }
+  return null
+}
+
+/** Dropped paths grouped by root for copy jobs; anything outside the user's places is counted as rejected. */
+export function dropPlan(env: Pick<FileEnv, 'home' | 'user'>, paths: unknown[]): { groups: { root: string; rels: string[] }[]; rejected: number } {
+  const by = new Map<string, string[]>()
+  let rejected = 0
+  for (const p of paths.slice(0, 1000)) {
+    const at = locate(env, p)
+    if (!at) { rejected++; continue }
+    by.set(at.root, [...(by.get(at.root) ?? []), at.rel])
+  }
+  return { groups: [...by].map(([root, rels]) => ({ root, rels })), rejected }
+}
+
 const DRV_STATES = new Set(['synced', 'syncing', 'pending', 'conflict', 'online-only', 'error'])
 
 export async function list(env: FileEnv, root: string, rel: string): Promise<Reply<Entry[]>> {

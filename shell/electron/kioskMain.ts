@@ -14,7 +14,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { blockedKey, desktopExecArgv, exitResult, isExitGesture, KIOSK_CONFIG, kioskWebPreferences, parseKioskConfig, restartDelay, urlAllowlist, type ExitResult, type KioskConfig } from './kiosk'
+import { blockedKey, desktopExecArgv, exitResult, isExitGesture, KIOSK_CONFIG, kioskWebPreferences, parseKioskConfig, restartDelay, screenState, urlAllowlist, type ExitResult, type KioskConfig } from './kiosk'
 import { shellWebPreferences } from './webSecurity'
 import { execProgram, findWorkSuiteDesktop, installedApps } from './xdg'
 
@@ -36,6 +36,7 @@ let main: BrowserWindow | null = null
 let exitWin: BrowserWindow | null = null
 let idleWin: BrowserWindow | null = null
 let restartWin: BrowserWindow | null = null
+let screenWin: BrowserWindow | null = null
 let child: ChildProcess | null = null
 let generation = 0
 let failures = 0
@@ -44,7 +45,7 @@ let leaving = false
 /** Whole display, also where the compositor ignores the fullscreen request. */
 const full = () => ({ ...screen.getPrimaryDisplay().bounds })
 
-type StatusState = 'starting' | 'unavailable' | 'restarting' | 'offline' | 'idle'
+type StatusState = 'starting' | 'unavailable' | 'restarting' | 'offline' | 'idle' | 'screen-off'
 const statusQuery = (state: StatusState, extra: Record<string, string> = {}) => ({ query: { mode: 'kiosk-status', state, ...extra } })
 
 function statusWindow(state: StatusState, extra: Record<string, string> = {}, onTop = false): BrowserWindow {
@@ -75,6 +76,16 @@ function idleWarning(show: boolean) {
   idleWin.on('closed', () => { idleWin = null })
 }
 
+/** Night screen-off (policy kiosk.screen_off, worksuite-kiosk-screen): when a touch wakes the screen in the window, it
+ *  shows "Screen off until 07:00" first; a tap takes the notice away and the app can be used until the screen goes off
+ *  again. `until` is HH:MM from worksuite-kiosk-ctl. */
+function screenOffNotice(until: string | null) {
+  if (!until || leaving) { screenWin?.destroy(); screenWin = null; return }
+  if (screenWin && !screenWin.isDestroyed()) return
+  screenWin = statusWindow('screen-off', { until }, true)
+  screenWin.webContents.on('input-event', (_e, input) => { if (['mouseDown', 'touchStart', 'keyDown', 'gestureTap'].includes(input.type)) { screenWin?.destroy(); screenWin = null } })
+  screenWin.on('closed', () => { screenWin = null })
+}
 /** Every web contents of the kiosk: no new windows, no devtools, blocked shortcuts, exit gesture. */
 function lockDown(wc: WebContents, allowed: (u: string) => boolean) {
   wc.setWindowOpenHandler(({ url }) => {
@@ -236,6 +247,9 @@ app.whenReady().then(() => {
     let v = ''
     try { v = readFileSync(path.join(RUN, 'idle'), 'utf8').trim() } catch { /* nothing asked */ }
     idleWarning(v === 'warn')
+    let sc = ''
+    try { sc = readFileSync(path.join(RUN, 'screen'), 'utf8') } catch { /* no schedule */ }
+    screenOffNotice(screenState(sc))
   })
 
   ipcMain.on('kiosk:gesture', (e) => { if (main && e.sender === main.webContents) showExitPrompt() })

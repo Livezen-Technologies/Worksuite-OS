@@ -14,7 +14,7 @@
 //   worksuite-server release-emergency --db server.db manifest.json [--arch amd64]   (critical, all rings, 100 %)
 //   worksuite-server bundle-build --db server.db manifest.json OUT.wsupdate A.deb [B.deb ...]   (offline update)
 //   worksuite-server grant --db server.db --email a@example.com --permission desktop.releases.manage [--revoke]
-//   worksuite-server directory-set --db server.db --org 1 directory.json   (offline_login_days, password_max_age_days, domain, netbios_domain, upn_suffixes)
+//   worksuite-server directory-set --db server.db --org 1 directory.json   (offline_login_days, allow_offline_mfa_bypass, password_max_age_days, domain, netbios_domain, upn_suffixes)
 //   worksuite-server totp-enroll|totp-remove --db server.db --email a@example.com      (WSOS-DIR-009; prints the otpauth URI)
 //   worksuite-server password-expire --db server.db --email a@example.com [--revoke]   (change at next sign-in, WSOS-DIR-007)
 //   worksuite-server licence-set --db server.db --org 1 licence.json   ({edition, state, entitlements, grace_until})
@@ -60,7 +60,7 @@ export function createHandler(db: DatabaseSync, o: ServerOptions) {
   oauthRoutes(r, db, { issuer, clientIds: o.clientIds ?? ['worksuite-os'] });
   const webUrl = o.webUrl ? o.webUrl.replace(/\/?$/, '/') : new URL('apps/', publicUrl).toString();
   apiRoutes(r, db, { publicUrl, issuer, updateHost: o.updateHost ?? new URL(publicUrl).host, webUrl });
-  consoleRoutes(r, db, { secureCookie: publicUrl.startsWith('https:') });
+  consoleRoutes(r, db, { secureCookie: publicUrl.startsWith('https:'), publicUrl });
   return async (req: IncomingMessage, res: ServerResponse) => {
     const ctx = makeCtx(req, res, publicUrl);
     const started = process.hrtime.bigint();

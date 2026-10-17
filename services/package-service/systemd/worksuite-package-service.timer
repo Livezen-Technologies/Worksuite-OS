@@ -1,0 +1,9 @@
+[Unit]
+Description=Start the WorkSuite package service after the boot rush (update checks, WSOS-AUP-001)
+
+[Timer]
+OnBootSec=2min
+Unit=worksuite-package-service.service
+
+[Install]
+WantedBy=timers.target

@@ -2,10 +2,13 @@
 // The main process opens one of these per extra output (electron/outputWindows.ts) and closes it on unplug.
 import { useCallback, useEffect, useState } from 'react'
 import { RunningApps } from '../components/PanelItems'
+import { EndMirror } from '../components/SessionEnd'
 import { BG } from '../components/Ws'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
 import type { PanelWindow } from '../lib/panel'
-import { useT } from '../i18n'
+import { formatTime, useT } from '../i18n'
+import SnipOverlay from '../components/SnipOverlay'
+import { captureApi, type SnipOpen } from '../lib/captureApi'
 
 export default function OutputDesktop({ output }: { output: string }) {
   const t = useT()
@@ -13,13 +16,21 @@ export default function OutputDesktop({ output }: { output: string }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => { const i = setInterval(() => setNow(new Date()), 15000); return () => clearInterval(i) }, [])
   const only = useCallback((ws: PanelWindow[]) => windowsOnOutput(ws, output, false, []), [output])
-  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const time = formatTime(now)
+  // The snipping overlay on this monitor too (electron/capture.ts lifts every shell window).
+  const [snip, setSnip] = useState<SnipOpen | null>(null)
+  useEffect(() => {
+    const offs = [captureApi?.onSnipOpen(setSnip), captureApi?.onSnipClose(() => setSnip(null))]
+    return () => offs.forEach((f) => f?.())
+  }, [])
   return (
     <div className="relative h-full w-full overflow-hidden font-sans" style={{ background: wallpaperFor(display, output, BG.desktop) }} data-output={output}>
       <nav aria-label={t('panel.taskbar')} className="absolute inset-x-0 bottom-0 z-40 flex h-14 items-center gap-2 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.82)] px-4 text-[#E8EEFA] backdrop-blur-[20px]">
         <RunningApps pinned={[]} info={() => undefined} onLaunch={() => undefined} only={only} />
         <time className="ml-auto text-[13px]" dateTime={now.toISOString()}>{time}</time>
       </nav>
+      <EndMirror />
+      {snip && <SnipOverlay open={snip} output={output} />}
     </div>
   )
 }

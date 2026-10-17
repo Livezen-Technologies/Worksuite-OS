@@ -33,6 +33,11 @@ check "u2f: pam_u2f with the WorkSuite authfile and origin" 'grep -q "pam_u2f.so
 check "u2f: users without a key are skipped (nouserok)" 'grep -q nouserok "$P/worksuite-signin-u2f"'
 check "keyring: skipped when the sign-in used the PIN" 'awk "/pam-pin-used/{a=NR} /pam_gnome_keyring.so\$/{b=NR} END{exit !(a && b == a + 1)}" "$P/worksuite-keyring"'
 check "keyring: the skip jumps exactly one module" 'grep -q "^	\[success=1 default=ignore\]	pam_exec.so quiet /usr/lib/worksuite/worksuite-signin pam-pin-used$" "$P/worksuite-keyring"'
+# pam_gnome_keyring's session part needs XDG_RUNTIME_DIR, which pam_systemd sets: it must come after it. pam-auth-update
+# sorts by Priority, then by profile name backwards, so at systemd's Priority 0 "worksuite-keyring" came first; the
+# module found no control socket, started a daemon of its own outside the user manager, and the session's daemon
+# stayed locked ("Unlock Login Keyring" on every sign-in after the first).
+check "keyring: session part after pam_systemd (Priority below systemd's 0)" '[ "$(prio "$P/worksuite-keyring")" -lt 0 ]'
 check "PIN is not in any boot-time unlock path" '! grep -rqs "worksuite-signin" "$ROOT/installer" "$ROOT/services/recovery-boot" "$ROOT/live-build/config/hooks"'
 
 S=$ROOT/services/session/systemd/system

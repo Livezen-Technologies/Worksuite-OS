@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { nextState, type SessionEvent, type SessionState } from './lib/session'
+import { nextState, requestLock, type SessionEvent, type SessionState } from './lib/session'
 import { os } from './lib/os'
 import type { WindowApp } from './screens/types'
 import Greeter from './screens/Greeter'
@@ -15,6 +15,9 @@ import Installer from './screens/Installer'
 import { useNotices } from './lib/useNotices'
 import { useT } from './i18n'
 import SafeLauncher from './screens/SafeLauncher'
+import SnippingTool, { OPEN_FILES_EVENT } from './screens/SnippingTool'
+import TextContextMenu from './components/TextContextMenu'
+import { captureApi, SNIP_EDIT_EVENT, snipState, type SnipMode } from './lib/captureApi'
 
 // `?mode=installer` boots the live-ISO installer; `?mode=recovery` the recovery launcher.
 const mode = new URLSearchParams(location.search).get('mode')
@@ -34,6 +37,18 @@ export default function App() {
   // An archive opened from elsewhere (Files is the default handler for archive types): open it in Files.
   const [archive, setArchive] = useState<{ root: string; rel: string; n: number } | null>(null)
   useEffect(() => os.onOpenArchive((at) => { setArchive({ ...at, n: Date.now() }); setWin('files') }), [])
+  // Files at a folder (the Snipping Tool's "Show in Files"), and the Snipping Tool on a kept screenshot.
+  const [folder, setFolder] = useState<{ root: string; rel: string; n: number } | null>(null)
+  const [shotId, setShotId] = useState(0)
+  useEffect(() => {
+    const files = (e: Event) => { const d = (e as CustomEvent<{ root: string; rel: string }>).detail; setFolder({ ...d, n: Date.now() }); setWin('files') }
+    const edit = (e: Event) => setShotId(Number((e as CustomEvent<number>).detail) || 0)
+    window.addEventListener(OPEN_FILES_EVENT, files)
+    window.addEventListener(SNIP_EDIT_EVENT, edit)
+    return () => { window.removeEventListener(OPEN_FILES_EVENT, files); window.removeEventListener(SNIP_EDIT_EVENT, edit) }
+  }, [])
+  // New in the Snipping Tool: the window closes (the shell goes below the apps) and the snip opens back in it.
+  const newSnip = (mode: SnipMode, delay: number) => { snipState.fromApp = true; setWin(null); void captureApi?.snipStart(mode, delay) }
   const [installing, setInstalling] = useState(mode === 'installer')
   const inSession = (state === 'active' && !firstRun) || state === 'locked' || state === 'suspending'
   const notes = useNotices(inSession)
@@ -61,7 +76,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (state !== 'active') return
-      if (e.metaKey && e.key.toLowerCase() === 'l') { e.preventDefault(); void os.lock(); send('lock') }
+      if (e.metaKey && e.key.toLowerCase() === 'l') { e.preventDefault(); void requestLock(() => os.lock(), () => send('lock')) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -86,11 +101,12 @@ export default function App() {
     case 'active':
       if (firstRun) return <FirstRun userName={realName || displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
       return (
-        <Desktop user={user} onLock={() => { void os.lock(); send('lock') }} onLogout={() => { void os.logout(); send('logout') }} onOpen={setWin} notes={notes}>
-          {win === 'files' && <Files archive={archive} onClose={() => { setWin(null); setArchive(null) }} />}
+        <Desktop user={user} fullName={realName || undefined} onLock={() => { void requestLock(() => os.lock(), () => send('lock')) }} onLogout={() => { void os.logout(); if (!(window as { worksuite?: unknown }).worksuite) send('logout') /* Electron: the session ends; never the preview greeter */ }} onOpen={setWin} notes={notes}>
+          {win === 'files' && <Files archive={archive} folder={folder} onClose={() => { setWin(null); setArchive(null); setFolder(null) }} />}
           {win === 'appcenter' && <AppCenter onClose={() => setWin(null)} />}
           {win === 'settings' && <Settings onClose={() => setWin(null)} />}
           {win === 'monitor' && <Monitor onClose={() => setWin(null)} />}
+          {win === 'snip' && <SnippingTool shotId={shotId} onNew={newSnip} onClose={() => { setWin(null); setShotId(0) }} />}
         </Desktop>
       )
   }

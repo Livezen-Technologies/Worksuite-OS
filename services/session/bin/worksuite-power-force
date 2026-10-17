@@ -1,0 +1,47 @@
+#!/bin/sh
+# "Restart anyway" / "Shut down anyway" (shell/electron/sessionHost.ts forcePower). Run as root through pkexec, polkit
+# action lk.worksuite.power-force, which the active local user has without a password.
+#   worksuite-power-force reboot|poweroff
+# systemd 257's logind obeys every "block" inhibitor, the caller's own too (it used to ignore those), so an ordinary
+# user restarting past their own app's inhibitor was asked for an administrator. This helper restarts past the
+# caller's OWN inhibitors without asking. When someone else is signed in, or another user's or a service's inhibitor
+# blocks, it asks for an administrator first: ONE prompt in WorkSuite's agent (lk.worksuite.power-force-admin).
+set -eu
+SYSTEMCTL=${WORKSUITE_SYSTEMCTL:-systemctl}
+case "${1:-}" in
+    reboot|poweroff) ;;
+    *) echo "usage: worksuite-power-force reboot|poweroff" >&2; exit 2 ;;
+esac
+
+# Whether anything but the caller stands in the way: prints "others" or "own".
+others() {
+    { busctl --json=short call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager ListInhibitors 2>/dev/null || echo '{}'
+      echo; loginctl list-sessions --json=short 2>/dev/null || echo '[]'; } | python3 -Es -c '
+import json, sys
+uid = int(sys.argv[1])
+lines = [l for l in sys.stdin.read().splitlines() if l.strip()]
+try:
+    inh = (json.loads(lines[0]).get("data") or [[]])[0]
+    sessions = json.loads(lines[1])
+except (ValueError, IndexError, AttributeError):
+    print("others"); sys.exit()
+blocking = [i for i in inh if "shutdown" in str(i[0]).split(":") and str(i[3]).startswith("block") and int(i[4]) != uid]
+people = [s for s in sessions if str(s.get("class", "")).startswith("user") and int(s.get("uid", uid)) != uid]
+print("others" if blocking or people else "own")' "$1"
+}
+
+# pkexec sets PKEXEC_UID; run directly by root there is no one to ask.
+if [ -n "${PKEXEC_UID:-}" ] && [ "$(others "$PKEXEC_UID")" != own ]; then
+    # pkexec exec'd this helper, so the parent is the program that asked (the shell).
+    rc=0
+    pkcheck --action-id lk.worksuite.power-force-admin --process "$PPID" --allow-user-interaction >/dev/null 2>&1 || rc=$?
+    case $rc in
+        0) ;;
+        3) exit 126 ;;   # dismissed, as pkexec reports a cancelled prompt
+        *) exit 127 ;;   # not authorized
+    esac
+fi
+# Root's own call to logind still goes through polkit (systemd 257 asks polkit about ignoring inhibitors, and other
+# people's sessions, even for root; polkitd 126 does not wave root through): 50-worksuite-power.rules allows root those
+# actions, and --no-ask-password keeps any leftover check from turning into a second prompt in the session's agent.
+exec "$SYSTEMCTL" "$1" --no-wall --check-inhibitors=no --no-ask-password

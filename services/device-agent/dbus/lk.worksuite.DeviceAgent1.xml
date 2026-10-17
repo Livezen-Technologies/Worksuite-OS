@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
   "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
-<!-- System bus: lk.worksuite.DeviceAgent1 at /lk/worksuite/DeviceAgent1.
+<!-- Served by worksuite-device-agent (src/dbus.ts; ACTIONS maps each method to its polkit action). System bus: lk.worksuite.DeviceAgent1 at /lk/worksuite/DeviceAgent1.
      Remote commands arrive from the server only; this bus API is for local UI (Settings > About this device). -->
 <node name="/lk/worksuite/DeviceAgent1">
   <interface name="lk.worksuite.DeviceAgent1">

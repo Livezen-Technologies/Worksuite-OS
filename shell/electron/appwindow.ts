@@ -9,7 +9,7 @@ import path from 'node:path'
 import { brokerCall } from './broker'
 import { deviceCredential, deviceInfo } from './device'
 import {
-  allowedOrigins, appAuthHeaders, linkRequest, loadSession, navDecision, resolveLink, screenShareAllowed, signInTarget, startUrl, wantsToken,
+  allowedOrigins, appAuthHeaders, appProcessNames, isPrintShortcut, linkRequest, loadSession, navDecision, resolveLink, screenShareAllowed, signInTarget, startUrl, wantsToken,
   type AppRequest, type Fetch, type Session, type WebApp,
 } from './webapps'
 import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
@@ -23,9 +23,10 @@ const TITLE: Record<string, string> = { mail: 'Mail', calendar: 'Calendar', chat
 
 /** Must run before app 'ready'. Returns false when another process already shows this module (it gets the request). */
 export function prepareAppMode(req: AppRequest): boolean {
-  app.setName(`worksuite-${req.id}`)
+  const names = appProcessNames(req.id, TITLE[req.id])
+  app.setName(names.name)
   // Linux-only (undocumented in the typings): the Wayland app_id, matching the .desktop file.
-  ;(app as unknown as { setDesktopName?: (n: string) => void }).setDesktopName?.(`worksuite-${req.id}.desktop`)
+  ;(app as unknown as { setDesktopName?: (n: string) => void }).setDesktopName?.(names.desktop)
   app.commandLine.appendSwitch('class', `worksuite-${req.id}`)
   // Screen capture on Wayland goes through the xdg-desktop-portal ScreenCast path (PipeWire), SRS §7.1.
   app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer')
@@ -65,6 +66,8 @@ export function runAppMode(req: AppRequest) {
       return { action: 'deny' }
     })
     wc.on('did-create-window', (child) => guard(child, origins))
+    // Printing like any desktop app: Ctrl+P (and window.print() from the page) opens the system print dialog.
+    wc.on('before-input-event', (e, input) => { if (isPrintShortcut(input)) { e.preventDefault(); wc.print({}) } })
   }
 
   function webPrefs(accountId?: string) {

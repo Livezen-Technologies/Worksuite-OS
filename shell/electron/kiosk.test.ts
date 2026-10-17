@@ -1,6 +1,6 @@
 // Kiosk mode (WSOS-AUTH-002): config parsing, the web kiosk's URL allowlist, webPreferences, blocked keys, exit codes.
 import { describe, expect, it } from 'vitest'
-import { blockedKey, desktopExecArgv, exitResult, isExitGesture, kioskWebPreferences, parseKioskConfig, restartDelay, tapCounter, urlAllowlist } from './kiosk'
+import { blockedKey, desktopExecArgv, exitResult, isExitGesture, kioskWebPreferences, parseKioskConfig, restartDelay, screenState, tapCounter, urlAllowlist } from './kiosk'
 
 const cfg = { app: { type: 'url' as const, url: 'https://visitors.example.com/check-in' }, allowed_urls: ['https://*.cdn.example.net', 'https://help.example.org/kiosk', 'http://insecure.example.com', 'https://*'] }
 const key = (k: string, m: Partial<{ control: boolean; alt: boolean; shift: boolean; meta: boolean }> = {}) => ({ type: 'keyDown', key: k, control: false, alt: false, shift: false, meta: false, ...m })
@@ -90,5 +90,15 @@ describe('kiosk app supervision and exit', () => {
     expect(desktopExecArgv('sh -c "rm -rf ~"')).toBeNull()
     expect(desktopExecArgv('env FOO=1 app')).toBeNull()
     expect(desktopExecArgv('')).toBeNull()
+  })
+})
+
+describe('night screen-off notice', () => {
+  it('reads only "off HH:MM" from worksuite-kiosk-ctl', () => {
+    expect(screenState('off 07:00\n')).toBe('07:00')
+    expect(screenState('on\n')).toBeNull()
+    expect(screenState('off 7:00')).toBeNull()
+    expect(screenState('off 07:00; reboot')).toBeNull()
+    expect(screenState('')).toBeNull()
   })
 })

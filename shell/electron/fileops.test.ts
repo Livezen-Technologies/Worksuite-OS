@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { errCode, freeName, jobs, mkdirIn, removeIn, recent, renameIn, search, setStar, starredHits, trash, trashDelete, trashList, trashRestore, type JobEvent } from './fileops'
+import { deviceInfo, errCode, freeName, jobs, mkdirIn, removeIn, recent, renameIn, search, setStar, starredHits, trash, trashDelete, trashList, trashRestore, type JobEvent } from './fileops'
 
 describe('fileops', () => {
   let home: string
@@ -30,6 +30,31 @@ describe('fileops', () => {
     expect(mkdirIn(env(), 'home', 'Documents', '../x').ok).toBe(false)
     expect(await renameIn(env(), 'home', 'Documents/notes.md', 'Meeting notes.md')).toEqual({ ok: true, value: 'Documents/Meeting notes.md' })
     expect((await renameIn(env(), 'home', 'Documents/Meeting notes.md', 'Budget 2027.xlsx')).ok).toBe(false)
+  })
+
+  it('Undo after Delete restores from the .trashinfo files, whatever else is in the Trash', async () => {
+    writeFileSync(path.join(home, 'Documents', 'ශ්‍රී 100% #1.txt'), 's')
+    const r = await trash(env(), 'home', ['Documents/ශ්‍රී 100% #1.txt', 'Documents/Projects'])
+    expect(r.ok).toBe(true)
+    const ids = r.ok ? r.value.ids : []
+    // Another app's broken entry (unreadable info, a folder where a file should be) used to make the whole restore fail.
+    mkdirSync(path.join(home, '.local/share/Trash/info/broken.trashinfo'))
+    writeFileSync(path.join(home, '.local/share/Trash/info/nofile.trashinfo'), '[Trash Info]\nPath=/etc/passwd\n')
+    expect(await trashRestore(env(), ids)).toEqual({ ok: true, value: { restored: 2, skipped: 0 } })
+    expect(readFileSync(path.join(home, 'Documents', 'ශ්‍රී 100% #1.txt'), 'utf8')).toBe('s')
+    expect(readFileSync(path.join(home, 'Documents', 'Projects', 'Marketing budget.xlsx'), 'utf8')).toBe('m')
+    expect(existsSync(path.join(home, '.local/share/Trash/info/Projects.trashinfo'))).toBe(false)
+    // Same name trashed twice: each Undo restores its own copy, and never over a file that came back meanwhile.
+    const a = await trash(env(), 'home', ['Documents/notes.md'])
+    writeFileSync(path.join(home, 'Documents', 'notes.md'), 'second')
+    const b = await trash(env(), 'home', ['Documents/notes.md'])
+    expect(a.ok && b.ok && a.value.ids[0] !== b.value.ids[0]).toBe(true)
+    expect(await trashRestore(env(), b.ok ? b.value.ids : [])).toEqual({ ok: true, value: { restored: 1, skipped: 0 } })
+    expect(readFileSync(path.join(home, 'Documents', 'notes.md'), 'utf8')).toBe('second')
+    expect(await trashRestore(env(), a.ok ? a.value.ids : [])).toEqual({ ok: true, value: { restored: 0, skipped: 1 } })
+    // Outside the places Files writes to, or a made-up id: skipped.
+    writeFileSync(path.join(home, '.local/share/Trash/files/nofile'), 'x')
+    expect(await trashRestore(env(), ['nofile', '../x', 'missing'])).toEqual({ ok: true, value: { restored: 0, skipped: 3 } })
   })
 
   it('moves to the freedesktop Trash, lists, restores and deletes', async () => {
@@ -110,5 +135,16 @@ describe('fileops', () => {
   it('maps errno codes to the reasons Files explains', () => {
     const e = (code: string) => Object.assign(new Error(code), { code })
     expect(['ENOSPC', 'EACCES', 'EROFS', 'EIO', 'EBUSY', 'ENOENT', 'EXDEV'].map((c) => errCode(e(c)))).toEqual(['no_space', 'permission', 'permission', 'io', 'busy', 'missing', 'failed'])
+  })
+})
+
+describe('storage card device name', () => {
+  it('marks a LUKS mapping as encrypted instead of showing luks-<uuid>', () => {
+    const d = deviceInfo('/dev/mapper/luks-3f1c9a', {}, (p) => p)
+    expect(d.encrypted).toBe(true)
+    expect(d.label).toBe('')
+  })
+  it('uses the filesystem label when there is one', () => {
+    expect(deviceInfo('/dev/vda2', { '/dev/vda2': 'WORKSUITE' }, (p) => p)).toEqual({ device: 'vda2', label: 'WORKSUITE', encrypted: false })
   })
 })

@@ -5,6 +5,8 @@ if [ "$1" = configure ]; then
   # overwritten once present, and it must exist before the PAM profiles name it.
   install -d -m 0755 /etc/worksuite
   [ -e /etc/worksuite/faillock.conf ] || install -m 0644 /usr/share/worksuite/faillock.conf /etc/worksuite/faillock.conf
+  # gtklock checks the password as the user, so pam_faillock must be able to read its conf= file.
+  chmod 0644 /etc/worksuite/faillock.conf
   # Device PIN / security-key sign-in (Settings > Users): verifiers stay root-only; the PIN and u2f PAM profiles are
   # "Default: no" and worksuite-signin turns them on only once someone sets a PIN or adds a key.
   install -d -m 0755 /var/lib/worksuite /var/lib/worksuite/signin

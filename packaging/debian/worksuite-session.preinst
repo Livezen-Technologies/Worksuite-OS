@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+# /etc/pam.d/greetd is WorkSuite's (services/session/pam/greetd); greetd's own file is kept as greetd.distrib.
+if [ "$1" = install ] || [ "$1" = upgrade ]; then
+  dpkg-divert --package worksuite-session --add --rename --divert /etc/pam.d/greetd.distrib /etc/pam.d/greetd
+fi
+#DEBHELPER#
+exit 0

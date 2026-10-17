@@ -23,6 +23,11 @@ check "version order is not lexical" '! echo "$out" | grep -q "previous kernel 6
 mkdir -p "$t/empty"
 check "no kernels, no entries" '[ -z "$(WORKSUITE_BOOT_DIR="$t/empty" sh "$rb/grub/42_worksuite_recovery")" ]'
 
+check "no boot-details entry unless an administrator turned it on" '! echo "$out" | grep -q "show boot details"'
+: > "$t/details"
+det=$(WORKSUITE_BOOT_DIR="$t/boot" WORKSUITE_BOOT_DETAILS_FLAG="$t/details" GRUB_DEVICE_UUID=1234-abcd sh "$rb/grub/42_worksuite_recovery")
+check "boot-details entry: newest kernel, no splash, systemd status shown" \
+  'echo "$det" | grep -q "WorkSuite OS (show boot details)" && echo "$det" | grep "vmlinuz-6.12.41" | grep -q "nosplash systemd.show_status=true" && ! echo "$det" | grep "show_status=true" | grep -q " quiet"'
 check "row icons: recovery and previous classes" 'echo "$out" | grep -q "class ws-recovery" && echo "$out" | grep -q "class ws-previous"'
 
 # G13 failed-start fallback
@@ -65,6 +70,22 @@ check "interrupted dpkg is repaired" '[ "$(cat "$t/run/boot-repair")" = repaired
 check "requested repair runs and clears the flag" '[ "$(cat "$t/run/boot-repair")" = repaired ] && [ ! -e "$t/flag" ]'
 : > "$t/dirty"; : > "$t/broken"
 check "failed repair exits non-zero (unit isolates recovery)" '! repair && [ "$(cat "$t/run/boot-repair")" = failed ]'
+
+# GRUB theme on /boot and the locked command line (E2E: stock menu on encrypted installs; Esc reached "grub>")
+check "recovery and previous-kernel entries boot without the GRUB superuser" '[ "$(echo "$out" | grep "^menuentry" | grep -vc -- "--unrestricted")" = 0 ]'
+check "GRUB_THEME is on the unencrypted /boot" 'grep -qx "GRUB_THEME=/boot/grub/themes/worksuite/theme.txt" "$here/branding/grub/worksuite.cfg"'
+mkdir -p "$t/theme" "$t/tb/grub/themes/worksuite"; echo x > "$t/theme/theme.txt"; echo f > "$t/theme/f.pf2"; echo stale > "$t/tb/grub/themes/worksuite/old.png"
+WORKSUITE_GRUB_THEME_SRC="$t/theme" WORKSUITE_BOOT_DIR="$t/tb" sh "$here/branding/grub/worksuite-grub-theme"
+check "theme copied to /boot/grub/themes/worksuite (fonts too, stale files gone)" '[ -f "$t/tb/grub/themes/worksuite/theme.txt" ] && [ -f "$t/tb/grub/themes/worksuite/f.pf2" ] && [ ! -e "$t/tb/grub/themes/worksuite/old.png" ]'
+check "installer and branding postinst install the theme before update-grub" 'grep -q worksuite-grub-theme "$here/installer/modules/shellprocess-worksuite.conf" && grep -q worksuite-grub-theme "$here/packaging/debian/worksuite-branding.postinst" && grep -q worksuite-grub-theme "$here/packaging/debian/rules"'
+mkdir -p "$t/grubd" "$t/pbin"
+printf '#!/bin/sh\ncat >/dev/null; echo "PBKDF2 hash of your password is grub.pbkdf2.sha512.10000.AB.CD"\n' > "$t/pbin/mkpw"; chmod +x "$t/pbin/mkpw"
+echo 'CLASS="--class gnu-linux --class gnu --class os"' > "$t/grubd/10_linux"
+lock() { WORKSUITE_GRUB_D="$t/grubd" WORKSUITE_GRUB_PBKDF2="$t/pbin/mkpw" sh "$rb/grub/01_worksuite_lock"; }
+check "unpatched 10_linux: no lock (it would lock the normal boot)" '[ -z "$(lock)" ]'
+echo 'CLASS="--unrestricted --class gnu-linux --class gnu --class os"' > "$t/grubd/10_linux"
+check "patched 10_linux: superuser with a random password" 'lock | grep -q "^set superusers=\"worksuite-boot\"" && lock | grep -q "^password_pbkdf2 worksuite-boot grub.pbkdf2.sha512.10000.AB.CD$"'
+check "image patches 10_linux entries and submenu with --unrestricted" 'grep -q "CLASS=\"--unrestricted --class gnu-linux" "$here/live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot" && grep -q "01_worksuite_lock etc/grub.d/" "$here/packaging/debian/worksuite-recovery-boot.install"'
 
 # Units
 check "recovery target isolatable and conflicts with greeter" 'grep -q "^AllowIsolate=yes" "$rb/systemd/worksuite-recovery.target" && grep -q "Conflicts=greetd.service" "$rb/systemd/worksuite-recovery.target"'

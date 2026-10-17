@@ -1,51 +1,38 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { deviceInfo, enrollDevice } from './device'
+import { deviceInfo, enrollDevice, hostSpecs, type EnrollCall } from './device'
 
-// A stand-in pkexec on PATH: records argv and stdin, then behaves as told by $FAKE_PKEXEC.
-describe('enrollDevice', () => {
+// A stand-in for the lk.worksuite.DeviceAgent1.Enroll call: records its arguments and answers as told.
+describe('enrollDevice (lk.worksuite.DeviceAgent1.Enroll, WSOS-ARC-002)', () => {
   let dir: string
-  const oldPath = process.env.PATH
   beforeEach(() => {
     dir = mkdtempSync(path.join(tmpdir(), 'ws-enroll-'))
-    writeFileSync(path.join(dir, 'pkexec'), `#!/bin/sh
-printf '%s\\n' "$@" > "${dir}/argv"
-cat > "${dir}/stdin"
-case "$FAKE_PKEXEC" in
-  ok) echo '"dev-9"'; exit 0 ;;
-  cancel) exit 126 ;;
-  already) echo 'error: ALREADY_ENROLLED' >&2; exit 1 ;;
-  *) echo 'error: 400 ENROLLMENT_TOKEN_INVALID' >&2; exit 1 ;;
-esac
-`)
-    chmodSync(path.join(dir, 'pkexec'), 0o755)
     writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ managed: true, org_name: 'Livezen Technologies' }))
-    process.env.PATH = `${dir}:${oldPath}`
   })
-  afterEach(() => { process.env.PATH = oldPath; rmSync(dir, { recursive: true, force: true }) })
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
+  const fake = (r: Awaited<ReturnType<EnrollCall>>) => { const seen: string[][] = []; const call: EnrollCall = async (u, t) => { seen.push([u, t]); return r }; return { seen, call } }
 
-  it('runs the agent CLI through pkexec with fixed arguments and the code on stdin only', async () => {
-    process.env.FAKE_PKEXEC = 'ok'
-    const r = await enrollDevice('https://work.livezentech.com', ' LZT-7Q4K-92XM ', path.join(dir, 'status.json'))
+  it('calls the named D-Bus method with the code as an argument (never argv)', async () => {
+    const f = fake({ ok: true, id: 'dev-9' })
+    const r = await enrollDevice('https://work.livezentech.com', ' LZT-7Q4K-92XM ', path.join(dir, 'status.json'), f.call)
     expect(r).toEqual({ ok: true, value: { device_id: 'dev-9', org_name: 'Livezen Technologies' } })
-    expect(readFileSync(path.join(dir, 'argv'), 'utf8').trim().split('\n')).toEqual(['/usr/bin/worksuite-device-agent', 'enroll', '--server', 'https://work.livezentech.com/'])
-    expect(readFileSync(path.join(dir, 'stdin'), 'utf8')).toBe('LZT-7Q4K-92XM\n')
+    expect(f.seen).toEqual([['https://work.livezentech.com/', 'LZT-7Q4K-92XM']])
   })
 
-  it('maps cancelled authentication, already-enrolled and rejected codes', async () => {
-    process.env.FAKE_PKEXEC = 'cancel'
-    expect(await enrollDevice('https://x.example', 'ABCD-1234')).toEqual({ ok: false, error: 'auth_cancelled' })
-    process.env.FAKE_PKEXEC = 'already'
-    expect((await enrollDevice('https://x.example', 'ABCD-1234', path.join(dir, 'status.json'))).ok).toBe(true)
-    process.env.FAKE_PKEXEC = 'reject'
-    expect(await enrollDevice('https://x.example', 'ABCD-1234')).toEqual({ ok: false, error: 'enrollment_rejected' })
+  it('maps polkit refusal, a missing agent, already-enrolled and rejected codes', async () => {
+    expect(await enrollDevice('https://x.example', 'ABCD-1234', undefined, fake({ ok: false, name: 'lk.worksuite.Error.NotAuthorized', message: '' }).call)).toEqual({ ok: false, error: 'auth_cancelled' })
+    expect(await enrollDevice('https://x.example', 'ABCD-1234', undefined, fake({ ok: false, name: 'org.freedesktop.DBus.Error.ServiceUnknown', message: '' }).call)).toEqual({ ok: false, error: 'agent_unavailable' })
+    expect((await enrollDevice('https://x.example', 'ABCD-1234', path.join(dir, 'status.json'), fake({ ok: false, name: 'lk.worksuite.Error.Failed', message: 'ALREADY_ENROLLED' }).call)).ok).toBe(true)
+    expect(await enrollDevice('https://x.example', 'ABCD-1234', undefined, fake({ ok: false, name: 'lk.worksuite.Error.Failed', message: 'ENROLL_FAILED' }).call)).toEqual({ ok: false, error: 'enrollment_rejected' })
   })
 
-  it('refuses http servers and odd codes before running anything', async () => {
-    expect(await enrollDevice('http://x.example', 'ABCD-1234')).toEqual({ ok: false, error: 'insecure_url' })
-    expect(await enrollDevice('https://x.example', 'abc; rm -rf /')).toEqual({ ok: false, error: 'invalid_code' })
+  it('refuses http servers and odd codes before calling anything', async () => {
+    const f = fake({ ok: true, id: 'x' })
+    expect(await enrollDevice('http://x.example', 'ABCD-1234', undefined, f.call)).toEqual({ ok: false, error: 'insecure_url' })
+    expect(await enrollDevice('https://x.example', 'abc; rm -rf /', undefined, f.call)).toEqual({ ok: false, error: 'invalid_code' })
+    expect(f.seen).toEqual([])
   })
 })
 
@@ -66,5 +53,15 @@ describe('deviceInfo', () => {
     writeFileSync(p, JSON.stringify({ require_enrollment: 'yes', server: 'http://insecure.example' }))
     expect(deviceInfo('/nonexistent/status.json', p).provisioning).toEqual({ require_enrollment: false, server: null })
     rmSync(dir, { recursive: true, force: true })
+  })
+})
+
+describe('Settings › About processor and memory', () => {
+  it('reports the CPU model, core count and memory', () => {
+    expect(hostSpecs(() => [{ model: ' Intel(R)  Core(TM) i5 ' }, { model: 'x' }], () => 8e9)).toEqual({ cpu_model: 'Intel(R) Core(TM) i5', cpu_cores: 2, memory_bytes: 8e9 })
+    expect(hostSpecs(() => { throw new Error('no /proc') }, () => 0)).toEqual({ cpu_model: null, cpu_cores: null, memory_bytes: null })
+  })
+  it('comes with deviceInfo', () => {
+    expect(deviceInfo('/nonexistent', '/nonexistent').specs.cpu_cores).toBeGreaterThan(0)
   })
 })

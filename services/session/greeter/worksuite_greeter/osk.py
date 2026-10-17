@@ -85,3 +85,34 @@ button.osk-key:active { background: #1F6BFF; }
 button.osk-space { min-width: 280px; }
 button.osk-toggle { background: rgba(255,255,255,0.08); border-radius: 10px; min-width: 44px; min-height: 44px; border: none; color: #FFFFFF; }
 """
+
+
+# The toggle's keyboard glyph is drawn, not looked up: the greeter runs without an icon theme that has
+# input-keyboard-symbolic (or an SVG pixbuf loader), and GTK then shows its broken-image icon.
+def icon_rects(w, h):
+    """Outline and keys of a keyboard glyph in a w×h box: [(x, y, width, height, filled), ...]."""
+    bw, bh = w * 0.9, h * 0.62
+    x0, y0 = (w - bw) / 2, (h - bh) / 2
+    out = [(x0, y0, bw, bh, False)]
+    kw, kh, gap = bw / 8, bh / 6, bw / 16
+    for row in range(2):
+        for col in range(5):
+            out.append((x0 + gap + col * (kw + gap * 0.6), y0 + bh * 0.2 + row * (kh + bh * 0.12), kw, kh, True))
+    out.append((x0 + bw * 0.25, y0 + bh * 0.68, bw * 0.5, kh, True))
+    return out
+
+
+def icon(Gtk, size=18):
+    """The keyboard glyph from plain GTK boxes styled in CSS (no cairo: python3-gi-cairo is not in the image, and a
+    draw function then renders nothing)."""
+    w, h = size, size
+    outline = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, css_classes=["osk-glyph"],
+                      halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+    for row in range(2):
+        r = Gtk.Box(spacing=2, halign=Gtk.Align.CENTER)
+        for _col in range(5):
+            r.append(Gtk.Box(css_classes=["osk-glyph-key"]))
+        outline.append(r)
+    outline.append(Gtk.Box(css_classes=["osk-glyph-space"], halign=Gtk.Align.CENTER))
+    outline.set_size_request(int(w * 1.3), int(h * 0.85))
+    return outline

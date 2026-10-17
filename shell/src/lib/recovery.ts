@@ -1,6 +1,6 @@
 // Recovery screens (docs/design/boot-install R1–R6): pure helpers for the recovery key, startup repair and
 // snapshots, plus the screen state machine. Nothing here touches the key beyond formatting it in memory.
-import { localeTag, t } from '../i18n'
+import { formatDate, formatDecimal, formatTime, t } from '../i18n'
 
 // --- Recovery key (installer/modules/worksuiterecovery: 8 groups of 5 characters from this alphabet) -----------
 export const KEY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -96,24 +96,23 @@ export function repairSummary(rows: readonly CheckRow[]): { fixed: number; probl
 // --- Snapshots ----------------------------------------------------------------------------------------------
 export interface SnapshotInfo { id: string; title: string; created: number; kind: string; os_version: string; last_working: boolean }
 
-const pad = (n: number) => String(n).padStart(2, '0')
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 
 /** "Today, 02:03 · automatic" / "Sun 11 Oct, 03:00 · automatic". */
 export function snapshotDesc(s: SnapshotInfo, now = new Date()): string {
   const d = new Date(s.created)
-  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const time = formatTime(d)
   const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
   const day = sameDay(d, now) ? t('rec.snap.today') : sameDay(d, yesterday) ? t('rec.snap.yesterday')
-    : `${d.toLocaleDateString(localeTag(), { weekday: 'short' })} ${d.getDate()} ${d.toLocaleDateString(localeTag(), { month: 'short' })}`
+    : formatDate(d, { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
   return `${day}, ${time} · ${s.kind}`
 }
 
 /** "02:03 today" / "11 Oct" for the "Apps installed after …" note. */
 export function snapshotWhen(s: SnapshotInfo, now = new Date()): string {
   const d = new Date(s.created)
-  if (sameDay(d, now)) return t('rec.snap.timeToday', { time: `${pad(d.getHours())}:${pad(d.getMinutes())}` })
-  return `${d.getDate()} ${d.toLocaleDateString(localeTag(), { month: 'short' })}`
+  if (sameDay(d, now)) return t('rec.snap.timeToday', { time: formatTime(d) })
+  return formatDate(d, { day: 'numeric', month: 'short' })
 }
 
 /** Preselect the last snapshot that booted, else the newest. */
@@ -156,5 +155,5 @@ export function recoveryErrorText(code: string): string {
 }
 
 export function formatGiB(bytes: number | null): string {
-  return bytes == null ? '' : `${(bytes / 2 ** 30).toFixed(1)} GiB`
+  return bytes == null ? '' : `${formatDecimal(bytes / 2 ** 30, 1)} GiB`
 }

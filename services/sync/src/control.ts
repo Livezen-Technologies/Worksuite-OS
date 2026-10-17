@@ -6,9 +6,10 @@ import type { SyncService } from './service.ts';
 import type { TokenProvider } from './transport.ts';
 import type { FileLocks } from './locks.ts';
 
+const PREF_ID = /^[a-z][a-z0-9._-]{0,63}$/;
 type Request = { id?: unknown; method: string; params?: Record<string, unknown> };
 
-/** Serve lk.worksuite.Sync1-equivalent methods for the shell: Status, ListFailed, RetryFailed, SyncNow, Unsent, ExportUnsent, Forget, FileStates, DriveSummary. */
+/** Serve lk.worksuite.Sync1-equivalent methods for the shell: Status, ListFailed, RetryFailed, SyncNow, Unsent, ExportUnsent, Forget, FileStates, DriveSummary, GetPreference, SetPreference. */
 export function serveControl(path: string, svc: SyncService, exportDir = '.', locks: FileLocks | null = null): Server {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   rmSync(path, { force: true });
@@ -28,7 +29,9 @@ export function serveControl(path: string, svc: SyncService, exportDir = '.', lo
     });
     sock.on('error', () => {});
   });
-  server.listen(path, () => chmodSync(path, 0o600));
+  // umask first, then chmod: the socket is never reachable by another user, not even for an instant.
+  const old = process.umask(0o177);
+  server.listen(path, () => { process.umask(old); chmodSync(path, 0o600); });
   return server;
 }
 
@@ -55,6 +58,16 @@ async function dispatch(svc: SyncService, line: string, exportDir: string, locks
       if (typeof p !== 'string' || p.length === 0 || p.length > 4096 || p.startsWith('/') || p.split('/').some((s) => s === '..' || s === '.')) return { id, error: 'invalid_argument' };
       if (!locks) return { id, error: 'unavailable' };
       return { id, result: req.method === 'LockFile' ? await locks.lock(p) : await locks.unlock(p) };
+    }
+    // Shell preferences (Shell ENH-01: favourites, pins, order), readable offline from the local store.
+    case 'GetPreference':
+    case 'SetPreference': {
+      const o = req.params?.object_id;
+      if (typeof o !== 'string' || !PREF_ID.test(o)) return { id, error: 'invalid_argument' };
+      if (req.method === 'GetPreference') return { id, result: svc.getPreference(o) };
+      const data = req.params?.data;
+      if (data === undefined || JSON.stringify(data).length > 16 * 1024) return { id, error: 'invalid_argument' };
+      return svc.setPreference(o, data) ? { id, result: true } : { id, error: 'not_signed_in' };
     }
     case 'SyncNow': void svc.syncNow(); return { id, result: true };
     case 'RetryFailed': {

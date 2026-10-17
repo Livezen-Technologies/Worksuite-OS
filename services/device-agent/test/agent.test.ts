@@ -259,6 +259,11 @@ test('policy enforcement: USB storage, Bluetooth, lock timeout and faillock map 
   assert.match(pinOff.files[ENFORCED_PATHS.signinPolicy]!, /^PIN_MIN_LENGTH=8$/m);
   assert.match(policyEnforcement({ version: 'p', signature: 'x', pin_min_length: 99 }).files[ENFORCED_PATHS.signinPolicy]!, /^PIN_MIN_LENGTH=6$/m);
   assert.equal(policyEnforcement({ version: 'p', signature: 'x', allow_pin: 'no' as unknown as boolean, pin_min_length: '4\nALLOW_PIN=1' as unknown as number }).files[ENFORCED_PATHS.signinPolicy], signinPolicyConf(true, 6));
+  // On-device AI (services/ai): no file unless the policy sets it; off; an allow-list with only well-formed ids.
+  assert.equal(none.files[ENFORCED_PATHS.aiPolicy], null);
+  assert.equal(ro.files[ENFORCED_PATHS.aiPolicy], null);
+  assert.deepEqual(JSON.parse(policyEnforcement({ version: 'p', signature: 'x', ai_assistant: false }).files[ENFORCED_PATHS.aiPolicy]!), { enabled: false, models: null });
+  assert.deepEqual(JSON.parse(policyEnforcement({ version: 'p', signature: 'x', ai_models: ['qwen3.5-2b-q4', '../x', 'A'] }).files[ENFORCED_PATHS.aiPolicy]!), { enabled: true, models: ['qwen3.5-2b-q4'] });
   // Only integers ever reach the lock file that worksuite-idle reads.
   assert.equal(policyEnforcement({ version: 'p', signature: 'x', lock_timeout_max_s: '60; rm -rf /' as unknown as number }).files[ENFORCED_PATHS.lockPolicy], null);
 });
@@ -289,6 +294,41 @@ test('a failure applying the policy is audited and does not reject the verified 
   await w.agent.enroll('https://work.livezentech.com', 'tok-123');
   assert.equal(w.agent.status().policies?.usb_storage, 'block');
   w.cleanup();
+});
+
+test('whatsapp policy reaches the shell through the status (off, or not set)', async () => {
+  const w = world({ policy: signedPolicy({ version: 'p1', whatsapp: false }) });
+  await w.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(w.agent.status().policies?.whatsapp, false);
+  w.cleanup();
+  const v = world({ policy: signedPolicy({ version: 'p2' }) });
+  await v.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(v.agent.status().policies?.whatsapp, null);
+  v.cleanup();
+});
+
+test('screen capture and clipboard history policies reach the shell through the status (disabled, or not set)', async () => {
+  const w = world({ policy: signedPolicy({ version: 'p1', screen_capture: 'disabled', clipboard_history: 'disabled' }) });
+  await w.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(w.agent.status().policies?.screen_capture, 'disabled');
+  assert.equal(w.agent.status().policies?.clipboard_history, 'disabled');
+  w.cleanup();
+  const v = world({ policy: signedPolicy({ version: 'p2' }) });
+  await v.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(v.agent.status().policies?.screen_capture, null);
+  assert.equal(v.agent.status().policies?.clipboard_history, null);
+  v.cleanup();
+});
+
+test('desktop widgets policy reaches the shell through the status (off, or not set)', async () => {
+  const w = world({ policy: signedPolicy({ version: 'p1', desktop_widgets: false }) });
+  await w.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(w.agent.status().policies?.desktop_widgets, false);
+  w.cleanup();
+  const v = world({ policy: signedPolicy({ version: 'p2' }) });
+  await v.agent.enroll('https://work.livezentech.com', 'tok-123');
+  assert.equal(v.agent.status().policies?.desktop_widgets, null);
+  v.cleanup();
 });
 
 test('offline access period: sign-in refused and sessions locked after N days offline, restored on check-in (WSOS-AUTH-003)', async () => {
@@ -338,7 +378,7 @@ test('kiosk mode: only listed devices become kiosks; USB blocked; verifier kept 
   assert.ok(!JSON.stringify(w.s.published.policy).includes('scrypt'), 'world-readable policy has no verifier');
   assert.equal((w.s.published.policy!.kiosk as { exit_pin_set: boolean }).exit_pin_set, true);
   assert.equal(w.agent.status().policies?.kiosk, true);
-  assert.deepEqual(w.agent.status().kiosk, { user: 'kiosk', app: { type: 'url', url: 'https://visitors.example.com/' }, allowed_urls: [], idle_reset_minutes: 5, show_on_screen_keyboard: false, exit_pin: true });
+  assert.deepEqual(w.agent.status().kiosk, { user: 'kiosk', app: { type: 'url', url: 'https://visitors.example.com/' }, allowed_urls: [], idle_reset_minutes: 5, show_on_screen_keyboard: false, exit_pin: true, orientation: 'landscape', screen_off: null });
   assert.ok(!JSON.stringify(w.agent.status()).includes('scrypt'), 'status has no verifier');
   // Another device of the same org is not a kiosk.
   w.s.policy = signedPolicy({ version: 'p2', kiosk: { ...kiosk, devices: ['dev-2'] } });

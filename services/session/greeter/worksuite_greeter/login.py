@@ -125,10 +125,116 @@ def users(getpwall=pwd.getpwall, min_uid=1000):
     for p in getpwall():
         if p.pw_uid < min_uid or p.pw_uid == 65534 or p.pw_name == "wsadmin":
             continue
+        if 60000 <= p.pw_uid < DIRECTORY_UID_MIN:  # systemd dynamic users, containers: not people
+            continue
         if p.pw_shell.endswith(("nologin", "false")):
             continue
         out.append({"name": p.pw_name, "display": (p.pw_gecos.split(",")[0] or p.pw_name), "directory": p.pw_uid >= DIRECTORY_UID_MIN})
     return sorted(out, key=lambda u: u["display"].lower())
+
+
+KIOSK_ENV = os.environ.get("WORKSUITE_KIOSK_ENV", "/etc/worksuite/kiosk/session.env")
+
+
+def kiosk_user(path=None):
+    """The kiosk account (worksuite-kiosk-apply): it signs in automatically and its password is locked, so it gets no
+    tile on the sign-in screen."""
+    try:
+        with open(path or KIOSK_ENV, encoding="utf-8") as f:
+            for line in f:
+                m = re.fullmatch(r"KIOSK_USER=([a-z_][a-z0-9_.@-]{0,63})", line.strip())
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return None
+
+
+def accounts_locked(names, timeout_ms=800):
+    """Names AccountsService reports as locked (passwd --lock, or disabled): no tile, they cannot sign in. The greeter
+    cannot read /etc/shadow itself. Empty when AccountsService does not answer."""
+    try:
+        from gi.repository import Gio, GLib
+        bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    except Exception:  # noqa: BLE001
+        return set()
+    out = set()
+    for n in names:
+        try:
+            path = bus.call_sync("org.freedesktop.Accounts", "/org/freedesktop/Accounts", "org.freedesktop.Accounts", "FindUserByName",
+                                 GLib.Variant("(s)", (n,)), GLib.VariantType("(o)"), Gio.DBusCallFlags.NONE, timeout_ms, None).unpack()[0]
+            locked = bus.call_sync("org.freedesktop.Accounts", path, "org.freedesktop.DBus.Properties", "Get",
+                                   GLib.Variant("(ss)", ("org.freedesktop.Accounts.User", "Locked")), GLib.VariantType("(v)"),
+                                   Gio.DBusCallFlags.NONE, timeout_ms, None).unpack()[0]
+            if locked:
+                out.add(n)
+        except Exception:  # noqa: BLE001  (no AccountsService, unknown user: keep the tile)
+            continue
+    return out
+
+
+ACCOUNTS_DIR = os.environ.get("WORKSUITE_ACCOUNTS_DIR", "/var/lib/AccountsService")
+LAST_USER = os.environ.get("WORKSUITE_GREETER_LAST_USER", "/var/cache/worksuite-greeter/last-user")
+
+
+def _accounts_entry(name, accounts_dir):
+    """[User] keys of AccountsService's file for this account ({} when there is none)."""
+    out = {}
+    try:
+        with open(os.path.join(accounts_dir, "users", name), encoding="utf-8") as f:
+            section = None
+            for line in f:
+                line = line.strip()
+                if line.startswith("["):
+                    section = line.strip("[]")
+                elif section == "User" and "=" in line:
+                    k, _, v = line.partition("=")
+                    out[k.strip()] = v.strip()
+    except (OSError, UnicodeDecodeError, ValueError):
+        pass
+    return out
+
+
+def user_tiles(accounts, accounts_dir=None, last=None, hidden=()):
+    """User tiles (LoginUsers board): the people from users(), without AccountsService system accounts and without
+    `hidden` (the kiosk account, locked accounts), with AccountsService's real name and picture when it has them, the
+    last person to sign in first."""
+    accounts_dir = accounts_dir or ACCOUNTS_DIR
+    out = []
+    for u in accounts:
+        if u["name"] in hidden:
+            continue
+        a = _accounts_entry(u["name"], accounts_dir)
+        if a.get("SystemAccount", "").lower() == "true":
+            continue
+        icon = a.get("Icon") or os.path.join(accounts_dir, "icons", u["name"])
+        if not (icon and os.path.isfile(icon) and os.access(icon, os.R_OK)):
+            icon = None
+        out.append(dict(u, display=a.get("RealName") or u["display"], icon=icon, initials=initials(a.get("RealName") or u["display"])))
+    if last:
+        out.sort(key=lambda t: t["name"] != last)
+    return out
+
+
+def read_last_user(path=None):
+    try:
+        with open(path or LAST_USER, encoding="utf-8") as f:
+            n = f.read(256).strip()
+        return n if n and "/" not in n else None
+    except OSError:
+        return None
+
+
+def save_last_user(name, path=None):
+    """Remembered for the next start (the greeter user owns the directory; failures do not matter)."""
+    path = path or LAST_USER
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(name)
+        os.replace(tmp, path)
+    except OSError:
+        pass
 
 
 def signin_methods(name, path=None):
@@ -152,10 +258,20 @@ def available_methods(m):
     return ["password"] + [k for k in ("pin", "key") if m.get(k)]
 
 
-def secret_for(password, otp=None, new_password=None):
-    if new_password is not None:
+def secret_for(password, otp=None, new_password=None, framed=True):
+    if new_password is not None and framed:
         return CHANGE_PREFIX + password + SEP + new_password
     return password + (otp or "")
+
+
+def is_local(name, getpwnam=pwd.getpwnam):
+    """An account of this computer (pam_unix), not a directory account (the WorkSuite directory PAM helper)."""
+    if "@" in name:
+        return False
+    try:
+        return getpwnam(name).pw_uid < DIRECTORY_UID_MIN
+    except KeyError:
+        return True
 
 
 class Result:
@@ -166,12 +282,22 @@ class Result:
         return f"Result({self.ok!r}, {self.reason!r}, {self.messages!r})"
 
 
-def sign_in(greetd, name, password, otp=None, new_password=None, cmd=None, run_dir=RUN_DIR, method="password"):
+_EXPIRY = re.compile(r"password (has )?expired|change your password|password aged", re.I)
+_CHANGE_PROMPT = re.compile(r"(current|old|new|retype|again|confirm).*password|password.*(again|confirm)", re.I)
+
+
+def sign_in(greetd, name, password, otp=None, new_password=None, cmd=None, run_dir=RUN_DIR, method="password",
+            getpwnam=pwd.getpwnam):
     """Runs one PAM conversation through greetd and starts the session on success.
 
     reason on failure: 'expired' (ask for a new password), 'mfa' (ask for a code), 'denied', 'error',
-    'bad_pin' (not 4-12 digits), 'key_failed' (no key touched: PAM moved on to a password prompt).
+    'bad_pin' (not 4-12 digits), 'key_failed' (no key touched: PAM moved on to a password prompt), 'weak' (the new
+    password was refused by the password policy).
     method="key" sends no secret: pam_u2f answers first; method="pin" sends the PIN where the password goes.
+    Expired passwords: directory accounts send the old/new pair in one framed secret (the WorkSuite PAM helper);
+    accounts of this computer change it in the same conversation, as pam_unix asks (greetd runs pam_chauthtok when
+    the account phase says the password expired): current password, new password, new password again.
+    messages: everything PAM said along the way, for pam_errors.classify() and the journal, never shown as is.
     """
     if otp is not None and not re.fullmatch(r"\d{6}", otp):
         return Result(False, "bad_code")
@@ -179,11 +305,13 @@ def sign_in(greetd, name, password, otp=None, new_password=None, cmd=None, run_d
         if not re.fullmatch(r"[0-9]{4,12}", password or ""):
             return Result(False, "bad_pin")
         otp = new_password = None
-    secret = secret_for(password, otp, new_password)
+    local = is_local(name, getpwnam)
+    secret = secret_for(password, otp, new_password, framed=not local)
     messages = []
     try:
         r = greetd.create_session(name)
         answered = False
+        new_asked = 0
         while r.get("type") == "auth_message":
             kind = r.get("auth_message_type")
             if kind == "secret":
@@ -191,12 +319,31 @@ def sign_in(greetd, name, password, otp=None, new_password=None, cmd=None, run_d
                     # pam_u2f did not accept a touch and PAM now wants a password: do not send anything.
                     greetd.cancel_session()
                     return Result(False, "key_failed", messages)
-                if answered:
+                if not answered:
+                    r = greetd.respond(secret)
+                    answered = True
+                    continue
+                prompt = r.get("auth_message") or ""
+                expiring = local and (_EXPIRY.search(" ".join(messages)) or _CHANGE_PROMPT.search(prompt))
+                if not expiring:
                     # A second secret prompt (e.g. a PAM module we do not drive): stop instead of re-sending.
                     greetd.cancel_session()
                     return Result(False, "denied", messages)
-                r = greetd.respond(secret)
-                answered = True
+                if new_password is None:
+                    greetd.cancel_session()
+                    return Result(False, "expired", messages)
+                if re.search(r"current|old", prompt, re.I):
+                    r = greetd.respond(password)
+                elif re.search(r"new|retype|again|confirm", prompt, re.I):
+                    new_asked += 1
+                    if new_asked > 2:
+                        # Asked again after "BAD PASSWORD: …": the policy refused the new password.
+                        greetd.cancel_session()
+                        return Result(False, "weak", messages)
+                    r = greetd.respond(new_password)
+                else:
+                    greetd.cancel_session()
+                    return Result(False, "denied", messages)
             elif kind == "visible":
                 r = greetd.respond(name)
             else:
@@ -209,10 +356,14 @@ def sign_in(greetd, name, password, otp=None, new_password=None, cmd=None, run_d
                 return Result(True, None, messages)
             return Result(False, "error", messages + [s.get("description", "")])
         greetd.cancel_session()
+        if r.get("description"):
+            messages.append(r["description"])
         status = name_status(name, run_dir)
         if status:
             return Result(False, status, messages)
-        return Result(False, "denied" if r.get("error_type") == "auth_error" else "error", messages)
+        if r.get("error_type") == "auth_error":
+            return Result(False, "denied", messages)
+        return Result(False, "error", messages)
     finally:
         secret = None  # noqa: F841  (drop the reference; Python strings cannot be wiped)
 

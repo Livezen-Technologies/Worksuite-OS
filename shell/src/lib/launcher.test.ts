@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildLauncherApps, filterApps, taskbarApps } from './launcher'
+import { alphaGroups, appForWindow, buildLauncherApps, filterApps, startPins, taskbarApps } from './launcher'
 
 const ff = { id: 'firefox-esr', name: 'Firefox ESR', generic_name: 'Web Browser', comment: null, icon: null, categories: ['Network'], keywords: ['internet'] }
 const term = { id: 'foot', name: 'Foot', generic_name: 'Terminal', comment: null, icon: null, categories: ['TerminalEmulator'], keywords: [] }
@@ -27,7 +27,7 @@ describe('launcher list', () => {
   })
   it('lists installed Linux apps and skips worksuite-* entries', () => {
     const apps = buildLauncherApps([], [ff, term, { ...ff, id: 'worksuite-mail', name: 'WorkSuite Mail' }], null)
-    expect(apps.filter((a) => a.kind === 'Linux app').map((a) => a.id)).toEqual(['firefox-esr', 'foot'])
+    expect(apps.filter((a) => a.kind === 'Linux app').map((a) => a.id)).toEqual(['lk.worksuite.whatsapp', 'firefox-esr', 'foot'])
     expect(apps.find((a) => a.id === 'foot')?.mark).toBe('>_')
     expect(apps.find((a) => a.id === 'firefox-esr')?.fav).toBe(true)
   })
@@ -37,8 +37,19 @@ describe('launcher list', () => {
     expect(filterApps(apps, 'all', 'browser').map((a) => a.id)).toEqual(['firefox-esr'])
     expect(filterApps(apps, 'all', 'xlsx').map((a) => a.id)).toEqual(['office-sheets'])
     expect(filterApps(apps, 'all', 'app center').map((a) => a.id)).toEqual(['appcenter'])
-    expect(filterApps(apps, 'linux', '').map((a) => a.id)).toEqual(['firefox-esr', 'foot'])
+    expect(filterApps(apps, 'linux', '').map((a) => a.id)).toEqual(['lk.worksuite.whatsapp', 'firefox-esr', 'foot'])
     expect(filterApps(apps, 'ws', 'foot')).toEqual([])
+  })
+  it('"files" finds the shell\'s Files first, not an editor that edits text files', () => {
+    const vim = { id: 'vim', name: 'Vim', generic_name: 'Text Editor', comment: 'Edit text files', icon: null, categories: ['Utility', 'TextEditor'], keywords: ['Text', 'editor'] }
+    const fm = { id: 'org.example.Fm', name: 'Some File Manager', generic_name: null, comment: null, icon: null, categories: ['FileManager'], keywords: [] }
+    const apps = buildLauncherApps([{ id: 'drive', name: 'Drive' }], [vim, fm], null)
+    const hits = filterApps(apps, 'all', 'files').map((a) => a.id)
+    expect(hits[0]).toBe('files')
+    expect(hits).toContain('vim')
+    expect(hits.indexOf('files')).toBeLessThan(hits.indexOf('vim'))
+    expect(filterApps(apps, 'all', 'file')[0].id).toBe('files')   // the shell's own app before a Linux app's word match
+    expect(apps.find((a) => a.id === 'files')?.launch).toEqual({ screen: 'files' })
   })
   it('drops taskbar pins that are not available', () => {
     const apps = buildLauncherApps([{ id: 'chat', name: 'Chat' }], [ff], null)
@@ -67,5 +78,31 @@ describe('WorkSuite Desktop in the start menu', () => {
     const apps = buildLauncherApps(web, [ff], null, null)
     expect(apps.filter((a) => a.kind === 'WorkSuite').every((a) => 'desktop' in a.launch)).toBe(true)
     expect(apps.some((a) => a.id === 'worksuite-desktop')).toBe(false)
+  })
+})
+
+describe('WhatsApp in the launcher', () => {
+  it('is pinned to Start by default and listed in All apps and search', async () => {
+    const { WHATSAPP } = await import('./launcher')
+    const apps = buildLauncherApps(null, null, null)
+    expect(apps.find((a) => a.id === 'lk.worksuite.whatsapp')).toMatchObject({ name: 'WhatsApp', fav: true, launch: { desktop: 'lk.worksuite.whatsapp' } })
+    expect(startPins(apps, 12).map((a) => a.id)).toContain(WHATSAPP.id)
+    expect(alphaGroups(apps).flatMap((g) => g.apps.map((a) => a.id))).toContain(WHATSAPP.id)
+    expect(filterApps(apps, 'all', 'whats').map((a) => a.id)).toEqual([WHATSAPP.id])
+    expect(filterApps(apps, 'all', 'messenger').map((a) => a.id)).toContain(WHATSAPP.id)
+    expect(WHATSAPP.kindLabel).toBe('launcher.kind.chat')
+  })
+  it('keeps a user\'s saved favourites (no WhatsApp forced in)', async () => {
+    const { applyShellPrefs } = await import('./shellPrefs')
+    const apps = applyShellPrefs(buildLauncherApps(null, null, null), { favorites: ['worksuite-mail'] })
+    expect(apps.find((a) => a.id === 'lk.worksuite.whatsapp')?.fav).toBe(false)
+  })
+  it('is left out when policy turns it off, and the installed entry is not listed twice', () => {
+    const entry = { id: 'lk.worksuite.whatsapp', name: 'WhatsApp', generic_name: null, comment: null, icon: 'lk.worksuite.whatsapp', categories: ['Network', 'InstantMessaging', 'Chat'], keywords: [] }
+    expect(buildLauncherApps(null, [entry], null).filter((a) => a.id === 'lk.worksuite.whatsapp')).toHaveLength(1)
+    expect(buildLauncherApps(null, [entry], null, null, false).some((a) => a.id === 'lk.worksuite.whatsapp')).toBe(false)
+  })
+  it('owns its window by app_id', () => {
+    expect(appForWindow(buildLauncherApps(null, null, null), 'lk.worksuite.whatsapp')?.name).toBe('WhatsApp')
   })
 })

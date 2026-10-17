@@ -72,10 +72,15 @@ export function sha256File(path: string, start = 0, end?: number): string {
 /** Offline bundles come from removable media or the caller's home (WSOS-AUP-010). */
 export const BUNDLE_ROOTS = ['/media/', '/run/media/', '/mnt/', '/home/'];
 
-export function bundlePath(src: string, roots = BUNDLE_ROOTS): string {
+export const MAX_BUNDLE_BYTES = 16 * 1024 ** 3;
+
+/** A bundle under one of `roots`, staged like any other handed-over file (stageFile: no symlink as the file itself,
+ *  owned by the caller unless root, copied into `spool`). The caller removes the staged copy when done with it. */
+export function stageBundle(src: string, owner: number, spool: string, roots = BUNDLE_ROOTS, maxBytes = MAX_BUNDLE_BYTES): Staged {
   if (typeof src !== 'string' || !src.startsWith('/') || src.includes('\0') || !src.endsWith('.wsupdate')) throw new ServiceError('InvalidArgs', 'choose a .wsupdate file');
   let real: string;
   try { real = realpathSync(src); } catch { throw new ServiceError('InvalidArgs', 'file not found'); }
   if (!roots.some((r) => real.startsWith(r))) throw new ServiceError('InvalidArgs', 'bundles are read from removable media or your home folder');
-  return real;
+  // stageFile opens the path the caller named with O_NOFOLLOW (a symlink is refused) and checks ownership on the fd.
+  return stageFile(src, owner, spool, '.wsupdate', maxBytes);
 }

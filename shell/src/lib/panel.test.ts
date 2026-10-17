@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACTIVATED, MINIMIZED, clickAction, taskbarEntries, updateBadge, type PanelWindow } from './panel'
+import { ACTIVATED, MINIMIZED, clickAction, onWorkspace, taskbarEntries, taskbarUnread, updateBadge, type PanelWindow } from './panel'
 import type { OsUpdateStatus } from './os'
 
 const w = (handle: string, appId: string, flags = 0, title = appId): PanelWindow => ({ handle, appId, title, output: 'HDMI-A-1', flags })
@@ -43,5 +43,24 @@ describe('update badge (WSOS-AUP-011)', () => {
     expect(updateBadge(s('up_to_date'))).toBeNull()
     expect(updateBadge(s('up_to_date'), 3)).toBe('available')
     expect(updateBadge(null)).toBeNull()
+  })
+})
+
+describe('windows on the current workspace', () => {
+  const w = (handle: string): PanelWindow => ({ handle, appId: 'foot', title: handle, output: 'HDMI-A-1', flags: 0 })
+  it('keeps only the current workspace when the bridge has workspaces', () => {
+    const ws = { supported: true, current: 2, count: 4, windows: { a: 1, b: 2 } }
+    expect(onWorkspace([w('a'), w('b'), w('c')], ws).map((x) => x.handle)).toEqual(['b', 'c'])
+    expect(onWorkspace([w('a'), w('b')], { ...ws, supported: false }).length).toBe(2)
+  })
+})
+
+describe('WhatsApp unread badge on the taskbar', () => {
+  const w = (title: string, appId = 'lk.worksuite.whatsapp'): PanelWindow => ({ handle: 'h', appId, title, output: '', flags: 0 })
+  it('shows the count from the WhatsApp window title only', () => {
+    expect(taskbarUnread('lk.worksuite.whatsapp', [w('(4) WhatsApp')])).toBe(4)
+    expect(taskbarUnread('lk.worksuite.whatsapp', [w('WhatsApp')])).toBe(0)
+    expect(taskbarUnread('lk.worksuite.whatsapp', [])).toBe(0)
+    expect(taskbarUnread('worksuite-mail', [w('(4) WhatsApp', 'worksuite-mail')])).toBe(0)
   })
 })

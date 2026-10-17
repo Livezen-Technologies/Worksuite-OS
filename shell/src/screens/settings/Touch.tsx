@@ -3,10 +3,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Svg, card, chip, field, rowLine, sectionLabel } from '../../components/Dk'
 import { Empty } from '../Hardware'
-import { hasTabletSwitch, pens, touchApi, touchScreens, useTouch, type OskMode, type OskSize, type PenEvent, type TabletMode, type TouchSettings } from '../../lib/touch'
+import { DEFAULT_GESTURES, hasTabletSwitch, pens, touchApi, touchScreens, useTouch, type OskMode, type OskSize, type PenEvent, type TabletMode, type TouchSettings, type GestureSettings } from '../../lib/touch'
 import { formatNumber, t, type MessageKey } from '../../i18n'
 import { BigSwitch, H1, Note, Unavail } from './ui'
 import { TouchCalibrate } from './TouchCalibrate'
+import { ShortcutsPanel } from './Shortcuts'
 
 const HAND = 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15'
 const PEN = 'M15 4l5 5L9 20H4v-5zM13 6l5 5'
@@ -112,6 +113,7 @@ export function TouchPanel() {
         </div>
       </section>
     </>}
+    {!!screens.length && s.touchEnabled && <Gestures s={s} set={set} />}
     <section aria-label={t('touch.tabletMode')} className="flex flex-col gap-2">
       <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('touch.tabletMode')}</h2>
       <div className={card}>
@@ -137,18 +139,77 @@ export function TouchPanel() {
   </>
 }
 
-export function KeyboardPanel() {
+/** Board SetTouch › Gestures: edge swipes, three-finger swipes (worksuite-gestures) and the long-press delay. */
+function Gestures({ s, set }: { s: TouchSettings; set: (p: Partial<TouchSettings>) => unknown }) {
+  const g: GestureSettings = s.gestures ?? DEFAULT_GESTURES
+  const hold = s.longPressMs ?? 600
+  const put = (patch: Partial<GestureSettings>) => void set({ gestures: { ...g, ...patch } })
+  const rows: { k: keyof GestureSettings; f: string; what: MessageKey; opts: string[]; edge: boolean }[] = [
+    { k: 'edgeBottom', f: '1 ↑', what: 'touch.g.edgeBottom', opts: ['launcher', 'off'], edge: true },
+    { k: 'edgeRight', f: '1 ←', what: 'touch.g.edgeRight', opts: ['notifications', 'off'], edge: true },
+    { k: 'edgeLeft', f: '1 →', what: 'touch.g.edgeLeft', opts: ['switch-apps', 'off'], edge: true },
+    { k: 'threeHorizontal', f: '3 ↔', what: 'touch.g.threeHorizontal', opts: ['workspaces', 'switch-apps', 'off'], edge: false },
+    { k: 'threeDown', f: '3 ↓', what: 'touch.g.threeDown', opts: ['desktop', 'off'], edge: false },
+    { k: 'threeUp', f: '3 ↑', what: 'touch.g.threeUp', opts: ['taskview', 'off'], edge: false },
+  ]
+  return (
+    <section aria-label={t('touch.g.title')} className="flex flex-col gap-2">
+      <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('touch.g.title')}</h2>
+      <div className={card}>
+        <Row title={t('touch.g.enable')} sub={t('touch.g.enableSub')}><BigSwitch label={t('touch.g.enable')} checked={g.enabled} onChange={(v) => put({ enabled: v })} /></Row>
+        {g.enabled && <Row title={t('touch.g.edges')} sub={t('touch.g.edgesSub')}><BigSwitch label={t('touch.g.edges')} checked={g.edgeSwipes} onChange={(v) => put({ edgeSwipes: v })} /></Row>}
+        {g.enabled && rows.filter((r) => !r.edge || g.edgeSwipes).map((r) => (
+          <Row key={r.k} title={<span className="flex items-center gap-2"><span className="w-9 font-mono text-[11px] text-[#18D4F0]" aria-hidden="true">{r.f}</span>{t(r.what)}</span>}>
+            <select aria-label={t(r.what)} value={g[r.k] as string} className={field} onChange={(e) => put({ [r.k]: e.target.value } as Partial<GestureSettings>)}>
+              {r.opts.map((o) => <option key={o} value={o}>{t(`touch.g.a.${o}` as MessageKey)}</option>)}
+            </select>
+          </Row>
+        ))}
+        <Row title={t('touch.g.hold')} sub={t('touch.g.holdSub')}>
+          <span className="flex items-center gap-3">
+            <input type="range" min={300} max={1200} step={50} value={hold} aria-label={t('touch.g.hold')} aria-valuetext={t('touch.g.ms', { n: formatNumber(hold) })}
+              onChange={(e) => void set({ longPressMs: Number(e.target.value) })} className="w-40 accent-[#1F6BFF]" />
+            <span className="w-16 font-mono text-xs text-[#C9D6EE]">{t('touch.g.ms', { n: formatNumber(hold) })}</span>
+          </span>
+        </Row>
+      </div>
+    </section>
+  )
+}
+
+export function KeyboardPanel({ tab: initialTab = 'osk' }: { tab?: 'osk' | 'shortcuts' }) {
+  const [tab, setTab] = useState<'osk' | 'shortcuts'>(initialTab)
+  useEffect(() => setTab(initialTab), [initialTab])
+  return <>
+    <H1>{t('settings.nav.Keyboard')}</H1>
+    <div role="tablist" aria-label={t('settings.nav.Keyboard')} className="flex gap-1 self-start rounded-[10px] bg-[rgba(4,10,26,0.5)] p-1">
+      {(['shortcuts', 'osk'] as const).map((x) => (
+        <button key={x} type="button" role="tab" id={`kb-tab-${x}`} aria-selected={tab === x} aria-controls={`kb-panel-${x}`} onClick={() => setTab(x)}
+          onKeyDown={(e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); const n = x === 'osk' ? 'shortcuts' : 'osk'; setTab(n); document.getElementById(`kb-tab-${n}`)?.focus() } }}
+          tabIndex={tab === x ? 0 : -1}
+          className={`min-h-9 cursor-pointer rounded-lg px-4 text-[13px] ${tab === x ? 'bg-[#1F6BFF] font-semibold text-white' : 'text-[#C9D6EE] hover:bg-white/[0.06]'}`}>{t(x === 'osk' ? 'osk.title' : 'sc.tab')}</button>
+      ))}
+    </div>
+    <div role="tabpanel" id={`kb-panel-${tab}`} aria-labelledby={`kb-tab-${tab}`} className="flex flex-col gap-3.5">
+      {tab === 'osk' ? <OskSettings /> : <ShortcutsPanel />}
+    </div>
+  </>
+}
+
+function OskSettings() {
   const { state, reason, set } = useTouch()
   const s: TouchSettings | null = state?.settings ?? null
   const modes: { id: OskMode; label: string }[] = [{ id: 'off', label: t('common.off') }, { id: 'touch', label: t('osk.touchOnly') }, { id: 'always', label: t('osk.always') }]
+  const layouts: { id: 'full' | 'split' | 'floating'; label: string }[] = (['full', 'split', 'floating'] as const).map((id) => ({ id, label: t(`osk.layout.${id}` as MessageKey) }))
   const sizes: { id: OskSize; label: string }[] = (['small', 'medium', 'large'] as const).map((id) => ({ id, label: t(`osk.size.${id}` as MessageKey) }))
   return <>
-    <H1>{t('settings.nav.Keyboard')}</H1>
     {reason ? <Unavail what={t('osk.title')} reason={reason} /> : !s ? <Empty title={t('touch.reading')} /> : <>
       <Hero d={KBD} tint="#7A4FE0" title={t('osk.title')} sub={state?.osk.available || s.osk === 'off' ? t('osk.sub') : t('osk.missing')} />
       <div className={card}>
         <Row title={t('osk.show')} sub={t('osk.showSub')}><Segmented label={t('osk.show')} value={s.osk} options={modes} onChange={(v) => void set({ osk: v })} /></Row>
         <Row title={t('osk.sizeTitle')}><Segmented label={t('osk.sizeTitle')} value={s.oskSize} options={sizes} onChange={(v) => void set({ oskSize: v })} /></Row>
+        <Row title={t('osk.layoutTitle')} sub={t('osk.layoutSub')}><Segmented label={t('osk.layoutTitle')} value={s.oskLayout ?? 'full'} options={layouts} onChange={(v) => void set({ oskLayout: v })} /></Row>
+        <Row title={t('osk.suggest')} sub={t('osk.suggestSub')}><BigSwitch label={t('osk.suggest')} checked={s.oskSuggestions !== false} onChange={(v) => void set({ oskSuggestions: v })} /></Row>
       </div>
       <Note>{t('osk.layoutsNote')}</Note>
     </>}

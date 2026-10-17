@@ -145,3 +145,9 @@ export function desktopExecArgv(exec: string | null | undefined): string[] | nul
   if (!out.length || /^(sh|bash|dash|zsh|env)$/.test(out[0].split('/').pop()!)) return null
   return out
 }
+
+/** $RUN/screen as worksuite-kiosk-ctl writes it: "off HH:MM" or "on". */
+export function screenState(text: string): string | null {
+  const m = /^off ([01]\d|2[0-3]):([0-5]\d)$/.exec(text.trim())
+  return m ? `${m[1]}:${m[2]}` : null
+}

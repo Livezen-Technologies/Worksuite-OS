@@ -137,7 +137,7 @@ export function JobsWindow({ jobs, notify, setNotify, onMinimize }: { jobs: File
         </header>
         <div className="flex max-h-[420px] flex-col overflow-auto">{jobs.map((j) => <JobRow key={j.id} j={j} bps={speeds[j.id]} />)}</div>
         {detail && now && (
-          <dl className="m-0 grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 px-5 py-3.5 text-xs" style={{ background: 'rgba(4,10,26,0.35)' }}>
+          <dl className="m-0 grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 px-5 py-3.5 text-xs" style={{ background: 'var(--ws-g-field)' }}>
             <dt style={{ color: C.muted }}>{now.op === 'move' ? t('files.ops.nowMoving') : t('files.ops.nowCopying')}</dt><dd className="m-0 truncate font-mono">{now.current}</dd>
             <dt style={{ color: C.muted }}>{t('files.ops.speed')}</dt><dd className="m-0 font-mono">{bps ? t('files.ops.perSec', { size: formatBytes(bps) }) : now.state === 'paused' ? t('files.job.paused') : t('files.ops.measuring')}</dd>
             <dt style={{ color: C.muted }}>{t('files.ops.destination')}</dt><dd className="m-0 truncate">{now.free != null ? t('files.ops.destFree', { dest: now.dest, free: formatBytes(now.free) }) : now.dest}</dd>
@@ -163,7 +163,7 @@ export function JobsChip({ jobs, onOpen }: { jobs: FileJob[]; onOpen: () => void
   const label = active.length ? t('files.ops.headline', { count: formatNumber(active.length) }) : t('files.ops.allDone')
   return (
     <button type="button" onClick={onOpen} aria-label={t('files.ops.open', { what: label })}
-      className={`${btn} absolute right-4 bottom-11 z-40 box-border flex w-[320px] flex-col gap-2 rounded-[14px] px-4 py-3 text-left`} style={{ background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)', color: C.text }}>
+      className={`${btn} absolute right-4 bottom-11 z-40 box-border flex w-[320px] flex-col gap-2 rounded-[14px] px-4 py-3 text-left`} style={{ background: 'var(--ws-g-menu)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)', color: C.text }}>
       <span className="flex justify-between gap-2 text-[13px]">
         <span className="truncate font-semibold">{label}</span>
         <span className="shrink-0" style={{ color: need || paused ? '#FFB98A' : C.muted }}>{need ? t('files.ops.needsYou') : paused ? t('files.job.paused') : pct != null ? <CountUp value={pct} /> : null}</span>
@@ -237,7 +237,7 @@ export function ConflictDialog({ job }: { job: FileJob }) {
         <div className="grid grid-cols-2 gap-3">
           {sides.map((x) => (
             <button key={x.id} type="button" aria-pressed={x.on} onClick={x.pick} className={`${btn} flex gap-3 rounded-xl p-3.5 text-left`}
-              style={{ border: `1px solid ${x.on ? C.blue : 'rgba(127,178,255,0.18)'}`, background: x.on ? 'rgba(31,107,255,0.12)' : 'rgba(4,10,26,0.3)' }}>
+              style={{ border: `1px solid ${x.on ? C.blue : 'var(--ws-g-line)'}`, background: x.on ? 'rgba(31,107,255,0.12)' : 'rgba(4,10,26,0.3)' }}>
               <span className="box-border flex h-[54px] w-11 flex-none items-end justify-center rounded-md pb-1.5 text-[10px] font-bold" style={{ background: '#E8EEFA', color: k.color }}>{k.ext}</span>
               <span className="flex min-w-0 flex-col gap-[3px] text-xs" style={{ color: C.soft }}>
                 <span className="truncate text-[11px] tracking-[0.06em] uppercase" style={{ color: C.muted }}>{x.label}</span>
@@ -253,7 +253,7 @@ export function ConflictDialog({ job }: { job: FileJob }) {
             const on = a.id === act
             return (
               <button key={a.id} type="button" role="radio" aria-checked={on} onClick={() => setAct(a.id)} className={`${btn} flex items-center gap-3 rounded-[10px] px-3.5 py-[11px] text-left`}
-                style={{ border: `1px solid ${on ? C.blue : 'rgba(127,178,255,0.15)'}`, background: on ? 'rgba(31,107,255,0.12)' : 'transparent' }}>
+                style={{ border: `1px solid ${on ? C.blue : 'var(--ws-g-line)'}`, background: on ? 'rgba(31,107,255,0.12)' : 'transparent' }}>
                 <span className="box-border flex size-4 items-center justify-center rounded-full" style={{ border: `2px solid ${on ? C.blue : 'rgba(127,178,255,0.35)'}` }}><span className="size-1.5 rounded-full" style={{ background: on ? C.blue : 'transparent' }} /></span>
                 <span className="flex-1 text-sm">{a.name}</span>
                 <span className="max-w-[260px] truncate font-mono text-xs" style={{ color: C.muted }}>{a.hint}</span>
@@ -297,7 +297,7 @@ export function DeleteDialog({ items, permanent: startPermanent, canTrash, onCan
             <span id="del-b" className="text-[13px] leading-normal" style={{ color: C.soft }}>{body}</span>
           </div>
         </div>
-        <ul aria-label={t('files.del.items')} className="m-0 flex list-none flex-col gap-1.5 rounded-xl px-3.5 py-3 text-[13px]" style={{ background: 'rgba(4,10,26,0.35)' }}>
+        <ul aria-label={t('files.del.items')} className="m-0 flex list-none flex-col gap-1.5 rounded-xl px-3.5 py-3 text-[13px]" style={{ background: 'var(--ws-g-field)' }}>
           {shown.map((e) => {
             const k = kindOf(e.name, e.dir)
             return (
@@ -310,7 +310,7 @@ export function DeleteDialog({ items, permanent: startPermanent, canTrash, onCan
           {shown.length < n && <li style={{ color: C.muted }}>{t('files.del.more', { count: formatNumber(n - shown.length) })}</li>}
         </ul>
         {canTrash && (
-          <div role="radiogroup" aria-label={t('files.del.mode')} className="flex rounded-[10px] p-[3px]" style={{ background: 'rgba(4,10,26,0.5)' }}>
+          <div role="radiogroup" aria-label={t('files.del.mode')} className="flex rounded-[10px] p-[3px]" style={{ background: 'var(--ws-g-field)' }}>
             {[false, true].map((v) => (
               <button key={String(v)} type="button" role="radio" aria-checked={v === perm} onClick={() => setPerm(v)} className={`${btn} flex-1 rounded-lg p-2 text-center text-[13px]`}
                 style={{ background: v === perm ? (v ? 'rgba(229,72,77,0.35)' : C.blue) : 'transparent' }}>{v ? t('files.del.modePerm') : t('files.moveToTrash')}</button>
@@ -334,7 +334,8 @@ const TOAST_LOOK: Record<ToastKind, [readonly [string, string], string]> = {
   ok: [TINT.green, ICON.done], move: [TINT.green, ICON.move], trash: [TINT.blue, P.trash], paused: [TINT.amber, ICON.pause], error: [TINT.red, ICON.error],
 }
 
-/** Bottom-centre toasts; each goes after 6 s unless the pointer is on it. */
+/** Bottom-centre toasts; each goes after 6 s (one with an action such as Undo after 12 s: on a slow machine the pointer
+ *  often got there just as it went) unless the pointer is on it. */
 export function Toasts({ toasts, dismiss }: { toasts: Toast[]; dismiss: (id: number) => void }) {
   if (!toasts.length) return null
   return (
@@ -345,7 +346,7 @@ export function Toasts({ toasts, dismiss }: { toasts: Toast[]; dismiss: (id: num
 }
 function ToastCard({ toast, dismiss }: { toast: Toast; dismiss: (id: number) => void }) {
   const [hold, setHold] = useState(false)
-  useEffect(() => { if (hold) return; const id = setTimeout(() => dismiss(toast.id), 6000); return () => clearTimeout(id) }, [hold, toast.id, dismiss])
+  useEffect(() => { if (hold) return; const id = setTimeout(() => dismiss(toast.id), toast.action ? 12_000 : 6000); return () => clearTimeout(id) }, [hold, toast.id, toast.action, dismiss])
   const [tint, d] = TOAST_LOOK[toast.kind]
   return (
     <div role="status" onMouseEnter={() => setHold(true)} onMouseLeave={() => setHold(false)} className="pointer-events-auto flex items-center gap-3 rounded-[14px] py-3 pr-3.5 pl-4"

@@ -26,7 +26,7 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
     }
   })
 
-  it('elevates only through the named, polkit-guarded helpers (enrollment; sign-in methods)', () => {
+  it('elevates only through the kiosk-exit helper; enrollment and sign-in methods are D-Bus methods behind polkit', () => {
     const elevations: string[] = []
     for (const [f, s] of all) {
       expect(s, f).not.toMatch(/['"`](sudo|doas|su|runuser|setpriv)['"`]\s*,/)
@@ -35,7 +35,15 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
       expect(s, f).not.toMatch(/['"`]pkexec['"`]\s*,\s*\[\s*[^'\s]/)
     }
     // kioskMain.ts: leaving kiosk mode (PIN or administrator password, polkit lk.worksuite.kiosk.exit-*).
-    expect(elevations.sort()).toEqual(['device.ts:/usr/bin/worksuite-device-agent', 'kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit', 'signin.ts:/usr/lib/worksuite/worksuite-signin'])
+    // Enrollment is lk.worksuite.DeviceAgent1.Enroll (polkit lk.worksuite.device.enroll, WSOS-ARC-002), not pkexec.
+    expect(all.find(([f]) => f === 'device.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.DeviceAgent1'\)\.Enroll\(/)
+    // Sign-in methods are lk.worksuite.SignIn1 methods (polkit lk.worksuite.signin.manage).
+    expect(all.find(([f]) => f === 'signin.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.SignIn1'\)/)
+    // sessionHost.ts: Settings › About › Diagnostics, the system journal and the boot-details entry, through the fixed
+    // helper behind polkit lk.worksuite.diagnostics (auth_admin_keep); its arguments are checked there and here.
+    // "Restart anyway": always the fixed helper behind lk.worksuite.power-force, which
+    // accepts only reboot|poweroff (tests/session/session-test.sh).
+    expect(elevations.sort()).toEqual(['kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics', 'sessionHost.ts:/usr/lib/worksuite/worksuite-power-force'])
   })
 
   it('every IPC handler goes through the sender check', () => {
@@ -50,6 +58,10 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
         for (const m of s.matchAll(/ipcMain\.(?:handle|on)\('[^']+', (?:async )?\(e[^)]*\) => \{?\s*(.{0,60})/g))
           expect(m[1], f).toMatch(/^(if \(!?fromPrompt\(e\)|\(?fromPrompt\(e\)|if \(main && e\.sender === main\.webContents\))/)
         expect(raw.length, f).toBe([...s.matchAll(/ipcMain\.(?:handle|on)\('[^']+', (?:async )?\(e/g)].length)
+      } else if (f === 'whatsappwindow.ts') {
+        // WhatsApp window: one bare "focus" message, accepted only from its own window's page.
+        expect(raw.length, f).toBe(1)
+        expect(s).toMatch(/ipcMain\.on\(WHATSAPP_FOCUS_CHANNEL, \(e\) => \{ if \(win && e\.sender === win\.webContents\) focus\(\) \}\)/)
       } else expect(raw.length, f).toBe(0)
     }
   })

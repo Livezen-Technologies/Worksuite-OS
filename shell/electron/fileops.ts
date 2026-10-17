@@ -2,7 +2,7 @@
 // search, new folder, rename, freedesktop.org Trash, copy/move jobs with conflict prompts, and eject.
 // The renderer only names roots and relative paths; everything is resolved through resolveIn and stays inside a root.
 import { execFile } from 'node:child_process'
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statfsSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statfsSync, writeFileSync } from 'node:fs'
 import { copyFile, lstat, mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { resolveIn, roots, type FileEnv } from './files'
@@ -35,12 +35,32 @@ function mountOf(p: string): { source: string; target: string } | null {
   } catch { return null }
 }
 
+/** Filesystem labels by resolved device path (/dev/disk/by-label). */
+function fsLabels(): Record<string, string> {
+  const out: Record<string, string> = {}
+  try {
+    for (const n of readdirSync('/dev/disk/by-label')) {
+      try { out[realpathSync(path.join('/dev/disk/by-label', n))] = n.replace(/\\x([0-9a-f]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16))) } catch { /* gone */ }
+    }
+  } catch { /* none */ }
+  return out
+}
+
+/** What the storage card calls the device: its filesystem label, else "encrypted" for a LUKS mapping (luks-<uuid>),
+ *  never the raw mapper name. */
+export function deviceInfo(source: string, labels: Record<string, string>, resolve: (p: string) => string = (p) => { try { return realpathSync(p) } catch { return p } }) {
+  const real = source.startsWith('/') ? resolve(source) : source
+  const name = path.basename(source)
+  return { device: name, label: labels[real] ?? labels[source] ?? '', encrypted: /^luks-/.test(name) || /^\/dev\/mapper\/luks-/.test(source) }
+}
+
 export function places(env: Env) {
-  let disk: { device: string; used: number; total: number } | null = null
+  let disk: { device: string; label: string; encrypted: boolean; used: number; total: number } | null = null
   try {
     const s = statfsSync(env.home)
     const m = mountOf(env.home)
-    disk = { device: m ? path.basename(m.source) : '', used: (s.blocks - s.bfree) * s.bsize, total: s.blocks * s.bsize }
+    const info = m ? deviceInfo(m.source, fsLabels()) : { device: '', label: '', encrypted: false }
+    disk = { ...info, used: (s.blocks - s.bfree) * s.bsize, total: s.blocks * s.bsize }
   } catch { /* unknown */ }
   return {
     user: env.user,
@@ -239,16 +259,31 @@ export async function trashList(env: Env): Promise<TrashItem[]> {
 }
 
 const validId = (id: string) => okName(id) && !id.endsWith('.trashinfo')
+
+/** The original path an item's .trashinfo records (Path=, percent-encoded; relative ones are under home), or null. */
+function trashInfoPath(env: Env, id: string): string | null {
+  let txt: string
+  try { txt = readFileSync(path.join(trashDir(env), 'info', `${id}.trashinfo`), 'utf8') } catch { return null }
+  if (!/^\[Trash Info\]$/m.test(txt)) return null
+  let orig = /^Path=(.*)$/m.exec(txt)?.[1] ?? ''
+  if (!orig) return null
+  try { orig = decodeURIComponent(orig) } catch { /* keep raw */ }
+  return path.resolve(env.home, orig)
+}
+
+/** Puts items back where their .trashinfo files say they came from (Undo after Delete, Trash › Restore). Each item is
+ *  read from its own info file, so one unreadable entry elsewhere in the Trash (or a large Trash) can't stop it; only
+ *  places Files may write to are restored to, and an item never replaces a file that has appeared there since. */
 export async function trashRestore(env: Env, ids: string[]): Promise<Reply<{ restored: number; skipped: number }>> {
-  const items = await trashList(env)
   const bases = roots(env).filter((r) => r.id !== 'drive').map((r) => r.path)
   let restored = 0, skipped = 0
   for (const id of ids) {
-    const it = items.find((x) => x.id === id)
-    if (!it || !validId(id) || !bases.some((b) => it.orig.startsWith(b + '/')) || existsSync(it.orig)) { skipped++; continue }
+    const orig = validId(id) ? trashInfoPath(env, id) : null
+    const from = path.join(trashDir(env), 'files', id)
+    if (!orig || !bases.some((b) => orig.startsWith(b + '/')) || orig.split('/').includes('..') || !existsSync(from) || existsSync(orig)) { skipped++; continue }
     try {
-      mkdirSync(path.dirname(it.orig), { recursive: true })
-      await moveAcross(path.join(trashDir(env), 'files', id), it.orig)
+      mkdirSync(path.dirname(orig), { recursive: true })
+      await moveAcross(from, orig)
       await rm(path.join(trashDir(env), 'info', `${id}.trashinfo`), { force: true })
       restored++
     } catch { skipped++ }

@@ -12,6 +12,10 @@
 #       Livezen-Technologies/worksuite-office (the WORKSUITE_OFFICE_TOKEN secret in CI). WORKSUITE_OFFICE_RUN=<id>
 #       picks a run; the default is the latest successful build.yml run on main.
 #
+# WORKSUITE_OFFICE_SHA256 pins the deb in either mode. Release builds (WORKSUITE_RELEASE=1, as image.yml and
+# live-build/build.sh use it) require it: an unpinned download fails. Other builds warn and fall back to the
+# checksum URL (URL mode) or to no checksum (artifact mode).
+#
 # ARCH (default amd64) selects the package. Saved as worksuite-office_<version>_<arch>.deb.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -21,10 +25,17 @@ dest="$here/../live-build/config/packages.chroot"
 mkdir -p "$dest"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+pinned=${WORKSUITE_OFFICE_SHA256:-}
+if [ -z "$pinned" ]; then
+  if [ "${WORKSUITE_RELEASE:-0}" = 1 ]; then
+    echo "fetch-office: release builds need a pinned WORKSUITE_OFFICE_SHA256" >&2; exit 1
+  fi
+  echo "fetch-office: warning: WORKSUITE_OFFICE_SHA256 is not set; the Office deb is not pinned (dev build)" >&2
+fi
 
 if [ -n "${WORKSUITE_OFFICE_URL:-}" ]; then
   curl -fsSL --retry 3 -o "$tmp/office.deb" "$WORKSUITE_OFFICE_URL"
-  sum=${WORKSUITE_OFFICE_SHA256:-}
+  sum=$pinned
   if [ -z "$sum" ]; then
     sum=$(curl -fsSL --retry 3 "${WORKSUITE_OFFICE_SHA256_URL:-$WORKSUITE_OFFICE_URL.sha256}" | awk '{print $1; exit}') || sum=
   fi
@@ -54,6 +65,9 @@ for d in $candidates; do
   case "$parch" in "$ARCH" | all) pick=$d; break ;; esac
 done
 [ -n "$pick" ] || { echo "fetch-office: no $ARCH editors .deb among: $candidates" >&2; exit 1; }
+if [ -n "$pinned" ]; then
+  echo "$pinned  $pick" | sha256sum -c - >/dev/null || { echo "fetch-office: checksum mismatch (WORKSUITE_OFFICE_SHA256)" >&2; exit 1; }
+fi
 ver=$(dpkg-deb -f "$pick" Version)
 rm -f "$dest"/worksuite-office*.deb
 out="$dest/worksuite-office_${ver}_$ARCH.deb"

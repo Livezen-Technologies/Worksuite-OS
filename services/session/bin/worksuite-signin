@@ -2,4 +2,9 @@
 # Device PIN and security-key sign-in helper (services/session/signin). Installed as /usr/lib/worksuite/worksuite-signin.
 # Run by pam_exec, by the socket-activated root daemon and through pkexec from Settings > Users. Secrets come on stdin
 # only (see worksuite_signin/cli.py). -I: no PYTHONPATH or user site from the caller's environment.
+# Fast path (sign-in speed): every password sign-in asks "was a PIN used?" for the keyring profile. With no PIN profile
+# in the PAM stack no PIN can have been used, so answer "no" without starting Python and the daemon.
+if [ "${1:-}" = pam-pin-used ] && ! grep -Eqs 'worksuite-signin pam-pin([[:space:]]|$)' "${WORKSUITE_PAM_COMMON_AUTH:-/etc/pam.d/common-auth}"; then
+    exit 1
+fi
 exec /usr/bin/python3 -I -c 'import sys; sys.path.insert(0, "/usr/lib/worksuite/signin"); from worksuite_signin.cli import main; sys.exit(main())' "$@"

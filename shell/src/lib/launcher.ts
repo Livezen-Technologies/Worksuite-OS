@@ -2,11 +2,12 @@
 // Office when installed, and installed Linux apps.
 import type { InstalledApp } from './os'
 import { t } from '../i18n'
+import { WHATSAPP_APP_ID } from '../../electron/whatsapp'
 
 export type Kind = 'WorkSuite' | 'Linux app' | 'System'
 
 /** How a tile starts: a desktop entry via gtk-launch, WorkSuite Office (start centre or new document), or a shell screen. */
-export type Launch = { desktop: string } | { office: 'start' | 'docs' | 'sheets' | 'slides' } | { worksuite: DesktopModule } | { screen: 'appcenter' | 'files' | 'monitor' | 'settings' }
+export type Launch = { desktop: string } | { office: 'start' | 'docs' | 'sheets' | 'slides' } | { worksuite: DesktopModule } | { screen: 'appcenter' | 'files' | 'monitor' | 'settings' | 'snip' }
 
 /** Modules WorkSuite Desktop opens with `--module=<id>`. */
 export type DesktopModule = 'home' | 'mail' | 'chat' | 'calendar' | 'tasks' | 'files' | 'crm' | 'hr'
@@ -19,7 +20,12 @@ export const DESKTOP_MODULE_FOR: Record<string, DesktopModule> = {
   mail: 'mail', chat: 'chat', calendar: 'calendar', tasks: 'tasks', drive: 'files', files: 'files', crm: 'crm', hr: 'hr',
 }
 
-export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[]; offline?: OfflineLevel }
+/**
+ * icon: the desktop entry's Icon= (theme name or path), resolved by the main process; apps the OS knows by id use
+ * bundled icons (lib/brandIcons.ts). mark/bg/fg: the letter mark drawn when there is no icon. appIds: Wayland
+ * app_ids / StartupWMClass its windows carry besides its id.
+ */
+export interface LauncherApp { id: string; name: string; mark: string; bg: string; fg: string; kind: Kind; fav?: boolean; launch: Launch; keywords: string[]; offline?: OfflineLevel; kindLabel?: 'launcher.kind.chat'; icon?: string | null; appIds?: string[] }
 /** Offline level the app declares (WSOS-SYN-009); shown in the launcher. */
 export type OfflineLevel = 'full_offline' | 'cached_read' | 'online_only'
 
@@ -43,6 +49,16 @@ const OFFICE_STYLE = { bg: '#ffedd5', fg: '#c2410c' }
 const LINUX_FAV = new Set(['firefox-esr', 'firefox', 'org.mozilla.firefox'])
 
 export const APP_CENTER: LauncherApp = { id: 'appcenter', name: 'App Center', mark: 'A', bg: '#2563eb', fg: '#ffffff', kind: 'System', launch: { screen: 'appcenter' }, keywords: ['software', 'install'] }
+/** WhatsApp Web in its own window (lk.worksuite.whatsapp.desktop, `worksuite-app whatsapp`); pinned by default. */
+export const WHATSAPP: LauncherApp = {
+  id: WHATSAPP_APP_ID, name: 'WhatsApp', mark: 'Wa', bg: '#25D366', fg: '#ffffff', kind: 'Linux app', kindLabel: 'launcher.kind.chat', fav: true,
+  launch: { desktop: WHATSAPP_APP_ID }, icon: WHATSAPP_APP_ID, appIds: [WHATSAPP_APP_ID, 'whatsapp'],
+  keywords: ['whatsapp', 'chat', 'messages', 'messenger', 'InstantMessaging'],
+}
+
+/** The shell's own file manager (Super+E). Without an entry, a search for "files" found Vim ("Edit text files"). */
+export const FILES: LauncherApp = { id: 'files', get name() { return t('files.title') }, mark: 'F', bg: '#ffedd5', fg: '#c2410c', kind: 'System', launch: { screen: 'files' }, keywords: ['files', 'file manager', 'explorer', 'folders', 'documents', 'downloads'] }
+
 export const MONITOR: LauncherApp = { id: 'monitor', get name() { return t('monitor.title') }, mark: '~', bg: '#dcfce7', fg: '#15803d', kind: 'System', launch: { screen: 'monitor' }, keywords: ['task manager', 'processes', 'cpu', 'memory', 'performance'] }
 
 function initials(name: string) {
@@ -56,9 +72,9 @@ function initials(name: string) {
  * webApps: the org's enabled modules, or null when unknown (fallback list). installed: XDG entries, or null when
  * the bridge isn't available. office: the detected WorkSuite Office desktop id, or null when it isn't installed.
  * desktop: the WorkSuite Desktop entry id when it is installed: its modules open there (`--module=<id>`), the rest
- * in worksuite-app web windows.
+ * in worksuite-app web windows. whatsapp: false when policy turns WhatsApp off (or on a kiosk).
  */
-export function buildLauncherApps(webApps: { id: string; name: string; offline_level?: OfflineLevel }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null): LauncherApp[] {
+export function buildLauncherApps(webApps: { id: string; name: string; offline_level?: OfflineLevel }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null, whatsapp = true): LauncherApp[] {
   const out: LauncherApp[] = []
   if (desktop) {
     out.push({ id: 'worksuite-desktop', name: 'WorkSuite', mark: 'W', bg: '#2563eb', fg: '#ffffff', kind: 'WorkSuite', fav: true, launch: { worksuite: 'home' }, keywords: ['worksuite', 'home', 'desktop'] })
@@ -80,16 +96,17 @@ export function buildLauncherApps(webApps: { id: string; name: string; offline_l
       { id: 'office-slides', name: t('launcher.presentations'), mark: 'Sl', ...OFFICE_STYLE, kind: 'WorkSuite', launch: { office: 'slides' }, keywords: ['office', 'powerpoint', 'pptx', 'slides', 'new presentation'] },
     )
   }
+  if (whatsapp) out.push(WHATSAPP)
   for (const e of installed ?? []) {
-    if (e.id === office || e.id === desktop || e.id.startsWith('worksuite-')) continue
+    if (e.id === office || e.id === desktop || e.id.startsWith('worksuite-') || e.id === WHATSAPP_APP_ID) continue
     const terminal = e.categories.includes('TerminalEmulator')
     out.push({
       id: e.id, name: e.name, mark: terminal ? '>_' : initials(e.name), bg: terminal ? '#0f172a' : '#f1f5f9', fg: terminal ? '#e2e8f0' : '#334155',
-      kind: 'Linux app', fav: LINUX_FAV.has(e.id), launch: { desktop: e.id },
+      kind: 'Linux app', fav: LINUX_FAV.has(e.id), launch: { desktop: e.id }, icon: e.icon, ...(e.wm_class ? { appIds: [e.wm_class] } : {}),
       keywords: [e.generic_name ?? '', e.comment ?? '', ...e.keywords, ...e.categories].filter(Boolean),
     })
   }
-  out.push(MONITOR, APP_CENTER)
+  out.push(FILES, MONITOR, APP_CENTER)
   return out
 }
 
@@ -136,7 +153,14 @@ export function alphaGroups(apps: LauncherApp[]): { letter: string; apps: Launch
   return [...by.entries()].map(([letter, apps]) => ({ letter, apps }))
 }
 
-const rank = (a: LauncherApp, q: string) => (a.name.toLowerCase().startsWith(q) ? 0 : a.name.toLowerCase().includes(q) ? 1 : 2)
+/** Search order: name starts with the query, a word of the name does, the name contains it, a keyword starts with it,
+ *  anything else; within each, the shell's and WorkSuite's own apps before other Linux apps. */
+const rank = (a: LauncherApp, q: string) => {
+  const n = a.name.toLowerCase()
+  const r = n.startsWith(q) ? 0 : n.split(/\s+/).some((w) => w.startsWith(q)) ? 1 : n.includes(q) ? 2
+    : a.keywords.some((k) => k.toLowerCase().startsWith(q)) ? 3 : 4
+  return r * 2 + (a.kind === 'Linux app' ? 1 : 0)
+}
 
 /**
  * Recovery launcher list (WSOS-SES-005): installed apps without terminals or shells, and without the WorkSuite web app
@@ -146,6 +170,23 @@ export function safeApps<T extends InstalledApp>(apps: T[]): T[] {
   const TERMINAL = new Set(['TerminalEmulator', 'ConsoleOnly'])
   return apps.filter((a) => !a.categories.some((c) => TERMINAL.has(c)) && !a.id.startsWith('worksuite-'))
     .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * The launcher app a running window belongs to, from its Wayland app_id: the desktop id itself, the entry's
+ * StartupWMClass, a WorkSuite app window (lk.worksuite.<module>), or a reverse-DNS id's last part (org.gnome.Nautilus
+ * → nautilus, and the other way round). Case is ignored. Undefined when nothing matches.
+ */
+export function appForWindow(apps: LauncherApp[], appId: string): LauncherApp | undefined {
+  const w = appId.trim().toLowerCase()
+  if (!w) return undefined
+  const ws = /^lk\.worksuite\.(.+)$/.exec(w)
+  const hit = ws && apps.find((a) => a.id === `worksuite-${ws[1]}`)
+  if (hit) return hit
+  const last = (s: string) => s.split('.').pop() ?? s
+  return apps.find((a) => a.id.toLowerCase() === w)
+    ?? apps.find((a) => a.appIds?.some((x) => x.toLowerCase() === w))
+    ?? apps.find((a) => a.kind === 'Linux app' && (last(a.id.toLowerCase()) === w || a.id.toLowerCase() === last(w)))
 }
 
 /** Taskbar pins that exist in the current list (an app the org disabled or that isn't installed drops out). */

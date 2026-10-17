@@ -3,7 +3,8 @@
 export interface WorkSuiteApi {
   /** method 'pin' sends the PIN where the password goes; 'key' sends no secret (pam_u2f asks for a touch). */
   authenticate(user: string, password: string, method?: SignInMethod): Promise<{ ok: boolean; message?: string }>
-  lock(): Promise<void>
+  /** Locks through the system locker; true when it took the screen (the shell then shows no lock board of its own). */
+  lock(): Promise<boolean>
   logout(): Promise<void>
   power(action: 'suspend' | 'restart' | 'shutdown'): Promise<void>
   launchApp(appId: string): Promise<void>
@@ -15,11 +16,18 @@ export interface WorkSuiteApi {
   search(q: string, types?: string[]): Promise<SearchResponse>
   /** Recent files: local (recently-used.xbel) and WorkSuite Drive. */
   recentFiles(): Promise<{ local: SearchHit[]; cloud: { state: SourceState; hits: SearchHit[] } }>
+  /** Desktop widgets' data (WorkSuite Desktop's Home), fetched and cached by the main process; never a token. */
+  widgets(): Promise<WidgetsSnapshot>
   /** Open a search result (worksuite:// or file://), or its location. */
   openSearchResult(link: string, where?: 'open' | 'location'): Promise<{ ok: boolean; error?: string }>
   /** WorkSuite web apps the org has enabled (from bootstrap via the broker); an error when not signed in/offline. */
-  webApps(): Promise<CloudResult<{ id: string; name: string; offline_level?: 'full_offline' | 'cached_read' | 'online_only' }[]>>
+  webApps(): Promise<CloudResult<{ id: string; name: string; offline_level?: 'full_offline' | 'cached_read' | 'online_only' }[]> & { cached?: true }>
+  /** The user's synced shell preferences (favourites, taskbar pins, order); null when none are saved. */
+  shellPrefs(): Promise<CloudResult<unknown>>
+  setShellPrefs(prefs: unknown): Promise<CloudResult<boolean>>
   /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
+  /** App icons for desktop entries' Icon= values at a size (CSS px) and scale: data: URLs, null when none exists. */
+  appIcons?(names: string[], size: number, scale: number): Promise<Record<string, string | null>>
   installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null }>
   /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
   launchOffice(kind: 'start' | 'docs' | 'sheets' | 'slides'): Promise<void>
@@ -72,10 +80,18 @@ export interface WorkSuiteApi {
   filesDelete(root: string, rels: string[]): Promise<CloudResult<number>>
   /** "Notify me when done" (FO1): a text notice in the shell's notification centre. */
   filesNotify(summary: string, body: string): Promise<unknown>
+  /** worksuite-toasts runs: toasts go there (a layer-shell surface over the apps) instead of the shell's window. */
+  toastsAvailable?(): Promise<boolean>
+  toastShow?(t: { key: string; title: string; body?: string; tone?: 'ok' | 'warn' | 'error'; icon?: string | null }): Promise<boolean>
   filesTrashList(): Promise<TrashItem[]>
   filesTrashRestore(ids: string[]): Promise<CloudResult<{ restored: number; skipped: number }>>
   filesTrashDelete(ids: string[] | 'all'): Promise<CloudResult<number>>
   /** Start a copy/move/duplicate job; progress and conflicts arrive through onFilesJob. */
+  /** Files dropped from another app: copied into root/rel; paths outside the user's places are rejected. */
+  filesDrop(paths: string[], dstRoot: string, dstRel: string): Promise<CloudResult<{ jobs: number; rejected: number }>>
+  /** Drag files out to another app (native drag with the real paths). */
+  filesStartDrag(root: string, rels: string[]): Promise<CloudResult<number>>
+  pathForFile(f: File): string
   filesPaste(op: 'copy' | 'move' | 'duplicate', srcRoot: string, rels: string[], dstRoot: string, dstRel: string): Promise<CloudResult<string>>
   /** Answer a job: conflict (replace/skip/keep), error (retry/skip), pause/resume (copy and move), or cancel. */
   filesResolve(id: string, r: 'replace' | 'skip' | 'keep' | 'cancel' | 'continue' | 'retry' | 'pause' | 'resume', all: boolean): Promise<CloudResult<true>>
@@ -204,6 +220,8 @@ export interface RecoveryInfo {
   os_version: string | null; disk: string | null; firmware: 'EFI' | 'BIOS'
   /** Shell restarts counted by systemd before recovery opened; null when unknown. */
   failures: number | null
+  /** Entered by hand from the boot menu (electron/recovery.ts). */
+  manual?: boolean
   luks: RecoveryLuksDevice[]; features: Record<RecoveryFeature, boolean>
 }
 
@@ -213,6 +231,7 @@ import type { HwDevice, HwKind } from '../../electron/hardware'
 import type { LocalUser } from '../../electron/users'
 import type { SecurityKey, SignInMethod, SignInMethods, SigninResult } from '../../electron/signin'
 import type { SearchHit, SearchResponse, SourceState } from '../../electron/search'
+import { emptySnapshot, ymd, type WidgetsSnapshot } from '../../electron/widgets'
 export type { HwDevice, HwKind, LocalUser, SecurityKey, SignInMethod, SignInMethods, SigninResult }
 export interface DriverOffer {
   id: string; device_id: string | null; name: string; summary: string
@@ -257,7 +276,7 @@ export interface AppImageRecord {
   approved: boolean; imported_at: string; approved_at: string | null; categories: string[]
 }
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
-export interface FilePlaces { user: string; folders: string[]; media: { id: string; label: string }[]; disk: { device: string; used: number; total: number } | null }
+export interface FilePlaces { user: string; folders: string[]; media: { id: string; label: string }[]; disk: { device: string; label?: string; encrypted?: boolean; used: number; total: number } | null }
 export interface FileHit { root: string; rel: string; name: string; dir: boolean; size: number | null; modified: number | null; where: string }
 export interface TrashItem { id: string; name: string; dir: boolean; size: number; orig: string; where: string; deleted: number | null }
 export interface FileStamp { size: number; modified: number }
@@ -285,7 +304,7 @@ export interface PackageJobEvent { job: string; kind: 'progress' | 'finished'; p
 export function formatBytes(n: number | null): string {
   if (n == null) return '—'
   const a = Math.abs(n)
-  const s = a >= 1e9 ? `${formatNumber(Number((a / 1e9).toFixed(1)))} GB` : a >= 1e6 ? `${formatNumber(Math.round(a / 1e6))} MB` : `${formatNumber(Math.max(1, Math.round(a / 1e3)))} kB`
+  const s = a >= 1e9 ? `${formatDecimal(a / 1e9, 1)} GB` : a >= 1e6 ? `${formatNumber(Math.round(a / 1e6))} MB` : `${formatNumber(Math.max(1, Math.round(a / 1e3)))} kB`
   return n < 0 ? t('bytes.freed', { size: s }) : s
 }
 
@@ -297,21 +316,33 @@ export function packageErrorText(code: string): string {
     case 'service_unavailable': return t('pkg.err.service')
     case 'invalid_argument': return t('pkg.err.invalid')
     case 'failed': return t('rec.err.default')
-    default: return code.charAt(0).toUpperCase() + code.slice(1) + (/[.!]$/.test(code) ? '' : '.')
+    // Anything else is PackageKit's/dpkg's own text: a sentence from lib/errors.ts instead (details for administrators).
+    default: return errorMessage(code, 'package')
   }
 }
 
 import type { SyncStatus } from './syncNotices'
 import type { CheckId, CheckResult, SnapshotInfo } from './recovery'
-import { formatNumber, t } from '../i18n'
+import { formatDecimal, formatNumber, t } from '../i18n'
+import { errorMessage } from './errors'
 
 export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
   lock_timeout_max_s: number | null; offline_access_days: number | null; usb_storage: string | null; bluetooth: boolean | null
   app_allowlist_size: number
+  /** On-device AI assistant (services/ai): false = off for everyone; ai_models = catalog ids allowed. */
+  ai_assistant?: boolean | null; ai_models?: string[] | null
+  /** Desktop widgets (WorkSuite Desktop's Home on the wallpaper): false = off for everyone. Kiosk: always off. */
+  desktop_widgets?: boolean | null; kiosk?: boolean
+  /** WhatsApp (WhatsApp Web window): false = off on this device. */
+  whatsapp?: boolean | null
+  /** Screenshots and the snipping tool; clipboard history (Super+V). 'disabled' = off; kiosks: always off. */
+  screen_capture?: 'allowed' | 'disabled' | null; clipboard_history?: 'allowed' | 'disabled' | null
 }
 export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
-export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean }
+export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean
+  /** Policy kiosk.orientation and kiosk.screen_off (older agents send neither). */
+  orientation?: 'landscape' | 'portrait' | 'landscape-flipped' | 'portrait-flipped'; screen_off?: { from: string; until: string } | null }
 export interface DeviceInfo {
   agent: boolean
   device: { hostname: string; os_version: string; arch: string; kernel_version: string; encrypted: boolean | null } | null
@@ -324,6 +355,8 @@ export interface DeviceInfo {
   kiosk?: KioskSummary | null
   /** WSOS-IDN-004: provisioning requires enrollment (and so a connection) before first use. */
   provisioning?: { require_enrollment: boolean; server: string | null }
+  /** Processor and memory (electron/device.ts hostSpecs). */
+  specs?: { cpu_model: string | null; cpu_cores: number | null; memory_bytes: number | null }
 }
 
 /** Taskbar chip text: null when the device isn't managed (WSOS-MDM-007). */
@@ -343,6 +376,12 @@ export function policyLines(p: DevicePolicies | null): string[] {
   if (p.usb_storage === 'block') out.push(t('mdm.usbBlocked'))
   else if (p.usb_storage === 'read_only') out.push(t('mdm.usbRO'))
   if (p.bluetooth === false) out.push(t('mdm.btOff'))
+  if (p.desktop_widgets === false) out.push(t('mdm.widgetsOff'))
+  if (p.whatsapp === false) out.push(t('mdm.whatsappOff'))
+  if (p.screen_capture === 'disabled') out.push(t('mdm.captureOff'))
+  if (p.clipboard_history === 'disabled') out.push(t('mdm.clipboardOff'))
+  if (p.ai_assistant === false) out.push(t('mdm.aiOff'))
+  else if (p.ai_models?.length) out.push(t('mdm.aiLimited', { count: p.ai_models.length }))
   return out
 }
 
@@ -353,7 +392,7 @@ export function lockChoiceLabel(s: number): string {
   if (s < 3600) return t('time.min', { n: Math.round(s / 60) })
   return s === 3600 ? t('time.hour') : t('time.hours', { n: formatNumber(Math.round(s / 360) / 10) })
 }
-export interface InstalledApp { id: string; name: string; generic_name: string | null; comment: string | null; icon: string | null; categories: string[]; keywords: string[] }
+export interface InstalledApp { id: string; name: string; generic_name: string | null; comment: string | null; icon: string | null; categories: string[]; keywords: string[]; wm_class?: string | null }
 
 export type SignOutChoice = 'none' | 'export' | 'discard'
 
@@ -378,7 +417,7 @@ const stub: WorkSuiteApi = {
     if (password === 'wrong') return { ok: false, message: 'Incorrect password. Try again.' }
     return password.length > 0 ? { ok: true } : { ok: false, message: 'Enter your password.' }
   },
-  async lock() {},
+  async lock() { return false },
   async logout() {},
   async power() {},
   async launchApp() {},
@@ -392,8 +431,12 @@ const stub: WorkSuiteApi = {
     return { query, sources: query ? [{ source: 'worksuite', state: 'not_signed_in', hits: [] }, { source: 'drive', state: 'not_signed_in', hits: [] }] : [], hits: [] }
   },
   async recentFiles() { return { local: [], cloud: { state: 'not_signed_in', hits: [] } } },
+  // Preview: signed out, so the widgets offer sign-in instead of inventing data.
+  async widgets() { return emptySnapshot('not_signed_in', ymd(new Date())) },
   async openSearchResult() { return { ok: true } },
   async webApps() { return { ok: false, error: 'not_signed_in' } },
+  async shellPrefs() { return { ok: false, error: 'not_signed_in' } },
+  async setShellPrefs() { return { ok: false, error: 'not_signed_in' } },
   async installedApps() {
     return { apps: [
       { id: 'firefox-esr', name: 'Firefox ESR', generic_name: 'Web Browser', comment: null, icon: 'firefox-esr', categories: ['Network', 'WebBrowser'], keywords: ['internet', 'web'] },
@@ -467,7 +510,7 @@ const stub: WorkSuiteApi = {
     return { ok: true, value: [f('Invoice INV-2026-0418.pdf', 'local', 182_000), f('worksuite-agent-2.4.1.zip', 'local', 38_200_000)] }
   },
   async filesOpen() { return { ok: true, value: true } },
-  async filesPlaces() { return { user: 'alex', folders: ['Documents', 'Downloads', 'Pictures', 'Music', 'Videos'], media: [{ id: 'media:KINGSTON', label: 'KINGSTON' }], disk: { device: 'vda', used: 12.8e9, total: 39.5e9 } } },
+  async filesPlaces() { return { user: 'alex', folders: ['Documents', 'Downloads', 'Pictures', 'Music', 'Videos'], media: [{ id: 'media:KINGSTON', label: 'KINGSTON' }], disk: { device: 'luks-3f1c', label: '', encrypted: true, used: 12.8e9, total: 39.5e9 } } },
   async filesStarred() { return { keys: [], hits: [] } },
   async filesStar() { return { ok: true, value: [] } },
   async filesRecent() { return [] },
@@ -480,6 +523,8 @@ const stub: WorkSuiteApi = {
   async filesTrash(_r, rels) { return { ok: true, value: { count: rels.length, ids: rels.map((r) => r.split('/').pop()!) } } },
   async filesDelete(_r, rels) { return { ok: true, value: rels.length } },
   async filesNotify() { return true },
+  async toastsAvailable() { return false },
+  async toastShow() { return false },
   async filesTrashList() {
     const d = (days: number) => Date.now() - days * 86_400_000
     return [['Old logo.png', '~/Pictures', 0, 640_000], ['Draft v1.docx', '~/Documents/Projects', 1, 312_000], ['Invoice copy.pdf', '~/Downloads', 9, 220_000]]
@@ -487,6 +532,9 @@ const stub: WorkSuiteApi = {
   },
   async filesTrashRestore(ids) { return { ok: true, value: { restored: ids.length, skipped: 0 } } },
   async filesTrashDelete(ids) { return { ok: true, value: ids === 'all' ? 0 : ids.length } },
+  async filesDrop(paths) { return { ok: true, value: { jobs: 0, rejected: paths.length } } },
+  async filesStartDrag() { return { ok: false, error: 'unavailable' } },
+  pathForFile() { return '' },
   async filesPaste(op, _s, rels, dstRoot) {
     // Preview: a job that stops on one conflict, then runs to the end; Pause holds it, like the real job service.
     const id = `stubjob${++stubJobSeq}`

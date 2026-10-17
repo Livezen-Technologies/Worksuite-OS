@@ -1,10 +1,13 @@
 // App Center (G08 browse, G09 app detail, G10 install from file). The organization's catalog through the package
 // service (WSOS-APP-001/002), the user's AppImages (WSOS-AIM-001…004), local .deb files (WSOS-APT-005) and Flatpak
 // permissions (WSOS-FLP-002…004). Nothing here is sample data: what the services don't report is left out or says so.
+import { AppGlyph } from '../components/AppGlyph'
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useState } from 'react'
 import type { WindowProps } from './types'
 import { C, card, Dialog, dialogFooter, btnGhost, btnPrimary, Svg, Switch } from '../components/Dk'
+import { ErrorDetails } from '../components/ErrorDetails'
+import { friendlyError } from '../lib/errors'
 import { formatBytes, os, packageErrorText, type AppCatalog, type AppImageRecord, type AppPermissions, type InstalledApp, type LocalDebPreview, type PackageJobEvent, type PackagePreview } from '../lib/os'
 import { buildApps, catalogNotice, categories, filterApps, SOURCES, type AppView, type Section } from '../lib/appcatalog'
 import { appColor, detailSecurity, expandPermissions, featuredApp, formatLabel, launchIdFor } from '../lib/appdetail'
@@ -34,8 +37,16 @@ const errText = (e: string) => (e === 'cancelled' ? '' : packageErrorText(e))
 type Op = 'install' | 'remove' | 'update' | 'reset' | 'prune'
 type View = { kind: 'section'; section: Section; category: string } | { kind: 'detail'; key: string }
 
-function AppIcon({ a, size, radius, font }: { a: Pick<AppView, 'name'>; size: number; radius: number; font: number }) {
-  return <span aria-hidden="true" className="flex flex-none items-center justify-center font-bold text-white" style={{ width: size, height: size, borderRadius: radius, fontSize: font, background: appColor(a.name) }}>{initials(a.name)}</span>
+/** Theme icon name for a catalog row: a Flatpak's app id, a Debian package's name (most install an icon so named). */
+export function catalogIconName(a: Partial<Pick<AppView, 'catalogId'>>): string | null {
+  const m = /^(?:flatpak|apt):([A-Za-z0-9][A-Za-z0-9._+-]{0,127})$/.exec(a.catalogId ?? '')
+  return m ? m[1] : null
+}
+
+interface IconRow { name: string; catalogId?: string | null; builtin?: AppView['builtin']; key?: string }
+
+function AppIcon({ a, size, radius, font }: { a: IconRow; size: number; radius: number; font: number }) {
+  return <AppGlyph app={{ id: a.builtin === 'office' ? 'office' : `appc:${a.key ?? a.name}`, name: a.name, mark: initials(a.name), bg: appColor(a.name), fg: '#FFFFFF', icon: catalogIconName(a) }} size={size} radius={radius} font={font} className="flex-none" />
 }
 
 export default function AppCenter({ onClose }: WindowProps) {
@@ -78,8 +89,10 @@ export default function AppCenter({ onClose }: WindowProps) {
   const [fileMenu, setFileMenu] = useState(false)
   const [jobs, setJobs] = useState<Record<string, { name: string; op: Op; key?: string }>>({})
   const [progress, setProgress] = useState<Record<string, number>>({})
-  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null)
-  const say = (text: string, error = false) => { if (text) setNotice({ text, error }) }
+  const [notice, setNotice] = useState<{ text: string; error?: boolean; details?: string | null } | null>(null)
+  const say = (text: string, error = false, details: string | null = null) => { if (text) setNotice({ text, error, details }) }
+  /** A package failure: the sentence (lib/errors.ts), the technical text for administrators only. */
+  const fail = (prefix: string | null, code: string) => say(prefix ? `${prefix}: ${packageErrorText(code)}` : packageErrorText(code), true, friendlyError(code, 'package').details)
 
   useEffect(() => os.onPkgJob((e: PackageJobEvent) => {
     if (e.kind === 'progress') { setProgress((p) => ({ ...p, [e.job]: e.percent ?? 0 })); return }
@@ -90,7 +103,7 @@ export default function AppCenter({ onClose }: WindowProps) {
       if (e.result === 'success') {
         setNotice({ text: j.op === 'install' ? t('appc.done.installed', { name: j.name }) : j.op === 'remove' ? t('appc.done.removed', { name: j.name }) : j.op === 'reset' ? t('appc.done.reset', { name: j.name }) : j.op === 'prune' ? t('appc.done.pruned') : t('appc.done.updates') })
         loadCatalog(); if (j.op === 'update') loadUpdates()
-      } else setNotice({ text: `${j.name}: ${packageErrorText(e.error ?? 'failed')}`, error: true })
+      } else fail(j.name, e.error ?? 'failed')
       return rest
     })
   }), [])
@@ -117,13 +130,13 @@ export default function AppCenter({ onClose }: WindowProps) {
     setBusy(true); setNotice(null)
     const r = op === 'install' ? await os.pkgInstall(a.catalogId) : await os.pkgRemove(a.catalogId)
     setBusy(false)
-    if (!r.ok) { say(`${a.name}: ${packageErrorText(r.error)}`, true); return }
+    if (!r.ok) { fail(a.name, r.error); return }
     track(r.value, a.name, op, a.key); setReview(null)
   }
   const updateAll = async () => {
     setNotice(null)
     const r = await os.pkgApplyUpdate()
-    if (!r.ok) { say(`${t('settings.nav.Updates')}: ${packageErrorText(r.error)}`, true); return }
+    if (!r.ok) { fail(t('settings.nav.Updates'), r.error); return }
     track(r.value, t('settings.nav.Updates'), 'update')
   }
   const updating = Object.values(jobs).some((j) => j.op === 'update')
@@ -134,7 +147,7 @@ export default function AppCenter({ onClose }: WindowProps) {
     const f = await os.pickFile('appimage')
     if (!f.ok) { say(errText(f.error), true); return }
     const r = await os.appimageImport(f.value.handle)
-    if (!r.ok) { say(`${f.value.name}: ${packageErrorText(r.error)}`, true); return }
+    if (!r.ok) { fail(f.value.name, r.error); return }
     setAiConfirm({ record: r.value, file: f.value.name })
     loadCatalog()
   }
@@ -144,7 +157,7 @@ export default function AppCenter({ onClose }: WindowProps) {
     setBusy(true)
     const r = allow ? await os.appimageApprove(record.id) : await os.appimageRemove(record.id)
     setBusy(false); setAiConfirm(null)
-    if (allow) say(r.ok ? t('appc.allowed', { name: record.name }) : `${record.name}: ${packageErrorText(r.error)}`, !r.ok)
+    if (allow) { if (r.ok) say(t('appc.allowed', { name: record.name })); else fail(record.name, r.error) }
     loadCatalog()
   }
   const appimageAct = async (a: AppView, op: 'approve' | 'remove' | 'update' | 'open') => {
@@ -154,10 +167,10 @@ export default function AppCenter({ onClose }: WindowProps) {
       const f = await os.pickFile('appimage')
       if (!f.ok) { say(errText(f.error), true); return }
       const r = await os.appimageUpdate(id, f.value.handle)
-      say(r.ok ? t('appc.updated', { name: a.name }) : `${a.name}: ${packageErrorText(r.error)}`, !r.ok)
+      if (r.ok) say(t('appc.updated', { name: a.name })); else fail(a.name, r.error)
     } else {
       const r = op === 'approve' ? await os.appimageApprove(id) : op === 'remove' ? await os.appimageRemove(id) : await os.appimageLaunch(id)
-      say(r.ok ? (op === 'approve' ? t('appc.allowed', { name: a.name }) : op === 'remove' ? t('appc.aiRemoved', { name: a.name }) : '') : `${a.name}: ${packageErrorText(r.error)}`, !r.ok)
+      if (r.ok) say((op === 'approve' ? t('appc.allowed', { name: a.name }) : op === 'remove' ? t('appc.aiRemoved', { name: a.name }) : '')); else fail(a.name, r.error)
       if (op === 'remove' && r.ok) setView({ kind: 'section', section: 'installed', category: 'All' })
     }
     loadCatalog()
@@ -182,7 +195,7 @@ export default function AppCenter({ onClose }: WindowProps) {
   }
   const prune = async () => {
     const r = await os.pruneRuntimes()
-    if (!r.ok) { say(packageErrorText(r.error), true); return }
+    if (!r.ok) { fail(null, r.error); return }
     track(r.value, t('appc.runtimes'), 'prune')
   }
 
@@ -266,11 +279,11 @@ export default function AppCenter({ onClose }: WindowProps) {
         {catalog && <div className="mt-auto px-2.5 pt-4 text-[11px] leading-normal" style={{ color: C.dim }}>{catalog.state === 'ok' ? t('appc.orgApproved') : t('appc.noCatalog')} {t('appc.device', { arch: catalog.arch })}</div>}
       </nav>
 
-      <main className="relative flex min-w-0 flex-1 flex-col gap-[18px] overflow-auto px-7 py-[22px]" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, #12306B 0%, #0A1A3D 60%)' }}>
+      <main className="relative flex min-w-0 flex-1 flex-col gap-[18px] overflow-auto px-7 py-[22px]" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, var(--ws-g-glow) 0%, var(--ws-g-page) 60%)' }}>
         <button type="button" aria-label={t('common.close')} onClick={onClose} className="absolute top-[22px] right-5 z-10 flex size-10 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10" style={{ color: C.soft }}><Svg d="M6 6l12 12M18 6L6 18" size={16} /></button>
         {notice && (
           <div role="status" className="mr-12 flex items-center gap-3 rounded-xl px-4 py-2.5 text-[13px]" style={{ background: notice.error ? 'rgba(255,138,122,0.12)' : 'rgba(95,211,154,0.12)', color: notice.error ? '#FFB4A8' : '#BFF0D6' }}>
-            <span className="grow">{notice.text}</span>
+            <span className="flex grow flex-col gap-1.5"><span>{notice.text}</span>{notice.error && <ErrorDetails details={notice.details} />}</span>
             <button type="button" aria-label={t('common.dismiss')} onClick={() => setNotice(null)} className="cursor-pointer opacity-70 hover:opacity-100"><Svg d="M6 6l12 12M18 6L6 18" size={14} /></button>
           </div>
         )}
@@ -466,8 +479,9 @@ function Rows({ rows }: { rows: ([string, string] | [string, string, string])[] 
 /** G09: one app: open or remove, its permissions with per-permission switches (Flatpak), and what is known about its security. */
 function AppDetail({ a, org, launchable, job, onBack, onOpen, onInstall, onRemove, onApprove, onTracked, say }: {
   a: AppView; org: string | null; launchable: boolean; job: boolean; onBack: () => void; onOpen: () => void; onInstall: () => void; onRemove: () => void; onApprove: () => void
-  onTracked: (job: string, op: Op) => void; say: (text: string, error?: boolean) => void
+  onTracked: (job: string, op: Op) => void; say: (text: string, error?: boolean, details?: string | null) => void
 }) {
+  const fail = (prefix: string, code: string) => say(`${prefix}: ${packageErrorText(code)}`, true, friendlyError(code, 'package').details)
   const flatpak = a.source === 'Flatpak' && a.installed && !!a.catalogId
   const [perms, setPerms] = useState<{ loading: boolean; data?: AppPermissions; off: string[]; error?: string }>({ loading: flatpak, off: [] })
   const load = () => {
@@ -481,18 +495,18 @@ function AppDetail({ a, org, launchable, job, onBack, onOpen, onInstall, onRemov
   const toggle = async (perm: string, on: boolean) => {
     if (!os.appPermSet) return
     const r = await os.appPermSet(a.catalogId!, perm, on)
-    if (!r.ok) say(`${a.name}: ${packageErrorText(r.error)}`, true)
+    if (!r.ok) fail(a.name, r.error)
     load()
   }
   const reset = async () => {
     const r = await os.appPermissionsReset(a.catalogId!)
-    if (!r.ok) { say(`${a.name}: ${packageErrorText(r.error)}`, true); return }
+    if (!r.ok) { fail(a.name, r.error); return }
     onTracked(r.value, 'reset')
   }
   const removeData = async () => {
     if (!window.confirm(t('appc.confirmData', { name: a.name }))) return
     const r = await os.appDataRemove(a.catalogId!)
-    say(r.ok ? (r.value ? t('appc.dataRemoved', { name: a.name }) : t('appc.noData', { name: a.name })) : `${a.name}: ${packageErrorText(r.error)}`, !r.ok)
+    if (r.ok) say((r.value ? t('appc.dataRemoved', { name: a.name }) : t('appc.noData', { name: a.name }))); else fail(a.name, r.error)
   }
   const sec = detailSecurity(a, org)
   const entries = perms.data ? expandPermissions(perms.data.permissions, perms.data.broad) : []

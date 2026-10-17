@@ -1,0 +1,40 @@
+[Unit]
+Description=WorkSuite AI assistant (on-device models: catalog, downloads, hash checks, policy)
+Documentation=file:///usr/share/doc/worksuite-ai/README.md
+PartOf=worksuite-session.target
+After=worksuite-session.target
+
+[Service]
+Type=simple
+# Control service only: llama.cpp runs in worksuite-ai-engine.service, which has no network.
+# The sandbox's read-write directories must exist before the service starts ("+": outside the sandbox). The user
+# tmpfiles.d file did not run before it on a first sign-in, and the service then failed every start.
+ExecStartPre=+/bin/mkdir -p -m 0700 %h/.local/share/worksuite %t/worksuite
+ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/ai/src/main.ts
+Restart=on-failure
+RestartSec=5s
+Slice=background.slice
+# AppArmor (security/apparmor/worksuite-ai); "-" keeps the unit working on kernels without AppArmor.
+AppArmorProfile=-worksuite-ai
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+# Its own data only: $XDG_DATA_HOME/worksuite/ai (models, settings) and the runtime socket.
+ProtectHome=read-only
+# Created by user-tmpfiles.d/worksuite-ai.conf; "-" so a missing one never stops the service from starting.
+ReadWritePaths=-%h/.local/share/worksuite -%t/worksuite
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+SystemCallArchitectures=native
+# Model downloads need the network (https to the catalog's hosts only, enforced in src/fetch.ts); nothing listens on it.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+MemoryMax=512M
+
+[Install]
+WantedBy=worksuite-session.target

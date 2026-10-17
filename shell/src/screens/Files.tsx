@@ -5,8 +5,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { formatBytes, os, type FileEntry, type FileHit, type FileJob, type FilePlaces, type TrashItem } from '../lib/os'
-import { formatDate, formatNumber, messages, t } from '../i18n'
-import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place } from './files/parts'
+import { formatDate, formatDecimal, formatNumber, messages, t } from '../i18n'
+import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place, START_PLACE, startFallback } from './files/parts'
+import { requestAssistant } from '../lib/assistantNav'
 import { ArchiveView, CompressDialog, LargeDialog, PasswordDialog, archiveError, archiveKind, stemOf } from './files/archive'
 import { ConflictDialog, DeleteDialog, JobErrorCard, JobsChip, JobsWindow, Toasts, finishedToast, useFileJobs, type Toast } from './files/ops'
 
@@ -22,9 +23,9 @@ const btn = 'cursor-pointer disabled:cursor-default'
 const iconBtn = `${btn} flex h-[34px] w-[34px] items-center justify-center rounded-lg hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent`
 
 /** archive: an archive opened with Files from elsewhere (the default handler for archive types); n changes per request. */
-export default function Files({ onClose, archive }: WindowProps & { archive?: { root: string; rel: string; n: number } | null }) {
+export default function Files({ onClose, archive, folder }: WindowProps & { archive?: { root: string; rel: string; n: number } | null; folder?: { root: string; rel: string; n: number } | null }) {
   const [places, setPlaces] = useState<FilePlaces | null>(null)
-  const [hist, setHist] = useState<{ list: Place[]; i: number }>({ list: [{ kind: 'dir', root: 'home', rel: 'Documents' }], i: 0 })
+  const [hist, setHist] = useState<{ list: Place[]; i: number }>({ list: [START_PLACE], i: 0 })
   const place = hist.list[hist.i]
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [entries, setEntries] = useState<FileEntry[] | null>(null)
@@ -61,6 +62,8 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
   const dir = place.kind === 'dir' ? place : null
   const arc = place.kind === 'archive' ? place : null
   useEffect(() => { if (archive) go({ kind: 'archive', root: archive.root, rel: archive.rel, inner: '' }) }, [archive?.n]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A folder to show (the Snipping Tool's "Show in Files").
+  useEffect(() => { if (folder) go({ kind: 'dir', root: folder.root, rel: folder.rel }) }, [folder?.n]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!arc) setArcPw(null) }, [arc?.root, arc?.rel]) // eslint-disable-line react-hooks/exhaustive-deps
   const cloud = dir?.root === 'drive'
 
@@ -81,7 +84,11 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
     setError(null)
     if (place.kind === 'dir') {
       setEntries(null)
-      void os.filesList(place.root, place.rel).then((r) => (r.ok ? setEntries(r.value) : setError(t('files.cantOpen'))))
+      void os.filesList(place.root, place.rel).then((r) => {
+        if (r.ok) { setEntries(r.value); return }
+        const home = hist.i === 0 ? startFallback(place, false) : null
+        if (home) setHist({ list: [home], i: 0 }); else setError(t('files.cantOpen'))
+      })
       void os.filesStatus(place.root).then(setStatus)
     } else if (place.kind === 'recent') { setHits(null); void os.filesRecent().then(setHits) }
     else if (place.kind === 'starred') { setHits(null); void os.filesStarred().then((s) => setHits(s.hits)) }
@@ -125,10 +132,29 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
   }
   const paste = () => { if (clip && dir) { const to: Place = { ...dir }; void act(() => os.filesPaste(clip.op, clip.root, clip.rels, dir.root, dir.rel)).then((r) => started(r, to)); if (clip.op === 'move') setClip(null) } }
   // FO3: Delete asks first (Trash, or permanently with Shift+Delete); FO4: the toast offers Undo for the Trash.
+  // Undo (the toast's button, or Ctrl+Z like Windows' Explorer): puts the last items moved to the Trash back where their
+  // .trashinfo files say they came from (electron/fileops.ts trashRestore).
+  const lastTrash = useRef<string[] | null>(null)
+  const lastTrashNames = useRef<string[]>([])
+  const undoTrash = (ids: string[], names: string[] = []) => {
+    if (lastTrash.current === ids) lastTrash.current = null
+    // Say what happened: the restore is quick, and with the view refreshing under the pointer an Undo that did nothing
+    // (the toast already gone, an item no longer in the Trash) looked the same as one that worked.
+    void os.filesTrashRestore(ids).then((x) => {
+      if (!x.ok) setNotice(t('files.err.generic'))
+      else {
+        const n = x.value.restored
+        if (n) toast({ kind: 'ok', text: n === 1 && names.length === 1 ? t('files.ops.toastRestoredOne', { name: names[0] }) : t('files.ops.toastRestored', { count: formatNumber(n) }) })
+        if (x.value.skipped) setNotice(n || x.value.skipped < ids.length ? t('files.trash.skipped', { count: x.value.skipped }) : t('files.ops.undoGone'))
+      }
+      reload()
+    })
+  }
   const askDelete = (names: string[], permanent: boolean) => { if (dir && names.length) setAsk({ kind: 'delete', names, permanent }) }
   const doDelete = async (names: string[], permanent: boolean) => {
     if (!dir) return
     setAsk(null); setSel([])
+    rootRef.current?.focus()   // the dialog had focus: keys (Ctrl+Z, Delete…) work again at once
     if (permanent) {
       const r = await os.filesDelete(dir.root, names.map(relOf))
       if (r.ok) toast({ kind: 'trash', text: r.value === 1 ? t('files.ops.toastDeletedOne') : t('files.ops.toastDeleted', { count: formatNumber(r.value) }) })
@@ -137,16 +163,28 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
       const r = await os.filesTrash(dir.root, names.map(relOf))
       if (r.ok) {
         const ids = r.value.ids
+        lastTrash.current = ids
+        lastTrashNames.current = names
         toast({ kind: 'trash', text: names.length === 1 ? t('files.ops.toastTrashedOne', { name: names[0] }) : t('files.ops.toastTrashed', { count: formatNumber(r.value.count) }),
-          action: { label: t('files.ops.undo'), run: () => void os.filesTrashRestore(ids).then((x) => { if (x.ok && x.value.skipped) setNotice(t('files.trash.skipped', { count: x.value.skipped })); reload() }) } })
+          action: { label: t('files.ops.undo'), run: () => undoTrash(ids, names) } })
       } else setNotice(t('files.err.generic'))
     }
     reload()
   }
   const star = (name: string) => { if (!dir) return; const on = !stars.includes(`${dir.root}:${relOf(name)}`); void os.filesStar(dir.root, relOf(name), on).then((r) => { if (r.ok) setStars(r.value) }) }
 
+  // Drag files out to another app: a native drag with the real paths (text/uri-list on Wayland).
+  const dragOut = (ev: React.DragEvent, name: string) => {
+    ev.preventDefault()
+    if (dir) void os.filesStartDrag(dir.root, (sel.includes(name) ? sel : [name]).map(relOf))
+  }
+
   // Keyboard: Enter, F2, Delete, Ctrl+X/C/V (FM3 shortcuts).
   const mainRef = useRef<HTMLDivElement>(null)
+  // Keyboard shortcuts (Ctrl+A/C/V, Delete…) need focus inside Files: it opens focused, and a click on empty space
+  // focuses it again (Ctrl+A otherwise selected the page's text).
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { rootRef.current?.focus() }, [])
   const onKey = (ev: React.KeyboardEvent) => {
     if (!dir || ask || search || (ev.target as HTMLElement).tagName === 'INPUT') return
     const one = sel.length === 1 ? byName(sel[0]) : undefined
@@ -157,6 +195,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
     else if (ev.ctrlKey && (ev.key === 'c' || ev.key === 'x') && sel.length) setClip({ op: ev.key === 'c' ? 'copy' : 'move', root: dir.root, rels: sel.map(relOf) })
     else if (ev.ctrlKey && ev.key === 'v') paste()
     else if (ev.ctrlKey && ev.key === 'a') setSel(shown.map((e) => e.name))
+    else if (ev.ctrlKey && !ev.shiftKey && ev.key === 'z' && lastTrash.current) undoTrash(lastTrash.current, lastTrashNames.current)
     else return
     ev.preventDefault()
   }
@@ -168,14 +207,23 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
   const selected = sel.length === 1 ? byName(sel[0]) : undefined
 
   return (
-    <div role="dialog" aria-modal="false" aria-label={t('files.title')} className="fixed inset-0 z-50 flex font-sans" style={{ background: C.page, color: C.text }} onKeyDown={onKey}>
+    <div ref={rootRef} tabIndex={-1} role="dialog" aria-modal="false" aria-label={t('files.title')} className="fixed inset-0 z-50 flex select-none font-sans" style={{ background: C.page, color: C.text }} onKeyDown={onKey}
+      onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('button, input, textarea, select, a, [tabindex]:not([tabindex="-1"])')) rootRef.current?.focus() }}>
       <FilesSide place={place} places={places} drive={driveState ? DRIVE_META[driveState as keyof typeof DRIVE_META] ?? driveState : null} onGo={go}
         onEject={(id, label) => void os.filesEject(id).then((r) => { if (!r.ok) setNotice(t('files.ejectFailed', { name: label })); else go({ kind: 'dir', root: 'home', rel: '' }); reload() })} />
-      <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col" onClick={() => setMenu(null)}>
+      <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col" onClick={() => setMenu(null)}
+        onDragOver={(ev) => { if (dir && ev.dataTransfer.types.includes('Files')) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy' } }}
+        onDrop={(ev) => {
+          // Files dropped from another app (WSOS-DSK-013) are copied here, like Paste.
+          if (!dir || !ev.dataTransfer.files.length) return
+          ev.preventDefault()
+          const paths = [...ev.dataTransfer.files].map((f) => os.pathForFile(f)).filter(Boolean)
+          void os.filesDrop(paths, dir.root, dir.rel).then((r) => { if (!r.ok || r.value.rejected) setNotice(t('files.dropRejected')) })
+        }}>
         {/* Header: FM1/FM2 toolbar, FM5 search bar, FM6 trash actions */}
         <header className="box-border flex h-[60px] shrink-0 items-center gap-2.5 px-5" style={{ borderBottom: `1px solid ${C.line}`, background: C.bar }}>
           {search && dir ? <>
-            <label className="box-border flex h-[38px] flex-1 items-center gap-2.5 rounded-[10px] px-3.5 text-sm" style={{ background: 'rgba(4,10,26,0.6)', border: `1px solid ${C.blue}` }}>
+            <label className="box-border flex h-[38px] flex-1 items-center gap-2.5 rounded-[10px] px-3.5 text-sm" style={{ background: 'var(--ws-g-field)', border: `1px solid ${C.blue}` }}>
               <Svg d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" stroke={C.link} width={2.2} />
               <input autoFocus type="text" value={search.q} onChange={(e) => setSearch({ ...search, q: e.target.value })} aria-label={t('files.search.label')}
                 onKeyDown={(e) => { if (e.key === 'Escape') setSearch(null) }} className="min-w-0 grow border-0 bg-transparent text-sm outline-none" style={{ color: C.text, background: 'transparent' }} />
@@ -201,18 +249,18 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
               )) : <span className="font-semibold text-white">{folderName(place)}</span>}
             </nav>
             {dir && <button type="button" onClick={() => setSearch({ q: '', kind: 'any', days: 0 })} className={`${btn} ml-auto box-border flex h-[34px] w-[240px] items-center gap-2 rounded-lg px-3 text-[13px]`}
-              style={{ background: 'rgba(4,10,26,0.5)', border: '1px solid rgba(127,178,255,0.14)', color: C.muted }}>
+              style={{ background: 'var(--ws-g-field)', border: '1px solid rgba(127,178,255,0.14)', color: C.muted }}>
               <Svg d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" size={14} stroke={C.muted} width={2.2} /><span className="truncate">{t('files.search.placeholder', { folder: folderName(place) })}</span>
             </button>}
             {dir && <div className="flex overflow-hidden rounded-lg" style={{ border: '1px solid rgba(127,178,255,0.18)' }}>
               {(['grid', 'list'] as const).map((v) => (
                 <button key={v} type="button" aria-label={v === 'grid' ? t('files.gridView') : t('files.listView')} aria-pressed={view === v} onClick={() => setView(v)}
                   className={`${btn} flex h-8 w-[34px] items-center justify-center`} style={{ background: view === v ? 'rgba(31,107,255,0.25)' : 'transparent' }}>
-                  <Svg d={v === 'grid' ? P.grid : P.list} size={14} stroke={view === v ? '#FFFFFF' : C.muted} width={2.2} />
+                  <Svg d={v === 'grid' ? P.grid : P.list} size={14} stroke={view === v ? 'var(--ws-g-strong)' : C.muted} width={2.2} />
                 </button>
               ))}
             </div>}
-            {dir && view === 'grid' && <button type="button" onClick={() => setAsk({ kind: 'mkdir' })} title={t('files.newFolder')} className={`${btn} flex h-[34px] items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold`} style={{ background: C.blue }}>{`+ ${t('files.new')}`}</button>}
+            {dir && view === 'grid' && <button type="button" onClick={() => setAsk({ kind: 'mkdir' })} title={t('files.newFolder')} className={`${btn} flex h-[34px] items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold`} style={{ background: C.blue, color: '#FFFFFF' }}>{`+ ${t('files.new')}`}</button>}
           </>}
           {!search && <button type="button" aria-label={t('files.close')} onClick={onClose} className={`${iconBtn} ${dir ? '' : arc ? 'ml-auto' : 'ml-1'}`} style={{ color: C.muted }}><Svg d={P.close} /></button>}
         </header>
@@ -244,13 +292,13 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
           : error ? <p className="p-6 text-sm" style={{ color: '#FF8A7A' }}>{error}</p>
           : !entries ? <p className="p-6 text-sm" style={{ color: C.muted }}>{t('common.loading')}</p>
           : view === 'grid' ? (
-            <div className="flex flex-1 flex-col gap-3.5 overflow-auto px-6 py-[22px]" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, #102A5E 0%, #0A1A3D 60%)' }}
+            <div className="flex flex-1 flex-col gap-3.5 overflow-auto px-6 py-[22px]" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, var(--ws-g-glow) 0%, var(--ws-g-page) 60%)' }}
               onContextMenu={(ev) => { ev.preventDefault(); setMenu({ x: ev.clientX, y: ev.clientY, name: null }) }} onClick={(ev) => { if (ev.target === ev.currentTarget) setSel([]) }}>
               {rows.length === 0 && <p className="text-sm" style={{ color: C.muted }}>{t('files.empty')}</p>}
               {folders.length > 0 && <><span className="text-xs" style={{ color: C.muted }}>{t('files.foldersSection')}</span>
                 <div className="grid grid-cols-6 gap-3">
                   {folders.map((f, i) => (
-                    <button key={f.name} type="button" onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)} onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
+                    <button key={f.name} type="button" draggable onDragStart={(ev) => dragOut(ev, f.name)} onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)} onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
                       aria-pressed={sel.includes(f.name)} className={`${btn} flex items-center gap-2.5 rounded-[10px] p-3 text-left`}
                       style={{ background: sel.includes(f.name) ? 'rgba(31,107,255,0.18)' : C.card, border: `1px solid ${sel.includes(f.name) ? C.blue : C.line}` }}>
                       <Svg d={P.folder} size={22} fill={folderColor(i)} />
@@ -263,9 +311,9 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
                   {files.map((f) => {
                     const k = kindOf(f.name, false), on = sel.includes(f.name)
                     return (
-                      <button key={f.name} type="button" onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)} onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
+                      <button key={f.name} type="button" draggable onDragStart={(ev) => dragOut(ev, f.name)} onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)} onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
                         aria-pressed={on} title={!f.local ? t('files.onlineOnly') : undefined} className={`${btn} flex flex-col gap-2 rounded-xl p-2.5 text-left`}
-                        style={{ background: on ? 'rgba(31,107,255,0.18)' : 'rgba(14,32,72,0.5)', border: `1px solid ${on ? C.blue : 'rgba(127,178,255,0.1)'}`, opacity: f.local ? 1 : 0.7 }}>
+                        style={{ background: on ? 'rgba(31,107,255,0.18)' : 'var(--ws-g-card)', border: `1px solid ${on ? C.blue : 'var(--ws-g-line)'}`, opacity: f.local ? 1 : 0.7 }}>
                         <span className="flex h-24 items-center justify-center rounded-lg" style={{ background: thumbBg(k.image) }}>
                           <span className="rounded-[5px] px-[7px] py-[3px] font-mono text-[11px] font-semibold text-white" style={{ background: k.color }}>{k.ext}</span>
                         </span>
@@ -289,7 +337,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
                 {rows.map((f, i) => {
                   const k = kindOf(f.name, f.dir), on = sel.includes(f.name)
                   return (
-                    <button key={f.name} type="button" onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)}
+                    <button key={f.name} type="button" draggable onDragStart={(ev) => dragOut(ev, f.name)} onClick={(ev) => { ev.stopPropagation(); pick(f.name, ev) }} onDoubleClick={() => open(f)}
                       onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); if (!sel.includes(f.name)) setSel([f.name]); setMenu({ x: ev.clientX, y: ev.clientY, name: f.name }) }}
                       aria-pressed={on} className={`${btn} grid grid-cols-[minmax(0,1fr)_110px_90px_120px] items-center gap-3 px-6 py-[9px] text-left text-[13px]`}
                       style={{ background: on ? 'rgba(31,107,255,0.22)' : f.state === 'conflict' ? 'rgba(255,185,138,0.08)' : i % 2 ? 'rgba(255,255,255,0.015)' : 'transparent', opacity: f.local ? 1 : 0.7 }}>
@@ -326,6 +374,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
             const names = targets(menu.name), one = menu.name ? byName(menu.name) : undefined
             setMenu(null)
             if (a === 'open' && one) open(one)
+            else if (a === 'explainAI' && one) requestAssistant({ kind: 'file', root: dir.root, rel: relOf(one.name) })
             else if (a === 'cut' || a === 'copy') setClip({ op: a === 'cut' ? 'move' : 'copy', root: dir.root, rels: names.map(relOf) })
             else if (a === 'paste') paste()
             else if (a === 'duplicate') { const to: Place = { ...dir }; void act(() => os.filesPaste('duplicate', dir.root, names.map(relOf), dir.root, dir.rel)).then((r) => started(r, to)) }
@@ -342,7 +391,7 @@ export default function Files({ onClose, archive }: WindowProps & { archive?: { 
         {!!jobs.length && !jobsOpen && <JobsChip jobs={jobs} onOpen={() => setJobsOpen(true)} />}
         <Toasts toasts={toasts} dismiss={dropToast} />
         {notice && (
-          <div role="status" className="absolute bottom-11 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-xl px-4 py-2.5 text-[13px]" style={{ background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)' }}>
+          <div role="status" className="absolute bottom-11 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-xl px-4 py-2.5 text-[13px]" style={{ background: 'var(--ws-g-menu)', border: '1px solid rgba(127,178,255,0.22)' }}>
             {notice}<button type="button" onClick={() => setNotice(null)} className={btn} style={{ color: C.link }}>{t('common.dismiss')}</button>
           </div>
         )}
@@ -394,7 +443,8 @@ function Preview({ entry, dirLabel, cloud, onOpen }: { entry: FileEntry | undefi
 }
 
 // FM3 right-click menu.
-type MenuAction = 'open' | 'cut' | 'copy' | 'paste' | 'duplicate' | 'rename' | 'star' | 'compress' | 'openArchive' | 'extractHere' | 'extractTo' | 'properties' | 'trash' | 'mkdir'
+const AI_SPARK = 'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z'
+type MenuAction = 'open' | 'explainAI' | 'cut' | 'copy' | 'paste' | 'duplicate' | 'rename' | 'star' | 'compress' | 'openArchive' | 'extractHere' | 'extractTo' | 'properties' | 'trash' | 'mkdir'
 function ContextMenu({ menu, entry, starred, canPaste, multi, onPick }: { menu: Menu; entry: FileEntry | undefined; starred: boolean; canPaste: boolean; multi: boolean; onPick: (a: MenuAction) => void }) {
   type It = [MenuAction | null, string, string, string, boolean?, string?] | null
   // Archives: open (browse) and extract, for a single archive.
@@ -403,7 +453,9 @@ function ContextMenu({ menu, entry, starred, canPaste, multi, onPick }: { menu: 
     ['extractTo', t('files.arc.extractTo', { name: stemOf(entry.name) }), P.folder, '', !entry.local], null,
   ] : []
   const items: It[] = entry ? [...archive,
-    ['open', t('files.open'), P.open, 'Enter', !entry.dir && !entry.local], [null, t('files.openWith'), P.chevron, '', true, t('files.openWithNone')], null,
+    ['open', t('files.open'), P.open, 'Enter', !entry.dir && !entry.local], [null, t('files.openWith'), P.chevron, '', true, t('files.openWithNone')],
+    // The on-device AI assistant reads this file (text only, size-capped in electron/ai.ts) only when this is chosen.
+    ['explainAI', t('files.explainAI'), AI_SPARK, '', entry.dir || multi || !entry.local], null,
     ['cut', t('files.cut'), P.cut, 'Ctrl X', !entry.local], ['copy', t('files.copy'), P.copy, 'Ctrl C', !entry.local], ['duplicate', t('files.duplicate'), P.duplicate, '', !entry.local], null,
     ['rename', t('files.rename'), P.rename, 'F2', !entry.local], ['star', starred ? t('files.unstar') : t('files.star'), P.star, '', !entry.local], [null, t('files.share'), P.share, '', true, t('files.shareNone')], ['compress', t('files.compressMore'), P.compress, '', !entry.local], null,
     ['properties', t('files.properties'), P.info, ''], ['trash', t('files.moveToTrash'), P.trash, 'Del', !entry.local],
@@ -418,7 +470,7 @@ function ContextMenu({ menu, entry, starred, canPaste, multi, onPick }: { menu: 
         const i = all.indexOf(document.activeElement as HTMLButtonElement)
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); all[(i + (e.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]?.focus() }
       }}
-      className="fixed z-[60] box-border flex w-[260px] flex-col rounded-xl p-1.5" style={{ left: x, top: y, background: 'rgba(12,28,66,0.98)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 20px 50px rgba(0,0,0,0.55)' }}>
+      className="fixed z-[60] box-border flex w-[260px] flex-col rounded-xl p-1.5" style={{ left: x, top: y, background: 'var(--ws-g-menu)', border: '1px solid rgba(127,178,255,0.22)', boxShadow: '0 20px 50px rgba(0,0,0,0.55)' }}>
       {items.map((it, i) => it === null ? <div key={i} className="mx-1.5 my-1 h-px" style={{ background: C.line }} /> : (
         <button key={i} type="button" role="menuitem" disabled={it[4] || !it[0]} title={it[5]} onClick={() => it[0] && onPick(it[0])}
           className="flex cursor-pointer items-center gap-3 rounded-[7px] px-2.5 py-2 text-left text-[13px] outline-none hover:bg-[rgba(31,107,255,0.25)] focus:bg-[rgba(31,107,255,0.25)] disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
@@ -447,12 +499,12 @@ function SearchView({ search, setSearch, found, openHit }: { search: { q: string
       <div role="group" aria-label={t('files.search.filters')} className="flex gap-2 px-6 py-3.5" style={{ borderBottom: '1px solid rgba(127,178,255,0.1)' }}>
         {chips.map((c) => (
           <button key={c.label} type="button" aria-pressed={c.on} disabled={!c.click} title={c.title} onClick={c.click}
-            className={`${btn} rounded-full px-3 py-1.5 text-xs disabled:opacity-40`} style={{ border: `1px solid ${c.on ? C.blue : 'rgba(127,178,255,0.2)'}`, background: c.on ? 'rgba(31,107,255,0.2)' : 'transparent' }}>{c.label}</button>
+            className={`${btn} rounded-full px-3 py-1.5 text-xs disabled:opacity-40`} style={{ border: `1px solid ${c.on ? C.blue : 'var(--ws-g-line)'}`, background: c.on ? 'rgba(31,107,255,0.2)' : 'transparent' }}>{c.label}</button>
         ))}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 overflow-auto px-6 py-4">
         {found && q && <span className="mb-1 text-xs" style={{ color: C.muted }}>
-          {t('files.search.results', { count: formatNumber(found.hits.length), secs: (found.ms / 1000).toFixed(2) })}{found.truncated ? ` · ${t('files.search.more', { count: formatNumber(found.hits.length) })}` : ''}
+          {t('files.search.results', { count: formatNumber(found.hits.length), secs: formatDecimal(found.ms / 1000, 2) })}{found.truncated ? ` · ${t('files.search.more', { count: formatNumber(found.hits.length) })}` : ''}
         </span>}
         {found && q && found.hits.length === 0 && <p className="text-sm" style={{ color: C.muted }}>{t('files.search.none', { q: search.q.trim() })}</p>}
         {q && found?.hits.map((h, i) => <HitRow key={h.root + h.rel} h={h} q={q} first={i === 0} onOpen={() => openHit(h)} />)}
@@ -534,7 +586,7 @@ function NameDialog({ title, initial, action, onCancel, onSubmit }: { title: str
       <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (ok) void onSubmit(name.trim()).then(setErr) }}>
         <label className="flex flex-col gap-1.5 text-xs" style={{ color: C.muted }}>{t('files.nameLabel')}
           <input ref={ref} value={name} onChange={(e) => { setName(e.target.value); setErr(null) }} onKeyDown={(e) => { if (e.key === 'Escape') onCancel() }}
-            className="h-10 rounded-lg px-3 text-sm outline-none" style={{ background: 'rgba(4,10,26,0.6)', border: `1px solid ${err ? '#FF8A7A' : C.blue}`, color: C.text }} />
+            className="h-10 rounded-lg px-3 text-sm outline-none" style={{ background: 'var(--ws-g-field)', border: `1px solid ${err ? '#FF8A7A' : C.blue}`, color: C.text }} />
         </label>
         {err && <p role="alert" className="m-0 text-[13px]" style={{ color: '#FFB4A8' }}>{err}</p>}
         <div className="flex justify-end gap-2">

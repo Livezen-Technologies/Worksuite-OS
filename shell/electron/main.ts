@@ -1,7 +1,11 @@
 import { findBundles } from './bundles'
-import { app, BrowserWindow, dialog, ipcMain, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
+
+// Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
+const DRAG_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4nGNgoCaQz/7/nxiM1wBCYNSAUQNGigEUZSZyAAAnXe3wcJ4r8wAAAABJRU5ErkJggg=='
 import { execFile, spawn } from 'node:child_process'
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
@@ -15,30 +19,43 @@ import { checkOwnPassword, localUsers } from './users'
 import { ask, signinHost, type SignInMethod } from './signin'
 import { recoveryHost } from './recovery'
 import { prepareAppMode, runAppMode } from './appwindow'
-import { loadSession, parseAppArgs, resolveLink } from './webapps'
+import { prepareWhatsApp, runWhatsApp } from './whatsappwindow'
+import { WHATSAPP_ID } from './whatsapp'
+import { shellPrefsFrom } from '../src/lib/shellPrefs'
+import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
+import { createWidgets } from './widgets'
 import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { archiveJobs, listIn, locate } from './archives'
-import { defaultEnv, driveDir, freeBytes, list, resolveIn, roots } from './files'
+import { startAIHost } from './ai'
+import { defaultEnv, driveDir, dropPlan, freeBytes, list, resolveIn, roots } from './files'
 import { eject, jobs as fileJobs, mkdirIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
-import { startPanel } from './panelHost'
+import { startPanel, type PanelHooks } from './panelHost'
+import { captureHost, imageData, runBytes, screenshotFileName, screenshotsDir, wlCopyImage, type CaptureKind, type SnipMode } from './capture'
+import { clipboardAllowed } from './clipboard'
+import { applyShortcuts } from './shortcutsHost'
+import { ACTIVATED_FLAG, FULLSCREEN_FLAG } from './panel'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
+import type { Layout } from './displays'
 import { outputWindows } from './outputWindows'
 import { realExec } from './system'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
+import { powerArgs, startSessionHost } from './sessionHost'
+import { bannerAllowed, toastHost, type ToastMsg } from './toastHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
 import { startTouchHost } from './touch'
-import { startNotifications } from './notifications'
+import { startNotifications, windowForNotification } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
 import { fileHead, isWindowsProgram } from './winexe'
 import { externalAllowed, loadGrants, permissionAllowed, shellWebPreferences } from './webSecurity'
 import { xdgDirs } from './xdgDirs'
+import { IconCache } from './icons'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 // URL scheme allow-list, renderer prefs and per-origin permission grants: ./webSecurity (WSOS-SEC-001/003/006).
@@ -58,7 +75,7 @@ function broadcast(channel: string, payload: unknown) {
 const shellPrefs = () => shellWebPreferences(path.join(__dirname, 'preload.cjs'))
 
 const monitors = outputWindows((r) => {
-  const w = new BrowserWindow({ x: r.x, y: r.y, width: r.width, height: r.height, fullscreen: true, frame: false, title: `WorkSuite desktop ${r.name}`, backgroundColor: '#0f172a', webPreferences: shellPrefs() })
+  const w = new BrowserWindow({ x: r.x, y: r.y, width: r.width, height: r.height, fullscreen: true, frame: false, title: `WorkSuite desktop ${r.name}`, backgroundColor: '#040A1A', webPreferences: shellPrefs() })
   const wc = w.webContents
   shellContents.add(wc)
   w.on('closed', () => { shellContents.delete(wc); monitors.forget(r.name) })
@@ -68,10 +85,16 @@ const monitors = outputWindows((r) => {
   return w
 }, () => win)
 
+const appIcons = new IconCache()
+const parseJson = (s: string): unknown => { try { return JSON.parse(s) } catch { return null } }
+
+/** The checked sender of the IPC call being handled (read synchronously in a handler, e.g. ws:edit). */
+let ipcSender: Electron.WebContents | null = null
 function handle(channel: string, fn: (...args: string[]) => unknown) {
   ipcMain.handle(channel, (e, ...args) => {
     if (!validSender(e)) throw new Error('Rejected IPC sender')
-    return fn(...args.map(String))
+    ipcSender = e.sender
+    try { return fn(...args.map(String)) } finally { ipcSender = null }
   })
 }
 
@@ -80,16 +103,31 @@ function run(cmd: string, args: string[]) {
   return new Promise<void>((resolve) => execFile(cmd, args, () => resolve()))
 }
 
+/** $XDG_RUNTIME_DIR/worksuite/shell-ready: services/session/greeter/worksuite_greeter/veil.py session_main. */
+function markSessionVeil() {
+  const run = process.env.XDG_RUNTIME_DIR
+  if (!run) return
+  try { mkdirSync(path.join(run, 'worksuite'), { recursive: true, mode: 0o700 }); writeFileSync(path.join(run, 'worksuite', 'shell-ready'), `${process.pid}\n`) } catch { /* no veil to tell */ }
+}
+
 function createWindow() {
   win = new BrowserWindow({
     fullscreen: true,
-    backgroundColor: '#0f172a',
+    // See-through, so Start, the notification centre, quick settings and the shell's windows float over the app below
+    // while the shell is lifted (src/screens/Desktop.tsx draws the wallpaper only when it is the desktop). The page
+    // itself starts in the greeter veil's colour (index.css), so signing in still fades through dark.
+    transparent: true,
+    backgroundColor: '#00000000',
     webPreferences: shellPrefs(),
   })
   shellContents.add(win.webContents)
   // Perf probe (tests/perf/guest/measure-shell, WSOS-PRF-002/006): process start → first window ready.
   if (process.env.WORKSUITE_PERF === '1') win.once('ready-to-show', () => process.stdout.write(`WORKSUITE_PERF shell_ready_ms ${Math.round(process.uptime() * 1000)}\n`))
   win.once('ready-to-show', () => markShellReady(Math.round(process.uptime() * 1000)))
+  // The session veil (worksuite-session-veil, over Labwc from the session's start) leaves once the renderer has drawn
+  // its first screen (ws:firstFrame, src/main.tsx); ready-to-show is only the empty page. A renderer that never says so
+  // still lets it go a little after its page showed.
+  win.once('ready-to-show', () => setTimeout(markSessionVeil, 5000))
   // Renderer probes (launcher first frame, WSOS-PRF-005) report on the console; forwarded only in perf runs.
   if (process.env.WORKSUITE_PERF === '1') win.webContents.on('console-message', (ev) => { if (/^WORKSUITE_PERF [a-z_]+ \d+$/.test(ev.message)) process.stdout.write(`${ev.message}\n`) })
   win.webContents.on('will-navigate', (e) => e.preventDefault())
@@ -108,11 +146,18 @@ function createWindow() {
 app.commandLine.appendSwitch('enable-wayland-ime')
 // `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
 const appRequest = parseAppArgs(process.argv)
-if (appRequest) {
+if (appRequest?.id === WHATSAPP_ID) {
+  // WhatsApp Web: its own window, partition and app_id; no WorkSuite account involved (whatsappwindow.ts).
+  if (prepareWhatsApp()) runWhatsApp()
+  else app.quit()
+} else if (appRequest) {
   if (prepareAppMode(appRequest)) runAppMode(appRequest)
   else app.quit()
 } else startShell()
 
+/** The shell's Wayland app_id is Electron's default, "worksuite-shell" (package.json name): Labwc's window rule
+ *  (services/session/labwc/rc.xml) keeps it always on bottom by that id: below every app, and on every desktop. */
+export const SHELL_APP_ID = 'worksuite-shell'
 function startShell() {
 app.whenReady().then(() => {
   // Web permissions denied by default; the shell's own session never gets any (WSOS-SEC-003).
@@ -130,11 +175,15 @@ app.whenReady().then(() => {
     if (method === 'key') return { ok: false, message: 'Use your password.' }
     return checkOwnPassword(user, secret)
   })
-  handle('ws:lock', async () => { await brokerCall('Lock'); await run('loginctl', ['lock-session']) })
+  // true = the system locker (swayidle → worksuite-lock → gtklock) has the screen; the shell then shows no lock board.
+  handle('ws:lock', async () => {
+    await brokerCall('Lock')
+    return new Promise<boolean>((resolve) => execFile('loginctl', ['lock-session'], (err) => resolve(!err)))
+  })
   handle('ws:logout', () => run(...logoutCommand()))
   handle('ws:power', (action) => {
-    const verbs: Record<string, string> = { suspend: 'suspend', restart: 'reboot', shutdown: 'poweroff' }
-    return verbs[action] ? run('systemctl', [verbs[action]]) : undefined
+    const args = powerArgs(String(action), false)
+    return args ? run('systemctl', args) : undefined
   })
   // WorkSuite web apps: one window and one persistent session partition per app (WSOS-SEC-004).
   const apps = appWindows({
@@ -151,9 +200,15 @@ app.whenReady().then(() => {
   handle('ws:setLockTimeout', (s) => writeLockTimeout(lock, Number(s)))
   // Launcher data: the org's WorkSuite web apps (no token leaves the main process) and installed XDG apps.
   handle('ws:webApps', async () => {
-    const r = await loadSession((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }))
-    return r.ok ? { ok: true, value: r.value.apps.map(({ id, name, offline_level }) => ({ id, name, offline_level })) } : r
+    // Cached per account in the user's cache dir so the launcher keeps the org's list offline (WSOS-DSK-001).
+    const file = path.join(app.getPath('home'), '.cache', 'worksuite', 'launcher-apps.json')
+    return launcherApps((m, p) => brokerCall(m, p ?? {}), (url, init) => fetch(url, { headers: init?.headers }), {
+      read: () => (existsSync(file) ? readFileSync(file, 'utf8') : null),
+      write: (text) => { mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 }); writeFileSync(file, text, { mode: 0o600 }) },
+    })
   })
+  // App icons (Icon= of desktop entries) as data: URLs, from icon directories only (electron/icons.ts).
+  handle('ws:appIcons', (names, size, scale) => appIcons.resolve(parseJson(names), size, scale))
   handle('ws:installedApps', () => {
     const all = installedApps()
     const office = findOffice(all)
@@ -183,6 +238,21 @@ app.whenReady().then(() => {
   const brokerFn = (m: string, p?: Record<string, unknown>) => brokerCall(m, p ?? {})
   const searcher = createSearch({ broker: brokerFn, device: () => deviceCredential(), fetch: (url, init) => fetch(url, { headers: init.headers, signal: init.signal }) })
   handle('ws:search', (q, types) => searcher.search(q, types ? types.split(',').filter(Boolean) : []))
+  // Desktop widgets (WorkSuite Desktop's Home on the wallpaper): the same token path as search; the renderer gets
+  // parsed data only. Cached per account (hashed id) under ~/.cache/worksuite/widgets for offline use; policy
+  // desktop_widgets: false, or a kiosk device, turns them off here too, so no request is made.
+  const widgetDir = path.join(app.getPath('home'), '.cache', 'worksuite', 'widgets')
+  const widgetFile = (id: string) => path.join(widgetDir, `${createHash('sha256').update(id).digest('hex').slice(0, 32)}.json`)
+  const widgets = createWidgets({
+    broker: brokerFn, device: () => deviceCredential(), fetch: (url, init) => fetch(url, { headers: init.headers, signal: init.signal }),
+    enabled: () => { const p = deviceInfo().policies as { desktop_widgets?: boolean | null; kiosk?: boolean } | null; return p?.desktop_widgets !== false && p?.kiosk !== true },
+    cache: {
+      read: (id) => { try { return JSON.parse(readFileSync(widgetFile(id), 'utf8')) } catch { return null } },
+      write: (id, snap) => { try { mkdirSync(widgetDir, { recursive: true, mode: 0o700 }); writeFileSync(widgetFile(id), JSON.stringify(snap), { mode: 0o600 }) } catch { /* a convenience */ } },
+      clear: () => { try { rmSync(widgetDir, { recursive: true, force: true }) } catch { /* nothing cached */ } },
+    },
+  })
+  handle('ws:widgets', () => widgets.load())
   handle('ws:recentFiles', async () => {
     const home = app.getPath('home')
     let local: ReturnType<typeof localRecentHits> = []
@@ -250,10 +320,15 @@ app.whenReady().then(() => {
   })
   handle('ws:syncNow', () => syncCall('SyncNow'))
   handle('ws:syncStatus', () => syncCall('Status'))
+  // Shell ENH-01 preferences (favourites, taskbar pins, order): the user's synced 'preferences/shell' object.
+  handle('ws:shellPrefs', () => syncCall('GetPreference', { object_id: 'shell' }))
+  // The preferences come as JSON text (handle() passes strings only).
+  handle('ws:setShellPrefs', (prefs) => syncCall('SetPreference', { object_id: 'shell', data: shellPrefsFrom(parseJson(prefs)) }))
   // WSOS-SYN-004: rejected changes are shown against their record; retry only when the user asks.
   handle('ws:syncFailed', () => syncCall('ListFailed'))
   handle('ws:syncRetry', (mutationId) => syncCall('RetryFailed', { mutation_id: mutationId }))
   handle('ws:deviceInfo', () => deviceInfo())
+  handle('ws:firstFrame', () => { markSessionVeil(); return true })
   // Settings → NetworkManager, BlueZ, PipeWire, UPower, CUPS, wlr-randr, UDisks2 (WSOS-INT-001…006, DSK-006).
   const sys = systemBridge()
   handle('ws:sysNetwork', () => sys.network())
@@ -416,6 +491,8 @@ app.whenReady().then(() => {
   for (const ch of ['ws:recoverySnapshots', 'ws:recoveryRestore', 'ws:recoveryCopyToUsb', 'ws:recoveryTerminal', 'ws:recoverySaveReport']) handle(ch, () => rec.unavailable())
   // Files: real folders plus Drive sync states from the sync service.
   const files = defaultEnv(async (dir) => { const r = await syncCall('FileStates', { dir }); return r.ok && Array.isArray(r.value) ? r.value as { name: string; state: string }[] : null })
+  // On-device AI assistant (services/ai): Settings › AI, the assistant panel and its context actions.
+  startAIHost(handle, broadcast, files, { readClipboard: () => clipboard.readText() })
   handle('ws:filesRoots', () => ({ roots: roots(files).map(({ id, label }) => ({ id, label })), drive_exists: existsSync(driveDir(files.home)) }))
   handle('ws:filesList', (root, rel) => list(files, root, rel))
   handle('ws:filesOpen', async (root, rel) => {
@@ -452,6 +529,20 @@ app.whenReady().then(() => {
   handle('ws:filesTrashList', () => trashList(files))
   handle('ws:filesTrashRestore', (ids) => trashRestore(files, strs(ids)))
   handle('ws:filesTrashDelete', (ids) => trashDelete(files, ids === 'all' ? 'all' : strs(ids)))
+  // Drag and drop with other apps (WSOS-DSK-013): dropped paths inside the user's places are copied here by the
+  // same jobs as paste; dragging files out hands real file paths to the compositor (text/uri-list for the target).
+  handle('ws:filesDrop', (paths, dstRoot, dstRel) => {
+    const plan = dropPlan(files, strs(paths))
+    const jobs = plan.groups.map((g) => fjobs.start('copy', g.root, g.rels, dstRoot, dstRel)).filter((r) => r.ok).length
+    return { ok: true, value: { jobs, rejected: plan.rejected } }
+  })
+  handle('ws:filesStartDrag', (root, rels) => {
+    const paths = strs(rels).slice(0, 500).map((r) => resolveIn(files, root, r)?.full).filter((p): p is string => !!p && existsSync(p))
+    const wc = [...shellContents].find((c) => !c.isDestroyed() && c.isFocused())
+    if (!paths.length || !wc) return { ok: false, error: 'not_found' }
+    wc.startDrag({ file: paths[0], files: paths, icon: nativeImage.createFromDataURL(DRAG_ICON) })
+    return { ok: true, value: paths.length }
+  })
   handle('ws:filesPaste', (op, srcRoot, rels, dstRoot, dstRel) => fjobs.start(op, srcRoot, strs(rels), dstRoot, dstRel))
   // Archives (electron/archives.ts): passwords arrive here only to go to 7z's stdin; they are never logged or sent back.
   const ajobs = archiveJobs(files, (e) => broadcast('ws:filesJob', e))
@@ -474,8 +565,10 @@ app.whenReady().then(() => {
     exec: realExec,
     storeFile: path.join(xdgDirs(app.getPath('home')).config, 'worksuite', 'displays.json'),
     spawn: (cmd, args) => { const p = spawn(cmd, args, { stdio: 'ignore' }); p.on('error', () => undefined); return { kill: () => p.kill() } },
-    onChange: (st: DisplayState) => { broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)) },
+    onChange: (st: DisplayState) => { layout = st.layout; broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)) },
   })
+  let layout: Layout | null = null
+  void displays.state().then((r) => { if (r.ok && !layout) layout = r.value.layout })
   handle('ws:displayState', () => displays.state())
   handle('ws:displayApply', (json) => {
     try { const p = JSON.parse(json); return displays.apply(arrange(p.layout, p.sides ?? {})) } catch { return { ok: false, error: 'bad_layout' } }
@@ -485,20 +578,127 @@ app.whenReady().then(() => {
   handle('ws:displayWallpaper', (output, id) => displays.setWallpaper(output, id))
   void displays.applySaved()
   // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
-  startPanel(handle, broadcast, () => void displays.applySaved(), (full) => {
+  const hooks: PanelHooks = {}
+  const panelClient = startPanel(handle, broadcast, () => void displays.applySaved(), (full) => {
     // An archive opened from elsewhere (worksuite-open-archive, the default handler): browse it in Files.
     const at = locate(files, full)
     if (at) { broadcast('ws:openArchive', at); win?.show(); win?.focus() }
-  })
+  }, hooks)
+  const home = app.getPath('home')
+  const policies = () => deviceInfo().policies as { screen_capture?: string | null; clipboard_history?: string | null; kiosk?: boolean } | null
+  // The app window with the focus (not the shell's): where Super+V pastes, and whose copies the deny list checks.
+  const focusedWindow = () => panelClient?.windows.find((w) => w.flags & ACTIVATED_FLAG && !['worksuite-shell', 'worksuite', 'electron'].includes(w.appId.toLowerCase())) ?? null
   // Default apps, clipboard history, problem report (WSOS-DSK-008/009, SES-005).
-  startDesktopHost(handle, broadcast, app.getPath('home'), app.getVersion())
+  startDesktopHost(handle, broadcast, home, app.getVersion(), {
+    focusedApp: () => focusedWindow()?.appId ?? null,
+    allowed: () => clipboardAllowed(policies()),
+    preview: (data) => { try { const img = nativeImage.createFromBuffer(data); if (img.isEmpty()) return null; const s = img.getSize(); return (s.width > 360 || s.height > 240 ? img.resize(s.width / 360 > s.height / 240 ? { width: 360 } : { height: 240 }) : img).toDataURL() } catch { return null } },
+    activate: (h) => panelClient?.activate(h) ?? Promise.resolve(),
+  })
+  // Screenshots and the snipping tool (electron/capture.ts): Shell1.Capture from the Print/Super+Shift+S bindings.
+  const capture = captureHost({
+    run: runBytes, copy: (png) => wlCopyImage(png), policies, broadcast,
+    outputs: () => (layout ? outputRects(layout).map(({ name, x, y, width, height }) => ({ name, x, y, width, height })) : []),
+    lift: (on) => hooks.lift?.('snip', on),
+    dir: () => screenshotsDir(process.env, home),
+    settingsFile: path.join(xdgDirs(home).config, 'worksuite', 'capture.json'),
+  })
+  hooks.capture = (k) => void capture.request(k as CaptureKind)
+  // Open(what) from the key bindings: shell surfaces, or an app (custom shortcuts, Ctrl+Alt+T) in its own scope.
+  // Super+V, Super+. and Super+/ show over a capture of the screen, so they look like they float over the app.
+  hooks.open = (what) => void (async () => {
+    if (what.startsWith('app:')) { const c = appLaunchCommand(what.slice(4)); if (c) await run(...c); return }
+    const previous = focusedWindow()?.handle ?? ''
+    let backdrop: string | null = null
+    if (['clipboard', 'emoji', 'shortcuts'].includes(what) && capture.allowed()) {
+      const primary = layout?.primary
+      const jpg = await runBytes('grim', [...(primary && /^[A-Za-z0-9._-]{1,64}$/.test(primary) ? ['-o', primary] : []), '-t', 'jpeg', '-q', '80', '-'])
+      if (jpg) backdrop = `data:image/jpeg;base64,${jpg.toString('base64')}`
+    }
+    broadcast('ws:shellOpen', { what, previous, backdrop })
+  })()
+  handle('ws:captureAllowed', () => capture.allowed())
+  handle('ws:captureSettings', () => capture.settings())
+  handle('ws:captureSetSettings', (json) => capture.setSettings((parseJson(json) ?? {}) as object))
+  handle('ws:capture', (kind) => (['print', 'save', 'window', 'snip'].includes(kind) ? capture.request(kind as CaptureKind) : false))
+  handle('ws:snipStart', (mode, delay) => capture.start(mode as SnipMode, Number(delay) || 0))
+  handle('ws:snipFrame', (id, output) => capture.frame(Number(id), output))
+  handle('ws:snipDone', (id, dataUrl) => capture.done(Number(id), dataUrl))
+  handle('ws:snipCancel', (id) => capture.cancel(Number(id)))
+  handle('ws:snipImage', (id) => capture.image(Number(id) || 0))
+  handle('ws:snipCopy', (dataUrl) => capture.copyImage(dataUrl))
+  // Save as: the person picks the place (default Pictures/Screenshots) and PNG or JPEG; nothing is written elsewhere.
+  handle('ws:snipSave', async (dataUrl) => {
+    const img = imageData(dataUrl)
+    if (!img || !win) return { ok: false, error: 'invalid_argument' }
+    const dir = screenshotsDir(process.env, home)
+    try { mkdirSync(dir, { recursive: true }) } catch { /* the dialog still opens */ }
+    const d = await dialog.showSaveDialog(win, { defaultPath: path.join(dir, screenshotFileName(new Date(), img.ext)), filters: [img.ext === 'png' ? { name: 'PNG', extensions: ['png'] } : { name: 'JPEG', extensions: ['jpg', 'jpeg'] }] })
+    if (d.canceled || !d.filePath) return { ok: false, error: 'cancelled' }
+    try { writeFileSync(d.filePath, img.data, { mode: 0o644 }) } catch { return { ok: false, error: 'failed' } }
+    return { ok: true, value: d.filePath }
+  })
+  // "Show in Files": the saved file's folder in the shell's own Files, when it is in the home folder.
+  handle('ws:snipReveal', (file) => {
+    const rel = path.relative(home, path.dirname(path.resolve(file)))
+    return rel.startsWith('..') || path.isAbsolute(rel) ? null : { root: 'home', rel, name: path.basename(file) }
+  })
+  // Settings › Keyboard › Shortcuts: the user's block in their Labwc rc.xml; also applied at start from the synced
+  // preferences, so shortcuts follow the person to another computer.
+  const shortcutFiles = { userRc: path.join(xdgDirs(home).config, 'worksuite', 'labwc', 'rc.xml'), systemRc: '/etc/xdg/worksuite/labwc/rc.xml' }
+  handle('ws:shortcutsApply', (json) => applyShortcuts(parseJson(json), shortcutFiles, realExec))
+  setTimeout(() => void syncCall('GetPreference', { object_id: 'shell' }).then((r) => {
+    const sc = r.ok ? (r.value as { shortcuts?: unknown } | null)?.shortcuts : undefined
+    if (sc) void applyShortcuts(sc, shortcutFiles, realExec)
+  }).catch(() => undefined), 3000).unref?.()
+  // Edit commands for the shell's own text fields (right-click menu): the focused field of the asking window.
+  handle('ws:edit', (cmd) => {
+    const wc = ipcSender
+    if (!wc) return false
+    const fn = ({ cut: () => wc.cut(), copy: () => wc.copy(), paste: () => wc.paste(), selectAll: () => wc.selectAll(), undo: () => wc.undo(), redo: () => wc.redo() } as Record<string, () => void>)[String(cmd)]
+    fn?.()
+    return !!fn
+  })
+  // Shutdown/restart/sign-out overlay on every display, inhibitors, crashed apps, administrators' diagnostics.
+  startSessionHost(handle, broadcast, {
+    apps: () => installedApps(), user: os.userInfo().username, readGroup: () => readFileSync('/etc/group', 'utf8'),
+    launch: (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined },
+  })
   // System monitor (G11) and quick settings brightness / power mode (G01).
   startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
   startTouchHost(handle, broadcast, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
-  const notices = startNotifications(handle, broadcast)
+  // Clicking one (its "default" action) also raises the sender's window through the bridge, whatever the app does.
+  const notices = startNotifications(handle, broadcast, (n) => {
+    const w = panelClient && windowForNotification(n, panelClient.windows, installedApps())
+    if (w) void panelClient.activate(w.handle)
+  })
+  // Toasts over the apps (worksuite-toasts, a layer-shell overlay surface): the renderer hands its toast here when the
+  // helper runs. Clicking an app notification's toast takes its default action, which focuses the sender's window.
+  const toasts = toastHost((key) => {
+    const m = /^app-(\d+)$/.exec(key)
+    if (m) notices.invoke(Number(m[1]), 'default')
+    else broadcast('ws:toastClicked', key)
+  })
+  handle('ws:toastsAvailable', () => toasts.available())
+  handle('ws:toastShow', (json) => {
+    try {
+      const t = JSON.parse(json) as ToastMsg
+      // Held back under a full-screen window: true, so the renderer does not draw it itself (it stays in the centre).
+      if (!bannerAllowed(panelClient?.windows ?? [], ACTIVATED_FLAG, FULLSCREEN_FLAG)) return true
+      return toasts.show({ ...t, key: String(t.key) })
+    } catch { return false }
+  })
+  // A notification closed by its app (or from the notification centre) takes its toast away too.
+  let liveIds = new Set<number>()
+  notices.onChange((list) => {
+    const now = new Set(list.map((n) => n.id))
+    for (const id of liveIds) if (!now.has(id)) toasts.hide(`app-${id}`)
+    liveIds = now
+  })
+  app.on('before-quit', () => toasts.stop())
   // Files' "Notify me when done" (FO1): a notice in the shell's own notification centre, text only.
   handle('ws:filesNotify', (summary, body) => notices.notify('Files', 0, String(summary).slice(0, 200), String(body).slice(0, 400), [], 1))
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).

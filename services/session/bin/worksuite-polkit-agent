@@ -3,10 +3,11 @@
 # /usr/lib/worksuite/worksuite-polkit-agent.
 # G05: the WorkSuite agent (services/session/polkit) registers with polkitd and the shell draws the prompt: action,
 # requesting program, administrator account, tries left and the pam_faillock lockout (WSOS-AUTH-004). PAM checks the
-# password. lxpolkit (GTK) or mate-polkit stays as the fallback when the GObject bindings for polkit are missing or
-# WORKSUITE_POLKIT_LEGACY is set.
+# password. polkit itself is spoken by worksuite-polkit-listener (C). lxpolkit (GTK) or mate-polkit stays as the
+# fallback when the listener or python3-gi is missing, or WORKSUITE_POLKIT_LEGACY is set.
 set -u
-if [ -z "${WORKSUITE_POLKIT_LEGACY:-}" ] && python3 -c 'import gi; gi.require_version("PolkitAgent", "1.0"); from gi.repository import PolkitAgent' >/dev/null 2>&1; then
+if [ -z "${WORKSUITE_POLKIT_LEGACY:-}" ] && [ -x "${WORKSUITE_POLKIT_LISTENER:=/usr/lib/worksuite/worksuite-polkit-listener}" ] \
+    && python3 -c 'from gi.repository import GLib' >/dev/null 2>&1; then
     PYTHONPATH=/usr/lib/worksuite/polkit${PYTHONPATH:+:$PYTHONPATH} exec python3 -m worksuite_polkit_agent
 fi
 for a in /usr/bin/lxpolkit /usr/libexec/polkit-mate-authentication-agent-1 /usr/lib/mate-polkit/polkit-mate-authentication-agent-1; do

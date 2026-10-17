@@ -2,111 +2,156 @@
 # One centred column, 28 px apart: the mark in a spinning ring (120 px), the title (Plex Sans Medium 28) over the
 # subtitle (Plex Sans 15, #8FA3C8), then a 420 x 4 progress bar with the phase on the left and "WorkSuite OS <version>" (filled in at package build)
 # on the right (Plex Mono 12, #5E739C); "Press Esc for details" sits 32 px from the bottom (Plex Mono 12, #3D5280).
-# Modes (Plymouth.GetMode): boot -> "Starting WorkSuite OS", shutdown -> "Shutting down", reboot -> "Restarting",
+# Modes (Plymouth.GetMode): boot -> "Booting…", shutdown -> "Shutting down…", reboot -> "Restarting…",
 # updates / system-upgrade / firmware-upgrade -> the same column with update progress and "Don't turn off" copy.
 # The disk-unlock prompt (LUKS, SRS full-disk encryption) appears under the bar, in a 420 x 44 field.
+#
+# Every display: Plymouth's script plugin centres each head on one shared canvas (a head's Window.GetX/GetY is its
+# offset on that canvas), so one set of sprites placed at the canvas centre is centred on every head. The bottom hint
+# sits at the bottom of the shortest head, so it is on screen everywhere.
+# HiDPI: one device scale S for every head (1, or 2 when the shortest head has 1800+ physical rows, i.e. 4K-class
+# panels); sizes, offsets and fonts are multiplied by S and the @2x renders are used, so the picture is crisp and the
+# same size on every head. When Plymouth already reports logical (scaled) sizes, S stays 1.
+# Boot: the column fades in over 0.5 s after the firmware logo. Shutdown/restart: no fade, the shell's overlay
+# (shell/src/components/SessionEnd.tsx) already shows the same picture, so the splash continues it.
+# Esc still shows the text details (Plymouth's own handling, for administrators). Recovery boots have no "splash".
 # Plymouth's script language has no ternary operator: every choice below is an if/else.
 Window.SetBackgroundTopColor(0.016, 0.039, 0.102);      # #040A1A
 Window.SetBackgroundBottomColor(0.016, 0.039, 0.102);
+
+# Heads: the shared canvas centre and the shortest head (Window.GetWidth(i) is #NULL past the last head).
+heads = 0;
+min_h = 0;
+min_bottom = 0;
+for (i = 0; i < 8; i++) {
+  if (Window.GetWidth(i)) {
+    hh = Window.GetHeight(i);
+    if (heads == 0 || hh < min_h) { min_h = hh; min_bottom = Window.GetY(i) + hh; }
+    heads++;
+  }
+}
+if (heads == 0) { min_h = Window.GetHeight(); min_bottom = Window.GetY() + min_h; }
 W = Window.GetWidth();
 H = Window.GetHeight();
 cx = Window.GetX() + W / 2;
 cy = Window.GetY() + H / 2;
+S = 1;
+if (min_h >= 1800) S = 2;
+SUFFIX = "";
+if (S == 2) SUFFIX = "@2x";
 SANS = "IBM Plex Sans";
 SANS_MEDIUM = "IBM Plex Sans Medium";
 MONO = "IBM Plex Mono";
 VERSION_S = "WorkSuite OS @VERSION@";
 
-# Pango sizes are points at 96 dpi: the design's pixel sizes x 0.75.
+# Pango sizes are points at 96 dpi: the design's pixel sizes x 0.75, times the device scale.
 fun text(s, px, r, g, b, font) {
-  return Image.Text(s, r, g, b, 1, font + " " + px * 0.75);
+  return Image.Text(s, r, g, b, 1, font + " " + px * 0.75 * S);
+}
+fun img(name) {
+  return Image(name + SUFFIX + ".png");
 }
 fun place_center(sprite, y) {
   sprite.SetPosition(Math.Int(cx - sprite.GetImage().GetWidth() / 2), Math.Int(y), 3);
 }
 
 # Column: ring 120 + 28 + title 37 + 10 + subtitle 20 + 28 + bar 4 + 10 + phase row 16 = 273 px, centred.
-ring_y = Math.Int(cy - 273 / 2);
-title_y = ring_y + 148;
-sub_y = title_y + 47;
-track_y = sub_y + 48;
+ring_y = Math.Int(cy - 273 * S / 2);
+title_y = ring_y + 148 * S;
+sub_y = title_y + 47 * S;
+track_y = sub_y + 48 * S;
 
-ring.track = Sprite(Image("ring-track.png"));
-ring.track.SetPosition(cx - 60, ring_y, 1);
-ring.arc_image = Image("ring-arc.png");
+ring.track = Sprite(img("ring-track"));
+ring.track.SetPosition(cx - 60 * S, ring_y, 1);
+ring.arc_image = img("ring-arc");
 ring.arc = Sprite(ring.arc_image);
-ring.arc.SetPosition(cx - 60, ring_y, 2);
+ring.arc.SetPosition(cx - 60 * S, ring_y, 2);
 ring.angle = 0;
-mark = Sprite(Image("mark.png"));
-mark.SetPosition(cx - 24, ring_y + 36, 3);
+mark = Sprite(img("mark"));
+mark.SetPosition(cx - 24 * S, ring_y + 36 * S, 3);
 
-fun refresh_callback() {
-  ring.angle += 0.0898;                                  # one turn per 1.4 s at Plymouth's 50 Hz refresh
-  if (ring.angle > 6.2832) ring.angle -= 6.2832;
-  ring.arc.SetImage(ring.arc_image.Rotate(ring.angle));
-  if (bar.original) { step_bar(); step_shimmer(); }
-}
-Plymouth.SetRefreshRate(50);
-Plymouth.SetRefreshFunction(refresh_callback);
-
-# Title and subtitle by mode.
+# Mode: title and subtitle.
 mode = Plymouth.GetMode();
 updating = 0;
 if (mode == "updates" || mode == "system-upgrade" || mode == "firmware-upgrade") updating = 1;
-if (mode == "shutdown") { title_s = "Shutting down"; sub_s = "Saving settings and closing apps."; }
-else if (mode == "reboot") { title_s = "Restarting"; sub_s = "You’ll be back in a moment."; }
+ending = 0;
+if (mode == "shutdown" || mode == "reboot") ending = 1;
+if (mode == "shutdown") { title_s = "Shutting down…"; sub_s = "Saving settings and closing apps."; }
+else if (mode == "reboot") { title_s = "Restarting…"; sub_s = "You’ll be back in a moment."; }
 else if (mode == "firmware-upgrade") { title_s = "Updating firmware"; sub_s = "Don’t turn off your computer. It will restart when done."; }
 else if (updating) { title_s = "Installing updates"; sub_s = "Don’t turn off your computer. It will restart when done."; }
-else { title_s = "Starting WorkSuite OS"; sub_s = "Getting your workspace ready."; }
+else { title_s = "Booting…"; sub_s = "Getting your workspace ready."; }
 title = Sprite(text(title_s, 28, 0.91, 0.933, 0.98, SANS_MEDIUM));
 place_center(title, title_y);
 sub = Sprite(text(sub_s, 15, 0.561, 0.639, 0.784, SANS));
 place_center(sub, sub_y);
 
 # Progress: 420 x 4 track, gradient bar, phase on the left, version on the right.
-track.sprite = Sprite(Image("progress-track.png"));
-track.x = cx - 210;
+BAR_W = 420 * S;
+BAR_H = 4 * S;
+track.sprite = Sprite(img("progress-track"));
+track.x = cx - BAR_W / 2;
 track.y = track_y;
 track.sprite.SetPosition(track.x, track.y, 1);
-bar.original = Image("progress-bar.png");
+bar.original = img("progress-bar");
 bar.sprite = Sprite();
 bar.sprite.SetPosition(track.x, track.y, 2);
-shimmer.original = Image("progress-shimmer.png");     # 96 x 4, white to transparent both ways
+shimmer.original = img("progress-shimmer");     # 96 x 4, white to transparent both ways
 shimmer.sprite = Sprite();
 shimmer.sprite.SetOpacity(0);
 shimmer.t = 0;
 shimmer.shown = -1;
 phase = Sprite();
 brand = Sprite(text(VERSION_S, 12, 0.369, 0.451, 0.612, MONO));
-brand.SetPosition(track.x + 420 - brand.GetImage().GetWidth(), track.y + 14, 3);
+brand.SetPosition(track.x + BAR_W - brand.GetImage().GetWidth(), track.y + 14 * S, 3);
 last_phase = "";
 asking = 0;
+
+hint = Sprite(text("Press Esc for details", 12, 0.239, 0.322, 0.502, MONO));
+place_center(hint, min_bottom - 48 * S);
+
+# Fade-in (boot only): every sprite of the column goes from 0 to 1 over 25 frames (0.5 s at 50 Hz), eased.
+fade.t = 0;
+fade.frames = 25;
+if (ending || updating) fade.t = fade.frames;
+fade.value = -1;
+fun apply_fade() {
+  if (fade.t >= fade.frames) a = 1;
+  else { p = fade.t / fade.frames; a = 1 - (1 - p) * (1 - p) * (1 - p); }   # ease-out cubic
+  if (a == fade.value) return;
+  fade.value = a;
+  ring.track.SetOpacity(a); ring.arc.SetOpacity(a); mark.SetOpacity(a);
+  title.SetOpacity(a); sub.SetOpacity(a); track.sprite.SetOpacity(a); bar.sprite.SetOpacity(a);
+  brand.SetOpacity(a); phase.SetOpacity(a); hint.SetOpacity(a);
+}
+apply_fade();
 
 fun set_phase(p) {
   if (p != last_phase) {
     phase.SetImage(text(p, 12, 0.369, 0.451, 0.612, MONO));
-    phase.SetPosition(track.x, track.y + 14, 3);
+    phase.SetPosition(track.x, track.y + 14 * S, 3);
     last_phase = p;
   }
 }
 # The fill eases toward the reported progress on every 50 Hz frame instead of jumping (the board's fill is a
 # plain gradient of the current width; a soft light sweeps across the fill every 1.6 s, as on the shell's bars).
+# Progress only moves forward: Plymouth's estimate can step back when a boot takes longer than the last one.
 bar.target = 0;
 bar.shown = -1;
-bar.w = 4;
+bar.w = BAR_H;
 fun set_bar(progress) {
-  t = 420 * progress;
-  if (t < 4) t = 4;
-  if (t > 420) t = 420;
-  bar.target = t;
+  t = BAR_W * progress;
+  if (t < BAR_H) t = BAR_H;
+  if (t > BAR_W) t = BAR_W;
+  if (t > bar.target) bar.target = t;
 }
 fun step_bar() {
   d = bar.target - bar.w;
-  if (d > 0.5 || d < -0.5) bar.w += d * 0.12;           # ~0.35 s ease-out to the new value
+  if (d > 0.5 || d < -0.5) bar.w += d * 0.1;            # exponential ease-out, ~0.4 s to the new value
   else bar.w = bar.target;
   w = Math.Int(bar.w + 0.5);
   if (w != bar.shown) {
-    bar.sprite.SetImage(bar.original.Scale(w, 4));
+    bar.sprite.SetImage(bar.original.Scale(w, BAR_H));
     bar.shown = w;
   }
 }
@@ -117,30 +162,42 @@ fun step_shimmer() {
   shimmer.t += 1;
   if (shimmer.t >= 80) shimmer.t = 0;
   fw = bar.shown;
-  if (fw < 24) { shimmer.sprite.SetOpacity(0); return; }
-  x0 = Math.Int(-96 + (fw + 96) * shimmer.t / 80);
+  SW = 96 * S;
+  if (fw < 24 * S || fade.value < 1) { shimmer.sprite.SetOpacity(0); return; }
+  x0 = Math.Int(-SW + (fw + SW) * shimmer.t / 80);
   l = x0;
   if (l < 0) l = 0;
-  r = x0 + 96;
+  r = x0 + SW;
   if (r > fw) r = fw;
   vw = r - l;
   if (vw < 2) { shimmer.sprite.SetOpacity(0); return; }
   if (vw != shimmer.shown) {
-    shimmer.sprite.SetImage(shimmer.original.Scale(vw, 4));
+    shimmer.sprite.SetImage(shimmer.original.Scale(vw, BAR_H));
     shimmer.shown = vw;
   }
   shimmer.sprite.SetPosition(track.x + l, track.y, 3);
   shimmer.sprite.SetOpacity(1);
 }
 
+fun refresh_callback() {
+  ring.angle += 0.0898;                                  # one turn per 1.4 s at Plymouth's 50 Hz refresh
+  if (ring.angle > 6.2832) ring.angle -= 6.2832;
+  ring.arc.SetImage(ring.arc_image.Rotate(ring.angle));
+  if (fade.t < fade.frames) { fade.t++; apply_fade(); }
+  step_bar();
+  step_shimmer();
+}
+Plymouth.SetRefreshRate(50);
+Plymouth.SetRefreshFunction(refresh_callback);
+
 fun progress_callback(duration, progress) {
   if (updating) return;                                  # update modes are driven by the system-update callback
   set_bar(progress);
   if (asking) p = "Unlocking disk";
-  else if (mode == "shutdown" || mode == "reboot") {
+  else if (ending) {
     if (progress < 0.5) p = "Closing apps";
-    else if (mode == "reboot") p = "Rebooting";
-    else p = "Unmounting disks";
+    else if (mode == "reboot") p = "Restarting";
+    else p = "Turning off";
   } else {
     if (progress < 0.3) p = "Starting up";
     else if (progress < 0.7) p = "Loading system services";
@@ -161,29 +218,27 @@ Plymouth.SetSystemUpdateFunction(update_callback);
 if (updating) update_callback(0);
 else progress_callback(0, 0);
 
-hint = Sprite(text("Press Esc for details", 12, 0.239, 0.322, 0.502, MONO));
-place_center(hint, Window.GetY() + H - 32 - 16);
-
 # Disk unlock / questions: label, then a 420 x 44 field holding the typed characters as dots.
 prompt.sprite = Sprite();
-field.sprite = Sprite(Image("field.png"));
-field.sprite.SetPosition(track.x, track.y + 64, 3);
+field.sprite = Sprite(img("field"));
+field.sprite.SetPosition(track.x, track.y + 64 * S, 3);
 field.sprite.SetOpacity(0);
 entry.sprite = Sprite();
 fun show_entry(label_s, value_s) {
   asking = 1;
   if (!updating) set_phase("Unlocking disk");
   prompt.sprite.SetImage(text(label_s, 13, 0.561, 0.639, 0.784, SANS));
-  prompt.sprite.SetPosition(track.x, track.y + 40, 4);
+  prompt.sprite.SetPosition(track.x, track.y + 40 * S, 4);
   if (value_s == "") value_s = " ";
   entry.sprite.SetImage(text(value_s, 13, 0.91, 0.933, 0.98, SANS));
-  entry.sprite.SetPosition(track.x + 16, Math.Int(track.y + 64 + 22 - entry.sprite.GetImage().GetHeight() / 2), 4);
+  entry.sprite.SetPosition(track.x + 16 * S, Math.Int(track.y + (64 + 22) * S - entry.sprite.GetImage().GetHeight() / 2), 4);
   prompt.sprite.SetOpacity(1); entry.sprite.SetOpacity(1); field.sprite.SetOpacity(1);
 }
 fun display_password_callback(prompt_s, bullets) {
-  if (prompt_s == "") prompt_s = "Enter the passphrase to unlock this disk";
+  # cryptsetup asks "Please unlock disk luks-<uuid>": show plain words, not the mapping name.
+  if (prompt_s == "" || prompt_s.SubString(0, 18) == "Please unlock disk") prompt_s = "Enter the passphrase to unlock this disk";
   dots = "";
-  for (i = 0; i < bullets; i++) dots += "●";
+  for (i = 0; i < bullets; i++) dots += "•";   # U+2022: in IBM Plex Sans (U+25CF is not, it drew empty boxes)
   show_entry(prompt_s, dots);
 }
 fun display_question_callback(prompt_s, entry_s) {
@@ -197,11 +252,21 @@ Plymouth.SetDisplayPasswordFunction(display_password_callback);
 Plymouth.SetDisplayQuestionFunction(display_question_callback);
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
 
-# Messages (plymouth message --text=...): one line between the field and the hint.
+# Messages (plymouth display-message --text=...): one short status line between the field and the hint.
+# Technical chatter is not shown: it is in the journal, and Esc shows the details.
 message.sprite = Sprite();
+fun technical(s) {
+  if (s.SubString(0, 11) == "cryptsetup:") return 1;       # "cryptsetup: luks-…: set up successfully"
+  if (s.SubString(0, 8) == "systemd[") return 1;
+  if (s.SubString(0, 1) == "[") return 1;                    # "[  OK  ] Started …", "[    1.234] kernel: …"
+  if (s.SubString(0, 2) == "A " && s.SubString(2, 10) == "stop job") return 1;
+  if (s.SubString(0, 6) == "fsck: " || s.SubString(0, 4) == "/dev") return 1;
+  return 0;
+}
 fun message_callback(text_s) {
+  if (technical(text_s)) return;
   message.sprite.SetImage(text(text_s, 13, 0.561, 0.639, 0.784, SANS));
-  place_center(message.sprite, track.y + 132);
+  place_center(message.sprite, track.y + 132 * S);
   message.sprite.SetOpacity(1);
 }
 fun hide_message_callback(text_s) {

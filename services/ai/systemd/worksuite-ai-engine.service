@@ -1,0 +1,43 @@
+[Unit]
+Description=WorkSuite AI engine (llama.cpp, no network)
+Documentation=file:///usr/share/doc/worksuite-ai/README.md
+# Started and stopped by worksuite-ai.service on demand (first question; 10 idle minutes; Settings › AI changes).
+PartOf=worksuite-ai.service
+StopWhenUnneeded=no
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/ai/src/engine-main.ts %t/worksuite/ai-engine/engine.sock
+RuntimeDirectory=worksuite/ai-engine
+RuntimeDirectoryMode=0700
+Restart=no
+Slice=background.slice
+AppArmorProfile=-worksuite-ai-engine
+# No network at all: Unix sockets only, and its own empty network namespace where user namespaces allow it.
+RestrictAddressFamilies=AF_UNIX
+PrivateNetwork=yes
+IPAddressDeny=any
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+# It reads the model file (after worksuite-ai checked its SHA-256) and writes nothing in the home directory.
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+UMask=0077
+# Limits: a model larger than memory is stopped here (reported as "out of memory") instead of freezing the desktop,
+# and inference leaves CPU for the session. Raise per device with a drop-in (worksuite-ai-engine.service.d/).
+MemoryHigh=75%
+MemoryMax=85%
+MemorySwapMax=0
+CPUWeight=50
+CPUQuota=90%
+Nice=5
+OOMPolicy=stop
+# The GPU (Vulkan) through the render node only.
+DeviceAllow=char-drm rw

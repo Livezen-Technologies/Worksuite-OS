@@ -13,6 +13,9 @@ val() { sed -n "s/^$1=\\($2\\)\$/\\1/p" "$ENV" 2>/dev/null | head -n 1; }
 KIOSK_USER=$(val KIOSK_USER '[a-z_][a-z0-9_.@-]*')
 KIOSK_IDLE_RESET_S=$(val KIOSK_IDLE_RESET_S '[0-9]\{1,6\}'); KIOSK_IDLE_RESET_S=${KIOSK_IDLE_RESET_S:-0}
 KIOSK_OSK=$(val KIOSK_OSK '[01]'); KIOSK_OSK=${KIOSK_OSK:-0}
+KIOSK_TRANSFORM=$(val KIOSK_TRANSFORM '\(0\|90\|180\|270\)'); KIOSK_TRANSFORM=${KIOSK_TRANSFORM:-0}
+KIOSK_SCREEN_OFF_FROM=$(val KIOSK_SCREEN_OFF_FROM '[0-2][0-9][0-5][0-9]')
+KIOSK_SCREEN_OFF_UNTIL=$(val KIOSK_SCREEN_OFF_UNTIL '[0-2][0-9][0-5][0-9]')
 if [ -z "$KIOSK_USER" ] || [ "$KIOSK_USER" != "$(id -un)" ]; then
     echo "worksuite-kiosk-session: this account is not the device's kiosk account" >&2; exit 1
 fi
@@ -23,7 +26,7 @@ wipe() {
     rm -rf "$HOME/.cache" "$HOME/.config" "$HOME/.local/share" "$HOME/.local/state" "${XDG_RUNTIME_DIR:-/nonexistent}/worksuite-kiosk" 2>/dev/null
 }
 wipe
-export KIOSK_IDLE_RESET_S KIOSK_OSK WORKSUITE_KIOSK=1 XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=WorkSuite-Kiosk:wlroots
+export KIOSK_IDLE_RESET_S KIOSK_OSK KIOSK_TRANSFORM KIOSK_SCREEN_OFF_FROM KIOSK_SCREEN_OFF_UNTIL WORKSUITE_KIOSK=1 XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=WorkSuite-Kiosk:wlroots
 . "${WORKSUITE_WLR_ENV:-/usr/lib/worksuite/wlr-env}"
 labwc -C "$CONF" -s "$START"
 rc=$?

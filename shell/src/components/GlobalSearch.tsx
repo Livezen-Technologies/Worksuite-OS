@@ -1,6 +1,7 @@
 // Global search (design board docs/design/boot-install/project/GlobalSearch.dc.html; WSOS-LCH, DSK-010).
 // Real results only: apps, Settings pages, WorkSuite records and Drive files from the main-process bridge
 // (electron/search.ts), and local recent files. Signed out or offline is said in the list and the footer.
+import { AppGlyph } from './AppGlyph'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { os } from '../lib/os'
 import type { SearchHit, SourceResult } from '../../electron/search'
@@ -15,6 +16,8 @@ export interface GlobalSearchProps {
   settings: { label: string; section: string }[]
   onLaunchApp(id: string): void
   onOpenSettings(section: string): void
+  /** "Ask AI": opens the on-device assistant with the query (absent: no entry). */
+  onAskAI?(query: string): void
   onClose(): void
 }
 
@@ -24,7 +27,7 @@ const STATE_LABEL: Record<string, MessageKey> = {
   offline: 'search.state.offline', timeout: 'search.state.timeout', error: 'search.state.error',
 }
 
-export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchApp, onOpenSettings, onClose }: GlobalSearchProps) {
+export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchApp, onOpenSettings, onAskAI, onClose }: GlobalSearchProps) {
   const t = useT()
   const input = useRef<HTMLInputElement>(null)
   const [cat, setCat] = useState<Category>('all')
@@ -51,7 +54,7 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
   const q = query.trim().toLowerCase()
   const localHits = useMemo(() => local.filter((h) => h.title.toLowerCase().includes(q)), [local, q])
   const signedIn = !!sources?.some((s) => s.state === 'ok')
-  const groups = useMemo(() => buildGroups({ apps, settings, local: localHits, hits: loading ? null : hits, query }, signedIn), [apps, settings, localHits, hits, loading, query, signedIn])
+  const groups = useMemo(() => buildGroups({ apps, settings, local: localHits, hits: loading ? null : hits, query }, signedIn, !!onAskAI), [apps, settings, localHits, hits, loading, query, signedIn, onAskAI])
   const cats = categories(groups)
   const shown = visible(groups, cats.some((c) => c.id === cat) ? cat : 'all')
   const items = flat(shown)
@@ -63,6 +66,7 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
     if (!it) return
     if (it.kind === 'app') { onLaunchApp(it.app.id); return }
     if (it.kind === 'setting') { onOpenSettings(it.section); return }
+    if (it.kind === 'ai') { onAskAI?.(query.trim()); return }
     if (it.kind === 'more') { void os.openSearchResult(`worksuite://search?q=${encodeURIComponent(query.trim())}`); onClose(); return }
     void os.openSearchResult(it.hit.link, where); onClose()
   }
@@ -83,8 +87,8 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
   const actions: [MessageKey, string][] = !selected ? [] : selected.kind === 'hit'
     ? [['search.action.open', 'Enter'], ['search.action.location', 'Ctrl Enter'], ...(selected.hit.source === 'local' ? [['search.action.copyPath', 'Ctrl C'] as [MessageKey, string]] : [])]
     : [['search.action.open', 'Enter']]
-  const label = (it: Item) => it.kind === 'app' ? it.app.name : it.kind === 'setting' ? it.label : it.kind === 'more' ? t('search.more', { q: query.trim() }) : it.hit.title
-  const detail = (it: Item) => it.kind === 'app' ? t(`launcher.kind.${it.app.kind}` as MessageKey) : it.kind === 'setting' ? t('search.inSettings') : it.kind === 'more' ? t('search.moreHint') : (it.hit.subtitle ?? '')
+  const label = (it: Item) => it.kind === 'app' ? it.app.name : it.kind === 'setting' ? it.label : it.kind === 'more' ? t('search.more', { q: query.trim() }) : it.kind === 'ai' ? t('search.askAI', { q: query.trim() }) : it.hit.title
+  const detail = (it: Item) => it.kind === 'app' ? t(it.app.kindLabel ?? `launcher.kind.${it.app.kind}` as MessageKey) : it.kind === 'setting' ? t('search.inSettings') : it.kind === 'more' ? t('search.moreHint') : it.kind === 'ai' ? t('search.askAIHint') : (it.hit.subtitle ?? '')
 
   let k = 0
   return (
@@ -118,7 +122,8 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
                   <button key={it.id} id={`ws-sr-${idx}`} type="button" role="option" aria-selected={on} tabIndex={-1}
                     onMouseEnter={() => setSel(idx)} onClick={() => open(it)}
                     className={`flex cursor-pointer items-center gap-3 rounded-[10px] px-3 py-2 text-left ${on ? 'bg-[rgba(31,107,255,0.25)]' : 'bg-transparent'}`}>
-                    <span className="flex size-8 flex-none items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: m.c }}>{m.i}</span>
+                    {it.kind === 'app' ? <AppGlyph app={{ ...it.app, bg: m.c, fg: '#FFFFFF' }} size={32} radius={8} font={12} />
+                      : <span className="flex size-8 flex-none items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: m.c }}>{m.i}</span>}
                     <span className="flex min-w-0 flex-1 flex-col gap-px">
                       <span className="truncate text-sm">{label(it)}</span>
                       <span className="truncate text-[11px] text-[#8FA3C8]">{detail(it)}</span>
@@ -135,7 +140,7 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
           {!loading && notes.map((s) => (
             <p key={s.source} role="status" className="m-0 px-3 py-2 text-xs text-[#8FA3C8]">{t('search.sourceState', { source: t(SOURCE_LABEL[s.source]), state: t(STATE_LABEL[s.state]) })}</p>
           ))}
-          {!loading && items.length === 0 && (
+          {!loading && items.every((x) => x.kind === 'ai') && (
             <div className="px-5 py-[60px] text-center text-sm text-[#8FA3C8]">{t('search.empty', { q: query.trim() })}</div>
           )}
         </div>
@@ -143,7 +148,8 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
           {selected && (
             <>
               <div className="flex h-[140px] items-center justify-center rounded-xl bg-[rgba(14,32,72,0.8)]">
-                <span className="flex size-[60px] items-center justify-center rounded-[14px] text-[22px] font-bold text-white" style={{ background: markOf(selected).c }}>{markOf(selected).i}</span>
+                {selected.kind === 'app' ? <AppGlyph app={{ ...selected.app, bg: markOf(selected).c, fg: '#FFFFFF' }} size={60} radius={14} font={22} />
+                  : <span className="flex size-[60px] items-center justify-center rounded-[14px] text-[22px] font-bold text-white" style={{ background: markOf(selected).c }}>{markOf(selected).i}</span>}
               </div>
               <span className="text-base font-semibold break-words">{label(selected)}</span>
               <span className="text-xs leading-[1.5] text-[#8FA3C8]">{detail(selected)}</span>

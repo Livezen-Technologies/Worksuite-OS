@@ -4,3 +4,6 @@
 set -e
 mkdir -p /usr/share/worksuite
 du -sxb --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp / | cut -f1 > /usr/share/worksuite/rootfs.size
+# "Files copied" of the same tree (every entry the copy creates) and the "Packages" tile's count.
+find / -xdev \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /tmp \) -prune -o -print | wc -l > /usr/share/worksuite/rootfs.files
+dpkg-query -W -f '.\n' | wc -l > /usr/share/worksuite/rootfs.packages

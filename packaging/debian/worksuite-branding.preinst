@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+# /usr/lib/os-release (and the /etc/os-release link to it) names WorkSuite OS, ID_LIKE=debian; Debian's copy from
+# base-files is kept beside it as os-release.debian.
+if [ "$1" = install ] || [ "$1" = upgrade ]; then
+  dpkg-divert --package worksuite-branding --add --rename --divert /usr/lib/os-release.debian /usr/lib/os-release
+fi
+#DEBHELPER#
+exit 0

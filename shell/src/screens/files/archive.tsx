@@ -20,14 +20,14 @@ const ERR: Record<string, MessageKey> = {
 export const archiveError = (code: string | null | undefined) => t(ERR[code ?? ''] ?? 'files.arc.err.failed')
 
 const field = 'h-10 rounded-lg px-3 text-sm outline-none'
-const fieldStyle = (on = true) => ({ background: 'rgba(4,10,26,0.6)', border: `1px solid ${on ? C.blue : 'rgba(127,178,255,0.2)'}`, color: C.text })
+const fieldStyle = (on = true) => ({ background: 'var(--ws-g-field)', border: `1px solid ${on ? C.blue : 'var(--ws-g-line)'}`, color: C.text })
 
 function Chips<T extends string | number>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
       {options.map(([v, text]) => (
         <button key={String(v)} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)}
-          className={`${btn} rounded-full px-3.5 py-1.5 font-mono text-xs`} style={{ border: `1px solid ${value === v ? C.blue : 'rgba(127,178,255,0.2)'}`, background: value === v ? 'rgba(31,107,255,0.22)' : 'transparent' }}>{text}</button>
+          className={`${btn} rounded-full px-3.5 py-1.5 font-mono text-xs`} style={{ border: `1px solid ${value === v ? C.blue : 'var(--ws-g-line)'}`, background: value === v ? 'rgba(31,107,255,0.22)' : 'transparent' }}>{text}</button>
       ))}
     </div>
   )

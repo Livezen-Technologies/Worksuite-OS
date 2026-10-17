@@ -78,6 +78,14 @@ export function allowedOrigins(app: WebApp): Set<string> {
   return new Set([new URL(app.web_url).origin])
 }
 
+/**
+ * Process identity of an app window, set before 'ready': the name Chromium's libnotify path sends as app_name, and
+ * the desktop file name (setDesktopName → CHROME_DESKTOP) it sends as the desktop-entry hint and Wayland uses as app_id.
+ */
+export function appProcessNames(id: string, title?: string): { name: string; desktop: string; wmClass: string } {
+  return { name: `WorkSuite ${title ?? id}`, desktop: `worksuite-${id}.desktop`, wmClass: `worksuite-${id}` }
+}
+
 export type NavDecision = 'allow' | 'external' | 'deny'
 
 /** In-window for the allowed origins; https/mailto/tel elsewhere goes to the default browser; everything else is blocked. */
@@ -168,6 +176,57 @@ export async function loadSession(broker: Broker, fetchFn: Fetch, device?: Devic
     }
     return { ok: true, value: { account: acct, token: t.value, apiBase, apps: webAppsFrom(body, apiBase, FALLBACK_WEB_APPS.map((a) => a.id)) } }
   } catch { return { ok: false, error: 'offline' } }
+}
+
+/** Ctrl+P (Cmd+P) in a WorkSuite app window opens the system print dialog (CUPS via GTK; WSOS-DSK-013). */
+export function isPrintShortcut(i: { type: string; key: string; control: boolean; meta: boolean; alt: boolean; shift: boolean }): boolean {
+  return i.type === 'keyDown' && i.key.toLowerCase() === 'p' && (i.control || i.meta) && !i.alt && !i.shift
+}
+
+/** The org's app list as the launcher sees it; no URLs or tokens (WSOS-DSK-001). */
+export type LauncherWebApp = { id: string; name: string; offline_level?: OfflineLevel }
+export interface AppListCache { read(): string | null; write(text: string): void }
+
+/** Cache text for the org app list of one account. */
+export function appCacheText(accountId: string, apps: WebApp[]): string {
+  return JSON.stringify({ v: 1, account_id: accountId, apps: apps.map(({ id, name, offline_level }) => ({ id, name, ...(offline_level ? { offline_level } : {}) })) })
+}
+
+/** The cached list for this account, or null (other account, bad file). Entries are re-validated. */
+export function cachedApps(text: string | null, accountId: string): LauncherWebApp[] | null {
+  if (!text) return null
+  try {
+    const o = JSON.parse(text) as { v?: unknown; account_id?: unknown; apps?: unknown }
+    if (o.v !== 1 || o.account_id !== accountId || !Array.isArray(o.apps)) return null
+    const out: LauncherWebApp[] = []
+    for (const a of o.apps as Record<string, unknown>[]) {
+      if (!a || typeof a.id !== 'string' || !WEB_APP_ID.test(a.id)) continue
+      const level = offlineLevel(a.offline_level)
+      out.push({ id: a.id, name: typeof a.name === 'string' && a.name ? a.name.slice(0, 80) : a.id, ...(level ? { offline_level: level } : {}) })
+    }
+    return out
+  } catch { return null }
+}
+
+/**
+ * Launcher list: live from bootstrap (and cached for the account), or, when the server can't be reached, the
+ * last list this account saw, marked `cached` so the launcher can say so.
+ */
+export async function launcherApps(broker: Broker, fetchFn: Fetch, cache: AppListCache, device?: DeviceCredential):
+  Promise<{ ok: true; value: LauncherWebApp[]; cached?: true } | Extract<SessionResult, { ok: false }>> {
+  const r = await loadSession(broker, fetchFn, device)
+  if (r.ok) {
+    try { cache.write(appCacheText(r.value.account.id, r.value.apps)) } catch { /* read-only home: live list still shown */ }
+    return { ok: true, value: r.value.apps.map(({ id, name, offline_level }) => ({ id, name, ...(offline_level ? { offline_level } : {}) })) }
+  }
+  if (r.error !== 'offline' && r.error !== 'server_error') return r
+  const st = await broker('Status')
+  const accounts = (st.ok && Array.isArray(st.value) ? st.value : []) as { id: string; state?: string }[]
+  const acct = accounts.find((a) => a.state === 'signed_in') ?? accounts[0]
+  let text: string | null = null
+  try { text = cache.read() } catch { /* no cache */ }
+  const apps = acct ? cachedApps(text, acct.id) : null
+  return apps ? { ok: true, value: apps, cached: true } : r
 }
 
 /** worksuite:// link → web_url via /desktop/v1/links/resolve (null if the server can't place it). */

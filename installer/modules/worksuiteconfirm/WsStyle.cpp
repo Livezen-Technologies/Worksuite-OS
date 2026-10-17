@@ -320,6 +320,12 @@ segmentsOf( QAbstractItemModel* model, bool after )
             s.kind = QStringLiteral( "efi" );
             s.text = tr( "EFI system" ) + QStringLiteral( " · " ) + WsStyle::sizeText( s.size ) + QStringLiteral( " · FAT32" );
         }
+        else if ( after && mount == QLatin1String( "/boot" ) )
+        {
+            // Unencrypted /boot of an encrypted install (partition.conf): kernel and initramfs only.
+            s.kind = QStringLiteral( "other" );
+            s.text = tr( "Startup files" ) + QStringLiteral( " · " ) + WsStyle::sizeText( s.size ) + QStringLiteral( " · ext4" );
+        }
         else if ( after && mount == QLatin1String( "/" ) )
         {
             s.kind = QStringLiteral( "root" );
@@ -1083,8 +1089,8 @@ setRole( QAbstractButton* b, const char* role )
     repolish( b );
 }
 
-void
-dimBehind( QWidget* d )
+QWidget*
+mainWindowFor( QWidget* d )
 {
     QWidget* win = d->parentWidget() ? d->parentWidget()->window() : nullptr;
     if ( !win )
@@ -1097,18 +1103,63 @@ dimBehind( QWidget* d )
             }
         }
     }
+    return win == d ? nullptr : win;
+}
+
+void
+dimBehind( QWidget* d )
+{
+    QWidget* win = mainWindowFor( d );
     if ( !win )
     {
         return;
     }
-    auto* dim = new QWidget( win );
+    QWidget* dim = nullptr;
+    if ( d->property( "wsEmbedded" ).toBool() )
+    {
+        // The QML pages and the sidebar (welcomeq, usersq…, calamares-sidebar.qml) are QQuickWidgets, which Qt
+        // composites over the window's other widgets: on the real installer the dim covered only the plain widgets and
+        // the card stayed hidden under the page (a dimmed window with an empty middle; Esc still answered it). So the
+        // window is captured first (grab() renders the QQuickWidgets; a page in a window container comes out dark), the dim shows that picture darkened, and the
+        // QQuickWidgets are hidden while the dialog is up (keeping their space, shown again on hide). (A native child
+        // would be a Wayland subsurface over the page, but Qt's modality then blocks the clicks on its buttons.)
+        QPixmap snap = win->grab();
+        {
+            QPainter p( &snap );
+            p.fillRect( QRect( QPoint( 0, 0 ), snap.size() ), QColor( 2, 6, 16, 158 ) );
+        }
+        auto* l = new QLabel( win );
+        l->setPixmap( snap );
+        l->setScaledContents( true );
+        dim = l;
+        for ( QWidget* q : win->findChildren< QWidget* >() )
+        {
+            if ( ( q->inherits( "QQuickWidget" ) || q->inherits( "QWindowContainer" ) ) && q->isVisible() )
+            {
+                QSizePolicy sp = q->sizePolicy();
+                q->setProperty( "wsKeepSize", sp.retainSizeWhenHidden() );
+                sp.setRetainSizeWhenHidden( true );
+                q->setSizePolicy( sp );
+                q->setProperty( "wsHiddenForDialog", true );
+                q->hide();
+            }
+        }
+    }
+    else
+    {
+        dim = new QWidget( win );
+        dim->setAttribute( Qt::WA_StyledBackground );
+        dim->setStyleSheet( QStringLiteral( "background: rgba(2,6,16,0.62);" ) );
+    }
     dim->setObjectName( QStringLiteral( "wsDlgDim" ) );
-    dim->setAttribute( Qt::WA_StyledBackground );
-    dim->setStyleSheet( QStringLiteral( "background: rgba(2,6,16,0.62);" ) );
     dim->setGeometry( win->rect() );
     dim->show();
     dim->raise();
     d->setProperty( "wsDim", QVariant::fromValue( static_cast< QObject* >( dim ) ) );
+    if ( !d->isWindow() )
+    {
+        d->raise();   // embedded (prepareDialog): over the dim, in the same window
+    }
 }
 
 // QMessageBox fixes its own size again whenever its style or contents change (updateSize); this puts the design's back.
@@ -1155,7 +1206,12 @@ fitDialog( QDialog* d )
         const int h = d->layout()->hasHeightForWidth() ? d->layout()->totalHeightForWidth( w ) : d->layout()->sizeHint().height();
         guard->target = QSize( w, h );
         d->setFixedSize( w, h );
-        if ( auto* p = d->parentWidget() ? d->parentWidget()->window() : nullptr )
+        if ( !d->isWindow() && d->parentWidget() )
+        {
+            d->move( d->parentWidget()->rect().center() - QPoint( w / 2, h / 2 ) );   // embedded: parent coordinates
+            d->raise();
+        }
+        else if ( auto* p = d->parentWidget() ? d->parentWidget()->window() : nullptr )
         {
             d->move( p->geometry().center() - QPoint( w / 2, h / 2 ) );
         }
@@ -1440,8 +1496,24 @@ prepareDialog( QWidget* w )
         return;
     }
     w->setProperty( "wsPrepared", true );
+    // In the installer's main window, not a window of its own. Under cage (the live ISO's installer session) a dialog
+    // window never showed, only the dim behind it in the main window: the Quit dialog was invisible and the installer
+    // looked frozen. Embedded, the card sits over the dim on any compositor; exec() works the same.
+    if ( QWidget* win = mainWindowFor( w ) )
+    {
+        w->setParent( win, Qt::Widget );
+        w->setProperty( "wsEmbedded", true );
+        w->setAttribute( Qt::WA_TranslucentBackground );
+        return;
+    }
     w->setWindowFlag( Qt::FramelessWindowHint, true );
     w->setAttribute( Qt::WA_TranslucentBackground );
+}
+
+bool
+isDialogSurface( QWidget* w )
+{
+    return w->isWindow() || ( w->property( "wsEmbedded" ).toBool() && isStyledDialog( w ) );
 }
 
 void
@@ -1482,6 +1554,20 @@ dialogHidden( QWidget* w )
     if ( auto* dim = qobject_cast< QWidget* >( w->property( "wsDim" ).value< QObject* >() ) )
     {
         w->setProperty( "wsDim", QVariant() );
+        if ( QWidget* win = dim->parentWidget() )
+        {
+            for ( QWidget* q : win->findChildren< QWidget* >() )
+            {
+                if ( q->property( "wsHiddenForDialog" ).toBool() )
+                {
+                    q->setProperty( "wsHiddenForDialog", QVariant() );
+                    q->show();
+                    QSizePolicy sp = q->sizePolicy();
+                    sp.setRetainSizeWhenHidden( q->property( "wsKeepSize" ).toBool() );
+                    q->setSizePolicy( sp );
+                }
+            }
+        }
         dim->deleteLater();
     }
     // Shown again (a dialog that is reused): dim again then.

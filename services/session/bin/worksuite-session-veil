@@ -1,0 +1,14 @@
+#!/bin/sh
+# The splash colour with the WorkSuite mark and a spinner over the whole screen from the start of a session until the
+# shell's first frame (services/session/greeter/worksuite_greeter/veil.py session_main). Started first by Labwc's
+# autostart. Without GTK 4 layer-shell it does nothing.
+# gtk4-layer-shell must load before libwayland-client: from Python that needs LD_PRELOAD (see worksuite-toasts).
+lib=${WORKSUITE_LAYER_SHELL_LIB:-}
+if [ -z "$lib" ]; then
+    for d in /usr/lib/*-linux-gnu /usr/lib64 /usr/lib; do
+        [ -e "$d/libgtk4-layer-shell.so.0" ] && { lib="$d/libgtk4-layer-shell.so.0"; break; }
+    done
+fi
+[ -n "$lib" ] && [ -e "$lib" ] || exit 0
+export LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}"
+cd "${WORKSUITE_GREETER_DIR:-/usr/lib/worksuite/greeter}" && exec python3 -E -s -m worksuite_greeter.veil --session

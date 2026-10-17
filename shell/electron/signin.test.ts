@@ -56,3 +56,14 @@ describe('sign-in methods (electron/signin.ts)', () => {
     expect(args[2].startsWith('My key x')).toBe(true)
   })
 })
+
+describe('lk.worksuite.SignIn1 calls (WSOS-ARC-002)', () => {
+  it('maps each change to its named method; the PIN is an argument, not argv', async () => {
+    const { busCall } = await import('./signin')
+    expect(busCall(['pin-set'], '123456\n')).toEqual({ member: 'SetPin', body: ['123456'] })
+    expect(busCall(['pin-remove'], '')).toEqual({ member: 'RemovePin', body: [] })
+    expect(busCall(['key-add', '--name', 'YubiKey'], '')).toEqual({ member: 'AddKey', body: ['YubiKey'] })
+    expect(busCall(['key-remove', '--id', '0123456789abcdef'], '')).toEqual({ member: 'RemoveKey', body: ['0123456789abcdef'] })
+    expect(busCall(['serve'], '')).toBeNull()
+  })
+})

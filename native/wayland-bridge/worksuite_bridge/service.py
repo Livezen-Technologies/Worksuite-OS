@@ -16,7 +16,9 @@ from dbus_next.aio import MessageBus
 from dbus_next.errors import DBusError
 
 from .access import AccessPolicy
-from .model import OPERATIONS, AccessDenied, Backend, BridgeError, NotFound, NotSupported, Window, WindowRegistry
+from .model import ACTIVATED, OPERATIONS, AccessDenied, Backend, BridgeError, NotFound, NotSupported, Window, WindowRegistry
+from .capture import OutputCapture
+from .workspace import Desktops, LabwcConfig, LabwcKeys, WorkspaceTracker, clean_name
 
 log = logging.getLogger("worksuite-bridge")
 
@@ -31,6 +33,15 @@ WATCHER_IFACE = "org.kde.StatusNotifierWatcher"
 ITEM_IFACE = "org.kde.StatusNotifierItem"
 PROPS = "org.freedesktop.DBus.Properties"
 INTROSPECTABLE = "org.freedesktop.DBus.Introspectable"
+# Labwc's desktop bindings report here (worksuite-workspace-event); open to processes of the session's user.
+EVENTS_PATH = "/lk/worksuite/WaylandBridge1/Workspaces"
+EVENTS_IFACE = "lk.worksuite.WorkspaceEvents1"
+EVENTS_XML = """<node>
+  <interface name="lk.worksuite.WorkspaceEvents1">
+    <!-- action: goto | left | right | move | new | close; index 1-based (0 for left/right/new/close) -->
+    <method name="Event"><arg name="action" type="s" direction="in"/><arg name="index" type="u" direction="in"/></method>
+  </interface>
+</node>"""
 
 WATCHER_XML = """<node>
   <interface name="org.kde.StatusNotifierWatcher">
@@ -58,8 +69,16 @@ Handler = Callable[[Message], Awaitable[tuple[str, list[Any]]]]
 
 
 class Bridge:
-    def __init__(self, bus: MessageBus, backend: Backend, registry: WindowRegistry, policy: AccessPolicy):
+    def __init__(self, bus: MessageBus, backend: Backend, registry: WindowRegistry, policy: AccessPolicy,
+                 workspaces: WorkspaceTracker | None = None, keys: LabwcKeys | None = None, config: LabwcConfig | None = None,
+                 capture: OutputCapture | None = None):
         self.bus, self.backend, self.registry, self.policy = bus, backend, registry, policy
+        self.workspaces, self.keys = workspaces, keys
+        self.capture = capture
+        # Dynamic desktops need the rc.xml writer as well (LabwcConfig); without one, the count stays as configured.
+        self.desktops = Desktops(workspaces, keys, config, lambda w: self.backend.activate(w.native, "")) if workspaces is not None and keys is not None and config is not None else None
+        if workspaces is not None:
+            workspaces.listeners.append(self._workspaces_changed)
         self.subscribers: set[str] = set()
         self._creds: dict[str, bool] = {}
         self.items: dict[str, tuple[str, str]] = {}  # key → (owner unique name, object path)
@@ -70,6 +89,22 @@ class Bridge:
             (BRIDGE_PATH, BRIDGE_IFACE, "SetMinimized"): self._set_minimized,
             (BRIDGE_PATH, BRIDGE_IFACE, "SubscribeWindowEvents"): self._subscribe,
             (BRIDGE_PATH, BRIDGE_IFACE, "ListOutputs"): self._list_outputs,
+            (BRIDGE_PATH, BRIDGE_IFACE, "ListWorkspaces"): self._list_workspaces,
+            (BRIDGE_PATH, BRIDGE_IFACE, "ActivateWorkspace"): self._activate_workspace,
+            (BRIDGE_PATH, BRIDGE_IFACE, "MoveWindowToWorkspace"): self._move_to_workspace,
+            (BRIDGE_PATH, BRIDGE_IFACE, "WorkspaceDetails"): self._workspace_details,
+            (BRIDGE_PATH, BRIDGE_IFACE, "CreateWorkspace"): self._create_workspace,
+            (BRIDGE_PATH, BRIDGE_IFACE, "RemoveWorkspace"): self._remove_workspace,
+            (BRIDGE_PATH, BRIDGE_IFACE, "MoveWorkspace"): self._reorder_workspace,
+            (BRIDGE_PATH, BRIDGE_IFACE, "RenameWorkspace"): self._rename_workspace,
+            (BRIDGE_PATH, BRIDGE_IFACE, "RestoreWorkspaces"): self._restore_workspaces,
+            (BRIDGE_PATH, BRIDGE_IFACE, "SetWindowOnAllWorkspaces"): self._window_all,
+            (BRIDGE_PATH, BRIDGE_IFACE, "SetAppOnAllWorkspaces"): self._app_all,
+            (BRIDGE_PATH, BRIDGE_IFACE, "SetSwitcherAllWorkspaces"): self._switcher_all,
+            (BRIDGE_PATH, BRIDGE_IFACE, "CaptureOutput"): self._capture_output,
+            (BRIDGE_PATH, BRIDGE_IFACE, "SetShellRaised"): self._shell_raised,
+            (EVENTS_PATH, EVENTS_IFACE, "Event"): self._workspace_event,
+            (EVENTS_PATH, INTROSPECTABLE, "Introspect"): self._xml(EVENTS_XML),
             (BRIDGE_PATH, PROPS, "Get"): self._bridge_prop_get,
             (BRIDGE_PATH, PROPS, "GetAll"): self._bridge_prop_get_all,
             (BRIDGE_PATH, INTROSPECTABLE, "Introspect"): self._xml(_interface_xml(BRIDGE_IFACE)),
@@ -108,7 +143,7 @@ class Bridge:
             return False
         fn = self.routes.get((msg.path, msg.interface or "", msg.member))
         if fn is None:
-            if msg.path in (BRIDGE_PATH, TRAY_PATH, WATCHER_PATH):
+            if msg.path in (BRIDGE_PATH, TRAY_PATH, WATCHER_PATH, EVENTS_PATH):
                 self.bus.send(Message.new_error(msg, "org.freedesktop.DBus.Error.UnknownMethod", f"{msg.interface}.{msg.member}"))
                 return True
             return False
@@ -119,6 +154,8 @@ class Bridge:
         try:
             if msg.path in self.protected and msg.interface != INTROSPECTABLE and not await self._permitted(msg.sender):
                 raise AccessDenied("only the WorkSuite shell or panel may use this interface")
+            if msg.path == EVENTS_PATH and msg.interface != INTROSPECTABLE and await self._uid(msg.sender) != self.policy.uid:
+                raise AccessDenied("only the session's own processes may report workspace changes")
             sig, body = await fn(msg)
             self.bus.send(Message.new_method_return(msg, sig, body))
         except BridgeError as e:
@@ -138,6 +175,11 @@ class Bridge:
             pid = c["ProcessID"].value if "ProcessID" in c else None
             self._creds[sender] = self.policy.permits(uid, pid)  # unique names are never reused
         return self._creds[sender]
+
+    async def _uid(self, sender: str):
+        reply = await self.bus.call(Message(destination="org.freedesktop.DBus", path="/org/freedesktop/DBus", interface="org.freedesktop.DBus",
+                                            member="GetConnectionUnixUser", signature="s", body=[sender]))
+        return reply.body[0] if reply.message_type == MessageType.METHOD_RETURN else None
 
     def _signal(self, path: str, iface: str, member: str, sig: str, body: list[Any], destination: str | None = None) -> None:
         self.bus.send(Message.new_signal(path, iface, member, sig, body) if destination is None else
@@ -189,7 +231,143 @@ class Bridge:
         return "a(ssiiiid)", [[list(o.row()) for o in self.backend.outputs()]]
 
     def _bridge_props(self) -> dict[str, Variant]:
-        return {"SupportedOperations": Variant("as", [o for o in OPERATIONS if o in self.backend.supported_operations()])}
+        ops = [o for o in OPERATIONS if o in self.backend.supported_operations()]
+        if self._workspaces_ok():
+            ops.append("workspaces")
+            if self.desktops is not None:
+                ops.append("dynamic-workspaces")
+        if self.capture is not None and self.capture.available():
+            ops.append("capture-output")
+        return {"SupportedOperations": Variant("as", ops)}
+
+    # ---- workspaces (Labwc desktops, see workspace.py) -------------------------------------------------------
+    def _workspaces_ok(self) -> bool:
+        return self.workspaces is not None and self.keys is not None and self.keys.available()
+
+    def _need_workspaces(self) -> WorkspaceTracker:
+        if not self._workspaces_ok():
+            raise NotSupported("workspaces are not available (no virtual keyboard tool)")
+        return self.workspaces  # type: ignore[return-value]
+
+    async def _list_workspaces(self, _m: Message) -> tuple[str, list[Any]]:
+        ws = self.workspaces
+        if ws is None:
+            return "uua{su}", [1, 1, {}]
+        return "uua{su}", [ws.current, ws.count, ws.windows()]
+
+    async def _activate_workspace(self, m: Message) -> tuple[str, list[Any]]:
+        ws = self._need_workspaces()
+        n = ws.check(int(m.body[0]))
+        await asyncio.get_running_loop().run_in_executor(None, self.keys.go, n)  # type: ignore[union-attr]
+        ws.event("goto", n)
+        # The app used last on that desktop gets the focus (Labwc leaves it on the shell when the shell had it), unless
+        # the shell is over the apps (Task View switching desktops keeps the keyboard).
+        if self.desktops is not None and not self.desktops.lifted and "activate" in self.backend.supported_operations():
+            self.desktops.focus_top_app(n)
+        return "", []
+
+    async def _move_to_workspace(self, m: Message) -> tuple[str, list[Any]]:
+        ws = self._need_workspaces()
+        handle, n = m.body[0], ws.check(int(m.body[1]))
+        w = self.registry.get(handle)
+        self._need("activate")
+        # SendToDesktop acts on the focused window: focus it first, then send the bridge-only binding.
+        focused = next((x for x in self.registry.list() if x.flags & ACTIVATED), None)
+        self.backend.activate(w.native, "")
+        ws.moved(handle, n)
+        await asyncio.get_running_loop().run_in_executor(None, self.keys.send_focused, n)  # type: ignore[union-attr]
+        # Give the focus back (Task View keeps the keyboard; the moved window is on another desktop now).
+        if focused is not None and focused.handle != handle and focused.handle in {x.handle for x in self.registry.list()}:
+            self.backend.activate(focused.native, "")
+        return "", []
+
+    async def _workspace_event(self, m: Message) -> tuple[str, list[Any]]:
+        action = str(m.body[0])
+        if self.workspaces is not None:
+            if action in ("new", "close"):
+                d = self._need_desktops()
+                # Ctrl+Super+D / Ctrl+Super+F4; the reply goes out at once (the helper must not wait for the reload).
+                asyncio.get_running_loop().create_task(self._quietly(d.create() if action == "new" else d.remove(self.workspaces.current)))
+            else:
+                self.workspaces.event(action, int(m.body[1]))
+        return "", []
+
+    @staticmethod
+    async def _quietly(coro: Awaitable[Any]) -> None:
+        try:
+            await coro
+        except BridgeError as e:
+            log.info("desktops: %s", e)
+        except Exception:  # never crash on a key press (WSOS-SHL-003)
+            log.exception("desktops")
+
+    def _need_desktops(self) -> Desktops:
+        self._need_workspaces()
+        if self.desktops is None:
+            raise NotSupported("desktops cannot be added or removed here (no Labwc configuration)")
+        return self.desktops
+
+    async def _workspace_details(self, _m: Message) -> tuple[str, list[Any]]:
+        ws = self.workspaces
+        if ws is None:
+            return "uasa{su}asasbas", [1, [""], {}, [], [], False, ["d1"]]
+        names = (ws.names + [""] * ws.count)[: ws.count]
+        return "uasa{su}asasbas", [ws.current, names, ws.windows(), sorted(ws.sticky), sorted(ws.sticky_apps), ws.switcher_all, list(ws.ids)]
+
+    async def _create_workspace(self, _m: Message) -> tuple[str, list[Any]]:
+        return "u", [await self._need_desktops().create()]
+
+    async def _remove_workspace(self, m: Message) -> tuple[str, list[Any]]:
+        await self._need_desktops().remove(self.workspaces.check(int(m.body[0])))  # type: ignore[union-attr]
+        return "", []
+
+    async def _reorder_workspace(self, m: Message) -> tuple[str, list[Any]]:
+        await self._need_desktops().reorder(int(m.body[0]), int(m.body[1]))
+        return "", []
+
+    async def _rename_workspace(self, m: Message) -> tuple[str, list[Any]]:
+        await self._need_desktops().rename(self.workspaces.check(int(m.body[0])), clean_name(m.body[1]))  # type: ignore[union-attr]
+        return "", []
+
+    async def _restore_workspaces(self, m: Message) -> tuple[str, list[Any]]:
+        names, prefix = m.body
+        await self._need_desktops().restore([str(x) for x in names], str(prefix))
+        return "", []
+
+    async def _window_all(self, m: Message) -> tuple[str, list[Any]]:
+        self._need("activate")
+        await self._need_desktops().set_window_sticky(str(m.body[0]), bool(m.body[1]))
+        return "", []
+
+    async def _app_all(self, m: Message) -> tuple[str, list[Any]]:
+        app_id = str(m.body[0])
+        if not app_id or len(app_id) > 255:
+            raise NotFound(f"bad app id {app_id!r}")
+        self._need("activate")
+        await self._need_desktops().set_app_sticky(app_id, bool(m.body[1]))
+        return "", []
+
+    async def _switcher_all(self, m: Message) -> tuple[str, list[Any]]:
+        await self._need_desktops().set_switcher_all(bool(m.body[0]))
+        return "", []
+
+    async def _shell_raised(self, m: Message) -> tuple[str, list[Any]]:
+        self._need("activate")
+        log.info("shell %s", "lifted over the apps" if m.body[1] else "back below the apps")
+        await self._need_desktops().set_shell_raised(str(m.body[0]), bool(m.body[1]))
+        return "", []
+
+    async def _capture_output(self, m: Message) -> tuple[str, list[Any]]:
+        if self.capture is None:
+            raise NotSupported("output capture is not available")
+        name, width = str(m.body[0]), int(m.body[1])
+        data = await asyncio.get_running_loop().run_in_executor(None, self.capture.grab, self.backend.outputs(), name, width)
+        return "ays", [data, "image/jpeg"]
+
+    def _workspaces_changed(self) -> None:
+        ws = self.workspaces
+        for dest in list(self.subscribers):
+            self._signal(BRIDGE_PATH, BRIDGE_IFACE, "WorkspacesChanged", "uu", [ws.current, ws.count], dest)  # type: ignore[union-attr]
 
     async def _bridge_prop_get(self, m: Message) -> tuple[str, list[Any]]:
         props = self._bridge_props()

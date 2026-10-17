@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  DEFAULT_TOUCH, hasTabletModeBit, labwcTouchBlock, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
+  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, oskControlLine, oskSocketSender, worksuiteOskArgs, labwcTouchBlock, carryDesktops, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
   parseOrientation, parsePenLine, parseSwitchLine, parseUdevProps, saveTouch, touchBridge, touchModeOn, type Spawn,
 } from './touch'
 import type { Exec } from './system'
@@ -95,6 +95,15 @@ describe('Labwc config writer', () => {
     expect(twice).toContain('<sendEventsMode>yes</sendEventsMode>')
     expect(twice).not.toContain('mapToOutput')
   })
+  it('keeps the desktops and Alt+Tab scope the Wayland bridge wrote (WSOS-DSK-003)', () => {
+    const sys = '<labwc_config><desktops number="1"><names><name>Desktop 1</name></names></desktops><windowSwitcher allWorkspaces="no"/></labwc_config>'
+    const user = '<labwc_config><desktops number="3"><names><name>A</name><name>B</name><name>C</name></names></desktops><windowSwitcher allWorkspaces="yes"/></labwc_config>'
+    const out = carryDesktops(user, mergeRcXml(sys, labwcTouchBlock(DEFAULT_TOUCH, [])))
+    expect(out).toContain('<desktops number="3">')
+    expect(out).toContain('allWorkspaces="yes"')
+    expect(out).toContain('worksuite-touch:begin')
+    expect(carryDesktops('', sys)).toBe(sys)
+  })
   it('writes a calibration matrix and drops unusable ones', () => {
     const m = [1.02, 0, -0.01, 0, 0.98, 0.015]
     expect(normalizeTouch({ calibration: { 'ELAN Touch': m, bad: [1, 2, 3], huge: [9, 0, 0, 0, 1, 0], 'x"<': m } }).calibration).toEqual({ 'ELAN Touch': m })
@@ -136,6 +145,99 @@ describe('Labwc config writer', () => {
     expect((await b.state()).available && (await b.state() as { value: { touchMode: boolean } }).value.touchMode).toBe(true)
     expect(calls).toContain('wlr-randr --output eDP-1 --transform 90')
     expect(b.osk(true)).toEqual({ available: true, value: true })
+    await new Promise((r) => setTimeout(r, 450))   // wvkbd gets the signal once its handlers are set up
     expect(spawned).toContain('kill wvkbd-mobintl SIGUSR2')
+    // Gestures: the daemon runs with a touchscreen, re-reads its file on a change and stops when turned off.
+    const gfile = path.join(home, '.config', 'worksuite', 'gestures.json')
+    expect(spawned).toContain('/usr/lib/worksuite/worksuite-gestures')
+    expect(JSON.parse(readFileSync(gfile, 'utf8')).edgeBottom).toBe('launcher')
+    await b.set(JSON.stringify({ touchEnabled: true, gestures: { ...DEFAULT_GESTURES, threeHorizontal: 'switch-apps' }, longPressMs: 800 }))
+    expect(JSON.parse(readFileSync(gfile, 'utf8')).threeHorizontal).toBe('switch-apps')
+    await b.set(JSON.stringify({ longPressMs: 900 }))
+    expect(spawned).toContain('kill /usr/lib/worksuite/worksuite-gestures SIGHUP')
+    await b.set(JSON.stringify({ gestures: { ...DEFAULT_GESTURES, enabled: false } }))
+    expect(spawned).toContain('kill /usr/lib/worksuite/worksuite-gestures SIGTERM')
+  })
+  it('gesture settings: only known choices, long-press delay 300–1200 ms', () => {
+    const n = normalizeTouch({ gestures: { edgeBottom: 'off', threeHorizontal: 'rm -rf', edgeSwipes: false }, longPressMs: 5000 })
+    expect(n.gestures).toEqual({ ...DEFAULT_GESTURES, edgeBottom: 'off', edgeSwipes: false })
+    expect(n.longPressMs).toBe(600)
+    expect(normalizeTouch({ longPressMs: 900 }).longPressMs).toBe(900)
+  })
+})
+
+describe('WorkSuite keyboard (worksuite-osk)', () => {
+  it('is preferred over wvkbd and gets the field type over its socket', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))
+    const spawned: string[] = []
+    const lines: string[] = []
+    const sp: Spawn = (cmd, args) => { spawned.push([cmd, ...args].join(' ')); return { kill: () => {}, onLine: () => {}, onExit: () => {} } }
+    const exec: Exec = async () => ({ code: 1, stdout: '', stderr: '' })
+    const b = touchBridge(home, exec, sp, home, () => true, (_s, l) => lines.push(l))
+    await b.start()
+    expect(spawned[spawned.length - 1]).toBe('/usr/lib/worksuite/worksuite-osk --size medium --mode full --langs en,si,ta')
+    expect(b.osk(true, 6, 8)).toEqual({ available: true, value: true })
+    expect(b.osk(false)).toEqual({ available: true, value: false })
+    expect(lines.slice(-2)).toEqual(['show 6 8\n', 'hide\n'])
+  })
+  it('the taskbar button toggles in the keyboard, which knows whether it closed itself', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))
+    const lines: string[] = []
+    const sp: Spawn = () => ({ kill: () => {}, onLine: () => {}, onExit: () => {} })
+    const b = touchBridge(home, async () => ({ code: 1, stdout: '', stderr: '' }), sp, home, () => true, (_s, l) => lines.push(l))
+    await b.start()
+    b.osk(true)          // shown, then closed with the keyboard's own key (the shell does not hear about it)
+    b.oskToggle()
+    b.oskToggle()
+    expect(lines.slice(-2)).toEqual(['toggle\n', 'toggle\n'])
+  })
+  it('falls back to wvkbd at once when worksuite-osk cannot run (Settings never says "not installed")', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))
+    const spawned: string[] = []
+    const exits: Record<string, () => void> = {}
+    const sp: Spawn = (cmd, args) => { spawned.push([cmd, ...args].join(' ')); return { kill: () => {}, onLine: () => {}, onExit: (cb) => { exits[cmd] = cb } } }
+    const exec: Exec = async () => ({ code: 1, stdout: '', stderr: '' })
+    const b = touchBridge(home, exec, sp, home, () => true, () => {})
+    await b.start()
+    exits['/usr/lib/worksuite/worksuite-osk']()
+    expect(spawned[spawned.length - 1]).toMatch(/^wvkbd-mobintl /)
+    expect(b.osk(true)).toEqual({ available: true, value: true })
+  })
+  it('the first show reaches the keyboard once its socket is up; only the newest line is retried', async () => {
+    let up = false
+    const sent: string[] = []
+    const connect = () => {
+      const h: Record<string, () => void> = {}
+      queueMicrotask(() => (up ? h.connect : h.error)?.())
+      return { on: (ev: string, fn: () => void) => { h[ev] = fn }, end: (l: string) => { if (l) sent.push(l) } }
+    }
+    const send = oskSocketSender(connect as never, 5, 20)
+    send('/run/osk.sock', 'show 0 0\n')            // worksuite-osk just started: no socket yet
+    await new Promise((r) => setTimeout(r, 20))
+    expect(sent).toEqual([])
+    up = true
+    await new Promise((r) => setTimeout(r, 20))
+    expect(sent).toEqual(['show 0 0\n'])
+    up = false
+    send('/run/osk.sock', 'show 0 0\n')
+    send('/run/osk.sock', 'hide\n')
+    up = true
+    await new Promise((r) => setTimeout(r, 30))
+    expect(sent).toEqual(['show 0 0\n', 'hide\n'])
+  })
+  it('wvkbd is signalled only after it had time to set up its handlers', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))
+    const events: string[] = []
+    const sp: Spawn = (cmd) => { events.push(`spawn ${cmd}`); return { kill: (sig) => { events.push(`kill ${sig}`) }, onLine: () => {}, onExit: () => {} } }
+    const b = touchBridge(home, async () => ({ code: 1, stdout: '', stderr: '' }), sp, home, () => false, () => {})
+    expect(b.osk(true)).toEqual({ available: true, value: true })
+    expect(events).toEqual(['spawn wvkbd-mobintl'])
+    await new Promise((r) => setTimeout(r, 450))
+    expect(events).toEqual(['spawn wvkbd-mobintl', 'kill SIGUSR2'])
+  })
+  it('control lines are bounded numbers only', () => {
+    expect(oskControlLine(true, 99, -1)).toBe('show 0 0\n')
+    expect(oskControlLine(true, 9, 0xffff)).toBe('show 9 1023\n')
+    expect(worksuiteOskArgs({ ...DEFAULT_TOUCH, oskLayout: 'split', oskSuggestions: false }, [])).toEqual(['--size', 'medium', '--mode', 'split', '--langs', 'en,si,ta', '--no-suggestions'])
   })
 })

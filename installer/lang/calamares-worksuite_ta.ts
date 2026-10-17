@@ -270,8 +270,12 @@
       <translation>கணினியை மின்னிணைப்பில் வைத்திருங்கள். இங்கிருந்து பின்செல்ல முடியாது.</translation>
     </message>
     <message>
-      <source>Applying your choices. This usually takes under a minute.</source>
-      <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன. இது பொதுவாக ஒரு நிமிடத்திற்குள் முடியும்.</translation>
+      <source>Applying your choices.</source>
+      <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன.</translation>
+    </message>
+    <message>
+      <source>Applying your choices. This step is taking longer than usual; it is still working.</source>
+      <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன. இந்தப் படி வழக்கத்தை விட அதிக நேரம் எடுக்கிறது; இது இன்னும் செயல்படுகிறது.</translation>
     </message>
     <message>
       <source>Preparing the disk</source>
@@ -458,6 +462,10 @@
       <translation>அழிப்பை உறுதிப்படுத்து</translation>
     </message>
     <message>
+      <source>Enroll this device</source>
+      <translation>இந்தச் சாதனத்தைப் பதிவுசெய்</translation>
+    </message>
+    <message>
       <source>Recovery key</source>
       <translation>மீட்பு விசை</translation>
     </message>
@@ -468,6 +476,26 @@
     <message>
       <source>Type the disk name to confirm</source>
       <translation>உறுதிப்படுத்த வட்டின் பெயரைத் தட்டச்சிடுக</translation>
+    </message>
+    <message>
+      <source>Server address</source>
+      <translation>சேவையக முகவரி</translation>
+    </message>
+    <message>
+      <source>work.example.com</source>
+      <translation>work.example.com</translation>
+    </message>
+    <message>
+      <source>Enrollment code or link</source>
+      <translation>பதிவுக் குறியீடு அல்லது இணைப்பு</translation>
+    </message>
+    <message>
+      <source>Scan QR code</source>
+      <translation>QR குறியீட்டை ஸ்கேன் செய்</translation>
+    </message>
+    <message>
+      <source>Enrollment status</source>
+      <translation>பதிவு நிலை</translation>
     </message>
     <message>
       <source>I've saved my recovery key somewhere safe</source>
@@ -514,6 +542,14 @@
       <translation>அதிலுள்ள எல்லாத் தரவும் நிரந்தரமாக நீக்கப்படும் என உறுதிப்படுத்த %1 எனத் தட்டச்சிடுக</translation>
     </message>
     <message>
+      <source>OPTIONAL · MANAGED DEVICE</source>
+      <translation>விருப்பம் · நிர்வகிக்கப்படும் சாதனம்</translation>
+    </message>
+    <message>
+      <source>If your organization manages its devices with WorkSuite, enter the enrollment code from the admin console, paste its enrollment link, or scan its QR code. The device enrolls the first time it starts with a network connection. Leave this empty to skip.</source>
+      <translation>உங்கள் நிறுவனம் WorkSuite மூலம் சாதனங்களை நிர்வகித்தால், நிர்வாகக் கன்சோலில் உள்ள பதிவுக் குறியீட்டை உள்ளிடவும், அதன் பதிவு இணைப்பை ஒட்டவும், அல்லது அதன் QR குறியீட்டை ஸ்கேன் செய்யவும். பிணைய இணைப்புடன் முதல் முறை தொடங்கும்போது சாதனம் பதிவாகும். தவிர்க்க இதை வெறுமையாக விடவும்.</translation>
+    </message>
+    <message>
       <source>STEP 6 · RECOVERY KEY</source>
       <translation>படி 6 · மீட்பு விசை</translation>
     </message>
@@ -525,6 +561,34 @@
       <source>If you forget your disk passphrase, this key is the only way to unlock your files. It is shown once and is not stored on this computer.</source>
       <translation>உங்கள் வட்டுக் கடவுச்சொற்றொடரை மறந்தால், உங்கள் கோப்புகளைத் திறக்க இந்த விசை மட்டுமே வழி. இது ஒருமுறை மட்டுமே காட்டப்படும், இந்தக் கணினியில் சேமிக்கப்படாது.</translation>
     </message>
+    <message>
+      <source>Not enrolling. You can enroll later in Settings › About this device.</source>
+      <translation>பதிவு செய்யப்படவில்லை. பின்னர் அமைப்புகள் › இந்தச் சாதனம் பற்றி என்பதில் பதிவு செய்யலாம்.</translation>
+    </message>
+    <message>
+      <source>Enrolls with %1 on first start.</source>
+      <translation>முதல் தொடக்கத்தில் %1 உடன் பதிவாகும்.</translation>
+    </message>
+    <message>
+      <source>Could not keep the enrollment code. Try again, or enroll later in Settings.</source>
+      <translation>பதிவுக் குறியீட்டை வைத்திருக்க முடியவில்லை. மீண்டும் முயலவும், அல்லது பின்னர் அமைப்புகளில் பதிவு செய்யவும்.</translation>
+    </message>
+    <message>
+      <source>Enter the server address (https) from your administrator.</source>
+      <translation>உங்கள் நிர்வாகியிடமிருந்து சேவையக முகவரியை (https) உள்ளிடவும்.</translation>
+    </message>
+    <message>
+      <source>That enrollment code doesn't look right. Check it, or paste the whole link.</source>
+      <translation>அந்தப் பதிவுக் குறியீடு சரியாகத் தெரியவில்லை. சரிபார்க்கவும், அல்லது முழு இணைப்பையும் ஒட்டவும்.</translation>
+    </message>
+    <message>
+      <source>Hold the QR code from the admin console in front of the camera…</source>
+      <translation>நிர்வாகக் கன்சோலின் QR குறியீட்டைக் கேமராவின் முன் பிடிக்கவும்…</translation>
+    </message>
+    <message>
+      <source>No enrollment QR code was read. Try again, or type the code.</source>
+      <translation>பதிவு QR குறியீடு எதுவும் படிக்கப்படவில்லை. மீண்டும் முயலவும், அல்லது குறியீட்டைத் தட்டச்சு செய்யவும்.</translation>
+    </message>
   </context>
   <context>
     <name>WsStyle</name>
@@ -535,6 +599,10 @@
     <message>
       <source>EFI system</source>
       <translation>EFI முறைமை</translation>
+    </message>
+    <message>
+      <source>Startup files</source>
+      <translation>தொடக்கக் கோப்புகள்</translation>
     </message>
     <message>
       <source>STEP 2 · DISK</source>

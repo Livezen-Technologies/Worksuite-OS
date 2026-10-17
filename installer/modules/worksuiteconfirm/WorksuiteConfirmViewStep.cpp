@@ -1,4 +1,5 @@
 #include "WorksuiteConfirmViewStep.h"
+#include "EnrollLink.h"
 #include "WsStyle.h"
 
 #include "Branding.h"
@@ -8,6 +9,7 @@
 #include "utils/Logger.h"
 
 #include <QApplication>
+#include <sys/statvfs.h>
 #include <QCheckBox>
 #include <QDialog>
 #include <QFile>
@@ -22,12 +24,15 @@
 #include <qpa/qwindowsysteminterface.h>
 #endif
 #include <QProcess>
+#include <QPushButton>
+#include <QStandardPaths>
 #include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
 #include <QStorageInfo>
 #include <QToolBar>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 
 CALAMARES_PLUGIN_FACTORY_DEFINITION( WorksuiteConfirmViewStepFactory, registerPlugin< WorksuiteConfirmViewStep >(); )
@@ -57,7 +62,17 @@ recordEncryption( bool on )
      worksuiteFiles*      unpackfs "Unpacking image a/b, file n/m"
      worksuitePackages*   packages "Processing packages (n / m)"
      worksuiteBytesDone   bytes written to the target root since the copy started (its file system's used space)
-     worksuiteBytesTotal  the image's unpacked size, measured at image build time (/usr/share/worksuite/rootfs.size) */
+     worksuiteBytesTotal  the image's unpacked size, measured at image build time (/usr/share/worksuite/rootfs.size)
+     worksuiteFiles*      when unpackfs reports no file counts: files written to the target (its used inodes since the
+                          copy started) of the image's file count (/usr/share/worksuite/rootfs.files)
+     worksuiteImagePackages  packages in the image (/usr/share/worksuite/rootfs.packages) */
+static qint64
+readCount( const char* path )
+{
+    QFile f( QString::fromLatin1( path ) );
+    return f.open( QIODevice::ReadOnly ) ? QString::fromLatin1( f.readAll() ).trimmed().section( QLatin1Char( '\t' ), 0, 0 ).toLongLong() : 0;
+}
+
 static void
 reportProgress( qreal percent, const QString& message )
 {
@@ -82,6 +97,7 @@ reportProgress( qreal percent, const QString& message )
     }
 
     static const QRegularExpression files( QStringLiteral( "(\\d+)\\s*/\\s*(\\d+)\\s*$" ) );
+    static bool filesFromMessages = false;
     static const QRegularExpression packages( QStringLiteral( "\\((\\d+)\\s*/\\s*(\\d+)\\)" ) );
     const QString phase = gs->value( QStringLiteral( "worksuitePhase" ) ).toString();
     if ( phase == QLatin1String( "copy" ) )
@@ -91,6 +107,7 @@ reportProgress( qreal percent, const QString& message )
         {
             gs->insert( QStringLiteral( "worksuiteFilesDone" ), m.captured( 1 ).toLongLong() );
             gs->insert( QStringLiteral( "worksuiteFilesTotal" ), m.captured( 2 ).toLongLong() );
+            filesFromMessages = true;
         }
     }
     const auto pm = packages.match( line );
@@ -101,13 +118,19 @@ reportProgress( qreal percent, const QString& message )
     }
 
     static qint64 total = -1;
+    static qint64 imageFiles = 0;
     if ( total < 0 )
     {
-        QFile f( QStringLiteral( "/usr/share/worksuite/rootfs.size" ) );
-        total = f.open( QIODevice::ReadOnly ) ? QString::fromLatin1( f.readAll() ).trimmed().section( QLatin1Char( '\t' ), 0, 0 ).toLongLong() : 0;
+        total = readCount( "/usr/share/worksuite/rootfs.size" );
         if ( total > 0 )
         {
             gs->insert( QStringLiteral( "worksuiteBytesTotal" ), total );
+        }
+        imageFiles = readCount( "/usr/share/worksuite/rootfs.files" );
+        const qint64 packageCount = readCount( "/usr/share/worksuite/rootfs.packages" );
+        if ( packageCount > 0 )
+        {
+            gs->insert( QStringLiteral( "worksuiteImagePackages" ), packageCount );
         }
     }
     const QString root = gs->value( QStringLiteral( "rootMountPoint" ) ).toString();
@@ -123,6 +146,18 @@ reportProgress( qreal percent, const QString& message )
                 baseline = used;
             }
             gs->insert( QStringLiteral( "worksuiteBytesDone" ), qMax< qint64 >( 0, used - baseline ) );
+        }
+        struct statvfs vfs;
+        if ( !filesFromMessages && imageFiles > 0 && ::statvfs( QFile::encodeName( root ).constData(), &vfs ) == 0 && vfs.f_files > 0 )
+        {
+            static qint64 inodeBaseline = -1;
+            const qint64 usedInodes = qint64( vfs.f_files - vfs.f_ffree );
+            if ( inodeBaseline < 0 )
+            {
+                inodeBaseline = usedInodes;
+            }
+            gs->insert( QStringLiteral( "worksuiteFilesDone" ), qBound< qint64 >( 0, usedInodes - inodeBaseline, imageFiles ) );
+            gs->insert( QStringLiteral( "worksuiteFilesTotal" ), imageFiles );
         }
     }
 }
@@ -220,12 +255,12 @@ public:
                 {
                     WsStyle::styleChoicePage( w );
                 }
-                else if ( w->isWindow() )
+                else if ( WsStyle::isDialogSurface( w ) )
                 {
                     WsStyle::styleDialog( w );
                 }
             }
-            else if ( e->type() == QEvent::Hide && w->isWindow() )
+            else if ( e->type() == QEvent::Hide && WsStyle::isDialogSurface( w ) )
             {
                 WsStyle::dialogHidden( w );
             }
@@ -400,13 +435,14 @@ WorksuiteConfirmViewStep::~WorksuiteConfirmViewStep()
 QString
 WorksuiteConfirmViewStep::prettyName() const
 {
-    return m_mode == Mode::Erase ? tr( "Confirm erase" ) : tr( "Recovery key" );
+    return m_mode == Mode::Erase ? tr( "Confirm erase" ) : m_mode == Mode::Enroll ? tr( "Enroll this device" ) : tr( "Recovery key" );
 }
 
 void
 WorksuiteConfirmViewStep::setConfigurationMap( const QVariantMap& map )
 {
-    m_mode = map.value( QStringLiteral( "mode" ) ).toString() == QStringLiteral( "recovery" ) ? Mode::Recovery : Mode::Erase;
+    const QString mode = map.value( QStringLiteral( "mode" ) ).toString();
+    m_mode = mode == QStringLiteral( "recovery" ) ? Mode::Recovery : mode == QStringLiteral( "enroll" ) ? Mode::Enroll : Mode::Erase;
 }
 
 QString
@@ -522,7 +558,7 @@ WorksuiteConfirmViewStep::widget()
         return m_widget;
     }
     m_widget = new QWidget;
-    m_widget->setObjectName( m_mode == Mode::Erase ? QStringLiteral( "wsConfirm" ) : QStringLiteral( "wsRecovery" ) );
+    m_widget->setObjectName( m_mode == Mode::Erase ? QStringLiteral( "wsConfirm" ) : m_mode == Mode::Enroll ? QStringLiteral( "wsEnroll" ) : QStringLiteral( "wsRecovery" ) );
     m_widget->setAttribute( Qt::WA_StyledBackground );
     // Calamares strips the margins of a page's own layout, so the content sits in an inner widget with them.
     auto* outer = new QVBoxLayout( m_widget );
@@ -575,6 +611,41 @@ WorksuiteConfirmViewStep::widget()
         layout->addWidget( m_inputLabel );
         layout->addWidget( m_input );
         connect( m_input, &QLineEdit::textChanged, this, [ this ] { refresh(); } );
+    }
+    else if ( m_mode == Mode::Enroll )
+    {
+        auto* serverLabel = label( QStringLiteral( "wsFieldLabel" ) );
+        serverLabel->setText( tr( "Server address" ) );
+        m_server = new QLineEdit;
+        m_server->setObjectName( QStringLiteral( "wsConfirmInput" ) );
+        m_server->setPlaceholderText( tr( "work.example.com" ) );
+        m_server->setAccessibleName( tr( "Server address" ) );
+        m_server->setInputMethodHints( Qt::ImhUrlCharactersOnly | Qt::ImhNoAutoUppercase );
+        m_inputLabel = label( QStringLiteral( "wsFieldLabel" ) );
+        m_inputLabel->setText( tr( "Enrollment code or link" ) );
+        m_input = new QLineEdit;
+        m_input->setObjectName( QStringLiteral( "wsConfirmInput" ) );
+        m_input->setAccessibleName( tr( "Enrollment code or link" ) );
+        m_input->setInputMethodHints( Qt::ImhSensitiveData | Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase );
+        m_input->setEchoMode( QLineEdit::PasswordEchoOnEdit );   // a token on screen only while typing it
+        auto* row = new QHBoxLayout;
+        row->setSpacing( 12 );
+        m_scan = new QPushButton( tr( "Scan QR code" ) );
+        m_scan->setObjectName( QStringLiteral( "wsSecondary" ) );
+        row->addWidget( m_scan );
+        row->addStretch();
+        m_status = label( QStringLiteral( "wsSubtitle" ) );
+        m_status->setTextFormat( Qt::PlainText );
+        m_status->setAccessibleName( tr( "Enrollment status" ) );
+        layout->addWidget( serverLabel );
+        layout->addWidget( m_server );
+        layout->addWidget( m_inputLabel );
+        layout->addWidget( m_input );
+        layout->addLayout( row );
+        layout->addWidget( m_status );
+        connect( m_server, &QLineEdit::textChanged, this, [ this ] { enrollChanged(); } );
+        connect( m_input, &QLineEdit::textChanged, this, [ this ] { enrollChanged(); } );
+        connect( m_scan, &QPushButton::clicked, this, [ this ] { scanQr(); } );
     }
     else
     {
@@ -688,6 +759,17 @@ WorksuiteConfirmViewStep::onActivate()
         m_input->setEnabled( !m_disk.isEmpty() );
         m_input->setFocus();
     }
+    else if ( m_mode == Mode::Enroll )
+    {
+        m_eyebrow->setText( tr( "OPTIONAL · MANAGED DEVICE" ) );
+        m_title->setText( tr( "Enroll this device" ) );
+        m_details->setText( tr( "If your organization manages its devices with WorkSuite, enter the enrollment code from the admin console, "
+                                "paste its enrollment link, or scan its QR code. The device enrolls the first time it starts with a network "
+                                "connection. Leave this empty to skip." ) );
+        m_scan->setVisible( !QStandardPaths::findExecutable( QStringLiteral( "zbarcam" ) ).isEmpty() );
+        enrollChanged();
+        return;
+    }
     else
     {
         const QString key = Calamares::JobQueue::instance()->globalStorage()->value( QString::fromLatin1( RECOVERY_KEY ) ).toString();
@@ -738,9 +820,81 @@ WorksuiteConfirmViewStep::onLeave()
     }
 }
 
+/* Enroll page: empty = skip (Next allowed); otherwise Next only for a usable server + code. The token is written to
+   the pending file at once and removed again when the fields are cleared, so it never sits in global storage (which
+   Calamares can dump to its log). */
+void
+WorksuiteConfirmViewStep::enrollChanged()
+{
+    const QString server = m_server->text().trimmed(), code = m_input->text().trimmed();
+    WsEnroll::Target t;
+    bool ok = false;
+    if ( server.isEmpty() && code.isEmpty() )
+    {
+        QFile::remove( WsEnroll::pendingPath() );
+        m_status->setText( tr( "Not enrolling. You can enroll later in Settings › About this device." ) );
+        ok = true;
+    }
+    else if ( WsEnroll::fromFields( server, code, t ) )
+    {
+        ok = WsEnroll::writePending( WsEnroll::pendingPath(), t );
+        m_status->setText( ok ? tr( "Enrolls with %1 on first start." ).arg( QUrl( t.server ).host() )
+                              : tr( "Could not keep the enrollment code. Try again, or enroll later in Settings." ) );
+        if ( ok && m_server->text().trimmed() != t.server && WsEnroll::parseLink( code, t ) )
+        {
+            m_server->setText( t.server );   // a pasted link fills in the server it names
+        }
+    }
+    else
+    {
+        QFile::remove( WsEnroll::pendingPath() );
+        m_status->setText( WsEnroll::normalizeServer( server ).isEmpty() && !WsEnroll::parseLink( code, t )
+                               ? tr( "Enter the server address (https) from your administrator." )
+                               : tr( "That enrollment code doesn't look right. Check it, or paste the whole link." ) );
+    }
+    Calamares::JobQueue::instance()->globalStorage()->insert( QStringLiteral( "worksuiteEnroll" ), ok && !( server.isEmpty() && code.isEmpty() ) );
+    if ( ok != m_ok )
+    {
+        m_ok = ok;
+        emit nextStatusChanged( ok );
+    }
+}
+
+/* Reads the admin console's QR code with the camera: zbarcam prints the decoded link on stdout and exits after the
+   first code. Fixed arguments; the output goes straight into the field, never to the log. */
+void
+WorksuiteConfirmViewStep::scanQr()
+{
+    auto* p = new QProcess( this );
+    p->setProcessChannelMode( QProcess::SeparateChannels );
+    m_scan->setEnabled( false );
+    m_status->setText( tr( "Hold the QR code from the admin console in front of the camera…" ) );
+    connect( p, QOverload< int, QProcess::ExitStatus >::of( &QProcess::finished ), this, [ this, p ]( int code, QProcess::ExitStatus ) {
+        const QString link = QString::fromUtf8( p->readAllStandardOutput() ).section( QLatin1Char( '\n' ), 0, 0 ).trimmed();
+        p->deleteLater();
+        m_scan->setEnabled( true );
+        WsEnroll::Target t;
+        if ( code == 0 && WsEnroll::parseLink( link, t ) )
+        {
+            m_input->setText( link );
+        }
+        else
+        {
+            m_status->setText( tr( "No enrollment QR code was read. Try again, or type the code." ) );
+        }
+    } );
+    QTimer::singleShot( 60000, p, [ p ] { p->kill(); } );
+    p->start( QStringLiteral( "zbarcam" ), { QStringLiteral( "--raw" ), QStringLiteral( "--oneshot" ), QStringLiteral( "-Sdisable" ), QStringLiteral( "-Sqrcode.enable" ) } );
+}
+
 void
 WorksuiteConfirmViewStep::refresh()
 {
+    if ( m_mode == Mode::Enroll )
+    {
+        enrollChanged();
+        return;
+    }
     const bool ok = m_mode == Mode::Erase ? confirmationMatches( m_input->text(), m_disk ) : m_saved->isChecked();
     if ( ok != m_ok )
     {
@@ -759,7 +913,7 @@ bool
 WorksuiteConfirmViewStep::isBackEnabled() const
 {
     // The recovery step comes after installation: there is nothing to go back to.
-    return m_mode == Mode::Erase;
+    return m_mode != Mode::Recovery;
 }
 
 bool

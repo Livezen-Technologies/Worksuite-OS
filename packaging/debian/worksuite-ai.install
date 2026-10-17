@@ -1,0 +1,11 @@
+services/ai/src usr/lib/worksuite/ai/
+services/ai/package.json usr/lib/worksuite/ai/
+services/ai/node_modules usr/lib/worksuite/ai/
+services/ai/catalog/catalog.json usr/share/worksuite/ai/
+services/ai/systemd/worksuite-ai.service usr/lib/systemd/user/
+services/ai/systemd/worksuite-ai-engine.service usr/lib/systemd/user/
+services/ai/bin/worksuite-ai usr/sbin/
+services/ai/README.md usr/share/doc/worksuite-ai/
+security/apparmor/worksuite-ai etc/apparmor.d/
+security/apparmor/worksuite-ai-engine etc/apparmor.d/
+services/ai/systemd/user-tmpfiles.d/worksuite-ai.conf usr/share/user-tmpfiles.d/

@@ -3,6 +3,7 @@
 // can't tell, the section says so instead of showing sample values.
 import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { localTaskbarAlign, saveTaskbarAlign, shellPrefsFrom, type TaskbarAlign } from '../lib/shellPrefs'
 import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
 import type { WindowProps } from './types'
@@ -15,8 +16,12 @@ import { PowerPanel, PrintersPanel } from './settings/Devices'
 import { BigSwitch } from './settings/ui'
 import { SignInOptions } from './settings/SignIn'
 import { ReportProblem } from './settings/ReportProblem'
+import { Diagnostics } from './settings/Diagnostics'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
 import { KioskPanel } from './settings/Kiosk'
+import { AIPanel } from './settings/AI'
+import { MultitaskingPanel } from './settings/Multitasking'
+import { ClipboardPanel } from './settings/Clipboard'
 import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
@@ -30,13 +35,16 @@ const NAV = [
   { id: 'Bluetooth', tint: '#1F6BFF', icon: 'M7 7l10 10-5 5V2l5 5L7 17' },
   { id: 'Display', tint: '#0E8FA8', icon: 'M3 4h18v12H3zM8 20h8M12 16v4', sep: true },
   { id: 'Touchscreen & pen', tint: '#0E8FA8', icon: 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15' },
+  { id: 'Multitasking', tint: '#0E8FA8', icon: 'M3 5h8v6H3zM13 5h8v6h-8zM3 15h18v4H3z' },
   { id: 'Keyboard', tint: '#7A4FE0', icon: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10' },
   { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
   { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
   { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
+  { id: 'Clipboard', tint: '#0E8FA8', icon: 'M9 4h6v3H9zM7 5H5v16h14V5h-2' },
   { id: 'Power', tint: '#B7791F', icon: 'M13 2L4 14h7l-1 8 9-12h-7z' },
   { id: 'Printers', tint: '#5E739C', icon: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z' },
   { id: 'Default apps', tint: '#0E8FA8', icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 16.5h7M16.5 13v7' },
+  { id: 'AI', tint: '#7A4FE0', icon: 'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z' },
   { id: 'Privacy & security', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', sep: true },
   { id: 'Lock screen', tint: '#2E9E6A', icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' },
   { id: 'Users', tint: '#5E739C', icon: 'M9 8a3.5 3.5 0 1 0 0 .01M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7' },
@@ -50,7 +58,7 @@ export type Section = (typeof NAV)[number]['id']
 const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
 const navLabel = (id: Section) => t(`settings.nav.${id}` as MessageKey)
 // Older names (launcher search, earlier builds) still land somewhere sensible.
-const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard' }
+const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard' }
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
 /** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
@@ -227,12 +235,40 @@ function AppearancePanel() {
         ))}
       </div>
     </fieldset>
+    <TaskbarAlignChoice accent={accent} />
     <Rows rows={[
       { k: t('settings.app.wallpaper'), v: t('settings.app.wallpaperDefault') },
       { k: t('settings.app.font'), v: 'IBM Plex Sans' },
       { k: t('a11y.reducedMotion'), v: reduce ? t('settings.app.onSystem') : t('settings.app.offSystem') },
     ]} />
   </>
+}
+
+/** Taskbar alignment (Centre / Left), stored in the synced shell preferences. */
+function TaskbarAlignChoice({ accent }: { accent: string }) {
+  const [align, setAlign] = useState<TaskbarAlign>(() => localTaskbarAlign() ?? 'center')
+  useEffect(() => {
+    let live = true
+    void os.shellPrefs().then((r) => { if (live && r.ok) { const p = shellPrefsFrom(r.value); if (p.taskbarAlign) setAlign(p.taskbarAlign) } }).catch(() => undefined)
+    return () => { live = false }
+  }, [])
+  const pick = (a: TaskbarAlign) => { setAlign(a); void saveTaskbarAlign(a, os) }
+  return (
+    <fieldset className="m-0 flex flex-col gap-2.5 border-0 p-0">
+      <legend className="mb-2.5 p-0 text-sm font-semibold">{t('settings.app.taskbar')}</legend>
+      <div className="flex gap-3.5">
+        {(['center', 'left'] as const).map((a) => (
+          <button key={a} type="button" aria-pressed={align === a} onClick={() => pick(a)}
+            className="flex w-[180px] cursor-pointer flex-col gap-2 rounded-[14px] border-2 bg-[rgba(14,32,72,0.5)] p-2.5 text-left" style={{ borderColor: align === a ? accent : 'transparent' }}>
+            <span aria-hidden="true" className={`flex h-6 items-center gap-1 rounded-md bg-[rgba(6,14,34,0.88)] px-1.5 ${a === 'center' ? 'justify-center' : 'justify-start'}`}>
+              <span className="size-3 rounded-[3px]" style={{ background: accent }} />{[0, 1, 2].map((i) => <span key={i} className="size-3 rounded-[3px] bg-[#8FA3C8]" />)}
+            </span>
+            <span className="px-1 text-sm font-semibold">{t(a === 'center' ? 'settings.app.taskbarCenter' : 'settings.app.taskbarLeft')}</span>
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  )
 }
 
 function SoundPanel() {
@@ -342,7 +378,7 @@ function PrivacyPanel() {
   return <>
     <H1>{navLabel('Privacy & security')}</H1>
     <section aria-label={t('settings.priv.summary')} className="flex items-center gap-[22px] rounded-2xl border px-[22px] py-[18px]"
-      style={allGood ? { background: 'linear-gradient(120deg, rgba(46,158,106,0.22), rgba(14,32,72,0.7))', borderColor: 'rgba(95,211,154,0.35)' } : { background: 'linear-gradient(120deg, rgba(255,159,90,0.14), rgba(14,32,72,0.7))', borderColor: 'rgba(255,159,90,0.3)' }}>
+      style={allGood ? { background: 'linear-gradient(120deg, rgba(46,158,106,0.22), var(--ws-g-card))', borderColor: 'rgba(95,211,154,0.35)' } : { background: 'linear-gradient(120deg, rgba(255,159,90,0.14), var(--ws-g-card))', borderColor: 'rgba(255,159,90,0.3)' }}>
       <div className="relative h-[72px] w-[72px] shrink-0">
         <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">
           <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(127,178,255,0.18)" strokeWidth="7" />
@@ -416,7 +452,7 @@ function UsersPanel() {
     <H1>{t('settings.nav.Users')}</H1>
     {r.state === 'unavailable' && <Unavail what={t('settings.users.list')} />}
     {r.state === 'ok' && (
-      <div className="flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.18)] px-6 py-[22px]" style={{ background: 'radial-gradient(circle at 90% 10%, rgba(24,212,240,0.25), transparent 45%), rgba(14,32,72,0.75)' }}>
+      <div className="flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.18)] px-6 py-[22px]" style={{ background: 'radial-gradient(circle at 90% 10%, rgba(24,212,240,0.25), transparent 45%), var(--ws-g-card)' }}>
         <Avatar name={me?.name ?? r.value.current} size={96} font={34} />
         <span className="flex flex-1 flex-col gap-1.5">
           <span className="text-[22px] font-bold">{me?.name ?? r.value.current}</span>
@@ -474,7 +510,7 @@ function batteryText(b: BatteryState): string {
   return `${b.percentage == null ? '—' : `${formatNumber(b.percentage)}%`} · ${what}${eta ? ` · ${b.state === 'charging' ? t('settings.bat.toFull', { eta }) : t('settings.bat.left', { eta })}` : ''}`
 }
 
-/** SetAbout board. Processor and memory have no bridge source yet, so those tiles say so. */
+/** SetAbout board. Processor and memory come from the main process (DeviceInfo.specs). */
 function AboutPanel() {
   const { r: disks } = useAvail(os.sysDisks)
   const { r: battery } = useAvail(os.sysBattery, 60_000)
@@ -498,8 +534,8 @@ function AboutPanel() {
   const screen = displays.state === 'ok' ? displays.value.find((x) => x.enabled) ?? null : null
   const na = t('common.unavailable')
   const specs: { k: string; v: string; d: string; icon: string }[] = [
-    { k: t('settings.about.cpu'), v: na, d: t('settings.about.noSource'), icon: 'M7 7h10v10H7zM9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3' },
-    { k: t('settings.about.memory'), v: na, d: t('settings.about.noSource'), icon: 'M3 7h18v10H3zM7 11v2M11 11v2M15 11v2' },
+    { k: t('settings.about.cpu'), v: info.specs?.cpu_model ?? na, d: info.specs?.cpu_cores ? t('settings.about.cores', { count: formatNumber(info.specs.cpu_cores) }) : info.specs ? '' : t('settings.about.noSource'), icon: 'M7 7h10v10H7zM9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3' },
+    { k: t('settings.about.memory'), v: info.specs?.memory_bytes ? formatBytes(info.specs.memory_bytes) : na, d: info.specs ? '' : t('settings.about.noSource'), icon: 'M3 7h18v10H3zM7 11v2M11 11v2M15 11v2' },
     { k: t('settings.about.graphics'), v: gpus === null ? '…' : gpus[0] ?? na, d: gpus && gpus.length > 1 ? `+ ${gpus.slice(1).join(', ')}` : '', icon: 'M3 6h18v12H3zM7 10h4v4H7z' },
     { k: t('settings.nav.Display'), v: screen?.width && screen.height ? `${formatNumber(screen.width)} × ${formatNumber(screen.height)}` : displays.state === 'loading' ? '…' : na, d: screen ? [screen.refresh ? `${formatNumber(Math.round(screen.refresh))} Hz` : null, screen.scale ? `${formatNumber(Math.round(screen.scale * 100))}%` : null].filter(Boolean).join(' · ') || screen.description : '', icon: 'M3 4h18v12H3zM8 20h8M12 16v4' },
     { k: t('settings.about.desktop'), v: t('settings.about.shell'), d: t('settings.about.wayland'), icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
@@ -514,7 +550,7 @@ function AboutPanel() {
   const upToDate = status?.state === 'up_to_date'
   const copy = () => {
     const text = [`WorkSuite OS ${d?.os_version ?? ''}`.trim(), `${t('settings.about.name')}: ${d?.hostname ?? '—'}`, `${t('settings.about.kernel')}: ${d?.kernel_version ?? '—'} (${d?.arch ?? '—'})`,
-      ...specs.slice(2, 4).map((s) => `${s.k}: ${s.v}${s.d ? ` (${s.d})` : ''}`), `${t('settings.about.battery')}: ${battery.state === 'ok' ? batteryText(battery.value) : t('settings.about.noBattery')}`,
+      ...specs.slice(0, 4).map((s) => `${s.k}: ${s.v}${s.d ? ` (${s.d})` : ''}`), `${t('settings.about.battery')}: ${battery.state === 'ok' ? batteryText(battery.value) : t('settings.about.noBattery')}`,
       ...sec.map((s) => `${s.k}: ${s.v}`)].join('\n')
     void navigator.clipboard?.writeText(text).then(() => setCopied(true)).catch(() => {})
   }
@@ -570,6 +606,7 @@ function AboutPanel() {
         ))}
       </div>
     </div>
+    <Diagnostics />
     <ReportProblem />
   </>
 }
@@ -809,15 +846,15 @@ function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (
 }
 
 export default function Settings({ onClose }: WindowProps) {
-  const [section, setSection] = useState<Section>(() => {
-    const s = takeSettingsSection()
-    return isSection(s) ? s : (s && ALIAS[s]) || 'Network'
-  })
+  const first = useMemo(() => takeSettingsSection(), [])
+  const [section, setSection] = useState<Section>(() => (isSection(first) ? first : (first && ALIAS[first]) || 'Network'))
+  // Settings › Keyboard opens on Shortcuts, or on the on-screen keyboard when that was asked for.
+  const [kbTab, setKbTab] = useState<'osk' | 'shortcuts'>(first === 'On-screen keyboard' ? 'osk' : 'shortcuts')
   const [problem, setProblem] = useState<HwDevice | null>(null)
   const [driverCount, setDriverCount] = useState(0)
   const [user, setUser] = useState<{ name: string; role: string } | null>(null)
   const { status } = useOsUpdate()
-  useEffect(() => onSettingsSection((s) => setSection(isSection(s) ? s : ALIAS[s] ?? 'Network')), [])
+  useEffect(() => onSettingsSection((s) => { setSection(isSection(s) ? s : ALIAS[s] ?? 'Network'); setKbTab(s === 'On-screen keyboard' ? 'osk' : 'shortcuts') }), [])
   useEffect(() => {
     void os.hwDriverUpdates().then((r) => setDriverCount(r.ok ? r.value.length : 0)).catch(() => {})
     void os.sysUsers().then((r) => {
@@ -835,7 +872,7 @@ export default function Settings({ onClose }: WindowProps) {
     <div role="dialog" aria-modal="false" aria-label={t('launcher.settings')} className="fixed inset-0 z-50 flex bg-[#0A1A3D] font-sans text-[#E8EEFA]">
       <SetNav section={section} onPick={setSection} badges={badges} user={user} />
       {/* Page frame from the Set* boards: 26/36 px padding, 14 px gap; Privacy & security has its own green tint. */}
-      <main className="relative flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-9 pt-[26px] pb-[82px] [&>*]:shrink-0" style={{ background: `radial-gradient(ellipse 80% 50% at 80% 0%, ${section === 'Privacy & security' ? '#0F3A3A' : '#12306B'} 0%, #0A1A3D 60%)` }}>
+      <main className="relative flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-9 pt-[26px] pb-[82px] [&>*]:shrink-0" style={{ background: `radial-gradient(ellipse 80% 50% at 80% 0%, ${section === 'Privacy & security' ? 'var(--ws-g-glow-green)' : 'var(--ws-g-glow)'} 0%, var(--ws-g-page) 60%)` }}>
         <button type="button" aria-label={t('settings.close')} onClick={onClose} className="absolute top-4 right-4 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#8FA3C8] hover:bg-white/10 hover:text-white">
           <Svg d="M6 6l12 12M18 6L6 18" size={16} />
         </button>
@@ -844,13 +881,16 @@ export default function Settings({ onClose }: WindowProps) {
         {section === 'Bluetooth' && <BluetoothPanel />}
         {section === 'Display' && <DisplayPanel />}
         {section === 'Touchscreen & pen' && <TouchPanel />}
-        {section === 'Keyboard' && <KeyboardPanel />}
+        {section === 'Keyboard' && <KeyboardPanel tab={kbTab} />}
+        {section === 'Clipboard' && <ClipboardPanel />}
         {section === 'Appearance' && <AppearancePanel />}
+        {section === 'Multitasking' && <MultitaskingPanel />}
         {section === 'Sound' && <SoundPanel />}
         {section === 'Notifications' && <NotificationsPanel />}
         {section === 'Power' && <PowerPanel />}
         {section === 'Printers' && <PrintersPanel />}
         {section === 'Default apps' && <DefaultAppsPanel />}
+        {section === 'AI' && <AIPanel />}
         {section === 'Privacy & security' && <PrivacyPanel />}
         {section === 'Lock screen' && <LockScreenPanel onLock={() => void os.lock()} />}
         {section === 'Users' && <UsersPanel />}

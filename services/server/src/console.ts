@@ -11,6 +11,8 @@ import { checkPassword } from './oauth.ts';
 import { approvalsNeeded, checkApproval, requirePermission } from './approvals.ts';
 import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
 import { normalizeKiosk, redactKiosk, type KioskPolicy } from './kiosk.ts';
+import { qrMatrix } from './qr.ts';
+import { Throttle } from './throttle.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
 const SESSION_TTL = 8 * 3_600_000;
@@ -31,13 +33,8 @@ function cookie(ctx: Ctx, name: string): string | undefined {
 }
 
 /** Login throttling per client address: 10 failures per 15 minutes. */
-const failures = new Map<string, number[]>();
-function throttled(addr: string) {
-  const now = Date.now();
-  const recent = (failures.get(addr) ?? []).filter((t) => t > now - 15 * 60_000);
-  failures.set(addr, recent);
-  return recent.length >= 10;
-}
+const failures = new Throttle();
+const throttled = (addr: string) => failures.blocked([addr]);
 
 const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   update_ring: (v) => v === 'development' || v === 'pilot' || v === 'stable',
@@ -67,6 +64,18 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   // Managed WireGuard VPN (WSOS-INT-001): connection must be up (always-on); user-imported VPNs allowed or removed.
   vpn_required: (v) => typeof v === 'boolean',
   user_vpn: (v) => v === 'allow' || v === 'block',
+  // On-device AI assistant (services/ai): off for every user, and the catalog models users may download and run.
+  ai_assistant: (v) => typeof v === 'boolean',
+  // Desktop widgets (WorkSuite Desktop's Home on the OS wallpaper): false turns them off for every user. Kiosk: always off.
+  desktop_widgets: (v) => typeof v === 'boolean',
+  // WhatsApp (WhatsApp Web in its own window, pinned by default): false removes it from Start and the taskbar and the
+  // window shows that the organization turned it off. Kiosk: never shown (the kiosk runs its own app list).
+  whatsapp: (v) => typeof v === 'boolean',
+  // Screenshots and the snipping tool (Print Screen, Super+Shift+S): disabled turns them off for every user. Kiosk: always off.
+  screen_capture: (v) => v === 'allowed' || v === 'disabled',
+  // Clipboard history (Super+V): disabled turns it off and drops what was kept. Kiosk: always off.
+  clipboard_history: (v) => v === 'allowed' || v === 'disabled',
+  ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 
 export function validatePolicy(body: unknown, current?: Record<string, unknown> | null): Record<string, unknown> {
@@ -84,7 +93,21 @@ export function validatePolicy(body: unknown, current?: Record<string, unknown> 
   return out;
 }
 
-export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: boolean }) {
+/** Pagination from ?page=&per_page= (1-based page, 10–100 rows, default 25). */
+export function pageOf(query: URLSearchParams): { page: number; per_page: number; offset: number } {
+  const n = (k: string, d: number) => { const v = Number(query.get(k) ?? d); return Number.isInteger(v) ? v : d; };
+  const per_page = Math.min(100, Math.max(10, n('per_page', 25)));
+  const page = Math.max(1, Math.min(100_000, n('page', 1)));
+  return { page, per_page, offset: (page - 1) * per_page };
+}
+
+/** WSOS-INS-006: the link the console shows as a QR code. The token is in the fragment, which browsers never send to a
+ *  server, so a phone that opens the link does not leave the token in a web server log. */
+export function enrollmentLink(publicUrl: string, token: string): string {
+  return `${new URL('enroll', publicUrl).toString()}#token=${encodeURIComponent(token)}`;
+}
+
+export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: boolean; publicUrl?: string }) {
   const log = (a: Admin, action: string, detail: Record<string, unknown> = {}) =>
     db.prepare('INSERT INTO admin_log (org_id, user_id, action, detail, at) VALUES (?, ?, ?, ?, ?)').run(a.org_id, a.id, action, JSON.stringify(detail), Date.now());
 
@@ -107,7 +130,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     if (throttled(addr)) throw new HttpError(429, 'RATE_LIMITED', 'too many failed attempts; try again later', { retryable: true });
     const u = typeof b.password === 'string' ? checkPassword(db, a.email, b.password) : undefined;
     if (!u || u.id !== a.id) {
-      failures.get(addr)!.push(Date.now());
+      failures.fail([addr]);
       log(a, 'reauth_failed', { action: 'wipe' });
       throw new HttpError(401, 'REAUTH_REQUIRED', 'enter your administrator password to confirm');
     }
@@ -136,7 +159,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const u = checkPassword(db, String(b.email ?? ''), String(b.password ?? ''));
     const role = u ? (db.prepare('SELECT role FROM users WHERE id = ?').get(u.id) as { role: string }).role : null;
     if (!u || role !== 'admin') {
-      failures.get(addr)!.push(Date.now());
+      failures.fail([addr]);
       throw new HttpError(401, 'PERMISSION_DENIED', 'email or password is incorrect, or this account is not an administrator');
     }
     const t = secret('wsadm');
@@ -352,7 +375,8 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     if (!Number.isInteger(uses) || uses < 1 || uses > 1000) throw invalid('uses', '1 to 1000');
     const token = createEnrollmentToken(db, a.org_id, { hours, uses });
     log(a, 'enrollment_token_created', { hours, uses });
-    send(ctx, 201, { token, expires_at: new Date(Date.now() + hours * 3_600_000).toISOString(), uses });
+    const link = o.publicUrl ? enrollmentLink(o.publicUrl, token) : null;
+    send(ctx, 201, { token, expires_at: new Date(Date.now() + hours * 3_600_000).toISOString(), uses, server: o.publicUrl ?? null, link, qr: link ? qrMatrix(link) : null }, { 'cache-control': 'no-store' });
   });
 
   // ---- policy ----
@@ -469,6 +493,47 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     promoteRelease(db, String(b.from ?? ''), String(b.to ?? ''), b.arch as string | undefined, { rollout_percent: b.rollout_percent as number | undefined }, a.email), 'release_promoted'));
   r.on('POST', '/admin/api/releases/emergency', releaseAction((a, b) =>
     emergencyRelease(db, (b.manifest ?? {}) as Record<string, unknown>, b.arch as string | undefined, a.email), 'release_emergency'));
+
+  // ---- problem reports (§11.6-d) ----
+  r.on('GET', '/admin/api/problem-reports', (ctx) => {
+    const a = admin(ctx);
+    const p = pageOf(ctx.url.searchParams);
+    const total = (db.prepare('SELECT COUNT(*) AS n FROM problem_reports WHERE org_id = ?').get(a.org_id) as { n: number }).n;
+    const rows = db.prepare(`SELECT r.id, r.at, r.body, r.device_id, u.name AS user_name, u.email AS user_email, d.hostname
+      FROM problem_reports r JOIN users u ON u.id = r.user_id LEFT JOIN devices d ON d.id = r.device_id AND d.org_id = r.org_id
+      WHERE r.org_id = ? ORDER BY r.at DESC, r.id LIMIT ? OFFSET ?`).all(a.org_id, p.per_page, p.offset) as { id: string; at: number; body: string; device_id: string | null; user_name: string; user_email: string; hostname: string | null }[];
+    send(ctx, 200, { page: p.page, per_page: p.per_page, total, items: rows.map(({ body: b, ...x }) => {
+      const r = json<{ description: string; sections: { id: string; text: string }[] }>(b);
+      return { ...x, summary: (r.description ?? '').slice(0, 140), sections: r.sections.map((s) => s.id) };
+    }) });
+  });
+  r.on('GET', '/admin/api/problem-reports/{id}', (ctx) => {
+    const a = admin(ctx);
+    const row = db.prepare(`SELECT r.id, r.at, r.body, r.device_id, u.name AS user_name, u.email AS user_email, d.hostname
+      FROM problem_reports r JOIN users u ON u.id = r.user_id LEFT JOIN devices d ON d.id = r.device_id AND d.org_id = r.org_id
+      WHERE r.id = ? AND r.org_id = ?`).get(ctx.params.id, a.org_id) as { id: string; at: number; body: string; device_id: string | null; user_name: string; user_email: string; hostname: string | null } | undefined;
+    if (!row) throw new HttpError(404, 'NOT_FOUND', 'no such report');
+    const { body: b, ...x } = row;
+    log(a, 'problem_report_viewed', { id: row.id });
+    send(ctx, 200, { ...x, ...json<{ description: string; sections: { id: string; text: string }[] }>(b) });
+  });
+
+  // ---- device package audit (WSOS-SEC-008, forwarded with POST desktop/v1/os/audit) ----
+  r.on('GET', '/admin/api/device-audit', (ctx) => {
+    const a = admin(ctx);
+    const p = pageOf(ctx.url.searchParams);
+    const dev = ctx.url.searchParams.get('device') ?? '';
+    const type = ctx.url.searchParams.get('type') ?? '';
+    if (dev && !/^[A-Za-z0-9_-]{1,64}$/.test(dev)) throw invalid('device');
+    if (type && !/^package\.[a-z_]{1,64}$/.test(type)) throw invalid('type');
+    const where = `d.org_id = ? AND x.principal = 'device:' || d.id AND x.type LIKE 'package.%'${dev ? ' AND d.id = ?' : ''}${type ? ' AND x.type = ?' : ''}`;
+    const args: (string | number)[] = [a.org_id, ...(dev ? [dev] : []), ...(type ? [type] : [])];
+    const total = (db.prepare(`SELECT COUNT(*) AS n FROM audit x JOIN devices d ON x.principal = 'device:' || d.id WHERE ${where}`).get(...args) as { n: number }).n;
+    const rows = db.prepare(`SELECT x.id, x.type, x.at, x.data, d.id AS device_id, d.hostname FROM audit x JOIN devices d ON x.principal = 'device:' || d.id
+      WHERE ${where} ORDER BY x.at DESC, x.id LIMIT ? OFFSET ?`).all(...args, p.per_page, p.offset) as { id: string; type: string; at: string; data: string | null; device_id: string; hostname: string }[];
+    const types = (db.prepare(`SELECT DISTINCT x.type FROM audit x JOIN devices d ON x.principal = 'device:' || d.id WHERE d.org_id = ? AND x.type LIKE 'package.%' ORDER BY x.type`).all(a.org_id) as { type: string }[]).map((t) => t.type);
+    send(ctx, 200, { page: p.page, per_page: p.per_page, total, types, items: rows.map((x) => ({ ...x, data: json(x.data) })) });
+  });
 
   // ---- activity ----
   r.on('GET', '/admin/api/log', (ctx) => {

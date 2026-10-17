@@ -13,6 +13,7 @@ import { openDb } from '../src/db.ts';
 import { createHandler } from '../src/main.ts';
 import { base32Decode, base32Encode, enrollTotp, requirePasswordChange, totp } from '../src/identity.ts';
 import { OS_LOGIN_CODE, TOKEN_EXCHANGE } from '../src/oauth.ts';
+import { Throttle } from '../src/throttle.ts';
 
 let dir: string, server: Server, base: string, db: ReturnType<typeof openDb>, org: number, org2: number;
 
@@ -65,6 +66,7 @@ test('WSOS-DIR-009: an enrolled TOTP is required at the greeter (password + code
   const ok = await auth('password-123' + code);
   assert.equal(ok.status, 200);
   assert.equal(ok.body.mfa, true);
+  assert.equal(ok.body.allow_offline_mfa_bypass, false);   // directory default: no offline sign-in without the code
   assert.equal((await auth('password-123' + code)).status, 401);   // replay refused
 });
 
@@ -103,6 +105,9 @@ test('WSOS-DIR-007: expired and must-change passwords are changed at the greeter
   assert.equal((await auth('brand-new-pass-1')).body.error.code, 'PASSWORD_EXPIRED');
   admin.setDirectory(db, org, { offline_login_days: 7 });
   assert.throws(() => admin.setDirectory(db, org, { run: 'x' }));
+  assert.throws(() => admin.setDirectory(db, org, { allow_offline_mfa_bypass: 'yes' }));
+  assert.equal(admin.setDirectory(db, org, { offline_login_days: 7, allow_offline_mfa_bypass: true }).allow_offline_mfa_bypass, true);
+  admin.setDirectory(db, org, { offline_login_days: 7 });
   assert.throws(() => admin.setDirectory(db, org, { netbios_domain: 'bad domain' }));
 });
 
@@ -126,3 +131,42 @@ test('WSOS-DIR-008: the login code becomes tokens once, only with the same devic
   const me = await fetch(`${base}/oauth/userinfo`, { headers: { authorization: `Bearer ${ok.body.access_token}` } });
   assert.equal((await me.json()).email, 'sso@a.test');
 });
+
+test('Throttle: blocks a key after max failures inside the window, then forgets them', () => {
+  const t = new Throttle(3, 1000);
+  for (let i = 0; i < 3; i++) { assert.equal(t.blocked(['a', 'u'], i), false); t.fail(['a', 'u'], i); }
+  assert.equal(t.blocked(['a'], 10), true);
+  assert.equal(t.blocked(['b', 'u'], 10), true);   // any blocked key blocks
+  assert.equal(t.blocked(['b'], 10), false);
+  assert.equal(t.blocked(['a'], 1003), false);     // window slid past
+});
+
+test('sign-in guesses are limited per account and per address, wrong TOTP codes included', async () => {
+  // Its own server: the throttle is per server, and earlier tests already spent part of the 127.0.0.1 budget.
+  const own = createServer(createHandler(db, { publicUrl: 'https://ws.test/' }));
+  await new Promise<void>((r) => own.listen(0, '127.0.0.1', r));
+  const shared = base;
+  base = `http://127.0.0.1:${(own.address() as AddressInfo).port}`;
+  try { await bruteForce(); } finally { base = shared; own.close(); }
+});
+async function bruteForce() {
+  const d = await enroll();
+  admin.addUser(db, org, 'brute@a.test', 'B', 'password-123');
+  const s = new URL(enrollTotp(db, 'brute@a.test')).searchParams.get('secret')!;
+  const auth = (username: string, password: string) => call('/desktop/v1/os/directory/authenticate', { username, password }, d.credential);
+  // Right password, wrong codes: these count.
+  for (let i = 0; i < 10; i++) assert.equal((await auth('brute@a.test', 'password-123000000')).body.error.code, 'INVALID_CREDENTIALS');
+  const r = await auth('brute@a.test', 'password-123' + totp(s, Date.now()));
+  assert.equal(r.status, 429);
+  assert.equal(r.body.error.code, 'RATE_LIMITED');
+  // The address is blocked too, for other accounts and for the OneAuth page.
+  admin.addUser(db, org, 'other@a.test', 'O', 'password-123');
+  assert.equal((await auth('other@a.test', 'password-123')).status, 429);
+  const form = new URLSearchParams({ email: 'other@a.test', password: 'password-123', client_id: 'worksuite-os',
+    redirect_uri: 'http://127.0.0.1:5000/callback', response_type: 'code', code_challenge_method: 'S256', code_challenge: 'a'.repeat(43) }).toString();
+  for (let i = 0; i < 10; i++) {
+    const res = await fetch(`${base}/oauth/authorize`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form.replace('password-123', 'wrong-pass') });
+    assert.equal(res.status, 401);
+  }
+  assert.equal((await fetch(`${base}/oauth/authorize`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form })).status, 429);
+}

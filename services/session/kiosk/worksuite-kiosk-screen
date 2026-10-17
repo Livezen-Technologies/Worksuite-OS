@@ -1,0 +1,4 @@
+#!/bin/sh
+# worksuite-kiosk-screen FROM UNTIL   (kiosk session; FROM/UNTIL as HHMM from session.env)
+# Nightly screen-off for kiosk devices (policy kiosk.screen_off): see ScreenSchedule in worksuite_kiosk.py.
+exec python3 -I "${WORKSUITE_KIOSK_PY:-/usr/lib/worksuite/kiosk}/worksuite_kiosk.py" screen-schedule "$@"

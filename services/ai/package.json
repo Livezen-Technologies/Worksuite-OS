@@ -1,0 +1,14 @@
+{
+  "name": "@worksuite-os/ai-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "worksuite-ai: the on-device AI assistant service (llama.cpp through node-llama-cpp) behind a 0600 Unix socket",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "test": "node --no-warnings --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": { "node-llama-cpp": "3.22.1" },
+  "devDependencies": { "typescript": "^5.9.0", "@types/node": "^22.18.0" }
+}

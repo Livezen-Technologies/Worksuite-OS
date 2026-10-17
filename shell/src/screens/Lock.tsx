@@ -65,8 +65,10 @@ export default function Lock({ user, name: realName, onUnlock, notices = [] }: L
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden font-sans text-white" style={{ background: BG.lock }}
+    <main aria-labelledby="ws-lock-h1" className="relative h-full w-full overflow-hidden font-sans text-white" style={{ background: BG.lock }}
       onMouseDown={(e) => { if (!asking && e.button === 0) { e.preventDefault(); setAsking(true) } }}>
+      {/* Orca announces the screen as "Locked" on arrival (WSOS-ACC-003). */}
+      <h1 id="ws-lock-h1" className="sr-only">{t('lock.locked')}</h1>
       <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.18]" viewBox="0 0 1280 800" preserveAspectRatio="xMidYMid slice">
         <rect x="880" y="120" width="160" height="160" rx="10" fill="#1F6BFF" />
         <rect x="800" y="200" width="80" height="80" rx="8" fill="#18D4F0" />
@@ -151,6 +153,6 @@ export default function Lock({ user, name: realName, onUnlock, notices = [] }: L
           <button type="button" aria-label={t('a11y.button')} className={glassBtn}><Icon d={P.a11y}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
         </div>
       )}
-    </div>
+    </main>
   )
 }

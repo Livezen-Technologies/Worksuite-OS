@@ -13,6 +13,7 @@ from typing import Any, Callable
 from pywayland.client import Display
 
 from .model import OPERATIONS, Backend, Output, WindowRegistry, flags_from_states
+from .x11 import X11Classes
 
 log = logging.getLogger("worksuite-bridge")
 
@@ -27,6 +28,8 @@ def _states(raw: Any) -> list[int]:
 class _Toplevel:
     def __init__(self) -> None:
         self.app_id = ""
+        self.seen_app_id: str | None = None
+        self.listed_app_id = ""
         self.title = ""
         self.outputs: list[Any] = []
         self.flags = 0
@@ -39,6 +42,7 @@ class WaylandBackend(Backend):
         from .protocol import wlr_foreign_toplevel_management_unstable_v1 as wlr  # generated
         self._wl, self._wlr = wl, wlr
         self.registry = registry
+        self.x11 = X11Classes()
         self.on_outputs_changed = on_outputs_changed
         self.display = Display(display_name)
         self.manager = None
@@ -86,11 +90,21 @@ class WaylandBackend(Backend):
         self.display.disconnect()
 
     def attach(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
         loop.add_reader(self.display.get_fd(), self._readable)
         self.display.flush()
 
     def _readable(self) -> None:
-        if self.display.dispatch(block=True) == -1:
+        # pywayland raises (EPIPE) instead of returning -1 once the compositor is gone. asyncio only logs an exception
+        # from a reader and calls it again at once: the bridge spun at full CPU writing tracebacks until stopped.
+        try:
+            lost = self.display.dispatch(block=True) == -1
+        except RuntimeError:
+            lost = True
+        if lost:
+            loop = getattr(self, "_loop", None)
+            if loop is not None:
+                loop.remove_reader(self.display.get_fd())
             raise SystemExit("Wayland connection lost")
         self.display.flush()
 
@@ -161,10 +175,12 @@ class WaylandBackend(Backend):
 
     def _done(self, handle: Any, t: _Toplevel) -> None:
         out = next((n for n in map(self._output_name, t.outputs) if n), "")
+        if t.app_id != t.seen_app_id:   # X11 windows: listed under their WM_CLASS class (x11.py)
+            t.seen_app_id, t.listed_app_id = t.app_id, self.x11.resolve(t.app_id)
         if self.registry.has_native(handle):
-            self.registry.update(handle, app_id=t.app_id, title=t.title, output=out, flags=t.flags)
+            self.registry.update(handle, app_id=t.listed_app_id, title=t.title, output=out, flags=t.flags)
         else:
-            self.registry.add(handle, t.app_id, t.title, out, t.flags)
+            self.registry.add(handle, t.listed_app_id, t.title, out, t.flags)
 
     def _closed(self, handle: Any, t: _Toplevel) -> None:
         t.closed = True

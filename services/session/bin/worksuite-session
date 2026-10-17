@@ -36,6 +36,12 @@ cleanup() {
         org.freedesktop.Secret.Service.Lock array:objpath:/org/freedesktop/secrets/collection/login >/dev/null 2>&1
     systemctl --user stop worksuite-session.target 2>/dev/null
     systemctl --user stop graphical-session.target 2>/dev/null
+    # A user manager that outlives the session (another login on a VT, lingering) kept this locked daemon, and the next
+    # sign-in's PAM-started daemon could not take over: apps then asked to unlock the login keyring (WSOS-INT-009).
+    # Stopping it lets the next sign-in start and unlock a fresh one with the password. Only after the session's apps
+    # are gone: a Secret Service call from one of them would start it again, locked (D-Bus activation, --start).
+    # Its socket unit stays, so the next sign-in's PAM module starts the daemon through it.
+    systemctl --user stop gnome-keyring-daemon.service 2>/dev/null
     # shellcheck disable=SC2086
     systemctl --user unset-environment $VARS
     log "session cleaned up"
@@ -45,6 +51,11 @@ case "${1:-}" in
     --ready)  ready ;;
     --logout) cleanup; [ -n "${LABWC_PID:-}" ] && kill -TERM "$LABWC_PID" ;;
     "")
+        # Nothing the session prints may reach the VT (Xwayland's xkbcomp warnings showed on sign-out and restart):
+        # Labwc and everything it starts log to the journal instead.
+        if [ -z "${WORKSUITE_SESSION_JOURNAL:-}" ] && command -v systemd-cat >/dev/null 2>&1; then
+            WORKSUITE_SESSION_JOURNAL=1 exec systemd-cat -t worksuite-session "$0"
+        fi
         # Kiosk mode (device policy, WSOS-AUTH-002): the kiosk account gets the kiosk session, never the full shell.
         kiosk=$(sed -n 's/^KIOSK_USER=//p' "${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}" 2>/dev/null | head -n 1)
         if [ -n "$kiosk" ] && [ "$kiosk" = "$(id -un)" ]; then exec "${WORKSUITE_KIOSK_SESSION:-/usr/lib/worksuite/worksuite-kiosk-session}"; fi
@@ -55,7 +66,7 @@ case "${1:-}" in
         . "${WORKSUITE_WLR_ENV:-/usr/lib/worksuite/wlr-env}"
         # Per-user Labwc config dir: the system files, linked, except rc.xml once Settings › Touchscreen & pen has
         # written its own copy (shell/electron/touch.ts adds the touch block to the system rc.xml).
-        SYSCONF=/etc/xdg/worksuite/labwc
+        SYSCONF=${WORKSUITE_LABWC_SYSCONF:-/etc/xdg/worksuite/labwc}
         CONF=${XDG_CONFIG_HOME:-$HOME/.config}/worksuite/labwc
         if mkdir -p "$CONF" 2>/dev/null; then
             for f in "$SYSCONF"/*; do
@@ -64,9 +75,27 @@ case "${1:-}" in
                 [ "$n" = rc.xml ] && [ -f "$CONF/rc.xml" ] && [ ! -L "$CONF/rc.xml" ] && continue
                 ln -sfn "$f" "$CONF/$n"
             done
+            # A copy written by an older version keeps its old window rules and bindings (the shell was omnipresent,
+            # which hid every app): rebuild it from the system file, keeping its desktops, Alt+Tab scope and touch block.
+            if [ -f "$CONF/rc.xml" ] && [ ! -L "$CONF/rc.xml" ] && [ -f "$SYSCONF/rc.xml" ]; then
+                python3 -Es - "$CONF/rc.xml" "$SYSCONF/rc.xml" "${WORKSUITE_BRIDGE_LIB:-/usr/lib/worksuite/wayland-bridge}" <<'PY' >/dev/null 2>&1 || true
+import os, sys
+user, system, lib = sys.argv[1:4]
+sys.path.insert(0, lib)
+from worksuite_bridge.workspace import refresh_rc
+old = open(user, encoding="utf-8").read()
+new = refresh_rc(old, open(system, encoding="utf-8").read())
+if new != old:
+    with open(user + ".tmp", "w", encoding="utf-8") as f:
+        f.write(new)
+    os.replace(user + ".tmp", user)
+PY
+            fi
         else
             CONF=$SYSCONF
         fi
+        # XDG user folders (Documents, Downloads, …) exist from the first sign-in; Files opens on Documents.
+        xdg-user-dirs-update >/dev/null 2>&1 || true
         labwc -C "$CONF"
         rc=$?
         cleanup

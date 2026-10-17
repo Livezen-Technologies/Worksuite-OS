@@ -10,6 +10,9 @@ Build-Depends: debhelper-compat (= 13), nodejs (>= 22.18), npm,
 # Branding: SVG sources rendered to PNG for Plymouth, GRUB and icons.
  librsvg2-bin, grub-common, fonts-dejavu-core,
 # Wayland bridge: protocol bindings generated with pywayland-scanner from wayland.xml; D-Bus tests on a private bus.
+ libpam0g-dev,
+# polkit agent: worksuite-polkit-listener (services/session/polkit/listener).
+ libpolkit-agent-1-dev, libglib2.0-dev,
  python3, python3-pywayland, python3-cffi-backend, python3-dbus-next, python3-yaml, libwayland-dev, pkgconf, dbus-daemon,
 # Installer translations (.ts → .qm).
  qt6-l10n-tools | qttools5-dev-tools
@@ -20,9 +23,9 @@ Rules-Requires-Root: no
 Package: worksuite-desktop
 Architecture: all
 Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archive-keyring,
- worksuite-user-services, worksuite-package-service, worksuite-device-agent, worksuite-directory, worksuite-recovery-boot, worksuite-wayland-bridge,
+ worksuite-user-services, worksuite-ai, worksuite-package-service, worksuite-device-agent, worksuite-directory, worksuite-recovery-boot, worksuite-wayland-bridge,
  labwc, wlr-randr, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
- xdg-desktop-portal, xdg-desktop-portal-wlr, grim, xdg-desktop-portal-gtk, gnome-keyring,
+ xdg-desktop-portal, xdg-desktop-portal-wlr, grim, wl-clipboard, wtype, xdg-desktop-portal-gtk, gnome-keyring,
  pipewire, pipewire-pulse, wireplumber, network-manager, bluez, udisks2, upower, cups, polkitd, pkexec,
  flatpak, fcitx5, fcitx5-m17n, fcitx5-frontend-gtk3, fcitx5-frontend-gtk4, fcitx5-frontend-qt6, apparmor, ${misc:Depends}
 Recommends: fwupd, wl-mirror, worksuite-office | worksuite-desktopeditors
@@ -37,8 +40,8 @@ Description: WorkSuite OS desktop (metapackage)
 
 Package: worksuite-shell
 Architecture: amd64 arm64
-Depends: libc6, libgtk-3-0t64 | libgtk-3-0, libgtk-3-bin, desktop-file-utils, libnss3, libasound2t64 | libasound2, libgbm1, libdrm2, libxshmfence1, wl-clipboard, tar, gzip, xz-utils,
-         7zip, libarchive-tools, ${misc:Depends}
+Depends: libc6, libgtk-3-0t64 | libgtk-3-0, libgtk-3-bin, desktop-file-utils, libnss3, libasound2t64 | libasound2, libgbm1, libdrm2, libxshmfence1, wl-clipboard, grim, wtype, libsecret-tools, tar, gzip, xz-utils,
+         7zip, libarchive-tools, fonts-noto-color-emoji, ${misc:Depends}
 Recommends: zip, unzip, bzip2, zstd
 Description: WorkSuite shell (Electron launcher, dashboard, Settings, App Center)
  The React/Electron desktop shell of WorkSuite OS: greeter preview, launcher,
@@ -51,7 +54,7 @@ Description: WorkSuite shell (Electron launcher, dashboard, Settings, App Center
 
 Package: worksuite-wayland-bridge
 Architecture: all
-Depends: python3, python3-pywayland, python3-cffi-backend, python3-dbus-next, labwc, ${misc:Depends}
+Depends: python3, python3-pywayland, python3-cffi-backend, python3-dbus-next, labwc, grim, x11-utils, ${misc:Depends}
 Description: WorkSuite Wayland bridge (window list, tray watcher) on D-Bus
  Session service lk.worksuite.WaylandBridge1: lists, activates, minimizes and
  closes Labwc windows through wlr-foreign-toplevel-management for the WorkSuite
@@ -59,10 +62,10 @@ Description: WorkSuite Wayland bridge (window list, tray watcher) on D-Bus
  StatusNotifierItem watcher and host behind the panel's tray.
 
 Package: worksuite-session
-Architecture: all
-Depends: labwc, xwayland, systemd, dbus-user-session, gtklock, swayidle, zenity, python3, pkexec | policykit-1, lxpolkit | mate-polkit,
+Architecture: any
+Depends: ${shlibs:Depends}, labwc, xwayland, systemd, dbus-user-session, xdg-user-dirs, librsvg2-common, adwaita-icon-theme, gtklock, swayidle, wlopm, wlr-randr, wtype, python3-evdev, zenity, python3, pkexec | policykit-1, lxpolkit | mate-polkit, python3-gi, gir1.2-polkit-1.0,
  libpam-modules, libpam-runtime, ${misc:Depends}
-Recommends: python3, python3-gi, gir1.2-gtk-4.0, gir1.2-polkit-1.0, libpam-u2f, pamu2fcfg
+Recommends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-4.0, gir1.2-gtk4layershell-1.0, libgtk4-layer-shell0, wvkbd, libpam-u2f, pamu2fcfg
 Description: WorkSuite Wayland session file, systemd user units and launcher
  Session entry for the display manager, the worksuite-session launcher and the
  systemd user units bound to worksuite-session.target, plus Labwc and portal
@@ -77,6 +80,19 @@ Description: WorkSuite user services (catalog, files, credentials broker, sync)
  Per-user services: the offline-first sync service (local SQLite store and
  outbox) and the credentials broker (OneAuth sign-in, keyring-held refresh
  tokens).
+
+Package: worksuite-ai
+Architecture: amd64 arm64
+Depends: worksuite-shell (= ${binary:Version}), systemd, ${misc:Depends}
+Recommends: libvulkan1, mesa-vulkan-drivers
+Description: WorkSuite AI assistant: models that run on this device
+ Per-user service behind a 0600 Unix socket that runs a downloaded GGUF model
+ with llama.cpp (node-llama-cpp, prebuilt CPU and Vulkan builds) for the
+ shell's assistant. Inference runs in its own unit with no network and with
+ memory and CPU limits. Models are never shipped in the image: they are
+ downloaded over HTTPS from the packaged catalog's host, verified against a
+ pinned SHA-256 before every load, and can be switched off or limited by the
+ organization's device policy. Prompts and answers are never logged.
 
 Package: worksuite-package-service
 Architecture: amd64 arm64
@@ -96,7 +112,7 @@ Description: WorkSuite device agent (enrollment, policy, signed remote commands)
 
 Package: worksuite-directory
 Architecture: amd64 arm64
-Depends: worksuite-shell (= ${binary:Version}), libpam-runtime, libpam-modules, passwd, bsdutils, systemd, ${misc:Depends}
+Depends: worksuite-shell (= ${binary:Version}), libpam-runtime, libpam-modules, passwd, bsdutils, systemd, ${shlibs:Depends}, ${misc:Depends}
 Recommends: worksuite-device-agent
 Description: WorkSuite directory sign-in and break-glass admin
  Signs organization users in at the greeter through pam_exec and the
@@ -120,6 +136,7 @@ Depends: calamares (>= 3.3), cryptsetup, python3,
 # QML sidebar, footer and slideshow (images install without Recommends, so these must be explicit).
  qml6-module-qtquick, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtcore, qml6-module-qtqml-workerscript, qt6-svg-plugins,
  ${shlibs:Depends}, ${misc:Depends}
+Recommends: zbar-tools
 Description: WorkSuite OS installer configuration for Calamares
  Calamares settings, branding and two WorkSuite modules for the live ISO:
  a typed disk-name confirmation before erasing (WSOS-INS-003) and a LUKS2

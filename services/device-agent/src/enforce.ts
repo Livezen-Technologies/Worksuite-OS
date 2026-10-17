@@ -16,6 +16,7 @@ export const ENFORCED_PATHS = {
   usbModprobe: '/etc/modprobe.d/worksuite-usb-storage.conf',
   usbUdev: '/etc/udev/rules.d/71-worksuite-usb-storage.rules',
   offlineExpired: '/etc/worksuite/offline-access-expired',
+  aiPolicy: '/etc/worksuite/ai-policy.json',
   ...KIOSK_PATHS,
 } as const;
 
@@ -52,6 +53,16 @@ export function signinPolicyConf(allowPin = true, minLength = 6): string {
   return HEADER + `ALLOW_PIN=${allowPin ? 1 : 0}\nPIN_MIN_LENGTH=${minLength}\n`;
 }
 
+/**
+ * The AI assistant's policy file (read by every user's worksuite-ai, so 0644 like the other files here). Only what the
+ * policy sets, and only well-formed catalog ids, reach it; no file = not managed (the assistant is the user's choice).
+ */
+export function aiPolicyFile(p: Policy | null | undefined): string | null {
+  if (!p || (p.ai_assistant === undefined && p.ai_models === undefined)) return null;
+  const models = Array.isArray(p.ai_models) ? p.ai_models.filter((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)).slice(0, 100) : null;
+  return JSON.stringify({ enabled: p.ai_assistant !== false, models }) + '\n';
+}
+
 /** null policy = not managed: every WorkSuite restriction removed, packaged defaults back. */
 export function policyEnforcement(p: Policy | null | undefined, deviceId?: string): Enforcement {
   const kiosk = activeKiosk(p, deviceId);
@@ -68,6 +79,7 @@ export function policyEnforcement(p: Policy | null | undefined, deviceId?: strin
       [ENFORCED_PATHS.faillock]: faillockConf(deny, unlock),
       // Unmanaged: no file, worksuite-signin's defaults (PIN allowed, 6 digits) apply.
       [ENFORCED_PATHS.signinPolicy]: p ? signinPolicyConf(p.allow_pin !== false, pinMin) : null,
+      [ENFORCED_PATHS.aiPolicy]: aiPolicyFile(kiosk ? { ...p!, ai_assistant: false } : p),
       [ENFORCED_PATHS.usbModprobe]: usb === 'block' ? MODPROBE_BLOCK : null,
       [ENFORCED_PATHS.usbUdev]: usb === 'block' ? UDEV_BLOCK : usb === 'read_only' ? UDEV_READ_ONLY : null,
       ...kf.files,

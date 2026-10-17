@@ -1,0 +1,5 @@
+# D-Bus system activation for lk.worksuite.SignIn1 (exits after a minute idle).
+[D-BUS Service]
+Name=lk.worksuite.SignIn1
+Exec=/usr/lib/worksuite/worksuite-signin dbus
+User=root

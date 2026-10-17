@@ -107,7 +107,9 @@ def program_name(details, proc="/proc"):
 
 
 def pick_identity(identities, my_uid):
-    """The identity to ask for: the person at the desk when they are an administrator, else the first offered.
+    """The identity to ask for: the person at the desk when they are an administrator, else the first administrator
+    with an ordinary account (uid >= 1000). System accounts such as the break-glass wsadmin (uid 989) are offered only
+    when there is no one else.
 
     identities: [(uid, name, display)]."""
     if not identities:
@@ -115,7 +117,32 @@ def pick_identity(identities, my_uid):
     for i in identities:
         if i[0] == my_uid:
             return i
+    for i in identities:
+        if i[0] >= 1000:
+            return i
     return identities[0]
+
+
+def join_fields(fields):
+    """One line for worksuite-polkit-listener: tab-separated, with \\ \t \n escaped."""
+    esc = (str(f).replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n") for f in fields)
+    return "\t".join(esc) + "\n"
+
+
+def split_fields(line):
+    """The fields of one line from worksuite-polkit-listener (see join_fields)."""
+    out = []
+    for f in line.rstrip("\n").split("\t"):
+        r, i = [], 0
+        while i < len(f):
+            c = f[i]
+            if c == "\\" and i + 1 < len(f):
+                i += 1
+                c = {"t": "\t", "n": "\n"}.get(f[i], f[i])
+            r.append(c)
+            i += 1
+        out.append("".join(r))
+    return out
 
 
 def encode(msg):

@@ -8,8 +8,21 @@ if [ -z "${WLR_RENDERER:-}" ]; then
         case "$(basename "$(readlink -f "$card/device/driver")")" in
             virtio_gpu|virtio-pci|qxl|bochs|bochs-drm|cirrus|cirrus-qemu|vboxvideo|vmwgfx|simpledrm|simple-framebuffer|efifb|hyperv_drm|mgag200|ast)
                 # No GL either for Qt Quick (installer sidebar, slideshow): use its software backend.
-                export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 QT_QUICK_BACKEND=software ;;
+                export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 QT_QUICK_BACKEND=software
+                # GTK 4 (greeter, veils, toasts, keyboard): its GL renderer on llvmpipe made the greeter's first frame
+                # slow; the cairo renderer draws these simple surfaces at once.
+                [ -n "${GSK_RENDERER:-}" ] || export GSK_RENDERER=cairo ;;
             *) unset WLR_RENDERER; break ;;   # a real GPU (i915, xe, amdgpu, radeon, nouveau, nvidia…)
         esac
     done
+fi
+# The system keyboard layout (Settings, the installer: /etc/default/keyboard) for the greeter and the live installer,
+# whose compositor would otherwise start with US English. An explicit XKB_DEFAULT_LAYOUT wins.
+if [ -z "${XKB_DEFAULT_LAYOUT:-}" ] && [ -r "${WORKSUITE_KEYBOARD_CONF:-/etc/default/keyboard}" ]; then
+    XKBLAYOUT=; XKBVARIANT=; XKBOPTIONS=; XKBMODEL=
+    . "${WORKSUITE_KEYBOARD_CONF:-/etc/default/keyboard}"
+    [ -n "$XKBLAYOUT" ] && export XKB_DEFAULT_LAYOUT="$XKBLAYOUT"
+    [ -n "$XKBVARIANT" ] && export XKB_DEFAULT_VARIANT="$XKBVARIANT"
+    [ -n "$XKBOPTIONS" ] && export XKB_DEFAULT_OPTIONS="$XKBOPTIONS"
+    [ -n "$XKBMODEL" ] && export XKB_DEFAULT_MODEL="$XKBMODEL"
 fi

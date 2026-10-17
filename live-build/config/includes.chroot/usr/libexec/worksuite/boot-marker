@@ -1,5 +1,11 @@
 #!/bin/sh
 # One line per check, then a summary the VM test greps for. No secrets; status only.
+# Always to the journal; to /dev/console only when that is a serial port (the VM tests' console=ttyS0 / ttyAMA0), never
+# the screen's VT: users must not see console text.
+active=$(cat /sys/class/tty/console/active 2>/dev/null); last=${active##* }
+case "$last" in
+  ttyS*|ttyAMA*) if [ -z "${WORKSUITE_MARKER_TEED:-}" ]; then WORKSUITE_MARKER_TEED=1 "$0" | tee /dev/console; exit 0; fi ;;
+esac
 for u in greetd worksuite-device-agent dbus polkit; do
   printf 'WORKSUITE_UNIT %s %s\n' "$u" "$(systemctl is-active "$u.service" 2>/dev/null || true)"
 done

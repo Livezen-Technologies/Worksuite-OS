@@ -25,6 +25,7 @@ Presentation {
     property real started: 0
     property real phaseStarted: 0
     property int elapsed: 0
+    property int phaseElapsed: 0      // seconds in the current configure task
     readonly property bool copying: phase === "prepare" || phase === "copy" || phase === ""
     readonly property bool preparing: phase === "prepare" || phase === ""
     property WsState wsState: WsState {}
@@ -41,11 +42,16 @@ Presentation {
     property real filesTotal: 0
     property real packagesDone: 0
     property real packagesTotal: 0
+    property real imagePackages: 0    // packages in the system image being copied (counted at image build time)
     property var log: []
     property real speed: 0            // bytes per second over the last few seconds of samples
     property var samples: []          // [time ms, bytes]
     // Shown values count up to the real ones (the board's number tween).
-    property real shownPercent: progress * 100
+    // While copying, the percentage is the copy's own (bytes written of the image's size), so it agrees with the GB
+    // shown under the bar; it holds at 99 until the copy step ends. Otherwise the whole queue's progress.
+    readonly property real copyFraction: bytesTotal > 0 && bytesDone > 0 ? Math.min(0.99, bytesDone / bytesTotal) : 0
+    readonly property real shownFraction: copying && !preparing && bytesTotal > 0 ? copyFraction : progress
+    property real shownPercent: shownFraction * 100
     Behavior on shownPercent { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
     property real shownBytes: bytesDone
     Behavior on shownBytes { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
@@ -67,6 +73,7 @@ Presentation {
         bytesTotal = num("worksuiteBytesTotal")
         filesDone = num("worksuiteFilesDone"); filesTotal = num("worksuiteFilesTotal")
         packagesDone = num("worksuitePackagesDone"); packagesTotal = num("worksuitePackagesTotal")
+        imagePackages = num("worksuiteImagePackages")
         var l = Global.value("worksuiteLog"); if (l && l.length !== log.length) log = l
         var b = num("worksuiteBytesDone")
         if (b !== bytesDone || samples.length === 0) {
@@ -90,6 +97,7 @@ Presentation {
         // The slideshow loads when Calamares starts; the clock starts when the install page is shown.
         if (!started || !presentation.activatedInCalamares) { started = now; phaseStarted = now }
         elapsed = Math.floor((now - started) / 1000)
+        phaseElapsed = Math.floor((now - phaseStarted) / 1000)
         encrypted = readEncrypted()
         readProgress(now)
         var p = Global.value("worksuitePhase") || "prepare"
@@ -119,7 +127,9 @@ Presentation {
                 Text { text: presentation.copying ? qsTr("Copying WorkSuite OS") : qsTr("Setting things up"); color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 30; font.weight: Font.Bold; font.letterSpacing: -0.6 }
                 Text {
                     Layout.fillWidth: true; wrapMode: Text.WordWrap
-                    text: presentation.copying ? qsTr("Keep the computer plugged in. You can't go back from here.") : qsTr("Applying your choices. This usually takes under a minute.")
+                    text: presentation.copying ? qsTr("Keep the computer plugged in. You can't go back from here.")
+                        : presentation.phaseElapsed > 60 ? qsTr("Applying your choices. This step is taking longer than usual; it is still working.")
+                        : qsTr("Applying your choices.")
                     color: "#8FA3C8"; font.family: "IBM Plex Sans"; font.pixelSize: 15
                 }
             }
@@ -152,7 +162,7 @@ Presentation {
                         Rectangle {
                             id: fill
                             height: parent.height; radius: 5; clip: true
-                            width: Math.max(presentation.progress > 0 ? height : 0, track.width * presentation.progress)
+                            width: Math.max(presentation.shownFraction > 0 ? height : 0, track.width * presentation.shownFraction)
                             Behavior on width { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
                             gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: "#1F6BFF" } GradientStop { position: 1; color: "#18D4F0" } }
                             Rectangle {
@@ -185,7 +195,8 @@ Presentation {
                 Repeater {
                     model: [
                         [qsTr("Files copied"), presentation.filesTotal > 0 ? Math.round(presentation.shownFiles).toLocaleString(Qt.locale("en_US"), "f", 0) : "—"],
-                        [qsTr("Packages"), presentation.packagesTotal > 0 ? qsTr("%1 / %2").arg(Math.round(presentation.shownPackages)).arg(presentation.packagesTotal.toLocaleString(Qt.locale("en_US"), "f", 0)) : "—"],
+                        [qsTr("Packages"), presentation.packagesTotal > 0 ? qsTr("%1 / %2").arg(Math.round(presentation.shownPackages)).arg(presentation.packagesTotal.toLocaleString(Qt.locale("en_US"), "f", 0))
+                            : presentation.imagePackages > 0 ? presentation.imagePackages.toLocaleString(Qt.locale("en_US"), "f", 0) : "—"],
                         [qsTr("Elapsed"), presentation.mmss(presentation.elapsed)]
                     ]
                     Rectangle {

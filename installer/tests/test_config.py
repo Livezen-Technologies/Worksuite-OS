@@ -136,7 +136,13 @@ class BootSplashTest(unittest.TestCase):
         live = (REPO / "live-build/auto/config").read_text()
         self.assertRegex(live, r"bootappend-live \"[^\"]*\bsplash\b[^\"]*plymouth\.ignore-serial-consoles")
         grub = (REPO / "branding/grub/worksuite.cfg").read_text()
-        self.assertIn('GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"', grub)
+        self.assertIn('GRUB_CMDLINE_LINUX_DEFAULT="quiet splash ', grub)
+        for quiet in ("loglevel=3", "systemd.show_status=false", "rd.udev.log_level=3", "vt.global_cursor_default=0"):
+            self.assertIn(quiet, grub)
+        self.assertIn("GRUB_TIMEOUT_STYLE=hidden", grub)
+        self.assertIn("GRUB_TIMEOUT=1", grub)   # hidden, but Esc/F4/Shift open the menu
+        self.assertIn("GRUB_ENABLE_CRYPTODISK=n", grub)
+        self.assertIn("GRUB_TERMINAL_OUTPUT=gfxterm", grub)
         self.assertIn("GRUB_GFXPAYLOAD_LINUX=keep", grub)
         self.assertEqual(load(MODULES / "grubcfg.conf")["kernel_params"], ["quiet"])
 
@@ -153,3 +159,111 @@ class BootSplashTest(unittest.TestCase):
         pkgs = (REPO / "live-build/config/package-lists/worksuite.list.chroot").read_text().split()
         for p in ("console-setup", "zstd", "plymouth", "worksuite-branding"):
             self.assertIn(p, pkgs)
+
+
+class EnrollmentTest(unittest.TestCase):
+    """WSOS-INS-006: optional enrollment page after the account page, applied by the device agent on first boot."""
+
+    def test_page_and_job_order(self):
+        settings, shows, execs = sequence()
+        self.assertEqual(shows[shows.index("usersq") + 1], "worksuiteconfirm@enroll")
+        self.assertIn({"id": "enroll", "module": "worksuiteconfirm", "config": "worksuiteconfirm-enroll.conf"}, settings["instances"])
+        self.assertEqual(load(MODULES / "worksuiteconfirm-enroll.conf")["mode"], "enroll")
+        self.assertGreater(execs.index("worksuiteenroll"), execs.index("usersq"))
+        self.assertLess(execs.index("worksuiteenroll"), execs.index("umount"))
+
+
+class StepIndexTest(unittest.TestCase):
+    """The sidebar and footer map Calamares step indices; a page added to the sequence must not shift them."""
+
+    def steps(self):
+        seq = load(ROOT / "settings.conf")["sequence"]
+        n = 0
+        for block in seq:
+            n += len(block["show"]) if "show" in block else 1   # the exec block is one step
+        return n
+
+    def test_sidebar_maps_every_step(self):
+        qml = (ROOT / "branding" / "worksuite" / "calamares-sidebar.qml").read_text()
+        m = re.search(r"readonly property var stepOf: (\[.*\])\n", qml)
+        self.assertEqual(len(re.findall(r"\[\d+, \d+\]", m.group(1))), self.steps())
+
+    def test_footer_counts_from_the_end_and_hides_back_after_install(self):
+        qml = (ROOT / "branding" / "worksuite" / "calamares-navigation.qml").read_text()
+        last = int(re.search(r"readonly property int lastStep: (\d+)", qml).group(1))
+        self.assertEqual(last, self.steps() - 1)
+        self.assertNotRegex(qml, r"currentStepIndex >= \d")
+        self.assertIn("visible: ViewManager.backAndNextVisible && !nav.afterInstall", qml)
+
+
+class CopyPageTest(unittest.TestCase):
+    def test_numbers_are_real(self):
+        qml = (ROOT / "branding" / "worksuite" / "show.qml").read_text()
+        self.assertNotIn("under a minute", qml)
+        self.assertIn("bytesDone / bytesTotal", qml)          # percentage agrees with the GB shown
+        self.assertIn('num("worksuiteImagePackages")', qml)
+        hook = (ROOT.parent / "live-build" / "config" / "hooks" / "normal" / "9900-worksuite-rootfs-size.hook.chroot").read_text()
+        self.assertIn("/usr/share/worksuite/rootfs.files", hook)
+        self.assertIn("/usr/share/worksuite/rootfs.packages", hook)
+        cpp = (ROOT / "modules" / "worksuiteconfirm" / "WorksuiteConfirmViewStep.cpp").read_text()
+        self.assertIn("worksuiteImagePackages", cpp)
+        self.assertIn("f_files - vfs.f_ffree", cpp)
+
+
+class PageIndexTest(unittest.TestCase):
+    def test_qml_pages_know_their_step_index(self):
+        # WsPage uses stepIndex to know it is the current page (and to skip itself in Express); a wrong one made the
+        # enroll page skip itself (localeq said 4 after the enroll page was added at 4).
+        seq = load(ROOT / "settings.conf")["sequence"]
+        shown = []
+        for block in seq:
+            shown += block["show"] if "show" in block else ["<exec>"]
+        for qml in (ROOT / "branding" / "worksuite").glob("*q.qml"):
+            m = re.search(r"^\s*stepIndex: (\d+)", qml.read_text(), re.M)
+            if m:
+                self.assertEqual(shown.index(qml.stem), int(m.group(1)), qml.name)
+
+
+class BootPartitionTest(unittest.TestCase):
+    def test_boot_is_unencrypted_root_in_luks2(self):
+        conf = load(ROOT / "modules" / "partition.conf")
+        self.assertEqual(conf["luksGeneration"], "luks2")
+        layout = {p["mountPoint"]: p for p in conf["partitionLayout"]}
+        self.assertTrue(layout["/boot"]["noEncrypt"])
+        self.assertEqual(layout["/boot"]["filesystem"], "ext4")
+        self.assertFalse(layout["/"].get("noEncrypt", False))
+        hook = (ROOT.parent / "live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot").read_text()
+        self.assertIn("/etc/grub.d/10_linux", hook)
+        # entries read "WorkSuite OS", not "WorkSuite OS GNU/Linux"
+        self.assertIn('Ubuntu|Kubuntu|*GNU\\/Linux|"WorkSuite OS")', hook)
+
+
+class LocaleTest(unittest.TestCase):
+    """E2E: LANG=en_US.UTF-8 with only C.utf8 generated ("locale not supported" in foot and Firefox)."""
+
+    def test_image_generates_the_locales_and_the_installer_can_generate_more(self):
+        pkgs = (REPO / "live-build/config/package-lists/worksuite.list.chroot").read_text().split()
+        self.assertIn("locales", pkgs)   # /etc/locale.gen: Calamares' localecfg runs locale-gen only when it exists
+        hook = (REPO / "live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot").read_text()
+        for loc in ("en_US.UTF-8", "en_GB.UTF-8", "si_LK.UTF-8", "ta_LK.UTF-8"):
+            self.assertIn(loc, hook)
+        self.assertIn("locale-gen", hook)
+        seq = load(ROOT / "settings.conf")["sequence"]
+        exec_jobs = [j for s in seq if "exec" in s for j in s["exec"]]
+        self.assertLess(exec_jobs.index("unpackfs"), exec_jobs.index("localecfg"))
+
+
+class OsReleaseTest(unittest.TestCase):
+    """Settings › About and other tools read /etc/os-release: WorkSuite OS, still Debian-compatible."""
+
+    def test_os_release_names_worksuite_like_debian(self):
+        kv = dict(l.split("=", 1) for l in (REPO / "branding/os-release").read_text().splitlines() if "=" in l)
+        self.assertEqual(kv["ID"], "worksuite")
+        self.assertEqual(kv["ID_LIKE"], "debian")
+        self.assertEqual(kv["NAME"], '"WorkSuite OS"')
+        self.assertEqual(kv["PRETTY_NAME"], '"WorkSuite OS @VERSION@"')
+        self.assertEqual(kv["VERSION_CODENAME"], "trixie")
+        rules = (REPO / "packaging/debian/rules").read_text()
+        self.assertIn("branding/os-release $$d/usr/lib/os-release", rules)
+        self.assertIn("--divert /usr/lib/os-release.debian /usr/lib/os-release", (REPO / "packaging/debian/worksuite-branding.preinst").read_text())
+        self.assertIn("--remove", (REPO / "packaging/debian/worksuite-branding.postrm").read_text())

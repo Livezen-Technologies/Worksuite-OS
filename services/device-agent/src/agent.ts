@@ -6,7 +6,7 @@ import { offlineAccessExpired, offlineNotice, policyEnforcement, type Enforcemen
 import { activeKiosk, publicPolicy } from './kiosk.ts';
 
 function kioskSummary(k: ReturnType<typeof activeKiosk>) {
-  return k ? { user: k.user, app: k.app, allowed_urls: k.allowed_urls, idle_reset_minutes: k.idle_reset_minutes, show_on_screen_keyboard: k.show_on_screen_keyboard, exit_pin: k.verifier !== null } : null;
+  return k ? { user: k.user, app: k.app, allowed_urls: k.allowed_urls, idle_reset_minutes: k.idle_reset_minutes, show_on_screen_keyboard: k.show_on_screen_keyboard, exit_pin: k.verifier !== null, orientation: k.orientation, screen_off: k.screen_off } : null;
 }
 import type { AgentState, Policy, StateFile } from './state.ts';
 import { rotationDue, userVpnsToRemove, vpnPlan, type NmConnection, type VpnConfig, type VpnPlan } from './vpn.ts';
@@ -361,6 +361,10 @@ export class Agent {
         allow_pin: p.allow_pin ?? null, pin_min_length: p.pin_min_length ?? null,
         app_allowlist_size: p.app_allowlist?.length ?? 0,
         vpn_required: p.vpn_required ?? null, user_vpn: p.user_vpn ?? null,
+        ai_assistant: p.ai_assistant ?? null, ai_models: p.ai_models ?? null,
+        desktop_widgets: p.desktop_widgets ?? null,
+        whatsapp: p.whatsapp ?? null,
+        screen_capture: p.screen_capture ?? null, clipboard_history: p.clipboard_history ?? null,
         kiosk: this.s.enrolled && activeKiosk(p, this.s.device_id) !== null,
       } : null,
       // Settings › Managed › Kiosk mode (board KioskSettings): what this device's kiosk runs. Never the exit PIN or its verifier.

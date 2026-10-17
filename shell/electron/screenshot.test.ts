@@ -7,14 +7,15 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import dbus from 'dbus-next'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { requestPath, screenshotName, takeScreenshot } from './screenshot'
+import { cliKind, requestPath, screenshotName, takeScreenshot, viaShell } from './screenshot'
 
 const { Message, Variant } = dbus
 
 describe('screenshot helpers', () => {
   it('builds the portal request path from the unique name', () => {
     expect(requestPath(':1.42', 'ws1')).toBe('/org/freedesktop/portal/desktop/request/1_42/ws1')
-    expect(screenshotName(new Date(2026, 9, 15, 9, 5, 7))).toBe('Screenshot 2026-10-15 09-05-07.png')
+    expect(screenshotName(new Date(2026, 9, 15, 9, 5, 7))).toBe('Screenshot 2026-10-15 090507.png')
+    expect([cliKind([]), cliKind(['--save']), cliKind(['--window']), cliKind(['--snip']), cliKind(['--interactive'])]).toEqual(['print', 'save', 'window', 'snip', 'snip'])
   })
 })
 
@@ -52,8 +53,25 @@ describe.skipIf(!haveDbus)('portal round trip on a private bus', () => {
     const r = await takeScreenshot(bus, true, path.join(dir, 'Pictures'), new Date(2026, 0, 2, 3, 4, 5), 5000)
     bus.disconnect()
     expect(answer.interactive).toBe(true)
-    expect(r).toEqual({ ok: true, file: path.join(dir, 'Pictures', 'Screenshots', 'Screenshot 2026-01-02 03-04-05.png') })
+    expect(r).toEqual({ ok: true, file: path.join(dir, 'Pictures', 'Screenshots', 'Screenshot 2026-01-02 030405.png') })
     expect(readFileSync((r as { file: string }).file, 'utf8')).toBe('PNGDATA')
+  })
+
+  it('hands the shortcut to the shell when it answers, and reports when it does not', async () => {
+    const shell = dbus.sessionBus({ busAddress: address })
+    const bus = dbus.sessionBus({ busAddress: address })
+    expect(await viaShell(bus, 'save', 1000)).toBe(false)
+    const got: string[] = []
+    await shell.requestName('lk.worksuite.Shell1', 0)
+    shell.addMethodHandler((msg: InstanceType<typeof Message>) => {
+      if (msg.member !== 'Capture') return false
+      got.push(String(msg.body[0]))
+      shell.send(Message.newMethodReturn(msg, '', []))
+      return true
+    })
+    expect(await viaShell(bus, 'window', 2000)).toBe(true)
+    expect(got).toEqual(['window'])
+    bus.disconnect(); shell.disconnect()
   })
 
   it('reports a cancelled selection and saves nothing', async () => {
@@ -80,7 +98,27 @@ describe('Labwc key bindings (WSOS-DSK-011)', () => {
     expect(bind('C-A-Left')).toContain('GoToDesktop" to="left"')
     expect(bind('C-A-Right')).toContain('GoToDesktop" to="right"')
     expect(bind('Print')).toContain('command="worksuite-screenshot"')
-    expect(bind('S-Print')).toContain('command="worksuite-screenshot --interactive"')
-    expect(rc).toMatch(/<desktops number="4"/)
+    expect(bind('S-Print')).toContain('command="worksuite-screenshot --snip"')
+    expect(bind('W-S-s')).toContain('command="worksuite-screenshot --snip"')
+    expect(bind('W-Print')).toContain('command="worksuite-screenshot --save"')
+    expect(bind('A-Print')).toContain('command="worksuite-screenshot --window"')
+    expect(rc).toMatch(/<desktops number="1"/)  // one desktop to start with, like Windows 11; Task View adds more
+    expect(bind('W-Tab')).toContain('ToggleTaskView')
+    expect(bind('C-W-d')).toContain('worksuite-workspace-event new')
+  })
+})
+
+describe('shell on every workspace', () => {
+  it('Labwc keeps the shell always on bottom (on every desktop, below every app), and main sets that app_id', () => {
+    const rc = readFileSync(path.join(__dirname, '../../services/session/labwc/rc.xml'), 'utf8')
+    const rule = /<windowRule identifier="worksuite-shell"[^>]*>([\s\S]*?)<\/windowRule>/.exec(rc)?.[1] ?? ''
+    expect(rule).toContain('<action name="ToggleAlwaysOnBottom"/>')
+    // Omnipresent windows are re-parented to the TOP of the desktop Labwc switches to: the shell then hid every app.
+    expect(rule).not.toContain('ToggleOmnipresent')
+    expect(rule).not.toMatch(/AlwaysOnTop|Raise/)
+    const main = readFileSync(path.join(__dirname, 'main.ts'), 'utf8')
+    expect(main).toContain("SHELL_APP_ID = 'worksuite-shell'")
+    const pkg = JSON.parse(readFileSync(path.join(__dirname, '../package.json'), 'utf8')) as { name: string }
+    expect(pkg.name).toBe('worksuite-shell')
   })
 })

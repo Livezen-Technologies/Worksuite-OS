@@ -9,3 +9,6 @@ XMODIFIERS=@im=fcitx
 QT_IM_MODULE=fcitx
 SDL_IM_MODULE=fcitx
 XKB_DEFAULT_OPTIONS=compose:ralt
+# WorkSuite's own defaults for apps that read XDG config folders (foot's copy and paste keys: services/session/foot),
+# before the distribution's.
+XDG_CONFIG_DIRS=/etc/xdg/worksuite:/etc/xdg

@@ -81,6 +81,12 @@ test('control socket answers Status and rejects bad arguments', async () => {
   assert.equal((await call('{"id":1,"method":"Status"}')).result.state, 'idle');
   assert.equal((await call('{"method":"RetryFailed","params":{"mutation_id":"x; rm -rf /"}}')).error, 'invalid_argument');
   assert.equal((await call('not json')).error, 'bad_request');
+  // Shell preferences: stored locally (readable offline), queued for the server, ids and sizes checked.
+  assert.equal((await call('{"method":"GetPreference","params":{"object_id":"shell"}}')).result, null);
+  assert.equal((await call('{"method":"SetPreference","params":{"object_id":"shell","data":{"favorites":["worksuite-mail"]}}}')).result, true);
+  assert.deepEqual((await call('{"method":"GetPreference","params":{"object_id":"shell"}}')).result, { favorites: ['worksuite-mail'] });
+  assert.equal((await call('{"method":"GetPreference","params":{"object_id":"../x"}}')).error, 'invalid_argument');
+  assert.equal((await call(JSON.stringify({ method: 'SetPreference', params: { object_id: 'shell', data: 'x'.repeat(20000) } }))).error, 'invalid_argument');
   srv.close();
   await svc.stop();
   rmSync(dir, { recursive: true, force: true });

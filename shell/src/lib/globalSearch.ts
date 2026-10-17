@@ -4,13 +4,15 @@ import type { SearchHit, SourceResult, SourceState } from '../../electron/search
 import type { LauncherApp } from './launcher'
 import type { MessageKey } from '../i18n'
 
-export type GroupId = 'apps' | 'settings' | 'mail' | 'contact' | 'crm' | 'task' | 'chat' | 'event' | 'note' | 'project' | 'document' | 'record' | 'files'
+export type GroupId = 'apps' | 'settings' | 'mail' | 'contact' | 'crm' | 'task' | 'chat' | 'event' | 'note' | 'project' | 'document' | 'record' | 'files' | 'ai'
 
 export type Item =
   | { kind: 'app'; id: string; app: LauncherApp }
   | { kind: 'setting'; id: string; label: string; section: string }
   | { kind: 'hit'; id: string; hit: SearchHit }
   | { kind: 'more'; id: string }
+  /** "Ask AI": the query goes to the on-device assistant (services/ai). */
+  | { kind: 'ai'; id: string }
 
 export interface Group { id: GroupId; items: Item[] }
 
@@ -20,7 +22,7 @@ export const GROUP_ORDER: GroupId[] = ['apps', 'settings', 'mail', 'contact', 'c
 export const GROUP_LABEL: Record<GroupId, MessageKey> = {
   apps: 'search.group.apps', settings: 'search.group.settings', mail: 'search.group.mail', contact: 'search.group.contact', crm: 'search.group.crm',
   task: 'search.group.task', chat: 'search.group.chat', event: 'search.group.event', note: 'search.group.note', project: 'search.group.project',
-  document: 'search.group.document', record: 'search.group.record', files: 'search.group.files',
+  document: 'search.group.document', record: 'search.group.record', files: 'search.group.files', ai: 'search.group.ai',
 }
 
 /** Mark colours per result kind, from the board's palette. */
@@ -28,6 +30,7 @@ export const MARK: Record<GroupId, { c: string; i: string }> = {
   apps: { c: '#2E9E6A', i: 'A' }, settings: { c: '#5E739C', i: '⚙' }, mail: { c: '#D9572B', i: 'M' }, contact: { c: '#7A4FE0', i: 'P' },
   crm: { c: '#BE123C', i: 'CR' }, task: { c: '#B7791F', i: 'T' }, chat: { c: '#15803D', i: 'Ch' }, event: { c: '#4338CA', i: 'C' },
   note: { c: '#0E8FA8', i: 'N' }, project: { c: '#A21CAF', i: 'Pr' }, document: { c: '#1D4ED8', i: 'D' }, record: { c: '#5E739C', i: 'W' }, files: { c: '#1F6BFF', i: 'F' },
+  ai: { c: '#7A4FE0', i: '✦' },
 }
 
 const EXT_MARK: Record<string, { c: string; i: string }> = {
@@ -40,6 +43,7 @@ export function markOf(item: Item): { c: string; i: string } {
   if (item.kind === 'app') return { c: '#1F6BFF', i: item.app.mark }
   if (item.kind === 'setting') return MARK.settings
   if (item.kind === 'more') return MARK.record
+  if (item.kind === 'ai') return MARK.ai
   if (item.hit.type === 'file') return EXT_MARK[item.hit.ext ?? ''] ?? MARK.files
   return MARK[groupOfType(item.hit.type)]
 }
@@ -60,7 +64,7 @@ export interface Inputs {
 }
 
 /** Groups in board order; files merge local matches and Drive hits; "Search in WorkSuite" closes the WorkSuite part. */
-export function buildGroups(i: Inputs, signedIn: boolean): Group[] {
+export function buildGroups(i: Inputs, signedIn: boolean, askAI = false): Group[] {
   const by = new Map<GroupId, Item[]>()
   const push = (g: GroupId, it: Item) => { if (!by.has(g)) by.set(g, []); by.get(g)!.push(it) }
   for (const a of i.apps) push('apps', { kind: 'app', id: `app:${a.id}`, app: a })
@@ -69,6 +73,8 @@ export function buildGroups(i: Inputs, signedIn: boolean): Group[] {
   for (const h of i.local) push('files', { kind: 'hit', id: h.id, hit: h })
   const groups = GROUP_ORDER.filter((g) => by.has(g)).map((id) => ({ id, items: by.get(id)! }))
   if (signedIn && i.query.trim()) groups.push({ id: 'record', items: [{ kind: 'more', id: 'more' }] })
+  // "Ask AI" closes the list: the question goes to the assistant on this computer.
+  if (askAI && i.query.trim()) groups.push({ id: 'ai', items: [{ kind: 'ai', id: 'ai' }] })
   return groups
 }
 
@@ -77,12 +83,12 @@ export type Category = 'all' | GroupId
 
 /** Chips: All, then each group with a count (the "Search in WorkSuite" row is not counted). */
 export function categories(groups: Group[]): { id: Category; n: number }[] {
-  const count = (g: Group) => g.items.filter((x) => x.kind !== 'more').length
+  const count = (g: Group) => g.items.filter((x) => x.kind !== 'more' && x.kind !== 'ai').length
   return [{ id: 'all' as Category, n: groups.reduce((s, g) => s + count(g), 0) }, ...groups.filter((g) => count(g) > 0).map((g) => ({ id: g.id as Category, n: count(g) }))]
 }
 
 export function visible(groups: Group[], cat: Category): Group[] {
-  return cat === 'all' ? groups : groups.filter((g) => g.id === cat).map((g) => ({ ...g, items: g.items.filter((x) => x.kind !== 'more') }))
+  return cat === 'all' ? groups : groups.filter((g) => g.id === cat).map((g) => ({ ...g, items: g.items.filter((x) => x.kind !== 'more' && x.kind !== 'ai') }))
 }
 
 export const flat = (groups: Group[]) => groups.flatMap((g) => g.items)

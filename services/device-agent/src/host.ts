@@ -2,7 +2,7 @@
 // WSOS-LCH-001); package changes go through lk.worksuite.PackageService1, never apt directly.
 import { execFile } from 'node:child_process';
 import { createHash, generateKeyPairSync } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, hostname, release, totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Host } from './agent.ts';
@@ -30,6 +30,9 @@ const readOr = (p: string, d = '') => { try { return readFileSync(p, 'utf8').tri
 
 function writePublic(path: string, data: string) {
   writeFileSync(path + '.tmp', data, { mode: 0o644 });
+  // The unit runs with UMask=0077, which strips the mode above: PAM modules in unprivileged callers (gtklock
+  // reads faillock.conf as the user) must be able to read these files.
+  chmodSync(path + '.tmp', 0o644);
   renameSync(path + '.tmp', path);
 }
 

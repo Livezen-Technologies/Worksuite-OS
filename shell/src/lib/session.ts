@@ -24,3 +24,20 @@ export function nextState(state: SessionState, event: SessionEvent): SessionStat
 export function shouldEnterRecovery(crashTimes: number[], now: number, windowMs = 60_000, limit = 3): boolean {
   return crashTimes.filter((t) => now - t <= windowMs).length >= limit
 }
+
+// One lock screen (WSOS-LOCK-001): on a real session the system locker (gtklock over ext-session-lock) takes the
+// screen and unlocks it itself, so the shell must not put its own lock board up behind it. The shell's board is only
+// for sessions without a system locker (the browser preview, or when `loginctl lock-session` failed).
+export async function requestLock(lock: () => Promise<boolean | void>, showShellLock: () => void): Promise<void> {
+  let system = false
+  try { system = (await lock()) === true } catch { system = false }
+  if (!system) showShellLock()
+}
+
+// The name the shell shows for the signed-in person: the account's full name (GECOS) when it has one, else the login
+// name (user, user@domain or DOMAIN\\user) bare and capitalised.
+export function personName(login: string, fullName?: string | null): string {
+  if (fullName && fullName.trim()) return fullName.trim()
+  const bare = login.split('\\').pop()!.split('@')[0]
+  return bare.charAt(0).toUpperCase() + bare.slice(1)
+}

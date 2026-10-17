@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5.9.0",
-    "@types/node": "^22.18.0"
+    "@types/node": "^22.18.0",
+    "jsqr": "^1.4.0",
+    "typescript": "^5.9.0"
   }
 }

@@ -6,13 +6,14 @@ set -e
 command -v calamares >/dev/null 2>&1 || exit 0
 cat > /etc/greetd/config.toml <<'CONF'
 [terminal]
-vt = 7
+vt = 1
 # Installer first; if it exits, the normal greeter comes back.
 [initial_session]
-command = "env QT_QPA_PLATFORM=wayland XDG_SESSION_TYPE=wayland worksuite-cage -s -- calamares"
+# The splash's last frame (worksuite_greeter.veil) first, then Calamares in front of it: no black screen while it starts.
+command = "systemd-cat -t worksuite-installer env QT_QPA_PLATFORM=wayland XDG_SESSION_TYPE=wayland worksuite-cage -s -- /usr/lib/worksuite/worksuite-installer-start"
 user = "root"
 [default_session]
-command = "worksuite-cage -s -- gtkgreet -c /usr/bin/worksuite-session"
+command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- gtkgreet -c /usr/bin/worksuite-session"
 user = "_greetd"
 CONF
 touch /var/lib/live/config/worksuite-installer

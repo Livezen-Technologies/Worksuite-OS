@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Snipping Tool
+Name[si]=තිර කැපුම් මෙවලම
+Name[ta]=திரைவெட்டுக் கருவி
+Comment=Take a screenshot of the screen, a window or an area, then mark it up
+Comment[si]=තිරයේ, කවුළුවක හෝ ප්‍රදේශයක තිර රුවක් ගෙන එය සලකුණු කරන්න
+Comment[ta]=திரை, சாளரம் அல்லது பகுதியின் திரைப்பிடிப்பை எடுத்து அதைக் குறிக்கவும்
+Keywords=screenshot;snip;capture;print screen;
+Exec=busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s snip
+Icon=worksuite-snipping-tool
+Terminal=false
+Categories=Utility;Graphics;

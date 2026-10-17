@@ -30,6 +30,73 @@
     <method name="ListOutputs">
       <arg name="outputs" type="a(ssiiiid)" direction="out"/>
     </method>
+    <!-- Workspaces (Labwc desktops; WSOS-DSK-003). current and count are 1-based; windows maps handle → workspace.
+         Labwc reports no desktop per window, so the bridge tracks them (native/wayland-bridge/worksuite_bridge/workspace.py).
+         ActivateWorkspace / MoveWindowToWorkspace need "workspaces" in SupportedOperations, otherwise NotSupported;
+         an index outside 1..count is NotFound. -->
+    <method name="ListWorkspaces">
+      <arg name="current" type="u" direction="out"/><arg name="count" type="u" direction="out"/><arg name="windows" type="a{su}" direction="out"/>
+    </method>
+    <method name="ActivateWorkspace">
+      <arg name="index" type="u" direction="in"/>
+    </method>
+    <method name="MoveWindowToWorkspace">
+      <arg name="handle" type="s" direction="in"/><arg name="index" type="u" direction="in"/>
+    </method>
+    <!-- Desktops in full: names ("" = no name of its own; the shell shows "Desktop N" in the user's language), windows
+         on all desktops (sticky handles), apps whose windows are on all desktops, and whether Alt+Tab shows windows from
+         all desktops; ids: a stable id per desktop that follows it when desktops move or close. -->
+    <method name="WorkspaceDetails">
+      <arg name="current" type="u" direction="out"/><arg name="names" type="as" direction="out"/><arg name="windows" type="a{su}" direction="out"/>
+      <arg name="sticky" type="as" direction="out"/><arg name="sticky_apps" type="as" direction="out"/><arg name="switcher_all" type="b" direction="out"/>
+      <arg name="ids" type="as" direction="out"/>
+    </method>
+    <!-- Dynamic desktops ("dynamic-workspaces" in SupportedOperations): Labwc 0.8 reads the count and names from rc.xml,
+         so these rewrite the user's rc.xml and reload Labwc; windows are moved first so none changes desktop by the
+         reload (see worksuite_bridge/workspace.py). 1..16 desktops. CreateWorkspace switches to the new one. -->
+    <method name="CreateWorkspace">
+      <arg name="index" type="u" direction="out"/>
+    </method>
+    <!-- Its windows go to the desktop on its left (the next one for the first); NotSupported for the last desktop. -->
+    <method name="RemoveWorkspace">
+      <arg name="index" type="u" direction="in"/>
+    </method>
+    <method name="MoveWorkspace">
+      <arg name="from" type="u" direction="in"/><arg name="to" type="u" direction="in"/>
+    </method>
+    <method name="RenameWorkspace">
+      <arg name="index" type="u" direction="in"/><arg name="name" type="s" direction="in"/>
+    </method>
+    <!-- Sign-in: the synced desktops (count = number of names). prefix: the default name's word ("Desktop") in the
+         user's language, for Labwc's own use. -->
+    <method name="RestoreWorkspaces">
+      <arg name="names" type="as" direction="in"/><arg name="prefix" type="s" direction="in"/>
+    </method>
+    <!-- Labwc omnipresent: "Show this window on all desktops" / "Show windows from this app on all desktops". -->
+    <method name="SetWindowOnAllWorkspaces">
+      <arg name="handle" type="s" direction="in"/><arg name="on" type="b" direction="in"/>
+    </method>
+    <method name="SetAppOnAllWorkspaces">
+      <arg name="app_id" type="s" direction="in"/><arg name="on" type="b" direction="in"/>
+    </method>
+    <!-- Alt+Tab (Labwc's window switcher) shows windows from all desktops, or only the current one. -->
+    <method name="SetSwitcherAllWorkspaces">
+      <arg name="on" type="b" direction="in"/>
+    </method>
+    <!-- Task View: a small JPEG of an output ("" = the first), at most max_width pixels wide, held in memory only.
+         Needs "capture-output" in SupportedOperations (grim, wlr-screencopy). -->
+    <method name="CaptureOutput">
+      <arg name="output" type="s" direction="in"/><arg name="max_width" type="u" direction="in"/>
+      <arg name="image" type="ay" direction="out"/><arg name="mime" type="s" direction="out"/>
+    </method>
+    <!-- Task View: lift one of the shell's own windows (app_id worksuite-shell) over the apps, on every desktop, and
+         put it back below them (Labwc's always-on-bottom layer). Only the shell's windows; repeating a state does nothing. -->
+    <method name="SetShellRaised">
+      <arg name="handle" type="s" direction="in"/><arg name="raised" type="b" direction="in"/>
+    </method>
+    <signal name="WorkspacesChanged">
+      <arg name="current" type="u"/><arg name="count" type="u"/>
+    </signal>
     <signal name="WindowAdded">
       <arg name="handle" type="s"/><arg name="app_id" type="s"/><arg name="title" type="s"/>
     </signal>
@@ -40,7 +107,7 @@
       <arg name="handle" type="s"/>
     </signal>
     <signal name="OutputsChanged"/>
-    <!-- Operations available on this compositor build, e.g. ["activate","close","minimize"]. -->
+    <!-- Operations available on this compositor build, e.g. ["activate","close","minimize","workspaces","dynamic-workspaces","capture-output"]. -->
     <property name="SupportedOperations" type="as" access="read"/>
   </interface>
 </node>

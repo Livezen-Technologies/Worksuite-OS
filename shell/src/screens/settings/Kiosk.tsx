@@ -65,6 +65,8 @@ export function KioskPanel({ kiosk, org, onBack }: { kiosk: KioskSummary | null;
           <Fact label={t(TYPES.find((x) => x.id === app.type)!.src)}><span className="font-mono text-xs">{src}</span></Fact>
           {app.type === 'url' && <Fact label={t('kiosk.allowed')}>{kiosk.allowed_urls.length ? <span className="font-mono text-xs">{kiosk.allowed_urls.join(', ')}</span> : t('kiosk.allowedStart')}</Fact>}
           <Fact label={t('kiosk.idle')}>{kiosk.idle_reset_minutes ? t('kiosk.idleMin', { n: formatNumber(kiosk.idle_reset_minutes) }) : t('time.never')}</Fact>
+          <Fact label={t('kiosk.orientation')}>{t(`kiosk.orient.${kiosk.orientation ?? 'landscape'}` as MessageKey)}</Fact>
+          <Fact label={t('kiosk.screenOff')}>{kiosk.screen_off ? t('kiosk.screenOffRange', { from: kiosk.screen_off.from, until: kiosk.screen_off.until }) : t('time.never')}</Fact>
           <Fact label={t('kiosk.exit')}>{kiosk.exit_pin ? t('kiosk.exitPin') : t('kiosk.exitAdmin')}</Fact>
         </dl>
         <section aria-label={t('kiosk.lockdown')} className={`${card} flex flex-col`}>
