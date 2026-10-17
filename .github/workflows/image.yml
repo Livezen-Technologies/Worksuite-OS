@@ -95,9 +95,8 @@ jobs:
           WORKSUITE_OFFICE_URL: ${{ vars.WORKSUITE_OFFICE_URL }}
           WORKSUITE_OFFICE_SHA256: ${{ vars.WORKSUITE_OFFICE_SHA256 }}
           WORKSUITE_OFFICE_RUN: ${{ inputs.office_run }}
-          # This step only runs with an Office source, which makes the build below a release build: the deb must be
-          # pinned by vars.WORKSUITE_OFFICE_SHA256.
-          WORKSUITE_RELEASE: '1'
+          # Tagged releases must pin the deb by vars.WORKSUITE_OFFICE_SHA256; other builds only warn when it is unset.
+          WORKSUITE_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
         run: tools/fetch-office.sh
       # WorkSuite Desktop (worksuite-desktop build.yml, artifact worksuite-Linux). WORKSUITE_DESKTOP_TOKEN (actions:read
       # on Livezen-Technologies/worksuite-desktop); without it the Office token is tried, which works when that token
