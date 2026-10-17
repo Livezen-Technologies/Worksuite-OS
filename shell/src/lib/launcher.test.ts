@@ -40,6 +40,17 @@ describe('launcher list', () => {
     expect(filterApps(apps, 'linux', '').map((a) => a.id)).toEqual(['lk.worksuite.whatsapp', 'firefox-esr', 'foot'])
     expect(filterApps(apps, 'ws', 'foot')).toEqual([])
   })
+  it('"files" finds the shell\'s Files first, not an editor that edits text files', () => {
+    const vim = { id: 'vim', name: 'Vim', generic_name: 'Text Editor', comment: 'Edit text files', icon: null, categories: ['Utility', 'TextEditor'], keywords: ['Text', 'editor'] }
+    const fm = { id: 'org.example.Fm', name: 'Some File Manager', generic_name: null, comment: null, icon: null, categories: ['FileManager'], keywords: [] }
+    const apps = buildLauncherApps([{ id: 'drive', name: 'Drive' }], [vim, fm], null)
+    const hits = filterApps(apps, 'all', 'files').map((a) => a.id)
+    expect(hits[0]).toBe('files')
+    expect(hits).toContain('vim')
+    expect(hits.indexOf('files')).toBeLessThan(hits.indexOf('vim'))
+    expect(filterApps(apps, 'all', 'file')[0].id).toBe('files')   // the shell's own app before a Linux app's word match
+    expect(apps.find((a) => a.id === 'files')?.launch).toEqual({ screen: 'files' })
+  })
   it('drops taskbar pins that are not available', () => {
     const apps = buildLauncherApps([{ id: 'chat', name: 'Chat' }], [ff], null)
     expect(taskbarApps(apps, ['worksuite-mail', 'worksuite-chat', 'office', 'firefox-esr']).map((a) => a.id)).toEqual(['worksuite-chat', 'firefox-esr'])

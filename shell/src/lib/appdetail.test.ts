@@ -42,7 +42,7 @@ describe('Start menu (G02)', () => {
   })
   it('groups all apps by letter and picks the darker mark colour for tiles', () => {
     const apps = buildLauncherApps([], [desk('a', 'alpha'), desk('b', 'Beta'), desk('c', '3D Viewer')], null)
-    expect(alphaGroups(apps).map((g) => g.letter)).toEqual(['#', 'A', 'B', 'S', 'W'])
+    expect(alphaGroups(apps).map((g) => g.letter)).toEqual(['#', 'A', 'B', 'F', 'S', 'W'])
     expect(tileColor({ bg: '#dbeafe', fg: '#1d4ed8' })).toBe('#1d4ed8')
     expect(tileColor({ bg: '#0f172a', fg: '#e2e8f0' })).toBe('#0f172a')
   })

@@ -50,6 +50,10 @@ if [ -f /etc/grub.d/10_linux ]; then
     -e "s/echo \"submenu '\(.*\)' \\\\\$menuentry_id_option/echo \"submenu '\\1' --unrestricted \\\\\$menuentry_id_option/" /etc/grub.d/10_linux
   grep -q '^CLASS="--unrestricted ' /etc/grub.d/10_linux && grep -q "submenu .* --unrestricted" /etc/grub.d/10_linux \
     || { echo "10_linux entries not --unrestricted" >&2; exit 1; }
+  # Entries read "WorkSuite OS", not "WorkSuite OS GNU/Linux": 10_linux appends GNU/Linux to any GRUB_DISTRIBUTOR but
+  # Ubuntu's and names already ending in it.
+  sed -i 's/^\([[:space:]]*\)Ubuntu|Kubuntu|\*GNU\/Linux)$/\1Ubuntu|Kubuntu|*GNU\/Linux|"WorkSuite OS")/' /etc/grub.d/10_linux
+  grep -q '|"WorkSuite OS")$' /etc/grub.d/10_linux || { echo "10_linux still names the entries WorkSuite OS GNU/Linux" >&2; exit 1; }
 fi
 # The splash from the first frame, and kept until the greeter takes the screen: no console text in between.
 mkdir -p /etc/plymouth

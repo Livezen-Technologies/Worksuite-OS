@@ -56,6 +56,9 @@ export const WHATSAPP: LauncherApp = {
   keywords: ['whatsapp', 'chat', 'messages', 'messenger', 'InstantMessaging'],
 }
 
+/** The shell's own file manager (Super+E). Without an entry, a search for "files" found Vim ("Edit text files"). */
+export const FILES: LauncherApp = { id: 'files', get name() { return t('files.title') }, mark: 'F', bg: '#ffedd5', fg: '#c2410c', kind: 'System', launch: { screen: 'files' }, keywords: ['files', 'file manager', 'explorer', 'folders', 'documents', 'downloads'] }
+
 export const MONITOR: LauncherApp = { id: 'monitor', get name() { return t('monitor.title') }, mark: '~', bg: '#dcfce7', fg: '#15803d', kind: 'System', launch: { screen: 'monitor' }, keywords: ['task manager', 'processes', 'cpu', 'memory', 'performance'] }
 
 function initials(name: string) {
@@ -103,7 +106,7 @@ export function buildLauncherApps(webApps: { id: string; name: string; offline_l
       keywords: [e.generic_name ?? '', e.comment ?? '', ...e.keywords, ...e.categories].filter(Boolean),
     })
   }
-  out.push(MONITOR, APP_CENTER)
+  out.push(FILES, MONITOR, APP_CENTER)
   return out
 }
 
@@ -150,7 +153,14 @@ export function alphaGroups(apps: LauncherApp[]): { letter: string; apps: Launch
   return [...by.entries()].map(([letter, apps]) => ({ letter, apps }))
 }
 
-const rank = (a: LauncherApp, q: string) => (a.name.toLowerCase().startsWith(q) ? 0 : a.name.toLowerCase().includes(q) ? 1 : 2)
+/** Search order: name starts with the query, a word of the name does, the name contains it, a keyword starts with it,
+ *  anything else; within each, the shell's and WorkSuite's own apps before other Linux apps. */
+const rank = (a: LauncherApp, q: string) => {
+  const n = a.name.toLowerCase()
+  const r = n.startsWith(q) ? 0 : n.split(/\s+/).some((w) => w.startsWith(q)) ? 1 : n.includes(q) ? 2
+    : a.keywords.some((k) => k.toLowerCase().startsWith(q)) ? 3 : 4
+  return r * 2 + (a.kind === 'Linux app' ? 1 : 0)
+}
 
 /**
  * Recovery launcher list (WSOS-SES-005): installed apps without terminals or shells, and without the WorkSuite web app

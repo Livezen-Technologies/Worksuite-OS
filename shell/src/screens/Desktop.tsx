@@ -259,12 +259,24 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     // On start, then again each time the launcher opens (sign-in, installs and org changes show up).
     if (!launcher && appsLoaded.current) return
     let live = true
-    void Promise.all([os.webApps().catch(() => null), os.installedApps().catch(() => null), os.shellPrefs().catch(() => null)]).then(([w, i, p]) => {
+    // Each list is used as soon as it lands: waiting for the org's web apps (the network) as well kept the installed
+    // apps, Firefox among the default taskbar pins, off the taskbar for a while after the first sign-in.
+    const webP = os.webApps().catch(() => null)
+    const instP = os.installedApps().catch(() => null)
+    let web: Awaited<typeof webP> | undefined
+    let inst: Awaited<typeof instP> | undefined
+    const apply = () => {
+      if (!live) return
+      setAllApps([...buildLauncherApps(web?.ok ? web.value : null, inst?.apps ?? null, inst?.office ?? null, inst?.desktop ?? null), SNIP_TILE])
+      setAppsCached(!!(web?.ok && web.cached))
+    }
+    void instP.then((i) => { inst = i; if (web === undefined) apply() })
+    void os.shellPrefs().catch(() => null).then((p) => { if (live && p?.ok) setPrefs(shellPrefsFrom(p.value)) })
+    void Promise.all([webP, instP]).then(([w, i]) => {
       if (!live) return
       appsLoaded.current = true   // only once a load lands (a cancelled first run, as in StrictMode, loads again)
-      setAllApps([...buildLauncherApps(w?.ok ? w.value : null, i?.apps ?? null, i?.office ?? null, i?.desktop ?? null), SNIP_TILE])
-      setAppsCached(!!(w?.ok && w.cached))
-      if (p?.ok) setPrefs(shellPrefsFrom(p.value))
+      web = w; inst = i
+      apply()
     })
     return () => { live = false }
   }, [launcher])

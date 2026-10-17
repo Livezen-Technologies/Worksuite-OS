@@ -78,7 +78,7 @@ export function RunningApps({ pinned, info, onLaunch, only, scope = 'current' }:
       className="ws-taskbar-apps flex min-w-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden py-1">
       {entries.map((e) => {
         // A window with no launcher entry still tries its app_id as an icon name (most apps name both alike).
-        const a = info(e.id) ?? { id: e.id, name: e.title || e.id, mark: (e.title || e.id).slice(0, 2), bg: '#E2E8F0', fg: '#0F172A', icon: /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(e.id) ? e.id : null }
+        const a = info(e.id) ?? { id: e.id, name: e.title || e.id, mark: (e.title || e.id).slice(0, 2), bg: '#E2E8F0', fg: '#0F172A', icon: SYSTEM_ICONS[e.id.toLowerCase()] ?? (/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(e.id) ? e.id : null) }
         const unread = taskbarUnread(e.id, e.windows)
         const base = e.windows.length > 1 ? t('panel.windows', { name: a.name, count: e.windows.length }) : e.active ? t('panel.active', { name: a.name }) : e.running ? t('panel.running', { name: a.name }) : a.name
         const label = unread ? t('panel.unread', { name: base, count: unread }) : base
@@ -130,6 +130,10 @@ function MoveMenu({ ws, win, x, onPick, onClose }: { ws: Workspaces; win?: Panel
     </>
   )
 }
+
+/** System prompts whose app_id is no icon name: GNOME Keyring's password prompt ("gcr-prompter", untitled) showed as a
+ *  "gc" tile. */
+const SYSTEM_ICONS: Record<string, string> = { 'gcr-prompter': 'dialog-password', 'org.gnome.keyring.systemprompter': 'dialog-password' }
 
 export function TrayItems() {
   const t = useT()

@@ -13,6 +13,7 @@ gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import GLib, Gtk, Gtk4LayerShell as LS  # noqa: E402
 
 from .engine import Keyboard  # noqa: E402
+from .geometry import HEIGHT, docked, panel_height  # noqa: E402
 from .layouts import Key  # noqa: E402
 from .output import Output  # noqa: E402
 
@@ -27,7 +28,6 @@ window.wsosk { background: rgba(7,19,48,0.97); color: #E8EEFA; font-family: "IBM
 .wsosk button.sugg.first { color: #FFFFFF; font-weight: 600; }
 .wsosk .handle { background: rgba(127,178,255,0.35); min-height: 4px; min-width: 40px; border-radius: 2px; }
 """
-HEIGHT = {"small": 200, "medium": 260, "large": 340}
 
 
 class OskWindow(Gtk.ApplicationWindow):
@@ -45,7 +45,8 @@ class OskWindow(Gtk.ApplicationWindow):
         self.set_child(self.box)
         self.drag = Gtk.GestureDrag()
         self.drag.connect("drag-update", self._dragged)
-        self.float_pos = [0, 0]
+        self.panel = panel_height(kiosk)
+        self.float_pos = [0, self.panel]
         self.place()
         self.render()
 
@@ -57,7 +58,10 @@ class OskWindow(Gtk.ApplicationWindow):
         for edge in (LS.Edge.LEFT, LS.Edge.RIGHT):
             LS.set_anchor(self, edge, not floating)
         LS.set_anchor(self, LS.Edge.BOTTOM, True)
-        LS.set_exclusive_zone(self, 0 if floating else HEIGHT[self.size])
+        # On the taskbar, not over it (geometry.py).
+        margin, zone = docked(self.size, self.panel)
+        LS.set_margin(self, LS.Edge.BOTTOM, int(self.float_pos[1]) if floating else margin)
+        LS.set_exclusive_zone(self, 0 if floating else zone)
         self.set_default_size(int(self.get_display().get_monitors()[0].get_geometry().width * 0.6) if floating else -1, HEIGHT[self.size])
 
     def _dragged(self, _g, dx: float, dy: float) -> None:

@@ -234,6 +234,8 @@ class BootPartitionTest(unittest.TestCase):
         self.assertFalse(layout["/"].get("noEncrypt", False))
         hook = (ROOT.parent / "live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot").read_text()
         self.assertIn("/etc/grub.d/10_linux", hook)
+        # entries read "WorkSuite OS", not "WorkSuite OS GNU/Linux"
+        self.assertIn('Ubuntu|Kubuntu|*GNU\\/Linux|"WorkSuite OS")', hook)
 
 
 class LocaleTest(unittest.TestCase):
