@@ -29,7 +29,9 @@ export function serveControl(path: string, svc: SyncService, exportDir = '.', lo
     });
     sock.on('error', () => {});
   });
-  server.listen(path, () => chmodSync(path, 0o600));
+  // umask first, then chmod: the socket is never reachable by another user, not even for an instant.
+  const old = process.umask(0o177);
+  server.listen(path, () => { process.umask(old); chmodSync(path, 0o600); });
   return server;
 }
 
