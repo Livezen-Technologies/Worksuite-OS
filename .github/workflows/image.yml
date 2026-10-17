@@ -14,7 +14,8 @@ name: Image
 # WORKSUITE_DESKTOP_URL + WORKSUITE_DESKTOP_SHA256 fetch a published deb instead.
 # Secret WORKSUITE_OFFICE_TOKEN: a token with actions:read on Livezen-Technologies/worksuite-office, used to download
 # the "linux-packages-$ARCH" artifact of its build.yml (tools/fetch-office.sh). Optional variables
-# WORKSUITE_OFFICE_URL + WORKSUITE_OFFICE_SHA256 fetch a published deb instead. Pull requests from forks get no
+# WORKSUITE_OFFICE_URL fetches a published deb instead. Variable WORKSUITE_OFFICE_SHA256 pins the deb and is required
+# for release builds (tools/fetch-office.sh). Pull requests from forks get no
 # secrets, so they build a dev image without Office. arm64: when no arm64 Office deb exists yet, the build warns
 # and continues without Office instead of failing release mode.
 on:
@@ -94,6 +95,9 @@ jobs:
           WORKSUITE_OFFICE_URL: ${{ vars.WORKSUITE_OFFICE_URL }}
           WORKSUITE_OFFICE_SHA256: ${{ vars.WORKSUITE_OFFICE_SHA256 }}
           WORKSUITE_OFFICE_RUN: ${{ inputs.office_run }}
+          # This step only runs with an Office source, which makes the build below a release build: the deb must be
+          # pinned by vars.WORKSUITE_OFFICE_SHA256.
+          WORKSUITE_RELEASE: '1'
         run: tools/fetch-office.sh
       # WorkSuite Desktop (worksuite-desktop build.yml, artifact worksuite-Linux). WORKSUITE_DESKTOP_TOKEN (actions:read
       # on Livezen-Technologies/worksuite-desktop); without it the Office token is tried, which works when that token
