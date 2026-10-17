@@ -1,0 +1,11 @@
+// WorkSuite: the person at the desk (an active local session) restarts, shuts down, suspends and hibernates without a
+// password, as Debian's defaults intend, whatever an administrator's local rules say about other actions. Restarting
+// past inhibitors goes through worksuite-power-force (lk.worksuite.power-force), which allows the caller's own
+// inhibitors only.
+polkit.addRule(function (action, subject) {
+    var own = ["org.freedesktop.login1.reboot", "org.freedesktop.login1.power-off", "org.freedesktop.login1.suspend",
+               "org.freedesktop.login1.hibernate"];
+    if (own.indexOf(action.id) >= 0 && subject.local && subject.active) {
+        return polkit.Result.YES;
+    }
+});

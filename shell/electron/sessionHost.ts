@@ -33,11 +33,12 @@ export function powerArgs(action: string, force: boolean): string[] | null {
 export const POWER_FORCE = '/usr/lib/worksuite/worksuite-power-force'
 
 /** "Restart anyway" / "Shut down anyway": at most ONE question, and none when logind allows it.
- *  1. logind without interaction (systemctl --no-ask-password): an ordinary user restarting with no other sessions
- *     signed in, past inhibitors of their own apps, needs no administrator (logind ignores the caller's own ones).
- *  2. Otherwise one administrator prompt (polkit lk.worksuite.power-force, through our agent): the helper runs as root,
- *     which logind does not ask about. systemctl itself asks polkit once per action (other sessions signed in, then
- *     inhibitors), which showed two administrator prompts in a row. */
+ *  1. logind without interaction (systemctl --no-ask-password), for when it allows it as it stands.
+ *  2. Otherwise the root helper (polkit lk.worksuite.power-force, no password for the person at the desk). systemd 257's
+ *     logind obeys the caller's own "block" inhibitors too, so an ordinary user's "Restart anyway" past their own app
+ *     needs it. The helper asks for an administrator once (lk.worksuite.power-force-admin, through our agent) only when
+ *     other people are signed in or someone else's inhibitor blocks. systemctl itself asks polkit once per reason,
+ *     which showed two administrator prompts in a row. */
 export async function forcePower(exec: Exec, action: string): Promise<{ ok: true; value: true } | { ok: false; error: string }> {
   const a = powerArgs(action, true)
   if (!a || action === 'suspend') return { ok: false, error: 'invalid_argument' }

@@ -4,16 +4,26 @@
 <policyconfig>
   <vendor>WorkSuite</vendor>
   <vendor_url>https://download.worksuitecloud.com</vendor_url>
-  <!-- "Restart anyway" / "Shut down anyway" (shell/electron/sessionHost.ts forcePower) when logind would want an
-       administrator: one prompt for the root helper, instead of one per logind action. -->
+  <!-- "Restart anyway" / "Shut down anyway" (shell/electron/sessionHost.ts forcePower). The person at the desk runs
+       the helper without a password; it restarts past their own apps' inhibitors and asks for
+       lk.worksuite.power-force-admin first when other people are signed in or someone else's inhibitor blocks. -->
   <action id="lk.worksuite.power-force">
-    <description>Restart or shut down although something is still running</description>
+    <description>Restart or shut down although your own programs are still running</description>
+    <message>Authentication is required to restart or shut down</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/worksuite/worksuite-power-force</annotate>
+  </action>
+  <action id="lk.worksuite.power-force-admin">
+    <description>Restart or shut down although other people are signed in or other programs are still running</description>
     <message>An administrator's password is required to restart or shut down while other people are signed in or programs are still running</message>
     <defaults>
       <allow_any>no</allow_any>
       <allow_inactive>no</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/worksuite/worksuite-power-force</annotate>
   </action>
 </policyconfig>

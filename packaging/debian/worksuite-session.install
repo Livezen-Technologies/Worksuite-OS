@@ -63,3 +63,4 @@ services/session/bin/worksuite-diagnostics usr/lib/worksuite/
 services/session/polkit/lk.worksuite.diagnostics.policy usr/share/polkit-1/actions/
 services/session/bin/worksuite-power-force usr/lib/worksuite/
 services/session/polkit/lk.worksuite.power-force.policy usr/share/polkit-1/actions/
+services/session/polkit/rules/50-worksuite-power.rules usr/share/polkit-1/rules.d/
