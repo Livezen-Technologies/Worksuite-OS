@@ -480,5 +480,30 @@ if command -v foot >/dev/null 2>&1; then
   XDG_CONFIG_HOME=$T/nofoot XDG_CONFIG_DIRS=$ROOT/services/session foot --check-config >/dev/null 2>&1 && ok "foot accepts foot.ini" || bad "foot accepts foot.ini"
 fi
 
+# ---- drivers and firmware in the image; online driver search trigger ----
+L=$ROOT/live-build/config/package-lists/worksuite.list.chroot
+for p in firmware-linux-free firmware-linux-nonfree firmware-misc-nonfree firmware-iwlwifi firmware-realtek firmware-atheros \
+  firmware-brcm80211 firmware-libertas firmware-ti-connectivity firmware-mediatek firmware-intel-misc firmware-cavium firmware-bnx2 \
+  firmware-bnx2x firmware-netxen firmware-myricom firmware-qlogic firmware-zd1211 firmware-carl9170 firmware-ath9k-htc wireless-regdb \
+  firmware-qcom-soc firmware-amd-graphics firmware-intel-graphics mesa-vulkan-drivers va-driver-all vdpau-driver-all intel-media-va-driver \
+  isenkram-cli fwupd mokutil pciutils usbutils; do
+  grep -qx "$p" "$L" && ok "image ships $p" || bad "image ships $p"
+done
+awk '/^#if ARCHITECTURES arm64/{a=1;next}/^#endif/{a=0}a' "$L" | grep -qx firmware-qcom-soc && ok "firmware-qcom-soc is arm64 only" || bad "firmware-qcom-soc is arm64 only"
+awk '/^#if ARCHITECTURES amd64/{a=1;next}/^#endif/{a=0}a' "$L" | grep -qx intel-media-va-driver && ok "intel-media-va-driver is amd64 only" || bad "intel-media-va-driver is amd64 only"
+grep -qx 'broadcom-sta-dkms\|nvidia-driver' "$L" && bad "DKMS drivers stay online add-ons" || ok "DKMS drivers stay online add-ons"
+A=$ROOT/live-build/auto/config
+grep -q -- '--archive-areas "main contrib non-free non-free-firmware"' "$A" && grep -q -- '--firmware-chroot false' "$A" \
+  && ok "image build: non-free-firmware (and contrib/non-free) enabled; firmware listed explicitly" || bad "image build: non-free-firmware (and contrib/non-free) enabled; firmware listed explicitly"
+grep -q 'firmware-ipw2x00/license/accepted boolean true' "$ROOT/live-build/config/preseed/firmware.cfg.chroot" && ok "ipw2x00 licence preseeded" || bad "ipw2x00 licence preseeded"
+S=$ROOT/live-build/config/includes.chroot/etc/apt/sources.list.d/debian.sources
+[ "$(grep -c '^Components: main contrib non-free non-free-firmware$' "$S")" = 2 ] && ok "installed system keeps non-free-firmware in its sources" || bad "installed system keeps non-free-firmware in its sources"
+D=$ROOT/services/package-service/networkmanager/90-worksuite-drivers
+[ -x "$D" ] && grep -q '^services/package-service/networkmanager/90-worksuite-drivers usr/lib/NetworkManager/dispatcher.d/$' "$ROOT/packaging/debian/worksuite-package-service.install" \
+  && ok "NetworkManager dispatcher installed and executable" || bad "NetworkManager dispatcher installed and executable"
+stub busctl 'echo "busctl $*" >> "$LOG"'
+: > "$LOG"; CONNECTIVITY_STATE=LIMITED sh "$D" wlan0 connectivity-change; CONNECTIVITY_STATE=FULL sh "$D" wlan0 up; CONNECTIVITY_STATE=FULL sh "$D" '' connectivity-change
+check "dispatcher asks for a driver check only when connectivity becomes full" "$(grep -c 'CheckDrivers s connectivity' "$LOG")" 1
+
 echo "1..$n"
 exit $fail

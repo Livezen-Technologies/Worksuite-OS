@@ -100,6 +100,22 @@
       <arg name="path" type="s" direction="in"/>
       <arg name="job" type="o" direction="out"/>
     </method>
+    <!-- Drivers (Settings › Drivers). GetDrivers: the last report (read-only). CheckDrivers(reason): "manual" checks now
+         (at most once a minute) and returns the report; root callers may pass "connectivity" (NetworkManager dispatcher,
+         connectivity FULL) or "timer", which check at most once a day or when the hardware changed, in the background.
+         Report JSON: {state, checked_at, online_search, metered, secure_boot, devices:[{id, kind, driver, status,
+         offers}], offers:[{id, device_id, kind, packages, name, summary, ...}], auto_installed, gpu_fallback?, mok?}.
+         InstallDrivers(offer ids): polkit lk.worksuite.drivers.install; progress phase = offer id. -->
+    <method name="GetDrivers"><arg name="report_json" type="s" direction="out"/></method>
+    <method name="CheckDrivers">
+      <arg name="reason" type="s" direction="in"/>
+      <arg name="report_json" type="s" direction="out"/>
+    </method>
+    <method name="InstallDrivers">
+      <arg name="offers" type="as" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+    <signal name="DriversChanged"><arg name="report_json" type="s"/></signal>
     <signal name="UpdateStatusChanged"><arg name="status_json" type="s"/></signal>
     <property name="State" type="s" access="read"/>           <!-- idle | busy | interrupted -->
     <property name="RebootRequired" type="b" access="read"/>

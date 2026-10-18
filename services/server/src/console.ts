@@ -79,6 +79,11 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   screen_capture: (v) => v === 'allowed' || v === 'disabled',
   // Clipboard history (Super+V): disabled turns it off and drops what was kept. Kiosk: always off.
   clipboard_history: (v) => v === 'allowed' || v === 'disabled',
+  // Drivers (Settings › Drivers): online search after the computer connects; firmware from the Debian archive installs
+  // itself unless auto_install is false; the NVIDIA driver (DKMS) only with auto_install_gpu. Kiosk: search on, firmware only.
+  drivers_online_search: (v) => typeof v === 'boolean',
+  drivers_auto_install: (v) => typeof v === 'boolean',
+  drivers_auto_install_gpu: (v) => typeof v === 'boolean',
   ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 

@@ -346,6 +346,8 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const onPrimary = useMemo(() => (primaryOut && display ? (ws: PanelWindow[]) => windowsOnOutput(ws, primaryOut, true, display.layout.outputs.filter((o) => o.enabled).map((o) => o.name)) : undefined), [primaryOut, display])
 
   const openSettingsAt = (section: string) => { requestSettingsSection(section); openWin('settings') }
+  // The "drivers available" notification in the notification centre opens Settings › Drivers.
+  useEffect(() => os.onOpenSettings((s) => openSettingsAt(s)), []) // eslint-disable-line react-hooks/exhaustive-deps
   const openSnipEditor = (id: number) => { window.dispatchEvent(new CustomEvent(SNIP_EDIT_EVENT, { detail: id })); openWin('snip') }
   // Shell1.Open from the key bindings (and the same keys pressed inside the shell).
   const onShellOpen = useRef<(o: ShellOpen) => void>(() => undefined)

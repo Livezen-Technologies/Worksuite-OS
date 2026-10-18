@@ -6,6 +6,7 @@ import { ServiceError } from './apt.ts';
 import type { Job, PackageService, Source } from './service.ts';
 import type { Coordinator } from './coordinator.ts';
 import type { CatalogResult } from './catalog.ts';
+import type { DriverManager } from './driverscan.ts';
 
 const { Message, Variant } = dbus;
 type Msg = InstanceType<typeof Message>;
@@ -46,6 +47,10 @@ export const ACTIONS: Record<string, string | null> = {
   // Offline bundles (WSOS-AUP-010).
   InspectBundle: null,
   InstallBundle: 'lk.worksuite.update.apply',
+  // Drivers (Settings › Drivers): the report and a check are read-only; installing needs an administrator.
+  GetDrivers: null,
+  CheckDrivers: null,
+  InstallDrivers: 'lk.worksuite.drivers.install',
 };
 
 export interface Authority {
@@ -74,7 +79,7 @@ const v = (sig: string, x: unknown) => new Variant(sig, x);
 // dbus-next's types declare newError(msg: string, …) but the implementation takes the method-call Message.
 const errorReply = (msg: Msg, name: string, text: string) => Message.newError(msg as unknown as string, name, text);
 
-export function serve(bus: Bus, svc: PackageService, auth: Authority, introspectionXml: string, coordinator?: Coordinator, extra: { catalog?: () => Promise<CatalogResult> } = {}) {
+export function serve(bus: Bus, svc: PackageService, auth: Authority, introspectionXml: string, coordinator?: Coordinator, extra: { catalog?: () => Promise<CatalogResult>; drivers?: DriverManager } = {}) {
   const sources = new Set<Source>(['apt', 'flatpak']);
 
   svc.on('progress', (job: Job, percent: number) => bus.send(Message.newSignal(PATH, IFACE, 'JobProgress', 'ous', [jobPath(job.id), percent, job.phase])));
@@ -86,6 +91,8 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
   });
 
   coordinator?.on('status', (st: unknown) => bus.send(Message.newSignal(PATH, IFACE, 'UpdateStatusChanged', 's', [JSON.stringify(st)])));
+
+  extra.drivers?.on('changed', (r: unknown) => bus.send(Message.newSignal(PATH, IFACE, 'DriversChanged', 's', [JSON.stringify(r)])));
 
   const props = () => ({ State: v('s', svc.state()), RebootRequired: v('b', svc.rebootRequired) });
 
@@ -141,6 +148,23 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
       case 'AddRemote': return Message.newMethodReturn(msg, 'o', [jobPath(svc.addRemote(uid, String(b[0]), String(b[1])))]);
       case 'InspectBundle': return Message.newMethodReturn(msg, 's', [JSON.stringify(svc.inspectBundle(String(b[0])))]);
       case 'InstallBundle': return Message.newMethodReturn(msg, 'o', [jobPath(svc.installBundle(uid, String(b[0])))]);
+      case 'GetDrivers':
+      case 'CheckDrivers': {
+        const d = extra.drivers;
+        if (!d) throw new ServiceError('Failed', 'drivers not available');
+        if (member === 'GetDrivers') return Message.newMethodReturn(msg, 's', [JSON.stringify(d.status())]);
+        // Only root (the NetworkManager dispatcher, the timer) may ask for the rate-limited background kinds; people
+        // check now and wait for the result.
+        const reason = uid === 0 && (b[0] === 'connectivity' || b[0] === 'timer') ? b[0] : 'manual';
+        if (reason !== 'manual') { void d.check(reason).catch(() => {}); return Message.newMethodReturn(msg, 's', [JSON.stringify(d.status())]); }
+        return Message.newMethodReturn(msg, 's', [JSON.stringify(await d.check('manual'))]);
+      }
+      case 'InstallDrivers': {
+        if (!extra.drivers) throw new ServiceError('Failed', 'drivers not available');
+        const ids = Array.isArray(b[0]) ? (b[0] as unknown[]).map(String).filter((x) => /^[a-z]+:[A-Za-z0-9+._-]{1,100}$/.test(x)).slice(0, 50) : [];
+        if (!ids.length) throw new ServiceError('InvalidArgs', 'offers');
+        try { return Message.newMethodReturn(msg, 'o', [jobPath(extra.drivers.install(uid, ids))]); } catch { throw new ServiceError('InvalidArgs', 'offers'); }
+      }
       case 'CancelJob': {
         const m = /\/job\/(\d+)$/.exec(String(b[0]));
         if (!m) throw new ServiceError('NoSuchJob');

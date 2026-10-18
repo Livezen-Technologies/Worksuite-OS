@@ -358,8 +358,9 @@ app.whenReady().then(() => {
   handle('ws:updateInstallNow', () => pkg.installUpdateNow())
   // Devices: sysfs, read-only. There is no driver catalog or driver installer service yet, so those say so.
   handle('ws:hwDevices', () => { try { return { ok: true, value: listDevices() } } catch { return { ok: false, error: 'unavailable' } } })
-  handle('ws:hwDriverUpdates', () => ({ ok: false, error: 'unavailable' }))
-  handle('ws:hwInstallDrivers', () => ({ ok: false, error: 'unavailable' }))
+  // Settings › Drivers: the package service's driver report (hardware scan, online search) and installs (polkit).
+  handle('ws:hwDriverReport', (check) => pkg.driverReport(check === 'check'))
+  handle('ws:hwInstallDrivers', (...ids) => pkg.installDrivers(ids.map(String)))
   handle('ws:sysUsers', () => localUsers())
   // Settings › Users › Sign-in options. Every change runs worksuite-signin through pkexec; the PIN goes on stdin.
   const signin = signinHost()
@@ -552,7 +553,7 @@ app.whenReady().then(() => {
   handle('ws:filesArchivePassword', (id, pw, cancel) => ajobs.password(id, cancel === '1' ? null : pw))
   handle('ws:filesArchiveList', (root, rel, password) => listIn(files, root, rel, password || null))
   handle('ws:filesEject', (id) => eject(files, id))
-  followJobs((e) => broadcast(e.kind === 'update_status' ? 'ws:updateStatusChanged' : 'ws:pkgJob', e.kind === 'update_status' ? e.status : e))
+  followJobs((e) => broadcast(e.kind === 'update_status' ? 'ws:updateStatusChanged' : e.kind === 'drivers' ? 'ws:driversChanged' : 'ws:pkgJob', e.kind === 'update_status' || e.kind === 'drivers' ? e.status : e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')
     return r.ok ? { ok: true, value: publicAccounts(r.value) } : r
@@ -672,6 +673,7 @@ app.whenReady().then(() => {
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
   // Clicking one (its "default" action) also raises the sender's window through the bridge, whatever the app does.
   const notices = startNotifications(handle, broadcast, (n) => {
+    if (n.app === DRIVERS_APP) { broadcast('ws:openSettings', 'Drivers'); return }
     const w = panelClient && windowForNotification(n, panelClient.windows, installedApps())
     if (w) void panelClient.activate(w.handle)
   })
@@ -700,6 +702,10 @@ app.whenReady().then(() => {
   })
   app.on('before-quit', () => toasts.stop())
   // Files' "Notify me when done" (FO1): a notice in the shell's own notification centre, text only.
+  // "Drivers available for your Wi-Fi card": the renderer words it (en/si/ta); clicking opens Settings › Drivers.
+  handle('ws:driversNotify', (summary, body) => {
+    return notices.notify(DRIVERS_APP, 0, String(summary).slice(0, 200), String(body).slice(0, 400), ['default', ''], 1)
+  })
   handle('ws:filesNotify', (summary, body) => notices.notify('Files', 0, String(summary).slice(0, 200), String(body).slice(0, 400), [], 1))
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
   startPolkitBridge(handle, broadcast)
@@ -708,6 +714,8 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => app.quit())
 }
 
+
+const DRIVERS_APP = 'WorkSuite Drivers'
 
 // ---------- captive portal (WSOS-INT-001) ----------
 // NetworkManager's connectivity check (conf.d/20-worksuite-connectivity.conf) says `portal`: notify and open a

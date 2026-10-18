@@ -1,12 +1,13 @@
-// Devices and drivers (boards H1–H6, HwSettings). Devices are read from sysfs by the bridge; there is no driver
-// catalog or driver installer service yet, so driver choices and driver updates show an honest empty state.
+// Devices and drivers (boards H1–H6, HwSettings). Devices are read from sysfs by the bridge; driver statuses, drivers
+// found online and installs come from the package service (services/package-service/src/driverscan.ts).
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useRef, useState } from 'react'
-import { formatBytes, os, type Avail, type DriverOffer, type HwDevice, type Printer } from '../lib/os'
-import { KIND_ICON, deviceStatus, deviceSub, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerVersion } from '../lib/hardware'
+import { formatBytes, os, type Avail, type DriverOffer, type DriverReport, type HwDevice, type Printer } from '../lib/os'
+import { friendlyError } from '../lib/errors'
+import { KIND_ICON, STATUS_COLOR, deviceStatus, deviceSub, driverGroups, driverNotice, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerText, offerTitle, offerVersion, statusLabel } from '../lib/hardware'
 import { C, Dialog, OptionCard, Progress, Spinner, Svg, Tag, btnGhost, btnPrimary, card, dialogFooter, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { ICON } from './Updates'
-import { formatNumber, t } from '../i18n'
+import { formatDate, formatNumber, t } from '../i18n'
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable' }
 
@@ -91,54 +92,110 @@ export function DevicesPanel({ onProblem }: { onProblem?: (d: HwDevice) => void 
   )
 }
 
-/** Settings › Drivers (HwSettings page=drivers). */
+/** Settings › Drivers (HwSettings page=drivers): devices by group with their driver status, drivers found online
+ *  (package service: after Wi-Fi or Ethernet connects, daily, or "Check for drivers"), and installing them. */
 export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
   const [devs] = useResource(os.hwDevices)
-  const [offers, reload] = useResource(os.hwDriverUpdates)
+  const [report, setReport] = useState<Res<DriverReport>>({ state: 'loading' })
+  const [checking, setChecking] = useState(false)
   const [sel, setSel] = useState<Set<string> | null>(null)
   const [installing, setInstalling] = useState<DriverOffer[] | null>(null)
-  const list = offers.state === 'ok' ? offers.value : []
-  const chosen = sel ?? new Set(list.map((o) => o.id))
-  const picked = list.filter((o) => chosen.has(o.id) || offerLocked(o))
+  const load = (check = false) => {
+    if (check) setChecking(true)
+    return os.hwDriverReport(check).then((x) => setReport(x.ok ? { state: 'ok', value: x.value } : { state: 'unavailable' }), () => setReport({ state: 'unavailable' })).finally(() => setChecking(false))
+  }
+  useEffect(() => { void load() }, [])
+  useEffect(() => os.onDriversChanged((r) => setReport({ state: 'ok', value: r })), [])
+  const r = report.state === 'ok' ? report.value : null
+  const busy = checking || r?.state === 'checking'
+  const list = r?.offers ?? []
+  const devList = devs.state === 'ok' ? devs.value : []
+  const devName = (id: string | null) => devList.find((d) => d.id === id)?.name
+  const gpu = list.filter((o) => o.kind === 'gpu')
+  const rest = list.filter((o) => o.kind !== 'gpu')
+  const chosen = sel ?? new Set(rest.map((o) => o.id))
+  const picked = rest.filter((o) => chosen.has(o.id) || offerLocked(o))
   const bytes = picked.reduce((n, o) => n + (o.size_bytes ?? 0), 0)
   const restarts = picked.filter((o) => o.restart).length
   return (
     <div className="flex flex-col gap-3.5">
-      <Header title={t('settings.nav.Drivers')} action={t('upd.action.check')} onAction={() => void reload()} busy={offers.state === 'loading'} />
-      {offers.state === 'unavailable' && (
+      <Header title={t('settings.nav.Drivers')} action={busy ? t('drv.checking') : t('drv.check')} onAction={() => void load(true)} busy={busy || report.state === 'loading'} />
+      {report.state === 'unavailable' && (
         <div className="flex items-center gap-3.5 rounded-xl border border-[rgba(31,107,255,0.35)] bg-[rgba(31,107,255,0.1)] px-[18px] py-4">
           <Svg d={ICON.download} size={22} stroke="#7FB2FF" />
           <span className="flex-1 text-sm"><strong>{t('hw.withOs')}</strong> <span className="text-[#C9D6EE]">{t('hw.noCatalog')}</span></span>
           <button type="button" onClick={onOpenUpdates} className={btnPrimary}>{t('hw.openUpdates')}</button>
         </div>
       )}
-      {offers.state === 'ok' && list.length > 0 && <>
+      {busy && (
+        <div role="status" className={`${card} flex items-center gap-3.5 px-5 py-4`}>
+          <Spinner size={22} />
+          <span className="flex flex-col gap-0.5"><span className="text-sm font-semibold">{t('drv.lookingOnline')}</span><span className="text-[13px] text-[#8FA3C8]">{t('drv.lookingHint')}</span></span>
+        </div>
+      )}
+      {r?.state === 'off' && <Empty title={t('drv.off')}>{t('drv.offHint')}</Empty>}
+      {r?.metered && list.length > 0 && <Note tone="amber">{t('drv.metered')}</Note>}
+      {r?.gpu_fallback && <Note tone="amber">{t('drv.gpuFallback')}</Note>}
+      {r?.mok?.pending && <MokSteps password={r.mok.password} />}
+      {gpu.map((o) => (
+        <section key={o.id} aria-label={t('drv.nvidiaTitle')} className="flex flex-col gap-2.5 rounded-xl border border-[rgba(95,211,154,0.35)] bg-[rgba(95,211,154,0.08)] px-[18px] py-4">
+          <div className="flex items-center gap-3">
+            <Svg d={KIND_ICON.graphics} size={22} stroke={C.green} />
+            <span className="flex flex-1 flex-col gap-0.5">
+              <span className="flex items-center gap-2 text-sm font-semibold">{t('drv.nvidiaTitle')}<Tag text={t('hw.tag.recommended')} bg="rgba(95,211,154,0.16)" color="#5FD39A" /></span>
+              <span className="text-xs text-[#8FA3C8]">{devName(o.device_id) ?? ''}{o.to_version ? ` · ${t('drv.series', { version: o.to_version })}` : ''}{o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}</span>
+            </span>
+            <button type="button" onClick={() => setInstalling([o])} className={btnPrimary}>{t('hw.installDriver')}</button>
+          </div>
+          <p className="m-0 text-[13px] leading-[1.45] text-[#C9D6EE]">{offerText(o)}</p>
+          <p className="m-0 text-xs text-[#8FA3C8]">{t('drv.nvidiaKeep')}</p>
+        </section>
+      ))}
+      {rest.length > 0 && <>
         <div className="flex items-center gap-3.5 rounded-xl border border-[rgba(31,107,255,0.35)] bg-[rgba(31,107,255,0.1)] px-[18px] py-4">
           <Svg d={ICON.download} size={22} stroke="#7FB2FF" />
-          <span className="flex-1 text-sm"><strong>{list.length === 1 ? t('hw.updatesOne') : t('hw.updatesMany', { count: formatNumber(list.length) })}</strong> {t('hw.available')}{bytes ? ` · ${formatBytes(bytes)}` : ''}{restarts ? ` · ${restarts === 1 ? t('hw.restartOne') : t('hw.restartMany', { count: formatNumber(restarts) })}` : ''}</span>
-          <button type="button" disabled={!picked.length} onClick={() => setInstalling(picked)} className={btnPrimary}>{t('hw.installSelected')}</button>
+          <span className="flex-1 text-sm"><strong>{rest.length === 1 ? t('hw.updatesOne') : t('hw.updatesMany', { count: formatNumber(rest.length) })}</strong> {t('hw.available')}{bytes ? ` · ${formatBytes(bytes)}` : ''}{restarts ? ` · ${restarts === 1 ? t('hw.restartOne') : t('hw.restartMany', { count: formatNumber(restarts) })}` : ''}</span>
+          <button type="button" disabled={!picked.length || busy} onClick={() => setInstalling(picked)} className={btnPrimary}>{t('hw.installSelected')}</button>
         </div>
         <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
-          {list.map((o) => {
+          {rest.map((o) => {
             const tg = offerTag(o)
             const on = chosen.has(o.id) || offerLocked(o)
+            const title = offerTitle(o, devName(o.device_id))
             return (
               <li key={o.id} className={rowLine}>
                 <label className="flex cursor-pointer items-center gap-3.5 px-4 py-[13px]">
-                  <input type="checkbox" checked={on} disabled={offerLocked(o)} aria-label={o.name}
+                  <input type="checkbox" checked={on} disabled={offerLocked(o)} aria-label={title}
                     onChange={() => { const n = new Set(chosen); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); setSel(n) }} className="h-[18px] w-[18px] accent-[#1F6BFF]" />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="flex items-center gap-2 text-sm font-medium">{o.name}<Tag text={tg.tag} bg={tg.bg} color={tg.color} /></span>
-                    <span className="text-xs text-[#8FA3C8]">{o.summary}{o.restart ? ` · ${t('hw.restartRequired')}` : ''}</span>
+                    <span className="flex items-center gap-2 text-sm font-medium">{title}<Tag text={tg.tag} bg={tg.bg} color={tg.color} /></span>
+                    <span className="text-xs text-[#8FA3C8]">{offerText(o)}{o.restart ? ` · ${t('hw.restartRequired')}` : ''}</span>
                   </span>
-                  <span className="font-mono text-xs text-[#C9D6EE]">{offerVersion(o)}</span>
+                  {o.from_version && <span className="font-mono text-xs text-[#C9D6EE]">{offerVersion(o)}</span>}
                 </label>
               </li>
             )
           })}
         </ul>
       </>}
-      {offers.state === 'ok' && list.length === 0 && <Empty title={t('hw.upToDate')} />}
+      {r && r.state !== 'off' && !busy && list.length === 0 && <Empty title={t('hw.upToDate')}>{r.checked_at ? t('drv.lastChecked', { time: formatDate(r.checked_at) }) : undefined}</Empty>}
+      {devs.state === 'ok' && driverGroups(devs.value, r).map((g) => (
+        <section key={g.group} aria-label={g.name} className="flex flex-col gap-1.5">
+          <h2 className={`m-0 font-normal ${sectionLabel}`}>{g.name}</h2>
+          <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
+            {g.items.map(({ dev, status, driverLabel }) => (
+              <li key={dev.id} className={`flex items-center gap-3.5 px-4 py-3 ${rowLine}`}>
+                <DeviceIcon d={dev} />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate text-sm font-medium">{dev.name}</span>
+                  <span className="truncate text-xs text-[#8FA3C8]">{[dev.vendor, driverLabel ? t('drv.usesDriver', { driver: driverLabel }) : t('hw.noDriverYet')].filter(Boolean).join(' · ')}</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-xs" style={{ color: STATUS_COLOR[status] }}><span className="h-2 w-2 rounded-full" style={{ background: STATUS_COLOR[status] }} />{statusLabel(status)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
       <section aria-label={t('hw.inUseLabel')} className="flex flex-col gap-1.5">
         <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('hw.inUse')}</h2>
         {devs.state === 'unavailable' && <Empty title={t('hw.drvUnavailable')} />}
@@ -159,13 +216,32 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
           </ul>
         )}
       </section>
-      {installing && <DriverInstallDialog offers={installing} onClose={() => { setInstalling(null); void reload() }} />}
+      {installing && <DriverInstallDialog offers={installing} names={(o) => offerTitle(o, devName(o.device_id))} secureBoot={!!r?.secure_boot} onClose={() => { setInstalling(null); setSel(null); void load() }} />}
     </div>
   )
 }
 
+function Note({ tone, children }: { tone: 'amber'; children: React.ReactNode }) {
+  return <div role="note" className="flex gap-2.5 rounded-xl border border-[rgba(255,159,90,0.3)] bg-[rgba(255,159,90,0.08)] px-3.5 py-3 text-[13px] text-[#C9D6EE]"><Svg d={ICON.restart} size={18} stroke={tone === 'amber' ? C.amber : C.soft} /><span>{children}</span></div>
+}
+
+/** Secure Boot: the driver's signing key is enrolled at the next restart (MokManager, a blue screen before WorkSuite). */
+export function MokSteps({ password }: { password: string }) {
+  const pw = `${password.slice(0, 4)}-${password.slice(4)}`
+  return (
+    <section aria-label={t('drv.mok.title')} className="flex flex-col gap-2 rounded-xl border border-[rgba(255,159,90,0.35)] bg-[rgba(255,159,90,0.08)] px-[18px] py-4">
+      <span className="text-sm font-semibold">{t('drv.mok.title')}</span>
+      <span className="text-[13px] text-[#C9D6EE]">{t('drv.mok.why')}</span>
+      <ol className="m-0 flex list-decimal flex-col gap-1 pl-5 text-[13px] text-[#C9D6EE]">
+        <li>{t('drv.mok.step1')}</li><li>{t('drv.mok.step2')}</li><li>{t('drv.mok.step3', { password: pw })}</li><li>{t('drv.mok.step4')}</li>
+      </ol>
+      <span className="font-mono text-lg tracking-[0.2em]" aria-label={t('drv.mok.password')}>{pw}</span>
+    </section>
+  )
+}
+
 /** H5: driver install progress from the package service job events (phase = offer id). */
-export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]; onClose: () => void }) {
+export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, secureBoot = false }: { offers: DriverOffer[]; onClose: () => void; names?: (o: DriverOffer) => string; secureBoot?: boolean }) {
   const [pct, setPct] = useState<Record<string, number>>({})
   const [error, setError] = useState<string | null>(null)
   const job = useRef<string | null>(null)
@@ -173,9 +249,10 @@ export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]
     const off = os.onPkgJob((e) => {
       if (e.job !== job.current) return
       if (e.kind === 'progress' && e.phase) setPct((p) => ({ ...p, [e.phase!]: e.percent ?? 0 }))
-      if (e.kind === 'finished' && e.result !== 'success') setError(e.error ?? t('hw.installUnfinished'))
+      if (e.kind === 'finished' && e.result !== 'success') setError(friendlyError(e.error ?? 'failed', 'package').text || t('hw.installUnfinished'))
+      if (e.kind === 'finished' && e.result === 'success') setPct((p) => Object.fromEntries(offers.map((o) => [o.id, 100])) as typeof p)
     })
-    void os.hwInstallDrivers(offers.map((o) => o.id)).then((r) => { if (r.ok) job.current = r.value; else setError(t('hw.cantInstall')) })
+    void os.hwInstallDrivers(offers.map((o) => o.id)).then((r) => { if (r.ok) job.current = r.value; else setError(r.error === 'unavailable' ? t('hw.cantInstall') : friendlyError(r.error, 'package').text) })
     return off
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const done = offers.every((o) => (pct[o.id] ?? 0) >= 100)
@@ -198,10 +275,10 @@ export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]
                   {st === 'done' && <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#5FD39A" /><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#0F2350" strokeWidth="2.4" strokeLinecap="round" /></svg>}
                   {st === 'active' && <Spinner size={20} />}
                   {st === 'wait' && <span className="h-5 w-5 rounded-full border-2 border-[rgba(127,178,255,0.3)]" />}
-                  <span className="flex-1 text-sm font-medium">{o.name} {o.to_version}</span>
+                  <span className="flex-1 text-sm font-medium">{names(o)}</span>
                   <span className="text-xs text-[#8FA3C8]">{st === 'done' ? t('common.installed') : st === 'active' ? <CountUp value={p} render={(n) => t('hw.installingPct', { percent: n })} /> : `${t('hw.waiting')}${o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}`}</span>
                 </div>
-                {st === 'active' && <div className="ml-8"><Progress value={p} label={t('hw.progressOf', { name: o.name })} height={4} /></div>}
+                {st === 'active' && <div className="ml-8"><Progress value={p} label={t('hw.progressOf', { name: names(o) })} height={4} /></div>}
               </li>
             )
           })}
@@ -209,7 +286,7 @@ export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]
         {error && <p role="alert" className="mx-4 mb-4 rounded-xl border border-[rgba(255,138,122,0.3)] bg-[rgba(255,138,122,0.08)] px-3.5 py-3 text-[13px] text-[#FFB0A6]">{error}</p>}
         {restart.length > 0 && (
           <div className="mx-4 mb-4 flex gap-2.5 rounded-xl border border-[rgba(255,159,90,0.3)] bg-[rgba(255,159,90,0.08)] px-3.5 py-3 text-[13px] text-[#C9D6EE]">
-            <Svg d={ICON.restart} size={18} stroke={C.amber} /><span>{t('hw.needRestart', { names: restart.map((o) => o.name).join(', ') })}</span>
+            <Svg d={ICON.restart} size={18} stroke={C.amber} /><span>{t('hw.needRestart', { names: restart.map(names).join(', ') })}{secureBoot && restart.some((o) => o.kind === 'gpu' || o.kind === 'dkms') ? ` ${t('drv.mok.atRestart')}` : ''}</span>
           </div>
         )}
         <div className={dialogFooter}>
@@ -223,11 +300,11 @@ export function DriverInstallDialog({ offers, onClose }: { offers: DriverOffer[]
 
 /** H2: set up a newly connected device. Only the driver the kernel bound is a real choice today. */
 export function DeviceSetupDialog({ device, onClose }: { device: HwDevice; onClose: () => void }) {
-  const [offers] = useResource(os.hwDriverUpdates)
-  const mine = offers.state === 'ok' ? offers.value.filter((o) => o.device_id === device.id) : []
+  const [offers] = useResource(() => os.hwDriverReport(false))
+  const mine = offers.state === 'ok' ? offers.value.offers.filter((o) => o.device_id === device.id) : []
   const [pick, setPick] = useState<string>('basic')
   const [installing, setInstalling] = useState<DriverOffer[] | null>(null)
-  if (installing) return <DriverInstallDialog offers={installing} onClose={onClose} />
+  if (installing) return <DriverInstallDialog offers={installing} names={(o) => offerTitle(o, device.name)} onClose={onClose} />
   const chosen = mine.find((o) => o.id === pick)
   return (
     <Dialog width={640} onClose={onClose} className="rounded-[20px]">
@@ -243,7 +320,7 @@ export function DeviceSetupDialog({ device, onClose }: { device: HwDevice; onClo
         <div role="radiogroup" aria-labelledby={tid} className="flex flex-col gap-2 px-6 py-5">
           {mine.map((o) => {
             const tg = offerTag(o)
-            return <OptionCard key={o.id} name="drv" checked={pick === o.id} onPick={() => setPick(o.id)} title={o.name} tag={<Tag text={tg.tag} bg={tg.bg} color={tg.color} />} desc={o.summary}
+            return <OptionCard key={o.id} name="drv" checked={pick === o.id} onPick={() => setPick(o.id)} title={offerTitle(o, device.name)} tag={<Tag text={tg.tag} bg={tg.bg} color={tg.color} />} desc={offerText(o)}
               right={<span className="font-mono text-xs text-[#8FA3C8]">{formatBytes(o.size_bytes)}</span>} />
           })}
           <OptionCard name="drv" checked={pick === 'basic'} onPick={() => setPick('basic')} title={device.driver ? t('hw.keepBuiltIn', { driver: device.driver }) : t('hw.leave')}
@@ -308,6 +385,22 @@ export function DeviceProblemDialog({ device, onClose, onOpenUpdates, onOpenDriv
 /** H1: watch for newly connected devices (poll the bridge) and toast them. */
 export function DeviceWatcher({ onOpenUpdates, onOpenDrivers }: { onOpenUpdates: () => void; onOpenDrivers: () => void }) {
   const [toasts, setToasts] = useState<HwDevice[]>([])
+  const [drvNotice, setDrvNotice] = useState<{ title: string; body: string } | null>(null)
+  // Drivers found by a background check (after Wi-Fi or Ethernet connected, or daily): a toast and a notice in the
+  // notification centre, once per offer; the ones that installed themselves aren't announced.
+  useEffect(() => {
+    const seen = new Set<string>()
+    return os.onDriversChanged((r) => {
+      void os.hwDevices().then((d) => {
+        const n = driverNotice(r, d.ok ? d.value : [], seen)
+        r.offers.forEach((o) => seen.add(o.id))
+        if (!n) return
+        setDrvNotice(n)
+        void os.driversNotify(n.title, n.body)
+      }).catch(() => {})
+    })
+  }, [])
+  useEffect(() => { if (!drvNotice) return; const x = setTimeout(() => setDrvNotice(null), 15_000); return () => clearTimeout(x) }, [drvNotice])
   const [setup, setSetup] = useState<HwDevice | null>(null)
   const [problem, setProblem] = useState<HwDevice | null>(null)
   useEffect(() => {
@@ -326,6 +419,14 @@ export function DeviceWatcher({ onOpenUpdates, onOpenDrivers }: { onOpenUpdates:
   useEffect(() => { if (!toasts.length) return; const t = setTimeout(() => setToasts((x) => x.slice(1)), 12_000); return () => clearTimeout(t) }, [toasts])
   const drop = (d: HwDevice) => setToasts((t) => t.filter((x) => x.id !== d.id))
   return <>
+    {drvNotice && (
+      <div role="status" className="pointer-events-auto flex w-full gap-3.5 rounded-2xl border border-[rgba(127,178,255,0.22)] bg-[rgba(10,24,56,0.96)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+        <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[rgba(31,107,255,0.18)]"><Svg d={ICON.download} size={22} stroke="#7FB2FF" /></span>
+        <div className="flex min-w-0 flex-1 flex-col gap-[3px]"><span className="text-sm font-semibold">{drvNotice.title}</span><span className="text-[13px] text-[#8FA3C8]">{drvNotice.body}</span></div>
+        <button type="button" onClick={() => { setDrvNotice(null); onOpenDrivers() }} className={`${linkBtn} self-center whitespace-nowrap`}>{t('drv.notice.view')}</button>
+        <button type="button" aria-label={t('common.dismiss')} onClick={() => setDrvNotice(null)} className="flex h-6 w-6 cursor-pointer items-center justify-center self-start rounded-md text-base leading-none text-[#8FA3C8] hover:bg-white/10 hover:text-white">×</button>
+      </div>
+    )}
     {toasts.length > 0 && (
       <div className="pointer-events-auto flex w-full flex-col gap-2.5">
         {toasts.map((d) => {

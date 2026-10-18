@@ -3,6 +3,7 @@
 import { aiEn } from './ai'
 import { widgetsEn } from './widgets'
 import { captureEn } from './capture'
+import { driversEn } from './drivers'
 import { whatsappEn } from './whatsapp'
 import { desktopsEn } from './desktops'
 import { bootuiEn } from './bootui'
@@ -12,6 +13,7 @@ const en = {
   ...aiEn,
   ...widgetsEn,
   ...captureEn,
+  ...driversEn,
   ...whatsappEn,
   ...desktopsEn,
   ...bootuiEn,

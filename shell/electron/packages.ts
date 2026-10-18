@@ -101,6 +101,12 @@ export function packageClient(exec: Exec = realExec) {
     pruneRuntimes: (): Promise<Reply<string>> => jobCall(exec, 'PruneRuntimes', '', []),
     // Offline .wsupdate bundles (WSOS-AUP-010).
     bundleInspect: (path: string): Promise<Reply<unknown>> => (ABS.test(path) && path.endsWith('.wsupdate') ? jsonCall(exec, 'InspectBundle', 's', [path]) : bad()),
+    // Drivers (Settings › Drivers): the report, a check now (waits for it), and installing offers (polkit).
+    driverReport: (check = false): Promise<Reply<unknown>> => (check ? jsonCall(exec, 'CheckDrivers', 's', ['manual']) : jsonCall(exec, 'GetDrivers', '', [])),
+    installDrivers: (ids: string[]): Promise<Reply<string>> => {
+      const ok = ids.filter((x) => /^[a-z]+:[A-Za-z0-9+._-]{1,100}$/.test(x)).slice(0, 50)
+      return ok.length ? jobCall(exec, 'InstallDrivers', 'as', [String(ok.length), ...ok]) : bad()
+    },
     bundleInstall: (path: string): Promise<Reply<string>> => (ABS.test(path) && path.endsWith('.wsupdate') ? jobCall(exec, 'InstallBundle', 's', [path]) : bad()),
   }
 }
@@ -166,7 +172,7 @@ export function appimageClient(exec: Exec = realExec, bin = '/usr/bin/worksuite-
 
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
 
-export interface JobEvent { job: string; kind: 'progress' | 'finished' | 'update_status'; status?: unknown; percent?: number; phase?: string; result?: string; error?: string }
+export interface JobEvent { job: string; kind: 'progress' | 'finished' | 'update_status' | 'drivers'; status?: unknown; percent?: number; phase?: string; result?: string; error?: string }
 
 /** One gdbus monitor line → event. Example:
  *  /lk/worksuite/PackageService1: lk.worksuite.PackageService1.JobFinished (objectpath '/lk/worksuite/PackageService1/job/3', 'failed', {'kind': <'install'>, 'error': <'not approved by your organization'>})
@@ -180,6 +186,10 @@ export function parseMonitorLine(line: string): JobEvent | null {
     return { job: m[1], kind: 'finished', result: m[2], ...(err ? { error: err } : {}) }
   }
   // GVariant string: single-quoted with \' and \\ escapes (JSON itself uses double quotes).
+  m = /\.DriversChanged \('((?:[^'\\]|\\.)*)',\)/.exec(line)
+  if (m) {
+    try { return { job: '', kind: 'drivers', status: JSON.parse(m[1].replace(/\\(.)/g, '$1')) } } catch { return null }
+  }
   m = /\.UpdateStatusChanged \('((?:[^'\\]|\\.)*)',\)/.exec(line)
   if (m) {
     try { return { job: '', kind: 'update_status', status: JSON.parse(m[1].replace(/\\(.)/g, '$1')) } } catch { return null }

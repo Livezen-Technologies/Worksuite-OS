@@ -3,6 +3,7 @@ import type { LocaleReview, MessageKey } from './en'
 import { aiSi } from './ai'
 import { widgetsSi } from './widgets'
 import { captureSi } from './capture'
+import { driversSi } from './drivers'
 import { whatsappSi } from './whatsapp'
 import { desktopsSi } from './desktops'
 import { bootuiSi } from './bootui'
@@ -14,6 +15,7 @@ const si: Partial<Record<MessageKey, string>> = {
   ...aiSi,
   ...widgetsSi,
   ...captureSi,
+  ...driversSi,
   ...whatsappSi,
   ...desktopsSi,
   ...bootuiSi,

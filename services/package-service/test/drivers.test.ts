@@ -1,0 +1,221 @@
+// Driver search: modalias / Contents mapping, kernel-log parsing, the once-a-day trigger, policy, metered, GPUs.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  aliasMatches, autoInstallable, contentsLookup, DAY, deviceKind, deviceStatuses, displayDriverLabel, dkmsFor, driverPolicy, gpuOffer,
+  needsGpuFallback, nvidiaPick, parseFirmwareFailures, parseFwupd, parseIsenkram, shouldCheck, type DriverOffer, type ScannedDevice,
+} from '../src/drivers.ts';
+import { DriverManager, mokPassword, parseModulesAlias, scanSysfs, type DriverEnv } from '../src/driverscan.ts';
+
+const INTEL_AX211 = 'pci:v00008086d000051F0sv00008086sd00000094bc02sc80i00';
+const dev = (o: Partial<ScannedDevice>): ScannedDevice => ({ id: 'pci:0000:00:14.3', bus: 'pci', modaliases: [INTEL_AX211], driver: 'iwlwifi', module: 'iwlwifi', cls: '0x028000', vendor: '8086', product: '51f0', ...o });
+
+const KLOG = `[    5.1] iwlwifi 0000:00:14.3: Direct firmware load for iwlwifi-so-a0-gf-a0-89.ucode failed with error -2
+[    5.2] iwlwifi 0000:00:14.3: Direct firmware load for iwlwifi-so-a0-gf-a0-88.ucode failed with error -2
+[    6.0] r8169 0000:02:00.0: Unable to load firmware rtl_nic/rtl8168h-2.fw (-2)
+[    6.1] bluetooth hci0: Direct firmware load for ../../etc/shadow failed with error -2
+[    7.0] firmware: failed to load rtl_nic/rtl8168h-2.fw (-2)
+usb 1-2: new high-speed USB device number 3`;
+
+test('firmware failures: file, driver and device from the kernel log; no paths outside /lib/firmware', () => {
+  const f = parseFirmwareFailures(KLOG);
+  assert.deepEqual(f.map((x) => x.file), ['iwlwifi-so-a0-gf-a0-89.ucode', 'iwlwifi-so-a0-gf-a0-88.ucode', 'rtl_nic/rtl8168h-2.fw']);
+  assert.deepEqual(f[0], { file: 'iwlwifi-so-a0-gf-a0-89.ucode', driver: 'iwlwifi', device: '0000:00:14.3' });
+  assert.equal(f[2].driver, 'r8169');
+});
+
+const CONTENTS = `usr/lib/firmware/iwlwifi-so-a0-gf-a0-89.ucode.zst                  non-free-firmware/kernel/firmware-iwlwifi
+usr/lib/firmware/rtl_nic/rtl8168h-2.fw                              non-free-firmware/kernel/firmware-realtek
+usr/lib/firmware/mt7921/WIFI_RAM_CODE_MT7961_1.bin                  non-free-firmware/kernel/firmware-mediatek`;
+
+test('Contents lookup: firmware file → Debian package (compressed variants match)', () => {
+  const m = contentsLookup(CONTENTS, ['iwlwifi-so-a0-gf-a0-89.ucode', 'rtl_nic/rtl8168h-2.fw', 'nope.bin']);
+  assert.equal(m.get('iwlwifi-so-a0-gf-a0-89.ucode'), 'firmware-iwlwifi');
+  assert.equal(m.get('rtl_nic/rtl8168h-2.fw'), 'firmware-realtek');
+  assert.equal(m.has('nope.bin'), false);
+});
+
+test('modalias patterns: fnmatch like modules.alias', () => {
+  assert.ok(aliasMatches('pci:v00008086d000051F0sv*sd*bc*sc*i*', INTEL_AX211));
+  assert.ok(aliasMatches('pci:v00008086d*sv*sd*bc02sc80i*', INTEL_AX211));
+  assert.ok(!aliasMatches('pci:v000014E4d*sv*sd*bc*sc*i*', INTEL_AX211));
+  assert.ok(aliasMatches('usb:v0BDAp[89]*d*', 'usb:v0BDAp8812d0000dc00dsc00dp00ic00isc00ip00in00'));
+  const a = parseModulesAlias('alias pci:v00008086d000051F0sv*sd*bc*sc*i* iwlwifi\nalias acpi*:X* foo\n');
+  assert.deepEqual(a, [{ pattern: 'pci:v00008086d000051F0sv*sd*bc*sc*i*', module: 'iwlwifi' }]);
+});
+
+test('DKMS catalog: Broadcom BCM4360 without a kernel driver → broadcom-sta-dkms (amd64 only); never when the kernel has one', () => {
+  const bcm = dev({ id: 'pci:0000:03:00.0', modaliases: ['pci:v000014E4d000043A0sv0000106Bsd00000117bc02sc80i00'], driver: null, module: null, vendor: '14e4', product: '43a0' });
+  assert.equal(dkmsFor(bcm, 'amd64')?.package, 'broadcom-sta-dkms');
+  assert.equal(dkmsFor(bcm, 'arm64'), null);
+  assert.equal(dkmsFor({ ...bcm, module: 'bcma' }, 'amd64'), null);
+  assert.equal(dkmsFor(dev({}), 'amd64'), null);
+});
+
+test('isenkram output: only driver and firmware packages', () => {
+  assert.deepEqual(parseIsenkram('firmware-iwlwifi\nprinter-driver-foo\nbroadcom-sta-dkms\n; rm -rf /\nfirmware-iwlwifi\n'), ['firmware-iwlwifi', 'broadcom-sta-dkms']);
+});
+
+test('policy: defaults, admin choices, kiosk forces search on and firmware only', () => {
+  assert.deepEqual(driverPolicy(null), { online_search: true, auto_firmware: true, auto_gpu: false });
+  assert.deepEqual(driverPolicy({ drivers_online_search: false, drivers_auto_install: false, drivers_auto_install_gpu: true }), { online_search: false, auto_firmware: false, auto_gpu: true });
+  assert.deepEqual(driverPolicy({ drivers_online_search: false, drivers_auto_install_gpu: true, kiosk: { enabled: true } }), { online_search: true, auto_firmware: true, auto_gpu: false });
+});
+
+const offer = (o: Partial<DriverOffer>): DriverOffer => ({ id: 'fw:firmware-iwlwifi', device_id: null, kind: 'firmware', packages: ['firmware-iwlwifi'], name: '', summary: '', from_version: null, to_version: '', license: 'proprietary', category: 'recommended', size_bytes: 1e6, restart: false, ...o });
+
+test('auto-install: firmware by policy, DKMS never, GPU only with its policy and never under Secure Boot, nothing big on metered', () => {
+  const pol = driverPolicy(null), free = { metered: false, secureBoot: false };
+  assert.equal(autoInstallable(offer({}), pol, free), true);
+  assert.equal(autoInstallable(offer({}), driverPolicy({ drivers_auto_install: false }), free), false);
+  assert.equal(autoInstallable(offer({ kind: 'dkms' }), pol, free), false);
+  assert.equal(autoInstallable(offer({ kind: 'gpu' }), pol, free), false);
+  const gpuPol = driverPolicy({ drivers_auto_install_gpu: true });
+  assert.equal(autoInstallable(offer({ kind: 'gpu' }), gpuPol, free), true);
+  assert.equal(autoInstallable(offer({ kind: 'gpu' }), gpuPol, { metered: false, secureBoot: true }), false);
+  assert.equal(autoInstallable(offer({ size_bytes: 1e6 }), pol, { metered: true, secureBoot: false }), true);
+  assert.equal(autoInstallable(offer({ size_bytes: 100e6 }), pol, { metered: true, secureBoot: false }), false);
+  assert.equal(autoInstallable(offer({ size_bytes: null }), pol, { metered: true, secureBoot: false }), false);
+});
+
+test('trigger: connectivity once a day or on new hardware; manual any time (≥ 1 min apart); off by policy', () => {
+  const pol = driverPolicy(null), now = 10 * DAY;
+  assert.equal(shouldCheck({}, 'connectivity', now, 'a', pol), true);
+  assert.equal(shouldCheck({ last_check: now - 3_600_000, hw_fingerprint: 'a' }, 'connectivity', now, 'a', pol), false);
+  assert.equal(shouldCheck({ last_check: now - DAY, hw_fingerprint: 'a' }, 'connectivity', now, 'a', pol), true);
+  assert.equal(shouldCheck({ last_check: now - 3_600_000, hw_fingerprint: 'a' }, 'timer', now, 'b', pol), true);
+  assert.equal(shouldCheck({ last_check: now + DAY, hw_fingerprint: 'a' }, 'timer', now, 'a', pol), true);   // clock went back
+  assert.equal(shouldCheck({ last_manual: now - 5_000 }, 'manual', now, 'a', pol), false);
+  assert.equal(shouldCheck({ last_manual: now - 61_000, last_check: now }, 'manual', now, 'a', pol), true);
+  assert.equal(shouldCheck({}, 'manual', now, 'a', driverPolicy({ drivers_online_search: false })), false);
+});
+
+test('GPU mapping: Maxwell+ → nvidia-driver 550; compute cards → tesla 535; Kepler and older stay on nouveau', () => {
+  assert.deepEqual(nvidiaPick('2684', '0x030000'), { package: 'nvidia-driver', series: '550' });  // RTX 4090
+  assert.deepEqual(nvidiaPick('1380', '0x030000'), { package: 'nvidia-driver', series: '550' });  // GTX 750 Ti
+  assert.deepEqual(nvidiaPick('20b0', '0x030200'), { package: 'nvidia-tesla-535-driver', series: '535' }); // A100
+  assert.deepEqual(nvidiaPick('1180', '0x030000'), { package: null, reason: 'too_old' });  // GTX 680 (Kepler)
+  const rtx = dev({ id: 'pci:0000:01:00.0', cls: '0x030000', vendor: '10de', product: '2684', driver: 'nouveau', module: 'nouveau' });
+  const o = gpuOffer(rtx, { secureBoot: false, mokEnrolled: false, nvidiaInstalled: false }, 'amd64')!;
+  assert.deepEqual(o.packages, ['nvidia-driver', 'nvidia-kernel-dkms', 'linux-headers-amd64']);
+  assert.equal(o.category, 'recommended'); assert.equal(o.restart, true); assert.equal(o.summary, 'nvidia_better');
+  assert.equal(gpuOffer(rtx, { secureBoot: true, mokEnrolled: false, nvidiaInstalled: false }, 'arm64')!.summary, 'nvidia_secure_boot');
+  assert.deepEqual(gpuOffer(rtx, { secureBoot: false, mokEnrolled: false, nvidiaInstalled: false }, 'arm64')!.packages[2], 'linux-headers-arm64');
+  assert.equal(gpuOffer(rtx, { secureBoot: false, mokEnrolled: false, nvidiaInstalled: true }, 'amd64'), null);
+  assert.equal(gpuOffer({ ...rtx, vendor: '1002', driver: 'amdgpu' }, { secureBoot: false, mokEnrolled: false, nvidiaInstalled: false }, 'amd64'), null);
+  assert.equal(deviceKind(rtx), 'display');
+  assert.equal(displayDriverLabel('amdgpu', null), 'Mesa (amdgpu)');
+  assert.equal(displayDriverLabel('nvidia', '550.163.01'), 'NVIDIA 550');
+});
+
+test('GPU fallback: only after an nvidia install whose first boot lost the greeter or the module', () => {
+  const base = { nvidiaInstalled: true, pendingBoot: true, greeterOk: true, nvidiaLoaded: true };
+  assert.equal(needsGpuFallback(base), false);
+  assert.equal(needsGpuFallback({ ...base, greeterOk: false }), true);
+  assert.equal(needsGpuFallback({ ...base, nvidiaLoaded: false }), true);
+  assert.equal(needsGpuFallback({ ...base, pendingBoot: false, greeterOk: false }), false);
+  assert.equal(needsGpuFallback({ ...base, nvidiaInstalled: false, greeterOk: false }), false);
+});
+
+test('fwupd: get-updates JSON → offers', () => {
+  const j = JSON.stringify({ Devices: [{ Name: 'UEFI dbx', DeviceId: 'a'.repeat(40), Version: '77', Releases: [{ Version: '83', Size: 24000, Summary: 'dbx', Urgency: 'high' }] }, { Name: 'x', DeviceId: 'bad' }] });
+  const o = parseFwupd(j);
+  assert.equal(o.length, 1); assert.equal(o[0].id, `fwupd:${'a'.repeat(40)}`); assert.equal(o[0].category, 'security');
+  assert.deepEqual(parseFwupd('not json'), []);
+});
+
+test('statuses per device', () => {
+  const wifi = dev({}), gpu = dev({ id: 'pci:0000:01:00.0', cls: '0x030000', vendor: '10de', product: '2684', driver: 'nouveau', module: 'nouveau' });
+  const r = deviceStatuses([wifi, gpu, dev({ id: 'usb:1-2', bus: 'usb', driver: null, module: null, cls: 'ff' })], parseFirmwareFailures(KLOG), [offer({ device_id: wifi.id }), offer({ id: 'gpu:nvidia-driver', kind: 'gpu', device_id: gpu.id })]);
+  assert.deepEqual(r.map((x) => x.status), ['missing_firmware', 'optional_driver', 'no_driver']);
+  assert.equal(r[0].kind, 'wifi');
+});
+
+test('sysfs scan: PCI and USB devices with modaliases, drivers and the module that would bind', () => {
+  const root = mkdtempSync(join(tmpdir(), 'drv-'));
+  const pci = join(root, 'sys/bus/pci/devices/0000:00:14.3');
+  mkdirSync(pci, { recursive: true });
+  writeFileSync(join(pci, 'modalias'), INTEL_AX211 + '\n'); writeFileSync(join(pci, 'class'), '0x028000\n');
+  writeFileSync(join(pci, 'vendor'), '0x8086\n'); writeFileSync(join(pci, 'device'), '0x51f0\n');
+  mkdirSync(join(root, 'drivers/iwlwifi'), { recursive: true }); symlinkSync(join(root, 'drivers/iwlwifi'), join(pci, 'driver'));
+  const usb = join(root, 'sys/bus/usb/devices/1-2');
+  mkdirSync(join(usb, '1-2:1.0'), { recursive: true });
+  writeFileSync(join(usb, 'idVendor'), '0bda\n'); writeFileSync(join(usb, 'idProduct'), '8812\n');
+  writeFileSync(join(usb, '1-2:1.0/modalias'), 'usb:v0BDAp8812d0000dc00dsc00dp00icFFiscFFipFFin00\n'); writeFileSync(join(usb, '1-2:1.0/bInterfaceClass'), 'ff\n');
+  const devs = scanSysfs(root, [{ pattern: 'usb:v0BDAp8812d*dc*dsc*dp*icFFiscFFipFFin*', module: 'rtw88_8812au' }]);
+  assert.deepEqual(devs.map((d) => [d.id, d.driver, d.module]), [['pci:0000:00:14.3', 'iwlwifi', null], ['usb:1-2', null, 'rtw88_8812au']]);
+});
+
+function managerEnv(over: Partial<DriverEnv> = {}) {
+  let st: Record<string, unknown> = {};
+  const calls: string[] = [], audits: string[] = [];
+  let jobs = 0;
+  const env: DriverEnv = {
+    async run(cmd, args) {
+      calls.push([cmd, ...args].join(' '));
+      if (cmd === 'mokutil' && args[0] === '--generate-hash=' + args[0].slice(16)) return { code: 0, stdout: '$6$hash', stderr: '' };
+      return { code: cmd === 'isenkram-lookup' || cmd === 'fwupdmgr' ? 2 : 0, stdout: cmd === 'mokutil' ? 'not enrolled' : '', stderr: '' };
+    },
+    devices: () => [dev({}), dev({ id: 'pci:0000:01:00.0', cls: '0x030000', vendor: '10de', product: '2684', driver: 'nouveau', module: 'nouveau', modaliases: [] })],
+    kernelLog: async () => KLOG, firmwarePresent: () => false, contents: async () => CONTENTS, installed: () => false,
+    policy: () => null, metered: async () => false, secureBoot: () => false, arch: 'amd64', now: () => 5 * DAY,
+    load: () => st as never, save: (s) => { st = s as never; }, audit: (e) => audits.push(e), writeFile() {},
+    enqueue: (_c, body) => { jobs++; void body(() => {}); return jobs; },
+    ...over,
+  };
+  return { env, calls, audits, state: () => st, jobs: () => jobs };
+}
+
+test('manager: a connectivity check finds firmware and the NVIDIA driver; firmware installs itself and its driver reloads', async () => {
+  const m = managerEnv();
+  const d = new DriverManager(m.env);
+  const r = await d.check('connectivity');
+  assert.deepEqual(r.offers.map((o) => o.id).sort(), ['fw:firmware-iwlwifi', 'fw:firmware-realtek', 'gpu:nvidia-driver']);
+  assert.deepEqual(r.auto_installed.sort(), ['fw:firmware-iwlwifi', 'fw:firmware-realtek']);
+  await new Promise((res) => setImmediate(res));
+  assert.ok(m.calls.some((c) => c.startsWith('apt-get -y -q') && c.endsWith('install -- firmware-iwlwifi')));
+  assert.ok(m.calls.includes('modprobe -r iwlwifi') && m.calls.includes('modprobe iwlwifi'));
+  assert.ok(!m.calls.some((c) => c.includes('nvidia-driver')), 'the GPU driver waits for a person');
+  // the same day: no second check
+  m.calls.length = 0;
+  await d.check('connectivity');
+  assert.equal(m.calls.length, 0);
+});
+
+test('manager: policy off → no search, state off', async () => {
+  const m = managerEnv({ policy: () => ({ drivers_online_search: false }) });
+  const r = await new DriverManager(m.env).check('connectivity');
+  assert.equal(r.state, 'off'); assert.equal(m.calls.length, 0);
+});
+
+test('manager: metered → no fwupd refresh, no automatic install of unknown sizes', async () => {
+  const m = managerEnv({ metered: async () => true });
+  const r = await new DriverManager(m.env).check('manual');
+  assert.equal(r.metered, true); assert.deepEqual(r.auto_installed, []);
+  assert.ok(!m.calls.some((c) => c.startsWith('fwupdmgr refresh')));
+});
+
+test('manager: Secure Boot GPU install asks MokManager to enrol the DKMS key with a one-time password', async () => {
+  const m = managerEnv({ secureBoot: () => true });
+  const d = new DriverManager(m.env);
+  await d.check('manual');
+  d.install(1000, ['gpu:nvidia-driver']);
+  await new Promise((res) => setTimeout(res, 10));
+  assert.ok(m.calls.some((c) => c === 'mokutil --import /var/lib/dkms/mok.pub --hash-file /var/lib/worksuite-package-service/mok.hash'));
+  assert.match(d.status().mok!.password, /^\d{8}$/);
+  assert.equal((m.state() as { gpu?: { pending_boot?: boolean } }).gpu?.pending_boot, true);
+  assert.match(mokPassword(), /^\d{8}$/);
+});
+
+test('manager: failed first boot after the nvidia driver → purge back to nouveau', async () => {
+  const m = managerEnv({ installed: (p) => p === 'nvidia-driver' });
+  m.env.save({ gpu: { pending_boot: true } });
+  const d = new DriverManager(m.env);
+  assert.equal(await d.gpuBootCheck(false, false), true);
+  assert.ok(m.calls.some((c) => c.startsWith('apt-get -y -q purge -- nvidia-driver')));
+  assert.equal(d.status().gpu_fallback, true);
+  assert.equal(await d.gpuBootCheck(false, false), false, 'only once');
+});
