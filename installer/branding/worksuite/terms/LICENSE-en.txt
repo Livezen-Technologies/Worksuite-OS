@@ -1,0 +1,25 @@
+DRAFT — REPLACE WITH THE FINAL LEGAL TEXT BEFORE RELEASE
+This is a neutral placeholder outline, not a binding agreement.
+
+WorkSuite OS Terms and License Agreement
+Version: 0.1-draft
+
+1. Grant of use
+You may install and use WorkSuite OS on computers you own or are allowed to manage, subject to these terms.
+
+2. Open-source components
+WorkSuite OS includes Debian and other open-source software. Each of those components is licensed under its own
+licence, and nothing in these terms limits your rights under those licences. Their licence texts are installed with
+the system in /usr/share/doc/<package>/copyright.
+
+3. No warranty
+To the extent permitted by applicable law, WorkSuite OS is provided "as is", without warranty of any kind.
+
+4. Privacy
+How WorkSuite OS handles personal data is described in the privacy policy: [PRIVACY POLICY URL].
+
+5. Governing law
+These terms are governed by the laws of [JURISDICTION].
+
+6. Contact
+[PUBLISHER NAME AND CONTACT ADDRESS]

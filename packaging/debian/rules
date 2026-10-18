@@ -61,7 +61,9 @@ override_dh_auto_install:
 	install -D -m 0644 installer/modules/worksuitephase/module.desc $$m/worksuitephase/module.desc && \
 	install -m 0644 installer/modules/worksuitephase/main.py $$m/worksuitephase/main.py && \
 	install -D -m 0644 installer/modules/worksuiteenroll/module.desc $$m/worksuiteenroll/module.desc && \
-	install -m 0644 installer/modules/worksuiteenroll/main.py $$m/worksuiteenroll/main.py
+	install -m 0644 installer/modules/worksuiteenroll/main.py $$m/worksuiteenroll/main.py && \
+	install -D -m 0644 installer/modules/worksuiteterms/module.desc $$m/worksuiteterms/module.desc && \
+	install -m 0644 installer/modules/worksuiteterms/main.py $$m/worksuiteterms/main.py
 	# worksuite-archive-keyring: public keys only (packaging/keyring/README.md).
 	d=debian/worksuite-archive-keyring; \
 	install -d $$d/usr/share/keyrings $$d/usr/share/worksuite/keys/device-commands $$d/usr/share/worksuite/keys/release $$d/usr/share/doc/worksuite-archive-keyring && \
@@ -98,6 +100,7 @@ override_dh_auto_test:
 	python3 -m unittest discover -s installer/modules/worksuiterecovery/tests
 	python3 -m unittest discover -s installer/modules/worksuitephase/tests
 	python3 -m unittest discover -s installer/modules/worksuiteenroll/tests
+	python3 -m unittest discover -s installer/modules/worksuiteterms/tests
 	sh tests/session/session-test.sh
 	sh tests/session/smartcard-test.sh
 	sh tests/session/autologin-test.sh

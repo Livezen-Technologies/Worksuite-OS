@@ -173,6 +173,48 @@ class EnrollmentTest(unittest.TestCase):
         self.assertLess(execs.index("worksuiteenroll"), execs.index("umount"))
 
 
+class TermsTest(unittest.TestCase):
+    """The WorkSuite OS terms: the last page before Install, required, recorded on the target without personal data."""
+
+    def test_terms_page_holds_install(self):
+        settings, shows, execs = sequence()
+        first_show = settings["sequence"][0]["show"]
+        self.assertEqual(first_show[-1], "worksuiteconfirm@terms")        # the page whose Next is Install
+        self.assertEqual(first_show[-2], "worksuiteconfirm@erase")
+        self.assertIn({"id": "terms", "module": "worksuiteconfirm", "config": "worksuiteconfirm-terms.conf"}, settings["instances"])
+        conf = load(MODULES / "worksuiteconfirm-terms.conf")
+        self.assertEqual(conf["mode"], "terms")
+        self.assertIs(conf["accepted"], False)                            # only unattended images pre-accept
+        self.assertIn("worksuiteterms", execs)
+        self.assertLess(execs.index("worksuiteterms"), execs.index("umount"))
+        cpp = (ROOT / "modules" / "worksuiteconfirm" / "WorksuiteConfirmViewStep.cpp").read_text()
+        self.assertIn("I have read and accept the WorkSuite OS Terms and License Agreement", cpp)
+
+    def test_terms_texts_are_drafts_in_every_language(self):
+        for lang in ("en", "si", "ta"):
+            text = (ROOT / "branding" / "worksuite" / "terms" / f"LICENSE-{lang}.txt").read_text(encoding="utf-8")
+            self.assertIn("Version: 0.1-draft", text)
+            self.assertIn("[PRIVACY POLICY URL]", text)
+            self.assertIn("[JURISDICTION]", text)
+        en = (ROOT / "branding" / "worksuite" / "terms" / "LICENSE-en.txt").read_text(encoding="utf-8")
+        self.assertTrue(en.startswith("DRAFT — REPLACE WITH THE FINAL LEGAL TEXT BEFORE RELEASE"))
+
+    def test_job_is_packaged(self):
+        rules = (ROOT.parent / "packaging" / "debian" / "rules").read_text()
+        self.assertIn("installer/modules/worksuiteterms/main.py", rules)
+        self.assertIn("installer/modules/worksuiteterms/tests", rules)
+
+
+class EnrollSkipTest(unittest.TestCase):
+    def test_skip_button_and_sidebar_mark(self):
+        cpp = (ROOT / "modules" / "worksuiteconfirm" / "WorksuiteConfirmViewStep.cpp").read_text()
+        self.assertIn('tr( "Skip for now" )', cpp)
+        self.assertIn('tr( "You can enroll later from Settings › Managed." )', cpp)
+        qml = (ROOT / "branding" / "worksuite" / "calamares-sidebar.qml").read_text()
+        self.assertIn('state.get("enrollSkipped", false)', qml)
+        self.assertIn('qsTr("SKIPPED")', qml)
+
+
 class StepIndexTest(unittest.TestCase):
     """The sidebar and footer map Calamares step indices; a page added to the sequence must not shift them."""
 

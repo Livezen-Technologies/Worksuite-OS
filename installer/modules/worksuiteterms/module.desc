@@ -1,0 +1,7 @@
+# Records the accepted WorkSuite OS terms (worksuiteconfirm@terms) on the installed system. Runs in exec.
+---
+type:       "job"
+name:       "worksuiteterms"
+interface:  "python"
+script:     "main.py"
+noconfig:   true

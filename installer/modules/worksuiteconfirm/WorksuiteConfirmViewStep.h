@@ -6,6 +6,12 @@
  *  mode "enroll":   optional, after the account page (WSOS-INS-006): an enrollment code and server, or the admin
  *                   console's enrollment link pasted or read from its QR code with the camera (zbarcam). Valid input
  *                   is written to a 0600 root file (EnrollLink.h) for the worksuiteenroll job; never logged.
+ *                   "Skip for now" (or Continue with both fields empty) clears the fields, writes no token and moves
+ *                   on; the sidebar shows the sub-step as skipped.
+ *  mode "terms":    the last page before Install: the WorkSuite OS terms (branding/worksuite/terms/LICENSE-<lang>.txt)
+ *                   in a scrolling panel and an acceptance box that gates Install. The accepted version and time go to
+ *                   global storage ("worksuiteTerms"); the worksuiteterms job records them on the target.
+ *                   `accepted: true` in the instance config pre-accepts (unattended / OEM images).
  */
 #pragma once
 
@@ -57,14 +63,25 @@ public:
     static QString opKind( const QString& description );
     /// True when a planned job sets up encryption (LUKS).
     static bool encryptedFromDescriptions( const QStringList& descriptions );
+    /// The terms file for a language: <dir>/LICENSE-<lang>.txt ("si_LK" → si), else LICENSE-en.txt; empty if none.
+    static QString termsFile( const QString& dir, const QString& lang );
+    /// The "Version: …" line of a terms text; "unversioned" when it has none.
+    static QString termsVersion( const QString& text );
+
+    /// Enroll page: "Skip for now" — clears both fields, removes any pending token and goes to the next step.
+    void skipEnrollment();
+    /// Terms page: the acceptance box (tests; the page's checkbox does the same).
+    void setTermsAccepted( bool on );
 
 private:
     void refresh();
 
     void scanQr();
     void enrollChanged();
+    void recordEnrollSkipped( bool skipped );
+    void termsChanged();
 
-    enum class Mode { Erase, Recovery, Enroll };
+    enum class Mode { Erase, Recovery, Enroll, Terms };
     Mode m_mode = Mode::Erase;
     QWidget* m_widget = nullptr;
     QLabel* m_eyebrow = nullptr;
@@ -82,6 +99,11 @@ private:
     QLineEdit* m_server = nullptr;  // enroll
     QLabel* m_status = nullptr;     // enroll: what the input means, or why it is not usable
     class QPushButton* m_scan = nullptr;
+    class QPushButton* m_skip = nullptr;   // enroll: "Skip for now"
+    class QTextBrowser* m_terms = nullptr; // terms: the text
+    QCheckBox* m_accept = nullptr;         // terms: "I have read and accept…"
+    QString m_termsVersion;
+    bool m_preaccepted = false;            // terms: `accepted: true` in the config (unattended)
     QString m_disk;
     bool m_ok = false;
 };

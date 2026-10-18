@@ -1,7 +1,15 @@
 #include "WorksuiteConfirmViewStep.h"
+#include "WsIntro.h"
 #include "WsStyle.h"
 
+#include "GlobalStorage.h"
+#include "JobQueue.h"
+
 #include <QApplication>
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QTemporaryDir>
+#include <QPointer>
 #include <QMessageBox>
 #include <QWindow>
 #include <QPushButton>
@@ -108,6 +116,123 @@ private slots:
         QVERIFY( shownOverDim );
         WsStyle::dialogHidden( &mb );   // the installer's Hide filter
         QVERIFY( qml->isVisible() );
+    }
+    // WSOS-INS-006: "Skip for now" clears whatever was typed, leaves no token file and lets the installer go on;
+    // Continue with both fields empty is the same.
+    void enrollSkipWritesNoToken()
+    {
+        QTemporaryDir d;
+        const QString pending = d.filePath( "enroll.json" );
+        qputenv( "WORKSUITE_ENROLL_PENDING", QFile::encodeName( pending ) );
+        Calamares::JobQueue jq;
+        WorksuiteConfirmViewStep step;
+        step.setConfigurationMap( { { "mode", "enroll" } } );
+        QWidget* page = step.widget();
+        const auto fields = page->findChildren< QLineEdit* >();
+        QCOMPARE( fields.size(), 2 );
+        QPushButton* skip = nullptr;
+        for ( auto* b : page->findChildren< QPushButton* >() )
+        {
+            if ( b->text() == QStringLiteral( "Skip for now" ) )
+            {
+                skip = b;
+            }
+        }
+        QVERIFY( skip );
+        QVERIFY( skip->objectName() == QStringLiteral( "wsSecondary" ) );
+
+        // Empty: Continue skips.
+        step.onActivate();
+        QVERIFY( step.isNextEnabled() );
+        QVERIFY( !QFile::exists( pending ) );
+
+        // A valid code is kept at once; Skip throws it away.
+        fields[ 0 ]->setText( "ws.example.com" );
+        fields[ 1 ]->setText( "wse_AbC-123_xyz" );
+        QVERIFY( QFile::exists( pending ) );
+        QVERIFY( jq.globalStorage()->value( "worksuiteEnroll" ).toBool() );
+        skip->click();
+        QVERIFY( !QFile::exists( pending ) );
+        QVERIFY( fields[ 0 ]->text().isEmpty() && fields[ 1 ]->text().isEmpty() );
+        QVERIFY( !jq.globalStorage()->value( "worksuiteEnroll" ).toBool() );
+        QVERIFY( step.isNextEnabled() );
+
+        // Half-typed (Continue disabled): Skip still gets past, with nothing written.
+        fields[ 1 ]->setText( "wse_" );
+        QVERIFY( !step.isNextEnabled() );
+        skip->click();
+        QVERIFY( step.isNextEnabled() );
+        QVERIFY( !QFile::exists( pending ) );
+        qunsetenv( "WORKSUITE_ENROLL_PENDING" );
+    }
+    void termsFiles()
+    {
+        using S = WorksuiteConfirmViewStep;
+        QTemporaryDir d;
+        for ( const char* l : { "en", "si" } )
+        {
+            QFile f( d.filePath( QStringLiteral( "LICENSE-%1.txt" ).arg( l ) ) );
+            QVERIFY( f.open( QIODevice::WriteOnly ) );
+            f.write( "Draft\nVersion: 0.1-draft\n" );
+        }
+        QCOMPARE( S::termsFile( d.path(), "si_LK" ), d.filePath( "LICENSE-si.txt" ) );
+        QCOMPARE( S::termsFile( d.path(), "ta" ), d.filePath( "LICENSE-en.txt" ) );
+        QCOMPARE( S::termsFile( d.filePath( "none" ), "en" ), QString() );
+        QCOMPARE( S::termsVersion( "Title\nVersion: 0.1-draft \nText" ), QStringLiteral( "0.1-draft" ) );
+        QCOMPARE( S::termsVersion( "no version" ), QStringLiteral( "unversioned" ) );
+    }
+    // The terms page holds Install back until the box is ticked; the acceptance (version, time) is recorded.
+    void termsGateInstall()
+    {
+        QTemporaryDir d;
+        QFile f( d.filePath( "LICENSE-en.txt" ) );
+        QVERIFY( f.open( QIODevice::WriteOnly ) );
+        f.write( "WorkSuite OS Terms\nVersion: 0.1-draft\n" );
+        f.close();
+        qputenv( "WORKSUITE_TERMS_DIR", QFile::encodeName( d.path() ) );
+        Calamares::JobQueue jq;
+        WorksuiteConfirmViewStep step;
+        step.setConfigurationMap( { { "mode", "terms" } } );
+        step.onActivate();
+        QVERIFY( !step.isNextEnabled() );
+        QVERIFY( !jq.globalStorage()->contains( "worksuiteTerms" ) );
+        auto* box = step.widget()->findChild< QCheckBox* >();
+        QVERIFY( box && !box->isChecked() );
+        box->click();
+        QVERIFY( step.isNextEnabled() );
+        const QVariantMap rec = jq.globalStorage()->value( "worksuiteTerms" ).toMap();
+        QCOMPARE( rec.value( "version" ).toString(), QStringLiteral( "0.1-draft" ) );
+        QVERIFY( !rec.value( "acceptedAt" ).toString().isEmpty() );
+        step.setTermsAccepted( false );
+        QVERIFY( !step.isNextEnabled() );
+        QVERIFY( !jq.globalStorage()->contains( "worksuiteTerms" ) );
+
+        // Unattended images: `accepted: true` in the instance config.
+        WorksuiteConfirmViewStep oem;
+        oem.setConfigurationMap( { { "mode", "terms" }, { "accepted", true } } );
+        oem.onActivate();
+        QVERIFY( oem.isNextEnabled() );
+        qunsetenv( "WORKSUITE_TERMS_DIR" );
+    }
+    // The loading curtain covers the window (QML pages hidden under it), then fades into it and goes.
+    void introCurtain()
+    {
+        QWidget main;
+        main.setObjectName( QStringLiteral( "mainApp" ) );
+        main.resize( 1024, 768 );
+        auto* page = new QWindow;
+        auto* qml = QWidget::createWindowContainer( page, &main );
+        qml->setGeometry( 260, 0, 764, 700 );
+        main.show();
+        QTRY_VERIFY( page->isVisible() );
+        WsIntro::Options o;
+        o.enabled = true;
+        o.title = QStringLiteral( "Starting the installer…" );
+        QPointer< QWidget > c = WsIntro::cover( &main, o );
+        QVERIFY( c && c->isVisible() && c->geometry() == main.rect() );
+        QVERIFY( !page->isVisible() );   // the page's own window is unmapped under the curtain
+        QTRY_VERIFY_WITH_TIMEOUT( c.isNull(), 4000 );
+        QVERIFY( page->isVisible() && qml->isVisible() );
     }
     void sizeText()
     {

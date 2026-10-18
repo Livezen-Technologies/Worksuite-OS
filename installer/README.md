@@ -3,15 +3,25 @@
 Calamares configuration (WSOS-INS-001…009). `settings.conf` → `/etc/calamares/`, `modules/*.conf` →
 `/etc/calamares/modules/`, `branding/worksuite/` → `/usr/share/calamares/branding/worksuite/`; packaged as
 `calamares-settings-worksuite` and placed on the live ISO only. Flow: language → keyboard → disk (erase, LUKS2
-option) → account → summary → **type the disk name** → install → **recovery key** → done. Enrollment (WSOS-INS-006,
-P2) happens in the first-boot setup assistant.
+option) → account → enrollment (optional, **Skip for now**) → summary → **type the disk name** → **accept the terms**
+→ install → **recovery key** → done.
 
 Two WorkSuite modules, installed next to the stock ones in `/usr/lib/<multiarch>/calamares/modules/`:
 
-- `modules/worksuiteconfirm/` (C++ view module, two instances):
+- `modules/worksuiteconfirm/` (C++ view module, four instances):
   - `@erase` after the summary: reads the target disk from the partition step's planned jobs (the same list the summary
     shows; refuses if there isn't exactly one disk), shows its model and size from `lsblk`, and keeps Next disabled
     until the disk name (`nvme0n1`, `sda`, optionally with `/dev/`) is typed exactly (WSOS-INS-003).
+  - `@enroll` after the account page (optional, WSOS-INS-006): server and code, the console's link or its QR code.
+    **Skip for now** (or Continue with both fields empty) clears the fields, writes no token file and moves on; the
+    sidebar marks Your account › Enrollment as skipped.
+  - `@terms` last before Install: the WorkSuite OS terms (`branding/worksuite/terms/LICENSE-<lang>.txt`, en/si/ta,
+    **drafts: replace with the final legal text before release**) and a box that must be ticked before Install;
+    `accepted: true` in `worksuiteconfirm-terms.conf` pre-accepts for unattended/OEM images. The `worksuiteterms` job
+    writes the accepted version and time to `/var/lib/worksuite/terms-accepted` (0644, no personal data).
+  - The loading screen (`WsIntro.cpp`): on the live ISO the installer starts behind the animated veil
+    (`worksuite_greeter.veil --installer`); Calamares draws the same frame when its window first shows and cross-fades
+    into the Language page, the mark gliding into the sidebar logo (reduced motion: a still frame and a plain fade).
   - `@recovery` after install: shows the recovery key once with an "I saved it" checkbox gating Next, then removes it
     from memory; skipped on unencrypted installs (WSOS-INS-004).
   - Build and test: `cmake -S modules/worksuiteconfirm -B build -DWORKSUITE_TESTS=ON && cmake --build build && ctest --test-dir build`

@@ -9,6 +9,13 @@ starts and before shutdown/restart, so the next picture (the desktop, the shutdo
 
 Also a small program: `python3 -m worksuite_greeter.veil [--installer | --title T] -- CMD…` shows the veil, marks the handoff, runs
 CMD (the live installer) and exits with its status; cage shows CMD's window over the veil once it maps.
+
+--installer is the installer's loading screen: the splash's column comes alive (the mark breathes, the ring turns, a
+shimmer runs along the bar under "Starting the installer…"). Calamares is told the animation's clock and texts
+(WORKSUITE_INTRO_*), draws the same frame in its window's first frames (worksuiteconfirm, WsIntro.cpp) and
+cross-fades from it into its first page, the mark gliding into the sidebar's logo: the switch from this window to
+Calamares' shows no cut. Reduced motion (WORKSUITE_REDUCED_MOTION=1, or GTK animations off): a still frame and a
+plain fade.
 """
 import math
 import os
@@ -39,6 +46,42 @@ def column(cx, cy):
     sub_y = title_y + 47
     track_y = sub_y + 48
     return {"ring_y": ring_y, "title_y": title_y, "sub_y": sub_y, "track_y": track_y, "track_x": cx - 210}
+
+
+BREATH_S = 2.4      # one breath of the mark
+SHIMMER_S = 1.6     # one pass of the shimmer along the bar
+SHIMMER_W = 140     # the shimmer's width on the 420 px bar
+
+
+def breath(t):
+    """The mark's breathing at t seconds: (opacity, scale). Starts at rest (1, 1), as the splash left it."""
+    s = 0.5 - 0.5 * math.cos(2 * math.pi * t / BREATH_S)
+    return 1.0 - 0.22 * s, 1.0 + 0.04 * s
+
+
+def shimmer(t, width=420, seg=SHIMMER_W):
+    """Left edge of the shimmer on the bar at t seconds: from just off its left end to just off its right end."""
+    return (t % SHIMMER_S) / SHIMMER_S * (width + seg) - seg
+
+
+def reduced_motion(env=None, gtk_settings=None):
+    """True when the motion should stop: WORKSUITE_REDUCED_MOTION=1, or GTK's animations are off."""
+    env = os.environ if env is None else env
+    if env.get("WORKSUITE_REDUCED_MOTION") == "1":
+        return True
+    try:
+        return gtk_settings is not None and not gtk_settings.get_property("gtk-enable-animations")
+    except (TypeError, AttributeError):
+        return False
+
+
+def intro_env(title, version, t0_us, reduced, env=None):
+    """What Calamares needs to draw this frame on and fade from it (WsIntro.cpp): the clock, texts and motion."""
+    out = dict(os.environ if env is None else env)
+    out.update({"WORKSUITE_INTRO_T0": str(int(t0_us)), "WORKSUITE_INTRO_TITLE": title, "WORKSUITE_INTRO_VERSION": version})
+    if reduced:
+        out["WORKSUITE_REDUCED_MOTION"] = "1"
+    return out
 
 
 def ease_out(p):
@@ -73,6 +116,8 @@ def build(Gtk, Pango, PangoCairo):
             self.title, self.sub, self.phase, self.show_column = title, sub, phase, show_column
             self.mark_only = mark_only   # the ring (spinning, see spin()) and the mark; no texts, no bar
             self.angle = 0.0
+            self.alive = False           # the installer's loading screen: breathing mark, shimmer bar (animate())
+            self.t = 0.0
             self.version = splash_version()
             self.set_draw_func(self._draw)
 
@@ -84,6 +129,18 @@ def build(Gtk, Pango, PangoCairo):
                 now = clock.get_frame_time()
                 t0[0] = now if t0[0] is None else t0[0]
                 self.angle = ((now - t0[0]) / 1e6) * 2 * math.pi / 1.4   # one turn in 1.4 s
+                self.queue_draw()
+                return True
+            self.add_tick_callback(tick)
+
+        def animate(self, t0_us):
+            """The installer's loading screen: the ring turns, the mark breathes and the bar shimmers, all timed from
+            t0_us (GLib's monotonic clock, which Calamares reads too) so its copy of the frame continues this one."""
+            self.alive = True
+
+            def tick(_w, clock):
+                self.t = max(0.0, (clock.get_frame_time() - t0_us) / 1e6)
+                self.angle = self.t * 2 * math.pi / 1.4
                 self.queue_draw()
                 return True
             self.add_tick_callback(tick)
@@ -124,10 +181,11 @@ def build(Gtk, Pango, PangoCairo):
             cr.set_line_cap(1)
             cr.arc(rc[0], rc[1], 54, -math.pi / 2 + self.angle, self.angle)
             cr.stroke()
-            mx, my = cx - 24, g["ring_y"] + 36                   # the mark, 48 px (60-unit artwork scaled 0.8)
-            k = 0.8
+            alpha, scale = breath(self.t) if self.alive else (1.0, 1.0)
+            k = 0.8 * scale                                     # the mark, 48 px (60-unit artwork scaled 0.8)
+            mx, my = cx - 30 * k, g["ring_y"] + 60 - 30 * k
             def rect(x, y, s, rgb):
-                cr.set_source_rgb(*rgb)
+                cr.set_source_rgba(*rgb, alpha) if rgb is not BG else cr.set_source_rgb(*rgb)
                 cr.rectangle(mx + x * k, my + y * k, s * k, s * k)
                 cr.fill()
             rect(20, 0, 40, (0.122, 0.420, 1.0))
@@ -148,7 +206,17 @@ def build(Gtk, Pango, PangoCairo):
             grad.add_color_stop_rgb(0, 0.122, 0.420, 1.0)
             grad.add_color_stop_rgb(1, 0.094, 0.831, 0.941)
             cr.set_source(grad)
-            cr.rectangle(tx, ty, 420, 4)
+            if self.alive:
+                # Indeterminate: a soft band of the bar's gradient running along the track.
+                x0 = tx + shimmer(self.t)
+                band = __import__("cairo").LinearGradient(x0, 0, x0 + SHIMMER_W, 0)
+                band.add_color_stop_rgba(0, 0.122, 0.420, 1.0, 0)
+                band.add_color_stop_rgba(0.5, 0.094, 0.831, 0.941, 1)
+                band.add_color_stop_rgba(1, 0.122, 0.420, 1.0, 0)
+                cr.set_source(band)
+                cr.rectangle(max(tx, x0), ty, max(0, min(tx + 420, x0 + SHIMMER_W) - max(tx, x0)), 4)
+            else:
+                cr.rectangle(tx, ty, 420, 4)
             cr.fill()
             if self.phase:
                 self._text(cr, self.phase, 12, (0.369, 0.451, 0.612), "IBM Plex Mono", Pango.Weight.NORMAL, tx, ty + 14)
@@ -257,7 +325,8 @@ def main(argv=None):
     if argv[:1] == ["--session"]:
         return session_main()
     title = ""
-    if argv[:1] == ["--installer"]:
+    installer = argv[:1] == ["--installer"]
+    if installer:
         from . import i18n
         title, argv = i18n.translation().gettext("Starting the installer…"), argv[1:]
     if argv[:1] == ["--title"]:
@@ -277,7 +346,15 @@ def main(argv=None):
         win = Gtk.ApplicationWindow(application=a, title="WorkSuite")
         win.set_decorated(False)
         win.fullscreen()
-        win.set_child(Veil(title=title, phase=""))
+        v = Veil(title=title, phase="")
+        win.set_child(v)
+        env = None
+        if installer:
+            reduced = reduced_motion(gtk_settings=Gtk.Settings.get_default())
+            t0 = GLib.get_monotonic_time()
+            if not reduced:
+                v.animate(t0)
+            env = intro_env(title, v.version, t0, reduced)
         win.present()
 
         def first_frame():
@@ -285,7 +362,7 @@ def main(argv=None):
             if argv:
                 def run():
                     try:
-                        status[0] = subprocess.call(argv)
+                        status[0] = subprocess.call(argv, env=env)
                     except OSError:
                         status[0] = 127
                     GLib.idle_add(a.quit)

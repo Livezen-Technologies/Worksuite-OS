@@ -12,5 +12,12 @@ case " $* " in
             ${WORKSUITE_PYTHON:-python3} -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_foreign("cairo"); import worksuite_greeter.ui' >/dev/null 2>&1; then
             export WORKSUITE_GREETER_CHECKED=1
         fi ;;
+    # The live installer the same way: its loading screen (the veil) is up as soon as cage is, and Plymouth's last
+    # frame stays on screen meanwhile (greetd: plymouth deactivate; quit --retain-splash once the veil has drawn).
+    *" /usr/lib/worksuite/worksuite-installer-start "*|*" /usr/lib/worksuite/worksuite-installer-start")
+        if PYTHONPATH=/usr/lib/worksuite/greeter${PYTHONPATH:+:$PYTHONPATH} \
+            ${WORKSUITE_PYTHON:-python3} -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_foreign("cairo"); from gi.repository import Gtk; import worksuite_greeter.veil, worksuite_greeter.i18n' >/dev/null 2>&1; then
+            export WORKSUITE_INSTALLER_CHECKED=1
+        fi ;;
 esac
 exec ${WORKSUITE_CAGE:-cage} "$@"

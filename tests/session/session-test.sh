@@ -314,10 +314,15 @@ check "cage: greeter preloaded and checked before cage starts" \
 check "cage: no GTK 4, the greeter wrapper decides inside cage" \
   "$(PY_RC=1 WORKSUITE_WLR_ENV="$T/wlr-env" WORKSUITE_CAGE="$T/cage" WORKSUITE_PYTHON="$T/py" sh "$BIN/worksuite-cage" -s -- /usr/lib/worksuite/worksuite-greeter)" \
   "cage -s -- /usr/lib/worksuite/worksuite-greeter checked="
-rm -f "$T/py.log"
-check "cage: the installer is not preloaded" \
-  "$(WORKSUITE_WLR_ENV="$T/wlr-env" WORKSUITE_CAGE="$T/cage" WORKSUITE_PYTHON="$T/py" sh "$BIN/worksuite-cage" -s -- /usr/lib/worksuite/worksuite-installer-start; [ -e "$T/py.log" ] && echo ran)" \
+printf '#!/bin/sh\necho "cage $* checked=${WORKSUITE_INSTALLER_CHECKED:-}"\n' > "$T/cage"; chmod +x "$T/cage"
+check "cage: the installer's loading screen preloaded and checked before cage starts" \
+  "$(WORKSUITE_WLR_ENV="$T/wlr-env" WORKSUITE_CAGE="$T/cage" WORKSUITE_PYTHON="$T/py" sh "$BIN/worksuite-cage" -s -- /usr/lib/worksuite/worksuite-installer-start)" \
+  "cage -s -- /usr/lib/worksuite/worksuite-installer-start checked=1"
+check "cage: no GTK 4, the installer starts without the loading screen" \
+  "$(PY_RC=1 WORKSUITE_WLR_ENV="$T/wlr-env" WORKSUITE_CAGE="$T/cage" WORKSUITE_PYTHON="$T/py" sh "$BIN/worksuite-cage" -s -- /usr/lib/worksuite/worksuite-installer-start)" \
   "cage -s -- /usr/lib/worksuite/worksuite-installer-start checked="
+grep -q 'WORKSUITE_INSTALLER_CHECKED:-}" = 1' "$ROOT/live-build/config/includes.chroot/usr/lib/worksuite/worksuite-installer-start" \
+  && ok "installer start: no second GTK check inside cage" || bad "installer start: no second GTK check inside cage"
 grep -q 'worksuite-session-veil' "$ROOT/services/session/labwc/autostart" && grep -q '^services/session/bin/worksuite-session-veil usr/lib/worksuite/$' "$ROOT/packaging/debian/worksuite-session.install" \
   && grep -q "shell-ready" "$ROOT/shell/electron/main.ts" \
   && ok "session veil from Labwc's start until the shell's first frame" || bad "session veil from Labwc's start until the shell's first frame"
