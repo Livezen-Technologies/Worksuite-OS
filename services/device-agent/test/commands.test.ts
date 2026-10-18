@@ -53,6 +53,12 @@ test('RemoteWipe: 30-day max, scope and approval required', () => {
   assert.equal((r(make({ command: 'RemoteWipe', args: { scope: 'everything' } })) as any).reason, 'BAD_ARGS');
 });
 
+test('CollectApprovedDiagnostics: only the profiles the agent implements', () => {
+  const r = (e: unknown) => validateCommand(e, deps());
+  for (const p of ['basic', 'session', 'network', 'update']) assert.equal(r(make({ command: 'CollectApprovedDiagnostics', args: { bundle_profile: p } })).ok, true, p);
+  assert.equal((r(make({ command: 'CollectApprovedDiagnostics', args: { bundle_profile: 'everything' } })) as any).reason, 'BAD_ARGS');
+});
+
 test('expired ids are pruned from the replay store but still rejected as expired', () => {
   const d = deps(); const e = make();
   assert.equal(validateCommand(e, d).ok, true);

@@ -1,6 +1,7 @@
 // Remote command envelope validation (WSOS-MDM-003, WSOS-MDM-004, WSOS-MDM-006, WSOS-WIPE-004).
 // There is deliberately no "RunShell"/"Exec" command: unknown commands are rejected.
 import { verify, type KeyObject } from 'node:crypto';
+import { DIAGNOSTIC_PROFILES } from './diagnostics.ts';
 
 export const ALLOWED_COMMANDS = [
   'RefreshPolicy',
@@ -72,7 +73,7 @@ export function signingBytes(env: Omit<CommandEnvelope, 'signature'> & { signatu
 const ARG_CHECKS: Partial<Record<CommandName, (a: Record<string, unknown>) => boolean>> = {
   InstallApprovedApplication: (a) => typeof a.catalog_id === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(a.catalog_id),
   RemoteWipe: (a) => (a.scope === 'worksuite_data' || a.scope === 'full_device') && typeof a.approval_id === 'string',
-  CollectApprovedDiagnostics: (a) => typeof a.bundle_profile === 'string',
+  CollectApprovedDiagnostics: (a) => (DIAGNOSTIC_PROFILES as readonly unknown[]).includes(a.bundle_profile),
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

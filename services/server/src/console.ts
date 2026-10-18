@@ -19,7 +19,8 @@ import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSe
 const SESSION_TTL = 8 * 3_600_000;
 const COOKIE = 'ws_admin';
 const ROUTINE = new Set(['RefreshPolicy', 'RequestLock', 'RebootDuringWindow', 'ScheduleUpdate', 'InstallApprovedApplication', 'CollectApprovedDiagnostics']);
-const DIAG_PROFILES = new Set(['basic', 'network', 'update']);
+/** CollectApprovedDiagnostics profiles: exactly what the device agent implements (services/device-agent/src/diagnostics.ts). */
+export const DIAG_PROFILES = new Set(['basic', 'session', 'network', 'update']);
 
 interface Admin { id: number; org_id: number; email: string; name: string }
 
