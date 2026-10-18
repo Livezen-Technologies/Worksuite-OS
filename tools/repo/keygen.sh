@@ -14,4 +14,4 @@ gpg --batch --quiet --pinentry-mode loopback --passphrase "${WORKSUITE_KEY_PASSP
 fpr=$(gpg --batch --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')
 gpg --batch --export "$fpr" > "$out/archive.gpg"
 echo "$fpr" > "$out/fingerprint"
-echo "archive signing key $fpr; public key: $out/archive.pgp"
+echo "archive signing key $fpr; public key: $out/archive.gpg"
