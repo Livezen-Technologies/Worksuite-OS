@@ -123,6 +123,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   },
   hwDevices: () => ipcRenderer.invoke('ws:hwDevices'),
   hwDriverReport: (check?: boolean) => ipcRenderer.invoke('ws:hwDriverReport', check ? 'check' : ''),
+  hwMokPassword: () => ipcRenderer.invoke('ws:hwMokPassword'),
   driversNotify: (summary: string, body: string) => ipcRenderer.invoke('ws:driversNotify', String(summary), String(body)),
   onDriversChanged: (cb: (r: unknown) => void) => {
     const listener = (_e: unknown, r: unknown) => cb(r)

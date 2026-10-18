@@ -162,7 +162,7 @@ function managerEnv(over: Partial<DriverEnv> = {}) {
     devices: () => [dev({}), dev({ id: 'pci:0000:01:00.0', cls: '0x030000', vendor: '10de', product: '2684', driver: 'nouveau', module: 'nouveau', modaliases: [] })],
     kernelLog: async () => KLOG, firmwarePresent: () => false, contents: async () => CONTENTS, installed: () => false,
     policy: () => null, metered: async () => false, secureBoot: () => false, arch: 'amd64', now: () => 5 * DAY,
-    load: () => st as never, save: (s) => { st = s as never; }, audit: (e) => audits.push(e), writeFile() {},
+    load: () => st as never, save: (s) => { st = s as never; }, audit: (e) => audits.push(e), writeFile() {}, bootId: () => 'boot-1',
     enqueue: (_c, body) => { jobs++; void body(() => {}); return jobs; },
     ...over,
   };
@@ -205,7 +205,15 @@ test('manager: Secure Boot GPU install asks MokManager to enrol the DKMS key wit
   d.install(1000, ['gpu:nvidia-driver']);
   await new Promise((res) => setTimeout(res, 10));
   assert.ok(m.calls.some((c) => c === 'mokutil --import /var/lib/dkms/mok.pub --hash-file /var/lib/worksuite-package-service/mok.hash'));
-  assert.match(d.status().mok!.password, /^\d{8}$/);
+  // Not in the report every local user can read (GetDrivers, DriversChanged), only through the admin call.
+  assert.deepEqual(d.status().mok, { pending: true });
+  assert.ok(!JSON.stringify(d.status()).includes((m.state() as { mok: { password: string } }).mok.password));
+  const pw = await d.mokPassword();
+  assert.match(pw!, /^\d{8}$/);
+  // After the next boot the password is gone.
+  const next = new DriverManager({ ...m.env, bootId: () => 'boot-2' });
+  assert.equal(next.status().mok, undefined);
+  assert.equal(await next.mokPassword(), null);
   assert.equal((m.state() as { gpu?: { pending_boot?: boolean } }).gpu?.pending_boot, true);
   assert.match(mokPassword(), /^\d{8}$/);
 });
@@ -218,4 +226,19 @@ test('manager: failed first boot after the nvidia driver → purge back to nouve
   assert.ok(m.calls.some((c) => c.startsWith('apt-get -y -q purge -- nvidia-driver')));
   assert.equal(d.status().gpu_fallback, true);
   assert.equal(await d.gpuBootCheck(false, false), false, 'only once');
+});
+
+test('MOK password: only through the polkit-guarded call; cleared once the key is enrolled', async () => {
+  const { ACTIONS } = await import('../src/dbus.ts');
+  assert.equal(ACTIONS.GetMokPassword, 'lk.worksuite.drivers.install');
+  assert.equal(ACTIONS.GetDrivers, null);
+  const m = managerEnv({ secureBoot: () => true });
+  const d = new DriverManager(m.env);
+  await d.check('manual');
+  d.install(1000, ['gpu:nvidia-driver']);
+  await new Promise((res) => setTimeout(res, 10));
+  const enrolled = new DriverManager({ ...m.env, run: async (cmd, args) => ({ code: 0, stdout: cmd === 'mokutil' && args[0] === '--test-key' ? '/var/lib/dkms/mok.pub is already enrolled' : '', stderr: '' }) });
+  assert.equal(await enrolled.mokPassword(), null);
+  assert.equal((m.state() as { mok?: unknown }).mok, undefined);
+  assert.equal(enrolled.status().mok, undefined);
 });

@@ -104,7 +104,7 @@
          (at most once a minute) and returns the report; root callers may pass "connectivity" (NetworkManager dispatcher,
          connectivity FULL) or "timer", which check at most once a day or when the hardware changed, in the background.
          Report JSON: {state, checked_at, online_search, metered, secure_boot, devices:[{id, kind, driver, status,
-         offers}], offers:[{id, device_id, kind, packages, name, summary, ...}], auto_installed, gpu_fallback?, mok?}.
+         offers}], offers:[{id, device_id, kind, packages, name, summary, ...}], auto_installed, gpu_fallback?, mok?: {pending}}.
          InstallDrivers(offer ids): polkit lk.worksuite.drivers.install; progress phase = offer id. -->
     <method name="GetDrivers"><arg name="report_json" type="s" direction="out"/></method>
     <method name="CheckDrivers">
@@ -115,6 +115,10 @@
       <arg name="offers" type="as" direction="in"/>
       <arg name="job" type="o" direction="out"/>
     </method>
+    <!-- polkit: lk.worksuite.drivers.install. The one-time MokManager password after a DKMS/NVIDIA install under Secure
+         Boot ("" when none is pending or the key is enrolled). Never in GetDrivers or DriversChanged; dropped after the
+         next boot. -->
+    <method name="GetMokPassword"><arg name="password" type="s" direction="out"/></method>
     <signal name="DriversChanged"><arg name="report_json" type="s"/></signal>
     <signal name="UpdateStatusChanged"><arg name="status_json" type="s"/></signal>
     <property name="State" type="s" access="read"/>           <!-- idle | busy | interrupted -->

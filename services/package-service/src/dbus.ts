@@ -51,6 +51,8 @@ export const ACTIONS: Record<string, string | null> = {
   GetDrivers: null,
   CheckDrivers: null,
   InstallDrivers: 'lk.worksuite.drivers.install',
+  // The one-time Secure Boot (MOK) password: administrators only, never in the public report.
+  GetMokPassword: 'lk.worksuite.drivers.install',
 };
 
 export interface Authority {
@@ -158,6 +160,10 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
         const reason = uid === 0 && (b[0] === 'connectivity' || b[0] === 'timer') ? b[0] : 'manual';
         if (reason !== 'manual') { void d.check(reason).catch(() => {}); return Message.newMethodReturn(msg, 's', [JSON.stringify(d.status())]); }
         return Message.newMethodReturn(msg, 's', [JSON.stringify(await d.check('manual'))]);
+      }
+      case 'GetMokPassword': {
+        if (!extra.drivers) throw new ServiceError('Failed', 'drivers not available');
+        return Message.newMethodReturn(msg, 's', [(await extra.drivers.mokPassword()) ?? '']);
       }
       case 'InstallDrivers': {
         if (!extra.drivers) throw new ServiceError('Failed', 'drivers not available');

@@ -206,6 +206,7 @@ export function driverEnv(svc: PackageService): DriverEnv {
     load: () => { try { return JSON.parse(readFileSync(DRIVERS_STATE, 'utf8')); } catch { return {}; } },
     save: (st) => { mkdirSync('/var/lib/worksuite-package-service', { recursive: true }); writeFileSync(DRIVERS_STATE + '.tmp', JSON.stringify(st), { mode: 0o600 }); renameSync(DRIVERS_STATE + '.tmp', DRIVERS_STATE); },
     audit: linuxEnv.audit,
+    bootId: () => readOr('/proc/sys/kernel/random/boot_id'),
     writeFile: (p, text) => writeFileSync(p, text, { mode: 0o600 }),
     enqueue: (caller, body) => svc.driverJob(caller, body),
   };

@@ -112,7 +112,10 @@ image doesn't carry is found online:
   administrator) runs in the job queue with source checks: `apt-get install` (firmware, DKMS + headers, NVIDIA) or
   `fwupdmgr update`. Firmware for a loaded driver reloads it (`modprobe -r` / `modprobe`), else a restart is asked for.
 - **Secure Boot**: DKMS modules are signed with DKMS's MOK; the service runs `mokutil --import /var/lib/dkms/mok.pub`
-  with a one-time 8-digit password (`--hash-file`), and Settings › Drivers shows the MokManager steps and the password.
+  with a one-time 8-digit password (`--hash-file`). The password is kept in the root-only state file, never in the report
+  (`GetDrivers`/`DriversChanged` only say `mok.pending`); Settings › Drivers shows the MokManager steps and fetches the
+  password through `GetMokPassword` (polkit `lk.worksuite.drivers.install`, administrator). It is dropped once
+  `mokutil --test-key` says the key is enrolled, or after the next boot.
   The NVIDIA driver never installs automatically under Secure Boot.
 - **GPU rollback**: after installing the NVIDIA driver the next boot is "pending"; one minute after the service starts,
   if `greetd` isn't active or the `nvidia` module isn't loaded, it purges the NVIDIA packages (nouveau is no longer

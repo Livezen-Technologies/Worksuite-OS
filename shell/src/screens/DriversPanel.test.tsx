@@ -61,11 +61,16 @@ describe('Settings › Drivers', () => {
   })
 
   it('Secure Boot: the recommendation says so, and a pending MOK enrolment shows the steps and password', async () => {
-    mockOs(report({ secure_boot: true, offers: [{ ...NV, summary: 'nvidia_secure_boot' }], mok: { password: '12345678', pending: true } }))
+    mockOs(report({ secure_boot: true, offers: [{ ...NV, summary: 'nvidia_secure_boot' }], mok: { pending: true } }))
+    const pw = vi.spyOn(os, 'hwMokPassword').mockResolvedValue({ ok: true, value: '12345678' })
     const el = await mount(<DriversPanel onOpenUpdates={() => {}} />)
     expect(el.textContent).toContain('Secure Boot is on')
     const mok = section(el, 'One more step at the next restart')
     expect(mok.textContent).toContain('Enroll MOK')
+    // The report carries no password; it appears only after the administrator call.
+    expect(mok.textContent).not.toContain('1234-5678')
+    expect(pw).not.toHaveBeenCalled()
+    await act(async () => { [...mok.querySelectorAll('button')].find((b) => b.textContent!.startsWith('Show the password'))!.click() })
     expect(mok.textContent).toContain('1234-5678')
   })
 
@@ -82,6 +87,16 @@ describe('Settings › Drivers', () => {
     await act(async () => { done({ ok: true, value: report() }) })
     expect(el.textContent).not.toContain('Looking for drivers online')
     expect(el.textContent).toContain('1 driver update')
+  })
+
+  it('a non-administrator who can’t get the password sees a friendly refusal, never the password', async () => {
+    mockOs(report({ secure_boot: true, mok: { pending: true } }))
+    vi.spyOn(os, 'hwMokPassword').mockResolvedValue({ ok: false, error: 'not_authorized' })
+    const el = await mount(<DriversPanel onOpenUpdates={() => {}} />)
+    const mok = section(el, 'One more step at the next restart')
+    await act(async () => { [...mok.querySelectorAll('button')].find((b) => b.textContent!.startsWith('Show the password'))!.click() })
+    expect(mok.querySelector('[role=alert]')).not.toBeNull()
+    expect(mok.textContent).not.toMatch(/\d{4}-\d{4}/)
   })
 
   it('policy off, metered and fallback notes; no package service → the honest fallback', async () => {

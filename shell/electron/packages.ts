@@ -103,6 +103,8 @@ export function packageClient(exec: Exec = realExec) {
     bundleInspect: (path: string): Promise<Reply<unknown>> => (ABS.test(path) && path.endsWith('.wsupdate') ? jsonCall(exec, 'InspectBundle', 's', [path]) : bad()),
     // Drivers (Settings › Drivers): the report, a check now (waits for it), and installing offers (polkit).
     driverReport: (check = false): Promise<Reply<unknown>> => (check ? jsonCall(exec, 'CheckDrivers', 's', ['manual']) : jsonCall(exec, 'GetDrivers', '', [])),
+    /** The one-time MOK password (polkit: administrator); '' when none is pending. */
+    mokPassword: async (): Promise<Reply<string>> => { const r = await call(exec, 'GetMokPassword', '', []); return r.ok ? { ok: true, value: String(r.value[0] ?? '') } : r },
     installDrivers: (ids: string[]): Promise<Reply<string>> => {
       const ok = ids.filter((x) => /^[a-z]+:[A-Za-z0-9+._-]{1,100}$/.test(x)).slice(0, 50)
       return ok.length ? jobCall(exec, 'InstallDrivers', 'as', [String(ok.length), ...ok]) : bad()

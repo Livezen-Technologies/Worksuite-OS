@@ -360,6 +360,7 @@ app.whenReady().then(() => {
   handle('ws:hwDevices', () => { try { return { ok: true, value: listDevices() } } catch { return { ok: false, error: 'unavailable' } } })
   // Settings › Drivers: the package service's driver report (hardware scan, online search) and installs (polkit).
   handle('ws:hwDriverReport', (check) => pkg.driverReport(check === 'check'))
+  handle('ws:hwMokPassword', () => pkg.mokPassword())
   handle('ws:hwInstallDrivers', (...ids) => pkg.installDrivers(ids.map(String)))
   handle('ws:sysUsers', () => localUsers())
   // Settings › Users › Sign-in options. Every change runs worksuite-signin through pkexec; the PIN goes on stdin.

@@ -54,8 +54,9 @@ export interface DriverReport {
   auto_installed: string[];
   /** Set after a GPU fallback (nvidia → nouveau) on the last boot. */
   gpu_fallback?: boolean;
-  /** Secure Boot: a MOK enrolment is waiting for the next restart (one-time password for MokManager). */
-  mok?: { password: string; pending: boolean };
+  /** Secure Boot: a MOK enrolment is waiting for the next restart. The one-time password is never in the report
+   *  (every local user can read it); administrators get it through GetMokPassword (polkit). */
+  mok?: { pending: boolean };
 }
 
 // ---------- policy ----------

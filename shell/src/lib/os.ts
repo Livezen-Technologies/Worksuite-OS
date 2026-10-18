@@ -114,6 +114,8 @@ export interface WorkSuiteApi {
   hwDriverReport(check?: boolean): Promise<CloudResult<DriverReport>>
   /** Install driver offers (administrator, polkit); progress arrives through onPkgJob with phase = offer id. */
   hwInstallDrivers(ids: string[]): Promise<CloudResult<string>>
+  /** The one-time Secure Boot password for MokManager: administrators only (polkit prompt); '' when none. */
+  hwMokPassword(): Promise<CloudResult<string>>
   /** The package service found drivers (after Wi-Fi or Ethernet connected, daily, or a check). */
   onDriversChanged(cb: (r: DriverReport) => void): () => void
   /** A notice in the notification centre; clicking it opens Settings › Drivers (onOpenSettings). */
@@ -252,7 +254,7 @@ export type DriverStatus = 'working' | 'missing_firmware' | 'update_available' |
 export interface DriverReport {
   state: 'idle' | 'checking' | 'off' | 'error'; checked_at: number | null; online_search: boolean; metered: boolean; secure_boot: boolean
   devices: { id: string; kind: 'wifi' | 'ethernet' | 'display' | 'bluetooth' | 'other'; driver: string | null; status: DriverStatus; offers: string[] }[]
-  offers: DriverOffer[]; auto_installed: string[]; gpu_fallback?: boolean; mok?: { password: string; pending: boolean }
+  offers: DriverOffer[]; auto_installed: string[]; gpu_fallback?: boolean; mok?: { pending: boolean }
 }
 
 export interface PackagePreview {
@@ -634,6 +636,7 @@ const stub: WorkSuiteApi = {
     return () => { stubDriverListeners.delete(cb); if (t) clearTimeout(t) }
   },
   async driversNotify() { return 0 },
+  async hwMokPassword() { return PV.get('mok') ? { ok: true, value: '48213907' } : { ok: true, value: '' } },
   onOpenSettings() { return () => {} },
   async hwInstallDrivers(ids) {
     if (!['catalog', 'drivers', 'nvidia'].includes(PV.get('hw') ?? '')) return { ok: false, error: 'unavailable' }
@@ -793,7 +796,7 @@ function stubReport(hw: string | null): DriverReport {
       { id: 'pci:0000:00:02.0', kind: 'display', driver: 'i915', status: 'working', offers: [] },
       ...(nv ? [{ id: 'pci:0000:01:00.0', kind: 'display' as const, driver: 'nouveau', status: 'optional_driver' as const, offers: ['gpu:nvidia-driver'] }] : []),
     ],
-    offers, auto_installed: [], ...(PV.get('mok') ? { mok: { password: '48213907', pending: true } } : {}),
+    offers, auto_installed: [], ...(PV.get('mok') ? { mok: { pending: true } } : {}),
   }
 }
 const STUB_OFFERS: DriverOffer[] = [

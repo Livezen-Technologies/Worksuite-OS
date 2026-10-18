@@ -26,13 +26,18 @@ export interface DriverEnv {
   secureBoot(): boolean;
   arch: string;
   now(): number;
-  load(): TriggerState & { report?: DriverReport; gpu?: { pending_boot?: boolean } };
-  save(s: TriggerState & { report?: DriverReport; gpu?: { pending_boot?: boolean } }): void;
+  load(): DriverState;
+  save(s: DriverState): void;
   audit(event: string, fields: Record<string, unknown>): void;
+  /** This boot's id (/proc/sys/kernel/random/boot_id): the MOK password is dropped after the next boot. */
+  bootId(): string;
   writeFile(path: string, text: string): void;
   /** Install packages / firmware through the package service's queue; progress per offer id. */
   enqueue(caller: number, body: (progress: (phase: string, pct: number) => void) => Promise<void>): number;
 }
+
+/** Root-only state (0600): the one-time MOK password lives here, never in the report. */
+export type DriverState = TriggerState & { report?: DriverReport; gpu?: { pending_boot?: boolean }; mok?: { password: string; boot: string } };
 
 export class DriverManager extends EventEmitter {
   private report: DriverReport;
@@ -42,7 +47,10 @@ export class DriverManager extends EventEmitter {
     super();
     this.env = env;
     const pol = driverPolicy(env.policy());
-    this.report = env.load().report ?? { state: pol.online_search ? 'idle' : 'off', checked_at: null, online_search: pol.online_search, metered: false, secure_boot: env.secureBoot(), devices: [], offers: [], auto_installed: [] };
+    const st = env.load();
+    // The enrolment happens (or is skipped) at the next boot: after that the password is useless, so drop it.
+    if (st.mok && st.mok.boot !== env.bootId()) { delete st.mok; if (st.report) delete st.report.mok; env.save(st); env.audit('mok_password_cleared', {}); }
+    this.report = st.report ?? { state: pol.online_search ? 'idle' : 'off', checked_at: null, online_search: pol.online_search, metered: false, secure_boot: env.secureBoot(), devices: [], offers: [], auto_installed: [] };
   }
 
   status(): DriverReport { return this.report; }
@@ -121,6 +129,20 @@ export class DriverManager extends EventEmitter {
     return report;
   }
 
+  /** The one-time MOK password, for the administrator who installs (D-Bus GetMokPassword, polkit). null when no
+   *  enrolment is pending, or once the key is enrolled. */
+  async mokPassword(): Promise<string | null> {
+    const st = this.env.load();
+    if (!st.mok) return null;
+    const t = await this.env.run('mokutil', ['--test-key', '/var/lib/dkms/mok.pub']);
+    if (/already enrolled/i.test(t.stdout + t.stderr)) {
+      delete st.mok; if (st.report) delete st.report.mok; this.env.save(st);
+      this.publish({ ...this.report, mok: undefined });
+      return null;
+    }
+    return st.mok.password;
+  }
+
   /** Install offers (polkit lk.worksuite.drivers.install for people; root for automatic installs). */
   install(caller: number, ids: string[], automatic = false): number {
     const chosen = ids.map((id) => this.report.offers.find((o) => o.id === id)).filter((o): o is DriverOffer => !!o);
@@ -179,7 +201,9 @@ export class DriverManager extends EventEmitter {
     this.env.writeFile(file, hash.stdout.trim() + '\n');
     await this.must('mokutil', ['--import', pub, '--hash-file', file]);
     this.env.audit('mok_import_requested', {});
-    this.publish({ ...this.report, mok: { password: pw, pending: true } });
+    const st = this.env.load();
+    this.env.save({ ...st, mok: { password: pw, boot: this.env.bootId() } });
+    this.publish({ ...this.report, mok: { pending: true } });
   }
 
   private async must(cmd: string, args: string[]) {

@@ -136,7 +136,7 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
       {r?.state === 'off' && <Empty title={t('drv.off')}>{t('drv.offHint')}</Empty>}
       {r?.metered && list.length > 0 && <Note tone="amber">{t('drv.metered')}</Note>}
       {r?.gpu_fallback && <Note tone="amber">{t('drv.gpuFallback')}</Note>}
-      {r?.mok?.pending && <MokSteps password={r.mok.password} />}
+      {r?.mok?.pending && <MokSteps />}
       {gpu.map((o) => (
         <section key={o.id} aria-label={t('drv.nvidiaTitle')} className="flex flex-col gap-2.5 rounded-xl border border-[rgba(95,211,154,0.35)] bg-[rgba(95,211,154,0.08)] px-[18px] py-4">
           <div className="flex items-center gap-3">
@@ -226,8 +226,12 @@ function Note({ tone, children }: { tone: 'amber'; children: React.ReactNode }) 
 }
 
 /** Secure Boot: the driver's signing key is enrolled at the next restart (MokManager, a blue screen before WorkSuite). */
-export function MokSteps({ password }: { password: string }) {
-  const pw = `${password.slice(0, 4)}-${password.slice(4)}`
+export function MokSteps() {
+  // The password isn't in the report anyone can read: an administrator asks for it (polkit prompt).
+  const [password, setPassword] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const show = () => void os.hwMokPassword().then((r) => { if (r.ok) setPassword(r.value); else setErr(friendlyError(r.error, 'package').text) })
+  const pw = password ? `${password.slice(0, 4)}-${password.slice(4)}` : '····-····'
   return (
     <section aria-label={t('drv.mok.title')} className="flex flex-col gap-2 rounded-xl border border-[rgba(255,159,90,0.35)] bg-[rgba(255,159,90,0.08)] px-[18px] py-4">
       <span className="text-sm font-semibold">{t('drv.mok.title')}</span>
@@ -235,7 +239,10 @@ export function MokSteps({ password }: { password: string }) {
       <ol className="m-0 flex list-decimal flex-col gap-1 pl-5 text-[13px] text-[#C9D6EE]">
         <li>{t('drv.mok.step1')}</li><li>{t('drv.mok.step2')}</li><li>{t('drv.mok.step3', { password: pw })}</li><li>{t('drv.mok.step4')}</li>
       </ol>
-      <span className="font-mono text-lg tracking-[0.2em]" aria-label={t('drv.mok.password')}>{pw}</span>
+      {password
+        ? <span className="font-mono text-lg tracking-[0.2em]" aria-label={t('drv.mok.password')}>{pw}</span>
+        : <button type="button" onClick={show} className={`${btnGhost} self-start`}>{t('drv.mok.show')}</button>}
+      {err && <span role="alert" className="text-[13px] text-[#FFB0A6]">{err}</span>}
     </section>
   )
 }

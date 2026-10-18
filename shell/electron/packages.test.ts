@@ -177,5 +177,8 @@ describe('drivers', () => {
     await packageClient(f.exec).installDrivers(['fw:firmware-iwlwifi', '--evil', 'gpu:nvidia-driver'])
     expect(f.calls[2].slice(-5)).toEqual(['InstallDrivers', 'as', '2', 'fw:firmware-iwlwifi', 'gpu:nvidia-driver'])
     expect(await packageClient(f.exec).installDrivers(['; rm'])).toEqual({ ok: false, error: 'invalid_argument' })
+    await packageClient(f.exec).mokPassword()
+    expect(f.calls[3]).toContain('--allow-interactive-authorization=yes')
+    expect(f.calls[3].at(-1)).toBe('GetMokPassword')
   })
 })
