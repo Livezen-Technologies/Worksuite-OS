@@ -90,6 +90,8 @@ jobs:
           node-version: 22
       - run: node --test tools/sbom/spdx.test.mjs
       - run: node --test tools/release/publish-update-center.test.mjs
+      # Ring names, aliases and suites agree everywhere (tools/release/rings.mjs, docs/release-channels.md).
+      - run: node --test tools/release/rings.test.mjs
       # No private key material in the tree (WSOS-SEC-011).
       - run: "! git grep -I -l -e 'BEGIN [A-Z ]*PRIVATE KEY' -- . ':!docs/**'"
 

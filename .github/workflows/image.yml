@@ -178,7 +178,8 @@ jobs:
   # Optional: publish the tag to the WorkSuite Update Center (Livezen-Technologies/worksite-download, §18) so devices
   # update from it. Runs only when the UPDATE_CENTER_TOKEN secret is set: an Update Center API client of kind CI with
   # os.publish ("<client_id>.<secret>"). Variables: UPDATE_CENTER_URL (default https://download.worksuitecloud.com),
-  # UPDATE_CENTER_RING (development | pilot; default development; stable only by promotion in the Update Center),
+  # UPDATE_CENTER_RING (development | pilot, or the Update Center's aliases canary | beta; default development; stable
+  # only by promotion in the Update Center; mapping in tools/release/rings.mjs, docs/release-channels.md),
   # UPDATE_CENTER_RELEASE_TYPE (feature | security | emergency; default feature), UPDATE_CENTER_MIN_VERSION.
   # The APT repository is signed here with the archive key: secret WORKSUITE_ARCHIVE_GPG_KEY (ASCII-armoured private
   # key from tools/repo/keygen.sh) and optional WORKSUITE_KEY_PASSPHRASE. Without the key only the ISOs are published.
@@ -212,7 +213,8 @@ jobs:
         run: |
           export GNUPGHOME=$(mktemp -d)
           printf '%s\n' "$WORKSUITE_ARCHIVE_GPG_KEY" | gpg --batch --import
-          case "$RING" in development|canary) suite=trixie-dev ;; pilot|beta) suite=trixie-pilot ;; *) echo "ring must be development or pilot" >&2; exit 1 ;; esac
+          # Ring → suite from the one mapping (docs/release-channels.md); canary/beta are accepted as aliases.
+          suite=$(node tools/release/rings.mjs ci-suite "$RING")
           debs=$(find dist -name '*.deb' | sort -u)
           tools/repo/publish.sh apt-repo "$suite" $debs
           gpg --batch --export > apt-repo/worksuite-archive-keyring.gpg
