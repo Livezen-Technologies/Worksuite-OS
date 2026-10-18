@@ -856,7 +856,7 @@ export default function Settings({ onClose }: WindowProps) {
   const { status } = useOsUpdate()
   useEffect(() => onSettingsSection((s) => { setSection(isSection(s) ? s : ALIAS[s] ?? 'Network'); setKbTab(s === 'On-screen keyboard' ? 'osk' : 'shortcuts') }), [])
   useEffect(() => {
-    void os.hwDriverUpdates().then((r) => setDriverCount(r.ok ? r.value.length : 0)).catch(() => {})
+    void os.hwDriverReport(false).then((r) => setDriverCount(r.ok ? r.value.offers.length : 0)).catch(() => {})
     void os.sysUsers().then((r) => {
       if (!r.available) return
       const me = r.value.users.find((u) => u.login === r.value.current)

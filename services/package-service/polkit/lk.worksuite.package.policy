@@ -40,6 +40,15 @@
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
   </action>
+  <action id="lk.worksuite.drivers.install">
+    <description>Install drivers and firmware</description>
+    <message>Authentication is required to install drivers for this computer</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
   <action id="lk.worksuite.repair">
     <description>Repair interrupted package operations</description>
     <message>Authentication is required to repair system packages</message>

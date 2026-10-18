@@ -122,7 +122,19 @@ contextBridge.exposeInMainWorld('worksuite', {
     return () => { ipcRenderer.removeListener('ws:pkgJob', listener) }
   },
   hwDevices: () => ipcRenderer.invoke('ws:hwDevices'),
-  hwDriverUpdates: () => ipcRenderer.invoke('ws:hwDriverUpdates'),
+  hwDriverReport: (check?: boolean) => ipcRenderer.invoke('ws:hwDriverReport', check ? 'check' : ''),
+  hwMokPassword: () => ipcRenderer.invoke('ws:hwMokPassword'),
+  driversNotify: (summary: string, body: string) => ipcRenderer.invoke('ws:driversNotify', String(summary), String(body)),
+  onDriversChanged: (cb: (r: unknown) => void) => {
+    const listener = (_e: unknown, r: unknown) => cb(r)
+    ipcRenderer.on('ws:driversChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:driversChanged', listener) }
+  },
+  onOpenSettings: (cb: (section: string) => void) => {
+    const listener = (_e: unknown, s: unknown) => cb(String(s))
+    ipcRenderer.on('ws:openSettings', listener)
+    return () => { ipcRenderer.removeListener('ws:openSettings', listener) }
+  },
   hwInstallDrivers: (ids: string[]) => ipcRenderer.invoke('ws:hwInstallDrivers', ...(Array.isArray(ids) ? ids.map(String) : [])),
   sysUsers: () => ipcRenderer.invoke('ws:sysUsers'),
   signinMethods: () => ipcRenderer.invoke('ws:signinMethods'),

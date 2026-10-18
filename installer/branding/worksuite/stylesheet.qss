@@ -206,6 +206,9 @@ QDialogButtonBox { background: transparent; }
 #wsEnroll #wsConfirmInput:focus { border-color: #1F6BFF; }
 #wsSecondary { min-height: 40px; padding: 0 18px; border-radius: 10px; border: 1px solid rgba(127, 178, 255, 0.3); background: transparent; color: #E8EEFA; }
 #wsSecondary:hover { background: rgba(255, 255, 255, 0.06); }
+#wsHint { color: #8FA3C8; font-size: 13px; }
+/* Terms page: the agreement in a scrolling panel. */
+#wsTermsText { background: #081634; color: #C9D6EE; border: 1px solid rgba(127, 178, 255, 0.16); border-radius: 12px; padding: 12px 14px; font-family: "IBM Plex Sans"; font-size: 13px; }
 
 /* Calamares' error and confirmation dialogs (design: Message boxes): dark raised card, details on navy. */
 QDialog { background: #0F2350; color: #E8EEFA; }

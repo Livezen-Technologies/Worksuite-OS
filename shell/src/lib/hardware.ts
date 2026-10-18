@@ -1,5 +1,5 @@
 // Devices and drivers view logic over the bridge's sysfs device list (electron/hardware.ts).
-import type { DriverOffer, HwDevice, HwKind } from './os'
+import type { DriverOffer, DriverReport, DriverStatus, HwDevice, HwKind } from './os'
 import { messages, t } from '../i18n'
 
 export const OK = '#5FD39A', WARN = '#FFB98A', OFF = '#8FA3C8'
@@ -70,3 +70,66 @@ export const offerTag = (o: DriverOffer) => OFFER_TAG[o.category === 'optional' 
 export const offerVersion = (o: DriverOffer) => (o.from_version ? `${o.from_version} → ${o.to_version}` : t('hw.newVersion', { version: o.to_version }))
 /** Security fixes can't be unticked (HwSettings board: locked checkbox). */
 export const offerLocked = (o: DriverOffer) => o.category === 'security'
+
+// ---------- Settings › Drivers over the package service's report ----------
+
+type ReportDevice = DriverReport['devices'][number]
+export const STATUS_COLOR: Record<DriverStatus, string> = { working: OK, missing_firmware: WARN, update_available: '#7FB2FF', optional_driver: '#7FB2FF', no_driver: WARN }
+const STATUS_TEXT = messages({ working: 'hw.working', missing_firmware: 'drv.status.firmware', update_available: 'drv.status.update', optional_driver: 'drv.status.optional', no_driver: 'hw.noDriver' })
+export const statusLabel = (s: DriverStatus) => STATUS_TEXT[s]
+
+/** The device's group in Settings › Drivers: from the report when it knows the device, else from the sysfs kind. */
+export type DriverGroup = 'display' | 'wifi' | 'ethernet' | 'other'
+const GROUP_TEXT = messages({ display: 'drv.group.display', wifi: 'drv.group.wifi', ethernet: 'drv.group.ethernet', other: 'drv.group.other' })
+export function groupOf(d: HwDevice, r?: ReportDevice): DriverGroup {
+  const k = r?.kind
+  if (k === 'display' || k === 'wifi' || k === 'ethernet') return k
+  if (d.kind === 'graphics') return 'display'
+  if (d.kind === 'wireless') return 'wifi'
+  if (d.kind === 'network') return 'ethernet'
+  return 'other'
+}
+
+/** Display, Wi-Fi, Ethernet, then the rest; each device with its status (sysfs alone: Working / No driver). */
+export function driverGroups(devs: HwDevice[], report: DriverReport | null): { group: DriverGroup; name: string; items: { dev: HwDevice; status: DriverStatus; driverLabel: string | null }[] }[] {
+  const order: DriverGroup[] = ['display', 'wifi', 'ethernet', 'other']
+  const rows = devs.map((dev) => {
+    const r = report?.devices.find((x) => x.id === dev.id)
+    const status: DriverStatus = r?.status ?? (dev.driver ? 'working' : 'no_driver')
+    return { dev, group: groupOf(dev, r), status, driverLabel: driverLabel(dev.driver, dev.driver_version) }
+  })
+  return order.map((g) => ({ group: g, name: GROUP_TEXT[g], items: rows.filter((x) => x.group === g && (g !== 'other' || x.status !== 'working')).map(({ dev, status, driverLabel }) => ({ dev, status, driverLabel })) }))
+    .filter((g) => g.items.length)
+}
+
+/** The display driver in words people know: Mesa (amdgpu), Mesa (i915), Mesa (nouveau), NVIDIA 550. */
+export function driverLabel(driver: string | null, version: string | null): string | null {
+  if (!driver) return null
+  if (driver === 'nvidia') return version ? `NVIDIA ${version.split('.')[0]}` : 'NVIDIA'
+  if (['amdgpu', 'radeon', 'i915', 'xe', 'nouveau', 'virtio-pci', 'virtio_gpu', 'panfrost', 'panthor', 'msm', 'v3d'].includes(driver)) return `Mesa (${driver})`
+  return driver
+}
+
+const SUMMARY_TEXT = messages({
+  firmware_missing: 'drv.sum.firmware', firmware_suggested: 'drv.sum.suggested', nvidia_better: 'drv.sum.nvidia', nvidia_secure_boot: 'drv.sum.nvidiaSb',
+  dkms_optional: 'drv.sum.dkms', dkms_secure_boot: 'drv.sum.dkmsSb',
+})
+/** Offer title and description for people (packages only in technical details). */
+export function offerTitle(o: DriverOffer, devName?: string): string {
+  if (o.kind === 'gpu') return t('drv.nvidiaTitle')
+  if (o.kind === 'firmware') return devName ? t('drv.fwFor', { name: devName }) : t('drv.fwGeneric')
+  return o.name
+}
+export function offerText(o: DriverOffer): string {
+  return Object.hasOwn(SUMMARY_TEXT, o.summary) ? SUMMARY_TEXT[o.summary as keyof typeof SUMMARY_TEXT] : o.summary
+}
+
+/** The notice after a background check: offers a person must choose (not the ones that installed themselves). */
+export function driverNotice(r: DriverReport, devs: HwDevice[], seen: Set<string>): { title: string; body: string } | null {
+  const fresh = r.offers.filter((o) => !r.auto_installed.includes(o.id) && !seen.has(o.id))
+  if (!fresh.length) return null
+  const dev = (id: string | null) => devs.find((d) => d.id === id)
+  const kinds = new Set(fresh.map((o) => groupOf(dev(o.device_id) ?? ({ kind: 'other' } as HwDevice), r.devices.find((x) => x.id === o.device_id))))
+  const title = fresh.some((o) => o.kind === 'gpu') ? t('drv.notice.gpu') : kinds.has('wifi') ? t('drv.notice.wifi') : kinds.has('ethernet') ? t('drv.notice.ethernet') : t('drv.notice.generic')
+  return { title, body: t('drv.notice.body') }
+}

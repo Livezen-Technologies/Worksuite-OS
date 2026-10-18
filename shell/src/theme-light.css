@@ -78,7 +78,9 @@
 :root[data-theme="light"] .border-\[rgba\(255\,138\,122\,0\.55\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,49,36,0.5); }
 :root[data-theme="light"] .border-\[rgba\(255\,159\,90\,0\.25\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,80,36,0.4); }
 :root[data-theme="light"] .border-\[rgba\(255\,159\,90\,0\.3\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,80,36,0.48); }
+:root[data-theme="light"] .border-\[rgba\(255\,159\,90\,0\.35\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,80,36,0.5); }
 :root[data-theme="light"] .border-\[rgba\(255\,159\,90\,0\.5\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,80,36,0.5); }
+:root[data-theme="light"] .border-\[rgba\(95\,211\,154\,0\.35\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(39,140,90,0.5); }
 :root[data-theme="light"] .border-\[rgba\(95\,211\,154\,0\.4\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(39,140,90,0.5); }
 :root[data-theme="light"] .border-white\/10:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.16); }
 :root[data-theme="light"] .border-white\/15:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.24); }

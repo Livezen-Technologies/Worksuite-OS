@@ -47,6 +47,10 @@
       <translation>පරිගණක නාමය</translation>
     </message>
     <message>
+      <source>Enrollment</source>
+      <translation>ලියාපදිංචිය</translation>
+    </message>
+    <message>
       <source>Time zone</source>
       <translation>වේලා කලාපය</translation>
     </message>
@@ -65,6 +69,10 @@
     <message>
       <source>Confirm disk</source>
       <translation>තැටිය තහවුරු කරන්න</translation>
+    </message>
+    <message>
+      <source>Terms</source>
+      <translation>නියම</translation>
     </message>
     <message>
       <source>Install</source>
@@ -89,6 +97,10 @@
     <message>
       <source>WorkSuite OS Setup</source>
       <translation>WorkSuite OS පිහිටුවීම</translation>
+    </message>
+    <message>
+      <source>SKIPPED</source>
+      <translation>මඟ හැරිණි</translation>
     </message>
     <message>
       <source>Express install</source>
@@ -270,12 +282,12 @@
       <translation>පරිගණකය විදුලියට සම්බන්ධව තබන්න. ඔබට මෙතැනින් ආපසු යා නොහැක.</translation>
     </message>
     <message>
-      <source>Applying your choices.</source>
-      <translation>ඔබගේ තේරීම් යොදමින්.</translation>
-    </message>
-    <message>
       <source>Applying your choices. This step is taking longer than usual; it is still working.</source>
       <translation>ඔබගේ තේරීම් යොදමින්. මෙම පියවරට සාමාන්‍යයට වඩා වැඩි කාලයක් ගතවේ; එය තවමත් ක්‍රියා කරයි.</translation>
+    </message>
+    <message>
+      <source>Applying your choices.</source>
+      <translation>ඔබගේ තේරීම් යොදමින්.</translation>
     </message>
     <message>
       <source>Preparing the disk</source>
@@ -466,6 +478,10 @@
       <translation>මෙම උපාංගය ලියාපදිංචි කරන්න</translation>
     </message>
     <message>
+      <source>Terms</source>
+      <translation>නියම</translation>
+    </message>
+    <message>
       <source>Recovery key</source>
       <translation>ප්‍රතිසාධන යතුර</translation>
     </message>
@@ -498,6 +514,30 @@
       <translation>ලියාපදිංචි තත්ත්වය</translation>
     </message>
     <message>
+      <source>Skip for now</source>
+      <translation>දැනට මඟ හරින්න</translation>
+    </message>
+    <message>
+      <source>You can enroll later from Settings › Managed.</source>
+      <translation>පසුව සැකසුම් › කළමනාකරණය තුළින් ලියාපදිංචි විය හැක.</translation>
+    </message>
+    <message>
+      <source>WorkSuite OS Terms and License Agreement</source>
+      <translation>WorkSuite OS නියම සහ බලපත්‍ර ගිවිසුම</translation>
+    </message>
+    <message>
+      <source>Third-party licences (Debian and open-source components)</source>
+      <translation>තෙවන පාර්ශ්ව බලපත්‍ර (Debian සහ විවෘත මූලාශ්‍ර සංරචක)</translation>
+    </message>
+    <message>
+      <source>WorkSuite OS includes Debian and other open-source software. Each component keeps its own licence; the full texts are installed with the system in /usr/share/doc/&lt;package&gt;/copyright and listed in Settings › About this device.</source>
+      <translation>WorkSuite OS හි Debian සහ වෙනත් විවෘත මූලාශ්‍ර මෘදුකාංග ඇතුළත් වේ. සෑම සංරචකයක්ම තමන්ගේම බලපත්‍රය රඳවා ගනී; සම්පූර්ණ පාඨ පද්ධතිය සමඟ /usr/share/doc/&lt;package&gt;/copyright හි ස්ථාපනය වී සැකසුම් › මෙම උපාංගය ගැන තුළ ලැයිස්තුගත වේ.</translation>
+    </message>
+    <message>
+      <source>I have read and accept the WorkSuite OS Terms and License Agreement</source>
+      <translation>මම WorkSuite OS නියම සහ බලපත්‍ර ගිවිසුම කියවා පිළිගනිමි</translation>
+    </message>
+    <message>
       <source>I've saved my recovery key somewhere safe</source>
       <translation>මම මගේ ප්‍රතිසාධන යතුර ආරක්ෂිත තැනක සුරැකුවෙමි</translation>
     </message>
@@ -514,8 +554,8 @@
       <translation>ඉලක්ක තැටිය හඳුනාගත නොහැකි විය. ආපසු ගොස් තැටිය නැවත තෝරන්න.</translation>
     </message>
     <message>
-      <source>After you press Install, these changes can't be undone.</source>
-      <translation>ඔබ ස්ථාපනය ඔබූ පසු, මෙම වෙනස්කම් අහෝසි කළ නොහැක.</translation>
+      <source>Once the installation starts, these changes can't be undone.</source>
+      <translation>ස්ථාපනය ආරම්භ වූ පසු, මෙම වෙනස්කම් අහෝසි කළ නොහැක.</translation>
     </message>
     <message>
       <source>DELETE</source>
@@ -546,8 +586,24 @@
       <translation>විකල්ප · කළමනාකරණය කළ උපාංගය</translation>
     </message>
     <message>
-      <source>If your organization manages its devices with WorkSuite, enter the enrollment code from the admin console, paste its enrollment link, or scan its QR code. The device enrolls the first time it starts with a network connection. Leave this empty to skip.</source>
-      <translation>ඔබේ සංවිධානය WorkSuite සමඟ උපාංග කළමනාකරණය කරන්නේ නම්, පරිපාලක කොන්සෝලයේ ලියාපදිංචි කේතය ඇතුළත් කරන්න, එහි ලියාපදිංචි සබැඳිය අලවන්න, හෝ එහි QR කේතය ස්කෑන් කරන්න. ජාල සම්බන්ධතාවක් සමඟ පළමු වරට ආරම්භ වන විට උපාංගය ලියාපදිංචි වේ. මඟ හැරීමට මෙය හිස්ව තබන්න.</translation>
+      <source>If your organization manages its devices with WorkSuite, enter the enrollment code from the admin console, paste its enrollment link, or scan its QR code. The device enrolls the first time it starts with a network connection.</source>
+      <translation>ඔබේ ආයතනය WorkSuite සමඟ උපාංග කළමනාකරණය කරන්නේ නම්, පරිපාලන කොන්සෝලයෙන් ලියාපදිංචි කේතය ඇතුළු කරන්න, එහි ලියාපදිංචි සබැඳිය අලවන්න, නැතහොත් එහි QR කේතය ස්කෑන් කරන්න. ජාල සම්බන්ධතාවක් සමඟ උපාංගය පළමු වරට ආරම්භ වන විට ලියාපදිංචි වේ.</translation>
+    </message>
+    <message>
+      <source>STEP 5 · TERMS</source>
+      <translation>පියවර 5 · නියම</translation>
+    </message>
+    <message>
+      <source>Terms and License Agreement</source>
+      <translation>නියම සහ බලපත්‍ර ගිවිසුම</translation>
+    </message>
+    <message>
+      <source>Read the terms for using WorkSuite OS. Installation starts when you accept them and press Install.</source>
+      <translation>WorkSuite OS භාවිතය සඳහා නියම කියවන්න. ඔබ ඒවා පිළිගෙන ස්ථාපනය ඔබූ විට ස්ථාපනය ආරම්භ වේ.</translation>
+    </message>
+    <message>
+      <source>The terms could not be loaded.</source>
+      <translation>නියම පූරණය කළ නොහැකි විය.</translation>
     </message>
     <message>
       <source>STEP 6 · RECOVERY KEY</source>
@@ -562,8 +618,8 @@
       <translation>ඔබට ඔබේ තැටි මුරවැකිය අමතක වුවහොත්, ඔබේ ගොනු අගුළු හැරීමට ඇති එකම මාර්ගය මෙම යතුරයි. එය එක් වරක් පමණක් පෙන්වන අතර මෙම පරිගණකයේ ගබඩා නොකෙරේ.</translation>
     </message>
     <message>
-      <source>Not enrolling. You can enroll later in Settings › About this device.</source>
-      <translation>ලියාපදිංචි නොකෙරේ. පසුව සැකසුම් › මෙම උපාංගය ගැන තුළ ලියාපදිංචි විය හැක.</translation>
+      <source>Not enrolling. Continue to skip this step.</source>
+      <translation>ලියාපදිංචි නොකෙරේ. මෙම පියවර මඟ හැරීමට ඉදිරියට යන්න.</translation>
     </message>
     <message>
       <source>Enrolls with %1 on first start.</source>
@@ -588,6 +644,13 @@
     <message>
       <source>No enrollment QR code was read. Try again, or type the code.</source>
       <translation>ලියාපදිංචි QR කේතයක් කියවා නැත. නැවත උත්සාහ කරන්න, නැතහොත් කේතය ටයිප් කරන්න.</translation>
+    </message>
+  </context>
+  <context>
+    <name>WsIntro</name>
+    <message>
+      <source>Starting the installer…</source>
+      <translation>ස්ථාපකය ආරම්භ කරමින්…</translation>
     </message>
   </context>
   <context>

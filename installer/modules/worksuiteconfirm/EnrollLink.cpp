@@ -112,7 +112,9 @@ toJson( const Target& t )
 QString
 pendingPath()
 {
-    return QStringLiteral( "/run/worksuite-installer-enroll.json" );
+    // WORKSUITE_ENROLL_PENDING: tests only (the page's skip path, Tests.cpp).
+    const QString over = qEnvironmentVariable( "WORKSUITE_ENROLL_PENDING" );
+    return over.isEmpty() ? QStringLiteral( "/run/worksuite-installer-enroll.json" ) : over;
 }
 
 bool

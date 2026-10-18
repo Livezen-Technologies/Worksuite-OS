@@ -1,0 +1,9 @@
+#!/bin/sh
+# NetworkManager dispatcher: when the computer reaches the internet (connectivity FULL, after Wi-Fi or Ethernet
+# connects), ask the package service to look for drivers online. The service checks at most once a day (sooner only
+# when the hardware changed), honours the device policy and metered connections, and logs to the journal.
+[ "$2" = connectivity-change ] || exit 0
+[ "${CONNECTIVITY_STATE:-}" = FULL ] || exit 0
+busctl --system --timeout=10 call lk.worksuite.PackageService1 /lk/worksuite/PackageService1 \
+  lk.worksuite.PackageService1 CheckDrivers s connectivity >/dev/null 2>&1 || true
+exit 0

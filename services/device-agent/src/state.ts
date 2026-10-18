@@ -38,6 +38,12 @@ export interface Policy {
   screen_capture?: 'allowed' | 'disabled';
   /** Clipboard history (Super+V): disabled = off on the device and its list dropped (kiosks: always off). */
   clipboard_history?: 'allowed' | 'disabled';
+  /** Drivers: online search after connecting (default on), firmware auto-install (default on), NVIDIA driver
+   *  auto-install (default off). Read by the package service from the published policy.json; kiosks: search on,
+   *  firmware only. */
+  drivers_online_search?: boolean;
+  drivers_auto_install?: boolean;
+  drivers_auto_install_gpu?: boolean;
   [k: string]: unknown;
 }
 

@@ -14,14 +14,15 @@ Rectangle {
 
     property WsState state: WsState {}
     // Calamares step index → [design step, first sub-step]: welcome, keyboard | partition | users, enroll | locale |
-    // summary, confirm-erase | install, recovery key, finished. One entry per settings.conf step (tests/test_config.py).
-    readonly property var stepOf: [[0, 0], [0, 1], [1, 0], [2, 0], [2, 1], [3, 0], [4, 0], [4, 1], [5, 0], [5, 2], [5, 3]]
+    // summary, confirm-erase, terms | install, recovery key, finished. One entry per settings.conf step
+    // (tests/test_config.py).
+    readonly property var stepOf: [[0, 0], [0, 1], [1, 0], [2, 0], [2, 2], [3, 0], [4, 0], [4, 1], [4, 2], [5, 0], [5, 2], [5, 3]]
     readonly property var steps: [
         [qsTr("Language"), [qsTr("Language"), qsTr("Keyboard")]],
         [qsTr("Installation type"), [qsTr("Disk"), qsTr("Encryption")]],
-        [qsTr("Your account"), [qsTr("Name and password"), qsTr("Computer name")]],
+        [qsTr("Your account"), [qsTr("Name and password"), qsTr("Computer name"), qsTr("Enrollment")]],
         [qsTr("Time zone"), [qsTr("Region and city")]],
-        [qsTr("Review"), [qsTr("Summary"), qsTr("Confirm disk")]],
+        [qsTr("Review"), [qsTr("Summary"), qsTr("Confirm disk"), qsTr("Terms")]],
         [qsTr("Install"), [qsTr("Copy files"), qsTr("Configure system"), qsTr("Recovery key"), qsTr("Complete")]]
     ]
 
@@ -30,6 +31,7 @@ Rectangle {
     property int pageSub: 0
     property bool encrypt: false
     property string phase: ""
+    property bool enrollSkipped: false
     Timer {
         interval: 200; running: true; repeat: true; triggeredOnStart: true
         onTriggered: {
@@ -37,6 +39,7 @@ Rectangle {
             sideBar.pageSub = sideBar.state.get("subStep", 0)
             sideBar.encrypt = sideBar.state.get("encrypt", false)   // the partition page's Encrypt box (worksuiteconfirm)
             sideBar.phase = Global.value("worksuitePhase") || ""   // the install stage (worksuitephase markers)
+            sideBar.enrollSkipped = sideBar.state.get("enrollSkipped", false)   // Skip for now (worksuiteconfirm@enroll)
         }
     }
     readonly property int stepIndex: ViewManager.currentStepIndex
@@ -46,7 +49,8 @@ Rectangle {
     // (Disk, then Encryption; laid out by worksuiteconfirm over the stock widget page).
     // The install is one Calamares step for Copy files and Configure system: past unpacking, Configure is current.
     readonly property bool configuring: phase !== "" && phase !== "prepare" && phase !== "copy"
-    readonly property int currentSub: current === 1 || current === 2 ? pageSub
+    // The enroll page (Your account › Enrollment) is a page of its own: its position says the sub-step.
+    readonly property int currentSub: current === 1 || (current === 2 && position[1] < 2) ? pageSub
                                       : current === 5 && position[1] === 0 && configuring ? 1 : position[1]
 
     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1F7FB2FF" }   // rgba(127,178,255,0.12)
@@ -104,9 +108,9 @@ Rectangle {
                         }
                     }
 
-                    // Sub-steps of the open step, on a rail.
+                    // Sub-steps of the open step, on a rail. A done step keeps showing a sub-step that was skipped.
                     Item {
-                        visible: step.active
+                        visible: step.active || (step.done && step.stepNo === 2 && sideBar.enrollSkipped)
                         Layout.fillWidth: true
                         Layout.topMargin: 4; Layout.bottomMargin: 6
                         implicitHeight: subList.implicitHeight
@@ -122,9 +126,11 @@ Rectangle {
                                     // Express skips the keyboard page; the time zone keeps its default.
                                     readonly property bool skipped: sideBar.express && step.stepNo === 0 && index === 1
                                     readonly property bool auto: sideBar.express && step.stepNo === 3
+                                    // Optional enrollment passed over: marked skipped (grey, SKIPPED), not done or failed.
+                                    readonly property bool passed: sideBar.enrollSkipped && step.stepNo === 2 && index === 2 && (subDone || step.done)
                                     readonly property bool subDone: index < sideBar.currentSub
                                     readonly property bool subActive: index === sideBar.currentSub
-                                    visible: !skipped
+                                    visible: !skipped && (step.active || passed)
                                     Layout.fillWidth: true
                                     implicitHeight: 30
                                     radius: 6
@@ -134,17 +140,19 @@ Rectangle {
                                         spacing: 10
                                         Rectangle {
                                             width: 7; height: 7; radius: 3.5
-                                            color: sub.subDone ? "#5FD39A" : sub.subActive ? "#18D4F0" : "#407FB2FF"
+                                            color: sub.passed ? "transparent" : sub.subDone ? "#5FD39A" : sub.subActive ? "#18D4F0" : "#407FB2FF"
+                                            border.width: sub.passed ? 1 : 0; border.color: "#8FA3C8"
                                         }
                                         Text {
                                             Layout.fillWidth: true
                                             text: modelData
-                                            color: sub.subDone || sub.subActive ? "#E8EEFA" : "#8FA3C8"
+                                            color: sub.passed ? "#8FA3C8" : sub.subDone || sub.subActive ? "#E8EEFA" : "#8FA3C8"
                                             font.family: "IBM Plex Sans"; font.pixelSize: 13
                                             font.weight: sub.subActive ? Font.DemiBold : Font.Normal
                                             elide: Text.ElideRight
                                         }
                                         Text { visible: sub.auto; text: "AUTO"; color: "#5E739C"; font.family: "IBM Plex Mono"; font.pixelSize: 10 }
+                                        Text { visible: sub.passed; text: qsTr("SKIPPED"); color: "#5E739C"; font.family: "IBM Plex Mono"; font.pixelSize: 10 }
                                     }
                                 }
                             }

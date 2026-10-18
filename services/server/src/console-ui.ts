@@ -257,6 +257,9 @@ const views = {
         ai_assistant: f.ai_assistant.value === '' ? null : f.ai_assistant.value === 'true', ai_models: list('ai_models').length ? list('ai_models') : null,
         desktop_widgets: f.desktop_widgets.value === '' ? null : f.desktop_widgets.value === 'true',
         whatsapp: f.whatsapp.value === '' ? null : f.whatsapp.value === 'true',
+        drivers_online_search: f.drivers_online_search.value === '' ? null : f.drivers_online_search.value === 'true',
+        drivers_auto_install: f.drivers_auto_install.value === '' ? null : f.drivers_auto_install.value === 'true',
+        drivers_auto_install_gpu: f.drivers_auto_install_gpu.value === '' ? null : f.drivers_auto_install_gpu.value === 'true',
         screen_capture: f.screen_capture.value || null, clipboard_history: f.clipboard_history.value || null,
         app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
     } },
@@ -278,6 +281,9 @@ const views = {
         h('label', {}, 'WhatsApp (WhatsApp Web app, pinned by default)', sel('whatsapp', [['true', 'Allowed'], ['false', 'Off']]))),
       h('div', { class: 'row' }, h('label', {}, 'Screenshots and screen snipping', sel('screen_capture', [['allowed', 'Allowed'], ['disabled', 'Off']])),
         h('label', {}, 'Clipboard history (Super+V)', sel('clipboard_history', [['allowed', 'Allowed'], ['disabled', 'Off']]))),
+      h('div', { class: 'row' }, h('label', {}, 'Look for drivers online after connecting', sel('drivers_online_search', [['true', 'On'], ['false', 'Off']])),
+        h('label', {}, 'Install firmware automatically', sel('drivers_auto_install', [['true', 'On'], ['false', 'Off']])),
+        h('label', {}, 'Install the NVIDIA driver automatically', sel('drivers_auto_install_gpu', [['true', 'On'], ['false', 'Off']]))),
       h('label', {}, 'Update mirror (https, optional)', h('input', { name: 'update_mirror', value: p.update_mirror || '' })),
       h('label', {}, 'Allowed apps (catalog IDs, one per line)', h('textarea', { name: 'app_allowlist' }, (p.app_allowlist || []).join('\n'))),
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),
@@ -287,6 +293,7 @@ const views = {
     if (p.ai_assistant !== undefined) f.ai_assistant.value = String(p.ai_assistant);
     if (p.desktop_widgets !== undefined) f.desktop_widgets.value = String(p.desktop_widgets);
     if (p.whatsapp !== undefined && p.whatsapp !== null) f.whatsapp.value = String(p.whatsapp);
+    for (const k of ['drivers_online_search', 'drivers_auto_install', 'drivers_auto_install_gpu']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
     return [h('h1', {}, 'Policy'), h('p', { class: 'muted' }, 'Current version ' + version + '. Devices verify the signature before applying it.'), f, kioskForm(p)];
   },
   async apps() {

@@ -15,7 +15,7 @@ lb config noauto \
   --mode debian \
   --distribution trixie \
   --architecture "$ARCH" \
-  --archive-areas "main non-free-firmware" \
+  --archive-areas "main contrib non-free non-free-firmware" \
   --parent-mirror-bootstrap "$MIRROR" \
   --parent-mirror-chroot "$MIRROR" \
   --parent-mirror-chroot-security "$SECMIRROR" \
@@ -28,8 +28,8 @@ lb config noauto \
   --bootloaders grub-efi \
   --uefi-secure-boot auto \
   --binary-image iso-hybrid \
-  --firmware-binary true \
-  --firmware-chroot true \
+  --firmware-binary false \
+  --firmware-chroot false \
   --apt-recommends false \
   --apt-options "--yes -o Acquire::Check-Valid-Until=false -o Acquire::Retries=5" \
   --apt-secure true \

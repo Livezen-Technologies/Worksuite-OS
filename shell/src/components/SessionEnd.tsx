@@ -199,12 +199,14 @@ let fadedIn = false
 export function SessionFadeIn() {
   const [phase, setPhase] = useState<'on' | 'fading' | 'gone'>(fadedIn ? 'gone' : 'on')
   useEffect(() => {
-    if (fadedIn) return
+    // Not `if (fadedIn) return`: React's StrictMode (the dev preview) runs this twice, and the cleanup of the first
+    // run would cancel the fade, leaving the dark frame over the desktop for good.
+    if (phase === 'gone') return
     fadedIn = true
     const raf = requestAnimationFrame(() => setPhase('fading'))
     const done = setTimeout(() => setPhase('gone'), 900)
     return () => { cancelAnimationFrame(raf); clearTimeout(done) }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   if (phase === 'gone') return null
   return <div aria-hidden="true" className={`pointer-events-none fixed inset-0 z-[99] transition-opacity duration-700 ease-out ${phase === 'on' ? 'opacity-100' : 'opacity-0'}`} style={{ background: BG }} />
 }

@@ -47,6 +47,10 @@
       <translation>கணினிப் பெயர்</translation>
     </message>
     <message>
+      <source>Enrollment</source>
+      <translation>பதிவு</translation>
+    </message>
+    <message>
       <source>Time zone</source>
       <translation>நேர மண்டலம்</translation>
     </message>
@@ -65,6 +69,10 @@
     <message>
       <source>Confirm disk</source>
       <translation>வட்டை உறுதிப்படுத்து</translation>
+    </message>
+    <message>
+      <source>Terms</source>
+      <translation>விதிமுறைகள்</translation>
     </message>
     <message>
       <source>Install</source>
@@ -89,6 +97,10 @@
     <message>
       <source>WorkSuite OS Setup</source>
       <translation>WorkSuite OS அமைப்பு</translation>
+    </message>
+    <message>
+      <source>SKIPPED</source>
+      <translation>தவிர்க்கப்பட்டது</translation>
     </message>
     <message>
       <source>Express install</source>
@@ -270,12 +282,12 @@
       <translation>கணினியை மின்னிணைப்பில் வைத்திருங்கள். இங்கிருந்து பின்செல்ல முடியாது.</translation>
     </message>
     <message>
-      <source>Applying your choices.</source>
-      <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன.</translation>
-    </message>
-    <message>
       <source>Applying your choices. This step is taking longer than usual; it is still working.</source>
       <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன. இந்தப் படி வழக்கத்தை விட அதிக நேரம் எடுக்கிறது; இது இன்னும் செயல்படுகிறது.</translation>
+    </message>
+    <message>
+      <source>Applying your choices.</source>
+      <translation>உங்கள் தேர்வுகள் பயன்படுத்தப்படுகின்றன.</translation>
     </message>
     <message>
       <source>Preparing the disk</source>
@@ -466,6 +478,10 @@
       <translation>இந்தச் சாதனத்தைப் பதிவுசெய்</translation>
     </message>
     <message>
+      <source>Terms</source>
+      <translation>விதிமுறைகள்</translation>
+    </message>
+    <message>
       <source>Recovery key</source>
       <translation>மீட்பு விசை</translation>
     </message>
@@ -498,6 +514,30 @@
       <translation>பதிவு நிலை</translation>
     </message>
     <message>
+      <source>Skip for now</source>
+      <translation>இப்போது தவிர்</translation>
+    </message>
+    <message>
+      <source>You can enroll later from Settings › Managed.</source>
+      <translation>பின்னர் அமைப்புகள் › நிர்வகிக்கப்படுகிறது என்பதிலிருந்து பதிவு செய்யலாம்.</translation>
+    </message>
+    <message>
+      <source>WorkSuite OS Terms and License Agreement</source>
+      <translation>WorkSuite OS விதிமுறைகள் மற்றும் உரிம ஒப்பந்தம்</translation>
+    </message>
+    <message>
+      <source>Third-party licences (Debian and open-source components)</source>
+      <translation>மூன்றாம் தரப்பு உரிமங்கள் (Debian மற்றும் திறந்த மூல கூறுகள்)</translation>
+    </message>
+    <message>
+      <source>WorkSuite OS includes Debian and other open-source software. Each component keeps its own licence; the full texts are installed with the system in /usr/share/doc/&lt;package&gt;/copyright and listed in Settings › About this device.</source>
+      <translation>WorkSuite OS-இல் Debian மற்றும் பிற திறந்த மூல மென்பொருட்கள் உள்ளன. ஒவ்வொரு கூறும் அதன் சொந்த உரிமத்தை வைத்திருக்கும்; முழு உரைகள் கணினியுடன் /usr/share/doc/&lt;package&gt;/copyright இல் நிறுவப்பட்டு அமைப்புகள் › இந்தச் சாதனம் பற்றி என்பதில் பட்டியலிடப்படும்.</translation>
+    </message>
+    <message>
+      <source>I have read and accept the WorkSuite OS Terms and License Agreement</source>
+      <translation>WorkSuite OS விதிமுறைகள் மற்றும் உரிம ஒப்பந்தத்தைப் படித்து ஏற்றுக்கொள்கிறேன்</translation>
+    </message>
+    <message>
       <source>I've saved my recovery key somewhere safe</source>
       <translation>என் மீட்பு விசையைப் பாதுகாப்பான இடத்தில் சேமித்துவிட்டேன்</translation>
     </message>
@@ -514,8 +554,8 @@
       <translation>இலக்கு வட்டை அடையாளம் காண முடியவில்லை. பின்சென்று வட்டை மீண்டும் தேர்ந்தெடுக்கவும்.</translation>
     </message>
     <message>
-      <source>After you press Install, these changes can't be undone.</source>
-      <translation>நிறுவு என்பதை அழுத்திய பின், இந்த மாற்றங்களைச் செயல்தவிர்க்க முடியாது.</translation>
+      <source>Once the installation starts, these changes can't be undone.</source>
+      <translation>நிறுவல் தொடங்கியதும், இந்த மாற்றங்களைத் திரும்பப் பெற முடியாது.</translation>
     </message>
     <message>
       <source>DELETE</source>
@@ -546,8 +586,24 @@
       <translation>விருப்பம் · நிர்வகிக்கப்படும் சாதனம்</translation>
     </message>
     <message>
-      <source>If your organization manages its devices with WorkSuite, enter the enrollment code from the admin console, paste its enrollment link, or scan its QR code. The device enrolls the first time it starts with a network connection. Leave this empty to skip.</source>
-      <translation>உங்கள் நிறுவனம் WorkSuite மூலம் சாதனங்களை நிர்வகித்தால், நிர்வாகக் கன்சோலில் உள்ள பதிவுக் குறியீட்டை உள்ளிடவும், அதன் பதிவு இணைப்பை ஒட்டவும், அல்லது அதன் QR குறியீட்டை ஸ்கேன் செய்யவும். பிணைய இணைப்புடன் முதல் முறை தொடங்கும்போது சாதனம் பதிவாகும். தவிர்க்க இதை வெறுமையாக விடவும்.</translation>
+      <source>If your organization manages its devices with WorkSuite, enter the enrollment code from the admin console, paste its enrollment link, or scan its QR code. The device enrolls the first time it starts with a network connection.</source>
+      <translation>உங்கள் நிறுவனம் WorkSuite மூலம் சாதனங்களை நிர்வகித்தால், நிர்வாகக் கன்சோலில் உள்ள பதிவுக் குறியீட்டை உள்ளிடவும், அதன் பதிவு இணைப்பை ஒட்டவும் அல்லது அதன் QR குறியீட்டை ஸ்கேன் செய்யவும். பிணைய இணைப்புடன் சாதனம் முதல் முறை தொடங்கும்போது பதிவு செய்யப்படும்.</translation>
+    </message>
+    <message>
+      <source>STEP 5 · TERMS</source>
+      <translation>படி 5 · விதிமுறைகள்</translation>
+    </message>
+    <message>
+      <source>Terms and License Agreement</source>
+      <translation>விதிமுறைகள் மற்றும் உரிம ஒப்பந்தம்</translation>
+    </message>
+    <message>
+      <source>Read the terms for using WorkSuite OS. Installation starts when you accept them and press Install.</source>
+      <translation>WorkSuite OS-ஐப் பயன்படுத்துவதற்கான விதிமுறைகளைப் படிக்கவும். அவற்றை ஏற்று நிறுவு என்பதை அழுத்தியதும் நிறுவல் தொடங்கும்.</translation>
+    </message>
+    <message>
+      <source>The terms could not be loaded.</source>
+      <translation>விதிமுறைகளை ஏற்ற முடியவில்லை.</translation>
     </message>
     <message>
       <source>STEP 6 · RECOVERY KEY</source>
@@ -562,8 +618,8 @@
       <translation>உங்கள் வட்டுக் கடவுச்சொற்றொடரை மறந்தால், உங்கள் கோப்புகளைத் திறக்க இந்த விசை மட்டுமே வழி. இது ஒருமுறை மட்டுமே காட்டப்படும், இந்தக் கணினியில் சேமிக்கப்படாது.</translation>
     </message>
     <message>
-      <source>Not enrolling. You can enroll later in Settings › About this device.</source>
-      <translation>பதிவு செய்யப்படவில்லை. பின்னர் அமைப்புகள் › இந்தச் சாதனம் பற்றி என்பதில் பதிவு செய்யலாம்.</translation>
+      <source>Not enrolling. Continue to skip this step.</source>
+      <translation>பதிவு செய்யப்படவில்லை. இந்தப் படியைத் தவிர்க்க தொடரவும்.</translation>
     </message>
     <message>
       <source>Enrolls with %1 on first start.</source>
@@ -588,6 +644,13 @@
     <message>
       <source>No enrollment QR code was read. Try again, or type the code.</source>
       <translation>பதிவு QR குறியீடு எதுவும் படிக்கப்படவில்லை. மீண்டும் முயலவும், அல்லது குறியீட்டைத் தட்டச்சு செய்யவும்.</translation>
+    </message>
+  </context>
+  <context>
+    <name>WsIntro</name>
+    <message>
+      <source>Starting the installer…</source>
+      <translation>நிறுவியைத் தொடங்குகிறது…</translation>
     </message>
   </context>
   <context>

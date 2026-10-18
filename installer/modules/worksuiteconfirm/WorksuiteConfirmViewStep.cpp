@@ -1,5 +1,6 @@
 #include "WorksuiteConfirmViewStep.h"
 #include "EnrollLink.h"
+#include "WsIntro.h"
 #include "WsStyle.h"
 
 #include "Branding.h"
@@ -7,10 +8,13 @@
 #include "JobQueue.h"
 #include "ViewManager.h"
 #include "utils/Logger.h"
+#include "utils/Retranslator.h"
 
 #include <QApplication>
 #include <sys/statvfs.h>
 #include <QCheckBox>
+#include <QDateTime>
+#include <QDir>
 #include <QDialog>
 #include <QFile>
 #include <QFrame>
@@ -30,6 +34,7 @@
 #include <QSet>
 #include <QSettings>
 #include <QStorageInfo>
+#include <QTextBrowser>
 #include <QToolBar>
 #include <QTimer>
 #include <QUrl>
@@ -42,6 +47,8 @@ static const char RECOVERY_KEY[] = "worksuiteRecoveryKey";
 static const char ENCRYPTED_KEY[] = "worksuiteEncrypted";
 // branding/worksuite/WsState.qml: the file the QML pages share their state through.
 static const char WS_STATE[] = "/run/worksuite-installer.conf";
+// The accepted terms ({version, acceptedAt}), recorded on the target by the worksuiteterms job.
+static const char TERMS_KEY[] = "worksuiteTerms";
 
 static void
 recordEncryption( bool on )
@@ -382,6 +389,7 @@ WorksuiteConfirmViewStep::WorksuiteConfirmViewStep( QObject* parent )
     {
         focus = new QmlFocus( qApp );
         qApp->installEventFilter( focus );
+        WsIntro::install();   // the loading screen, continued from the live ISO's veil (WsIntro.h)
         if ( auto* branding = Calamares::Branding::instance() )
         {
             const QString dialogs = dialogStyleSheet( branding->stylesheet() );
@@ -435,14 +443,44 @@ WorksuiteConfirmViewStep::~WorksuiteConfirmViewStep()
 QString
 WorksuiteConfirmViewStep::prettyName() const
 {
-    return m_mode == Mode::Erase ? tr( "Confirm erase" ) : m_mode == Mode::Enroll ? tr( "Enroll this device" ) : tr( "Recovery key" );
+    return m_mode == Mode::Erase    ? tr( "Confirm erase" )
+        : m_mode == Mode::Enroll    ? tr( "Enroll this device" )
+        : m_mode == Mode::Terms     ? tr( "Terms" )
+                                    : tr( "Recovery key" );
 }
 
 void
 WorksuiteConfirmViewStep::setConfigurationMap( const QVariantMap& map )
 {
     const QString mode = map.value( QStringLiteral( "mode" ) ).toString();
-    m_mode = mode == QStringLiteral( "recovery" ) ? Mode::Recovery : mode == QStringLiteral( "enroll" ) ? Mode::Enroll : Mode::Erase;
+    m_mode = mode == QStringLiteral( "recovery" ) ? Mode::Recovery
+        : mode == QStringLiteral( "enroll" )      ? Mode::Enroll
+        : mode == QStringLiteral( "terms" )       ? Mode::Terms
+                                                  : Mode::Erase;
+    m_preaccepted = m_mode == Mode::Terms && map.value( QStringLiteral( "accepted" ) ).toBool();
+}
+
+QString
+WorksuiteConfirmViewStep::termsFile( const QString& dir, const QString& lang )
+{
+    const QString code = lang.section( QLatin1Char( '_' ), 0, 0 ).section( QLatin1Char( '@' ), 0, 0 ).toLower();
+    for ( const QString& l : { code, QStringLiteral( "en" ) } )
+    {
+        const QString f = QDir( dir ).filePath( QStringLiteral( "LICENSE-%1.txt" ).arg( l ) );
+        if ( !l.isEmpty() && QFile::exists( f ) )
+        {
+            return f;
+        }
+    }
+    return QString();
+}
+
+QString
+WorksuiteConfirmViewStep::termsVersion( const QString& text )
+{
+    static const QRegularExpression v( QStringLiteral( "^Version:\\s*(\\S.*?)\\s*$" ), QRegularExpression::MultilineOption );
+    const auto m = v.match( text );
+    return m.hasMatch() ? m.captured( 1 ) : QStringLiteral( "unversioned" );
 }
 
 QString
@@ -558,7 +596,10 @@ WorksuiteConfirmViewStep::widget()
         return m_widget;
     }
     m_widget = new QWidget;
-    m_widget->setObjectName( m_mode == Mode::Erase ? QStringLiteral( "wsConfirm" ) : m_mode == Mode::Enroll ? QStringLiteral( "wsEnroll" ) : QStringLiteral( "wsRecovery" ) );
+    m_widget->setObjectName( m_mode == Mode::Erase    ? QStringLiteral( "wsConfirm" )
+                             : m_mode == Mode::Enroll ? QStringLiteral( "wsEnroll" )
+                             : m_mode == Mode::Terms  ? QStringLiteral( "wsTerms" )
+                                                      : QStringLiteral( "wsRecovery" ) );
     m_widget->setAttribute( Qt::WA_StyledBackground );
     // Calamares strips the margins of a page's own layout, so the content sits in an inner widget with them.
     auto* outer = new QVBoxLayout( m_widget );
@@ -637,15 +678,66 @@ WorksuiteConfirmViewStep::widget()
         m_status = label( QStringLiteral( "wsSubtitle" ) );
         m_status->setTextFormat( Qt::PlainText );
         m_status->setAccessibleName( tr( "Enrollment status" ) );
+        // Skip: a clear way past the optional page, also when something half-typed keeps Continue disabled.
+        auto* skipRow = new QHBoxLayout;
+        skipRow->setSpacing( 16 );
+        m_skip = new QPushButton( tr( "Skip for now" ) );
+        m_skip->setObjectName( QStringLiteral( "wsSecondary" ) );
+        m_skip->setAccessibleName( tr( "Skip for now" ) );
+        auto* hint = label( QStringLiteral( "wsHint" ) );
+        hint->setTextFormat( Qt::PlainText );
+        hint->setText( tr( "You can enroll later from Settings › Managed." ) );
+        skipRow->addWidget( m_skip, 0, Qt::AlignVCenter );
+        skipRow->addWidget( hint, 1, Qt::AlignVCenter );
         layout->addWidget( serverLabel );
         layout->addWidget( m_server );
         layout->addWidget( m_inputLabel );
         layout->addWidget( m_input );
         layout->addLayout( row );
         layout->addWidget( m_status );
+        layout->addSpacing( 8 );
+        layout->addLayout( skipRow );
         connect( m_server, &QLineEdit::textChanged, this, [ this ] { enrollChanged(); } );
         connect( m_input, &QLineEdit::textChanged, this, [ this ] { enrollChanged(); } );
         connect( m_scan, &QPushButton::clicked, this, [ this ] { scanQr(); } );
+        connect( m_skip, &QPushButton::clicked, this, [ this ] { skipEnrollment(); } );
+    }
+    else if ( m_mode == Mode::Terms )
+    {
+        m_terms = new QTextBrowser;
+        m_terms->setObjectName( QStringLiteral( "wsTermsText" ) );
+        m_terms->setOpenExternalLinks( false );
+        m_terms->setOpenLinks( false );
+        m_terms->setAccessibleName( tr( "WorkSuite OS Terms and License Agreement" ) );
+        m_terms->setMinimumHeight( 220 );
+        layout->addWidget( m_terms, 1 );
+        auto* links = label( QStringLiteral( "wsHint" ) );
+        links->setTextFormat( Qt::RichText );
+        links->setOpenExternalLinks( false );
+        links->setTextInteractionFlags( Qt::TextBrowserInteraction );
+        links->setText( QStringLiteral( "<a href=\"licenses\" style=\"color:#7FB2FF\">%1</a>" )
+                            .arg( tr( "Third-party licences (Debian and open-source components)" ).toHtmlEscaped() ) );
+        // The licences of the system being installed: one file per package in /usr/share/doc/<package>/copyright.
+        connect( links, &QLabel::linkActivated, this, [ this ] {
+            QStringList out;
+            const QDir doc( QStringLiteral( "/usr/share/doc" ) );
+            for ( const QString& pkg : doc.entryList( QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name ) )
+            {
+                if ( QFile::exists( doc.filePath( pkg + QStringLiteral( "/copyright" ) ) ) )
+                {
+                    out << pkg;
+                }
+            }
+            m_terms->setPlainText( tr( "WorkSuite OS includes Debian and other open-source software. Each component keeps its own "
+                                       "licence; the full texts are installed with the system in /usr/share/doc/<package>/copyright "
+                                       "and listed in Settings › About this device." )
+                                   + QStringLiteral( "\n\n" ) + out.join( QLatin1Char( '\n' ) ) );
+        } );
+        m_accept = new QCheckBox( tr( "I have read and accept the WorkSuite OS Terms and License Agreement" ) );
+        m_accept->setObjectName( QStringLiteral( "wsAck" ) );
+        layout->addWidget( links );
+        layout->addWidget( m_accept );
+        connect( m_accept, &QCheckBox::toggled, this, [ this ] { termsChanged(); } );
     }
     else
     {
@@ -731,7 +823,7 @@ WorksuiteConfirmViewStep::onActivate()
         m_title->setText( tr( "This will erase your disk" ) );
         m_details->setText( m_disk.isEmpty()
                                 ? tr( "The target disk could not be identified. Go back and choose the disk again." )
-                                : tr( "After you press Install, these changes can't be undone." ) );
+                                : tr( "Once the installation starts, these changes can't be undone." ) );
         m_diskName->setText( diskTitle( m_disk, model, size ) );
         m_diskNode->setText( m_disk.isEmpty() ? QString() : QStringLiteral( "/dev/" ) + m_disk );
         while ( auto* item = m_ops->takeAt( 0 ) )
@@ -765,9 +857,40 @@ WorksuiteConfirmViewStep::onActivate()
         m_title->setText( tr( "Enroll this device" ) );
         m_details->setText( tr( "If your organization manages its devices with WorkSuite, enter the enrollment code from the admin console, "
                                 "paste its enrollment link, or scan its QR code. The device enrolls the first time it starts with a network "
-                                "connection. Leave this empty to skip." ) );
+                                "connection." ) );
         m_scan->setVisible( !QStandardPaths::findExecutable( QStringLiteral( "zbarcam" ) ).isEmpty() );
         enrollChanged();
+        return;
+    }
+    else if ( m_mode == Mode::Terms )
+    {
+        m_eyebrow->setText( tr( "STEP 5 · TERMS" ) );
+        m_title->setText( tr( "Terms and License Agreement" ) );
+        m_details->setText( tr( "Read the terms for using WorkSuite OS. Installation starts when you accept them and press Install." ) );
+        QString dir;
+        if ( auto* b = Calamares::Branding::instance() )
+        {
+            dir = b->componentDirectory() + QStringLiteral( "/terms" );
+        }
+        if ( !qEnvironmentVariableIsEmpty( "WORKSUITE_TERMS_DIR" ) )
+        {
+            dir = qEnvironmentVariable( "WORKSUITE_TERMS_DIR" );
+        }
+        QFile f( termsFile( dir, Calamares::translatorLocaleName().name ) );
+        QString text;
+        if ( f.open( QIODevice::ReadOnly ) )
+        {
+            text = QString::fromUtf8( f.readAll() );
+        }
+        // The version is the English text's: the translations render it, the record names the one agreement.
+        QFile en( termsFile( dir, QStringLiteral( "en" ) ) );
+        m_termsVersion = en.open( QIODevice::ReadOnly ) ? termsVersion( QString::fromUtf8( en.readAll() ) ) : termsVersion( text );
+        m_terms->setPlainText( text.isEmpty() ? tr( "The terms could not be loaded." ) : text );
+        if ( m_preaccepted )
+        {
+            m_accept->setChecked( true );
+        }
+        termsChanged();
         return;
     }
     else
@@ -809,6 +932,11 @@ WorksuiteConfirmViewStep::onActivate()
 void
 WorksuiteConfirmViewStep::onLeave()
 {
+    if ( m_mode == Mode::Enroll && m_server && m_input )
+    {
+        // Continue with both fields empty is the same as Skip.
+        recordEnrollSkipped( m_server->text().trimmed().isEmpty() && m_input->text().trimmed().isEmpty() );
+    }
     if ( m_mode == Mode::Recovery && m_ok )
     {
         // Shown once: drop it from memory as soon as the user moves on.
@@ -832,7 +960,7 @@ WorksuiteConfirmViewStep::enrollChanged()
     if ( server.isEmpty() && code.isEmpty() )
     {
         QFile::remove( WsEnroll::pendingPath() );
-        m_status->setText( tr( "Not enrolling. You can enroll later in Settings › About this device." ) );
+        m_status->setText( tr( "Not enrolling. Continue to skip this step." ) );
         ok = true;
     }
     else if ( WsEnroll::fromFields( server, code, t ) )
@@ -853,6 +981,77 @@ WorksuiteConfirmViewStep::enrollChanged()
                                : tr( "That enrollment code doesn't look right. Check it, or paste the whole link." ) );
     }
     Calamares::JobQueue::instance()->globalStorage()->insert( QStringLiteral( "worksuiteEnroll" ), ok && !( server.isEmpty() && code.isEmpty() ) );
+    if ( ok != m_ok )
+    {
+        m_ok = ok;
+        emit nextStatusChanged( ok );
+    }
+}
+
+void
+WorksuiteConfirmViewStep::recordEnrollSkipped( bool skipped )
+{
+    QSettings state( QString::fromLatin1( WS_STATE ), QSettings::IniFormat );
+    state.setValue( QStringLiteral( "enrollSkipped" ), skipped );
+    state.sync();
+}
+
+/* "Skip for now": nothing half-typed survives (the fields are cleared, which removes the pending token through
+   enrollChanged; removed again here in case the page never reacted), no enrollment is recorded, and the installer
+   moves on. */
+void
+WorksuiteConfirmViewStep::skipEnrollment()
+{
+    if ( m_mode != Mode::Enroll || !m_server || !m_input )
+    {
+        return;
+    }
+    m_server->clear();
+    m_input->clear();
+    QFile::remove( WsEnroll::pendingPath() );
+    if ( auto* jq = Calamares::JobQueue::instance() )
+    {
+        jq->globalStorage()->insert( QStringLiteral( "worksuiteEnroll" ), false );
+    }
+    recordEnrollSkipped( true );
+    if ( !m_ok )
+    {
+        m_ok = true;
+        emit nextStatusChanged( true );
+    }
+    if ( auto* vm = Calamares::ViewManager::instance() )
+    {
+        vm->next();
+    }
+}
+
+void
+WorksuiteConfirmViewStep::setTermsAccepted( bool on )
+{
+    if ( m_accept )
+    {
+        m_accept->setChecked( on );
+    }
+}
+
+void
+WorksuiteConfirmViewStep::termsChanged()
+{
+    const bool ok = m_accept && m_accept->isChecked();
+    if ( auto* jq = Calamares::JobQueue::instance() )
+    {
+        if ( ok )
+        {
+            jq->globalStorage()->insert( QString::fromLatin1( TERMS_KEY ),
+                                         QVariantMap { { QStringLiteral( "version" ), m_termsVersion },
+                                                       { QStringLiteral( "acceptedAt" ),
+                                                         QDateTime::currentDateTimeUtc().toString( Qt::ISODate ) } } );
+        }
+        else
+        {
+            jq->globalStorage()->remove( QString::fromLatin1( TERMS_KEY ) );
+        }
+    }
     if ( ok != m_ok )
     {
         m_ok = ok;
@@ -893,6 +1092,11 @@ WorksuiteConfirmViewStep::refresh()
     if ( m_mode == Mode::Enroll )
     {
         enrollChanged();
+        return;
+    }
+    if ( m_mode == Mode::Terms )
+    {
+        termsChanged();
         return;
     }
     const bool ok = m_mode == Mode::Erase ? confirmationMatches( m_input->text(), m_disk ) : m_saved->isChecked();

@@ -3,6 +3,7 @@ import type { LocaleReview, MessageKey } from './en'
 import { aiTa } from './ai'
 import { widgetsTa } from './widgets'
 import { captureTa } from './capture'
+import { driversTa } from './drivers'
 import { whatsappTa } from './whatsapp'
 import { desktopsTa } from './desktops'
 import { bootuiTa } from './bootui'
@@ -14,6 +15,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   ...aiTa,
   ...widgetsTa,
   ...captureTa,
+  ...driversTa,
   ...whatsappTa,
   ...desktopsTa,
   ...bootuiTa,

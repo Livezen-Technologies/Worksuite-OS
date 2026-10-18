@@ -109,10 +109,18 @@ export interface WorkSuiteApi {
   onFilesJob(cb: (e: FileJob) => void): () => void
   // Settings › Devices: real devices from sysfs (electron/hardware.ts).
   hwDevices(): Promise<CloudResult<HwDevice[]>>
-  /** Driver catalog. No service provides one yet, so Electron answers { ok: false, error: 'unavailable' }. */
-  hwDriverUpdates(): Promise<CloudResult<DriverOffer[]>>
-  /** Install driver offers; progress arrives through onPkgJob with phase = offer id. Electron: 'unavailable'. */
+  /** Settings › Drivers: the package service's report (devices with their driver status, offers found online).
+   *  check = look online now (waits for the result). */
+  hwDriverReport(check?: boolean): Promise<CloudResult<DriverReport>>
+  /** Install driver offers (administrator, polkit); progress arrives through onPkgJob with phase = offer id. */
   hwInstallDrivers(ids: string[]): Promise<CloudResult<string>>
+  /** The one-time Secure Boot password for MokManager: administrators only (polkit prompt); '' when none. */
+  hwMokPassword(): Promise<CloudResult<string>>
+  /** The package service found drivers (after Wi-Fi or Ethernet connected, daily, or a check). */
+  onDriversChanged(cb: (r: DriverReport) => void): () => void
+  /** A notice in the notification centre; clicking it opens Settings › Drivers (onOpenSettings). */
+  driversNotify(summary: string, body: string): Promise<unknown>
+  onOpenSettings(cb: (section: string) => void): () => void
   /** Settings › Users: accounts on this computer (electron/users.ts). */
   sysUsers(): Promise<Avail<{ current: string; users: LocalUser[] }>>
   /** Settings › Users › Sign-in options: this device's PIN and security keys (electron/signin.ts). Changes go
@@ -234,10 +242,19 @@ import type { SearchHit, SearchResponse, SourceState } from '../../electron/sear
 import { emptySnapshot, ymd, type WidgetsSnapshot } from '../../electron/widgets'
 export type { HwDevice, HwKind, LocalUser, SecurityKey, SignInMethod, SignInMethods, SigninResult }
 export interface DriverOffer {
-  id: string; device_id: string | null; name: string; summary: string
+  id: string; device_id: string | null; name: string
+  /** A code the shell words (firmware_missing, nvidia_better, nvidia_secure_boot, dkms_optional, …) or fwupd's text. */
+  summary: string
   from_version: string | null; to_version: string
   license: 'open' | 'proprietary'; category: 'security' | 'recommended' | 'optional'
   size_bytes: number | null; restart: boolean
+  kind?: 'firmware' | 'dkms' | 'fwupd' | 'gpu'; packages?: string[]
+}
+export type DriverStatus = 'working' | 'missing_firmware' | 'update_available' | 'optional_driver' | 'no_driver'
+export interface DriverReport {
+  state: 'idle' | 'checking' | 'off' | 'error'; checked_at: number | null; online_search: boolean; metered: boolean; secure_boot: boolean
+  devices: { id: string; kind: 'wifi' | 'ethernet' | 'display' | 'bluetooth' | 'other'; driver: string | null; status: DriverStatus; offers: string[] }[]
+  offers: DriverOffer[]; auto_installed: string[]; gpu_fallback?: boolean; mok?: { pending: boolean }
 }
 
 export interface PackagePreview {
@@ -601,11 +618,28 @@ const stub: WorkSuiteApi = {
   async hwDevices() {
     if (stubSim === 'none') return { ok: false, error: 'unavailable' }
     const extra = PV.get('hw') === 'new' && Date.now() - stubStart > 3000 ? [STUB_NEW] : PV.get('hw') === 'problem' && Date.now() - stubStart > 3000 ? [{ ...STUB_NEW, driver: null, driver_version: null }] : []
-    return { ok: true, value: [...STUB_DEVICES, ...extra] }
+    const more = PV.get('hw') === 'drivers' || PV.get('hw') === 'nvidia' ? [dev('pci:0000:00:1f.6', 'Ethernet Connection I219-V', 'Intel Corporation', 'network', 'pci', 'e1000e')] : []
+    if (PV.get('hw') === 'nvidia') more.push(dev('pci:0000:01:00.0', 'AD102 [GeForce RTX 4090]', 'NVIDIA Corporation', 'graphics', 'pci', 'nouveau'))
+    return { ok: true, value: [...STUB_DEVICES, ...more, ...extra] }
   },
-  async hwDriverUpdates() { return PV.get('hw') === 'catalog' ? { ok: true, value: STUB_OFFERS } : { ok: false, error: 'unavailable' } },
+  async hwDriverReport(check) {
+    const hw = PV.get('hw')
+    if (hw !== 'catalog' && hw !== 'drivers' && hw !== 'nvidia') return { ok: false, error: 'unavailable' }
+    if (check) { stubDriverReport = { ...stubDriverReport, state: 'checking' }; stubDriverListeners.forEach((l) => l(stubDriverReport)); await stubWait(PV.get('slow') ? 60_000 : 1500) }
+    stubDriverReport = { ...stubReport(hw), checked_at: Date.now() }
+    return { ok: true, value: stubDriverReport }
+  },
+  onDriversChanged(cb) {
+    stubDriverListeners.add(cb)
+    // ?hw=drivers&notify=1: the "drivers available" notification a few seconds in.
+    const t = PV.get('notify') ? setTimeout(() => cb(stubReport(PV.get('hw'))), 2500) : null
+    return () => { stubDriverListeners.delete(cb); if (t) clearTimeout(t) }
+  },
+  async driversNotify() { return 0 },
+  async hwMokPassword() { return PV.get('mok') ? { ok: true, value: '48213907' } : { ok: true, value: '' } },
+  onOpenSettings() { return () => {} },
   async hwInstallDrivers(ids) {
-    if (PV.get('hw') !== 'catalog') return { ok: false, error: 'unavailable' }
+    if (!['catalog', 'drivers', 'nvidia'].includes(PV.get('hw') ?? '')) return { ok: false, error: 'unavailable' }
     const job = `/lk/worksuite/PackageService1/job/${++stubJobId}`
     ids.forEach((id, i) => {
       setTimeout(() => stubListeners.forEach((l) => l({ job, kind: 'progress', percent: 100, phase: id })), 400 + i * 100)
@@ -742,6 +776,29 @@ const STUB_DEVICES: HwDevice[] = [
   dev('pci:0000:00:1f.3', 'Audio controller', 'Preview', 'audio', 'pci', 'snd_hda_intel'),
 ]
 const STUB_NEW = dev('usb:1-2', 'USB Camera', 'Preview', 'camera', 'usb', 'uvcvideo', { driver_version: '1.1.1' })
+const stubDriverListeners = new Set<(r: DriverReport) => void>()
+let stubDriverReport: DriverReport = { state: 'idle', checked_at: null, online_search: true, metered: false, secure_boot: false, devices: [], offers: [], auto_installed: [] }
+/** ?hw=drivers: Wi-Fi missing firmware, Ethernet working, a firmware update; ?hw=nvidia adds an NVIDIA GPU on nouveau
+ *  (&sb=1: Secure Boot on). */
+function stubReport(hw: string | null): DriverReport {
+  if (hw === 'catalog') return { state: 'idle', checked_at: Date.now(), online_search: true, metered: false, secure_boot: false, devices: [], offers: STUB_OFFERS, auto_installed: [] }
+  const nv = hw === 'nvidia'
+  const offers: DriverOffer[] = [
+    { id: 'fw:firmware-iwlwifi', device_id: 'pci:0000:00:14.3', name: 'firmware-iwlwifi', summary: 'firmware_missing', from_version: null, to_version: 'debian', license: 'proprietary', category: 'recommended', size_bytes: 24e6, restart: false, kind: 'firmware', packages: ['firmware-iwlwifi'] },
+    ...(nv ? [{ id: 'gpu:nvidia-driver', device_id: 'pci:0000:01:00.0', name: 'NVIDIA proprietary driver', summary: PV.get('sb') ? 'nvidia_secure_boot' : 'nvidia_better', from_version: null, to_version: '550', license: 'proprietary' as const, category: 'recommended' as const, size_bytes: 400e6, restart: true, kind: 'gpu' as const, packages: ['nvidia-driver', 'nvidia-kernel-dkms', 'linux-headers-amd64'] }] : []),
+    { id: 'fwupd:0123456789abcdef0123456789abcdef01234567', device_id: null, name: 'System firmware', summary: 'Fixes a sleep issue', from_version: '1.12.0', to_version: '1.14.2', license: 'proprietary', category: 'security', size_bytes: 9e6, restart: true, kind: 'fwupd' },
+  ]
+  return {
+    state: 'idle', checked_at: Date.now() - 3_600_000, online_search: true, metered: PV.get('metered') === '1', secure_boot: !!PV.get('sb'),
+    devices: [
+      { id: 'pci:0000:00:14.3', kind: 'wifi', driver: 'iwlwifi', status: 'missing_firmware', offers: ['fw:firmware-iwlwifi'] },
+      { id: 'pci:0000:00:1f.6', kind: 'ethernet', driver: 'e1000e', status: 'working', offers: [] },
+      { id: 'pci:0000:00:02.0', kind: 'display', driver: 'i915', status: 'working', offers: [] },
+      ...(nv ? [{ id: 'pci:0000:01:00.0', kind: 'display' as const, driver: 'nouveau', status: 'optional_driver' as const, offers: ['gpu:nvidia-driver'] }] : []),
+    ],
+    offers, auto_installed: [], ...(PV.get('mok') ? { mok: { pending: true } } : {}),
+  }
+}
 const STUB_OFFERS: DriverOffer[] = [
   { id: 'drv-gfx', device_id: 'pci:0000:00:02.0', name: 'Graphics driver (preview)', summary: 'Preview catalog entry', from_version: '1.0', to_version: '1.1', license: 'proprietary', category: 'optional', size_bytes: 140e6, restart: true },
   { id: 'drv-cam', device_id: 'usb:1-2', name: 'Camera driver (preview)', summary: 'Preview catalog entry', from_version: null, to_version: '2.0', license: 'open', category: 'recommended', size_bytes: 4e6, restart: false },

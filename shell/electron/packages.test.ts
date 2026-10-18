@@ -164,3 +164,21 @@ describe('WSOS-APT-006 service state', () => {
     expect(await packageClient(fakeExec({ code: 1, stderr: 'Failed: ServiceUnknown' }).exec).serviceState()).toEqual({ ok: false, error: 'service_unavailable' })
   })
 })
+
+describe('drivers', () => {
+  it('DriversChanged signal → report; GetDrivers / CheckDrivers / InstallDrivers with fixed arguments', async () => {
+    expect(parseMonitorLine("/lk/worksuite/PackageService1: lk.worksuite.PackageService1.DriversChanged ('{\"state\":\"idle\",\"offers\":[]}',)"))
+      .toEqual({ job: '', kind: 'drivers', status: { state: 'idle', offers: [] } })
+    const f = fakeExec({ stdout: '{"type":"s","data":["{\\"state\\":\\"idle\\"}"]}' })
+    expect(await packageClient(f.exec).driverReport(true)).toEqual({ ok: true, value: { state: 'idle' } })
+    expect(f.calls[0].slice(-4)).toEqual(['lk.worksuite.PackageService1', 'CheckDrivers', 's', 'manual'])
+    await packageClient(f.exec).driverReport(false)
+    expect(f.calls[1].at(-1)).toBe('GetDrivers')
+    await packageClient(f.exec).installDrivers(['fw:firmware-iwlwifi', '--evil', 'gpu:nvidia-driver'])
+    expect(f.calls[2].slice(-5)).toEqual(['InstallDrivers', 'as', '2', 'fw:firmware-iwlwifi', 'gpu:nvidia-driver'])
+    expect(await packageClient(f.exec).installDrivers(['; rm'])).toEqual({ ok: false, error: 'invalid_argument' })
+    await packageClient(f.exec).mokPassword()
+    expect(f.calls[3]).toContain('--allow-interactive-authorization=yes')
+    expect(f.calls[3].at(-1)).toBe('GetMokPassword')
+  })
+})
