@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { Readable } from 'node:stream';
+import { ciRing } from './rings.mjs';
 
 export function parseArgs(argv) {
   const o = { ring: 'development', type: 'feature', dist: 'dist', dryRun: false };
@@ -31,7 +32,7 @@ export function parseArgs(argv) {
     else throw new Error(`unknown argument ${a}`);
   }
   if (!/^[0-9][A-Za-z0-9.+~-]*$/.test(o.version ?? '')) throw new Error('--version is required (e.g. 1.2.0)');
-  if (!['development', 'pilot', 'canary', 'beta'].includes(o.ring)) throw new Error('CI publishes to development (canary) or pilot (beta); promote to stable in the Update Center');
+  o.ring = ciRing(o.ring);   // canary/beta accepted; the Update Center is sent the canonical name (tools/release/rings.mjs)
   if (!['security', 'feature', 'emergency'].includes(o.type)) throw new Error('--type is security, feature or emergency');
   return o;
 }

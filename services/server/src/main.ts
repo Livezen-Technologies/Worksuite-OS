@@ -27,6 +27,7 @@ import { parseArgs } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
 import * as admin from './admin.ts';
 import * as identity from './identity.ts';
+import { setValidatedPolicy } from './policy.ts';
 import { apiRoutes, purgeTombstones } from './api.ts';
 import { openDb } from './db.ts';
 import { HttpError, makeCtx, Router, sendError } from './http.ts';
@@ -126,7 +127,7 @@ async function main(argv: string[]) {
     case 'init': return out({ org_id: admin.createOrg(db, v.org ?? v.name ?? 'WorkSuite', { requireDevice: v['require-device'] }) });
     case 'user-add': return out({ user_id: admin.addUser(db, org(), v.email ?? '', v.name ?? v.email ?? '', readStdin(), v.admin ? 'admin' : 'user') });
     case 'enroll-token': return out(admin.createEnrollmentToken(db, org(), { hours: v.hours ? Number(v.hours) : undefined, uses: v.uses ? Number(v.uses) : undefined }));
-    case 'policy-set': return out({ version: admin.setPolicy(db, org(), readJson(positionals[0])) });
+    case 'policy-set': return out({ version: setValidatedPolicy(db, org(), readJson(positionals[0])) });   // same validator as the console
     case 'command': return out({ command_id: admin.issueCommand(db, v.device ?? '', v.name ?? '', v.args ? JSON.parse(v.args) : {}, v['ttl-hours'] ? Number(v['ttl-hours']) : undefined) });
     case 'release-publish': return out(admin.publishRelease(db, readJson(positionals[0])));
     case 'release-pause': case 'release-resume': case 'release-pull':

@@ -50,6 +50,10 @@ profile worksuite-device-agent flags=(attach_disconnected) {
 
   # Read-only probes run inside this profile.
   /usr/bin/{getent,lsblk,findmnt,dpkg-query,flatpak,journalctl} rix,
+  # Diagnostics profile "network" (src/diagnostics.ts): ip -j address/route over netlink.
+  /usr/{s,}bin/ip rix,
+  # The package service's update status (inventory, the check-in's update_status, diagnostics profile "update").
+  /run/worksuite-package-service/update-status.json r,
   /usr/lib/@{multiarch}/** mr,
   /var/lib/dpkg/** r,
   /var/lib/flatpak/** r,

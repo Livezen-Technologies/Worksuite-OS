@@ -10,6 +10,7 @@ import { checkSources, isCritical, parseCatalogId, parseDiskChange, parseSimulat
 import { debFieldsUnprivileged, type Unprivileged } from './untrusted.ts';
 
 export type Source = 'apt' | 'flatpak';
+export const APPIMAGE_NOT_INSTALLABLE = 'AppImages are not installed by the package service; import the AppImage file in the App Center (worksuite-appimage import)';
 export interface RunResult { code: number; stdout: string; stderr: string }
 export interface Runner { run(cmd: string, args: string[]): Promise<RunResult> }
 
@@ -400,6 +401,9 @@ export class PackageService extends EventEmitter {
 
   /** Policy allowlist on managed devices (WSOS-APP-003); flatpak only from approved remotes (WSOS-FLP-001). */
   private authorizeItem(source: Source, catalogId: string, op: 'install' | 'remove'): string {
+    // Catalog appimage:<id> items are approved checksums, not packages: the user imports the file they were given
+    // (worksuite-appimage import, the App Center's "Import file"), which is checked against the catalog sha256.
+    if ((source as string) === 'appimage' || catalogId.startsWith('appimage:')) throw new ServiceError('InvalidArgs', APPIMAGE_NOT_INSTALLABLE);
     if (source !== 'apt' && source !== 'flatpak') throw new ServiceError('InvalidArgs', 'source');
     const name = parseCatalogId(source, catalogId);
     if (op === 'remove' && source === 'apt' && isCritical(name)) throw new ServiceError('Protected', `${name} is part of the system`);

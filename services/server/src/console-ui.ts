@@ -192,7 +192,9 @@ const views = {
       d.revoked ? null : [h('h2', {}, 'Actions'), h('div', { class: 'row' },
         h('button', { onclick: () => send('RequestLock') }, 'Lock screen'), h('button', { onclick: () => send('RefreshPolicy') }, 'Refresh policy'),
         h('button', { onclick: () => send('ScheduleUpdate') }, 'Install updates'), h('button', { onclick: () => send('RebootDuringWindow') }, 'Restart in maintenance window'),
-        h('button', { onclick: () => send('CollectApprovedDiagnostics', { bundle_profile: 'basic' }) }, 'Collect diagnostics'),
+        // Same names as DIAG_PROFILES (src/console.ts) and the device agent's services/device-agent/src/diagnostics.ts.
+        (() => { const prof = h('select', { 'aria-label': 'Diagnostics profile' }, h('option', { value: 'basic' }, 'Basic'), h('option', { value: 'session' }, 'Session logs'), h('option', { value: 'network' }, 'Network'), h('option', { value: 'update' }, 'Updates'));
+          return [prof, h('button', { onclick: () => send('CollectApprovedDiagnostics', { bundle_profile: prof.value }) }, 'Collect diagnostics')]; })(),
         h('button', { class: 'danger', onclick: () => { if (confirm('Revoke this device? It stops receiving policy and its credential stops working.')) act(() => api('POST', 'devices/' + id + '/revoke'), 'Device revoked.'); } }, 'Revoke')),
       kioskDevice(id, d.kiosk),
       h('h2', {}, 'Erase'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),

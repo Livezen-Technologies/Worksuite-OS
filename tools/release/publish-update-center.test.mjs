@@ -27,6 +27,10 @@ test('arguments: CI may only publish to pre-release rings', () => {
   assert.equal(parseArgs(['--version', 'v1.2.0']).version, '1.2.0');
   assert.throws(() => parseArgs(['--version', '1.2.0', '--ring', 'stable']), /promote to stable/);
   assert.throws(() => parseArgs(['--ring', 'pilot']), /--version/);
+  // The Update Center's channel names are aliases; the Update Center is sent the canonical ring.
+  assert.equal(parseArgs(['--version', '1.2.0', '--ring', 'canary']).ring, 'development');
+  assert.equal(parseArgs(['--version', '1.2.0', '--ring', 'beta']).ring, 'pilot');
+  assert.throws(() => parseArgs(['--version', '1.2.0', '--ring', 'nightly']), /unknown ring/);
 });
 
 test('plan renames ISOs and SBOMs per version and skips perf images', () => {

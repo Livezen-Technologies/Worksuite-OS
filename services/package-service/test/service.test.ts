@@ -78,6 +78,15 @@ test('install runs in the queue, re-checks the plan, and audits', async () => {
   assert.ok(w.audit.includes('installed'));
 });
 
+test('catalog AppImages are refused with a clear error, nothing runs', async () => {
+  const w = world();
+  for (const [src, id] of [['appimage', 'appimage:pinta'], ['apt', 'appimage:pinta']] as const) {
+    assert.throws(() => w.svc.install(1000, src as 'apt', id), (e: { code: string; message: string }) => e.code === 'InvalidArgs' && /import the AppImage file/.test(e.message), `${src} ${id}`);
+    await assert.rejects(w.svc.preview(src as 'apt', id, 'install'), /import the AppImage file/);
+  }
+  assert.deepEqual(w.calls, []);
+});
+
 test('jobs never overlap (one package lock, WSOS-APT-004)', async () => {
   let running = 0, max = 0;
   const w = world();

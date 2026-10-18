@@ -9,10 +9,22 @@ its own window and its own persistent Electron session, `persist:ws-app-<appId>`
 workers and permission grants are separate per app, and separate from the shell's default session.
 
 Each app window is sandboxed and context-isolated. It has no Node integration, no preload and no `<webview>`.
-Every web permission request is denied, as in the shell (WSOS-SEC-003). Navigation stays on the app's own HTTPS
+Every web permission request is denied, as in the shell (WSOS-SEC-003), unless an administrator granted that
+permission to the requesting HTTPS origin in `/etc/worksuite/web-permissions.json` (see **Web permissions** below). Navigation stays on the app's own HTTPS
 origin. Other `https:`, `mailto:` and `tel:` links open in the system browser, and anything else is refused.
 
 Tested by `shell/electron/appwindows.test.ts`.
+
+### WorkSuite app windows (`worksuite-app <module>`)
+
+WorkSuite Desktop's modules run as separate processes started with `worksuite-app <module>`
+(`shell/electron/appwindow.ts`): one process per module, a persistent partition per account
+(`persist:account-<account id>`), sandboxed and context-isolated, no Node integration and no preload in the web
+content, and navigation kept on the module's own origins. These windows grant four web permissions, and only to the
+module's own origins (`allowedOrigins` in `shell/electron/webapps.ts`): `media` (camera and microphone, for Meet and
+Chat), `notifications`, `clipboard-sanitized-write` and `fullscreen`. Every other permission, and every other origin,
+is denied. Screen sharing is separate: only the `meet` module may ask (`SCREEN_SHARE_MODULES`), it goes through the
+ScreenCast portal, whose chooser asks the user every time, and cancelling there denies.
 
 ## AppArmor (WSOS-SEC-009)
 
@@ -21,13 +33,15 @@ Tested by `shell/electron/appwindows.test.ts`.
 | `worksuite-device-agent` | `worksuite-device-agent.service` | enforce |
 | `worksuite-package-service` | `worksuite-package-service.service` | enforce. `apt-get`, `dpkg` and `flatpak` run unconfined (`Ux`), because maintainer scripts are arbitrary. The service passes them fixed arguments only. |
 | `worksuite-directory` | `worksuite-breakglass-rotate.service` | enforce |
+| `worksuite-ai` | `worksuite-ai.service` (user unit) | enforce. The AI assistant's control service: network for model downloads (HTTPS to catalog hosts only, enforced in `services/ai/src/fetch.ts`), its own data under `~/.local/share/worksuite/ai`, reads the AI policy and catalog in `/etc/worksuite` and administrator models in `/var/lib/worksuite/ai`, starts the engine unit through the user manager. |
+| `worksuite-ai-engine` | `worksuite-ai-engine.service` (user unit) | enforce. llama.cpp with no network (`deny network inet/inet6`; the unit also has `RestrictAddressFamilies=AF_UNIX`): maps model files read-only and writes only its own socket. |
 | `worksuite-shell` | `worksuite-shell.service`, `worksuite-recovery-launcher.service`, `worksuite-recovery-shell.service` | complain |
 
 Profiles are attached by name through `AppArmorProfile=-<name>` in each unit, not by path. All services run on
 `/usr/bin/worksuite-node`, so a path-attached profile would confine all of them, including the PAM helper. The `-`
 prefix keeps a unit working on a kernel booted without AppArmor.
 
-Units with `NoNewPrivileges=yes` (the device agent and the rotation) run their helpers with `ix`. Under
+Units with `NoNewPrivileges=yes` (the device agent, the rotation and both AI units) run their helpers with `ix`. Under
 no_new_privs, AppArmor refuses a transition to a wider profile or to unconfined.
 
 Packages install the profiles to `/etc/apparmor.d/`. Their postinst reloads a profile when AppArmor is active, and
@@ -89,7 +103,7 @@ There are three key families. Only the public halves are in git (`packaging/keyr
 
 | Key | Signs | Private half lives |
 |---|---|---|
-| OpenPGP archive key | APT `InRelease` | HSM, or an offline machine (`tools/repo/keygen.sh`) |
+| OpenPGP archive key | APT `InRelease` | HSM, or an offline machine (`tools/repo/keygen.sh`). If the optional `update-center` CI job signs, also the `WORKSUITE_ARCHIVE_GPG_KEY` GitHub secret (see **What CI holds** below) |
 | Ed25519 release key | Release manifests | Server key store. Production: an HSM-backed KMS key |
 | Ed25519 device-command key | Policies and remote commands | Server key store. Production: an HSM-backed KMS key |
 
@@ -102,8 +116,30 @@ Process:
    tokens in separate safes.
 2. **Use.** The release signer is a dedicated host that is not a CI runner. `tools/repo/publish.sh` reaches the HSM
    through `GNUPGHOME` with a PKCS#11 agent, so the private key never exists as a file. Every signature is logged
-   with operator, suite and digest. CI never holds a private key. It builds unsigned artifacts and their SBOMs,
-   and the signer verifies the SBOM and checksums before it signs.
+   with operator, suite and digest.
+
+   **What CI holds.** Image builds (`.github/workflows/image.yml`, job `image`) hold no signing key: they build
+   unsigned `.deb`s, ISOs and SBOMs. The one exception is the optional `update-center` job, which signs the APT
+   suite it uploads to the Update Center:
+
+   - **What:** the OpenPGP archive private key, ASCII-armoured, in the repository secret `WORKSUITE_ARCHIVE_GPG_KEY`
+     (exported from the `tools/repo/keygen.sh` keyring with `gpg --export-secret-keys --armor`), and its optional
+     passphrase in `WORKSUITE_KEY_PASSPHRASE`. Neither Ed25519 server key (release manifests, device commands) is in
+     CI; the Update Center signs manifests with its own signing service.
+   - **Scope:** the job runs only for pushed `v*` tags (`if: startsWith(github.ref, 'refs/tags/v')`), never for pull
+     requests (GitHub does not pass secrets to workflows from forks), and only when the `UPDATE_CENTER_TOKEN` secret
+     is set too. The key reaches one step only, "Build and sign the APT suite", as environment variables; that step
+     imports it into a temporary `GNUPGHOME` (`mktemp -d`) inside a throwaway `debian:trixie` container on a
+     GitHub-hosted runner, signs `InRelease`/`Release.gpg` with `tools/repo/publish.sh`, exports only the public
+     keyring and deletes the `GNUPGHOME`. The workflow's token is `contents: read`. GitHub masks secret values in logs.
+   - **Why:** devices only accept an APT suite whose `InRelease` verifies against `worksuite-archive-keyring`
+     (WSOS-AUP-002), and the Update Center serves the uploaded suite as is, so a suite published from CI must be
+     signed in CI. Without the secret the job publishes only the ISOs.
+   - **Risk and the stricter path:** anyone who can push a `v*` tag, or change the workflow on a tagged commit, can
+     use the key, and a GitHub secret is a file-held key, not an HSM. Restrict tag pushes (tag protection rules) and
+     workflow changes to release managers. For the production archive key, leave `WORKSUITE_ARCHIVE_GPG_KEY` unset
+     and sign on the release signer above, which also verifies the SBOM and checksums before it signs; CI then
+     uploads only unsigned artifacts.
 3. **Rotation.** Rotate yearly, or at once if compromise is suspected. Follow the overlap procedure in
    `packaging/keyring/README.md`: ship the new public key, start signing with it, then drop the old key. If a
    key is compromised, revoke it by shipping a keyring without it, and treat devices that cannot update as

@@ -4,6 +4,9 @@ Updates reach devices through a signed APT repository, which apt verifies before
 (WSOS-AUP-002). The update coordinator decides *when* to install from the signed release manifest; apt checks
 *what* gets installed against the signed `InRelease`.
 
+Ring names, the Update Center's channel names (canary/beta) and suites: [`docs/release-channels.md`](../../docs/release-channels.md),
+from the one mapping in `tools/release/rings.mjs`.
+
 | Ring | Suite | Policy `update_ring` |
 | --- | --- | --- |
 | development | `trixie-dev` | `development` |

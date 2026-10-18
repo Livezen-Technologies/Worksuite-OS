@@ -49,7 +49,16 @@ reason. Acks that cannot be sent are queued in state and delivered first on the 
 - `InstallApprovedApplication` runs only if the id (`apt:…`, `flatpak:…`, `worksuite:…`) is also in the device's
   signed `app_allowlist`; installs go through `lk.worksuite.PackageService1`.
 - `RebootDuringWindow` needs a policy `maintenance_window` (`HH:MM-HH:MM`) and schedules `shutdown -r` at its start.
-- `CollectApprovedDiagnostics` accepts the fixed profiles `basic` and `session` (WorkSuite unit logs, no user files).
+- `CollectApprovedDiagnostics` accepts the fixed profiles in `src/diagnostics.ts`, which the admin console offers
+  (any other name is rejected `BAD_ARGS`). No user files and no secrets (no NetworkManager connection files; user and
+  password are removed from URLs):
+  - `basic`: os-release, kernel, failed units;
+  - `session`: `basic` plus 24 h of `worksuite-*` unit logs;
+  - `network`: `basic` plus `ip -j address`/`route` (IPv4 and IPv6), `/etc/resolv.conf`, NetworkManager device states,
+    `nmcli networking connectivity check`, and a DNS lookup of the update host;
+  - `update`: `basic` plus the package service's update status (state, ring, offered/installed version, last check,
+    reason), `/etc/worksuite/updates.json` (host, ring, mode), the WorkSuite APT source and 24 h of
+    `worksuite-package-service` logs.
 
 ## Remote wipe (§14.3)
 

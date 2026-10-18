@@ -25,7 +25,8 @@ D-Bus activation environment, then starts `worksuite-session.target` (shell, pan
 When Labwc exits the launcher stops sync, locks the login keyring, stops the target and unsets display variables.
 
 Shell crash: `Restart=always`, `RestartSec=1s` (≤ 3 s). Three failures within 60 s hit the start limit and
-`OnFailure=` starts `worksuite-recovery-launcher.service`. The shell launches every app with
+`OnFailure=` starts `worksuite-recovery-launcher.service`, which runs `worksuite-shell --safe` (the minimal launcher;
+`--recovery` is the separate recovery screens of `worksuite-recovery-shell.service`). The shell launches every app with
 `systemd-run --user --scope --slice=app.slice --unit=app-worksuite-<id>-<n>.scope -- gtk-launch <id>`
 (`shell/electron/session.ts`), so apps live outside the shell's cgroup and survive a shell crash (WSOS-REL-004).
 

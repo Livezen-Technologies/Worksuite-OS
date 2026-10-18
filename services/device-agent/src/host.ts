@@ -11,6 +11,7 @@ import { ENFORCED_PATHS, type Enforcement } from './enforce.ts';
 import { KILLSWITCH_TABLE, parseNmConnections, renderKillSwitch, renderNmConnection, VPN_CONNECTION_UUID, VPN_KEYFILE, wgKeyPair, wgPublicKey } from './vpn.ts';
 import type { Policy } from './state.ts';
 import { collectHardware, readUpdateStatus } from './inventory.ts';
+import { diagnosticProfiles, type DiagnosticProfile } from './diagnostics.ts';
 
 export interface HostPaths { stateDir: string; runtimeDir: string; auditLog: string }
 
@@ -55,19 +56,6 @@ export function splitCatalogId(id: string): [string, string] {
   if (i < 1 || !SOURCES.has(source) || !/^[A-Za-z0-9._+-]{1,200}$/.test(name)) throw new Error('BAD_CATALOG_ID');
   return [source, name];
 }
-
-/** Diagnostic profiles an admin may request. Logs only from WorkSuite units; no user files, no secrets. */
-const PROFILES: Record<string, () => Promise<Record<string, string>>> = {
-  basic: async () => ({
-    'os-release': readOr('/etc/os-release'),
-    kernel: release(),
-    'failed-units': await run('systemctl', ['--failed', '--no-legend', '--plain']).catch(() => ''),
-  }),
-  session: async () => ({
-    ...(await PROFILES.basic()),
-    journal: await run('journalctl', ['--since', '-24h', '--no-pager', '-o', 'short-iso', '-u', 'worksuite-*', '-n', '5000']).catch(() => ''),
-  }),
-};
 
 export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
   mkdirSync(paths.runtimeDir, { recursive: true, mode: 0o755 });
@@ -215,7 +203,8 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
     },
 
     async collectDiagnostics(profile) {
-      const make = PROFILES[profile];
+      const profiles = diagnosticProfiles({ run: (c, a) => run(c, a, 30_000), read: (p) => readOr(p), lookup: async (h) => (await lookup(h, { all: true })).map((x) => x.address) }, release());
+      const make = Object.hasOwn(profiles, profile) ? profiles[profile as DiagnosticProfile] : undefined;
       if (!make) throw new Error('UNKNOWN_PROFILE');
       const content = JSON.stringify(await make());
       return { profile, sha256: createHash('sha256').update(content).digest('hex'), content };
