@@ -9,6 +9,8 @@ import { busAuthority, loadIntrospection, NAME, serve } from './dbus.ts';
 import { PackageService, type DevicePolicy, type Env, type RunResult } from './service.ts';
 import { Coordinator, LOCAL_CONFIG, updateHost, type CoordinatorEnv } from './coordinator.ts';
 import { loadCatalog } from './catalog.ts';
+import { gunzipSync } from 'node:zlib';
+import { DriverManager, firmwarePresent, parseModulesAlias, scanSysfs, type DriverEnv } from './driverscan.ts';
 
 const POLICY = '/run/worksuite-device-agent/policy.json';
 const AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';
@@ -164,6 +166,52 @@ async function getJson(url: string, headers: Record<string, string> = {}) {
   return r.json();
 }
 
+const DRIVERS_STATE = '/var/lib/worksuite-package-service/drivers.json';
+const SECURE_BOOT_VAR = '/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-e0c98e08a90c';
+
+export function driverEnv(svc: PackageService): DriverEnv {
+  let aliases: ReturnType<typeof parseModulesAlias> | null = null;
+  const installed = (p: string) => { try { return execFileSync('dpkg-query', ['-W', '-f=${db:Status-Abbrev}', p], { encoding: 'utf8' }).startsWith('ii'); } catch { return false; } };
+  return {
+    run: linuxEnv.runner.run,
+    devices: () => {
+      aliases ??= parseModulesAlias(readOr(`/lib/modules/${release()}/modules.alias`));
+      return scanSysfs('/', aliases);
+    },
+    kernelLog: async () => (await run('journalctl', ['-k', '-b', '-o', 'cat', '--no-pager', '-q'])).stdout,
+    firmwarePresent: (f) => firmwarePresent(f),
+    // apt-file-like lookup: Debian's non-free-firmware Contents index (signed archive host; small, ~30 kB).
+    async contents() {
+      const base = 'https://deb.debian.org/debian/dists/trixie/non-free-firmware/';
+      const parts = await Promise.all(['Contents-all.gz', `Contents-${ARCH}.gz`].map(async (f) => {
+        const r = await fetch(base + f, { redirect: 'error', signal: AbortSignal.timeout(60_000) });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return gunzipSync(Buffer.from(await r.arrayBuffer())).toString('utf8');
+      }));
+      return parts.join('\n');
+    },
+    installed,
+    // The published policy carries the kiosk block for the devices it names; this device's id is in the agent's status.
+    policy: () => {
+      const p = linuxEnv.policy() as (ReturnType<DriverEnv['policy']> & { kiosk?: { enabled?: boolean; devices?: unknown } }) | null;
+      if (!p) return null;
+      const id = enrollment()?.deviceId;
+      const kiosk = p.kiosk?.enabled === true && Array.isArray(p.kiosk.devices) && !!id && p.kiosk.devices.includes(id);
+      return { ...p, kiosk: { enabled: kiosk } };
+    },
+    metered: async () => /^u [13]$/.test(await busctlGet(['org.freedesktop.NetworkManager', '/org/freedesktop/NetworkManager', 'org.freedesktop.NetworkManager', 'Metered'])),
+    secureBoot: () => { try { const b = readFileSync(SECURE_BOOT_VAR); return b[b.length - 1] === 1; } catch { return false; } },
+    arch: ARCH,
+    now: Date.now,
+    load: () => { try { return JSON.parse(readFileSync(DRIVERS_STATE, 'utf8')); } catch { return {}; } },
+    save: (st) => { mkdirSync('/var/lib/worksuite-package-service', { recursive: true }); writeFileSync(DRIVERS_STATE + '.tmp', JSON.stringify(st), { mode: 0o600 }); renameSync(DRIVERS_STATE + '.tmp', DRIVERS_STATE); },
+    audit: linuxEnv.audit,
+    bootId: () => readOr('/proc/sys/kernel/random/boot_id'),
+    writeFile: (p, text) => writeFileSync(p, text, { mode: 0o600 }),
+    enqueue: (caller, body) => svc.driverJob(caller, body),
+  };
+}
+
 async function main() {
   const releaseKeys = loadKeys(RELEASE_KEYS);
   const svc = new PackageService({ ...linuxEnv, release: { keys: releaseKeys, arch: ARCH, installed: () => pkgVersion('worksuite-desktop') } });
@@ -178,12 +226,23 @@ async function main() {
       renameSync(UPDATE_STATUS_DIR + '/update-status.json.tmp', UPDATE_STATUS_DIR + '/update-status.json');
     } catch { /* status is informational */ }
   });
+  const drivers = new DriverManager(driverEnv(svc));
   serve(bus, svc, busAuthority(bus), loadIntrospection(XML), coordinator, {
+    drivers,
     catalog: () => loadCatalog({ server: enrollment, fetchJson: getJson, arch: ARCH, policy: linuxEnv.policy, runner: linuxEnv.runner, now: Date.now }),
   });
   coordinator.start();
   await bus.requestName(NAME, dbus.NameFlag.DO_NOT_QUEUE);
   linuxEnv.audit('started', { state: svc.state() });
+  // GPU rollback (nvidia → nouveau) when the first boot after installing it didn't bring up the greeter; then the
+  // daily driver check (the timer starts this service 2 min after boot; NetworkManager's dispatcher on connectivity).
+  setTimeout(() => {
+    void (async () => {
+      const greeter = await run('systemctl', ['is-active', '--quiet', 'greetd.service']);
+      await drivers.gpuBootCheck(greeter.code === 0, existsSync('/sys/module/nvidia'));
+      await drivers.check('timer');
+    })().catch((e) => linuxEnv.audit('drivers_check_failed', { error: String(e) }));
+  }, 60_000).unref();
 }
 
 if (import.meta.main) main().catch((e) => { process.stdout.write(JSON.stringify({ ts: new Date().toISOString(), service: 'worksuite-package-service', level: 'error', event: 'fatal', error: String(e?.stack ?? e) }) + '\n'); process.exit(1); });

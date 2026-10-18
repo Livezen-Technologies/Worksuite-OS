@@ -41,8 +41,35 @@ profile worksuite-package-service flags=(attach_disconnected) {
   /var/lib/dpkg/** r,
   /var/lib/apt/** r,
 
+  # Drivers (Settings › Drivers): devices, modaliases, kernel modules and firmware files, Secure Boot state.
+  /sys/bus/ r,
+  /sys/bus/** r,
+  /sys/module/ r,
+  /sys/firmware/efi/efivars/SecureBoot-* r,
+  /{usr/,}lib/modules/** r,
+  /{usr/,}lib/firmware/** r,
+  /var/lib/dkms/mok.pub r,
+
   /usr/bin/test rix,
+  /usr/bin/journalctl Px -> worksuite-package-service//journal,
+  /usr/bin/{busctl,systemctl} Ux,
+  # Driver installs and checks: modprobe (reload after firmware), isenkram-lookup (python, reads AppStream), fwupd's
+  # client, mokutil (Secure Boot key enrolment), update-initramfs (GPU fallback). Fixed argument vectors only.
+  /usr/{s,}bin/{modprobe,kmod,mokutil,update-initramfs} Ux,
+  /usr/bin/{isenkram-lookup,fwupdmgr} Ux,
   /usr/bin/{apt-get,apt-cache,dpkg,dpkg-query,flatpak} Ux,
+
+  profile journal {
+    include <abstractions/base>
+    /usr/bin/journalctl mr,
+    /var/log/journal/ r,
+    /var/log/journal/** r,
+    /run/log/journal/ r,
+    /run/log/journal/** r,
+    /etc/machine-id r,
+    /proc/** r,
+    /sys/** r,
+  }
 
   deny /home/** rwx,
   deny /root/** rwx,

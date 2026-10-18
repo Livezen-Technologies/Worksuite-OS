@@ -41,7 +41,7 @@ export interface Env {
 }
 
 export interface Preview { source: Source; name: string; plan: Plan; disk_bytes: number | null; permissions: string[]; broad: string[] }
-export type JobKind = 'install' | 'remove' | 'update' | 'repair' | 'permissions' | 'prune' | 'remote';
+export type JobKind = 'install' | 'remove' | 'update' | 'repair' | 'permissions' | 'prune' | 'remote' | 'drivers';
 
 /** WSOS-APT-005: what the confirmation dialog shows for a local .deb. `token` must be passed back to install. */
 export interface LocalDebPreview {
@@ -367,6 +367,14 @@ export class PackageService extends EventEmitter {
   }
 
   job(id: number) { return this.jobs.get(id); }
+
+  /** Driver installs (driverscan.ts) in the same queue; progress phase = the offer id. Sources are checked first. */
+  driverJob(caller: number, body: (progress: (phase: string, pct: number) => void) => Promise<void>): number {
+    return this.enqueue('drivers', caller, async (job) => {
+      this.checkSources();
+      await body((phase, pct) => { job.phase = phase; this.progress(job, pct); });
+    });
+  }
 
   private enqueue(kind: JobKind, caller: number, body: (job: Job) => Promise<void>): number {
     if (this.needsRepair && kind !== 'repair') throw new ServiceError('PreconditionFailed', 'repair packages first');

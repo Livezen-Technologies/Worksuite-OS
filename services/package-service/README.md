@@ -88,3 +88,38 @@ checked per call with the caller's subject; only fixed executables are spawned w
 every privileged call is audited to journald and `desktop/v1/audit` without secrets.
 
 Files: `polkit/lk.worksuite.package.policy`, `dbus/*.conf` (bus policy), `dbus/*.service` (bus activation), `systemd/` (unit).
+
+## Drivers and firmware (`src/drivers.ts`, `src/driverscan.ts`)
+
+The image ships the firmware for every Wi-Fi and Ethernet chipset family Debian packages, plus Mesa and GPU firmware
+(`live-build/config/package-lists/worksuite.list.chroot`); udev loads the in-tree kernel drivers by modalias. What the
+image doesn't carry is found online:
+
+- **When**: NetworkManager's dispatcher (`networkmanager/90-worksuite-drivers`, `connectivity-change` to `FULL`) calls
+  `CheckDrivers("connectivity")`; the timer start calls it with `"timer"`. Both check at most once a day, sooner when the
+  hardware fingerprint changed. Settings › Drivers' "Check for drivers" calls `CheckDrivers("manual")` (≥ 1 min apart).
+- **What**: devices from sysfs (`/sys/bus/{pci,usb}/devices/*/modalias`, bound driver, the module `modules.alias`
+  names); missing firmware from the kernel log ("Direct firmware load for X failed", "Unable to load firmware X")
+  looked up in Debian's `non-free-firmware` Contents index (apt-file style); `isenkram-lookup` suggestions (firmware and
+  DKMS packages only); out-of-tree DKMS drivers for devices without a kernel driver (`DKMS_CATALOG`: broadcom-sta-dkms,
+  r8168-dkms, r8125-dkms); the NVIDIA proprietary driver for NVIDIA GPUs on nouveau (`nvidiaPick`: Maxwell and newer →
+  `nvidia-driver` 550, compute cards → `nvidia-tesla-535-driver`, Kepler and older keep nouveau); fwupd/LVFS updates.
+- **Policy** (device policy, `/run/worksuite-device-agent/policy.json`): `drivers_online_search` (default on),
+  `drivers_auto_install` (default on; firmware from the Debian archive only), `drivers_auto_install_gpu` (default off).
+  DKMS drivers never install by themselves. Kiosk: search on, firmware only. Metered: no LVFS refresh, nothing large or
+  of unknown size installs automatically.
+- **Install**: `InstallDrivers(offer ids)` (polkit `lk.worksuite.drivers.install`, the shell's own agent asks the
+  administrator) runs in the job queue with source checks: `apt-get install` (firmware, DKMS + headers, NVIDIA) or
+  `fwupdmgr update`. Firmware for a loaded driver reloads it (`modprobe -r` / `modprobe`), else a restart is asked for.
+- **Secure Boot**: DKMS modules are signed with DKMS's MOK; the service runs `mokutil --import /var/lib/dkms/mok.pub`
+  with a one-time 8-digit password (`--hash-file`). The password is kept in the root-only state file, never in the report
+  (`GetDrivers`/`DriversChanged` only say `mok.pending`); Settings › Drivers shows the MokManager steps and fetches the
+  password through `GetMokPassword` (polkit `lk.worksuite.drivers.install`, administrator). It is dropped once
+  `mokutil --test-key` says the key is enrolled, or after the next boot.
+  The NVIDIA driver never installs automatically under Secure Boot.
+- **GPU rollback**: after installing the NVIDIA driver the next boot is "pending"; one minute after the service starts,
+  if `greetd` isn't active or the `nvidia` module isn't loaded, it purges the NVIDIA packages (nouveau is no longer
+  blacklisted), rebuilds the initramfs and reports `gpu_fallback`, which Settings › Drivers explains. Restarting once
+  more brings the graphical session back on nouveau.
+- Everything is logged to the journal (`drivers_checked`, `driver_installed`, `gpu_fallback`, `mok_import_requested`);
+  the shell words statuses and offers itself (en/si/ta) and never shows package names or command output.
