@@ -6,7 +6,8 @@
   <interface name="lk.worksuite.PackageService1">
     <!-- polkit: lk.worksuite.package.install (root callers such as the device agent skip the prompt).
          source: "apt" | "flatpak"; catalog_id "<source>:<name>" or a bare name. On managed devices it must be in the
-         signed policy app_allowlist. No URLs, paths or options. -->
+         signed policy app_allowlist. No URLs, paths or options. "appimage" is refused InvalidArgs: catalog AppImages
+         are imported from a file by the user (worksuite-appimage), checked against the catalog SHA-256. -->
     <method name="Install">
       <arg name="source" type="s" direction="in"/>
       <arg name="catalog_id" type="s" direction="in"/>
@@ -41,6 +42,7 @@
     <method name="Repair">
       <arg name="job" type="o" direction="out"/>
     </method>
+    <!-- Only the job's caller (or root), and only while the job is still queued; otherwise Busy. -->
     <method name="CancelJob">
       <arg name="job" type="o" direction="in"/>
     </method>

@@ -291,7 +291,7 @@ export default function AppCenter({ onClose }: WindowProps) {
         {view.kind === 'detail' ? (
           detailApp ? <AppDetail a={detailApp} org={org} launchable={!!launchIdFor(detailApp, installedApps) || !!detailApp.appimageId || detailApp.builtin === 'office'}
             job={!!jobFor(detailApp)} onBack={() => setView({ kind: 'section', section: 'discover', category: 'All' })} onOpen={() => openApp(detailApp)}
-            onInstall={() => setReview(detailApp)} onRemove={() => (detailApp.appimageId ? void appimageAct(detailApp, 'remove') : void start(detailApp, 'remove'))}
+            onInstall={() => (detailApp.source === 'AppImage' ? void pickAppImage() : setReview(detailApp))} onRemove={() => (detailApp.appimageId ? void appimageAct(detailApp, 'remove') : void start(detailApp, 'remove'))}
             onApprove={() => void appimageAct(detailApp, 'approve')} onTracked={(job, op) => track(job, detailApp.name, op, detailApp.key)} say={say} />
             : <p className="text-sm" style={{ color: C.muted }}>{t('appc.noMatch')}</p>
         ) : <>
@@ -524,7 +524,7 @@ function AppDetail({ a, org, launchable, job, onBack, onOpen, onInstall, onRemov
         {removable && <button type="button" disabled={job} onClick={onRemove} className="cursor-pointer rounded-[10px] border px-[18px] py-2.5 text-sm font-medium disabled:opacity-50" style={{ borderColor: 'rgba(255,138,122,0.45)', color: '#FFB4A8' }}>{t('common.remove')}</button>}
         {a.needsApproval ? <button type="button" onClick={onApprove} className={btnPrimary}>{t('appc.allow')}</button>
           : a.installed ? (launchable && <button type="button" onClick={onOpen} className={btnPrimary}>{t('common.open')}</button>)
-          : !a.blocked && a.catalogId && <button type="button" disabled={job} onClick={onInstall} className={btnPrimary}>{job ? t('appc.working') : t('common.install')}</button>}
+          : !a.blocked && a.catalogId && <button type="button" disabled={job} onClick={onInstall} className={btnPrimary}>{job ? t('appc.working') : a.source === 'AppImage' ? t('appc.importFile') : t('common.install')}</button>}
       </div>
       {a.summary && <p className="m-0 text-[13px]" style={{ color: C.soft }}>{a.summary}</p>}
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">

@@ -7,16 +7,16 @@ install apps, apply updates and repair interrupted package operations. Interface
 
 | Method | polkit action | Contract |
 |---|---|---|
-| `Install(source, catalog_id) → job` | `lk.worksuite.package.install` | `source` ∈ {`apt`,`flatpak`}; `catalog_id` is `<source>:<name>` or a bare name, validated as a plain Debian package name or Flatpak app id (no URLs, paths or options). On managed devices it must be in the signed policy `app_allowlist` (WSOS-APP-003); Flatpaks come only from the first approved remote (default `flathub`, WSOS-FLP-001). The APT plan is re-simulated inside the lock. |
+| `Install(source, catalog_id) → job` | `lk.worksuite.package.install` | `source` ∈ {`apt`,`flatpak`}; `appimage` (or an `appimage:` id) is refused `InvalidArgs` — a catalog AppImage is an approved SHA-256 that the user's imported file is checked against (see AppImages below), never installed here; `catalog_id` is `<source>:<name>` or a bare name, validated as a plain Debian package name or Flatpak app id (no URLs, paths or options). On managed devices it must be in the signed policy `app_allowlist` (WSOS-APP-003); Flatpaks come only from the first approved remote (default `flathub`, WSOS-FLP-001). The APT plan is re-simulated inside the lock. |
 | `Preview(source, catalog_id, operation) → json` | none | WSOS-APP-002: the dependency plan (`install`/`upgrade`/`remove`), disk change in bytes, and for Flatpaks the permissions with the broad ones (home/host files, all devices, X11, session bus, network) listed separately. |
 | `Remove(source, catalog_id) → job` | `lk.worksuite.package.install` | WSOS-APT-003: refuses the critical set (WorkSuite session and services, greeter, locker, kernels, systemd, apt/dpkg, bootloader) directly and when a simulation shows any of it would be removed as a side effect. Flatpak removal prunes only unused runtimes (WSOS-FLP-004). |
 | `CheckUpdates() → a{sv}` | none | Read-only: available, size, reboot need, last result. |
 | `ApplyUpdate(release_id, options) → job` | `lk.worksuite.update.apply` | Runs the WSOS-UPD-001 coordinator steps: verified metadata, disk/AC/battery ≥ 40 % and lock checks, download, apply, health check, report to `desktop/v1/os/update-results`. Never removes user data or the sync outbox (WSOS-UPD-006). |
 | `Repair() → job` | `lk.worksuite.repair` | Fixed commands only: `dpkg --configure -a`, then `apt-get -f install`. |
-| `CancelJob(job)` | caller must own job | Only before the apply phase. |
+| `CancelJob(job)` | caller must own job (or root) | Only while the job is still `queued`; once it is running the call fails `Busy` ("job already started"). |
 
 Errors (`lk.worksuite.Error.*`): `NotAuthorized`, `NotInCatalog`, `InvalidArgs`, `Protected`, `SourcesInvalid`, `Busy`
-(package lock held), `PreconditionFailed` (power/disk, or repair needed first), `SignatureInvalid`, `NoSuchJob`, `Failed`.
+(package lock held), `PreconditionFailed` (power/disk, or repair needed first), `SignatureInvalid`, `NoSuchJob`, `ArchMismatch` (a local `.deb` built for another architecture), `Failed`.
 
 ## Implementation
 
