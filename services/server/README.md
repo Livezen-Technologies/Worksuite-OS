@@ -68,7 +68,7 @@ Administration (CLI today; the admin console comes later):
 
 ```sh
 node src/main.ts enroll-token --db ws.db --org 1 --hours 24 --uses 1         # for: worksuite-device-agent enroll
-node src/main.ts policy-set --db ws.db --org 1 policy.json                   # Policy fields, without version/signature
+node src/main.ts policy-set --db ws.db --org 1 policy.json                   # Policy fields, without version/signature; checked by src/policy.ts, the console's validator
 node src/main.ts command --db ws.db --device <id> --name RequestLock
 node src/main.ts release-publish --db ws.db manifest.json                     # ReleaseManifest, without signature
 node src/main.ts catalog-put --db ws.db item.json                             # CatalogItem

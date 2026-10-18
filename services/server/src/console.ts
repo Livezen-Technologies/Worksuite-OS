@@ -4,13 +4,14 @@
 // (never enabled here) would preflight. Remote wipe needs a second admin's approval (WSOS-WIPE-002).
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { issueCommand, revokeDevice, setPolicy, addUser, createEnrollmentToken, putCatalogItem, publishRelease, setReleaseState, promoteRelease, emergencyRelease, logRelease, RELEASE_PERMISSION } from './admin.ts';
+import { issueCommand, revokeDevice, addUser, createEnrollmentToken, putCatalogItem, publishRelease, setReleaseState, promoteRelease, emergencyRelease, logRelease, RELEASE_PERMISSION } from './admin.ts';
 import { secret, sha256, tx } from './db.ts';
 import { HttpError, invalid, send, type Ctx, type Router } from './http.ts';
 import { checkPassword } from './oauth.ts';
 import { approvalsNeeded, checkApproval, requirePermission } from './approvals.ts';
 import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
-import { normalizeKiosk, redactKiosk, type KioskPolicy } from './kiosk.ts';
+import { redactKiosk, type KioskPolicy } from './kiosk.ts';
+import { setValidatedPolicy, validatePolicy } from './policy.ts';
 import { qrMatrix } from './qr.ts';
 import { Throttle } from './throttle.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
@@ -21,6 +22,9 @@ const ROUTINE = new Set(['RefreshPolicy', 'RequestLock', 'RebootDuringWindow', '
 const DIAG_PROFILES = new Set(['basic', 'network', 'update']);
 
 interface Admin { id: number; org_id: number; email: string; name: string }
+
+// Re-exported: the console and the CLI (policy-set) share one validator, src/policy.ts.
+export { validatePolicy };
 
 const json = <T>(s: string | null): T => (s ? JSON.parse(s) : null) as T;
 
@@ -35,63 +39,6 @@ function cookie(ctx: Ctx, name: string): string | undefined {
 /** Login throttling per client address: 10 failures per 15 minutes. */
 const failures = new Throttle();
 const throttled = (addr: string) => failures.blocked([addr]);
-
-const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
-  update_ring: (v) => v === 'development' || v === 'pilot' || v === 'stable',
-  update_mode: (v) => v === 'automatic' || v === 'notify' || v === 'manual',
-  maintenance_window: (v) => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(v),
-  lock_timeout_max_s: (v) => Number.isInteger(v) && (v as number) >= 60 && (v as number) <= 86_400,
-  offline_access_days: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 365,
-  usb_storage: (v) => v === 'allow' || v === 'read_only' || v === 'block',
-  bluetooth: (v) => typeof v === 'boolean',
-  login_failures_max: (v) => Number.isInteger(v) && (v as number) >= 3 && (v as number) <= 20,
-  login_lockout_s: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 86_400,
-  // Device PIN sign-in (Settings > Users): false turns it off on the device; minimum digits 4–12.
-  allow_pin: (v) => typeof v === 'boolean',
-  pin_min_length: (v) => Number.isInteger(v) && (v as number) >= 4 && (v as number) <= 12,
-  app_allowlist: (v) => Array.isArray(v) && v.length <= 1000 && v.every((x) => typeof x === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(x)),
-  approved_remotes: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && x.length <= 200),
-  offline_wipe_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 365,
-  // CoreApprovalEngine waiver (WSOS-WIPE-001): personal-owned devices may be wiped with one approval.
-  wipe_personal_single_approval: (v) => typeof v === 'boolean',
-  // WSOS-AUTH-002: the one account a kiosk device may sign in automatically (worksuite-autologin --kiosk).
-  kiosk_autologin_user: (v) => typeof v === 'string' && /^[a-z_][a-z0-9_.@-]{0,63}$/.test(v) && v !== 'root' && v !== 'wsadmin',
-  // AppImages (WSOS-AIM-002) and local .deb files (WSOS-APT-005).
-  appimages: (v) => v === 'allow' || v === 'block',
-  appimage_trusted_keys: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && /^[0-9A-Fa-f ]{40,80}$/.test(x)),
-  allow_local_debs: (v) => typeof v === 'boolean',
-  update_mirror: (v) => typeof v === 'string' && /^https:\/\/[^\s/]+(\/\S*)?$/.test(v),
-  // Managed WireGuard VPN (WSOS-INT-001): connection must be up (always-on); user-imported VPNs allowed or removed.
-  vpn_required: (v) => typeof v === 'boolean',
-  user_vpn: (v) => v === 'allow' || v === 'block',
-  // On-device AI assistant (services/ai): off for every user, and the catalog models users may download and run.
-  ai_assistant: (v) => typeof v === 'boolean',
-  // Desktop widgets (WorkSuite Desktop's Home on the OS wallpaper): false turns them off for every user. Kiosk: always off.
-  desktop_widgets: (v) => typeof v === 'boolean',
-  // WhatsApp (WhatsApp Web in its own window, pinned by default): false removes it from Start and the taskbar and the
-  // window shows that the organization turned it off. Kiosk: never shown (the kiosk runs its own app list).
-  whatsapp: (v) => typeof v === 'boolean',
-  // Screenshots and the snipping tool (Print Screen, Super+Shift+S): disabled turns them off for every user. Kiosk: always off.
-  screen_capture: (v) => v === 'allowed' || v === 'disabled',
-  // Clipboard history (Super+V): disabled turns it off and drops what was kept. Kiosk: always off.
-  clipboard_history: (v) => v === 'allowed' || v === 'disabled',
-  ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
-};
-
-export function validatePolicy(body: unknown, current?: Record<string, unknown> | null): Record<string, unknown> {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid('policy', 'must be an object');
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(body)) {
-    if (v === null || v === '' || k === 'version' || k === 'signature') continue;   // cleared fields are omitted
-    // Kiosk mode: nested, and its exit PIN becomes a verifier (src/kiosk.ts).
-    if (k === 'kiosk') { out[k] = normalizeKiosk(v, current?.kiosk as KioskPolicy | undefined); continue; }
-    const check = POLICY_FIELDS[k];
-    if (!check) throw invalid(k, 'unknown policy field');
-    if (!check(v)) throw invalid(k, 'invalid value');
-    out[k] = v;
-  }
-  return out;
-}
 
 /** Pagination from ?page=&per_page= (1-based page, 10–100 rows, default 25). */
 export function pageOf(query: URLSearchParams): { page: number; per_page: number; offset: number } {
@@ -389,9 +336,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
   });
   r.on('PUT', '/admin/api/policy', async (ctx) => {
     const a = admin(ctx);
-    const cur = db.prepare('SELECT body FROM policies WHERE org_id = ?').get(a.org_id) as { body: string } | undefined;
-    const p = validatePolicy((await body(ctx)).policy, json(cur?.body ?? null));
-    const version = setPolicy(db, a.org_id, p);
+    const version = setValidatedPolicy(db, a.org_id, (await body(ctx)).policy);
     // Devices pick it up on their hourly refresh; nudge the active ones now.
     const ids = db.prepare('SELECT id FROM devices WHERE org_id = ? AND revoked = 0').all(a.org_id) as { id: string }[];
     for (const d of ids) issueCommand(db, d.id, 'RefreshPolicy', {}, 24);
