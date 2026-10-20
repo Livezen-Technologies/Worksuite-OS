@@ -36,6 +36,7 @@ import Assistant, { AI_ICON } from '../components/Assistant'
 import { onAssistantRequest, type AssistantRequest } from '../lib/assistantNav'
 import ShellRestartNotice from '../components/ShellRestartNotice'
 import AuthPrompt from '../components/AuthPrompt'
+import { RemoteSupportBadge, RemoteSupportPrompt } from '../components/RemoteSupport'
 import type { SearchHit } from '../../electron/search'
 import DesktopWidgets, { useWidgetData } from '../components/DesktopWidgets'
 import { WHATSAPP_APP_ID, whatsappAllowed } from '../../electron/whatsapp'
@@ -292,6 +293,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const [behind, setBehind] = useState(false)
   // An administrator prompt (polkit, WorkSuite's agent) over the apps and over the restart overlay.
   const [authOpen, setAuthOpen] = useState(false)
+  const [rsOpen, setRsOpen] = useState(false)
   const [liftSeq, setLiftSeq] = useState(0)
   const openWin = (screen: Parameters<typeof onOpen>[0]) => { setBehind(false); setLiftSeq((n) => n + 1); onOpen(screen) }
   useEffect(() => panel.onShellBehind?.(() => {
@@ -302,7 +304,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const hasWindow = Children.toArray(children).length > 0
   useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
-    || flyout || widgetPicker || authOpen || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
+    || flyout || widgetPicker || authOpen || rsOpen || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
   // Once the shell is over the apps it has the keyboard (the bridge activates it): give it to the launcher's search
   // again, which was focused while an app still had the keyboard (Start opened with the mouse).
   const focusSearch = useRef(() => undefined as void)
@@ -436,6 +438,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       {/* G12: the shell was restarted by systemd; apps in their own scopes kept running */}
       <ShellRestartNotice />
       <AuthPrompt onOpen={setAuthOpen} />
+      <RemoteSupportPrompt onOpen={setRsOpen} />
 
       {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
       <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">
@@ -569,6 +572,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           )}
           <TrayItems />
           <CaptureBadge />
+          <RemoteSupportBadge />
           <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <OskButton />

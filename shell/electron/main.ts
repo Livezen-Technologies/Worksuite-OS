@@ -48,6 +48,7 @@ import { bannerAllowed, toastHost, type ToastMsg } from './toastHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
+import { startRemoteSupportHost } from './remoteSupport'
 import { startTouchHost } from './touch'
 import { startNotifications, windowForNotification } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
@@ -670,6 +671,7 @@ app.whenReady().then(() => {
   startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
+  startRemoteSupportHost(handle)
   startTouchHost(handle, broadcast, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
   // Clicking one (its "default" action) also raises the sender's window through the bridge, whatever the app does.

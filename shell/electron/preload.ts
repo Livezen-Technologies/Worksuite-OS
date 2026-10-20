@@ -280,6 +280,14 @@ contextBridge.exposeInMainWorld('worksuiteMonitor', {
 })
 
 // Administrator prompts from the WorkSuite polkit agent — see electron/polkit.ts.
+// Remote support consent and indicator (issue #19) — see electron/remoteSupport.ts.
+contextBridge.exposeInMainWorld('worksuiteRemoteSupport', {
+  state: () => ipcRenderer.invoke('ws:remoteSupportState'),
+  decide: (decision: string) => ipcRenderer.invoke('ws:remoteSupportDecide', String(decision)),
+  revokeControl: () => ipcRenderer.invoke('ws:remoteSupportRevokeControl'),
+  end: () => ipcRenderer.invoke('ws:remoteSupportEnd'),
+})
+
 contextBridge.exposeInMainWorld('worksuitePolkit', {
   state: () => ipcRenderer.invoke('ws:polkitState'),
   respond: (id: string, password: string) => ipcRenderer.invoke('ws:polkitRespond', String(id), String(password)),
