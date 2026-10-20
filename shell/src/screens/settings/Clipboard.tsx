@@ -34,7 +34,7 @@ export function ClipboardPanel({ initial }: { initial?: ClipState | null }) {
     {!api && initial === undefined ? <Note>{t('flyout.unavailable')}</Note> : (
       <div className={card}>
         <Row title={t('clip.title')} sub={<>{t('clip.historySub')} <Keys k="W-v" small /></>}>
-          <BigSwitch label={t('clip.title')} checked={!!s?.enabled} disabled={!s || !!s.blocked} onChange={(v) => void api?.clipboardSetEnabled(v).then(setS)} />
+          <BigSwitch label={t('clip.title')} checked={!!s?.enabled} disabled={!s} unavailable={s?.blocked ? t('clip.blocked') : undefined} onChange={(v) => api?.clipboardSetEnabled(v).then(setS)} />
         </Row>
         <Row title={t('clip.clearData')} sub={cleared ? t('clip.clearedNote') : t('clip.clearDataSub')}>
           <button type="button" className={`${btnGhost} gap-2`} disabled={!s?.entries.some((e) => !e.pinned)} onClick={() => void api?.clipboardClear().then((x) => { setS(x); setCleared(true) })}>
