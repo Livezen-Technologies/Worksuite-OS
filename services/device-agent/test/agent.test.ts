@@ -10,6 +10,8 @@ import { canonical, signingBytes, type CommandEnvelope } from '../src/commands.t
 import { ENFORCED_PATHS, faillockConf, offlineAccessExpired, policyEnforcement, signinPolicyConf, type Enforcement } from '../src/enforce.ts';
 import { splitCatalogId, windowStart } from '../src/host.ts';
 import { StateFile, type Policy } from '../src/state.ts';
+import { dropSent, readPowerEvents, recordPowerEvent } from '../src/power.ts';
+import { existsSync } from 'node:fs';
 
 const server = generateKeyPairSync('ed25519');
 const attacker = generateKeyPairSync('ed25519');
@@ -33,11 +35,12 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
   const s = {
     queue: [] as unknown[], policy: opts.policy ?? signedPolicy({ version: 'p1', app_allowlist: ['flatpak:org.gimp.GIMP'], maintenance_window: '02:00-04:00' }),
     enforced: [] as Enforcement[], offlineNotice: undefined as string | null | undefined, failEnforce: false,
-    down: false, revoked: false, failAck: null as null | string, published: { credential: undefined as string | null | undefined, policy: undefined as Policy | null | undefined },
+    hbs: [] as Record<string, unknown>[], down: false, revoked: false, failAck: null as null | string, published: { credential: undefined as string | null | undefined, policy: undefined as Policy | null | undefined },
   };
   const api: DeviceApi = {
     async register(url, token) { log.push(`register ${url} ${token}`); return { device_id: 'dev-1', credential: 'cred-1', org_name: 'Livezen Technologies' }; },
-    async heartbeat() {
+    async heartbeat(hb) {
+      s.hbs.push(hb as unknown as Record<string, unknown>);
       if (s.down) throw new ApiError(0, 'NETWORK');
       if (s.revoked) throw new ApiError(403, 'DEVICE_REVOKED');
       const commands = s.queue; s.queue = []; return { commands };
@@ -81,8 +84,8 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
     async removeConnection() {},
   };
   const path = join(dir, 'state.json');
-  const make = () => new Agent({ state: new StateFile(path), api, host, keys: (id) => (id === 'k1' ? server.publicKey : undefined), now: () => NOW });
-  return { agent: make(), restart: make, s, log, acks, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  const make = () => new Agent({ state: new StateFile(path), api, host, keys: (id) => (id === 'k1' ? server.publicKey : undefined), now: () => NOW, powerEventsFile: join(dir, 'power-events.json') });
+  return { agent: make(), restart: make, s, log, acks, dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
 async function enrolled(o?: Parameters<typeof world>[0]) {
@@ -398,5 +401,38 @@ test('kiosk mode: only listed devices become kiosks; USB blocked; verifier kept 
   assert.equal(w.s.enforced.at(-1)!.files[ENFORCED_PATHS.config], null);
   assert.equal(w.s.enforced.at(-1)!.secret_files![ENFORCED_PATHS.exitVerifier], null);
   assert.equal(w.s.enforced.at(-1)!.usb_storage, 'allow');
+  w.cleanup();
+});
+
+test('power events (#39): recorded only while monitoring is on, sent with the check-in, dropped once accepted', async () => {
+  const off = { enrolled: true, policy: signedPolicy({ version: 'p1' }) };
+  const on = { enrolled: true, policy: signedPolicy({ version: 'p1', activity_monitoring: true } as Omit<Policy, 'signature'>) };
+  const w = await enrolled();
+  const file = join(w.dir, 'power-events.json');
+  assert.equal(recordPowerEvent(file, 'startup', off, NOW), false);
+  assert.equal(existsSync(file), false);
+  assert.equal(recordPowerEvent(file, 'startup', { enrolled: false, policy: on.policy }, NOW), false);   // unmanaged
+  assert.equal(recordPowerEvent(file, 'shutdown', on, NOW - 5000), true);
+  assert.equal(recordPowerEvent(file, 'startup', on, NOW), true);
+  assert.deepEqual(readPowerEvents(file), [{ at: NOW - 5000, type: 'shutdown' }, { at: NOW, type: 'startup' }]);
+
+  // Policy (p1) has monitoring off: the check-in sends none and the file is deleted.
+  await w.agent.checkIn();
+  assert.equal(w.s.hbs.at(-1)!.power_events, undefined);
+  assert.equal(existsSync(file), false);
+
+  w.s.policy = signedPolicy({ version: 'p2', activity_monitoring: true } as Omit<Policy, 'signature'>);
+  await w.agent.refreshPolicy();
+  recordPowerEvent(file, 'startup', on, NOW);
+  w.s.down = true;
+  await w.agent.checkIn();   // offline: kept for the next check-in
+  assert.equal(readPowerEvents(file).length, 1);
+  w.s.down = false;
+  await w.agent.checkIn();
+  assert.deepEqual(w.s.hbs.at(-1)!.power_events, [{ at: NOW, type: 'startup' }]);
+  assert.equal(existsSync(file), false);
+  recordPowerEvent(file, 'shutdown', on, NOW + 1);
+  dropSent(file, [{ at: NOW, type: 'startup' }]);
+  assert.equal(readPowerEvents(file).length, 1);   // recorded after sending: kept
   w.cleanup();
 });

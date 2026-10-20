@@ -4,5 +4,9 @@ set -e
 if [ "$1" = configure ] && command -v apparmor_parser >/dev/null && aa-enabled --quiet 2>/dev/null; then
   apparmor_parser -r -T -W /etc/apparmor.d/worksuite-device-agent || true
 fi
+# #39: device startup/shutdown record (does nothing unless the policy turns activity monitoring on).
+if [ "$1" = configure ] && command -v deb-systemd-helper >/dev/null; then
+  deb-systemd-helper enable worksuite-power-events.service >/dev/null || true
+fi
 #DEBHELPER#
 exit 0
