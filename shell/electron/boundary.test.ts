@@ -63,11 +63,11 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
         expect(raw.length, f).toBe(1)
         expect(s).toMatch(/ipcMain\.on\(WHATSAPP_FOCUS_CHANNEL, \(e\) => \{ if \(win && e\.sender === win\.webContents\) focus\(\) \}\)/)
       } else if (f === 'remoteSupport.ts') {
-        // Remote support capture window (issue #19): messages accepted only from that hidden window's own page.
+        // Remote support capture window (issues #19, #37): messages accepted only from that hidden window's own page.
         expect(s).toMatch(/const from = \(e: Electron\.IpcMainEvent\) => wc !== null && e\.sender === wc/)
         const on = [...s.matchAll(/ipcMain\.on\('rs:[a-z-]+', \(e[^)]*\) => \{ if \(from\(e\)\)/g)]
         expect(raw.length, f).toBe(on.length)
-        expect(on.length, f).toBe(5)
+        expect(on.length, f).toBe(7)
       } else expect(raw.length, f).toBe(0)
     }
   })

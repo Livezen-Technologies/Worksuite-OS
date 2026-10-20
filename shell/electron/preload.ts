@@ -332,6 +332,13 @@ contextBridge.exposeInMainWorld('worksuiteRemoteSupport', {
   end: () => ipcRenderer.invoke('ws:remoteSupportEnd'),
   chat: () => ipcRenderer.invoke('ws:remoteSupportChat'),
   sendChat: (text: string) => ipcRenderer.invoke('ws:remoteSupportSendChat', String(text)),
+  // Issue #37: step-up answer, clipboard opt-in, file transfer.
+  decideElevation: (allow: boolean) => ipcRenderer.invoke('ws:remoteSupportDecideElevation', String(allow === true)),
+  setClipboard: (on: boolean) => ipcRenderer.invoke('ws:remoteSupportSetClipboard', String(on === true)),
+  files: () => ipcRenderer.invoke('ws:remoteSupportFiles'),
+  acceptFile: (id: string) => ipcRenderer.invoke('ws:remoteSupportAcceptFile', String(id)),
+  rejectFile: (id: string) => ipcRenderer.invoke('ws:remoteSupportRejectFile', String(id)),
+  offerFile: () => ipcRenderer.invoke('ws:remoteSupportOfferFile'),
 })
 
 contextBridge.exposeInMainWorld('worksuitePolkit', {

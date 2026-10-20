@@ -3,8 +3,8 @@
 // every event). Two backends, both inside Wayland's rules (nothing reads or writes /dev/input):
 //   - RemoteDesktop portal (org.freedesktop.portal.RemoteDesktop NotifyPointer*/NotifyKeyboardKeysym), used whenever the
 //     portal backend implements it; starting it shows the portal's own permission dialog;
-//   - otherwise labwc's wlroots virtual-pointer / virtual-keyboard protocols via wlrctl and wtype (fixed argv).
-import type { Exec } from './system'
+//   - otherwise labwc's wlroots virtual-pointer / virtual-keyboard protocols through worksuite-rs-input (issue #37,
+//     native/rs-input): absolute motion, separate button and key press/release, so drag and held keys work.
 
 export type InputMsg =
   | { t: 'pm'; x: number; y: number }
@@ -31,10 +31,6 @@ const SPECIAL: Record<string, number> = {
   Insert: 0xff63, Shift: 0xffe1, Control: 0xffe3, Alt: 0xffe9, Meta: 0xffeb, CapsLock: 0xffe5, ' ': 0x20,
   F1: 0xffbe, F2: 0xffbf, F3: 0xffc0, F4: 0xffc1, F5: 0xffc2, F6: 0xffc3, F7: 0xffc4, F8: 0xffc5, F9: 0xffc6, F10: 0xffc7, F11: 0xffc8, F12: 0xffc9,
 }
-const XKB_NAME: Record<number, string> = {
-  0xff0d: 'Return', 0xff08: 'BackSpace', 0xff09: 'Tab', 0xff1b: 'Escape', 0xffff: 'Delete', 0xff50: 'Home', 0xff57: 'End', 0xff55: 'Prior', 0xff56: 'Next',
-  0xff51: 'Left', 0xff52: 'Up', 0xff53: 'Right', 0xff54: 'Down', 0xff63: 'Insert', 0xffe1: 'Shift_L', 0xffe3: 'Control_L', 0xffe9: 'Alt_L', 0xffeb: 'Super_L', 0xffe5: 'Caps_Lock', 0x20: 'space',
-}
 
 /** KeyboardEvent.key → X keysym (Unicode keysyms for printable characters), or null for keys we don't send. */
 export function keysym(key: string): number | null {
@@ -60,7 +56,7 @@ export interface InputBackend {
   close(): Promise<void>
 }
 
-/** Relative-only pointers (portal NotifyPointerMotion, wlrctl): track the position; first move warps to the corner. */
+/** Relative-only pointers (portal NotifyPointerMotion): track the position; first move warps to the corner. */
 export class PointerTracker {
   private at: { x: number; y: number } | null = null
   delta(x: number, y: number, w: number, h: number): { dx: number; dy: number }[] {
@@ -74,29 +70,58 @@ export class PointerTracker {
   }
 }
 
-/** labwc: wlr-virtual-pointer (wlrctl) and virtual-keyboard (wtype). wlrctl clicks press and release together. */
-export function wlrBackend(exec: Exec): InputBackend {
-  const tr = new PointerTracker()
-  const mods = new Set<string>()
-  const BTN = ['left', 'middle', 'right']
+/**
+ * Where the shared monitor sits in the compositor's layout (logical pixels). wlroots maps absolute motion onto the
+ * whole layout, so with several monitors the stream's normalized position is placed inside the shared one.
+ */
+export interface Region { x: number; y: number; w: number; h: number; layoutW: number; layoutH: number }
+
+/** The helper's stdin/stdout (worksuite-rs-input, native/rs-input). */
+export interface HelperProc { write(line: string): void; close(): void }
+
+export const RS_INPUT_HELPER = '/usr/lib/worksuite/worksuite-rs-input'
+
+/** labwc: wlr-virtual-pointer + virtual-keyboard through the packaged helper. Separate press/release (drag works). */
+export function helperBackend(p: HelperProc): InputBackend & { setRegion(r: Region | null): void } {
+  let region: Region | null = null
+  const n = (v: number, max: number) => Math.min(max, Math.max(0, Math.round(v)))
   return {
     name: 'wlroots',
-    async move(x, y, w, h) { for (const d of tr.delta(x, y, w, h)) await exec('wlrctl', ['pointer', 'move', String(d.dx), String(d.dy)]) },
-    async button(b, down) { if (!down) await exec('wlrctl', ['pointer', 'click', BTN[b]]) },
-    async scroll(dx, dy) { await exec('wlrctl', ['pointer', 'scroll', String(dy * 15), String(dx * 15)]) },
-    async key(sym, down) {
-      const name = XKB_NAME[sym]
-      const mod = name && /^(Shift|Control|Alt|Super)_L$/.test(name) ? name.replace('_L', '').toLowerCase().replace('super', 'logo').replace('control', 'ctrl') : null
-      if (mod) { if (down) mods.add(mod); else mods.delete(mod); return }
-      if (!down) return
-      const press = [...mods].flatMap((m) => ['-M', m])
-      const release = [...mods].flatMap((m) => ['-m', m])
-      const ch = String.fromCodePoint(sym >= 0x01000000 ? sym - 0x01000000 : sym)
-      // Keysym and modifier names come from the tables above; a typed character never starts with '-' (no option).
-      const k = name ? ['-k', name] : ch === '-' ? ['-k', 'minus'] : [ch]
-      await exec('wtype', [...press, ...k, ...release])
+    setRegion(r) { region = r && r.w > 0 && r.h > 0 && r.layoutW > 0 && r.layoutH > 0 ? r : null },
+    async move(x, y, w, h) {
+      if (region) p.write(`m ${n(region.x + x * region.w, region.layoutW)} ${n(region.y + y * region.h, region.layoutH)} ${Math.round(region.layoutW)} ${Math.round(region.layoutH)}`)
+      else p.write(`m ${n(x * w, w)} ${n(y * h, h)} ${w} ${h}`)
     },
-    async close() { mods.clear() },
+    async button(b, down) { p.write(`b ${BUTTON[b]} ${down ? 1 : 0}`) },
+    async scroll(dx, dy) { if (dy) p.write(`a v ${dy}`); if (dx) p.write(`a h ${dx}`) },
+    async key(sym, down) { p.write(`k ${sym.toString(16)} ${down ? 1 : 0}`) },
+    async close() { p.write('r'); p.close() },
+  }
+}
+
+/** Starts the helper and waits for "ready" (it says "err …" and exits when the compositor lacks the protocols). */
+export async function spawnHelper(path = RS_INPUT_HELPER): Promise<HelperProc> {
+  const { spawn } = await import('node:child_process')
+  const c = spawn(path, [], { stdio: ['pipe', 'pipe', 'ignore'] })
+  await new Promise<void>((resolve, reject) => {
+    let buf = ''
+    const t = setTimeout(() => { c.kill(); reject(new Error('helper_timeout')) }, 5000)
+    const onData = (d: Buffer) => {
+      buf += d.toString()
+      const line = buf.split('\n')[0]
+      if (!buf.includes('\n')) return
+      clearTimeout(t)
+      c.stdout!.off('data', onData)
+      c.stdout!.resume()            // later "ok" lines are discarded
+      if (line === 'ready') resolve(); else { c.kill(); reject(new Error(line || 'helper_failed')) }
+    }
+    c.stdout!.on('data', onData)
+    c.once('error', (e) => { clearTimeout(t); reject(e) })
+    c.once('exit', (code) => { clearTimeout(t); reject(new Error(`helper_exit_${code}`)) })
+  })
+  return {
+    write(line) { if (c.stdin!.writable) c.stdin!.write(line + '\n') },
+    close() { if (c.stdin!.writable) c.stdin!.end('q\n'); setTimeout(() => c.kill(), 2000).unref?.() },
   }
 }
 
@@ -161,9 +186,9 @@ export async function dbusPortalBus(): Promise<PortalBus> {
   }
 }
 
-/** The portal when its backend implements RemoteDesktop (it asks the user); otherwise the wlroots protocols. */
-export async function openInput(exec: Exec, portal: () => Promise<PortalBus> = dbusPortalBus): Promise<InputBackend> {
-  try { return await portalBackend(await portal()) } catch { return wlrBackend(exec) }
+/** The portal when its backend implements RemoteDesktop (it asks the user); otherwise the wlroots helper. */
+export async function openInput(portal: () => Promise<PortalBus> = dbusPortalBus, helper: () => Promise<HelperProc> = spawnHelper): Promise<InputBackend> {
+  try { return await portalBackend(await portal()) } catch { return helperBackend(await helper()) }
 }
 
 /** One message → backend calls. Screen size is the shared stream's (the viewer sends normalized coordinates). */
