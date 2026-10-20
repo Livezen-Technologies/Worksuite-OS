@@ -13,7 +13,7 @@ provider for the credentials broker. Node 22 TypeScript, `node:sqlite`, no runti
 | Session | `desktop/v1/bootstrap`, `apps`, `links/resolve`, `audit` | broker (sync config), shell |
 | Sync | `desktop/v1/sync/mutations`, `sync/changes`, `sync/events`, `files/{id}/lock` | sync service |
 | Devices | `desktop/v1/devices/register`, `heartbeat`, `commands/{id}/ack`, `policies` | device agent |
-| OS | `desktop/v1/os/catalog`, `inventory`, `update-results`, `diagnostics`, `directory`, `break-glass` | device agent, package service |
+| OS | `desktop/v1/os/catalog`, `software-requests`, `inventory`, `update-results`, `diagnostics`, `directory`, `break-glass` | device agent, package service |
 | Releases | `/os/manifests/{ring}/{arch}.json`, `desktop/v1/releases/manifest?platform=os` | update coordinator |
 | APT repository | `/os/apt/` (static, with `--apt-dir`; built by `tools/repo/publish.sh`) | apt on devices |
 | Admin console | `/admin` (UI), `/admin/api/*` | administrators in a browser |
@@ -46,6 +46,16 @@ policy, app catalog, releases (read-only) and an activity log.
   getStats. Signalling is relayed by `…/sessions/{id}/signal` (device: X-WS-Device; admin: console session) only while
   the session is active; media is DTLS-SRTP, peer to peer. STUN/TURN: `WORKSUITE_ICE_SERVERS` (JSON RTCIceServer[]);
   without it only devices reachable on the same network connect.
+- **Software Management** (`src/software.ts`, Device Management › Software Management): installation requests from the
+  App Center (approve → the app is added to the signed `app_allowlist` and an `InstallApprovedApplication` goes to the
+  requesting device; reject with a note the user sees), software inventory per app and per device (from the devices'
+  inventory reports), remote install/uninstall on one or many devices (`RemoveApplication`), and the deployment
+  history with each command's device-reported status. Catalog apps can be assigned to devices, users (followed to the
+  devices they sign in on) and departments (of the device or the signed-in user); an assigned app is listed only where
+  it is assigned, and a **required** app is deployed to every assigned device that doesn't report it installed
+  (after catalog changes, inventory reports and sign-ins; a failed automatic deployment is retried after 6 hours).
+  Policy fields: `software_install` (`any` | `approved` | `request` | `block`), `software_uninstall`,
+  `software_update`, and the Update Manager's `update_bandwidth_kbps`.
 
 ## Security model
 

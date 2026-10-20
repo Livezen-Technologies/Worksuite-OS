@@ -65,6 +65,14 @@ export function applyAppearance(a: Appearance, root: HTMLElement | null = typeof
   if (a.theme === 'Auto') root.removeAttribute('data-theme')
   else root.setAttribute('data-theme', a.theme.toLowerCase())
   root.style.setProperty('--color-ws-accent', accentColor(a.accent))
+  // Other apps' title bars (Labwc) follow: WorkSuite-Light or WorkSuite (electron/windowTheme.ts).
+  const bridge = (globalThis as { worksuiteCapture?: { windowTheme?: (dark: boolean) => Promise<unknown> } }).worksuiteCapture
+  void bridge?.windowTheme?.(isDarkTheme(a))?.catch(() => undefined)
+}
+/** Dark or Light as chosen; Auto follows the system's colour scheme. */
+export function isDarkTheme(a: Appearance, mq: ((q: string) => { matches: boolean }) | undefined = typeof matchMedia === 'undefined' ? undefined : matchMedia): boolean {
+  if (a.theme !== 'Auto') return a.theme === 'Dark'
+  return mq ? mq('(prefers-color-scheme: dark)').matches : true
 }
 
 /**

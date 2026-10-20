@@ -2,11 +2,16 @@
 import type { LocaleReview, MessageKey } from './en'
 import { aiTa } from './ai'
 import { widgetsTa } from './widgets'
+import { securityTa } from './security'
 import { captureTa } from './capture'
 import { driversTa } from './drivers'
+import { softwareTa } from './software'
 import { whatsappTa } from './whatsapp'
 import { desktopsTa } from './desktops'
+import { controlsTa } from './controls'
+import { desktopShellTa } from './desktopShell'
 import { bootuiTa } from './bootui'
+import { hardwareTa } from './hardware'
 
 /** Machine-drafted: not yet reviewed by a native Tamil speaker. See docs/i18n/README.md before changing. */
 export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedKeys: {} }
@@ -14,11 +19,16 @@ export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedK
 const ta: Partial<Record<MessageKey, string>> = {
   ...aiTa,
   ...widgetsTa,
+  ...securityTa,
   ...captureTa,
   ...driversTa,
+  ...softwareTa,
   ...whatsappTa,
   ...desktopsTa,
+  ...controlsTa,
+  ...desktopShellTa,
   ...bootuiTa,
+  ...hardwareTa,
   'panel.taskbar': 'பணிப்பட்டி',
   'panel.openLauncher': 'தொடக்கியைத் திற',
   'panel.running': '{name}, இயங்குகிறது',
@@ -328,7 +338,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'common.on': 'இயக்கு',
   'settings.bt.myDevices': 'என் சாதனங்கள்',
   'settings.bt.noPaired': 'இணைக்கப்பட்ட சாதனங்கள் இல்லை',
-  'settings.bt.note': 'புதிய சாதனங்களை இணைப்பதும் அருகிலுள்ள சாதனங்களைத் தேடுவதும் இன்னும் அமைப்புகளில் இல்லை.',
+  'settings.bt.note': 'இணைக்கும் சாதனத்தை அருகில், இணைத்தல் பயன்முறையில் வைத்திருங்கள். குறியீட்டைக் காட்டும் சாதனங்கள் அந்தச் சாதனத்திலேயே உறுதிப்படுத்தப்படும்.',
   'settings.nav.Display': 'திரை',
   'settings.disp.reading': 'திரைகளைப் படிக்கிறது…',
   'settings.disp.connected': 'இணைக்கப்பட்ட திரைகள்',
@@ -850,6 +860,23 @@ const ta: Partial<Record<MessageKey, string>> = {
   'files.offline': 'இணைப்பில்லை — மாற்றங்கள் பின்னர் ஒத்திசைக்கப்படும்',
   'files.noService': 'ஒத்திசைவுச் சேவை இயங்கவில்லை',
   'files.free': '{size} காலி',
+  'lock.status': 'நிலை',
+  'lock.wifiOn': 'Wi-Fi {ssid} உடன் இணைந்துள்ளது',
+  'lock.wifiConnected': 'Wi-Fi இணைந்துள்ளது',
+  'lock.wired': 'கம்பி வலையமைப்பு இணைந்துள்ளது',
+  'lock.wifiOff': 'Wi-Fi அணைக்கப்பட்டுள்ளது',
+  'lock.offline': 'இணைக்கப்படவில்லை',
+  'lock.netUnknown': 'வலையமைப்பு நிலை கிடைக்கவில்லை',
+  'lock.battery': 'மின்கலம் {pct}',
+  'lock.batteryCharging': 'மின்கலம் {pct}, மின்னேற்றப்படுகிறது',
+  'lock.batteryFull': 'மின்கலம் முழுமையாக மின்னேற்றப்பட்டது',
+  'lock.unread': 'பூட்டியிருக்கும்போது படிக்காதவை',
+  'lock.messages': 'படிக்காத செய்திகள் {n}',
+  'lock.messagesOne': 'படிக்காத செய்தி 1',
+  'lock.notifications': 'அறிவிப்புகள் {n}',
+  'lock.notificationsOne': 'அறிவிப்பு 1',
+  'lock.checking': 'சரிபார்க்கிறது…',
+  'lock.back': 'பின்செல்',
   'lock.user': 'பயனர்',
   'lock.verifyFailed': 'கடவுச்சொல்லைச் சரிபார்க்க முடியவில்லை. மீண்டும் முயல்க.',
   'lock.locked': 'பூட்டப்பட்டது',
@@ -1079,6 +1106,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'launcher.page.privacy': 'தனியுரிமை மற்றும் பாதுகாப்பு',
   'launcher.page.shortcuts': 'விசைப்பலகைக் குறுக்குவழிகள்',
   'window.minimize': 'சிறிதாக்கு',
+  'window.restore': 'மீட்டமை',
   'window.maximize': 'பெரிதாக்கு',
   'power.confirmTitle': 'இப்போது அணைக்கவா?',
   'power.countdown': '{secs} விநாடிகளில் தானாக அணைக்கப்படும்.',

@@ -2,6 +2,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA as REMOTE_SUPPORT_SCHEMA } from './remoteSupport.ts';
+import { migrateMonitoring } from './monitoring.ts';
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -122,7 +123,16 @@ export function openDb(path: string): DatabaseSync {
   db.exec(REMOTE_SUPPORT_SCHEMA);
   if (!devCols.includes('last_ip')) db.exec('ALTER TABLE devices ADD COLUMN last_ip TEXT');
   if (!devCols.includes('assigned_user')) db.exec('ALTER TABLE devices ADD COLUMN assigned_user TEXT');
+  migrateMonitoring(db);
   db.exec('CREATE TABLE IF NOT EXISTS release_log (id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL, at INTEGER NOT NULL)');
+  // Software Management (src/software.ts): installation requests, who signed in where, departments.
+  db.exec(`CREATE TABLE IF NOT EXISTS software_requests (
+    id TEXT PRIMARY KEY, org_id INTEGER NOT NULL, device_id TEXT NOT NULL, catalog_id TEXT NOT NULL, username TEXT NOT NULL,
+    reason TEXT, state TEXT NOT NULL DEFAULT 'pending', decided_by INTEGER, decided_at INTEGER, note TEXT, command_id TEXT, at INTEGER NOT NULL)`);
+  db.exec('CREATE INDEX IF NOT EXISTS software_requests_org ON software_requests(org_id, state)');
+  db.exec('CREATE TABLE IF NOT EXISTS device_users (device_id TEXT NOT NULL, user_id INTEGER NOT NULL, last_at INTEGER NOT NULL, PRIMARY KEY (device_id, user_id))');
+  if (!cols.includes('department')) db.exec('ALTER TABLE users ADD COLUMN department TEXT');
+  if (!devCols.includes('department')) db.exec('ALTER TABLE devices ADD COLUMN department TEXT');
   return db;
 }
 

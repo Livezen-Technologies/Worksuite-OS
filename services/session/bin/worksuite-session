@@ -5,7 +5,7 @@
 #   worksuite-session --logout stop session cleanly (also used by the shell's Log out)
 set -u
 
-VARS="WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP LABWC_PID"
+VARS="WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP LABWC_PID WORKSUITE_RENDERER WORKSUITE_RENDERER_REASON"
 
 log() { printf '%s\n' "worksuite-session: $*" | systemd-cat -t worksuite-session -p info 2>/dev/null || true; }
 
@@ -18,6 +18,8 @@ ready() {
     import="WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP"
     [ -n "${DISPLAY:-}" ] && import="$import DISPLAY"   # only when XWayland runs
     [ -n "${LABWC_PID:-}" ] && import="$import LABWC_PID"
+    # The renderer wlr-env chose (#16): the shell renders its windows the same way (shell/electron/graphics.ts).
+    [ -n "${WORKSUITE_RENDERER:-}" ] && import="$import WORKSUITE_RENDERER WORKSUITE_RENDERER_REASON"
     # shellcheck disable=SC2086
     systemctl --user import-environment $import
     # shellcheck disable=SC2086
@@ -96,9 +98,25 @@ PY
         fi
         # XDG user folders (Documents, Downloads, …) exist from the first sign-in; Files opens on Documents.
         xdg-user-dirs-update >/dev/null 2>&1 || true
+        started=$(date +%s)
         labwc -C "$CONF"
         rc=$?
         cleanup
+        # #16: the compositor failed right away on the GPU (driver without working GLES/Vulkan): the next session starts
+        # in software instead of another black screen. A GPU the person forced in Settings › Graphics goes back to
+        # Automatic; an automatic choice falls back until Settings › Graphics tries the GPU again.
+        if [ "$rc" -ne 0 ] && [ "${WORKSUITE_RENDERER:-}" = gpu ] && [ $(( $(date +%s) - started )) -lt "${WORKSUITE_GPU_FAIL_SECONDS:-20}" ]; then
+            case "${WORKSUITE_RENDERER_REASON:-}" in
+                choice)
+                    gconf=${WORKSUITE_GRAPHICS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/worksuite/graphics.conf}
+                    printf '# Reset to Automatic: the desktop could not start on the graphics card.\nrenderer=auto\n' > "$gconf" 2>/dev/null || true
+                    log "compositor failed on the GPU (chosen); renderer reset to auto" ;;
+                auto)
+                    fb=${WORKSUITE_RENDERER_FALLBACK:-${XDG_STATE_HOME:-$HOME/.local/state}/worksuite/renderer-fallback}
+                    mkdir -p "$(dirname "$fb")" 2>/dev/null && echo "software $(date -u +%FT%TZ) rc=$rc" > "$fb" 2>/dev/null || true
+                    log "compositor failed on the GPU; next session uses software rendering" ;;
+            esac
+        fi
         # WSOS-SES-006: unexpected compositor exit → greeter shows a notice on next display.
         if [ "$rc" -ne 0 ]; then
             mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/worksuite"

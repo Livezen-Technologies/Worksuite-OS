@@ -8,7 +8,8 @@ import dbus from 'dbus-next';
 import { busAuthority, loadIntrospection, NAME, serve } from './dbus.ts';
 import { PackageService, type DevicePolicy, type Env, type RunResult } from './service.ts';
 import { Coordinator, LOCAL_CONFIG, updateHost, type CoordinatorEnv } from './coordinator.ts';
-import { loadCatalog } from './catalog.ts';
+import { loadCatalog, requestApp, type CatalogEnv } from './catalog.ts';
+import { UpdateHistory } from './history.ts';
 import { gunzipSync } from 'node:zlib';
 import { DriverManager, firmwarePresent, parseModulesAlias, scanSysfs, type DriverEnv } from './driverscan.ts';
 
@@ -69,6 +70,7 @@ export const linuxEnv: Env = {
 
 const RELEASE_KEYS = '/usr/share/worksuite/keys/release';        // worksuite-archive-keyring
 const STATE = '/var/lib/worksuite-package-service/updates.json';
+const HISTORY = '/var/lib/worksuite-package-service/history.json';
 const AGENT_STATUS = '/run/worksuite-device-agent/status.json';
 const DEVICE_TOKEN = '/run/worksuite-device-agent/device-token';
 const WORKSUITE_SOURCES = '/etc/apt/sources.list.d/worksuite.sources';
@@ -166,6 +168,13 @@ async function getJson(url: string, headers: Record<string, string> = {}) {
   return r.json();
 }
 
+async function postJson(url: string, headers: Record<string, string>, body: unknown) {
+  const r = await fetch(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000), body: JSON.stringify(body),
+    headers: { ...headers, 'content-type': 'application/json', 'idempotency-key': randomUUID(), 'x-request-id': randomUUID() } });
+  if (!r.ok) throw Object.assign(new Error(r.status === 400 ? 'the organization does not offer this app' : `HTTP ${r.status}`), { code: r.status === 400 ? 'InvalidArgs' : 'Failed' });
+  return r.json();
+}
+
 const DRIVERS_STATE = '/var/lib/worksuite-package-service/drivers.json';
 const SECURE_BOOT_VAR = '/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-e0c98e08a90c';
 
@@ -208,13 +217,17 @@ export function driverEnv(svc: PackageService): DriverEnv {
     audit: linuxEnv.audit,
     bootId: () => readOr('/proc/sys/kernel/random/boot_id'),
     writeFile: (p, text) => writeFileSync(p, text, { mode: 0o600 }),
-    enqueue: (caller, body) => svc.driverJob(caller, body),
+    enqueue: (caller, body, subject) => svc.driverJob(caller, body, subject),
   };
 }
 
 async function main() {
   const releaseKeys = loadKeys(RELEASE_KEYS);
-  const svc = new PackageService({ ...linuxEnv, release: { keys: releaseKeys, arch: ARCH, installed: () => pkgVersion('worksuite-desktop') } });
+  const history = new UpdateHistory({
+    load: () => JSON.parse(readFileSync(HISTORY, 'utf8')),
+    save: (e) => { mkdirSync('/var/lib/worksuite-package-service', { recursive: true }); writeFileSync(HISTORY + '.tmp', JSON.stringify(e), { mode: 0o600 }); renameSync(HISTORY + '.tmp', HISTORY); },
+  });
+  const svc = new PackageService({ ...linuxEnv, history, release: { keys: releaseKeys, arch: ARCH, installed: () => pkgVersion('worksuite-desktop') } });
   await svc.detectInterrupted();          // WSOS-APT-006: surfaced as State=interrupted for the shell
   const bus = dbus.systemBus();
   const coordinator = new Coordinator(coordinatorEnv(), svc);
@@ -227,9 +240,16 @@ async function main() {
     } catch { /* status is informational */ }
   });
   const drivers = new DriverManager(driverEnv(svc));
+  const catalogEnv: CatalogEnv = { server: enrollment, fetchJson: getJson, postJson, arch: ARCH, policy: linuxEnv.policy, runner: linuxEnv.runner, now: Date.now };
   serve(bus, svc, busAuthority(bus), loadIntrospection(XML), coordinator, {
     drivers,
-    catalog: () => loadCatalog({ server: enrollment, fetchJson: getJson, arch: ARCH, policy: linuxEnv.policy, runner: linuxEnv.runner, now: Date.now }),
+    catalog: (user) => loadCatalog(catalogEnv, user),
+    requestApp: (user, id, reason) => requestApp(catalogEnv, user, id, reason),
+    userName: async (uid) => {
+      const r = await run('getent', ['passwd', String(uid)]);
+      const name = r.code === 0 ? r.stdout.split(':')[0] : '';
+      return /^[a-z_][a-z0-9_.@-]{0,63}\$?$/i.test(name) ? name : null;
+    },
   });
   coordinator.start();
   await bus.requestName(NAME, dbus.NameFlag.DO_NOT_QUEUE);

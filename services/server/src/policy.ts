@@ -65,6 +65,33 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
     return Object.entries(deny).every(([r, apps]) => APP_PERMISSION_RESOURCES.has(r) && Array.isArray(apps) && apps.length <= 500
       && apps.every((a) => typeof a === 'string' && (a === '*' || /^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}$/.test(a))));
   },
+  // WorkSuite Security (#20, services/device-agent/src/security.ts). Outbound destinations blocked (IPv4/IPv6 address
+  // or CIDR) in the device's policy table, logged as firewall alerts when firewall_log_blocked. Antivirus (ClamAV):
+  // on unless false; scheduled scans (daily: quick daily + full weekly; weekly: quick weekly + full monthly) start
+  // after av_scan_hour once the device is idle; exclusions are absolute paths set only here, by an administrator.
+  firewall_outbound_block: (v) => Array.isArray(v) && v.length <= 500 && v.every((x) => typeof x === 'string' && (/^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(x) || /^[0-9a-fA-F:]{2,39}(\/\d{1,3})?$/.test(x) && x.includes(':'))),
+  firewall_log_blocked: (v) => typeof v === 'boolean',
+  antivirus: (v) => typeof v === 'boolean',
+  av_scan_schedule: (v) => v === 'off' || v === 'daily' || v === 'weekly',
+  av_scan_hour: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 23,
+  av_scan_paths: (v) => Array.isArray(v) && v.length >= 1 && v.length <= 20 && v.every((x) => typeof x === 'string' && /^\/[^\0\n]{0,4095}$/.test(x) && !x.split('/').includes('..')),
+  av_exclusions: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^\/[^\0\n]{1,4095}$/.test(x) && !x.split('/').includes('..') && x !== '/'),
+  av_signature_checks_per_day: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 24,
+  av_cpu_quota_percent: (v) => Number.isInteger(v) && (v as number) >= 10 && (v as number) <= 100,
+  security_log_retention_days: (v) => Number.isInteger(v) && (v as number) >= 7 && (v as number) <= 3650,
+  // Employee activity monitoring (#22, shell/electron/activity.ts): off unless true; aggregate time per application,
+  // active/idle/locked time and session events only. Retention on the server and on the device; idle after N seconds.
+  activity_monitoring: (v) => typeof v === 'boolean',
+  activity_retention_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 730,
+  activity_idle_threshold_s: (v) => Number.isInteger(v) && (v as number) >= 60 && (v as number) <= 3600,
+  // Software Management (Admin Center): what users may do with software on their own. 'any' = any package from the
+  // approved sources, 'approved' = only the allowlist, 'request' = the allowlist plus asking an administrator for other
+  // catalog apps, 'block' = nothing (administrators still deploy remotely). Uninstall/update false = only the organization.
+  software_install: (v) => v === 'any' || v === 'approved' || v === 'request' || v === 'block',
+  software_uninstall: (v) => typeof v === 'boolean',
+  software_update: (v) => typeof v === 'boolean',
+  // Update Manager › Advanced options: download bandwidth cap for OS and application updates (KiB/s, 0 = none).
+  update_bandwidth_kbps: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 1_000_000,
   ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 

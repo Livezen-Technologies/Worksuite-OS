@@ -100,7 +100,7 @@ export function TouchPanel() {
       <section aria-label={t('touch.screen')} className="flex flex-col gap-2">
         <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('touch.screen')}</h2>
         <div className={card}>
-          <Row title={t('touch.enable')} sub={t('touch.enableSub')}><BigSwitch label={t('touch.enable')} checked={s.touchEnabled} onChange={(v) => void set({ touchEnabled: v })} /></Row>
+          <Row title={t('touch.enable')} sub={t('touch.enableSub')}><BigSwitch label={t('touch.enable')} checked={s.touchEnabled} onChange={(v) => set({ touchEnabled: v })} /></Row>
           {state.outputs.length > 1 && screens.map((d) => (
             <Row key={d.node} title={t('touch.mapTo')} sub={d.name}>
               <select aria-label={t('touch.mapToFor', { name: d.name })} value={s.mapToOutput[d.name] ?? ''} className={field}
@@ -121,7 +121,7 @@ export function TouchPanel() {
           <Segmented label={t('touch.tabletMode')} value={s.tabletMode} options={tabletOpts} onChange={(v) => void set({ tabletMode: v })} />
         </Row>
         <Row title={t('touch.rotationLock')} sub={state.hasAccelerometer ? t('touch.rotationSub') : t('touch.noSensor')}>
-          <BigSwitch label={t('touch.rotationLock')} checked={s.rotationLock} disabled={!state.hasAccelerometer} onChange={(v) => void set({ rotationLock: v })} />
+          <BigSwitch label={t('touch.rotationLock')} checked={s.rotationLock} unavailable={state.hasAccelerometer ? undefined : t('touch.noSensor')} onChange={(v) => set({ rotationLock: v })} />
         </Row>
       </div>
       <Note>{t('touch.modeNote')}</Note>

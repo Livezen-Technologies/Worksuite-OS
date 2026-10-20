@@ -48,6 +48,12 @@ export interface Policy {
   remote_support?: { enabled?: boolean; unattended?: boolean; max_session_minutes?: number };
   /** App permissions (issue #21): deny rules the shell writes into each user's XDG permission store (never grants). */
   app_permissions?: { deny?: Record<string, string[]> };
+  /** Software Management: what users may install themselves, and whether they may uninstall or update apps. */
+  software_install?: 'any' | 'approved' | 'request' | 'block';
+  software_uninstall?: boolean;
+  software_update?: boolean;
+  /** Update Manager: download limit for OS and app updates in KiB/s (0 = none). */
+  update_bandwidth_kbps?: number;
   [k: string]: unknown;
 }
 
@@ -73,6 +79,8 @@ export interface AgentState {
   vpn_key_created_at?: number;
   /** WSOS-SEC-008: how far the package-service audit log has been forwarded to the server. */
   package_audit?: { offset: number; head?: string };
+  /** WorkSuite Security (src/securityCenter.ts): isolation, scan and threat history, firewall alerts. */
+  security?: import('./security.ts').SecurityState;
 }
 
 export const emptyState = (): AgentState => ({ enrolled: false, seen_commands: {}, pending_acks: [] });

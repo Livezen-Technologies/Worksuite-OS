@@ -14,6 +14,8 @@ export const ACTIONS: Record<string, string | null> = {
   GetEffectivePolicy: null,
   Enroll: 'lk.worksuite.device.enroll',
   RefreshNow: null,   // fetches what the server already decided; changes nothing the caller chooses
+  // WorkSuite Security (#20): Settings › Privacy & security › WorkSuite Security "Scan now" (active local user).
+  StartSecurityScan: 'lk.worksuite.security.scan',
 };
 
 export interface Authority {
@@ -26,6 +28,8 @@ export interface AgentOps {
   effectivePolicy(): unknown;
   enroll(serverUrl: string, token: string): Promise<string>;
   refresh(): Promise<void>;
+  /** Starts a malware scan (quick | full); resolves when it has started. Absent = no security module. */
+  scan?(kind: 'quick' | 'full'): void;
 }
 
 export class BusError extends Error {
@@ -52,6 +56,12 @@ export async function dispatch(member: string, body: unknown[], sender: string, 
     }
     case 'GetEffectivePolicy': return ['s', [JSON.stringify(ops.effectivePolicy() ?? null)]];
     case 'RefreshNow': await ops.refresh(); return ['', []];
+    case 'StartSecurityScan': {
+      const [kind] = body;
+      if (kind !== 'quick' && kind !== 'full') throw new BusError('InvalidArgs');
+      if (!ops.scan) throw new BusError('Failed', 'NOT_SUPPORTED');
+      ops.scan(kind); return ['', []];
+    }
     case 'Enroll': {
       const [url, token] = body;
       if (typeof url !== 'string' || typeof token !== 'string' || !token || token.length > 4096 || url.length > 2048) throw new BusError('InvalidArgs');

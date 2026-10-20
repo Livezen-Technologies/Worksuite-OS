@@ -5,11 +5,12 @@ import { readFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { ENFORCED_PATHS } from '../src/enforce.ts';
 import { VPN_KEYFILE } from '../src/vpn.ts';
+import { FIREWALL_RULES, FRESHCLAM_ENV } from '../src/security.ts';
 
 const root = new URL('../../../', import.meta.url);
 const unit = readFileSync(new URL('services/device-agent/systemd/worksuite-device-agent.service', root), 'utf8');
 const profile = readFileSync(new URL('security/apparmor/worksuite-device-agent', root), 'utf8');
-const WRITTEN = [...Object.values(ENFORCED_PATHS), VPN_KEYFILE];
+const WRITTEN = [...Object.values(ENFORCED_PATHS), VPN_KEYFILE, FIREWALL_RULES, FRESHCLAM_ENV];
 
 test('every enforced path is inside ReadWritePaths', () => {
   assert.match(unit, /^ProtectSystem=strict$/m);

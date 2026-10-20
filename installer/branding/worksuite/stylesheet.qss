@@ -207,6 +207,16 @@ QDialogButtonBox { background: transparent; }
 #wsSecondary { min-height: 40px; padding: 0 18px; border-radius: 10px; border: 1px solid rgba(127, 178, 255, 0.3); background: transparent; color: #E8EEFA; }
 #wsSecondary:hover { background: rgba(255, 255, 255, 0.06); }
 #wsHint { color: #8FA3C8; font-size: 13px; }
+/* Confirm disk: the background read, other systems found on the disk (dual boot) and what still blocks Install. */
+#wsBusy { color: #18D4F0; font-size: 13px; }
+#wsSystemsBox { background: rgba(255, 138, 122, 0.08); border: 1px solid rgba(255, 138, 122, 0.45); border-radius: 12px; }
+#wsSystemsBox QWidget { background: transparent; }
+#wsSystemsText { color: #FFD2C8; font-size: 14px; }
+#wsValidation { color: #8FA3C8; font-size: 13px; }
+#wsValidation[wsState="bad"] { color: #FF8A7A; }
+#wsValidation[wsState="good"] { color: #5FD39A; }
+#wsDiskPage #wsSystemsBox { background: rgba(255, 138, 122, 0.08); }
+#wsDiskBusy { color: #18D4F0; font-size: 13px; }
 /* Terms page: the agreement in a scrolling panel. */
 #wsTermsText { background: #081634; color: #C9D6EE; border: 1px solid rgba(127, 178, 255, 0.16); border-radius: 12px; padding: 12px 14px; font-family: "IBM Plex Sans"; font-size: 13px; }
 

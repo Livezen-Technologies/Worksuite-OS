@@ -47,7 +47,7 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
       if (s.failAck === state) throw new ApiError(0, 'NETWORK');
       log.push(`ack ${state}${reason ? ' ' + reason : ''}`); acks.push({ id, state, reason });
     },
-    async inventory() {},
+    async inventory() { log.push('inventory sent'); },
     async diagnostics() { log.push('diagnostics uploaded'); },
     async audit() {},
     async vpn() { throw new ApiError(404, 'NOT_FOUND'); },
@@ -66,6 +66,7 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
     async applyEnforcement(e) { if (s.failEnforce) throw new Error('udevadm: failed'); s.enforced.push(e); },
     setOfflineAccessBlock(n) { s.offlineNotice = n; log.push(n ? 'offline block' : 'offline unblock'); },
     async installApproved(id) { log.push(`install ${id}`); },
+    async removeApplication(id) { if (id === 'apt:systemd') throw new Error('Protected'); log.push(`remove ${id}`); },
     async scheduleUpdate() { log.push('update'); },
     async scheduleReboot(w) { log.push(`reboot ${w}`); },
     async collectDiagnostics(p) { return { profile: p, sha256: 'x', content: '{}' }; },
@@ -148,7 +149,15 @@ test('install only what the signed allowlist contains; reboot uses the maintenan
   const w = await enrolled();
   w.s.queue = [command('InstallApprovedApplication', { catalog_id: 'apt:nmap' }), command('InstallApprovedApplication', { catalog_id: 'flatpak:org.gimp.GIMP' }), command('RebootDuringWindow')];
   await w.agent.checkIn();
-  assert.deepEqual(w.log, ['ack received', 'ack failed NOT_IN_ALLOWLIST', 'ack received', 'install flatpak:org.gimp.GIMP', 'ack completed', 'ack received', 'reboot 02:00-04:00', 'ack completed']);
+  assert.deepEqual(w.log, ['ack received', 'ack failed NOT_IN_ALLOWLIST', 'ack received', 'install flatpak:org.gimp.GIMP', 'inventory sent', 'ack completed', 'ack received', 'reboot 02:00-04:00', 'ack completed']);
+  w.cleanup();
+});
+
+test('RemoveApplication: removes through the package service, reports inventory, and acks failures with the reason', async () => {
+  const w = await enrolled();
+  w.s.queue = [command('RemoveApplication', { catalog_id: 'flatpak:org.gimp.GIMP' }), command('RemoveApplication', { catalog_id: 'apt:systemd' }), command('RemoveApplication', { catalog_id: '/bin/sh' })];
+  await w.agent.checkIn();
+  assert.deepEqual(w.log, ['ack received', 'remove flatpak:org.gimp.GIMP', 'inventory sent', 'ack completed', 'ack received', 'ack failed Protected', 'ack rejected BAD_ARGS']);
   w.cleanup();
 });
 

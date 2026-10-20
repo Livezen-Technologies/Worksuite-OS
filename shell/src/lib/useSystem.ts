@@ -31,7 +31,8 @@ export function unavailableText(reason: string): string {
   switch (reason) {
     case 'no_adapter': return t('sys.noAdapter')
     case 'no_battery': return t('sys.noBattery')
-    case 'service_unavailable': return t('sys.service')
+    case 'service_unavailable':
+    case 'service_stopped': return t('sys.service')
     default: return reason.endsWith('_missing') ? t('sys.missing') : t('sys.na')
   }
 }

@@ -52,3 +52,14 @@ test('read-only methods need no authorization', async () => {
   assert.deepEqual(properties(ops()).Enrolled, ['b', false]);
   await assert.rejects(dispatch('Wipe', [], ':1', deny, ops()));
 });
+
+test('StartSecurityScan needs lk.worksuite.security.scan and a valid kind', async () => {
+  const seen: string[] = [], kinds: string[] = [];
+  const o = ops({ scan: (k) => { kinds.push(k); } });
+  await assert.rejects(dispatch('StartSecurityScan', ['quick'], ':1', auth(1000, false, seen), o), (e) => e instanceof BusError && e.code === 'NotAuthorized');
+  assert.deepEqual(seen, ['lk.worksuite.security.scan']);
+  await assert.rejects(dispatch('StartSecurityScan', ['everything'], ':1', auth(1000, true), o), (e) => e instanceof BusError && e.code === 'InvalidArgs');
+  assert.deepEqual(await dispatch('StartSecurityScan', ['full'], ':1', auth(1000, true), o), ['', []]);
+  assert.deepEqual(kinds, ['full']);
+  await assert.rejects(dispatch('StartSecurityScan', ['quick'], ':1', auth(0, true), ops()), (e) => e instanceof BusError && e.message === 'NOT_SUPPORTED');
+});

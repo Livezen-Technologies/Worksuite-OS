@@ -3,7 +3,7 @@
 // ~/.config/worksuite/displays.json. A change only sticks once the user confirms it within REVERT_SECONDS;
 // otherwise the previous layout is re-applied. The saved layout for the connected monitor set is re-applied at
 // login and whenever a monitor is plugged or unplugged (the bridge's OutputsChanged).
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { Exec } from './system'
 
@@ -11,10 +11,13 @@ export const REVERT_SECONDS = 15
 export const MIN_SCALE = 1
 export const MAX_SCALE = 2
 
-export interface Mode { width: number; height: number; refresh: number; preferred: boolean; current: boolean }
+/** `custom`: not in the monitor's mode list but offered because the output takes any size (virtual GPUs); applied
+ *  with wlr-randr --custom-mode. */
+export interface Mode { width: number; height: number; refresh: number; preferred: boolean; current: boolean; custom?: boolean }
+/** `fixedMode`: the output runs on the firmware framebuffer (simpledrm/efifb), which has exactly one mode. */
 export interface OutputInfo {
   name: string; description: string; make: string; model: string; serial: string; enabled: boolean
-  modes: Mode[]; x: number; y: number; scale: number; transform: string
+  modes: Mode[]; x: number; y: number; scale: number; transform: string; driver?: string; fixedMode?: boolean
 }
 export interface OutputConfig { name: string; enabled: boolean; width: number; height: number; refresh: number; scale: number; x: number; y: number }
 export type Arrangement = 'extend' | 'mirror'
@@ -73,6 +76,59 @@ export function parseOutputsText(text: string): OutputInfo[] {
     else if (kv[1] === 'Transform') cur.transform = v.trim()
     else if (kv[1] === 'Scale') cur.scale = Number(v) || 1
     else if (kv[1] === 'Position') { const [x, y] = v.split(',').map(Number); cur.x = x || 0; cur.y = y || 0 }
+  }
+  return out
+}
+
+// ---------- modes ----------
+/** Kernel drivers whose outputs are virtual and accept any size (QEMU virtio/QXL/bochs, VMware/VirtualBox, Hyper-V),
+ *  and wlroots' own nested/headless backends. Their mode list is often just the host window's size, which is why
+ *  Settings used to offer a single resolution in a VM. */
+export const VIRTUAL_DRIVERS = ['virtio_gpu', 'virtio-gpu', 'qxl', 'bochs', 'bochs-drm', 'vmwgfx', 'vboxvideo', 'hyperv_drm', 'cirrus', 'cirrus-qemu']
+/** Firmware framebuffers: one mode, set by the firmware, that the compositor cannot change. */
+export const FIXED_DRIVERS = ['simpledrm', 'simple-framebuffer', 'efifb', 'vesafb', 'ofdrm']
+/** Usual desktop sizes offered on virtual outputs, up to the largest the output reports (at least 1920 × 1080). */
+export const STANDARD_SIZES: [number, number][] = [
+  [3840, 2160], [2560, 1600], [2560, 1440], [1920, 1200], [1920, 1080], [1680, 1050], [1600, 900], [1440, 900],
+  [1366, 768], [1280, 1024], [1280, 800], [1280, 720], [1024, 768], [800, 600],
+]
+const MIN_W = 640, MIN_H = 480
+const VIRTUAL_NAME = /^(Virtual|HEADLESS|WL|X11)-\d+$/
+
+export const isVirtualOutput = (o: Pick<OutputInfo, 'name' | 'driver'>) => (o.driver ? VIRTUAL_DRIVERS.includes(o.driver) : VIRTUAL_NAME.test(o.name))
+
+/** Real modes cleaned up (no zero/tiny sizes, no duplicates), plus standard sizes as custom modes on virtual outputs. */
+export function withOfferedModes(o: OutputInfo): OutputInfo {
+  const seen = new Set<string>()
+  const modes: Mode[] = []
+  for (const m of o.modes) {
+    if (m.width < MIN_W || m.height < MIN_H) { if (!m.current) continue }
+    const k = `${m.width}x${m.height}@${m.refresh}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    modes.push(m)
+  }
+  const fixedMode = !!o.driver && FIXED_DRIVERS.includes(o.driver)
+  if (!fixedMode && isVirtualOutput(o)) {
+    const maxW = Math.max(1920, ...modes.map((m) => m.width)), maxH = Math.max(1080, ...modes.map((m) => m.height))
+    const sizes = new Set(modes.map((m) => `${m.width}x${m.height}`))
+    for (const [w, h] of STANDARD_SIZES) {
+      if (w > maxW || h > maxH || sizes.has(`${w}x${h}`)) continue
+      modes.push({ width: w, height: h, refresh: 0, preferred: false, current: false, custom: true })
+    }
+  }
+  return { ...o, modes, fixedMode }
+}
+
+/** Connector → kernel driver from sysfs: /sys/class/drm/card0-Virtual-1/device/driver → …/virtio_gpu. */
+export function drmDrivers(root = '/sys/class/drm'): Record<string, string> {
+  const out: Record<string, string> = {}
+  let names: string[] = []
+  try { names = readdirSync(root) } catch { return out }
+  for (const n of names) {
+    const m = /^card\d+-(.+)$/.exec(n)
+    if (!m) continue
+    try { out[m[1]] = path.basename(readlinkSync(path.join(root, n, 'device', 'driver'))) } catch { /* no driver link */ }
   }
   return out
 }
@@ -139,20 +195,24 @@ export function validateLayout(layout: Layout, outputs: OutputInfo[]): string | 
     if (!c.enabled) continue
     if (!(c.scale >= MIN_SCALE && c.scale <= MAX_SCALE)) return 'bad_scale'
     if (!o.modes.some((m) => m.width === c.width && m.height === c.height && Math.abs(m.refresh - c.refresh) < 0.01)) return 'bad_mode'
+    if (o.fixedMode && !o.modes.some((m) => m.current && m.width === c.width && m.height === c.height)) return 'fixed_mode'
     if (!Number.isInteger(c.x) || !Number.isInteger(c.y) || c.x < 0 || c.y < 0) return 'bad_position'
   }
   return null
 }
 
 /** wlr-randr arguments for a layout: one invocation sets every output at once (atomic in wlroots). */
-export function randrArgs(layout: Layout): string[] {
+export function randrArgs(layout: Layout, outputs: OutputInfo[] = []): string[] {
   const args: string[] = []
   const ordered = [...layout.outputs].sort((a, b) => Number(b.enabled) - Number(a.enabled))
   for (const c of ordered) {
     args.push('--output', c.name)
     if (!c.enabled) { args.push('--off'); continue }
-    // Virtual outputs report no refresh rate; wlr-randr then only matches the bare size.
-    args.push('--on', '--mode', c.refresh > 0 ? `${c.width}x${c.height}@${c.refresh}Hz` : `${c.width}x${c.height}`, '--pos', `${c.x},${c.y}`, '--scale', String(c.scale))
+    // Virtual outputs report no refresh rate; wlr-randr then only matches the bare size. Sizes the output does not
+    // list (offered on virtual GPUs) go as a custom mode.
+    const m = outputs.find((o) => o.name === c.name)?.modes.find((x) => x.width === c.width && x.height === c.height && Math.abs(x.refresh - c.refresh) < 0.01)
+    const mode = c.refresh > 0 ? `${c.width}x${c.height}@${c.refresh}Hz` : `${c.width}x${c.height}`
+    args.push('--on', m?.custom ? '--custom-mode' : '--mode', mode, '--pos', `${c.x},${c.y}`, '--scale', String(c.scale))
   }
   return args
 }
@@ -223,8 +283,21 @@ export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
 export type Spawn = (cmd: string, args: string[]) => { kill(): void }
 
-export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Clock; spawn?: Spawn; onChange?: (s: DisplayState) => void }) {
+/** Whether the compositor now runs what was asked: wlroots may accept a mode and fall back to another. */
+export function layoutMatches(layout: Layout, outputs: OutputInfo[]): boolean {
+  return layout.outputs.every((c) => {
+    const o = outputs.find((x) => x.name === c.name)
+    if (!o) return false
+    if (!c.enabled) return !o.enabled
+    const m = o.modes.find((x) => x.current)
+    if (!m) return o.enabled   // no current mode reported (some custom modes): nothing to compare
+    return o.enabled && m.width === c.width && m.height === c.height && (c.refresh <= 0 || m.refresh <= 0 || Math.abs(m.refresh - c.refresh) < 0.5)
+  })
+}
+
+export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Clock; spawn?: Spawn; onChange?: (s: DisplayState) => void; drivers?: () => Record<string, string> }) {
   const { exec, storeFile } = opts
+  const drivers = opts.drivers ?? (() => drmDrivers())
   let arrangement: Arrangement = 'extend'
   let mirrors: { kill(): void }[] = []
   const mirror = (layout: Layout) => {
@@ -238,13 +311,19 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
 
   async function read(): Promise<Result<OutputInfo[]>> {
     const r = await exec('wlr-randr', ['--json'])
-    if (r.code === 0) return { ok: true, value: parseOutputs(r.stdout) }
-    if (r.missing) return { ok: false, error: 'missing_wlr_randr' }
-    const t = await exec('wlr-randr', [])
-    return t.code === 0 ? { ok: true, value: parseOutputsText(t.stdout) } : { ok: false, error: 'wlr_randr_failed' }
+    let raw: OutputInfo[]
+    if (r.code === 0) raw = parseOutputs(r.stdout)
+    else if (r.missing) return { ok: false, error: 'missing_wlr_randr' }
+    else {
+      const t = await exec('wlr-randr', [])
+      if (t.code !== 0) return { ok: false, error: 'wlr_randr_failed' }
+      raw = parseOutputsText(t.stdout)
+    }
+    const d = drivers()
+    return { ok: true, value: raw.map((o) => withOfferedModes({ ...o, driver: d[o.name] })) }
   }
-  async function run(layout: Layout): Promise<Result<true>> {
-    const r = await exec('wlr-randr', randrArgs(layout))
+  async function run(layout: Layout, outputs: OutputInfo[] = []): Promise<Result<true>> {
+    const r = await exec('wlr-randr', randrArgs(layout, outputs))
     if (r.code !== 0) return { ok: false, error: 'apply_failed' }
     arrangement = layout.arrangement
     primary = layout.primary
@@ -268,9 +347,16 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
       if (!o.ok) return o
       const err = validateLayout(layout, o.value)
       if (err) return { ok: false, error: err }
-      if (!timer.pending) previous = { layout: currentLayout(o.value, primary, arrangement), wallpapers }
-      const r = await run(layout)
-      if (!r.ok) return r
+      const before = currentLayout(o.value, primary, arrangement)
+      if (!timer.pending) previous = { layout: before, wallpapers }
+      const r = await run(layout, o.value)
+      // A refused or silently substituted mode goes straight back to what ran before, without a countdown.
+      const after = r.ok ? await read() : null
+      if (!r.ok || (after?.ok && !layoutMatches(layout, after.value))) {
+        await run(timer.pending && previous ? previous.layout : before, o.value)
+        void emit()
+        return { ok: false, error: r.ok ? 'mode_not_applied' : r.error }
+      }
       primary = layout.primary
       wallpapers = walls
       const deadline = timer.start(() => { void this.revert() })
@@ -296,7 +382,8 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
       if (!p) return { ok: true, value: true }
       primary = p.layout.primary
       wallpapers = p.wallpapers
-      const r = await run(p.layout)
+      const o = await read()
+      const r = await run(p.layout, o.ok ? o.value : [])
       void emit()
       return r
     },
@@ -331,7 +418,7 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
       wallpapers = saved.wallpapers ?? {}
       primary = saved.layout.primary
       if (validateLayout(saved.layout, o.value)) { void emit(); return { ok: true, value: false } }
-      const r = await run(saved.layout)
+      const r = await run(saved.layout, o.value)
       void emit()
       return r.ok ? { ok: true, value: true } : r
     },

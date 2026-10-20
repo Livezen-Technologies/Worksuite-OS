@@ -29,6 +29,7 @@ import * as admin from './admin.ts';
 import * as identity from './identity.ts';
 import { setValidatedPolicy } from './policy.ts';
 import { apiRoutes, purgeTombstones } from './api.ts';
+import { purgeActivity } from './monitoring.ts';
 import { openDb } from './db.ts';
 import { HttpError, makeCtx, Router, sendError } from './http.ts';
 import { log } from './log.ts';
@@ -118,7 +119,8 @@ async function main(argv: string[]) {
         : createHttp(handler);
       const [host, port] = [v.listen!.slice(0, v.listen!.lastIndexOf(':')), Number(v.listen!.slice(v.listen!.lastIndexOf(':') + 1))];
       purgeTombstones(db);
-      setInterval(() => purgeTombstones(db), 3_600_000).unref();
+      purgeActivity(db);
+      setInterval(() => { purgeTombstones(db); purgeActivity(db); }, 3_600_000).unref();
       server.listen(port, host, () => log('info', 'listening', { listen: v.listen, public_url: v['public-url'] }));
       process.on('SIGTERM', () => server.close(() => process.exit(0)));
       return;

@@ -109,6 +109,16 @@ export function packageClient(exec: Exec = realExec) {
       const ok = ids.filter((x) => /^[a-z]+:[A-Za-z0-9+._-]{1,100}$/.test(x)).slice(0, 50)
       return ok.length ? jobCall(exec, 'InstallDrivers', 'as', [String(ok.length), ...ok]) : bad()
     },
+    // Update Manager: history of OS/driver/firmware/app updates, Flatpak app updates (polkit to apply).
+    updateHistory: (): Promise<Reply<unknown>> => jsonCall(exec, 'GetUpdateHistory', '', []),
+    appUpdates: (): Promise<Reply<unknown>> => jsonCall(exec, 'GetAppUpdates', '', []),
+    updateApps: (ids: string[]): Promise<Reply<string>> => {
+      const ok = ids.filter((x) => FLATPAK_ID.test(x)).slice(0, 200)
+      return ok.length !== ids.length ? bad() : jobCall(exec, 'UpdateApps', 'as', [String(ok.length), ...ok])
+    },
+    // Software Management: ask the organization to approve an app; the service takes the requester from the bus.
+    requestApp: (catalogId: string, reason: string): Promise<Reply<unknown>> =>
+      (ID.test(catalogId) ? jsonCall(exec, 'RequestApp', 'ss', [catalogId, String(reason).replace(/[\u0000-\u001f]/g, ' ').slice(0, 500)]) : bad()),
     bundleInstall: (path: string): Promise<Reply<string>> => (ABS.test(path) && path.endsWith('.wsupdate') ? jobCall(exec, 'InstallBundle', 's', [path]) : bad()),
   }
 }

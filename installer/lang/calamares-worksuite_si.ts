@@ -466,6 +466,14 @@
       <source>Search languages</source>
       <translation>භාෂා සොයන්න</translation>
     </message>
+    <message>
+      <source>No language matches "%1".</source>
+      <translation>"%1" ට ගැළපෙන භාෂාවක් නැත.</translation>
+    </message>
+    <message>
+      <source>Applying the language…</source>
+      <translation>භාෂාව යොදමින්…</translation>
+    </message>
   </context>
   <context>
     <name>WorksuiteConfirmViewStep</name>
@@ -490,8 +498,56 @@
       <translation>නොදන්නා තැටිය</translation>
     </message>
     <message>
+      <source>Windows</source>
+      <translation>Windows</translation>
+    </message>
+    <message>
+      <source>macOS</source>
+      <translation>macOS</translation>
+    </message>
+    <message>
+      <source>Linux</source>
+      <translation>Linux</translation>
+    </message>
+    <message>
+      <source>Another system</source>
+      <translation>වෙනත් පද්ධතියක්</translation>
+    </message>
+    <message>
+      <source>The target disk could not be identified. Go back and choose the disk again.</source>
+      <translation>ඉලක්ක තැටිය හඳුනාගත නොහැකි විය. ආපසු ගොස් තැටිය නැවත තෝරන්න.</translation>
+    </message>
+    <message>
+      <source>Wait until the disk has been read.</source>
+      <translation>තැටිය කියවා අවසන් වන තුරු රැඳී සිටින්න.</translation>
+    </message>
+    <message>
+      <source>Type %1 to continue.</source>
+      <translation>ඉදිරියට යාමට %1 ටයිප් කරන්න.</translation>
+    </message>
+    <message>
+      <source>That is not the disk name. Type %1 exactly, in lower case.</source>
+      <translation>එය තැටියේ නම නොවේ. %1 කුඩා අකුරින්, නිවැරදිව ටයිප් කරන්න.</translation>
+    </message>
+    <message>
+      <source>Tick the box to confirm that the systems on this disk will be removed.</source>
+      <translation>මෙම තැටියේ පද්ධති ඉවත් වන බව තහවුරු කිරීමට කොටුව සලකුණු කරන්න.</translation>
+    </message>
+    <message>
+      <source>Reading the disk…</source>
+      <translation>තැටිය කියවමින්…</translation>
+    </message>
+    <message>
+      <source>Operating systems on this disk</source>
+      <translation>මෙම තැටියේ මෙහෙයුම් පද්ධති</translation>
+    </message>
+    <message>
       <source>Type the disk name to confirm</source>
       <translation>තහවුරු කිරීමට තැටියේ නම ටයිප් කරන්න</translation>
+    </message>
+    <message>
+      <source>Confirmation status</source>
+      <translation>තහවුරු කිරීමේ තත්ත්වය</translation>
     </message>
     <message>
       <source>Server address</source>
@@ -548,10 +604,6 @@
     <message>
       <source>This will erase your disk</source>
       <translation>මෙය ඔබේ තැටිය මකා දමයි</translation>
-    </message>
-    <message>
-      <source>The target disk could not be identified. Go back and choose the disk again.</source>
-      <translation>ඉලක්ක තැටිය හඳුනාගත නොහැකි විය. ආපසු ගොස් තැටිය නැවත තෝරන්න.</translation>
     </message>
     <message>
       <source>Once the installation starts, these changes can't be undone.</source>
@@ -645,6 +697,18 @@
       <source>No enrollment QR code was read. Try again, or type the code.</source>
       <translation>ලියාපදිංචි QR කේතයක් කියවා නැත. නැවත උත්සාහ කරන්න, නැතහොත් කේතය ටයිප් කරන්න.</translation>
     </message>
+    <message>
+      <source>This disk already has an operating system on it. Installing WorkSuite OS removes it and everything stored with it; it will no longer start:</source>
+      <translation>මෙම තැටියේ දැනටමත් මෙහෙයුම් පද්ධතියක් ඇත. WorkSuite OS ස්ථාපනය කිරීමෙන් එය සහ එහි ගබඩා කළ සියල්ල ඉවත් වේ; එය තවදුරටත් ආරම්භ නොවේ:</translation>
+    </message>
+    <message>
+      <source>I understand that the systems listed above will be permanently removed</source>
+      <translation>ඉහත ලැයිස්තුගත පද්ධති ස්ථිරවම ඉවත් වන බව මට වැටහේ</translation>
+    </message>
+    <message>
+      <source>Ready. Press Continue to review the terms; nothing is written before Install.</source>
+      <translation>සූදානම්. කොන්දේසි බැලීමට ඉදිරියට ඔබන්න; ස්ථාපනයට පෙර කිසිවක් ලියවෙන්නේ නැත.</translation>
+    </message>
   </context>
   <context>
     <name>WsIntro</name>
@@ -690,6 +754,10 @@
     <message>
       <source>Deletes &lt;b style="color:#FFB98A"&gt;all data&lt;/b&gt; on the selected device.</source>
       <translation>තෝරාගත් උපාංගයේ &lt;b style="color:#FFB98A"&gt;සියලු දත්ත&lt;/b&gt; මකා දමයි.</translation>
+    </message>
+    <message>
+      <source>Looking for disks and the systems on them…</source>
+      <translation>තැටි සහ ඒවායේ පද්ධති සොයමින්…</translation>
     </message>
     <message>
       <source>Before</source>
@@ -770,6 +838,10 @@
     <message>
       <source>Passphrases match</source>
       <translation>මුරවැකි ගැළපේ</translation>
+    </message>
+    <message>
+      <source>Other operating systems are on this disk. Erasing it removes them and they will no longer start. Back up first, or choose another disk:</source>
+      <translation>මෙම තැටියේ වෙනත් මෙහෙයුම් පද්ධති ඇත. එය මැකීමෙන් ඒවා ඉවත් වී තවදුරටත් ආරම්භ නොවේ. පළමුව උපස්ථ කරන්න, නැතහොත් වෙනත් තැටියක් තෝරන්න:</translation>
     </message>
     <message>
       <source>Quit the installer?</source>

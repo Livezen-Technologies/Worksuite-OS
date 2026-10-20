@@ -22,7 +22,9 @@ fi
 
 if [ "${1:-}" = "--print-timeout" ]; then echo "$want"; exit 0; fi
 
-set -- -w
+# idlehint: logind's IdleHint after a minute without input, which WorkSuite Security (idle-time scans) and, when the
+# organization's policy turns it on, employee activity monitoring follow (shell/electron/activity.ts).
+set -- -w idlehint 60
 [ "$want" -gt 0 ] && set -- "$@" timeout "$want" "loginctl lock-session"
 # lock: Super+L, the shell's Lock button and the device agent's RequestLock all go through `loginctl lock-session`.
 # before-sleep: -w holds logind's delay inhibitor until worksuite-lock returns, i.e. until the locker holds the lock.

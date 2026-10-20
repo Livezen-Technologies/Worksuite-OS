@@ -5,7 +5,9 @@ import { ACTIVATED_FLAG, MAX_DESKTOPS, PanelClient, type PanelWindow } from './p
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 
 /** Open/Capture from Shell1 (Windows-style key bindings), and the lift for others (the snipping overlay) once it exists. */
-export interface PanelHooks { open?(what: string): void; capture?(kind: string): void; lift?: (reason: string, on: boolean) => Promise<void> }
+export interface PanelHooks { open?(what: string): void; capture?(kind: string): void; lift?: (reason: string, on: boolean) => Promise<void>
+  /** Every window-list change (activity monitoring follows the activated app). */
+  windows?(w: PanelWindow[]): void }
 
 export function startPanel(handle: Handle, send: (channel: string, payload: unknown) => void, outputsChanged: () => void = () => undefined, openArchive: (path: string) => void = () => undefined, hooks: PanelHooks = {}): PanelClient | null {
   let client: PanelClient | null = null
@@ -13,7 +15,7 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
     const bus = dbus.sessionBus()
     bus.on('error', () => { /* bus gone: keep the shell running */ })
     client = new PanelClient(bus as never, {
-      windows: (w) => { send('ws:panelWindowsChanged', w); lift.windowsChanged(w) },
+      windows: (w) => { send('ws:panelWindowsChanged', w); lift.windowsChanged(w); hooks.windows?.(w) },
       tray: (t) => send('ws:panelTrayChanged', t),
       launcher: (a) => { if (a === 'taskview') void tv.open(); else send('ws:launcher', a) },
       outputs: outputsChanged,

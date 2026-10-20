@@ -44,6 +44,7 @@ export const WAIT_REASON: Record<string, string> = messages({
   manual_mode: 'upd.wait.manual',
   not_entitled: 'upd.wait.entitled',
   download_interrupted: 'upd.wait.interrupted',
+  major_upgrade: 'swu.wait.major',
 })
 
 export const fmtWhen = (ms: number | null | string) => (ms == null ? '—' : formatDate(ms, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))

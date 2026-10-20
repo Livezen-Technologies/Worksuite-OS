@@ -27,15 +27,21 @@ import { createSearch, localRecentHits, parseXbel } from './search'
 import { createWidgets } from './widgets'
 import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge, AGENT_POLICY_PATH } from './system'
+import { applyFix, diagnose, diagnosisText, type RadioFix, type RadioKind } from './radios'
+import { accelerationPlan, graphicsState, noteGpuCrash, readCrashLog, readRendererChoice, resetGpuFallback, setRenderer } from './graphics'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { archiveJobs, listIn, locate } from './archives'
 import { startAIHost } from './ai'
 import { defaultEnv, driveDir, dropPlan, freeBytes, list, resolveIn, roots } from './files'
-import { eject, jobs as fileJobs, mkdirIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
+import { eject, jobs as fileJobs, desktopDir, mkdirIn, newFileIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, templates, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel, type PanelHooks } from './panelHost'
+import { startActivity } from './activityHost'
+import { startSecurity } from './securityCenter'
 import { captureHost, imageData, runBytes, screenshotFileName, screenshotsDir, wlCopyImage, type CaptureKind, type SnipMode } from './capture'
 import { clipboardAllowed } from './clipboard'
 import { applyShortcuts } from './shortcutsHost'
+import { applyWindowTheme } from './windowTheme'
+import { APP_WINDOW } from './windowDefaults'
 import { ACTIVATED_FLAG, FULLSCREEN_FLAG } from './panel'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import type { Layout } from './displays'
@@ -51,6 +57,8 @@ import { startPeripheralsHost } from './peripherals'
 import { startRemoteSupportHost } from './remoteSupport'
 import { appPermissionsBridge, startAppPermissionsHost } from './appPermissions'
 import { startTouchHost } from './touch'
+import { startPointerHost } from './pointer'
+import { startSysWatch } from './sysWatch'
 import { startNotifications, windowForNotification } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
@@ -146,6 +154,14 @@ function createWindow() {
 
 // WSOS-INT-011: Sinhala/Tamil typing in the shell and app windows through fcitx5 (Wayland text-input-v3).
 app.commandLine.appendSwitch('enable-wayland-ime')
+// #16: GPU compositing, rasterization and VA-API video in the shell and every WorkSuite app window, or software
+// rendering when the session has no usable GPU or the GPU process kept crashing (graphics.ts).
+const accel = accelerationPlan(process.env, readCrashLog(), readRendererChoice())
+if (accel.disable) app.disableHardwareAcceleration()
+for (const [k, v] of accel.switches) app.commandLine.appendSwitch(k, v)
+app.on('child-process-gone', (_e, d) => {
+  if (d.type === 'GPU' && d.reason !== 'clean-exit' && d.reason !== 'killed') noteGpuCrash()
+})
 // `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
 const appRequest = parseAppArgs(process.argv)
 if (appRequest?.id === WHATSAPP_ID) {
@@ -190,7 +206,7 @@ app.whenReady().then(() => {
   // WorkSuite web apps: one window and one persistent session partition per app (WSOS-SEC-004).
   const apps = appWindows({
     session: (p) => session.fromPartition(p),
-    window: ({ partition, title }) => new BrowserWindow({ title, backgroundColor: '#0f172a', webPreferences: appWebPreferences(partition) }),
+    window: ({ partition, title }) => new BrowserWindow({ ...APP_WINDOW, title, backgroundColor: '#0f172a', webPreferences: appWebPreferences(partition) }),
     openExternal: (u) => { if (externalAllowed(u)) void shell.openExternal(u) },
     permission: (perm, url) => permissionAllowed(webGrants, url, perm),
   })
@@ -339,11 +355,32 @@ app.whenReady().then(() => {
   handle('ws:sysBluetooth', () => sys.bluetooth())
   handle('ws:sysSetBluetooth', (on) => sys.setBluetooth(on === 'on'))
   handle('ws:sysBtConnect', (address, on) => sys.btConnect(address, on === 'on'))
+  handle('ws:sysWifiRescan', () => sys.wifiRescan())
+  handle('ws:sysWifiDisconnect', () => sys.wifiDisconnect())
+  // #31: why Wi-Fi or Bluetooth doesn't work, and the fixes a person can apply (radios.ts).
+  const radioKind = (k: string): RadioKind | null => (k === 'wifi' || k === 'bluetooth' ? k : null)
+  handle('ws:radioDiagnose', async (kind) => {
+    const k = radioKind(kind)
+    if (!k) return { ok: false, error: 'invalid_argument' }
+    const d = await diagnose(k, { exec: realExec })
+    return { ok: true, value: { ...d, text: diagnosisText(d) } }
+  })
+  handle('ws:radioFix', (kind, fix) => {
+    const k = radioKind(kind)
+    if (!k || (fix !== 'unblock' && fix !== 'restart_service')) return { ok: false, error: 'invalid_argument' }
+    return applyFix(k, fix as RadioFix, realExec)
+  })
+  // #16: Settings › Graphics.
+  handle('ws:graphics', async () => ({ ok: true, value: await graphicsState({ exec: realExec, plan: accel, featureStatus: () => app.getGPUFeatureStatus() as unknown as Record<string, string>, gpuInfo: () => app.getGPUInfo('complete') }) }))
+  handle('ws:graphicsSetRenderer', (choice) => setRenderer(choice))
+  handle('ws:graphicsReset', () => resetGpuFallback())
   handle('ws:sysSound', () => sys.sound())
   handle('ws:sysSetVolume', (p) => sys.setVolume(Number(p)))
   handle('ws:sysSetMute', (on) => sys.setMute(on === 'on'))
   handle('ws:sysSetDefaultAudio', (id) => sys.setDefaultAudio(Number(id)))
   handle('ws:sysBattery', () => sys.battery())
+  // The taskbar's Wi-Fi, Bluetooth and power indicators update when the services signal a change (#28).
+  void startSysWatch(broadcast)
   handle('ws:sysPrinters', () => sys.printers())
   handle('ws:sysDisplays', () => sys.displays())
   handle('ws:sysDisks', () => sys.disks())
@@ -376,6 +413,10 @@ app.whenReady().then(() => {
   handle('ws:pkgRepair', () => pkg.repair())
   handle('ws:pkgState', () => pkg.serviceState())
   handle('ws:pkgCatalog', () => pkg.catalog())
+  handle('ws:pkgRequestApp', (catalogId, reason) => pkg.requestApp(String(catalogId), String(reason ?? '')))
+  handle('ws:updateHistory', () => pkg.updateHistory())
+  handle('ws:appUpdates', () => pkg.appUpdates())
+  handle('ws:updateApps', (...ids) => pkg.updateApps(ids.map(String)))
   // Files for local installs come only from the user's own choice in a file dialog: the renderer gets an opaque
   // handle, never the ability to name a path (WSOS-APT-005, WSOS-AIM-001, WSOS-AUP-010).
   const picked = new Map<string, string>()
@@ -527,6 +568,10 @@ app.whenReady().then(() => {
   handle('ws:filesRecent', () => recent(files))
   handle('ws:filesSearch', (root, rel, q, kind, days) => search(files, root, rel, q, kind, Number(days) || 0))
   handle('ws:filesMkdir', (root, rel, name) => mkdirIn(files, root, rel, name))
+  // Desktop right-click menu (#27): the XDG Desktop folder, "New" from ~/Templates, new empty files.
+  handle('ws:desktopDir', () => desktopDir(files))
+  handle('ws:filesTemplates', () => templates(files))
+  handle('ws:filesNewFile', (root, rel, name, template) => newFileIn(files, root, rel, name, template ? template : null))
   handle('ws:filesRename', (root, rel, name) => renameIn(files, root, rel, name))
   handle('ws:filesTrash', (root, rels) => trash(files, root, strs(rels)))
   handle('ws:filesDelete', (root, rels) => removeIn(files, root, strs(rels)))
@@ -651,6 +696,8 @@ app.whenReady().then(() => {
   // preferences, so shortcuts follow the person to another computer.
   const shortcutFiles = { userRc: path.join(xdgDirs(home).config, 'worksuite', 'labwc', 'rc.xml'), systemRc: '/etc/xdg/worksuite/labwc/rc.xml' }
   handle('ws:shortcutsApply', (json) => applyShortcuts(parseJson(json), shortcutFiles, realExec))
+  // Settings › Appearance: the Labwc title bar theme (light or dark) in the same file.
+  handle('ws:windowTheme', (dark) => applyWindowTheme(dark === 'dark', shortcutFiles, realExec))
   setTimeout(() => void syncCall('GetPreference', { object_id: 'shell' }).then((r) => {
     const sc = r.ok ? (r.value as { shortcuts?: unknown } | null)?.shortcuts : undefined
     if (sc) void applyShortcuts(sc, shortcutFiles, realExec)
@@ -682,6 +729,8 @@ app.whenReady().then(() => {
     stateDir: path.join(app.getPath('home'), '.local/state/worksuite/permissions'),
   }))
   startTouchHost(handle, broadcast, app.getPath('home'))
+  // Settings › Mouse & touchpad (#35): Labwc libinput block, applied live with labwc --reconfigure.
+  startPointerHost(handle, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
   // Clicking one (its "default" action) also raises the sender's window through the bridge, whatever the app does.
   const notices = startNotifications(handle, broadcast, (n) => {
@@ -719,6 +768,16 @@ app.whenReady().then(() => {
     return notices.notify(DRIVERS_APP, 0, String(summary).slice(0, 200), String(body).slice(0, 400), ['default', ''], 1)
   })
   handle('ws:filesNotify', (summary, body) => notices.notify('Files', 0, String(summary).slice(0, 200), String(body).slice(0, 400), [], 1))
+  // WorkSuite Security (#20): status, Scan now, and notices for threats, firewall alerts, protection off, isolation.
+  startSecurity(handle, (n) => void notices.notify('WorkSuite Security', 0, n.title, n.body, [], n.kind === 'threat_detected' || n.kind === 'isolated' ? 2 : 1), broadcast)
+  // Employee monitoring (#22): only when the signed policy turns it on; Settings and the taskbar indicator show it.
+  const activity = startActivity(handle, {
+    home, broadcast, device: () => deviceCredential(),
+    session: async () => { const s = await loadSession(brokerFn, (url, init) => fetch(url, { headers: init?.headers }), () => deviceCredential()); return s.ok ? s.value : null },
+    fetch: (url, init) => fetch(url, init as RequestInit),
+  })
+  hooks.windows = (w) => activity.windows(w, ACTIVATED_FLAG)
+  app.on('before-quit', () => activity.stop())
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
   startPolkitBridge(handle, broadcast)
 })
@@ -763,7 +822,7 @@ function startPortalWatch(sys: ReturnType<typeof systemBridge>) {
     ses.setPermissionCheckHandler(() => false)
     ses.on('will-download', (e) => e.preventDefault())
     const w = new BrowserWindow({
-      title: 'Sign in to network', width: 900, height: 700, backgroundColor: '#ffffff', autoHideMenuBar: true,
+      ...APP_WINDOW, title: 'Sign in to network', width: 900, height: 700, backgroundColor: '#ffffff',
       webPreferences: { partition, sandbox: true, contextIsolation: true, nodeIntegration: false, nodeIntegrationInSubFrames: false, webviewTag: false, webSecurity: true, spellcheck: false },
     })
     const guard = (e: { preventDefault(): void }, url: string) => { if (!portalNavAllowed(url)) e.preventDefault() }

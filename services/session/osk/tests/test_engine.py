@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from worksuite_osk.__main__ import options
-from worksuite_osk.control import parse
+from worksuite_osk.control import parse, state_line
 from worksuite_osk.engine import HINT_AUTOCAP, HINT_SENSITIVE, PURPOSE, Keyboard
 from worksuite_osk.layouts import Key
 from worksuite_osk.output import Output
@@ -133,6 +133,10 @@ class OutputAndControl(unittest.TestCase):
         self.assertEqual(parse("show 99 4"), ("show", 0, 4))
         self.assertIsNone(parse("show 6; reboot"))
         self.assertIsNone(parse("type secret"))
+
+    def test_state_lines(self):
+        self.assertEqual(state_line(True), "visible 1\n")
+        self.assertEqual(state_line(False), "visible 0\n")
 
     def test_options(self):
         o = options(["--kiosk", "--mode", "split", "--langs", "si,xx,ta"])

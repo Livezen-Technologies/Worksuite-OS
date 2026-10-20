@@ -42,6 +42,13 @@ contextBridge.exposeInMainWorld('worksuite', {
   sysBluetooth: () => ipcRenderer.invoke('ws:sysBluetooth'),
   sysSetBluetooth: (on: boolean) => ipcRenderer.invoke('ws:sysSetBluetooth', on ? 'on' : 'off'),
   sysBtConnect: (address: string, on: boolean) => ipcRenderer.invoke('ws:sysBtConnect', String(address), on ? 'on' : 'off'),
+  sysWifiRescan: () => ipcRenderer.invoke('ws:sysWifiRescan'),
+  sysWifiDisconnect: () => ipcRenderer.invoke('ws:sysWifiDisconnect'),
+  radioDiagnose: (kind: string) => ipcRenderer.invoke('ws:radioDiagnose', String(kind)),
+  radioFix: (kind: string, fix: string) => ipcRenderer.invoke('ws:radioFix', String(kind), String(fix)),
+  graphics: () => ipcRenderer.invoke('ws:graphics'),
+  graphicsSetRenderer: (choice: string) => ipcRenderer.invoke('ws:graphicsSetRenderer', String(choice)),
+  graphicsReset: () => ipcRenderer.invoke('ws:graphicsReset'),
   sysSound: () => ipcRenderer.invoke('ws:sysSound'),
   sysSetVolume: (percent: number) => ipcRenderer.invoke('ws:sysSetVolume', String(Number(percent))),
   sysSetMute: (muted: boolean) => ipcRenderer.invoke('ws:sysSetMute', muted ? 'on' : 'off'),
@@ -61,6 +68,21 @@ contextBridge.exposeInMainWorld('worksuite', {
   },
   sysDisks: () => ipcRenderer.invoke('ws:sysDisks'),
   enrollDevice: (serverUrl: string, code: string) => ipcRenderer.invoke('ws:enrollDevice', String(serverUrl), String(code)),
+  securityStatus: () => ipcRenderer.invoke('ws:securityStatus'),
+  securityScan: (kind: string) => ipcRenderer.invoke('ws:securityScan', kind === 'full' ? 'full' : 'quick'),
+  onSecurityChanged: (cb: (s: unknown) => void) => {
+    const listener = (_e: unknown, payload: unknown) => cb(payload)
+    ipcRenderer.on('ws:securityChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:securityChanged', listener) }
+  },
+  activityStatus: () => ipcRenderer.invoke('ws:activityStatus'),
+  activityAck: () => ipcRenderer.invoke('ws:activityAck'),
+  activityRemote: () => ipcRenderer.invoke('ws:activityRemote'),
+  onActivityChanged: (cb: (s: unknown) => void) => {
+    const listener = (_e: unknown, payload: unknown) => cb(payload)
+    ipcRenderer.on('ws:activityChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:activityChanged', listener) }
+  },
   pkgPreview: (catalogId: string, op: string) => ipcRenderer.invoke('ws:pkgPreview', String(catalogId), String(op)),
   pkgInstall: (catalogId: string) => ipcRenderer.invoke('ws:pkgInstall', String(catalogId)),
   pkgRemove: (catalogId: string) => ipcRenderer.invoke('ws:pkgRemove', String(catalogId)),
@@ -84,6 +106,9 @@ contextBridge.exposeInMainWorld('worksuite', {
   filesRecent: () => ipcRenderer.invoke('ws:filesRecent'),
   filesSearch: (root: string, rel: string, q: string, kind: string, days: number) => ipcRenderer.invoke('ws:filesSearch', String(root), String(rel), String(q), String(kind), String(days)),
   filesMkdir: (root: string, rel: string, name: string) => ipcRenderer.invoke('ws:filesMkdir', String(root), String(rel), String(name)),
+  desktopDir: () => ipcRenderer.invoke('ws:desktopDir'),
+  filesTemplates: () => ipcRenderer.invoke('ws:filesTemplates'),
+  filesNewFile: (root: string, rel: string, name: string, template: string | null) => ipcRenderer.invoke('ws:filesNewFile', String(root), String(rel), String(name), template ? String(template) : ''),
   filesRename: (root: string, rel: string, name: string) => ipcRenderer.invoke('ws:filesRename', String(root), String(rel), String(name)),
   filesTrash: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesTrash', String(root), JSON.stringify(rels.map(String))),
   filesDelete: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesDelete', String(root), JSON.stringify(rels.map(String))),
@@ -130,6 +155,11 @@ contextBridge.exposeInMainWorld('worksuite', {
     ipcRenderer.on('ws:driversChanged', listener)
     return () => { ipcRenderer.removeListener('ws:driversChanged', listener) }
   },
+  onSysChanged: (cb: (kind: string) => void) => {
+    const listener = (_e: unknown, k: unknown) => cb(String(k))
+    ipcRenderer.on('ws:sysChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:sysChanged', listener) }
+  },
   onOpenSettings: (cb: (section: string) => void) => {
     const listener = (_e: unknown, s: unknown) => cb(String(s))
     ipcRenderer.on('ws:openSettings', listener)
@@ -150,6 +180,10 @@ contextBridge.exposeInMainWorld('worksuite', {
   reportSave: (id: string, keep: string[], description: string) => ipcRenderer.invoke('ws:reportSave', String(id), keep.map(String).join(','), String(description)),
   reportSend: (id: string, keep: string[], description: string) => ipcRenderer.invoke('ws:reportSend', String(id), keep.map(String).join(','), String(description)),
   pkgCatalog: () => ipcRenderer.invoke('ws:pkgCatalog'),
+  pkgRequestApp: (catalogId: string, reason: string) => ipcRenderer.invoke('ws:pkgRequestApp', String(catalogId), String(reason)),
+  updateHistory: () => ipcRenderer.invoke('ws:updateHistory'),
+  appUpdates: () => ipcRenderer.invoke('ws:appUpdates'),
+  updateApps: (ids: string[]) => ipcRenderer.invoke('ws:updateApps', ...ids.map(String)),
   pickFile: (kind: string) => ipcRenderer.invoke('ws:pickFile', String(kind)),
   localDebPreview: (handle: string) => ipcRenderer.invoke('ws:localDebPreview', String(handle)),
   localDebInstall: (token: string) => ipcRenderer.invoke('ws:localDebInstall', String(token)),
@@ -351,6 +385,12 @@ contextBridge.exposeInMainWorld('worksuiteTouch', {
   onPen: on('ws:penEvent'),
 })
 
+// Mouse and touchpad settings — see electron/pointer.ts.
+contextBridge.exposeInMainWorld('worksuitePointer', {
+  state: () => ipcRenderer.invoke('ws:pointerState'),
+  set: (patch: unknown) => ipcRenderer.invoke('ws:pointerSet', JSON.stringify(patch ?? {})),
+})
+
 // Screenshots, the snipping overlay and editor, Windows-style Open targets, shortcuts — see electron/capture.ts,
 // electron/shortcutsHost.ts. Images travel as data: URLs; files are written only where the person saves them.
 contextBridge.exposeInMainWorld('worksuiteCapture', {
@@ -367,6 +407,7 @@ contextBridge.exposeInMainWorld('worksuiteCapture', {
   snipSave: (dataUrl: string) => ipcRenderer.invoke('ws:snipSave', String(dataUrl)),
   snipReveal: (file: string) => ipcRenderer.invoke('ws:snipReveal', String(file)),
   shortcutsApply: (prefs: unknown) => ipcRenderer.invoke('ws:shortcutsApply', JSON.stringify(prefs ?? null)),
+  windowTheme: (dark: boolean) => ipcRenderer.invoke('ws:windowTheme', dark ? 'dark' : 'light'),
   edit: (cmd: string) => ipcRenderer.invoke('ws:edit', String(cmd)),
   onSnipOpen: on('ws:snipOpen'),
   onSnipClose: on('ws:snipClose'),

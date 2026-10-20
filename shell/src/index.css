@@ -94,6 +94,32 @@
   --color-ws-subtle: #0f172a;
 }
 
+/* Window frames (components/ShellWindow.tsx), Windows 11 style, in step with the Labwc theme every other app's title
+   bar is drawn with (services/session/themes: WorkSuite and WorkSuite-Light): 32 px title bar, 46 x 32 px Minimize, Maximize /
+   Restore and Close at the top right, an 8 px rounded window, red Close on hover, a dimmer title bar when inactive. */
+:root {
+  --ws-win-bar: #0C1E46; --ws-win-bar-inactive: #0A1A3D; --ws-win-title: #E8EEFA; --ws-win-title-inactive: #8FA3C8;
+  --ws-win-border: rgba(127,178,255,0.30); --ws-win-border-inactive: rgba(127,178,255,0.14);
+  --ws-win-hover: rgba(255,255,255,0.09); --ws-win-press: rgba(255,255,255,0.05); --ws-win-close: #C42B1C; --ws-win-close-press: #A1281D;
+}
+:root[data-theme="light"] {
+  --ws-win-bar: #EEF2F9; --ws-win-bar-inactive: #F3F6FB; --ws-win-title: #0F172A; --ws-win-title-inactive: #4A5B80;
+  --ws-win-border: rgba(37,74,150,0.30); --ws-win-border-inactive: rgba(37,74,150,0.16);
+  --ws-win-hover: rgba(15,23,42,0.07); --ws-win-press: rgba(15,23,42,0.04);
+}
+.ws-win { border-radius: 8px; border: 1px solid var(--ws-win-border-inactive); box-shadow: 0 8px 24px rgba(2,6,23,0.35); transition: box-shadow 0.15s ease, border-color 0.15s ease; }
+.ws-win[data-active="true"] { border-color: var(--ws-win-border); box-shadow: 0 18px 48px rgba(2,6,23,0.5); }
+.ws-win[data-maximized="true"] { border-radius: 0; border-width: 0; box-shadow: none; }
+.ws-win-bar { height: 32px; background: var(--ws-win-bar-inactive); color: var(--ws-win-title-inactive); transition: background-color 0.15s ease, color 0.15s ease; }
+.ws-win[data-active="true"] .ws-win-bar { background: var(--ws-win-bar); color: var(--ws-win-title); }
+.ws-win-btn { width: 46px; height: 32px; display: flex; align-items: center; justify-content: center; color: inherit; background: transparent; transition: background-color 0.1s ease, color 0.1s ease; }
+.ws-win-btn:hover { background: var(--ws-win-hover); }
+.ws-win-btn:active { background: var(--ws-win-press); }
+.ws-win-btn[data-close]:hover { background: var(--ws-win-close); color: #FFFFFF; }
+.ws-win-btn[data-close]:active { background: var(--ws-win-close-press); color: #FFFFFF; }
+.ws-win:not([data-maximized="true"]) .ws-win-btn[data-close] { border-top-right-radius: 7px; }
+.ws-win-btn:focus-visible { outline: 2px solid #7FB2FF; outline-offset: -2px; }
+
 /* Wrong-password shake (Login board). */
 @keyframes ws-shake { 0%, 100% { transform: translateX(0) } 20%, 60% { transform: translateX(-8px) } 40%, 80% { transform: translateX(8px) } }
 .ws-shake { animation: ws-shake 0.4s ease; }

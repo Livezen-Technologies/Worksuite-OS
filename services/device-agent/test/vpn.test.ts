@@ -142,7 +142,7 @@ function world(opts: { orgVpn?: Partial<VpnConfig> | false; policy?: Omit<Policy
     async inventory() { return {}; },
     publishCredential() {}, publishPolicy() {}, publishStatus() {},
     async lockAllSessions() {}, async applyEnforcement() {}, setOfflineAccessBlock() {},
-    async installApproved() {}, async scheduleUpdate() {}, async scheduleReboot() {},
+    async installApproved() {}, async removeApplication() {}, async scheduleUpdate() {}, async scheduleReboot() {},
     async collectDiagnostics(p) { return { profile: p, sha256: '', content: '' }; },
     async isFullyEncrypted() { return true; },
     async wipeWorkSuiteData() {}, async cryptoErase() {}, audit() {},
