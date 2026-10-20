@@ -11,6 +11,7 @@ import { ENFORCED_PATHS, type Enforcement } from './enforce.ts';
 import { KILLSWITCH_TABLE, parseNmConnections, renderKillSwitch, renderNmConnection, VPN_CONNECTION_UUID, VPN_KEYFILE, wgKeyPair, wgPublicKey } from './vpn.ts';
 import type { Policy } from './state.ts';
 import { collectHardware, readUpdateStatus } from './inventory.ts';
+import { runPackageJob, systemJobBus } from './packageJob.ts';
 import { diagnosticProfiles, type DiagnosticProfile } from './diagnostics.ts';
 
 export interface HostPaths { stateDir: string; runtimeDir: string; auditLog: string }
@@ -186,9 +187,16 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
       else rmSync(ENFORCED_PATHS.offlineExpired, { force: true });
     },
 
+    // Software Management: wait for the package job so the server sees whether it really installed or why not.
     async installApproved(catalogId) {
       const [source, name] = splitCatalogId(catalogId);
-      await run('busctl', ['call', '--system', 'lk.worksuite.PackageService1', '/lk/worksuite/PackageService1', 'lk.worksuite.PackageService1', 'Install', 'ss', source, name], 600_000);
+      const bus = await systemJobBus();
+      try { await runPackageJob(bus, 'Install', source, name); } finally { bus.close(); }
+    },
+    async removeApplication(catalogId) {
+      const [source, name] = splitCatalogId(catalogId);
+      const bus = await systemJobBus();
+      try { await runPackageJob(bus, 'Remove', source, name); } finally { bus.close(); }
     },
 
     async scheduleUpdate() {

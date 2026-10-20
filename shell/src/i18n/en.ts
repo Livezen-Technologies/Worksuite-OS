@@ -4,6 +4,7 @@ import { aiEn } from './ai'
 import { widgetsEn } from './widgets'
 import { captureEn } from './capture'
 import { driversEn } from './drivers'
+import { softwareEn } from './software'
 import { whatsappEn } from './whatsapp'
 import { desktopsEn } from './desktops'
 import { controlsEn } from './controls'
@@ -17,6 +18,7 @@ const en = {
   ...widgetsEn,
   ...captureEn,
   ...driversEn,
+  ...softwareEn,
   ...whatsappEn,
   ...desktopsEn,
   ...controlsEn,

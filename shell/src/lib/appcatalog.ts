@@ -1,6 +1,6 @@
 // App Center view model: the server catalog (through the package service) plus the user's imported AppImages.
 // Pure functions so the filters and states are testable without a window.
-import type { AppCatalog, AppImageRecord, CatalogEntry } from './os'
+import type { AppCatalog, AppImageRecord, AppRequest, CatalogEntry } from './os'
 import { t } from '../i18n'
 
 export type Source = 'WorkSuite' | 'APT' | 'Flatpak' | 'AppImage'
@@ -25,9 +25,24 @@ export interface AppView {
   /** Shown on the card: "Signed by …", "Checksum only — publisher not verified", "Approved by your organization (checksum)". */
   trust: string | null
   needsApproval: boolean
+  /** Software Management: not approved here, but the person may ask the organization (policy software_install = request). */
+  requestable?: boolean
+  /** This person's latest request for it. */
+  request?: AppRequest | null
   /** Ships with WorkSuite OS (not from the catalog): opened, never installed or removed here. */
   builtin?: 'office'
   sha256?: string
+}
+
+/** Software Management: what the App Center shows for an app the organization hasn't approved here. null when the app
+ *  isn't blocked or can't be asked for. A declined request can be asked again (with a reason). */
+export function requestStatus(a: Pick<AppView, 'blocked' | 'requestable' | 'request'>): { label: string; hint: string | null; canRequest: boolean } | null {
+  if (!a.blocked || (!a.requestable && !a.request)) return null
+  const r = a.request
+  if (r?.state === 'pending') return { label: t('swr.requested'), hint: t('swr.pending'), canRequest: false }
+  if (r?.state === 'approved') return { label: t('swr.approved'), hint: t('swr.approvedHint'), canRequest: false }
+  const hint = r?.state === 'rejected' ? (r.note ? t('swr.rejectedNote', { note: r.note }) : t('swr.rejected')) : null
+  return { label: t('swr.request'), hint, canRequest: !!a.requestable }
 }
 
 const mark = (fpr: string) => fpr.replace(/(.{4})/g, '$1 ').trim().slice(-24)
@@ -55,6 +70,7 @@ export function buildApps(catalog: AppCatalog | null, appimages: AppImageRecord[
       key: i.id, catalogId: i.id, appimageId: null, name: i.name, publisher: i.publisher ?? SOURCES.find((s) => s.id === SOURCE_OF[i.source])!.label,
       summary: i.summary ?? '', source: SOURCE_OF[i.source], category: i.category ?? 'Other', installed: i.installed, blocked: i.blocked_reason,
       trust: i.source === 'appimage' ? t('appc.trust.import') : null, needsApproval: false, sha256: i.sha256,
+      requestable: i.requestable === true, request: i.request ?? null,
     }))
   const fromImports: AppView[] = appimages.map((r) => ({
     key: `appimage-local:${r.id}`, catalogId: null, appimageId: r.id, name: r.name, publisher: r.origin.replace(/^file:\/\//, ''),

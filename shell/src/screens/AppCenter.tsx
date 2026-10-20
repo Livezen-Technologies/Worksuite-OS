@@ -9,7 +9,7 @@ import { C, card, Dialog, dialogFooter, btnGhost, btnPrimary, Svg, Switch } from
 import { ErrorDetails } from '../components/ErrorDetails'
 import { friendlyError } from '../lib/errors'
 import { formatBytes, os, packageErrorText, type AppCatalog, type AppImageRecord, type AppPermissions, type InstalledApp, type LocalDebPreview, type PackageJobEvent, type PackagePreview } from '../lib/os'
-import { buildApps, catalogNotice, categories, filterApps, SOURCES, type AppView, type Section } from '../lib/appcatalog'
+import { buildApps, catalogNotice, categories, filterApps, requestStatus, SOURCES, type AppView, type Section } from '../lib/appcatalog'
 import { appColor, detailSecurity, expandPermissions, featuredApp, formatLabel, launchIdFor } from '../lib/appdetail'
 import { formatNumber, t, useT, type MessageKey } from '../i18n'
 
@@ -87,6 +87,7 @@ export default function AppCenter({ onClose, active }: WindowProps) {
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<{ loading: boolean; data?: PackagePreview; error?: string }>({ loading: false })
   const [deb, setDeb] = useState<{ loading: boolean; name: string; data?: LocalDebPreview; error?: string } | null>(null)
+  const [asking, setAsking] = useState<AppView | null>(null)
   const [aiConfirm, setAiConfirm] = useState<{ record: AppImageRecord; file: string } | null>(null)
   const [fileMenu, setFileMenu] = useState(false)
   const [jobs, setJobs] = useState<Record<string, { name: string; op: Op; key?: string }>>({})
@@ -211,6 +212,8 @@ export default function AppCenter({ onClose, active }: WindowProps) {
     if (a.builtin === 'office') return { label: t('common.open'), act: () => openApp(a) }
     if (jobFor(a)) return { label: t('appc.working'), disabled: true }
     if (a.appimageId) return a.needsApproval ? { label: t('appc.allow'), act: () => void appimageAct(a, 'approve'), primary: true } : { label: t('common.open'), act: () => openApp(a) }
+    const req = requestStatus(a)
+    if (req) return req.canRequest ? { label: req.label, act: () => setAsking(a), primary: true } : { label: req.label, disabled: true }
     if (a.blocked) return { label: t('common.unavailable'), disabled: true }
     if (a.catalogId && updates.has(a.catalogId)) return updating ? { label: t('appc.updating'), disabled: true } : { label: t('appc.update'), act: () => void updateAll(), primary: true }
     if (a.source === 'AppImage') return { label: t('appc.importFile'), act: () => void pickAppImage(), primary: true }
@@ -220,14 +223,14 @@ export default function AppCenter({ onClose, active }: WindowProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || activeRef.current === false || busy || review || deb || aiConfirm) return
+      if (e.key !== 'Escape' || activeRef.current === false || busy || review || deb || aiConfirm || asking) return
       if (fileMenu) setFileMenu(false)
       else if (view.kind === 'detail') setView({ kind: 'section', section: 'discover', category: 'All' })
       else onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [busy, review, deb, aiConfirm, fileMenu, view, onClose])
+  }, [busy, review, deb, aiConfirm, asking, fileMenu, view, onClose])
 
   const navBtn = (label: string, on: boolean, go: () => void, count?: number) => (
     <button key={label} type="button" aria-current={on ? 'page' : undefined} onClick={go}
@@ -250,7 +253,7 @@ export default function AppCenter({ onClose, active }: WindowProps) {
           <span className="truncate text-sm font-semibold">{a.name}</span>
           <span className="flex items-center gap-1.5 text-[11px]" style={{ color: C.muted }}>
             <span className="rounded px-[5px] py-px font-mono text-[9px]" style={{ background: 'rgba(127,178,255,0.14)', color: C.soft }}>{formatLabel(a.source)}</span>
-            <span className="truncate">{a.needsApproval ? t('appc.needsApproval') : a.blocked ?? a.category}</span>
+            <span className="truncate">{a.needsApproval ? t('appc.needsApproval') : requestStatus(a)?.hint ?? a.blocked ?? a.category}</span>
           </span>
           {job && <AnimatedProgress className="mt-[3px]" value={progress[job[0]] ?? null} label={a.name} height={4} />}
         </span>
@@ -293,7 +296,7 @@ export default function AppCenter({ onClose, active }: WindowProps) {
           detailApp ? <AppDetail a={detailApp} org={org} launchable={!!launchIdFor(detailApp, installedApps) || !!detailApp.appimageId || detailApp.builtin === 'office'}
             job={!!jobFor(detailApp)} onBack={() => setView({ kind: 'section', section: 'discover', category: 'All' })} onOpen={() => openApp(detailApp)}
             onInstall={() => (detailApp.source === 'AppImage' ? void pickAppImage() : setReview(detailApp))} onRemove={() => (detailApp.appimageId ? void appimageAct(detailApp, 'remove') : void start(detailApp, 'remove'))}
-            onApprove={() => void appimageAct(detailApp, 'approve')} onTracked={(job, op) => track(job, detailApp.name, op, detailApp.key)} say={say} />
+            onRequest={() => setAsking(detailApp)} onApprove={() => void appimageAct(detailApp, 'approve')} onTracked={(job, op) => track(job, detailApp.name, op, detailApp.key)} say={say} />
             : <p className="text-sm" style={{ color: C.muted }}>{t('appc.noMatch')}</p>
         ) : <>
           <label className="mr-12 box-border flex h-10 shrink-0 items-center gap-2 rounded-[10px] border px-3.5 text-[13px] focus-within:border-[#1F6BFF]" style={{ background: 'rgba(4,10,26,0.5)', borderColor: 'rgba(127,178,255,0.14)', color: C.muted }}>
@@ -354,6 +357,7 @@ export default function AppCenter({ onClose, active }: WindowProps) {
         </>}
       </main>
 
+      {asking && <RequestDialog a={asking} onClose={() => setAsking(null)} onSent={() => { say(t('swr.sent', { name: asking.name })); setAsking(null); loadCatalog() }} />}
       {review && (
         <Dialog width={600} onClose={busy ? undefined : () => setReview(null)} label={t('appc.reviewOf', { name: review.name })}>
           {() => <>
@@ -478,8 +482,40 @@ function Rows({ rows }: { rows: ([string, string] | [string, string, string])[] 
 }
 
 /** G09: one app: open or remove, its permissions with per-permission switches (Flatpak), and what is known about its security. */
-function AppDetail({ a, org, launchable, job, onBack, onOpen, onInstall, onRemove, onApprove, onTracked, say }: {
-  a: AppView; org: string | null; launchable: boolean; job: boolean; onBack: () => void; onOpen: () => void; onInstall: () => void; onRemove: () => void; onApprove: () => void
+/** Software Management: ask the organization to approve an app, with an optional reason. */
+function RequestDialog({ a, onClose, onSent }: { a: AppView; onClose: () => void; onSent: () => void }) {
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const send = async () => {
+    if (!a.catalogId) return
+    setBusy(true); setError(null)
+    const r = await os.pkgRequestApp(a.catalogId, reason)
+    setBusy(false)
+    if (r.ok) onSent(); else setError(packageErrorText(r.error))
+  }
+  return (
+    <Dialog width={520} onClose={busy ? undefined : onClose} label={t('swr.title', { name: a.name })}>
+      {() => <>
+        <div className="flex flex-col gap-3 px-6 pt-6 pb-4">
+          <h2 className="m-0 text-xl font-bold">{t('swr.title', { name: a.name })}</h2>
+          <p className="m-0 text-[13px]" style={{ color: C.soft }}>{t('swr.body')}</p>
+          <label className="flex flex-col gap-1.5 text-[13px]">{t('swr.reason')}
+            <textarea data-autofocus value={reason} maxLength={500} rows={3} onChange={(e) => setReason(e.target.value)}
+              className="rounded-lg border border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.45)] p-2.5 text-[13px] text-inherit" /></label>
+          {error && <span role="alert" className="text-xs" style={{ color: C.red }}>{error}</span>}
+        </div>
+        <div className={dialogFooter}>
+          <button type="button" disabled={busy} onClick={onClose} className={btnGhost}>{t('common.cancel')}</button>
+          <button type="button" disabled={busy} onClick={() => void send()} className={btnPrimary}>{t('swr.send')}</button>
+        </div>
+      </>}
+    </Dialog>
+  )
+}
+
+function AppDetail({ a, org, launchable, job, onBack, onOpen, onInstall, onRemove, onRequest, onApprove, onTracked, say }: {
+  a: AppView; org: string | null; launchable: boolean; job: boolean; onBack: () => void; onOpen: () => void; onInstall: () => void; onRemove: () => void; onRequest: () => void; onApprove: () => void
   onTracked: (job: string, op: Op) => void; say: (text: string, error?: boolean, details?: string | null) => void
 }) {
   const fail = (prefix: string, code: string) => say(`${prefix}: ${packageErrorText(code)}`, true, friendlyError(code, 'package').details)
@@ -512,6 +548,7 @@ function AppDetail({ a, org, launchable, job, onBack, onOpen, onInstall, onRemov
   const sec = detailSecurity(a, org)
   const entries = perms.data ? expandPermissions(perms.data.permissions, perms.data.broad) : []
   const removable = a.installed && !a.builtin && (!!a.catalogId || !!a.appimageId)
+  const req = requestStatus(a)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-[18px]">
@@ -525,9 +562,11 @@ function AppDetail({ a, org, launchable, job, onBack, onOpen, onInstall, onRemov
         {removable && <button type="button" disabled={job} onClick={onRemove} className="cursor-pointer rounded-[10px] border px-[18px] py-2.5 text-sm font-medium disabled:opacity-50" style={{ borderColor: 'rgba(255,138,122,0.45)', color: '#FFB4A8' }}>{t('common.remove')}</button>}
         {a.needsApproval ? <button type="button" onClick={onApprove} className={btnPrimary}>{t('appc.allow')}</button>
           : a.installed ? (launchable && <button type="button" onClick={onOpen} className={btnPrimary}>{t('common.open')}</button>)
+          : req ? <button type="button" disabled={!req.canRequest} onClick={onRequest} className={btnPrimary}>{req.label}</button>
           : !a.blocked && a.catalogId && <button type="button" disabled={job} onClick={onInstall} className={btnPrimary}>{job ? t('appc.working') : a.source === 'AppImage' ? t('appc.importFile') : t('common.install')}</button>}
       </div>
       {a.summary && <p className="m-0 text-[13px]" style={{ color: C.soft }}>{a.summary}</p>}
+      {req?.hint && <p role="status" className="m-0 text-[13px]" style={{ color: a.request?.state === 'rejected' ? C.amber : C.soft }}>{req.hint}</p>}
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between"><span className="text-[15px] font-semibold">{t('appc.permissions')}</span>

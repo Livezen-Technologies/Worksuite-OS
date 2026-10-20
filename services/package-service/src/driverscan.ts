@@ -33,7 +33,8 @@ export interface DriverEnv {
   bootId(): string;
   writeFile(path: string, text: string): void;
   /** Install packages / firmware through the package service's queue; progress per offer id. */
-  enqueue(caller: number, body: (progress: (phase: string, pct: number) => void) => Promise<void>): number;
+  /** `subject` names the job in the Update Manager's history. */
+  enqueue(caller: number, body: (progress: (phase: string, pct: number) => void) => Promise<void>, subject?: { kind: 'driver' | 'firmware'; title: string; version?: string | null }): number;
 }
 
 /** Root-only state (0600): the one-time MOK password lives here, never in the report. */
@@ -169,7 +170,8 @@ export class DriverManager extends EventEmitter {
       }
       const left = this.report.offers.filter((o) => !chosen.includes(o) || o.restart);
       this.publish({ ...this.report, offers: left.filter((o) => !chosen.includes(o)), devices: this.report.devices.map((d) => ({ ...d, offers: d.offers.filter((id) => !chosen.some((c) => c.id === id)), status: chosen.some((c) => c.device_id === d.id) ? 'working' : d.status })) });
-    });
+    }, { kind: chosen.every((o) => o.kind === 'fwupd' || o.kind === 'firmware') ? 'firmware' : 'driver', title: chosen.map((o) => o.name).join(', ').slice(0, 200),
+      version: chosen.length === 1 ? chosen[0].to_version ?? null : null });
   }
 
   /** At boot (after the greeter's health check): an nvidia install whose first boot failed goes back to nouveau. */

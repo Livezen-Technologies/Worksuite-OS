@@ -149,6 +149,13 @@ export interface WorkSuiteApi {
   reportSend(id: string, keep: string[], description: string): Promise<CloudResult<string>>
   /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
   pkgCatalog(): Promise<CloudResult<AppCatalog>>
+  /** Software Management: ask the organization to approve installing a catalog app (policy software_install = request). */
+  pkgRequestApp(catalogId: string, reason: string): Promise<CloudResult<AppRequest>>
+  /** Update Manager: installed, failed and pending updates (OS, drivers, firmware, apps). */
+  updateHistory(): Promise<CloudResult<UpdateHistory>>
+  /** Flatpak apps with an update, and updating them (empty list = all); a job like pkgInstall. */
+  appUpdates(): Promise<CloudResult<AppUpdate[]>>
+  updateApps(ids: string[]): Promise<CloudResult<string>>
   /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
   pickFile(kind: 'deb' | 'appimage' | 'wsupdate' | 'wgconf' | 'ovpn'): Promise<CloudResult<{ handle: string; name: string }>>
   localDebPreview(handle: string): Promise<CloudResult<LocalDebPreview>>
@@ -295,11 +302,24 @@ export interface OsUpdateStatus {
   critical?: boolean; resumed?: boolean
   /** Update Center (or the organisation's mirror) the coordinator checked, and the device's ring. */
   update_host?: string; ring?: 'development' | 'pilot' | 'stable'
+  /** From the signed manifest: release notes (plain text), sizes, a version upgrade, a security release. */
+  notes?: string | null; notes_url?: string | null; download_bytes?: number | null; installed_bytes?: number | null; upgrade?: boolean; security?: boolean
 }
+export interface AppRequest { id: string; state: 'pending' | 'approved' | 'rejected'; note: string | null; at: number }
+export interface UpdateHistoryEntry {
+  id: string; kind: 'os' | 'driver' | 'firmware' | 'app'; title: string; version: string | null
+  result: 'success' | 'failed' | 'cancelled' | 'pending'; finished_at?: number; started_at: number | null; reboot_required?: boolean
+  /** For administrators (diagnostics); people see a worded result. */
+  error?: string | null
+}
+export interface UpdateHistory { pending: UpdateHistoryEntry[]; entries: UpdateHistoryEntry[] }
+export interface AppUpdate { id: string; name: string; version: string | null; download_size: string | null }
 export interface CatalogEntry {
   id: string; source: 'apt' | 'flatpak' | 'appimage'; name: string; arches: string[]
   required?: boolean; blocked?: boolean; sha256?: string; category?: string; summary?: string; publisher?: string
   installed: boolean; available: boolean; blocked_reason: string | null
+  /** Software Management (older services omit both): the person may ask for approval; their latest request. */
+  requestable?: boolean; request?: AppRequest | null
 }
 export type AppCatalog =
   | { state: 'ok'; arch: string; items: CatalogEntry[]; fetched_at: number }
@@ -379,6 +399,9 @@ export interface DevicePolicies {
   whatsapp?: boolean | null
   /** Screenshots and the snipping tool; clipboard history (Super+V). 'disabled' = off; kiosks: always off. */
   screen_capture?: 'allowed' | 'disabled' | null; clipboard_history?: 'allowed' | 'disabled' | null
+  /** Software Management and the Update Manager's download limit (KiB/s, 0 = none). */
+  software_install?: 'any' | 'approved' | 'request' | 'block' | null; software_uninstall?: boolean | null; software_update?: boolean | null
+  update_bandwidth_kbps?: number | null
 }
 export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
 export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean
@@ -690,6 +713,10 @@ const stub: WorkSuiteApi = {
   async reportSend() { return { ok: false, error: 'service_unavailable' } },
   // Browser preview: there is no package service or server here, so these answer honestly instead of inventing apps.
   async pkgCatalog() { return { ok: true, value: { state: 'not_enrolled', arch: 'amd64', items: [], error: 'Preview mode: no package service, so there is no app catalog.' } } },
+  async pkgRequestApp() { return { ok: false, error: 'service_unavailable' } },
+  async updateHistory() { return { ok: false, error: 'service_unavailable' } },
+  async appUpdates() { return { ok: false, error: 'service_unavailable' } },
+  async updateApps() { return { ok: false, error: 'service_unavailable' } },
   async pickFile() { return { ok: false, error: 'service_unavailable' } },
   async localDebPreview() { return { ok: false, error: 'service_unavailable' } },
   async localDebInstall() { return { ok: false, error: 'service_unavailable' } },

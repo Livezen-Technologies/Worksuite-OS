@@ -182,3 +182,30 @@ describe('drivers', () => {
     expect(f.calls[3].at(-1)).toBe('GetMokPassword')
   })
 })
+
+describe('Update Manager and Software Management calls', () => {
+  it('history and app updates are read-only JSON calls; UpdateApps passes only Flatpak ids', async () => {
+    const hist = { pending: [], entries: [{ id: 'e1', kind: 'os', title: 'WorkSuite OS', version: '1.4.0', result: 'success', started_at: 1, finished_at: 2 }] }
+    const f = fakeExec({ stdout: JSON.stringify({ type: 's', data: [JSON.stringify(hist)] }) })
+    const c = packageClient(f.exec)
+    expect(await c.updateHistory()).toEqual({ ok: true, value: hist })
+    await c.appUpdates()
+    expect(f.calls.map((x) => x[9])).toEqual(['GetUpdateHistory', 'GetAppUpdates'])
+    const j = fakeExec({ stdout: '{"type":"o","data":["/lk/worksuite/PackageService1/job/3"]}' })
+    expect(await packageClient(j.exec).updateApps(['flatpak:org.gimp.GIMP'])).toEqual({ ok: true, value: '/lk/worksuite/PackageService1/job/3' })
+    expect(j.calls[0].slice(9)).toEqual(['UpdateApps', 'as', '1', 'org.gimp.GIMP'.replace(/^/, 'flatpak:')])
+    await packageClient(j.exec).updateApps([])
+    expect(j.calls[1].slice(9)).toEqual(['UpdateApps', 'as', '0'])
+    expect((await packageClient(j.exec).updateApps(['apt:gimp'])).ok).toBe(false)
+    expect(j.calls.length).toBe(2)
+  })
+
+  it('RequestApp sends the catalog id and a cleaned reason, never odd ids', async () => {
+    const f = fakeExec({ stdout: JSON.stringify({ type: 's', data: [JSON.stringify({ id: 'r1', state: 'pending' })] }) })
+    const c = packageClient(f.exec)
+    expect(await c.requestApp('apt:inkscape', 'For diagrams\nplease')).toEqual({ ok: true, value: { id: 'r1', state: 'pending' } })
+    expect(f.calls[0].slice(9)).toEqual(['RequestApp', 'ss', 'apt:inkscape', 'For diagrams please'])
+    expect((await c.requestApp('apt:x; reboot', '')).ok).toBe(false)
+    expect(f.calls.length).toBe(1)
+  })
+})

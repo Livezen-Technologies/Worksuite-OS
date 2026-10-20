@@ -4,6 +4,7 @@ import { aiSi } from './ai'
 import { widgetsSi } from './widgets'
 import { captureSi } from './capture'
 import { driversSi } from './drivers'
+import { softwareSi } from './software'
 import { whatsappSi } from './whatsapp'
 import { desktopsSi } from './desktops'
 import { controlsSi } from './controls'
@@ -19,6 +20,7 @@ const si: Partial<Record<MessageKey, string>> = {
   ...widgetsSi,
   ...captureSi,
   ...driversSi,
+  ...softwareSi,
   ...whatsappSi,
   ...desktopsSi,
   ...controlsSi,

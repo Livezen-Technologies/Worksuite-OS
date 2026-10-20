@@ -53,6 +53,14 @@ export const ACTIONS: Record<string, string | null> = {
   InstallDrivers: 'lk.worksuite.drivers.install',
   // The one-time Secure Boot (MOK) password: administrators only, never in the public report.
   GetMokPassword: 'lk.worksuite.drivers.install',
+  // Update Manager: history and the list of app updates are read-only; updating apps is like installing them.
+  GetUpdateHistory: null,
+  GetAppUpdates: null,
+  UpdateApps: 'lk.worksuite.package.install',
+  // NetworkManager dispatcher (root) after connectivity changes; other callers are ignored.
+  ConnectivityChanged: null,
+  // Software Management: asking for approval changes nothing on the device; the server records who asked.
+  RequestApp: null,
 };
 
 export interface Authority {
@@ -81,7 +89,16 @@ const v = (sig: string, x: unknown) => new Variant(sig, x);
 // dbus-next's types declare newError(msg: string, …) but the implementation takes the method-call Message.
 const errorReply = (msg: Msg, name: string, text: string) => Message.newError(msg as unknown as string, name, text);
 
-export function serve(bus: Bus, svc: PackageService, auth: Authority, introspectionXml: string, coordinator?: Coordinator, extra: { catalog?: () => Promise<CatalogResult>; drivers?: DriverManager } = {}) {
+export interface ServeExtra {
+  /** App Center catalog; `user` (the caller's account name) adds that person's installation requests. */
+  catalog?: (user?: string) => Promise<CatalogResult>;
+  drivers?: DriverManager;
+  requestApp?: (user: string, catalogId: string, reason: string) => Promise<unknown>;
+  /** Account name for a UID (getent), null when unknown. */
+  userName?: (uid: number) => Promise<string | null>;
+}
+
+export function serve(bus: Bus, svc: PackageService, auth: Authority, introspectionXml: string, coordinator?: Coordinator, extra: ServeExtra = {}) {
   const sources = new Set<Source>(['apt', 'flatpak']);
 
   svc.on('progress', (job: Job, percent: number) => bus.send(Message.newSignal(PATH, IFACE, 'JobProgress', 'ous', [jobPath(job.id), percent, job.phase])));
@@ -112,7 +129,7 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
       case 'Remove': return Message.newMethodReturn(msg, 'o', [jobPath(svc.remove(uid, src(b[0]), String(b[1])))]);
       case 'Preview': {
         const op = b[2] === 'remove' ? 'remove' : 'install';
-        return Message.newMethodReturn(msg, 's', [JSON.stringify(await svc.preview(src(b[0]), String(b[1]), op))]);
+        return Message.newMethodReturn(msg, 's', [JSON.stringify(await svc.preview(src(b[0]), String(b[1]), op, uid))]);
       }
       case 'CheckUpdates': {
         const u = await svc.checkUpdates();
@@ -140,7 +157,27 @@ export function serve(bus: Bus, svc: PackageService, auth: Authority, introspect
       }
       case 'GetCatalog': {
         if (!extra.catalog) throw new ServiceError('Failed', 'catalog not available');
-        return Message.newMethodReturn(msg, 's', [JSON.stringify(await extra.catalog())]);
+        const user = uid !== 0 && extra.userName ? await extra.userName(uid).catch(() => null) : null;
+        return Message.newMethodReturn(msg, 's', [JSON.stringify(await extra.catalog(user ?? undefined))]);
+      }
+      case 'RequestApp': {
+        if (!extra.requestApp || !extra.userName) throw new ServiceError('Failed', 'requests not available');
+        const user = uid === 0 ? null : await extra.userName(uid).catch(() => null);
+        if (!user) throw new ServiceError('NotAuthorized', 'requests come from a signed-in person');
+        try { return Message.newMethodReturn(msg, 's', [JSON.stringify(await extra.requestApp(user, String(b[0]), String(b[1] ?? '')))]); }
+        catch (e) { const code = (e as { code?: string }).code; throw new ServiceError(code === 'InvalidArgs' || code === 'NotAuthorized' || code === 'PreconditionFailed' ? code : 'Failed', (e as Error).message); }
+      }
+      case 'GetUpdateHistory': return Message.newMethodReturn(msg, 's', [JSON.stringify(svc.updateHistory())]);
+      case 'GetAppUpdates': return Message.newMethodReturn(msg, 's', [JSON.stringify(await svc.appUpdates())]);
+      case 'UpdateApps': {
+        const ids = Array.isArray(b[0]) ? (b[0] as unknown[]).map(String).slice(0, 200) : [];
+        return Message.newMethodReturn(msg, 'o', [jobPath(svc.updateApps(uid, ids))]);
+      }
+      case 'ConnectivityChanged': {
+        // Only the dispatcher (root) may trigger it; the reply never waits for the check.
+        const state = String(b[0] ?? '');
+        if (uid === 0 && state === 'full' && coordinator) void coordinator.connectivityChanged().catch(() => {});
+        return Message.newMethodReturn(msg, '', []);
       }
       case 'PreviewLocalDeb': return Message.newMethodReturn(msg, 's', [JSON.stringify(await svc.previewLocalDeb(uid, String(b[0])))]);
       case 'InstallLocalDeb': return Message.newMethodReturn(msg, 'o', [jobPath(svc.installLocalDeb(uid, String(b[0])))]);

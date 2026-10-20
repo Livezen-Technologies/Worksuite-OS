@@ -49,6 +49,14 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   drivers_online_search: (v) => typeof v === 'boolean',
   drivers_auto_install: (v) => typeof v === 'boolean',
   drivers_auto_install_gpu: (v) => typeof v === 'boolean',
+  // Software Management (Admin Center): what users may do with software on their own. 'any' = any package from the
+  // approved sources, 'approved' = only the allowlist, 'request' = the allowlist plus asking an administrator for other
+  // catalog apps, 'block' = nothing (administrators still deploy remotely). Uninstall/update false = only the organization.
+  software_install: (v) => v === 'any' || v === 'approved' || v === 'request' || v === 'block',
+  software_uninstall: (v) => typeof v === 'boolean',
+  software_update: (v) => typeof v === 'boolean',
+  // Update Manager › Advanced options: download bandwidth cap for OS and application updates (KiB/s, 0 = none).
+  update_bandwidth_kbps: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 1_000_000,
   ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 
