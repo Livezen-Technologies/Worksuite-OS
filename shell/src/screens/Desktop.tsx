@@ -84,7 +84,7 @@ function useClock() {
   return now
 }
 
-export default function Desktop({ user, fullName, onLock, onLogout, onOpen, notes, children }: DesktopProps) {
+export default function Desktop({ user, fullName, onLock, onLogout, onOpen, notes, children, shellWindows, onShellWindow }: DesktopProps) {
   const t = useT()
   const now = useClock()
   const [launcher, setLauncher] = useState(false)
@@ -299,7 +299,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     setFlyout(false); setWidgetPicker(false); setBehind(true)
   }), [])
   const closeTray = useCallback(() => setTrayOpen(false), [])
-  const hasWindow = Children.toArray(children).length > 0
+  // A shell window showing (minimized ones stay mounted, on the taskbar only, and let the shell go below the apps).
+  const hasWindow = shellWindows ? shellWindows.some((w) => !w.minimized) : Children.toArray(children).length > 0
+  const pressShellWin = (app: Parameters<typeof onOpen>[0]) => {
+    const how = behind ? 'focus' : 'toggle'
+    setBehind(false); setLiftSeq((n) => n + 1); onShellWindow?.(app, how)
+  }
   useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
     || flyout || widgetPicker || authOpen || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
@@ -418,7 +423,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
       {/* Work area for open windows, above the taskbar */}
       {/* Only with a window open: an empty work area would cover the wallpaper (its widgets and right-click menu). */}
-      {Children.toArray(children).length > 0 && <div className="absolute inset-x-0 top-0 bottom-[52px] z-10 px-6 pt-5 pb-5">{children}</div>}
+      {Children.toArray(children).length > 0 && <div className={`absolute inset-x-0 top-0 bottom-[52px] z-10 ${shellWindows ? 'pointer-events-none' : 'px-6 pt-5 pb-5'}`}>{children}</div>}
 
       {toast && !dnd && !trayOpen && !externalToasts && (
         <div role="status" onMouseEnter={() => setToastHover(true)} onMouseLeave={() => setToastHover(false)} className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
@@ -561,6 +566,15 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           )}
           <span aria-hidden="true" className="mx-1 hidden h-6 w-px shrink-0 bg-[rgba(127,178,255,0.15)] md:block" />
           <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => { const a = allApps.find((x) => x.id === id) ?? appForWindow(allApps, id); return a && { ...a, bg: tileColor(a), fg: '#FFFFFF' } }} onLaunch={launch} only={onPrimary} scope={desk.prefs.taskbar} />
+          {/* The shell's own open windows (Files, Settings…): restore a minimized one, minimize the active one (Windows 11). */}
+          {shellWindows?.map((w) => (
+            <button key={w.app} type="button" data-shell-task={w.app} aria-pressed={w.active && !behind} title={w.title} onClick={() => pressShellWin(w.app)}
+              aria-label={w.active && !behind ? t('panel.active', { name: w.title }) : t('panel.running', { name: w.title })}
+              className={`relative flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${w.active && !behind ? 'bg-white/10' : 'hover:bg-white/10'}`}>
+              <BIcon name={w.icon} size={20} />
+              <span aria-hidden="true" data-indicator={w.active && !behind ? 'active' : 'running'} className={`ws-run-dot absolute bottom-[2px] h-[3px] rounded-sm ${w.active && !behind ? 'w-4 bg-[#18D4F0]' : 'w-[5px] bg-[var(--ws-g-muted)]'}`} />
+            </button>
+          ))}
         </div>
         <div data-testid="taskbar-end" className={`flex shrink-0 items-center justify-end gap-1.5 ${centered ? 'flex-[1_0_0]' : 'ms-auto'}`}>
           {managed && (

@@ -2,7 +2,7 @@
 // UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
 // can't tell, the section says so instead of showing sample values.
 import { AnimatedProgress } from '../components/AnimatedProgress'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { localTaskbarAlign, saveTaskbarAlign, shellPrefsFrom, type TaskbarAlign } from '../lib/shellPrefs'
 import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
@@ -845,7 +845,9 @@ function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (
   )
 }
 
-export default function Settings({ onClose }: WindowProps) {
+export default function Settings({ onClose, active }: WindowProps) {
+  const activeRef = useRef(active)
+  activeRef.current = active
   const first = useMemo(() => takeSettingsSection(), [])
   const [section, setSection] = useState<Section>(() => (isSection(first) ? first : (first && ALIAS[first]) || 'Network'))
   // Settings › Keyboard opens on Shortcuts, or on the on-screen keyboard when that was asked for.
@@ -862,20 +864,17 @@ export default function Settings({ onClose }: WindowProps) {
       const me = r.value.users.find((u) => u.login === r.value.current)
       setUser({ name: me?.name ?? r.value.current, role: me ? (me.admin ? t('settings.users.admin') : t('settings.users.standard')) : t('settings.signedIn') })
     }).catch(() => {})
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[aria-modal="true"]')) onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeRef.current !== false && !document.querySelector('[aria-modal="true"]')) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
   const badges = useMemo(() => ({ ...(driverCount ? { Drivers: String(driverCount) } : {}), ...(needsAttention(status) ? { Updates: '1' } : {}) }), [driverCount, status])
 
   return (
-    <div role="dialog" aria-modal="false" aria-label={t('launcher.settings')} className="fixed inset-0 z-50 flex bg-[#0A1A3D] font-sans text-[#E8EEFA]">
+    <div role="dialog" aria-modal="false" aria-label={t('launcher.settings')} className="relative flex h-full w-full bg-[#0A1A3D] font-sans text-[#E8EEFA]">
       <SetNav section={section} onPick={setSection} badges={badges} user={user} />
       {/* Page frame from the Set* boards: 26/36 px padding, 14 px gap; Privacy & security has its own green tint. */}
       <main className="relative flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-9 pt-[26px] pb-[82px] [&>*]:shrink-0" style={{ background: `radial-gradient(ellipse 80% 50% at 80% 0%, ${section === 'Privacy & security' ? 'var(--ws-g-glow-green)' : 'var(--ws-g-glow)'} 0%, var(--ws-g-page) 60%)` }}>
-        <button type="button" aria-label={t('settings.close')} onClick={onClose} className="absolute top-4 right-4 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#8FA3C8] hover:bg-white/10 hover:text-white">
-          <Svg d="M6 6l12 12M18 6L6 18" size={16} />
-        </button>
         {section === 'Network' && <NetworkPanel />}
         {section === 'VPN' && <VpnPanel />}
         {section === 'Bluetooth' && <BluetoothPanel />}

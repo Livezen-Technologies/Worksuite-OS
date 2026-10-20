@@ -276,6 +276,16 @@ class RcTest(unittest.TestCase):
         self.assertEqual(refresh_rc("", system), system)
         self.assertEqual(refresh_rc(stale, ""), stale)
 
+    def test_refresh_keeps_the_users_title_bar_theme(self):
+        # Settings › Appearance › Light writes WorkSuite-Light (shell/electron/windowTheme.ts); a rebuild keeps it.
+        system = (Path(__file__).resolve().parents[3] / "services/session/labwc/rc.xml").read_text()
+        user = system.replace("<name>WorkSuite</name>", "<name>WorkSuite-Light</name>", 1)
+        out = refresh_rc(user, system)
+        self.assertIn("<name>WorkSuite-Light</name>", out)
+        self.assertNotIn("<name>WorkSuite</name>", out)
+        self.assertIn("<name>sans</name>", out)                 # the font names are not the theme's
+        self.assertEqual(refresh_rc(system, system), system)
+
     def test_refresh_and_rewrite_keep_the_users_shortcuts_inside_keyboard(self):
         system = RC.replace("<!-- worksuite-touch:begin -->\n  <touch deviceName=\"x\" mapToOutput=\"HDMI-A-1\" />\n<!-- worksuite-touch:end -->\n", "")
         block = ('    <!-- worksuite-shortcuts:begin (Settings) -->\n'

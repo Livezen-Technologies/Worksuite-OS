@@ -3,7 +3,7 @@
 // permissions (WSOS-FLP-002…004). Nothing here is sample data: what the services don't report is left out or says so.
 import { AppGlyph } from '../components/AppGlyph'
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { C, card, Dialog, dialogFooter, btnGhost, btnPrimary, Svg, Switch } from '../components/Dk'
 import { ErrorDetails } from '../components/ErrorDetails'
@@ -49,7 +49,9 @@ function AppIcon({ a, size, radius, font }: { a: IconRow; size: number; radius: 
   return <AppGlyph app={{ id: a.builtin === 'office' ? 'office' : `appc:${a.key ?? a.name}`, name: a.name, mark: initials(a.name), bg: appColor(a.name), fg: '#FFFFFF', icon: catalogIconName(a) }} size={size} radius={radius} font={font} className="flex-none" />
 }
 
-export default function AppCenter({ onClose }: WindowProps) {
+export default function AppCenter({ onClose, active }: WindowProps) {
+  const activeRef = useRef(active)
+  activeRef.current = active
   useT()
   const [view, setView] = useState<View>({ kind: 'section', section: 'discover', category: 'All' })
   const [query, setQuery] = useState('')
@@ -218,7 +220,7 @@ export default function AppCenter({ onClose }: WindowProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || busy || review || deb || aiConfirm) return
+      if (e.key !== 'Escape' || activeRef.current === false || busy || review || deb || aiConfirm) return
       if (fileMenu) setFileMenu(false)
       else if (view.kind === 'detail') setView({ kind: 'section', section: 'discover', category: 'All' })
       else onClose()
@@ -260,7 +262,7 @@ export default function AppCenter({ onClose }: WindowProps) {
   }
 
   return (
-    <div role="dialog" aria-modal="false" aria-label={t('launcher.appCenter')} className="fixed inset-x-0 top-0 bottom-[52px] z-50 flex font-sans" style={{ background: '#0A1A3D', color: C.ink }}>
+    <div role="dialog" aria-modal="false" aria-label={t('launcher.appCenter')} className="relative flex h-full w-full font-sans" style={{ background: '#0A1A3D', color: C.ink }}>
       <nav aria-label={t('appc.sections')} className="box-border flex w-[220px] shrink-0 flex-col gap-0.5 overflow-auto border-r px-3 py-[18px]" style={{ background: '#071330', borderColor: 'rgba(127,178,255,0.12)' }}>
         <div className="flex items-center gap-2.5 px-2 pt-1 pb-4"><span aria-hidden="true" className="flex size-[26px] items-center justify-center rounded-[7px] text-[13px] font-bold" style={{ background: C.blue }}>A</span><span className="text-[15px] font-semibold">{t('launcher.appCenter')}</span></div>
         {navBtn(t('appc.discover'), isSec('discover'), () => setView({ kind: 'section', section: 'discover', category: 'All' }))}
@@ -280,7 +282,6 @@ export default function AppCenter({ onClose }: WindowProps) {
       </nav>
 
       <main className="relative flex min-w-0 flex-1 flex-col gap-[18px] overflow-auto px-7 py-[22px]" style={{ background: 'radial-gradient(ellipse 80% 50% at 80% 0%, var(--ws-g-glow) 0%, var(--ws-g-page) 60%)' }}>
-        <button type="button" aria-label={t('common.close')} onClick={onClose} className="absolute top-[22px] right-5 z-10 flex size-10 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10" style={{ color: C.soft }}><Svg d="M6 6l12 12M18 6L6 18" size={16} /></button>
         {notice && (
           <div role="status" className="mr-12 flex items-center gap-3 rounded-xl px-4 py-2.5 text-[13px]" style={{ background: notice.error ? 'rgba(255,138,122,0.12)' : 'rgba(95,211,154,0.12)', color: notice.error ? '#FFB4A8' : '#BFF0D6' }}>
             <span className="flex grow flex-col gap-1.5"><span>{notice.text}</span>{notice.error && <ErrorDetails details={notice.details} />}</span>

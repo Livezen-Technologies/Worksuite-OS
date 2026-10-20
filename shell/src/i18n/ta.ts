@@ -1096,6 +1096,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'launcher.page.privacy': 'தனியுரிமை மற்றும் பாதுகாப்பு',
   'launcher.page.shortcuts': 'விசைப்பலகைக் குறுக்குவழிகள்',
   'window.minimize': 'சிறிதாக்கு',
+  'window.restore': 'மீட்டமை',
   'window.maximize': 'பெரிதாக்கு',
   'power.confirmTitle': 'இப்போது அணைக்கவா?',
   'power.countdown': '{secs} விநாடிகளில் தானாக அணைக்கப்படும்.',

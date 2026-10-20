@@ -85,3 +85,27 @@ it('goes behind an app that took the focus: menus close, a shell window waits un
     delete panel.onShellBehind
   }
 })
+
+it('puts the shell below the apps while its windows are all minimized, and restores one from the taskbar (#33)', async () => {
+  const onTop = vi.spyOn(panel, 'shellOnTop')
+  const press = vi.fn()
+  function Wins({ minimized }: { minimized: boolean }) {
+    const notes = useNotices(false)
+    return (
+      <Desktop user="alex" onLock={() => {}} onLogout={() => {}} onOpen={() => {}} notes={notes} onShellWindow={press}
+        shellWindows={[{ app: 'settings', title: 'Settings', icon: 'settings', minimized, active: !minimized }]}><div>Settings</div></Desktop>
+    )
+  }
+  host = document.createElement('div'); document.body.appendChild(host)
+  root = createRoot(host)
+  await act(async () => { root!.render(<Wins minimized={false} />) })
+  await settle()
+  expect(onTop).toHaveBeenLastCalledWith(true)
+  await act(async () => { root!.render(<Wins minimized />) })
+  await settle()
+  expect(onTop).toHaveBeenLastCalledWith(false)
+  const task = host.querySelector<HTMLButtonElement>('button[data-shell-task="settings"]')!
+  expect(task.getAttribute('aria-label')).toBe('Settings, running')
+  await act(async () => { task.click() })
+  expect(press).toHaveBeenCalledWith('settings', 'toggle')
+})

@@ -1096,6 +1096,7 @@ const si: Partial<Record<MessageKey, string>> = {
   'launcher.page.privacy': 'රහස්‍යතාව සහ ආරක්ෂාව',
   'launcher.page.shortcuts': 'යතුරුපුවරු කෙටිමං',
   'window.minimize': 'කුඩා කරන්න',
+  'window.restore': 'ප්‍රතිසාධනය කරන්න',
   'window.maximize': 'විශාල කරන්න',
   'power.confirmTitle': 'දැන් වසා දමන්නද?',
   'power.countdown': 'තත්පර {secs} කින් ස්වයංක්‍රීයව වසා දැමේ.',

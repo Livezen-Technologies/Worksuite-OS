@@ -347,6 +347,7 @@ contextBridge.exposeInMainWorld('worksuiteCapture', {
   snipSave: (dataUrl: string) => ipcRenderer.invoke('ws:snipSave', String(dataUrl)),
   snipReveal: (file: string) => ipcRenderer.invoke('ws:snipReveal', String(file)),
   shortcutsApply: (prefs: unknown) => ipcRenderer.invoke('ws:shortcutsApply', JSON.stringify(prefs ?? null)),
+  windowTheme: (dark: boolean) => ipcRenderer.invoke('ws:windowTheme', dark ? 'dark' : 'light'),
   edit: (cmd: string) => ipcRenderer.invoke('ws:edit', String(cmd)),
   onSnipOpen: on('ws:snipOpen'),
   onSnipClose: on('ws:snipClose'),

@@ -1420,6 +1420,7 @@ const en = {
   // Window chrome
   'window.maximize': 'Maximize',
   'window.minimize': 'Minimize',
+  'window.restore': 'Restore',
   // Power
   'power.confirmTitle': 'Shut down now?',
   'power.countdown': 'Shutting down automatically in {secs} seconds.',

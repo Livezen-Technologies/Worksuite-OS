@@ -19,6 +19,7 @@ import path from 'node:path'
 import { realExec, type Avail, type Exec } from './system'
 import { xdgDirs } from './xdgDirs'
 import { extractShortcutsBlock, mergeShortcutsBlock } from '../src/lib/shortcuts'
+import { rcWithTheme } from './windowTheme'
 
 // ---------- devices ----------
 export type DevKind = 'touchscreen' | 'tablet' | 'tablet-pad' | 'switch'
@@ -219,6 +220,9 @@ export function carryDesktops(previous: string, next: string): string {
     const old = previous.match(re)?.[0]
     if (old && re.test(out)) out = out.replace(re, () => old)
   }
+  // The title bar theme Settings › Appearance chose (electron/windowTheme.ts).
+  const theme = /<theme>(?:(?!<\/theme>)[\s\S])*?<name>([^<]*)<\/name>/.exec(previous)?.[1]
+  if (theme) out = rcWithTheme(out, theme.trim()) ?? out
   const keys = extractShortcutsBlock(previous)
   return keys ? mergeShortcutsBlock(out, keys) : out
 }

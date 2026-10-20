@@ -207,7 +207,7 @@ export default function Files({ onClose, archive, folder }: WindowProps & { arch
   const selected = sel.length === 1 ? byName(sel[0]) : undefined
 
   return (
-    <div ref={rootRef} tabIndex={-1} role="dialog" aria-modal="false" aria-label={t('files.title')} className="fixed inset-0 z-50 flex select-none font-sans" style={{ background: C.page, color: C.text }} onKeyDown={onKey}
+    <div ref={rootRef} tabIndex={-1} role="dialog" aria-modal="false" aria-label={t('files.title')} className="relative flex h-full w-full select-none font-sans" style={{ background: C.page, color: C.text }} onKeyDown={onKey}
       onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('button, input, textarea, select, a, [tabindex]:not([tabindex="-1"])')) rootRef.current?.focus() }}>
       <FilesSide place={place} places={places} drive={driveState ? DRIVE_META[driveState as keyof typeof DRIVE_META] ?? driveState : null} onGo={go}
         onEject={(id, label) => void os.filesEject(id).then((r) => { if (!r.ok) setNotice(t('files.ejectFailed', { name: label })); else go({ kind: 'dir', root: 'home', rel: '' }); reload() })} />
@@ -262,7 +262,6 @@ export default function Files({ onClose, archive, folder }: WindowProps & { arch
             </div>}
             {dir && view === 'grid' && <button type="button" onClick={() => setAsk({ kind: 'mkdir' })} title={t('files.newFolder')} className={`${btn} flex h-[34px] items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold`} style={{ background: C.blue, color: '#FFFFFF' }}>{`+ ${t('files.new')}`}</button>}
           </>}
-          {!search && <button type="button" aria-label={t('files.close')} onClick={onClose} className={`${iconBtn} ${dir ? '' : arc ? 'ml-auto' : 'ml-1'}`} style={{ color: C.muted }}><Svg d={P.close} /></button>}
         </header>
 
         {readOnly && (
