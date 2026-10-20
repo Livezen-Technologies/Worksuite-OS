@@ -3,7 +3,7 @@
 // never a shell. When the tool is missing or the service isn't running the answer is
 // `{ available: false, reason }`, never invented values. The Wi-Fi password only goes to nmcli's stdin (--ask).
 import { execFile, spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -33,7 +33,7 @@ export const realWithStdin: WithStdin = (cmd, args, input) => new Promise((resol
 })
 
 // ---------- types ----------
-export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean }
+export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean; saved?: boolean }
 export interface NetDevice { device: string; type: string; state: string; connection: string | null }
 export interface NetworkState { wifi_enabled: boolean; devices: NetDevice[]; networks: WifiNetwork[] }
 export interface BtDevice { address: string; name: string; connected: boolean }
@@ -140,6 +140,89 @@ export function parseUpowerBattery(text: string): BatteryState {
     time_to_empty_s: durationSeconds(f('time to empty')),
     on_battery: state === 'discharging',
   }
+}
+
+/** One block of `upower -d`: its object path ('Daemon' for the daemon block) and its text. */
+export function splitUpowerDump(text: string): { path: string; text: string }[] {
+  const out: { path: string; text: string }[] = []
+  for (const line of text.split('\n')) {
+    const dev = line.match(/^Device:\s*(\S+)/)
+    if (dev) { out.push({ path: dev[1], text: '' }); continue }
+    if (/^Daemon:/.test(line)) { out.push({ path: 'Daemon', text: '' }); continue }
+    if (out.length) out[out.length - 1].text += line + '\n'
+  }
+  return out
+}
+
+/** One /sys/class/power_supply/<name>/uevent as key → value (POWER_SUPPLY_ prefix dropped, keys lower case). */
+export type PowerSupply = { name: string; props: Record<string, string> }
+export type PowerSupplyReader = () => PowerSupply[]
+
+export function parsePowerSupplyUevent(name: string, text: string): PowerSupply {
+  const props: Record<string, string> = {}
+  for (const m of text.matchAll(/^POWER_SUPPLY_([A-Z0-9_]+)=(.*)$/gm)) props[m[1].toLowerCase()] = m[2].trim()
+  return { name, props }
+}
+
+export const realPowerSupplies: PowerSupplyReader = () => {
+  const base = '/sys/class/power_supply'
+  try {
+    return readdirSync(base).flatMap((n) => { try { return [parsePowerSupplyUevent(n, readFileSync(join(base, n, 'uevent'), 'utf8'))] } catch { return [] } })
+  } catch { return [] }
+}
+
+/** The system's own supplies: peripherals (mice, keyboards, game pads) report scope=Device. */
+const systemSupply = (p: PowerSupply) => (p.props.scope ?? 'system').toLowerCase() !== 'device'
+
+/** Is the machine on AC, from the kernel (Mains/USB-C adapters' `online`)? null when it has no such supply. */
+export function sysfsAcOnline(supplies: PowerSupply[]): boolean | null {
+  const ac = supplies.filter((p) => systemSupply(p) && p.props.type && p.props.type !== 'Battery' && p.props.online !== undefined)
+  return ac.length ? ac.some((p) => p.props.online === '1') : null
+}
+
+/** Battery from sysfs when UPower is not there: capacity and the kernel's status. */
+export function sysfsBattery(supplies: PowerSupply[]): BatteryState | null {
+  const b = supplies.find((p) => systemSupply(p) && p.props.type === 'Battery' && p.props.present !== '0')
+  if (!b) return null
+  const status = (b.props.status ?? 'Unknown').toLowerCase()
+  const state = status === 'discharging' ? 'discharging' : status === 'charging' ? 'charging' : status === 'full' ? 'fully-charged' : status === 'not charging' ? 'pending-charge' : 'unknown'
+  const pct = b.props.capacity !== undefined ? Math.round(Number(b.props.capacity)) : null
+  return { present: true, percentage: Number.isFinite(pct) ? pct : null, state, time_to_full_s: null, time_to_empty_s: null, on_battery: state === 'discharging' }
+}
+
+/**
+ * Battery state from `upower -d` (all devices plus the daemon) and sysfs (#43). On battery comes from the most direct
+ * source: UPower's daemon `on-battery`, else a line-power device's `online`, else the kernel's AC `online`, and only
+ * then the battery's own state (firmware often says "unknown" or "pending-charge" for a while after unplugging).
+ * The battery is the system's own (power supply: yes), never a mouse's or headset's. The state is made consistent with
+ * the AC: on battery it is "discharging"; on AC a stale "discharging" becomes "pending-charge" (Plugged in).
+ */
+export function batteryFrom(dump: string | null, supplies: PowerSupply[]): BatteryState | null {
+  const blocks = dump ? splitUpowerDump(dump) : []
+  const field = (t: string, k: string) => t.match(new RegExp(`^\\s*${k}:\\s*(.*)$`, 'm'))?.[1].trim()
+  const daemon = blocks.find((b) => b.path === 'Daemon')
+  const lines = blocks.filter((b) => /\/line_power_/.test(b.path) && field(b.text, 'power supply') !== 'no' && field(b.text, 'online') !== undefined)
+  const bats = blocks.filter((b) => /\/battery_/.test(b.path) && field(b.text, 'power supply') !== 'no')
+  const display = blocks.find((b) => /\/DisplayDevice$/.test(b.path))
+  let b: BatteryState | null = null
+  const sys = bats.map((x) => parseUpowerBattery(x.text)).filter((x) => x.present)
+  if (sys.length) {
+    // Several batteries: UPower's DisplayDevice is their composite.
+    const d = display && sys.length > 1 ? parseUpowerBattery(display.text) : null
+    b = d?.present ? d : sys[0]
+  }
+  b ??= sysfsBattery(supplies)
+  if (!b) return null
+  const daemonOn = daemon ? field(daemon.text, 'on-battery') : undefined
+  const acOnline = sysfsAcOnline(supplies)
+  const onBattery = daemonOn === 'yes' || daemonOn === 'no' ? daemonOn === 'yes'
+    : lines.length ? !lines.some((l) => field(l.text, 'online') === 'yes')
+      : acOnline !== null ? !acOnline
+        : b.state === 'discharging'
+  let state = b.state
+  if (onBattery) state = 'discharging'
+  else if (state === 'discharging') state = 'pending-charge'
+  return { ...b, state, on_battery: onBattery, time_to_empty_s: onBattery ? b.time_to_empty_s : null, time_to_full_s: state === 'charging' ? b.time_to_full_s : null }
 }
 
 /** `lpstat -p -d` → printers and the default destination. */
@@ -319,7 +402,44 @@ function unavailable(r: { missing?: boolean; stderr: string }, tool: string): { 
   return { available: false, reason: r.missing ? `${tool}_missing` : 'service_unavailable' }
 }
 
-export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realWithStdin, vpnDeps: VpnDeps = realVpnDeps) {
+/** `nmcli -t -f NAME,UUID,TYPE connection show` → the saved Wi-Fi profiles. */
+export function parseWifiProfiles(text: string): { name: string; uuid: string }[] {
+  return text.split('\n').filter((l) => l.trim()).map(splitTerse)
+    .filter(([, , type]) => type === '802-11-wireless' || type === 'wifi').map(([name, uuid]) => ({ name, uuid }))
+}
+
+export type WifiConnectResult = { ok: true; pending?: boolean } | { ok: false; error: string }
+const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realWithStdin, vpnDeps: VpnDeps = realVpnDeps, power: PowerSupplyReader = realPowerSupplies, sleep: (ms: number) => Promise<void> = realSleep) {
+  /** The saved profile for this SSID (by its 802-11-wireless.ssid, not only its name), or null. */
+  async function savedWifi(ssid: string): Promise<string | null> {
+    const r = await exec('nmcli', ['-t', '-f', 'NAME,UUID,TYPE', 'connection', 'show'])
+    if (r.code !== 0) return null
+    const profiles = parseWifiProfiles(r.stdout)
+    // Profiles named after the SSID first: one lookup in the common case.
+    profiles.sort((a, b) => Number(b.name === ssid) - Number(a.name === ssid))
+    for (const p of profiles) {
+      const s = await exec('nmcli', ['-g', '802-11-wireless.ssid', 'connection', 'show', 'uuid', p.uuid])
+      if (s.code === 0 && s.stdout.trim() === ssid) return p.uuid
+    }
+    return null
+  }
+  /** After nmcli gave up (its -w timeout) NetworkManager may still be activating, or already connected (#42): wait
+   *  for its verdict instead of reporting a timeout while the network comes up. */
+  async function settle(ssid: string): Promise<'connected' | 'connecting' | 'failed'> {
+    for (let i = 0; i < 10; i++) {
+      const dev = await exec('nmcli', ['-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device'])
+      const wifi = dev.code === 0 ? parseNmDevices(dev.stdout).filter((d) => d.type === 'wifi') : []
+      if (wifi.some((d) => d.state === 'connected')) {
+        const list = await exec('nmcli', ['-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list', '--rescan', 'no'])
+        if (list.code === 0 && parseWifiList(list.stdout).some((w) => w.in_use && w.ssid === ssid)) return 'connected'
+      }
+      if (!wifi.some((d) => /^connecting/.test(d.state))) return 'failed'
+      await sleep(2000)
+    }
+    return 'connecting'
+  }
   async function vpnDetails(uuid: string): Promise<{ kind: VpnConnection['kind']; needs_credentials: boolean }> {
     const svc = await exec('nmcli', ['-g', 'vpn.service-type', 'connection', 'show', 'uuid', uuid])
     if (svc.code !== 0 || svc.stdout.trim() !== OPENVPN_SERVICE) return { kind: 'vpn', needs_credentials: false }
@@ -331,11 +451,15 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
     async network(): Promise<Avail<NetworkState>> {
       const radio = await exec('nmcli', ['-t', '-f', 'WIFI', 'radio'])
       if (radio.code !== 0) return unavailable(radio, 'nmcli')
-      const [dev, list] = await Promise.all([
+      const [dev, list, saved] = await Promise.all([
         exec('nmcli', ['-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device']),
         exec('nmcli', ['-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list']),
+        exec('nmcli', ['-t', '-f', 'NAME,UUID,TYPE', 'connection', 'show']),
       ])
-      return { available: true, value: { wifi_enabled: radio.stdout.trim() === 'enabled', devices: parseNmDevices(dev.stdout), networks: list.code === 0 ? parseWifiList(list.stdout) : [] } }
+      // Saved networks (profile named after the SSID, nmcli's default) connect without asking for the password again.
+      const names = new Set(saved.code === 0 ? parseWifiProfiles(saved.stdout).map((p) => p.name) : [])
+      const networks = list.code === 0 ? parseWifiList(list.stdout).map((w) => ({ ...w, saved: names.has(w.ssid) })) : []
+      return { available: true, value: { wifi_enabled: radio.stdout.trim() === 'enabled', devices: parseNmDevices(dev.stdout), networks } }
     },
     async setWifi(on: boolean): Promise<Avail<true>> {
       // A radio blocked in software (airplane mode, a previous session) stays off whatever NetworkManager says (#31).
@@ -361,13 +485,32 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
       }
       return { available: true, value: true }
     },
-    /** Password goes to nmcli's stdin (`--ask`), never argv. Empty password = open network. */
-    async wifiConnect(ssid: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    /** Password goes to nmcli's stdin (`--ask`), never argv. Empty password = open network, or a saved network with
+     *  its stored secret (#42: no second password prompt). A new password replaces the saved profile instead of
+     *  piling up "SSID 1", "SSID 2" profiles. `pending`: NetworkManager is still activating after nmcli's timeout. */
+    async wifiConnect(ssid: string, password: string): Promise<WifiConnectResult> {
       if (!ssid || ssid.length > SSID_MAX || /[\0\n]/.test(ssid) || /[\0\n]/.test(password)) return { ok: false, error: 'invalid_argument' }
-      const r = await withStdin('nmcli', ['--ask', '-w', '45', 'device', 'wifi', 'connect', ssid], password ? `${password}\n` : '\n')
+      const saved = await savedWifi(ssid)
+      let r: { code: number; stderr: string }
+      if (saved && !password) r = await exec('nmcli', ['-w', '45', 'connection', 'up', 'uuid', saved])
+      else {
+        if (saved) await exec('nmcli', ['connection', 'delete', 'uuid', saved])
+        r = await withStdin('nmcli', ['--ask', '-w', '45', 'device', 'wifi', 'connect', ssid], password ? `${password}\n` : '\n')
+      }
       if (r.code === 0) return { ok: true }
       if (r.stderr === 'spawn_failed') return { ok: false, error: 'unavailable' }
-      return { ok: false, error: wifiConnectError(r.stderr) }
+      const error = wifiConnectError(r.stderr)
+      if (error === 'timeout' || error === 'connect_failed') {
+        const s = await settle(ssid)
+        if (s === 'connected') return { ok: true }
+        if (s === 'connecting') return { ok: true, pending: true }
+      }
+      if (error === 'bad_password') {
+        // A rejected password must not stay saved: the next attempt asks for it again instead of failing silently.
+        const bad = await savedWifi(ssid)
+        if (bad) await exec('nmcli', ['connection', 'delete', 'uuid', bad])
+      }
+      return { ok: false, error }
     },
     // VPN (WSOS-INT-001): the managed "WorkSuite VPN" comes from the device agent; users may import WireGuard .conf
     // files unless policy user_vpn=block. NetworkManager keeps the private key in its root-only keyfile.
@@ -519,12 +662,13 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
       return r.code === 0 ? { available: true, value: true } : unavailable(r, 'wpctl')
     },
     async battery(): Promise<Avail<BatteryState>> {
-      const e = await exec('upower', ['-e'])
-      if (e.code !== 0) return unavailable(e, 'upower')
-      const bat = e.stdout.split('\n').map((s) => s.trim()).find((p) => /\/battery_/.test(p))
-      if (!bat) return { available: false, reason: 'no_battery' }
-      const i = await exec('upower', ['-i', bat])
-      return i.code === 0 ? { available: true, value: parseUpowerBattery(i.stdout) } : unavailable(i, 'upower')
+      // One `upower -d` gives every device and the daemon's on-battery; sysfs covers a missing or stopped UPower.
+      const d = await exec('upower', ['-d'])
+      const supplies = power()
+      const b = batteryFrom(d.code === 0 ? d.stdout : null, supplies)
+      if (b) return { available: true, value: b }
+      if (d.code !== 0 && !supplies.length) return unavailable(d, 'upower')
+      return { available: false, reason: 'no_battery' }
     },
     async printers(): Promise<Avail<Printer[]>> {
       const r = await exec('lpstat', ['-p', '-d'])

@@ -13,3 +13,8 @@ export function onSettingsSection(cb: (s: string) => void): () => void {
   window.addEventListener(EVENT, l)
   return () => window.removeEventListener(EVENT, l)
 }
+
+// The desktop's "Sign in" (#46): Settings › Users starts the WorkSuite account sign-in right away.
+let cloudSignIn = false
+export function requestCloudSignIn() { cloudSignIn = true }
+export function takeCloudSignIn(): boolean { const v = cloudSignIn; cloudSignIn = false; return v }

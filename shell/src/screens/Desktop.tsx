@@ -25,7 +25,7 @@ import { useDnd } from '../lib/dnd'
 import { formatTime, localeTag, t as t0, useT } from '../i18n'
 import { UpdateOverlays } from './Updates'
 import { DeviceWatcher } from './Hardware'
-import { requestSettingsSection } from '../lib/settingsNav'
+import { requestCloudSignIn, requestSettingsSection } from '../lib/settingsNav'
 import { markLauncherRequest, reportLauncherFirstFrame } from '../lib/perfProbe'
 import { applyShellPrefs, shellPrefsFrom, TASKBAR_ALIGN_EVENT, taskbarAlign, taskbarPins, toggleFavorite, type ShellPrefs, type TaskbarAlign } from '../lib/shellPrefs'
 import { AppGlyph } from '../components/AppGlyph'
@@ -467,7 +467,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       {widgetsOn && !seeThrough && (
         <DesktopWidgets snap={widgetData.snap} loading={widgetData.loading} online={widgetData.online} layout={widgetLayout} onLayout={setWidgetLayout}
           editing={widgetEdit} onEditing={(v) => { setWidgetEdit(v); if (!v) setWidgetPicker(false) }} picker={widgetPicker} onPicker={setWidgetPicker}
-          onRefresh={widgetData.refresh} onSignIn={() => openSettingsAt('Users')} now={now} />
+          onRefresh={widgetData.refresh} onSignIn={() => { requestCloudSignIn(); openSettingsAt('Users') }} now={now} />
       )}
       {!seeThrough && deskFolder.rel !== null && (
         <DesktopIcons folder={deskFolder} view={deskView} selected={deskSel} onSelect={setDeskSel} onOpen={(e) => deskOpen(e.name)} />

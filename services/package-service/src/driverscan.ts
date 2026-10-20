@@ -14,6 +14,10 @@ import {
 
 export interface DriverEnv {
   run(cmd: string, args: string[]): Promise<RunResult>;
+  /** Like run, with each stdout line as it comes (apt's Status-Fd progress). Absent: run, without progress. */
+  runLines?(cmd: string, args: string[], onLine: (line: string) => void): Promise<RunResult>;
+  /** Installed version of a Debian package, null when not installed. */
+  version?(pkg: string): string | null;
   devices(): ScannedDevice[];
   /** Kernel log of this boot (journalctl -k -b). */
   kernelLog(): Promise<string>;
@@ -38,11 +42,12 @@ export interface DriverEnv {
 }
 
 /** Root-only state (0600): the one-time MOK password lives here, never in the report. */
-export type DriverState = TriggerState & { report?: DriverReport; gpu?: { pending_boot?: boolean }; mok?: { password: string; boot: string } };
+export type DriverState = TriggerState & { report?: DriverReport; gpu?: { pending_boot?: boolean }; mok?: { password: string; boot: string }; restart_boot?: string };
 
 export class DriverManager extends EventEmitter {
   private report: DriverReport;
   private running: Promise<DriverReport> | null = null;
+  private lastKernelLog = '';
   private env: DriverEnv;
   constructor(env: DriverEnv) {
     super();
@@ -51,6 +56,8 @@ export class DriverManager extends EventEmitter {
     const st = env.load();
     // The enrolment happens (or is skipped) at the next boot: after that the password is useless, so drop it.
     if (st.mok && st.mok.boot !== env.bootId()) { delete st.mok; if (st.report) delete st.report.mok; env.save(st); env.audit('mok_password_cleared', {}); }
+    // A restart asked for by an install is done once the boot id changed.
+    if (st.restart_boot && st.restart_boot !== env.bootId()) { delete st.restart_boot; if (st.report) st.report.restart_required = false; env.save(st); }
     this.report = st.report ?? { state: pol.online_search ? 'idle' : 'off', checked_at: null, online_search: pol.online_search, metered: false, secure_boot: env.secureBoot(), devices: [], offers: [], auto_installed: [] };
   }
 
@@ -79,7 +86,8 @@ export class DriverManager extends EventEmitter {
     const secureBoot = e.secureBoot();
     const offers: DriverOffer[] = [];
     let state: DriverReport['state'] = 'idle';
-    const fails = stillMissing(parseFirmwareFailures(await e.kernelLog().catch(() => '')), (f) => e.firmwarePresent(f));
+    this.lastKernelLog = await e.kernelLog().catch(() => '');
+    const fails = stillMissing(parseFirmwareFailures(this.lastKernelLog), (f) => e.firmwarePresent(f));
     // (a) firmware files the kernel asked for: Debian's Contents index names the package.
     if (fails.length) {
       try {
@@ -117,7 +125,8 @@ export class DriverManager extends EventEmitter {
     const fw = await e.run('fwupdmgr', ['get-updates', '--json', '--no-unreported-check']).catch(() => ({ code: 127, stdout: '', stderr: '' }));
     if (fw.code === 0) offers.push(...parseFwupd(fw.stdout));
 
-    const report: DriverReport = { state, checked_at: e.now(), online_search: pol.online_search, metered, secure_boot: secureBoot, devices: deviceStatuses(devs, fails, offers), offers, auto_installed: [] };
+    const report: DriverReport = { state, checked_at: e.now(), online_search: pol.online_search, metered, secure_boot: secureBoot, devices: deviceStatuses(devs, fails, offers), offers, auto_installed: [],
+      ...(this.report.installed ? { installed: this.report.installed } : {}), ...(this.report.restart_required ? { restart_required: true } : {}) };
     const auto = offers.filter((o) => autoInstallable(o, pol, { metered, secureBoot }));
     e.audit('drivers_checked', { reason, devices: devs.length, missing_firmware: fails.map((f) => f.file), offers: offers.map((o) => o.id), auto: auto.map((o) => o.id), metered });
     const st = e.load();
@@ -144,34 +153,80 @@ export class DriverManager extends EventEmitter {
     return st.mok.password;
   }
 
-  /** Install offers (polkit lk.worksuite.drivers.install for people; root for automatic installs). */
+  /** Install offers (polkit lk.worksuite.drivers.install for people; root for automatic installs). Progress phases are
+   *  "<offer id>|<step>": refreshing (apt-get update: a fresh install has no package lists, and the offer may be newer
+   *  than them), downloading (APT checks each file against the signed Release file), installing. An error names the
+   *  step and carries apt's own "E:" line, not the first warning. What finished stays installed when a later offer
+   *  fails; the rest stays offered, so trying again picks up where it stopped. */
   install(caller: number, ids: string[], automatic = false): number {
     const chosen = ids.map((id) => this.report.offers.find((o) => o.id === id)).filter((o): o is DriverOffer => !!o);
     if (!chosen.length) throw Object.assign(new Error('nothing to install'), { code: 'InvalidArgs' });
     return this.env.enqueue(caller, async (progress) => {
-      for (const o of chosen) {
-        progress(o.id, 5);
-        if (o.kind === 'fwupd') {
-          await this.must('fwupdmgr', ['update', o.fwupd_device!, '--assume-yes', '--no-reboot-check']);
-        } else {
-          for (const p of o.packages) if (!/^[a-z0-9][a-z0-9+.-]{1,99}$/.test(p)) throw new Error('bad package name');
-          await this.must('apt-get', ['-y', '-q', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold', 'install', '--', ...o.packages]);
-          // Firmware for a loaded driver: reload it so the device starts now; if it can't be unloaded, a restart finishes it.
-          if (o.kind === 'firmware' && o.reload && /^[\w-]{1,64}$/.test(o.reload)) {
-            const r = await this.env.run('modprobe', ['-r', o.reload]);
-            const ok = r.code === 0 && (await this.env.run('modprobe', [o.reload])).code === 0;
-            if (!ok) o.restart = true;
-          }
-          if (o.kind === 'gpu') { const s = this.env.load(); this.env.save({ ...s, gpu: { pending_boot: true } }); }
-          if ((o.kind === 'gpu' || o.kind === 'dkms') && this.env.secureBoot()) await this.enrollMok();
+      const done: InstalledOffer[] = [];
+      try {
+        const debs = chosen.filter((o) => o.kind !== 'fwupd');
+        if (debs.length) {
+          progress(`${debs[0].id}|refreshing`, 2);
+          const u = await this.env.run('apt-get', ['-q', 'update']);
+          if (u.code !== 0) this.env.audit('drivers_apt_update_failed', { error: aptError(u.stderr) });
         }
-        progress(o.id, 100);
-        this.env.audit('driver_installed', { caller, offer: o.id, packages: o.packages, automatic });
+        for (const o of chosen) {
+          if (o.kind === 'fwupd') {
+            // fwupd downloads the cabinet, checks its signature and checksum against the LVFS metadata, then flashes.
+            progress(`${o.id}|installing`, 10);
+            await this.must('fwupdmgr', ['update', o.fwupd_device!, '--assume-yes', '--no-reboot-check']);
+          } else {
+            for (const p of o.packages) if (!/^[a-z0-9][a-z0-9+.-]{1,99}$/.test(p)) throw new Error('bad package name');
+            const base = ['-y', '-q', '-o', 'APT::Status-Fd=1', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold'];
+            progress(`${o.id}|downloading`, 5);
+            await this.apt([...base, '--download-only', 'install', '--', ...o.packages], (st) => { if (st.stage === 'download') progress(`${o.id}|downloading`, 5 + Math.round(st.pct * 0.55)); });
+            progress(`${o.id}|installing`, 60);
+            await this.apt([...base, '--no-download', 'install', '--', ...o.packages], (st) => { if (st.stage === 'install') progress(`${o.id}|installing`, 60 + Math.round(st.pct * 0.35)); });
+            // Firmware for a loaded driver: reload it so the device starts now; if it can't be unloaded, a restart finishes it.
+            if (o.kind === 'firmware' && o.reload && /^[\w-]{1,64}$/.test(o.reload)) {
+              const r = await this.env.run('modprobe', ['-r', o.reload]);
+              const ok = r.code === 0 && (await this.env.run('modprobe', [o.reload])).code === 0;
+              if (!ok) o.restart = true;
+            }
+            if (o.kind === 'gpu') { const s = this.env.load(); this.env.save({ ...s, gpu: { pending_boot: true } }); }
+            if ((o.kind === 'gpu' || o.kind === 'dkms') && this.env.secureBoot()) await this.enrollMok();
+          }
+          progress(`${o.id}|done`, 100);
+          const version = o.kind === 'fwupd' ? o.to_version : (this.env.version?.(o.packages[0]) ?? o.to_version);
+          done.push({ id: o.id, name: o.name, version, restart: o.restart, at: this.env.now() });
+          this.env.audit('driver_installed', { caller, offer: o.id, packages: o.packages, version, automatic });
+        }
+      } finally {
+        if (done.length) this.afterInstall(done);
       }
-      const left = this.report.offers.filter((o) => !chosen.includes(o) || o.restart);
-      this.publish({ ...this.report, offers: left.filter((o) => !chosen.includes(o)), devices: this.report.devices.map((d) => ({ ...d, offers: d.offers.filter((id) => !chosen.some((c) => c.id === id)), status: chosen.some((c) => c.device_id === d.id) ? 'working' : d.status })) });
     }, { kind: chosen.every((o) => o.kind === 'fwupd' || o.kind === 'firmware') ? 'firmware' : 'driver', title: chosen.map((o) => o.name).join(', ').slice(0, 200),
       version: chosen.length === 1 ? chosen[0].to_version ?? null : null });
+  }
+
+  /** Installed offers leave the list; device statuses are worked out again (firmware now present, driver bound) and the
+   *  installed versions and the restart notice go into the report. */
+  private afterInstall(done: InstalledOffer[]) {
+    const ids = new Set(done.map((d) => d.id));
+    const offers = this.report.offers.filter((o) => !ids.has(o.id));
+    let devices = this.report.devices.map((d) => ({ ...d, offers: d.offers.filter((id) => !ids.has(id)) }));
+    try {
+      const devs = this.env.devices();
+      const fails = stillMissing(parseFirmwareFailures(this.lastKernelLog), (f) => this.env.firmwarePresent(f));
+      devices = deviceStatuses(devs, fails, offers);
+    } catch { /* keep the old statuses, minus the installed offers */ }
+    const installed = [...done, ...(this.report.installed ?? []).filter((x) => !ids.has(x.id))].slice(0, 20);
+    const restart = this.report.restart_required === true || done.some((d) => d.restart);
+    const report = { ...this.report, offers, devices, installed, restart_required: restart };
+    const st = this.env.load();
+    this.env.save({ ...st, report, ...(restart ? { restart_boot: this.env.bootId() } : {}) });
+    this.publish(report);
+  }
+
+  private async apt(args: string[], onStatus: (s: AptStatus) => void) {
+    const r = this.env.runLines
+      ? await this.env.runLines('apt-get', args, (l) => { const st = parseAptStatus(l); if (st) onStatus(st); })
+      : await this.env.run('apt-get', args);
+    if (r.code !== 0) throw new Error(`apt-get: ${aptError(r.stderr || r.stdout)}`);
   }
 
   /** At boot (after the greeter's health check): an nvidia install whose first boot failed goes back to nouveau. */
@@ -210,10 +265,28 @@ export class DriverManager extends EventEmitter {
 
   private async must(cmd: string, args: string[]) {
     const r = await this.env.run(cmd, args);
-    if (r.code !== 0) throw new Error(`${cmd}: ${(r.stderr.split('\n').find((l) => l.trim()) ?? `exit ${r.code}`).trim()}`);
+    if (r.code !== 0) throw new Error(`${cmd}: ${aptError(r.stderr || r.stdout) || `exit ${r.code}`}`);
   }
 
   private publish(r: DriverReport) { this.report = r; this.emit('changed', r); }
+}
+
+export interface InstalledOffer { id: string; name: string; version: string | null; restart: boolean; at: number }
+
+export interface AptStatus { stage: 'download' | 'install'; pct: number }
+/** apt-get -o APT::Status-Fd=1: "dlstatus:2:48.5:Retrieving file 2 of 3", "pmstatus:firmware-iwlwifi:66.7:Installed …". */
+export function parseAptStatus(line: string): AptStatus | null {
+  const m = /^(dlstatus|pmstatus):[^:]*:([\d.]+):/.exec(line.trim());
+  if (!m) return null;
+  const pct = Math.max(0, Math.min(100, Number(m[2])));
+  return Number.isFinite(pct) ? { stage: m[1] === 'dlstatus' ? 'download' : 'install', pct } : null;
+}
+
+/** The line that says what went wrong: apt's first "E:" line (warnings such as "W: Target … is configured multiple
+ *  times" come first), else dpkg's "dpkg: error", else the first non-empty line. */
+export function aptError(text: string): string {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  return lines.find((l) => /^E: /.test(l)) ?? lines.find((l) => /^dpkg: error/.test(l)) ?? lines.find((l) => !/^W: |^N: /.test(l)) ?? lines[0] ?? '';
 }
 
 /** Eight digits, shown as 1234-5678: MokManager's keyboard is basic, digits are typed reliably on any layout. */

@@ -1,11 +1,12 @@
 // worksuite-package-service: root daemon owning lk.worksuite.PackageService1 on the system bus.
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createPublicKey, randomUUID, type KeyObject } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statfsSync, writeFileSync } from 'node:fs';
 import { release } from 'node:os';
 import { join } from 'node:path';
 import dbus from 'dbus-next';
 import { busAuthority, loadIntrospection, NAME, serve } from './dbus.ts';
+import { tidyLegacySources } from './apt.ts';
 import { PackageService, type DevicePolicy, type Env, type RunResult } from './service.ts';
 import { Coordinator, LOCAL_CONFIG, updateHost, type CoordinatorEnv } from './coordinator.ts';
 import { loadCatalog, requestApp, type CatalogEnv } from './catalog.ts';
@@ -18,11 +19,41 @@ const AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';
 const XML = '/usr/share/dbus-1/interfaces/lk.worksuite.PackageService1.xml';
 
 /** Fixed executables, argument vectors, no shell; non-interactive and C locale so output parses (WSOS-SEC-007). */
+const RUN_ENV = { PATH: '/usr/sbin:/usr/bin:/sbin:/bin', LC_ALL: 'C.UTF-8', DEBIAN_FRONTEND: 'noninteractive', APT_LISTCHANGES_FRONTEND: 'none' };
+
+/** run, with every stdout line as it arrives (apt-get -o APT::Status-Fd=1 progress for Settings › Drivers). */
+function runLines(cmd: string, args: string[], onLine: (line: string) => void): Promise<RunResult> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { env: RUN_ENV, stdio: ['ignore', 'pipe', 'pipe'], timeout: 2 * 60 * 60_000 });
+    let stdout = '', stderr = '', partial = '';
+    child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (c: string) => {
+      stdout = (stdout + c).slice(-4 * 1024 * 1024);
+      const lines = (partial + c).split('\n'); partial = lines.pop() ?? '';
+      for (const l of lines) { try { onLine(l); } catch { /* progress is best effort */ } }
+    });
+    child.stderr.on('data', (c: string) => { stderr = (stderr + c).slice(-1024 * 1024); });
+    child.on('error', (e) => resolve({ code: 127, stdout, stderr: stderr || String(e) }));
+    child.on('close', (code) => { if (partial) onLine(partial); resolve({ code: code ?? 1, stdout, stderr }); });
+  });
+}
+
+/** Comments out /etc/apt/sources.list lines the signed deb822 files already cover (tidyLegacySources, #45). */
+function tidySources() {
+  const list = '/etc/apt/sources.list', dir = '/etc/apt/sources.list.d';
+  if (!existsSync(list)) return;
+  const deb822 = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.sources')).map((f) => readOr(join(dir, f))) : [];
+  const next = tidyLegacySources(readFileSync(list, 'utf8'), deb822);
+  if (next === null) return;
+  writeFileSync(list + '.worksuite-tmp', next, { mode: 0o644 }); renameSync(list + '.worksuite-tmp', list);
+  linuxEnv.audit('sources_list_tidied', { file: list });
+}
+
 function run(cmd: string, args: string[]): Promise<RunResult> {
   return new Promise((resolve) => {
     execFile(cmd, args, {
       timeout: 2 * 60 * 60_000, maxBuffer: 64 * 1024 * 1024,
-      env: { PATH: '/usr/sbin:/usr/bin:/sbin:/bin', LC_ALL: 'C.UTF-8', DEBIAN_FRONTEND: 'noninteractive', APT_LISTCHANGES_FRONTEND: 'none' },
+      env: RUN_ENV,
     }, (err, stdout, stderr) => {
       const code = err ? (typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : 127) : 0;
       resolve({ code, stdout, stderr });
@@ -183,6 +214,8 @@ export function driverEnv(svc: PackageService): DriverEnv {
   const installed = (p: string) => { try { return execFileSync('dpkg-query', ['-W', '-f=${db:Status-Abbrev}', p], { encoding: 'utf8' }).startsWith('ii'); } catch { return false; } };
   return {
     run: linuxEnv.runner.run,
+    runLines,
+    version: (p) => { try { return execFileSync('dpkg-query', ['-W', '-f=${Version}', p], { encoding: 'utf8' }).trim() || null; } catch { return null; } },
     devices: () => {
       aliases ??= parseModulesAlias(readOr(`/lib/modules/${release()}/modules.alias`));
       return scanSysfs('/', aliases);
@@ -227,6 +260,7 @@ async function main() {
     load: () => JSON.parse(readFileSync(HISTORY, 'utf8')),
     save: (e) => { mkdirSync('/var/lib/worksuite-package-service', { recursive: true }); writeFileSync(HISTORY + '.tmp', JSON.stringify(e), { mode: 0o600 }); renameSync(HISTORY + '.tmp', HISTORY); },
   });
+  try { tidySources(); } catch (e) { linuxEnv.audit('sources_list_tidy_failed', { error: String(e) }); }
   const svc = new PackageService({ ...linuxEnv, history, release: { keys: releaseKeys, arch: ARCH, installed: () => pkgVersion('worksuite-desktop') } });
   await svc.detectInterrupted();          // WSOS-APT-006: surfaced as State=interrupted for the shell
   const bus = dbus.systemBus();

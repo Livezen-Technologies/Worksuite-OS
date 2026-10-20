@@ -3,16 +3,17 @@ import { useCallback, useEffect, useState } from 'react'
 import { os, type Avail } from './os'
 import { t } from '../i18n'
 
-/** null while loading; then the bridge answer (possibly `available: false`). Refreshes every `pollMs` if set. */
-export function useSystem<T>(load: () => Promise<Avail<T>>, pollMs?: number) {
+/** null while loading; then the bridge answer (possibly `available: false`). Refreshes every `pollMs` if set, and at
+ *  once when the service of `live` signals a change (electron/sysWatch.ts; also sent on wake from sleep). */
+export function useSystem<T>(load: () => Promise<Avail<T>>, pollMs?: number, live?: 'network' | 'bluetooth' | 'battery') {
   const [state, setState] = useState<Avail<T> | null>(null)
   const reload = useCallback(() => load().then(setState, () => setState({ available: false, reason: 'service_unavailable' })), [load])
   useEffect(() => {
     void reload()
-    if (!pollMs) return
-    const t = setInterval(() => void reload(), pollMs)
-    return () => clearInterval(t)
-  }, [reload, pollMs])
+    const off = live ? os.onSysChanged?.((k) => { if (k === live) void reload() }) : undefined
+    const t = pollMs ? setInterval(() => void reload(), pollMs) : undefined
+    return () => { if (t) clearInterval(t); off?.() }
+  }, [reload, pollMs, live])
   return { state, reload }
 }
 

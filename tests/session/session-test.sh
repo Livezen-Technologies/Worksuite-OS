@@ -480,6 +480,15 @@ grep -q '"org.freedesktop.login1.reboot-ignore-inhibit", "org.freedesktop.login1
   && grep -q '"org.freedesktop.login1.reboot-multiple-sessions", "org.freedesktop.login1.power-off-multiple-sessions"' "$R50" \
   && grep -q 'root.indexOf(action.id) >= 0 && subject.user == "root"' "$R50" \
   && ok "power-force: root may restart past inhibitors and sessions (no logind prompt)" || bad "power-force: root may restart past inhibitors and sessions (no logind prompt)"
+# Wi-Fi (#42): networks the desk user joins are system connections (secret in NetworkManager's keyfile), not private
+# agent-owned ones that dropped on every re-association for want of a secret agent.
+R50N="$ROOT/services/session/polkit/rules/50-worksuite-network.rules"
+grep -q '"org.freedesktop.NetworkManager.settings.modify.system"' "$R50N" && grep -q 'subject.local && subject.active' "$R50N" \
+  && grep -q '^services/session/polkit/rules/50-worksuite-network.rules usr/share/polkit-1/rules.d/$' "$ROOT/packaging/debian/worksuite-session.install" \
+  && ok "Wi-Fi: desk user saves system connections (network polkit rule installed)" || bad "Wi-Fi: desk user saves system connections (network polkit rule installed)"
+N=$ROOT/live-build/config/includes.chroot/etc/NetworkManager/conf.d/10-worksuite-wifi.conf
+grep -qx 'wifi.powersave=2' "$N" && grep -qx 'wifi.scan-rand-mac-address=no' "$N" && grep -qx 'match-device=type:wifi' "$N" \
+  && ok "Wi-Fi: power saving off, no scan MAC randomisation" || bad "Wi-Fi: power saving off, no scan MAC randomisation"
 grep -qF '$(MAKE) -C services/session/polkit/listener worksuite-polkit-listener' "$ROOT/packaging/debian/rules" \
   && grep -q 'debian/worksuite-session/usr/lib/worksuite/worksuite-polkit-listener' "$ROOT/packaging/debian/rules" \
   && grep -A2 '^Package: worksuite-session' "$ROOT/packaging/debian/control" | grep -q 'Architecture: any' \

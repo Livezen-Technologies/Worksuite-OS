@@ -41,6 +41,11 @@ describe('package client', () => {
 })
 
 describe('parseMonitorLine', () => {
+  it('keeps an error GVariant prints in double quotes (it contains an apostrophe, #45)', () => {
+    const l = `/lk/worksuite/PackageService1: lk.worksuite.PackageService1.JobFinished (objectpath '/lk/worksuite/PackageService1/job/4', 'failed', {'kind': <'drivers'>, 'error': <"apt-get: E: Failed to fetch https://deb.debian.org/x.deb  Temporary failure resolving 'deb.debian.org'">})`
+    expect(parseMonitorLine(l)).toEqual({ job: '/lk/worksuite/PackageService1/job/4', kind: 'finished', result: 'failed', error: "apt-get: E: Failed to fetch https://deb.debian.org/x.deb  Temporary failure resolving 'deb.debian.org'" })
+    expect(parseMonitorLine("/x: lk.worksuite.PackageService1.JobProgress (objectpath '/j/5', uint32 33, 'fw:firmware-iwlwifi|downloading')")).toMatchObject({ phase: 'fw:firmware-iwlwifi|downloading', percent: 33 })
+  })
   it('reads JobProgress and JobFinished signals from gdbus monitor', () => {
     expect(parseMonitorLine("/lk/worksuite/PackageService1: lk.worksuite.PackageService1.JobProgress (objectpath '/lk/worksuite/PackageService1/job/3', uint32 30, 'installing')"))
       .toEqual({ job: '/lk/worksuite/PackageService1/job/3', kind: 'progress', percent: 30, phase: 'installing' })

@@ -163,6 +163,7 @@
 :root[data-theme="light"] .text-\[\#FFB0A6\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #AA1F0E; }
 :root[data-theme="light"] .text-\[\#FFB4A6\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #AA260E; }
 :root[data-theme="light"] .text-\[\#FFB4A8\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #AA230E; }
+:root[data-theme="light"] .text-\[\#FFB84D\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #7B4E0A; }
 :root[data-theme="light"] .text-\[\#FFB98A\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #8E400B; }
 :root[data-theme="light"] .text-\[\#FFD08A\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #7B4D0A; }
 :root[data-theme="light"] .text-\[\#FFD27A\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #714E09; }

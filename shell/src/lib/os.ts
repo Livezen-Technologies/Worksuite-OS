@@ -35,6 +35,8 @@ export interface WorkSuiteApi {
   launchWorkSuite(module: DesktopModule): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
+  /** Stop a sign-in that is waiting for the browser; its cloudSignIn then fails with sign_in_cancelled. */
+  cloudSignInCancel(): Promise<CloudResult<boolean>>
   /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
   cloudSignOut(accountId: string, choice: SignOutChoice): Promise<CloudResult<{ exported: string | null }>>
   syncUnsent(accountId: string): Promise<CloudResult<number>>
@@ -133,7 +135,7 @@ export interface WorkSuiteApi {
   /** Settings › Drivers: the package service's report (devices with their driver status, offers found online).
    *  check = look online now (waits for the result). */
   hwDriverReport(check?: boolean): Promise<CloudResult<DriverReport>>
-  /** Install driver offers (administrator, polkit); progress arrives through onPkgJob with phase = offer id. */
+  /** Install driver offers (administrator, polkit); progress arrives through onPkgJob with phase "<offer id>|<step>". */
   hwInstallDrivers(ids: string[]): Promise<CloudResult<string>>
   /** The one-time Secure Boot password for MokManager: administrators only (polkit prompt); '' when none. */
   hwMokPassword(): Promise<CloudResult<string>>
@@ -207,7 +209,7 @@ export interface WorkSuiteApi {
   sysNetwork(): Promise<Avail<NetworkState>>
   sysSetWifi(on: boolean): Promise<Avail<true>>
   /** The password reaches nmcli on stdin only. */
-  sysWifiConnect(ssid: string, password: string): Promise<{ ok: true } | { ok: false; error: string }>
+  sysWifiConnect(ssid: string, password: string): Promise<{ ok: true; pending?: boolean } | { ok: false; error: string }>
   /** VPN profiles (managed "WorkSuite VPN" first) and whether policy allows user VPNs (WSOS-INT-001). */
   sysVpn(): Promise<Avail<VpnState>>
   /** Imports the WireGuard .conf behind a pickFile('wgconf') handle; the private key never reaches the renderer. */
@@ -245,7 +247,7 @@ export interface WorkSuiteApi {
 }
 
 export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
-export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean }
+export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean; saved?: boolean }
 export interface NetDevice { device: string; type: string; state: string; connection: string | null }
 export interface NetworkState { wifi_enabled: boolean; devices: NetDevice[]; networks: WifiNetwork[] }
 export interface VpnConnection { name: string; uuid: string; type: 'wireguard' | 'vpn'; kind: 'wireguard' | 'openvpn' | 'vpn'; active: boolean; device: string | null; managed: boolean; needs_credentials: boolean }
@@ -301,6 +303,10 @@ export interface DriverReport {
   state: 'idle' | 'checking' | 'off' | 'error'; checked_at: number | null; online_search: boolean; metered: boolean; secure_boot: boolean
   devices: { id: string; kind: 'wifi' | 'ethernet' | 'display' | 'bluetooth' | 'other'; driver: string | null; status: DriverStatus; offers: string[] }[]
   offers: DriverOffer[]; auto_installed: string[]; gpu_fallback?: boolean; mok?: { pending: boolean }
+  /** Installed through Settings, newest first, with the version now on the system (#45). */
+  installed?: { id: string; name: string; version: string | null; restart: boolean; at: number }[]
+  /** Something installed needs a restart (cleared by the service after the next boot). */
+  restart_required?: boolean
 }
 
 export interface PackagePreview {
@@ -571,6 +577,7 @@ const stub: WorkSuiteApi = {
     stubAccounts = [{ id: 'preview:u-1', name: 'Preview User', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
   },
+  async cloudSignInCancel() { return { ok: true, value: false } },
   async cloudSignOut(id, choice) {
     stubAccounts = stubAccounts.filter((a) => a.id !== id)
     stubUnsent = 0
@@ -1056,12 +1063,28 @@ export function cloudErrorText(code: string): string {
     case 'bootstrap_failed':
     case 'bootstrap_invalid': return t('cloud.err.bootstrap')
     case 'auth_cancelled': return t('cloud.err.authCancelled')
+    case 'sign_in_cancelled': return t('cloud.err.signInCancelled')
+    case 'locked': return t('cloud.err.locked')
+    case 'browser_failed': return t('cloud.err.browser')
     case 'enrollment_rejected': return t('cloud.err.rejected')
     case 'invalid_code': return t('cloud.err.code')
     case 'agent_unavailable': return t('cloud.err.agent')
     case 'export_failed': return t('cloud.err.export')
     default: return t('cloud.err.default')
   }
+}
+
+/**
+ * Where "Sign in" goes without asking: the organization this device is enrolled with or provisioned for, else the
+ * server of an earlier sign-in, else WorkSuite Cloud (same order as signInTarget() in electron/webapps.ts).
+ */
+export function defaultSignInTarget(info: Pick<DeviceInfo, 'server' | 'provisioning'> | null, accounts: Pick<CloudAccount, 'server_url'>[]): { mode: 'personal' | 'enterprise'; server: string } {
+  const https = (u: string | null | undefined): u is string => { try { return !!u && new URL(u).protocol === 'https:' } catch { return false } }
+  const org = [info?.server, info?.provisioning?.server].find(https)
+  if (org) return { mode: 'enterprise', server: org }
+  const prev = accounts.find((a) => https(a.server_url))
+  if (prev && !new URL(prev.server_url).hostname.endsWith('worksuitecloud.com')) return { mode: 'enterprise', server: prev.server_url }
+  return { mode: 'personal', server: '' }
 }
 
 /** "work.example.com" → "https://work.example.com"; personal mode uses WorkSuite Cloud. */

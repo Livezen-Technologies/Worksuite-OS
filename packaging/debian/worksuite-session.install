@@ -64,6 +64,7 @@ services/session/polkit/lk.worksuite.diagnostics.policy usr/share/polkit-1/actio
 services/session/bin/worksuite-power-force usr/lib/worksuite/
 services/session/polkit/lk.worksuite.power-force.policy usr/share/polkit-1/actions/
 services/session/polkit/rules/50-worksuite-power.rules usr/share/polkit-1/rules.d/
+services/session/polkit/rules/50-worksuite-network.rules usr/share/polkit-1/rules.d/
 services/session/themes/WorkSuite usr/share/themes/
 services/session/themes/WorkSuite-Light usr/share/themes/
 services/session/fontconfig/60-worksuite-sinhala-tamil.conf etc/fonts/conf.d/
