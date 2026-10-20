@@ -91,6 +91,9 @@ contextBridge.exposeInMainWorld('worksuite', {
   filesRecent: () => ipcRenderer.invoke('ws:filesRecent'),
   filesSearch: (root: string, rel: string, q: string, kind: string, days: number) => ipcRenderer.invoke('ws:filesSearch', String(root), String(rel), String(q), String(kind), String(days)),
   filesMkdir: (root: string, rel: string, name: string) => ipcRenderer.invoke('ws:filesMkdir', String(root), String(rel), String(name)),
+  desktopDir: () => ipcRenderer.invoke('ws:desktopDir'),
+  filesTemplates: () => ipcRenderer.invoke('ws:filesTemplates'),
+  filesNewFile: (root: string, rel: string, name: string, template: string | null) => ipcRenderer.invoke('ws:filesNewFile', String(root), String(rel), String(name), template ? String(template) : ''),
   filesRename: (root: string, rel: string, name: string) => ipcRenderer.invoke('ws:filesRename', String(root), String(rel), String(name)),
   filesTrash: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesTrash', String(root), JSON.stringify(rels.map(String))),
   filesDelete: (root: string, rels: string[]) => ipcRenderer.invoke('ws:filesDelete', String(root), JSON.stringify(rels.map(String))),
@@ -136,6 +139,11 @@ contextBridge.exposeInMainWorld('worksuite', {
     const listener = (_e: unknown, r: unknown) => cb(r)
     ipcRenderer.on('ws:driversChanged', listener)
     return () => { ipcRenderer.removeListener('ws:driversChanged', listener) }
+  },
+  onSysChanged: (cb: (kind: string) => void) => {
+    const listener = (_e: unknown, k: unknown) => cb(String(k))
+    ipcRenderer.on('ws:sysChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:sysChanged', listener) }
   },
   onOpenSettings: (cb: (section: string) => void) => {
     const listener = (_e: unknown, s: unknown) => cb(String(s))

@@ -7,6 +7,7 @@ import { driversEn } from './drivers'
 import { whatsappEn } from './whatsapp'
 import { desktopsEn } from './desktops'
 import { controlsEn } from './controls'
+import { desktopShellEn } from './desktopShell'
 import { bootuiEn } from './bootui'
 import { hardwareEn } from './hardware'
 
@@ -19,6 +20,7 @@ const en = {
   ...whatsappEn,
   ...desktopsEn,
   ...controlsEn,
+  ...desktopShellEn,
   ...bootuiEn,
   ...hardwareEn,
   // Panel / taskbar

@@ -19,6 +19,9 @@ export interface GlobalSearchProps {
   /** "Ask AI": opens the on-device assistant with the query (absent: no entry). */
   onAskAI?(query: string): void
   onClose(): void
+  /** The taskbar's floating panel: narrower and shorter, no preview column; not modal (the apps stay usable). */
+  compact?: boolean
+  id?: string
 }
 
 const SOURCE_LABEL: Record<string, MessageKey> = { worksuite: 'search.source.worksuite', drive: 'search.source.drive' }
@@ -27,7 +30,7 @@ const STATE_LABEL: Record<string, MessageKey> = {
   offline: 'search.state.offline', timeout: 'search.state.timeout', error: 'search.state.error',
 }
 
-export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchApp, onOpenSettings, onAskAI, onClose }: GlobalSearchProps) {
+export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchApp, onOpenSettings, onAskAI, onClose, compact = false, id = 'ws-launcher' }: GlobalSearchProps) {
   const t = useT()
   const input = useRef<HTMLInputElement>(null)
   const [cat, setCat] = useState<Category>('all')
@@ -92,14 +95,14 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
 
   let k = 0
   return (
-    <div role="dialog" aria-modal="true" aria-label={t('launcher.search')} onKeyDown={onKey} id="ws-launcher"
-      className="w-[860px] max-w-full overflow-hidden rounded-[20px] border border-[rgba(127,178,255,0.22)] bg-[rgba(10,24,56,0.98)] font-sans text-[#E8EEFA] shadow-[0_40px_100px_rgba(0,0,0,0.6)]">
-      <div className="flex items-center gap-3.5 border-b border-[rgba(127,178,255,0.12)] px-[22px] py-[18px]">
+    <div role="dialog" aria-modal={compact ? undefined : true} aria-label={t('launcher.search')} onKeyDown={onKey} id={id} data-compact={compact || undefined}
+      className={`${compact ? 'w-[560px]' : 'w-[860px]'} max-w-full overflow-hidden rounded-[20px] border border-[rgba(127,178,255,0.22)] bg-[rgba(10,24,56,0.98)] font-sans text-[#E8EEFA] shadow-[0_40px_100px_rgba(0,0,0,0.6)]`}>
+      <div className={`flex items-center gap-3.5 border-b border-[rgba(127,178,255,0.12)] px-[22px] ${compact ? 'py-3' : 'py-[18px]'}`}>
         <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7FB2FF" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
         <input ref={input} aria-label={t('search.inputLabel')} value={query} onChange={(e) => onQuery(e.target.value)} placeholder={t('search.placeholder')}
           role="combobox" aria-expanded="true" aria-controls="ws-search-results" aria-activedescendant={selected ? `ws-sr-${cur}` : undefined}
-          className="min-w-0 flex-1 border-0 bg-transparent text-[20px] text-white outline-none" />
-        <span aria-hidden="true" className="rounded-[5px] border border-[#3D5280] px-[7px] py-[3px] font-mono text-[11px] text-[#8FA3C8]">Esc</span>
+          className={`min-w-0 flex-1 border-0 bg-transparent ${compact ? 'text-base' : 'text-[20px]'} text-white outline-none`} />
+        <button type="button" aria-label={t('common.close')} title="Esc" onClick={onClose} className="cursor-pointer rounded-[5px] border border-[#3D5280] px-[7px] py-[3px] font-mono text-[11px] text-[#8FA3C8] hover:bg-white/10">Esc</button>
       </div>
       <div role="tablist" aria-label={t('search.categories')} className="flex flex-wrap gap-1.5 border-b border-[rgba(127,178,255,0.08)] px-[22px] py-2.5">
         {cats.map((c) => (
@@ -109,7 +112,7 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
           </button>
         ))}
       </div>
-      <div className="flex h-[440px]">
+      <div className={`flex ${compact ? 'h-[min(360px,calc(100vh-220px))]' : 'h-[440px]'}`}>
         <div id="ws-search-results" role="listbox" aria-label={t('search.results')} className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-auto px-2.5 py-2">
           {shown.map((g) => (
             <div key={g.id + (g.items[0]?.kind === 'more' ? ':more' : '')} role="group" aria-label={g.items.every((x) => x.kind === 'more') ? t('search.moreGroup') : t(GROUP_LABEL[g.id])} className="flex flex-col gap-0.5">
@@ -140,11 +143,11 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
           {!loading && notes.map((s) => (
             <p key={s.source} role="status" className="m-0 px-3 py-2 text-xs text-[#8FA3C8]">{t('search.sourceState', { source: t(SOURCE_LABEL[s.source]), state: t(STATE_LABEL[s.state]) })}</p>
           ))}
-          {!loading && items.every((x) => x.kind === 'ai') && (
+          {!loading && query.trim() && items.every((x) => x.kind === 'ai') && (
             <div className="px-5 py-[60px] text-center text-sm text-[#8FA3C8]">{t('search.empty', { q: query.trim() })}</div>
           )}
         </div>
-        <aside aria-label={t('search.preview')} className="flex w-[300px] flex-col gap-3 border-l border-[rgba(127,178,255,0.1)] bg-[rgba(4,10,26,0.35)] p-[18px] max-md:hidden">
+        {!compact && <aside aria-label={t('search.preview')} className="flex w-[300px] flex-col gap-3 border-l border-[rgba(127,178,255,0.1)] bg-[rgba(4,10,26,0.35)] p-[18px] max-md:hidden">
           {selected && (
             <>
               <div className="flex h-[140px] items-center justify-center rounded-xl bg-[rgba(14,32,72,0.8)]">
@@ -162,10 +165,10 @@ export default function GlobalSearch({ query, onQuery, apps, settings, onLaunchA
               </div>
             </>
           )}
-        </aside>
+        </aside>}
       </div>
       <div className="flex flex-wrap gap-5 border-t border-[rgba(127,178,255,0.1)] px-[22px] py-2.5 text-[11px] text-[#8FA3C8]">
-        <span>{t('search.hint.navigate')}</span><span>{t('search.hint.open')}</span><span>{t('search.hint.tab')}</span><span>{t('search.hint.location')}</span>
+        {!compact && <><span>{t('search.hint.navigate')}</span><span>{t('search.hint.open')}</span><span>{t('search.hint.tab')}</span><span>{t('search.hint.location')}</span></>}
         <span className="ml-auto">{t(coverage(sources, loading))}</span>
       </div>
     </div>
