@@ -20,6 +20,7 @@ import { realExec, type Avail, type Exec } from './system'
 import { xdgDirs } from './xdgDirs'
 import { extractShortcutsBlock, mergeShortcutsBlock } from '../src/lib/shortcuts'
 import { rcWithTheme } from './windowTheme'
+import { extractPointerBlock, mergePointerBlock } from './pointer'
 
 // ---------- devices ----------
 export type DevKind = 'touchscreen' | 'tablet' | 'tablet-pad' | 'switch'
@@ -213,7 +214,8 @@ const DESKTOPS = /<desktops\b[^>]*\/>|<desktops\b[^>]*>[\s\S]*?<\/desktops>/
 const SWITCHER = /<windowSwitcher\b[^>]*?\/?>/
 /** The Wayland bridge keeps the desktops (count, names) and Alt+Tab's scope in the user's rc.xml
  *  (native/wayland-bridge/worksuite_bridge/workspace.py), and Settings › Keyboard › Shortcuts its block of key
- *  bindings (src/lib/shortcuts.ts): a rewrite from the system file carries them over. */
+ *  bindings (src/lib/shortcuts.ts), Settings › Mouse & touchpad its pointer block: a rewrite from the system file
+ *  carries them over. */
 export function carryDesktops(previous: string, next: string): string {
   let out = next
   for (const re of [DESKTOPS, SWITCHER]) {
@@ -224,7 +226,10 @@ export function carryDesktops(previous: string, next: string): string {
   const theme = /<theme>(?:(?!<\/theme>)[\s\S])*?<name>([^<]*)<\/name>/.exec(previous)?.[1]
   if (theme) out = rcWithTheme(out, theme.trim()) ?? out
   const keys = extractShortcutsBlock(previous)
-  return keys ? mergeShortcutsBlock(out, keys) : out
+  if (keys) out = mergeShortcutsBlock(out, keys)
+  // Settings › Mouse & touchpad keeps its <libinput> block here too (electron/pointer.ts).
+  const pointer = extractPointerBlock(previous)
+  return pointer ? mergePointerBlock(out, pointer) : out
 }
 
 // ---------- on-screen keyboard ----------

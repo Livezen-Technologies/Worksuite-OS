@@ -7,7 +7,7 @@ import {
   REVERT_SECONDS, SCALES, WALLPAPERS, displays, modeLabel, refreshRates, resolutions, secondsLeft, useDisplayState,
   type Arrangement, type DisplayLayout, type DisplayOutputConfig, type DisplayState, type Side,
 } from '../lib/displays'
-import { Dialog, btnGhost, btnPrimary, card, dialogFooter, rowLine } from '../components/Dk'
+import { Dialog, Switch, btnGhost, btnPrimary, card, dialogFooter, rowLine } from '../components/Dk'
 import { formatNumber, messages, t } from '../i18n'
 
 const select = 'box-border min-w-[200px] rounded-[9px] border border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.5)] px-3 py-[9px] text-[13px] text-[#E8EEFA]'
@@ -18,6 +18,8 @@ const ERRORS: Record<string, string> = messages({
   no_enabled_output: 'disp.err.none',
   apply_failed: 'disp.err.apply',
   missing_wlr_randr: 'disp.err.randr',
+  mode_not_applied: 'disp.err.notApplied',
+  fixed_mode: 'disp.err.fixed',
 })
 
 /** Where a secondary monitor sits relative to the primary, read back from positions. */
@@ -93,7 +95,7 @@ export function DisplayPanel() {
       <div className={`${card} overflow-hidden`} aria-label={t('disp.settingsFor', { name: out.description || out.name })} role="group">
         {multi && (
           <Row k={t('disp.on')} d={t('disp.onHint')}>
-            <input type="checkbox" aria-label={t('disp.on')} checked={cfg.enabled} onChange={(e) => edit({ enabled: e.target.checked })} className="size-4" />
+            <Switch label={t('disp.on')} checked={cfg.enabled} onChange={(v) => edit({ enabled: v })} />
           </Row>
         )}
         {multi && (
@@ -101,7 +103,7 @@ export function DisplayPanel() {
             <input type="radio" aria-label={t('disp.makeMain')} checked={draft.primary === out.name} disabled={!cfg.enabled} onChange={() => setDraft({ ...draft, primary: out.name })} className="size-4" />
           </Row>
         )}
-        <Row k={t('settings.disp.resolution')} d={t('settings.disp.currentMode')}>
+        <Row k={t('settings.disp.resolution')} d={out.fixedMode ? t('disp.fixedDriver') : res.length > 1 ? t('disp.modesCount', { n: formatNumber(res.length) }) : t('settings.disp.currentMode')}>
           <select aria-label={t('settings.disp.resolution')} className={select} value={`${cfg.width}x${cfg.height}`} disabled={!cfg.enabled} onChange={(e) => {
             const [w, h] = e.target.value.split('x').map(Number)
             edit({ width: w, height: h, refresh: refreshRates(out, w, h)[0] ?? 0 })
@@ -134,6 +136,7 @@ export function DisplayPanel() {
       </div>
     )}
 
+    {out?.fixedMode && <p className="m-0 rounded-[10px] border border-[rgba(242,153,74,0.4)] bg-[rgba(242,153,74,0.08)] px-3.5 py-2.5 text-xs leading-[1.5] text-[#F2C98A]">{t('disp.fixedNote')}</p>}
     {error && <p role="alert" className="m-0 text-[13px] text-[#FF9C8A]">{error}</p>}
     <div className="flex justify-end gap-2.5">
       <button type="button" className={btnGhost} disabled={!changed || busy} onClick={() => { setDraft(structuredClone(live.layout)); setError(null) }}>{t('disp.reset')}</button>

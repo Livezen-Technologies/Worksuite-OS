@@ -82,7 +82,7 @@ export function Diagnostics() {
       </div>
       <div className="flex items-center gap-3 border-t border-[rgba(127,178,255,0.1)] pt-3">
         <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">{t('diag.bootDetails')}</span><span className="text-xs text-[#8FA3C8]">{t('diag.bootDetailsSub')}</span></span>
-        <Switch label={t('diag.bootDetails')} checked={!!details} disabled={details === null || !!busy} onChange={(v) => void toggleDetails(v)} />
+        <Switch label={t('diag.bootDetails')} checked={!!details} disabled={details === null} loading={!!busy} onChange={(v) => toggleDetails(v)} />
       </div>
       {msg && <p role={msg.error ? 'alert' : 'status'} className={`m-0 text-[13px] ${msg.error ? 'text-[#FCA5A5]' : 'text-[#86EFAC]'}`}>{msg.text}</p>}
     </section>

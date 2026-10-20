@@ -6,6 +6,7 @@ import { captureEn } from './capture'
 import { driversEn } from './drivers'
 import { whatsappEn } from './whatsapp'
 import { desktopsEn } from './desktops'
+import { controlsEn } from './controls'
 import { bootuiEn } from './bootui'
 
 const en = {
@@ -16,6 +17,7 @@ const en = {
   ...driversEn,
   ...whatsappEn,
   ...desktopsEn,
+  ...controlsEn,
   ...bootuiEn,
   // Panel / taskbar
   'panel.taskbar': 'Taskbar',

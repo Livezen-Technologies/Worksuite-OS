@@ -35,6 +35,7 @@ const NAV = [
   { id: 'Bluetooth', tint: '#1F6BFF', icon: 'M7 7l10 10-5 5V2l5 5L7 17' },
   { id: 'Display', tint: '#0E8FA8', icon: 'M3 4h18v12H3zM8 20h8M12 16v4', sep: true },
   { id: 'Touchscreen & pen', tint: '#0E8FA8', icon: 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15' },
+  { id: 'Mouse & touchpad', tint: '#0E8FA8', icon: 'M12 3a6 6 0 0 0-6 6v6a6 6 0 0 0 12 0V9a6 6 0 0 0-6-6zM12 3v7M6 10h12' },
   { id: 'Multitasking', tint: '#0E8FA8', icon: 'M3 5h8v6H3zM13 5h8v6h-8zM3 15h18v4H3z' },
   { id: 'Keyboard', tint: '#7A4FE0', icon: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10' },
   { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
@@ -58,7 +59,7 @@ export type Section = (typeof NAV)[number]['id']
 const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
 const navLabel = (id: Section) => t(`settings.nav.${id}` as MessageKey)
 // Older names (launcher search, earlier builds) still land somewhere sensible.
-const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard' }
+const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Mouse: 'Mouse & touchpad', Touchpad: 'Mouse & touchpad', Pointer: 'Mouse & touchpad', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard' }
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
 /** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
@@ -119,7 +120,7 @@ function NetworkPanel() {
           {!wifi ? t('settings.net.noWifi') : !n.wifi_enabled ? t('common.off') : active || wifi.connection ? t('settings.net.connectedTo', { name: active?.ssid ?? wifi.connection ?? '' }) : t('common.notConnected')}
         </span>
       </span>
-      {wifi && <Switch label={t('settings.net.wifi')} checked={n.wifi_enabled} onChange={(v) => void os.sysSetWifi(v).then(reload)} />}
+      {wifi && <Switch label={t('settings.net.wifi')} checked={n.wifi_enabled} onChange={(v) => os.sysSetWifi(v).then((r) => { reload(); return r })} />}
     </div>
     {n.wifi_enabled && (
       <section aria-label={t('settings.net.available')} className="flex flex-col gap-2">
@@ -170,7 +171,7 @@ function BluetoothPanel() {
         <span className="text-base font-semibold">{t('settings.nav.Bluetooth')}</span>
         <span className="text-[13px] text-[#8FA3C8]">{!b.powered ? t('common.off') : b.discoverable && b.name ? t('settings.bt.visibleAs', { name: b.name }) : b.name ? t('settings.bt.onAs', { name: b.name }) : t('common.on')}</span>
       </span>
-      <Switch label={t('settings.nav.Bluetooth')} checked={b.powered} onChange={(v) => void os.sysSetBluetooth(v).then(reload)} />
+      <Switch label={t('settings.nav.Bluetooth')} checked={b.powered} onChange={(v) => os.sysSetBluetooth(v).then((r) => { reload(); return r })} />
     </div>
     <section aria-label={t('settings.bt.myDevices')} className="flex flex-col gap-2">
       <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('settings.bt.myDevices')}</h2>
@@ -193,6 +194,7 @@ function BluetoothPanel() {
 
 // Settings › Display lives in DisplaySettings.tsx (WSOS-DSK-005/006).
 import { DisplayPanel } from './DisplaySettings'
+import { PointerPanel } from './settings/Pointer'
 // Settings › Default apps and clipboard history live in DesktopSettings.tsx (WSOS-DSK-008/009).
 import { ClipboardSection, DefaultAppsPanel } from './DesktopSettings'
 // Pairing, drives, power, printers, input methods, rejected sync changes (WSOS-INT-003…006, 011, SYN-004).
@@ -880,6 +882,7 @@ export default function Settings({ onClose, active }: WindowProps) {
         {section === 'Bluetooth' && <BluetoothPanel />}
         {section === 'Display' && <DisplayPanel />}
         {section === 'Touchscreen & pen' && <TouchPanel />}
+        {section === 'Mouse & touchpad' && <PointerPanel />}
         {section === 'Keyboard' && <KeyboardPanel tab={kbTab} />}
         {section === 'Clipboard' && <ClipboardPanel />}
         {section === 'Appearance' && <AppearancePanel />}

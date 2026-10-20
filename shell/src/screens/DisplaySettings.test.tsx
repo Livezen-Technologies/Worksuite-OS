@@ -111,6 +111,30 @@ describe('Settings › Display', () => {
   })
 })
 
+describe('Settings › Display modes (#32)', () => {
+  const one = (o: Partial<DisplayState['outputs'][number]>): DisplayState => {
+    const out = { name: 'Virtual-1', description: 'Virtual', make: '', model: '', serial: '', enabled: true, x: 0, y: 0, scale: 1, transform: 'normal', modes: [{ width: 1280, height: 800, refresh: 60, preferred: true, current: true }], ...o }
+    return { outputs: [out], layout: { arrangement: 'extend', primary: out.name, outputs: [{ name: out.name, enabled: true, width: 1280, height: 800, refresh: 60, scale: 1, x: 0, y: 0 }] }, wallpapers: {}, pending: null }
+  }
+  it('lists every offered mode, custom sizes included', async () => {
+    const st = one({ modes: [{ width: 1280, height: 800, refresh: 60, preferred: true, current: true }, { width: 1920, height: 1080, refresh: 0, preferred: false, current: false, custom: true }, { width: 1024, height: 768, refresh: 0, preferred: false, current: false, custom: true }] })
+    const spy = vi.spyOn(displays, 'displayState').mockResolvedValue({ ok: true, value: st })
+    await render(<DisplayPanel />)
+    const opts = [...byLabel<HTMLSelectElement>('Resolution').options].map((o) => o.value)
+    expect(opts).toEqual(['1920x1080', '1280x800', '1024x768'])
+    expect(document.body.textContent).toContain('3 resolutions available')
+    spy.mockRestore()
+  })
+  it('explains a firmware framebuffer instead of offering modes it cannot set', async () => {
+    const spy = vi.spyOn(displays, 'displayState').mockResolvedValue({ ok: true, value: one({ driver: 'simpledrm', fixedMode: true }) })
+    await render(<DisplayPanel />)
+    expect(byLabel<HTMLSelectElement>('Resolution').options).toHaveLength(1)
+    expect(document.body.textContent).toContain('basic firmware framebuffer')
+    expect(document.body.textContent).toContain('Settings › Drivers')
+    spy.mockRestore()
+  })
+})
+
 describe('secondary monitor desktop', () => {
   it('shows its own wallpaper and an accessible taskbar', async () => {
     await displays.displayWallpaper('HDMI-A-1', 'sunrise')
