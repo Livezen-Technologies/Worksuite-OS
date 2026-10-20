@@ -212,6 +212,9 @@ test('security releases install automatically even in notify mode; feature relea
   assert.deepEqual(await sec.c.check(), { action: 'install', reason: 'security' });
   const feat = world({ policy: { update_mode: 'notify' } });
   assert.deepEqual(await feat.c.check(), { action: 'wait', reason: 'waiting_for_user' });
+  // #38: policy security_auto_patch reaches the decision.
+  const off = world({ policy: { update_mode: 'notify', security_auto_patch: 'off' }, manifest: signed({ ...base, security: true }) });
+  assert.deepEqual(await off.c.check(), { action: 'wait', reason: 'waiting_for_user' });
 });
 
 test('worksuite.sources follows the ring and host, keeping Signed-By', () => {
