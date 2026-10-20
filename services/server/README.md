@@ -41,11 +41,25 @@ policy, app catalog, releases (read-only) and an activity log.
   transition is in the activity log.
 - **Remote desktop viewer** (`#viewer/<session>`): WebRTC video of the device's screen (captured by the shell through the
   ScreenCast portal, after consent), mouse/keyboard over the data channel (applied on the device only while its user
-  grants control: RemoteDesktop portal when the backend has it, else labwc's virtual pointer/keyboard via wlrctl/wtype),
+  grants control: RemoteDesktop portal when the backend has it, else labwc's virtual pointer/keyboard through the
+  packaged `worksuite-rs-input` helper, `native/rs-input`: absolute motion, separate press/release, held keys),
   chat, full screen, view only, reconnect, disconnect, and live stats (resolution, fps, bitrate, loss, RTT) from
   getStats. Signalling is relayed by `…/sessions/{id}/signal` (device: X-WS-Device; admin: console session) only while
-  the session is active; media is DTLS-SRTP, peer to peer. STUN/TURN: `WORKSUITE_ICE_SERVERS` (JSON RTCIceServer[]);
-  without it only devices reachable on the same network connect.
+  the session is active; media is DTLS-SRTP, peer to peer.
+- **STUN/TURN** (issue #37): both peers fetch `…/sessions/{id}/ice-servers` (also in every signal reply).
+  `WORKSUITE_STUN_URLS`, `WORKSUITE_TURN_URLS` + `WORKSUITE_TURN_SECRET` (coturn `use-auth-secret`: per-session
+  credentials valid `WORKSUITE_TURN_TTL` seconds, default 3600) and `WORKSUITE_ICE_SERVERS` (JSON RTCIceServer[],
+  appended). An example coturn configuration is in `deploy/coturn/turnserver.conf`. Without any of them only devices
+  reachable on the same network connect.
+- **Remote support follow-ups** (issue #37): file transfer both ways over the data channel (64 KiB chunks, 200 MiB per
+  file, SHA-256 checked; the device user accepts each incoming file, saved to ~/Downloads; the administrator downloads
+  files the user offers), text clipboard sync (off until the device user turns it on for the session), monitor
+  switching and quality presets from the viewer, step-up from view to control (`…/elevate`: the administrator's TOTP
+  again, then a fresh "Allow" on the device), chat and file-transfer metadata audited from both sides (`…/events`;
+  never message text or file contents), and viewer-side recording (MediaRecorder WebM, uploaded in ≤1 MiB chunks to
+  `…/recording`) only when `remote_support.recording` is on and the request asked for it, which the consent dialog and
+  the indicator tell the user. Recordings are kept `remote_support.recording_retention_days` (default 30); every
+  download is in the activity log.
 - **Software Management** (`src/software.ts`, Device Management › Software Management): installation requests from the
   App Center (approve → the app is added to the signed `app_allowlist` and an `InstallApprovedApplication` goes to the
   requesting device; reject with a note the user sees), software inventory per app and per device (from the devices'

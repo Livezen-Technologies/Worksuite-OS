@@ -23,7 +23,8 @@ export const APP_HTML = `<!doctype html><html lang="en"><head><meta charset="utf
 export const APP_CSS = `.rs-view{display:grid;grid-template-columns:1fr 280px;gap:14px}.rs-screen{position:relative;background:#000;border-radius:10px;overflow:hidden;min-height:300px}
 .rs-screen video{width:100%;height:auto;display:block;outline:none;cursor:crosshair}.rs-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .rs-chat{display:flex;flex-direction:column;gap:8px}.rs-log{height:260px;overflow:auto;border:1px solid #8884;border-radius:8px;padding:8px;font-size:13px}
-.rs-stats{font-size:12px;line-height:1.6}@media (max-width:900px){.rs-view{grid-template-columns:1fr}}
+.rs-stats{font-size:12px;line-height:1.6}.rs-files{display:flex;flex-direction:column;gap:6px;font-size:13px}.rs-rec{color:#dc2626;font-weight:600}
+.rs-clip{width:100%;min-height:60px;box-sizing:border-box}@media (max-width:900px){.rs-view{grid-template-columns:1fr}}
 
 :root{--bg:#f5f7fb;--panel:#fff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--accent:#0A6CFF;--accent-text:#fff;--side:#001842;--side-text:#cbd5e1;
 --ok:#15803d;--warn:#b45309;--bad:#b91c1c;--chip:#eef2ff;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light}
@@ -425,7 +426,9 @@ const views = {
       const control = confirm('Request keyboard and mouse control?\nOK = remote control (needs your authenticator code), Cancel = view only.');
       const otp = control ? prompt('Authenticator code') : undefined;
       if (control && !otp) return;
-      act(() => api('POST', 'remote-support/sessions', { device_id: d.id, mode: control ? 'control' : 'view', reason, otp }), 'Request sent. The user is asked to allow it.');
+      // Recording (issue #37): only when the policy allows it; the user is told in the consent dialog.
+      const record = r.recording_allowed ? confirm('Record this session?\nThe user is told before they allow it, and sees it for the whole session.') : false;
+      act(() => api('POST', 'remote-support/sessions', { device_id: d.id, mode: control ? 'control' : 'view', reason, otp, record }), 'Request sent. The user is asked to allow it.');
     };
     const end = (id) => act(() => api('POST', 'remote-support/sessions/' + encodeURIComponent(id) + '/terminate'), 'Session ended.');
     return [h('h1', {}, 'Remote Support'),
@@ -442,7 +445,18 @@ const views = {
         h('td', {}, x.administrator), h('td', {}, x.device), h('td', {}, x.user || '—'), h('td', {}, x.started_at ? when(x.started_at) : '—'), h('td', {}, x.ended_at ? when(x.ended_at) : '—'),
         h('td', {}, dur(x.duration_s)), h('td', {}, (x.granted_mode || x.mode) === 'control' ? 'Full control' : 'View only', x.unattended ? h('div', { class: 'muted' }, 'Unattended policy') : null),
         h('td', {}, x.state === 'ended' ? (END[x.end_reason] || 'Ended') : x.state === 'active' ? h('span', { class: 'ok' }, 'Active') : 'Waiting for user'),
-        h('td', {}, x.state === 'active' ? h('a', { href: '#viewer/' + encodeURIComponent(x.id) }, 'Open ') : null, x.state !== 'ended' ? h('button', { type: 'button', onclick: () => end(x.id) }, 'Disconnect') : null))))];
+        h('td', {}, x.state === 'active' ? h('a', { href: '#viewer/' + encodeURIComponent(x.id) }, 'Open ') : null, x.state !== 'ended' ? h('button', { type: 'button', onclick: () => end(x.id) }, 'Disconnect') : null,
+          x.recording_bytes ? h('div', {}, h('a', { href: '/admin/api/remote-support/sessions/' + encodeURIComponent(x.id) + '/recording', download: '' }, 'Recording')) : null,
+          h('div', {}, h('a', { href: '#rsevents/' + encodeURIComponent(x.id) }, 'Chat and files'))))))];
+  },
+  // Chat and file-transfer audit of one session (issue #37): metadata reported by the device and the viewer.
+  async rsevents(id) {
+    const { items } = await api('GET', 'remote-support/sessions/' + encodeURIComponent(id) + '/events');
+    const what = (e) => e.kind === 'chat' ? 'Chat message (' + e.length + ' characters)' : 'File ' + e.action + ': ' + e.name + ' (' + e.size + ' bytes' + (e.sha256 ? ', SHA-256 ' + e.sha256.slice(0, 16) + '…' : '') + ')' + (e.reason ? ' · ' + e.reason : '');
+    return [h('p', {}, h('a', { href: '#support' }, '← Remote Support')), h('h1', {}, 'Chat and files'),
+      h('p', { class: 'muted' }, 'What passed over the session\'s data channel, as reported by the device and the viewer. Message text and file contents are not stored.'),
+      table(['Time', 'Reported by', 'Direction', 'Event'], items.map((e) => h('tr', {}, h('td', {}, when(e.at)), h('td', {}, e.side === 'device' ? 'Device' : 'Viewer'),
+        h('td', {}, e.direction === 'to_device' ? 'To the user' : 'To the administrator'), h('td', {}, what(e)))))];
   },
   // Remote desktop viewer (issue #19): WebRTC from the device's portal screen capture, encrypted by DTLS-SRTP; mouse,
   // keyboard and chat go over the data channel. The device applies input only while its user has granted control.
@@ -456,9 +470,95 @@ const views = {
     const say = (who, text) => { log.append(h('div', {}, h('b', {}, who + ': '), text)); log.scrollTop = log.scrollHeight; };
     let pc = null, dc = null, after = 0, live = true, granted = null, viewOnly = false, lastBytes = 0, lastAt = 0;
     const send = (m) => { if (dc && dc.readyState === 'open') dc.send(JSON.stringify(m)); };
+    const sessionUrl = 'remote-support/sessions/' + encodeURIComponent(id);
+    let recordAllowed = false, recorder = null, recSeq = 0, recQueue = Promise.resolve();
+    // ---- issue #37: files both ways, clipboard, quality, monitors, step-up, recording ----
+    const FILE_MAX = 200 * 1024 * 1024, CHUNK = 64 * 1024;
+    const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+    const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+    const outgoing = new Map(), incoming = new Map();
+    const fileList = h('div', { class: 'rs-files', 'aria-live': 'polite' });
+    const fileRow = (key, text, ...extra) => { let row = fileList.querySelector('[data-k="' + key + '"]'); if (!row) { row = h('div', { 'data-k': key }); fileList.append(row); } row.replaceChildren(text, ...extra); };
+    const drain = () => new Promise((res) => { const go = () => (!dc || dc.bufferedAmount < 1024 * 1024 ? res() : setTimeout(go, 50)); go(); });
+    const audit = (body) => api('POST', sessionUrl + '/events', body).catch(() => {});
+    const fileInput = h('input', { type: 'file', 'aria-label': 'File to send', onchange: async () => {
+      const f = fileInput.files[0]; fileInput.value = '';
+      if (!f) return;
+      if (f.size > FILE_MAX) { toast('Files up to 200 MB can be sent.'); return; }
+      const fid = 'a' + Math.random().toString(36).slice(2, 12);
+      outgoing.set(fid, f);
+      send({ t: 'f-offer', id: fid, name: f.name, size: f.size });
+      fileRow(fid, 'Sent ' + f.name + ': waiting for the user to accept…');
+    } });
+    const sendFile = async (fid) => {
+      const f = outgoing.get(fid); if (!f) return;
+      const buf = new Uint8Array(await f.arrayBuffer());
+      for (let seq = 0, o = 0; o < buf.length; seq++, o += CHUNK) {
+        await drain();
+        send({ t: 'f-chunk', id: fid, seq, data: b64(buf.subarray(o, o + CHUNK)) });
+        fileRow(fid, f.name + ': ' + Math.floor((Math.min(o + CHUNK, buf.length) / Math.max(1, buf.length)) * 100) + ' %');
+      }
+      send({ t: 'f-end', id: fid, sha256: hex(await crypto.subtle.digest('SHA-256', buf)) });
+    };
+    const onFileMsg = async (x) => {
+      if (x.t === 'f-accept') { fileRow(x.id, 'Sending…'); sendFile(x.id); }
+      else if (x.t === 'f-reject') { const f = outgoing.get(x.id); outgoing.delete(x.id); fileRow(x.id, (f ? f.name : 'File') + ': ' + (x.reason === 'too_large' ? 'too large for the device' : 'declined by the user')); }
+      else if (x.t === 'f-done') { const f = outgoing.get(x.id); outgoing.delete(x.id); fileRow(x.id, (f ? f.name : 'File') + (x.ok ? ': saved in the user\'s Downloads' : ': failed (' + (x.reason || 'error') + ')')); }
+      else if (x.t === 'f-offer') {
+        if (typeof x.name !== 'string' || !(x.size >= 0) || x.size > FILE_MAX) return;
+        incoming.set(x.id, { name: x.name, size: x.size, parts: [], got: 0 });
+        fileRow(x.id, 'The user offers ' + x.name + ' (' + x.size + ' bytes) ', h('button', { type: 'button', onclick: () => { send({ t: 'f-get', id: x.id }); fileRow(x.id, 'Downloading ' + x.name + '…'); } }, 'Download'),
+          h('button', { type: 'button', onclick: () => { send({ t: 'f-reject', id: x.id }); incoming.delete(x.id); fileRow(x.id, x.name + ': declined'); } }, 'Decline'));
+      } else if (x.t === 'f-chunk') {
+        const f = incoming.get(x.id); if (!f || x.seq !== f.parts.length) return;
+        const part = unb64(String(x.data)); f.parts.push(part); f.got += part.length;
+        fileRow(x.id, f.name + ': ' + Math.floor((f.got / Math.max(1, f.size)) * 100) + ' %');
+      } else if (x.t === 'f-end' || x.t === 'f-cancel') {
+        const f = incoming.get(x.id); if (!f) return; incoming.delete(x.id);
+        if (x.t === 'f-cancel') { fileRow(x.id, f.name + ': cancelled on the device'); return; }
+        const blob = new Blob(f.parts);
+        const sha = hex(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()));
+        if (sha !== x.sha256 || f.got !== f.size) { fileRow(x.id, f.name + ': damaged in transfer, discarded'); audit({ kind: 'file', direction: 'to_admin', action: 'failed', name: f.name, size: f.size, reason: 'hash_mismatch' }); return; }
+        const a = h('a', { href: URL.createObjectURL(blob), download: f.name }, 'Save ' + f.name);
+        fileRow(x.id, a); a.click();
+        audit({ kind: 'file', direction: 'to_admin', action: 'completed', name: f.name, size: f.size, sha256: sha });
+      }
+    };
+    const clipIn = h('textarea', { class: 'rs-clip', 'aria-label': 'Clipboard text', maxlength: 65536 });
+    const clipForm = h('div', { class: 'row' },
+      h('button', { type: 'button', onclick: () => { if (clipIn.value) send({ t: 'clip', text: clipIn.value }); } }, 'Send to device clipboard'),
+      h('button', { type: 'button', onclick: () => navigator.clipboard && navigator.clipboard.writeText(clipIn.value).catch(() => {}) }, 'Copy'));
+    const quality = h('select', { 'aria-label': 'Quality', onchange: () => send({ t: 'q', preset: quality.value }) },
+      h('option', { value: 'low' }, 'Low (720p, 10 fps)'), h('option', { value: 'balanced', selected: true }, 'Balanced (1080p, 20 fps)'), h('option', { value: 'high' }, 'High (1440p, 30 fps)'));
+    const monitors = h('select', { 'aria-label': 'Monitor', onchange: () => { if (monitors.value) send({ t: 'mon', id: monitors.value }); } }, h('option', { value: '' }, 'Monitor…'));
+    monitors.addEventListener('focus', () => send({ t: 'mon-list' }));
+    const recLabel = h('span', { class: 'rs-rec', hidden: true }, '● Recording');
+    const recBtn = h('button', { type: 'button', hidden: true, onclick: () => (recorder ? stopRec() : startRec()) }, 'Record');
+    const upload = (blob) => {
+      // Chunks of at most 900 KB (the server's body limit is 1 MiB), in order.
+      for (let o = 0; o < blob.size; o += 900 * 1024) {
+        const part = blob.slice(o, o + 900 * 1024), seq = recSeq++;
+        recQueue = recQueue.then(() => fetch('/admin/api/' + sessionUrl + '/recording?seq=' + seq, { method: 'POST', credentials: 'same-origin', headers: { 'x-ws-admin': '1', 'content-type': 'video/webm' }, body: part })
+          .then((res) => { if (!res.ok) throw new Error('upload ' + res.status); })).catch((e) => { toast('Recording upload failed: ' + e.message); stopRec(); });
+      }
+    };
+    const startRec = () => {
+      if (!recordAllowed || !video.srcObject || typeof MediaRecorder === 'undefined') return;
+      recorder = new MediaRecorder(video.srcObject, { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 1500000 });
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size) upload(e.data); };
+      recorder.start(4000);
+      recLabel.hidden = false; recBtn.textContent = 'Stop recording';
+    };
+    const stopRec = () => { if (recorder && recorder.state !== 'inactive') recorder.stop(); recorder = null; recLabel.hidden = true; recBtn.textContent = 'Record'; };
+    const elevate = h('button', { type: 'button', hidden: true, onclick: async () => {
+      const otp = prompt('Remote control needs your authenticator code again, and the user must allow it.\nAuthenticator code');
+      if (!otp) return;
+      try { await api('POST', sessionUrl + '/elevate', { otp }); toast('The user is asked to allow remote control.'); } catch (e) { toast(e.message); }
+    } }, 'Request control');
     const mode = h('button', { type: 'button', onclick: () => { viewOnly = !viewOnly; mode.textContent = viewOnly ? 'Remote control' : 'View only'; } }, 'View only');
     const stop = async (sayBye) => {
-      live = false; rsViewer.stop = null;
+      live = false; rsViewer.stop = null; stopRec();
       if (sayBye) await api('POST', base, { type: 'bye' }).catch(() => {});
       if (pc) pc.close();
     };
@@ -480,12 +580,19 @@ const views = {
         try {
           const r = await api('GET', base + '?after=' + after);
           granted = r.granted_mode;
+          recordAllowed = !!r.record; recBtn.hidden = !recordAllowed; elevate.hidden = granted !== 'view';
           status.textContent = (pc && pc.connectionState === 'connected' ? 'Connected' : 'Waiting for the device') + ' · ' + (granted === 'control' ? 'user allowed remote control' : 'user allowed view only');
           if (!pc) {
             pc = new RTCPeerConnection({ iceServers: r.ice_servers || [] });
             pc.ontrack = (e) => { video.srcObject = e.streams[0] || new MediaStream([e.track]); };
             pc.onicecandidate = (e) => { if (e.candidate) api('POST', base, { type: 'ice', candidate: e.candidate.toJSON() }).catch(() => {}); };
-            pc.ondatachannel = (e) => { dc = e.channel; dc.onmessage = (m) => { try { const x = JSON.parse(m.data); if (x.t === 'chat') say('User', String(x.text).slice(0, 500)); } catch {} }; };
+            pc.ondatachannel = (e) => { dc = e.channel; dc.onmessage = (m) => {
+              let x; try { x = JSON.parse(m.data); } catch { return; }
+              if (x.t === 'chat') say('User', String(x.text).slice(0, 500));
+              else if (typeof x.t === 'string' && x.t.startsWith('f-')) onFileMsg(x);
+              else if (x.t === 'clip' && typeof x.text === 'string') { clipIn.value = x.text.slice(0, 65536); if (navigator.clipboard && document.hasFocus()) navigator.clipboard.writeText(clipIn.value).catch(() => {}); }
+              else if (x.t === 'mons' && Array.isArray(x.items)) monitors.replaceChildren(h('option', { value: '' }, 'Monitor…'), ...x.items.map((it) => h('option', { value: it.id, selected: it.id === x.current }, it.name)));
+            }; };
           }
           for (const m of r.messages) {
             after = Math.max(after, m.id);
@@ -511,9 +618,13 @@ const views = {
     poll();
     return [h('p', {}, h('a', { href: '#support' }, '← Remote Support')), h('h1', {}, 'Remote session'),
       h('div', { class: 'rs-bar' }, h('button', { type: 'button', onclick: () => video.requestFullscreen && video.requestFullscreen() }, 'Full screen'), mode,
-        h('button', { type: 'button', onclick: () => { stop(true); setTimeout(() => route(), 300); } }, 'Reconnect'), h('button', { type: 'button', class: 'danger', onclick: end }, 'Disconnect'), status),
+        h('button', { type: 'button', onclick: () => { stop(true); setTimeout(() => route(), 300); } }, 'Reconnect'), h('button', { type: 'button', class: 'danger', onclick: end }, 'Disconnect'),
+        quality, monitors, elevate, recBtn, recLabel, status),
       h('div', { class: 'rs-view' }, h('div', { class: 'rs-screen' }, video),
-        h('div', { class: 'rs-chat' }, h('h2', {}, 'Chat'), log, chatForm, h('h2', {}, 'Session information'), stats))];
+        h('div', { class: 'rs-chat' }, h('h2', {}, 'Chat'), log, chatForm,
+          h('h2', {}, 'Files'), h('p', { class: 'muted' }, 'Up to 200 MB. The user accepts each file; it is saved in their Downloads.'), fileInput, fileList,
+          h('h2', {}, 'Clipboard'), h('p', { class: 'muted' }, 'Text only, while the user has clipboard sharing on.'), clipIn, clipForm,
+          h('h2', {}, 'Session information'), stats))];
   },
   async security() {
     const r = await api('GET', 'security');

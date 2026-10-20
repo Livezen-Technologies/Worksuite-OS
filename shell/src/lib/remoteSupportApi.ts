@@ -14,7 +14,14 @@ export interface RsSession {
   requested_at: number
   started_at: number | null
   expires_at: number
+  /** The administrator's viewer may record this session (organization policy; issue #37). */
+  record?: boolean
+  /** Text clipboard sync with the administrator, on only when the user turned it on. */
+  clipboard?: boolean
+  /** The administrator asks for remote control mid-session; the user answers in a dialog. */
+  elevation?: 'pending' | null
 }
+export interface RsFile { id: string; name: string; size: number; direction: 'to_device' | 'to_admin'; state: 'offered' | 'receiving' | 'sending' | 'done' | 'failed'; done: number; saved_as?: string }
 type Reply<T> = { ok: true; value: T } | { ok: false; error: string }
 
 export interface RemoteSupportApi {
@@ -25,6 +32,12 @@ export interface RemoteSupportApi {
   /** Chat with the administrator over the session's data channel (older bridges lack it). */
   chat?(): Promise<{ from: 'admin' | 'user'; text: string; at: number }[]>
   sendChat?(text: string): Promise<boolean>
+  decideElevation?(allow: boolean): Promise<Reply<RsSession | null>>
+  setClipboard?(on: boolean): Promise<Reply<RsSession | null>>
+  files?(): Promise<RsFile[]>
+  acceptFile?(id: string): Promise<boolean>
+  rejectFile?(id: string): Promise<boolean>
+  offerFile?(): Promise<Reply<RsFile>>
 }
 
 declare global {

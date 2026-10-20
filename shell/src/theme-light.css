@@ -10,6 +10,7 @@
 :root[data-theme="light"] .bg-\[\#10244F\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #FBFCFE; }
 :root[data-theme="light"] .bg-\[\#2A3B66\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #FBFCFE; }
 :root[data-theme="light"] .bg-\[\#5E739C\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #FCFCFD; }
+:root[data-theme="light"] .bg-\[\#7A1F10\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #FEFCFB; }
 :root[data-theme="light"] .bg-\[\#8FA3C8\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #FCFCFD; }
 :root[data-theme="light"] .bg-\[rgba\(10\,24\,56\,0\.85\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(239,242,249,0.94); }
 :root[data-theme="light"] .bg-\[rgba\(10\,24\,56\,0\.9\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(239,242,249,0.94); }
