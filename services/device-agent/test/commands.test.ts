@@ -26,7 +26,7 @@ test('valid command accepted once; replay rejected', () => {
 });
 
 test('allow-list is exactly the SRS set; no shell', () => {
-  assert.deepEqual([...ALLOWED_COMMANDS].sort(), ['CollectApprovedDiagnostics', 'InstallApprovedApplication', 'RebootDuringWindow', 'RefreshPolicy', 'RemoteWipe', 'RequestLock', 'ScheduleUpdate']);
+  assert.deepEqual([...ALLOWED_COMMANDS].sort(), ['CollectApprovedDiagnostics', 'InstallApprovedApplication', 'RebootDuringWindow', 'RefreshPolicy', 'RemoteSupportEnd', 'RemoteSupportRequest', 'RemoteWipe', 'RequestLock', 'ScheduleUpdate']);
   assert.equal((validateCommand(make({ command: 'RunShell' as any }), deps()) as any).reason, 'UNKNOWN_COMMAND');
 });
 

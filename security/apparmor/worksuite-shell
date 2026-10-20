@@ -49,6 +49,8 @@ profile worksuite-shell flags=(attach_disconnected, complain) {
   /tmp/** rwk,
   /run/user/@{uid}/** rwk,
   /run/worksuite-device-agent/** r,
+  # Remote support consent (issue #19): the shell answers the consent dialog over this socket.
+  /run/worksuite-device-agent/remote-support.sock rw,
   owner @{HOME}/** rwlk,
 
   # Fixed helpers the shell starts (WSOS-LCH-001); apps launched by gtk-launch get their own confinement.

@@ -9,15 +9,19 @@ import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { Agent } from './agent.ts';
 import { httpApi } from './api.ts';
-import { DEFAULT_PATHS, linuxHost } from './host.ts';
+import { DEFAULT_PATHS, linuxHost, remoteSupportHost } from './host.ts';
+import { consentDispatch, RemoteSupport } from './remoteSupport.ts';
+import { unattendedRemoteSupport } from './agent.ts';
 import { StateFile } from './state.ts';
 import { serveBus } from './dbus.ts';
 import { forwardPackageAudit } from './auditForward.ts';
-import { serveControl } from './control.ts';
+import { serveControl, serveSocket } from './control.ts';
 import { applyPendingEnrollment } from './pendingEnroll.ts';
 
 const KEY_DIR = '/usr/share/worksuite/keys/device-commands';   // from worksuite-archive-keyring
 const SOCKET = join(DEFAULT_PATHS.runtimeDir, 'control.sock');
+const CONSENT_SOCKET = join(DEFAULT_PATHS.runtimeDir, 'remote-support.sock');
+const REMOTE_SUPPORT_POLL_MS = 10_000;
 const CHECK_IN_MS = 15 * 60_000;
 const POLICY_MS = 60 * 60_000;
 const INVENTORY_MS = 24 * 60 * 60_000;
@@ -35,7 +39,16 @@ export function loadKeys(dir: string): (id: string) => KeyObject | undefined {
 async function daemon() {
   const state = new StateFile(join(DEFAULT_PATHS.stateDir, 'state.json'));
   const host = linuxHost();
-  const agent = new Agent({ state, host, api: httpApi(() => state.state), keys: loadKeys(KEY_DIR) });
+  const api = httpApi(() => state.state);
+  const remoteSupport = new RemoteSupport({
+    now: Date.now,
+    ...remoteSupportHost(),
+    unattendedPolicy: () => state.state.enrolled && unattendedRemoteSupport(state.state.policy),
+    report: (id, r) => api.remoteSupportState(id, r),
+    audit: (e, f) => host.audit(e, f),
+  });
+  const agent = new Agent({ state, host, api, keys: loadKeys(KEY_DIR), remoteSupport });
+
 
   // /run is empty after boot: republish what user services and Settings read.
   host.publishCredential(state.state.enrolled ? state.state.credential ?? null : null);
@@ -55,6 +68,10 @@ async function daemon() {
     refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); return agent.status(); },
     status: () => agent.status(),
   });
+
+  // Remote support consent (issue #19): any local user may end a session or drop control; only the seat user, with
+  // the nonce in consent/<uid>, may grant. 0666 so the shell (running as that user) can connect.
+  const consent = serveSocket(CONSENT_SOCKET, (line) => consentDispatch(remoteSupport, line).finally(() => agent.publishStatus()), 0o666);
 
   // lk.worksuite.DeviceAgent1 (WSOS-ARC-002): what Settings and first-run call, each privileged method behind polkit.
   // The root-only socket stays for the admin CLI. No bus (rescue shell) just means no D-Bus API.
@@ -78,6 +95,9 @@ async function daemon() {
     if (r !== 'retry') pending = false;
   });
   every(CHECK_IN_MS, 'check_in', () => agent.checkIn());
+  // Not serialised behind check-ins: a support request should reach the user within seconds. Network errors are quiet.
+  const rsTick = () => { void agent.pollRemoteSupport().catch(() => {}).finally(() => setTimeout(rsTick, REMOTE_SUPPORT_POLL_MS)); };
+  setTimeout(rsTick, REMOTE_SUPPORT_POLL_MS);
   every(POLICY_MS, 'policy', () => agent.refreshPolicy());
   every(5 * 60_000, 'package_audit', async () => {
     if (!state.state.enrolled) return;
@@ -86,7 +106,7 @@ async function daemon() {
   });
   every(INVENTORY_MS, 'inventory', async () => { if (state.state.enrolled) await httpApi(() => state.state).inventory(await host.inventory()); });
 
-  process.on('SIGTERM', () => { server.close(); process.exit(0); });
+  process.on('SIGTERM', () => { server.close(); consent.close(); void remoteSupport.end('user_ended').finally(() => process.exit(0)); });
   host.audit('started', { enrolled: state.state.enrolled });
 }
 

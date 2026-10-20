@@ -27,6 +27,10 @@ export interface DeviceApi {
   vpn(): Promise<VpnConfig>;
   /** Registers (or rotates) the device's WireGuard public key. Only the public key is ever sent. */
   vpnPeer(publicKey: string): Promise<VpnConfig>;
+  /** Pending RemoteSupportRequest/End envelopes for this device (polled every few seconds, issue #19). */
+  remoteSupportCommands(): Promise<{ commands: unknown[] }>;
+  /** Consent and session transitions (active, view-only, ended + reason). */
+  remoteSupportState(sessionId: string, body: unknown): Promise<void>;
 }
 
 export function httpApi(state: () => { server_url?: string; credential?: string }, fetchImpl: typeof fetch = fetch): DeviceApi {
@@ -65,6 +69,8 @@ export function httpApi(state: () => { server_url?: string; credential?: string 
     audit: async (events) => { await call('POST', 'desktop/v1/os/audit', { body: { events }, idem: true }); },
     vpn: () => call('GET', 'desktop/v1/os/vpn'),
     vpnPeer: (public_key) => call('PUT', 'desktop/v1/os/vpn/peer', { body: { public_key }, idem: true }),
+    remoteSupportCommands: () => call('GET', 'desktop/v1/os/remote-support/commands'),
+    remoteSupportState: async (id, body) => { await call('POST', `desktop/v1/os/remote-support/sessions/${encodeURIComponent(id)}/state`, { body, idem: true }); },
   };
 }
 

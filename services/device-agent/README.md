@@ -38,6 +38,29 @@ An unsigned or tampered policy is rejected and the previous one stays in force.
 `RebootDuringWindow`, `CollectApprovedDiagnostics {bundle_profile}`, `RemoteWipe {scope: worksuite_data|full_device, approval_id}`.
 There is no shell, exec or file-read command (WSOS-MDM-006). Anything else is rejected `UNKNOWN_COMMAND`.
 
+`RemoteSupportRequest {session_id, mode: view|control, reason, admin_name, org_name, unattended?}` and
+`RemoteSupportEnd {session_id}` (max TTL 4 h; the session ends at the request's expiry) — see Remote support below.
+
+## Remote support consent (issue #19) — `src/remoteSupport.ts`
+
+Requests are polled every 10 s (`desktop/v1/os/remote-support/commands`), validated like every command, then:
+
+- **Attended (default)**: nothing is shared until the active seat0 user answers the shell's consent dialog
+  (*Allow screen sharing* / *Allow remote control* / *Deny*). `remote-support.json` (0644) describes the request
+  (administrator, organization, access level, reason, session id); the dialog's nonce is in `consent/<uid>`, 0400 and
+  owned by the seat user, and `Decide` on `remote-support.sock` (0666) must present it. The grant never exceeds the
+  request. No answer in 2 minutes = denied; nobody signed in = `no_user`.
+- **While active** the shell shows an indicator. Anyone at the device may `RevokeControl` (drop to view only) or
+  `End` without a nonce; ending stops every portal stream (`worksuite-screencast-stop` in the seat user's session).
+- **Unattended**: only when the server marks the request eligible (org policy `remote_support.unattended` and a
+  corporate-owned device) *and* this device's signed policy says `remote_support.unattended: true`. It is disclosed
+  in `status.json` (`policies.remote_support_unattended`, shown in Settings) and the indicator is still shown.
+- Each transition is audited locally (`remote_support_*`) and reported to
+  `desktop/v1/os/remote-support/sessions/{id}/state`.
+
+Screen and input streaming itself goes through the ScreenCast/RemoteDesktop portals in the user's session, which
+keep their own per-request consent; the agent never captures the screen or injects input.
+
 ## Envelope validation — `src/commands.ts`
 
 Order: shape → allow-list → signature present → Ed25519 signature over canonical JSON (sorted keys, signature

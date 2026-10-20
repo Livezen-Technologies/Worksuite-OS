@@ -133,6 +133,8 @@ function world(opts: { orgVpn?: Partial<VpnConfig> | false; policy?: Omit<Policy
     async ack() {}, async inventory() {}, async diagnostics() {}, async audit() {},
     async vpn() { return vpnFor() as VpnConfig; },
     async vpnPeer(pub) { s.sentBodies.push({ public_key: pub }); s.peerKey = pub; return vpnFor() as VpnConfig; },
+    async remoteSupportCommands() { return { commands: [] }; },
+    async remoteSupportState() {},
   };
   const host: Host = {
     async generateDeviceKey() { return { publicKeyPem: 'PEM', tpmBacked: false }; },

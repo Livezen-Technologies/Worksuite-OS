@@ -52,6 +52,8 @@ function world(opts: { encrypted?: boolean | 'error'; policy?: Policy } = {}) {
     async audit() {},
     async vpn() { throw new ApiError(404, 'NOT_FOUND'); },
     async vpnPeer() { throw new ApiError(404, 'NOT_FOUND'); },
+    async remoteSupportCommands() { const commands = s.queue; s.queue = []; return { commands }; },
+    async remoteSupportState() {},
   };
   const host: Host = {
     async generateDeviceKey() { return { publicKeyPem: 'PEM', tpmBacked: false }; },
