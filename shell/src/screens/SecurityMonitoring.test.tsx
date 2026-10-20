@@ -42,6 +42,30 @@ describe('WorkSuite Security section', () => {
     expect(el.textContent).toContain('managed by Livezen')
     expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Quick scan', 'Full scan'])
   })
+  it('#38: real-time, ransomware and web protection rows, suspended programs, quarantine and recent blocks', async () => {
+    const full: SecurityStatus = {
+      ...sec,
+      realtime: { enabled: true, prevention: true, state: 'active', downloads: true },
+      protected_folders: { folders: ['~/Documents'], mode: 'block', state: 'active' },
+      app_control: { denied: 2 }, web: { dns_blocked: 10, dns_feeds: 1, dns_filter: true, dns_feed_entries: 5 },
+      threat_intel: { feeds: 1, entries: 300, updated: null, errors: [] }, auto_patch: 'immediate',
+      events: [{ id: 'e1', at: Date.now(), kind: 'write_blocked', path: '/home/u/Documents/a.odt', exe: '/tmp/x', signature: null, enforced: true, resolved: null }],
+      suspended: [{ id: 's1', at: Date.now(), path: '/home/u/Documents/b.locked', exe: '/usr/bin/python3', pid: 9 }],
+      quarantine: [{ id: 'q1', at: Date.now(), path: '/home/u/Downloads/eicar.com', signature: 'Eicar' }],
+    }
+    const el = await render(<SecuritySection info={info} initial={full} />)
+    expect(el.textContent).toContain('files with threats are blocked when opened')
+    expect(el.textContent).toContain('New downloads are scanned')
+    expect(el.textContent).toContain('Protecting Documents')
+    expect(el.textContent).toContain('15 dangerous sites blocked')
+    expect(el.textContent).toContain('300 known-bad addresses blocked')
+    expect(el.textContent).toContain('2 programs blocked by your organization')
+    expect(el.textContent).toContain('Change to a protected folder blocked')
+    expect(el.textContent).toContain('python3')
+    expect(el.textContent).toContain('eicar.com')
+    expect(el.textContent).toContain('install as soon as they are available')
+    expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Quick scan', 'Full scan', 'Resume', 'End program', 'Restore', 'Delete'])
+  })
   it('says when status is unavailable', async () => {
     const el = await render(<SecuritySection info={null} initial={null} />)
     expect(el.textContent).toContain('Security status unavailable')

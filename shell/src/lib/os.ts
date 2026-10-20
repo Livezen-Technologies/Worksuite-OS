@@ -48,6 +48,9 @@ export interface WorkSuiteApi {
   securityStatus(): Promise<SecurityStatus | null>
   /** Scan now through the device agent (polkit lk.worksuite.security.scan). */
   securityScan(kind: 'quick' | 'full'): Promise<CloudResult<unknown>>
+  /** #38 quarantine and suspended programs (polkit lk.worksuite.security.quarantine, an administrator):
+   *  RestoreQuarantined(id) (re-scanned first) | DeleteQuarantined(id) | ResolveSuspendedProcess(eventId, resume|terminate). */
+  securityAction(method: 'RestoreQuarantined' | 'DeleteQuarantined' | 'ResolveSuspendedProcess', ...args: string[]): Promise<CloudResult<unknown>>
   onSecurityChanged(cb: (s: SecurityStatus) => void): () => void
   /** Employee monitoring (#22): policy, disclosure state and this user's own recorded days. */
   activityStatus(): Promise<ActivityStatus>
@@ -453,6 +456,16 @@ export interface SecurityStatus {
   history: { id: string; at: number; path: string; signature: string; action: string }[]
   firewall_alerts: { at: number; dst: string; dport: number | null; proto: string }[]
   retention_days: number
+  /** #38 protection layers; absent from older agents. */
+  realtime?: { enabled: boolean; prevention: boolean; state: string; downloads: boolean }
+  protected_folders?: { folders: string[]; mode: 'block' | 'audit'; state: string }
+  app_control?: { denied: number }
+  web?: { dns_blocked: number; dns_feeds: number; dns_filter: boolean; dns_feed_entries: number }
+  threat_intel?: { feeds: number; entries: number; updated: number | null; errors: string[] }
+  auto_patch?: 'immediate' | 'window' | 'off'
+  events?: { id: string; at: number; kind: string; path: string; exe: string | null; signature: string | null; enforced: boolean; resolved: string | null }[]
+  suspended?: { id: string; at: number; path: string; exe: string | null; pid: number | null }[]
+  quarantine?: { id: string; at: number; path: string; signature: string }[]
 }
 /** One day of activity (electron/activity.ts DayReport): aggregates only. */
 export interface ActivityDay { day: string; active_s: number; idle_s: number; locked_s: number; first_active: number | null; last_active: number | null
@@ -575,9 +588,20 @@ const stub: WorkSuiteApi = {
       history: [...(risk ? [{ id: 't2', at: Date.now() - 7_200_000, path: '/home/nimal/Downloads/invoice.pdf.exe', signature: 'Win.Trojan.Agent-1', action: 'detected' }] : []),
         { id: 't1', at: Date.now() - 9 * 86_400_000, path: '/home/nimal/Downloads/eicar.com', signature: 'Win.Test.EICAR_HDB-1', action: 'quarantined' }],
       firewall_alerts: [], retention_days: 90,
+      realtime: { enabled: stubManaged, prevention: true, state: stubManaged ? 'active' : 'inactive', downloads: true },
+      protected_folders: { folders: stubManaged ? ['~/Documents', '~/Pictures'] : [], mode: 'block', state: stubManaged ? 'active' : 'inactive' },
+      app_control: { denied: stubManaged ? 2 : 0 }, web: { dns_blocked: stubManaged ? 12 : 0, dns_feeds: 0, dns_filter: stubManaged, dns_feed_entries: 0 },
+      threat_intel: { feeds: stubManaged ? 1 : 0, entries: stubManaged ? 4210 : 0, updated: Date.now() - 3_600_000, errors: [] }, auto_patch: 'window',
+      events: risk ? [{ id: 'e1', at: Date.now() - 600_000, kind: 'write_blocked', path: '/home/nimal/Documents/budget.ods', exe: '/home/nimal/.cache/x/run', signature: null, enforced: true, resolved: null }] : [],
+      suspended: stubSuspended, quarantine: stubQuarantine,
     }
   },
   async securityScan() { return { ok: true, value: true } },
+  async securityAction(method, ...args) {
+    if (method === 'RestoreQuarantined' && PV.get('security') === 'threat') return { ok: false, error: 'still_detected' }
+    stubQuarantine = stubQuarantine.filter((q) => q.id !== args[0]); stubSuspended = []
+    return { ok: true, value: true }
+  },
   onSecurityChanged() { return () => {} },
   async activityStatus() { return stubActivity() },
   async activityAck() { stubActivityAck = true; return stubActivity() },
@@ -1004,6 +1028,10 @@ function stubActivity(): ActivityStatus {
     days: on ? [{ day, active_s: 13_320, idle_s: 1_800, locked_s: 2_700, first_active: Date.now() - 6 * 3_600_000, last_active: Date.now(), events: [{ at: Date.now() - 6 * 3_600_000, type: 'login' }],
       apps: [{ app_id: 'org.worksuite.Office', name: 'WorkSuite Office', active_s: 7_900, switches: 31 }, { app_id: 'org.mozilla.firefox', name: 'Firefox', active_s: 3_600, switches: 24 }, { app_id: 'foot', name: 'Terminal', active_s: 1_820, switches: 9 }] }] : [] }
 }
+// Preview (#38): one quarantined file and, with ?security=threat, one suspended program.
+let stubQuarantine = [{ id: '0f0e0d0c-0b0a-4908-8706-050403020100', at: Date.now() - 9 * 86_400_000, path: '/home/nimal/Downloads/eicar.com', signature: 'Win.Test.EICAR_HDB-1' }]
+let stubSuspended = typeof location !== 'undefined' && new URLSearchParams(location.search).get('security') === 'threat'
+  ? [{ id: '1f0e0d0c-0b0a-4908-8706-050403020100', at: Date.now() - 300_000, path: '/home/nimal/Documents/report.odt.locked', exe: '/usr/bin/python3', pid: 4242 }] : []
 let stubManaged = typeof location !== 'undefined' && new URLSearchParams(location.search).get('managed') === '1'
 
 /** Broker error codes → text for the user. */

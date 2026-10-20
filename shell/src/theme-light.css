@@ -80,6 +80,7 @@
 :root[data-theme="light"] .border-\[rgba\(245\,158\,11\,0\.45\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,103,36,0.5); }
 :root[data-theme="light"] .border-\[rgba\(255\,138\,122\,0\.3\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,49,36,0.48); }
 :root[data-theme="light"] .border-\[rgba\(255\,138\,122\,0\.35\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,49,36,0.5); }
+:root[data-theme="light"] .border-\[rgba\(255\,138\,122\,0\.4\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,49,36,0.5); }
 :root[data-theme="light"] .border-\[rgba\(255\,138\,122\,0\.55\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,49,36,0.5); }
 :root[data-theme="light"] .border-\[rgba\(255\,159\,90\,0\.25\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,80,36,0.4); }
 :root[data-theme="light"] .border-\[rgba\(255\,159\,90\,0\.3\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(143,80,36,0.48); }

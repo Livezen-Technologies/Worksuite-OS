@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   enrollDevice: (serverUrl: string, code: string) => ipcRenderer.invoke('ws:enrollDevice', String(serverUrl), String(code)),
   securityStatus: () => ipcRenderer.invoke('ws:securityStatus'),
   securityScan: (kind: string) => ipcRenderer.invoke('ws:securityScan', kind === 'full' ? 'full' : 'quick'),
+  securityAction: (method: string, ...args: string[]) => ipcRenderer.invoke('ws:securityAction', String(method), ...args.map(String)),
   onSecurityChanged: (cb: (s: unknown) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on('ws:securityChanged', listener)
