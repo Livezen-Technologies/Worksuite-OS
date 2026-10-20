@@ -1,0 +1,28 @@
+[Unit]
+# Employee activity monitoring (#39): device startup and shutdown times, recorded only when the signed policy has
+# activity_monitoring on (src/power.ts); the device agent sends them with its next check-in.
+Description=WorkSuite device startup and shutdown record
+Documentation=file:///usr/share/doc/worksuite-device-agent/README.md
+DefaultDependencies=no
+# Started once local file systems are up; stopped (ExecStop) before they are unmounted at shutdown.
+After=local-fs.target
+Before=shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/device-agent/src/main.ts power-event startup
+ExecStop=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/device-agent/src/main.ts power-event shutdown
+StateDirectory=worksuite-device-agent
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/worksuite-device-agent
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

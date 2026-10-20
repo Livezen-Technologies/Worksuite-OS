@@ -62,6 +62,27 @@ describe('Employee monitoring', () => {
     expect(el.textContent).toContain('WorkSuite Office')
     expect(el.textContent).toContain('2026-10-20')
   })
+  it('Settings (#39): live state, startup/shutdown, attendance and, only when the policy allows, website domains', async () => {
+    const day0 = act0.days[0]
+    const base = { ...act0, live: { state: 'idle' as const, app_id: day0.apps[0]?.app_id ?? null, at: Date.now() - 30_000 },
+      days: [{ ...day0, domains: [{ domain: 'mail.worksuite.lk', active_s: 600 }] }] }
+    const el = await render(<MonitoringSection initial={{ ...base, web_domains: false }} />)
+    expect(el.textContent).toContain('Your current state once a minute')
+    expect(el.textContent).toContain('When this computer starts up and shuts down')
+    expect(el.textContent).toContain('daily attendance summary')
+    expect(el.querySelector('[data-testid="mon-live"]')?.textContent).toContain('Idle')
+    expect(el.textContent).toContain('First active')
+    expect(el.textContent).not.toContain('mail.worksuite.lk')
+    expect(el.textContent).not.toContain('Which websites you use')
+    act(() => root?.unmount()); host?.remove()
+    const el2 = await render(<MonitoringSection initial={{ ...base, web_domains: true }} />)
+    expect(el2.textContent).toContain('Which websites you use in WorkSuite web apps')
+    expect(el2.textContent).toContain('mail.worksuite.lk')
+  })
+  it('disclosure lists website domains only when the policy turns them on', async () => {
+    await render(<MonitoringIndicator onOpen={() => {}} initial={{ ...act0, web_domains: true }} />)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('the domain name only')
+  })
   it('Settings: off says so', async () => {
     const el = await render(<MonitoringSection initial={{ ...act0, enabled: false, days: [] }} />)
     expect(el.textContent).toContain('does not monitor activity')

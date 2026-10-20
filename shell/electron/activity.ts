@@ -7,6 +7,11 @@
 // no web addresses, no file names, no camera or microphone. The server refuses any other field (services/server
 // src/monitoring.ts).
 //
+// #39 adds, under the same policy: a current-state heartbeat every 60 s (active/idle/locked and the focused app id,
+// for the console's live view); device startup/shutdown (recorded by the device agent, not here); and, only when the
+// policy also turns activity_web_domains on, time per website *domain* in WorkSuite web-app windows (the host name,
+// never the URL, path or page title). Each new data type is disclosed again and listed in Settings.
+//
 // Event-driven: the focused app comes from the Wayland bridge's window list, idle from logind's IdleHint (swayidle
 // idlehint), lock from logind Lock/Unlock. No polling. Kept in ~/.local/state/worksuite/activity.json (0600) for the
 // retention period, sent to the organization every 15 minutes and again after the device comes back online.
@@ -14,27 +19,48 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
-export const DISCLOSURE_VERSION = 1
+/** Disclosure versions: 1 = #22 data; 2 = + live state and device startup/shutdown (#39); 3 = + website domains. */
+export const DISCLOSURE_VERSION = 2
+export const DISCLOSURE_VERSION_WEB = 3
+export const disclosureVersion = (p: Pick<ActivityPolicy, 'web_domains'>) => p.web_domains ? DISCLOSURE_VERSION_WEB : DISCLOSURE_VERSION
 const DAY = 86_400_000
 
-export interface ActivityPolicy { enabled: boolean; org_name: string | null; retention_days: number; idle_threshold_s: number }
+export interface ActivityPolicy { enabled: boolean; org_name: string | null; retention_days: number; idle_threshold_s: number; web_domains: boolean }
 
 /** From the device agent's status.json and the effective policy.json (both 0644). Unmanaged → off. */
 export function activityPolicy(read: (p: string) => string | null, statusPath = '/run/worksuite-device-agent/status.json', policyPath = '/run/worksuite-device-agent/policy.json'): ActivityPolicy {
-  const off: ActivityPolicy = { enabled: false, org_name: null, retention_days: 90, idle_threshold_s: 300 }
+  const off: ActivityPolicy = { enabled: false, org_name: null, retention_days: 90, idle_threshold_s: 300, web_domains: false }
   try {
     const st = JSON.parse(read(statusPath) ?? 'null')
     if (!st?.managed) return off
     const p = JSON.parse(read(policyPath) ?? 'null')
     if (!p || p.activity_monitoring !== true) return { ...off, org_name: st.org_name ?? null }
     const int = (v: unknown, lo: number, hi: number, d: number) => Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi ? v as number : d
-    return { enabled: true, org_name: st.org_name ?? null, retention_days: int(p.activity_retention_days, 1, 730, 90), idle_threshold_s: int(p.activity_idle_threshold_s, 60, 3600, 300) }
+    return { enabled: true, org_name: st.org_name ?? null, retention_days: int(p.activity_retention_days, 1, 730, 90), idle_threshold_s: int(p.activity_idle_threshold_s, 60, 3600, 300), web_domains: p.activity_web_domains === true }
   } catch { return off }
 }
 
 export type EventType = 'login' | 'logout' | 'lock' | 'unlock' | 'startup' | 'shutdown' | 'idle' | 'active'
 export interface AppTime { app_id: string; name: string; active_s: number; switches: number }
-export interface DayReport { day: string; active_s: number; idle_s: number; locked_s: number; first_active: number | null; last_active: number | null; apps: AppTime[]; events: { at: number; type: EventType }[] }
+export interface DomainTime { domain: string; active_s: number }
+export interface DayReport { day: string; active_s: number; idle_s: number; locked_s: number; first_active: number | null; last_active: number | null; apps: AppTime[]; events: { at: number; type: EventType }[]; domains?: DomainTime[] }
+
+/** Same rule as the server (services/server/src/monitoring.ts DOMAIN_RE): a lowercase host name and nothing else. */
+const DOMAIN_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/
+
+/** A page address (or host) → its host name only; null for anything that is not a public domain (IP, localhost, file:). */
+export function toDomain(input: string | null | undefined): string | null {
+  if (!input) return null
+  let host: string
+  try { host = /^[a-z][a-z0-9+.-]*:/i.test(input) ? new URL(input).hostname : new URL('https://' + input.trim()).hostname } catch { return null }
+  host = host.toLowerCase().replace(/\.$/, '')
+  return DOMAIN_RE.test(host) ? host : null
+}
+
+/** Where a WorkSuite web-app process puts the host name it shows ($XDG_RUNTIME_DIR, the user's own 0700 directory). */
+export function webDomainFile(runtimeDir: string, appId: string) { return path.join(runtimeDir, 'worksuite/web-domain', appId.replace(/[^A-Za-z0-9._-]/g, '_')) }
+
+export type LiveState = { state: 'active' | 'idle' | 'locked'; app_id: string | null }
 export interface Store { version: 1; disclosure_ack: number; days: Record<string, DayReport>; sent: Record<string, number>; changed: Record<string, number> }
 
 export const emptyStore = (): Store => ({ version: 1, disclosure_ack: 0, days: {}, sent: {}, changed: {} })
@@ -56,6 +82,7 @@ export class ActivityTracker {
   private state: State = 'active'
   private since: number
   private app: { id: string; name: string } | null = null
+  private domain: string | null = null
   private idleAt: number | null = null
   readonly store: Store
   private o: { now: () => number; idleThresholdS: number; idleHintDelayS?: number }
@@ -69,7 +96,7 @@ export class ActivityTracker {
   }
 
   /** Adds [from, to) in `state` to the day buckets, split at midnight. */
-  private add(state: State, from: number, to: number, app: { id: string; name: string } | null) {
+  private add(state: State, from: number, to: number, app: { id: string; name: string } | null, domain: string | null = null) {
     let a = from
     while (a < to) {
       const b = Math.min(to, nextMidnight(a))
@@ -84,6 +111,11 @@ export class ActivityTracker {
             const x = r.apps.find((p) => p.app_id === app.id) ?? (r.apps.push({ app_id: app.id, name: app.name, active_s: 0, switches: 0 }), r.apps[r.apps.length - 1])
             x.active_s += s
           }
+          if (domain) {
+            r.domains ??= []
+            const x = r.domains.find((p) => p.domain === domain) ?? (r.domains.push({ domain, active_s: 0 }), r.domains[r.domains.length - 1])
+            x.active_s += s
+          }
         } else if (state === 'idle') r.idle_s += s
         else r.locked_s += s
         this.store.changed[r.day] = this.o.now()
@@ -93,8 +125,25 @@ export class ActivityTracker {
   }
 
   private close(now: number) {
-    this.add(this.state, this.since, now, this.app)
+    this.add(this.state, this.since, now, this.app, this.domain)
     this.since = now
+  }
+
+  /** Current state for the 60 s live heartbeat. */
+  current(): LiveState { return { state: this.state, app_id: this.state === 'locked' ? null : this.app?.id ?? null } }
+
+  /** The domain shown in the focused WorkSuite web-app window (only called when the policy allows website domains). */
+  setDomain(domain: string | null) {
+    const d = toDomain(domain)
+    if (d === this.domain) return
+    this.close(this.o.now())
+    this.domain = d
+  }
+
+  /** Website tracking turned off: what was recorded of it is deleted. */
+  dropDomains() {
+    this.close(this.o.now()); this.domain = null
+    for (const r of Object.values(this.store.days)) if (r.domains) { delete r.domains; this.store.changed[r.day] = this.o.now() }
   }
 
   /** The activated window's app changed (null: no window focused, e.g. the desktop). */
@@ -102,6 +151,7 @@ export class ActivityTracker {
     if (app?.id === this.app?.id) return
     const now = this.o.now()
     this.close(now)
+    this.domain = null
     this.app = app && /^[A-Za-z0-9._@+-]{1,128}$/.test(app.id) ? { id: app.id, name: app.name.slice(0, 80) } : null
     if (this.app && this.state === 'active') {
       const r = this.day(localDay(now))
@@ -124,7 +174,7 @@ export class ActivityTracker {
       const start = this.idleAt ?? this.since
       const long = now - start >= this.o.idleThresholdS * 1000
       // Short pause: counted as active time in the app that had the focus.
-      this.add(long ? 'idle' : 'active', start, now, this.app)
+      this.add(long ? 'idle' : 'active', start, now, this.app, this.domain)
       if (long) { this.event('idle', start); this.event('active', now) }
       this.state = 'active'; this.since = now; this.idleAt = null
     }
@@ -195,7 +245,8 @@ export async function sendActivity(reports: DayReport[], s: { token: string; api
     const r = await fetchFn(new URL('desktop/v1/activity', s.apiBase).toString(), {
       method: 'POST',
       headers: { authorization: `Bearer ${s.token}`, 'x-ws-device': device, 'content-type': 'application/json' },
-      body: JSON.stringify({ reports: reports.map(({ day, active_s, idle_s, locked_s, first_active, last_active, apps, events }) => ({ day, active_s, idle_s, locked_s, first_active, last_active, apps, events })) }),
+      body: JSON.stringify({ reports: reports.map(({ day, active_s, idle_s, locked_s, first_active, last_active, apps, events, domains }) =>
+        ({ day, active_s, idle_s, locked_s, first_active, last_active, apps, events, ...(domains?.length ? { domains } : {}) })) }),
     })
     if (r.status === 401) return { ok: false, error: 'auth_required' }
     if (r.status === 403) return { ok: false, error: 'disabled' }
@@ -203,13 +254,26 @@ export async function sendActivity(reports: DayReport[], s: { token: string; api
   } catch { return { ok: false, error: 'offline' } }
 }
 
+/** POST desktop/v1/activity/live: { state, app_id } and nothing else. */
+export async function sendLive(live: LiveState, s: { token: string; apiBase: string } | null, device: string | null, fetchFn: SendFetch): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!s) return { ok: false, error: 'not_signed_in' }
+  if (!device) return { ok: false, error: 'not_enrolled' }
+  try {
+    const r = await fetchFn(new URL('desktop/v1/activity/live', s.apiBase).toString(), {
+      method: 'POST', headers: { authorization: `Bearer ${s.token}`, 'x-ws-device': device, 'content-type': 'application/json' },
+      body: JSON.stringify({ state: live.state, app_id: live.app_id }),
+    })
+    return r.ok ? { ok: true } : { ok: false, error: r.status === 403 ? 'disabled' : r.status === 401 ? 'auth_required' : 'server_error' }
+  } catch { return { ok: false, error: 'offline' } }
+}
+
 /** What Settings and the indicator show: the policy, the disclosure state and the employee's own recorded days. */
-export function activityView(p: ActivityPolicy, s: Store, lastSent: number | null) {
+export function activityView(p: ActivityPolicy, s: Store, lastSent: number | null, live: (LiveState & { at: number }) | null = null) {
   return {
-    enabled: p.enabled, org_name: p.org_name, retention_days: p.retention_days, idle_threshold_s: p.idle_threshold_s,
-    disclosure_needed: p.enabled && s.disclosure_ack < DISCLOSURE_VERSION, last_sent: lastSent,
+    enabled: p.enabled, org_name: p.org_name, retention_days: p.retention_days, idle_threshold_s: p.idle_threshold_s, web_domains: p.enabled && p.web_domains,
+    disclosure_needed: p.enabled && s.disclosure_ack < disclosureVersion(p), last_sent: lastSent, live: p.enabled ? live : null,
     days: Object.values(s.days).sort((a, b) => b.day.localeCompare(a.day)).slice(0, 14)
-      .map((d) => ({ ...d, apps: [...d.apps].sort((a, b) => b.active_s - a.active_s) })),
+      .map((d) => ({ ...d, apps: [...d.apps].sort((a, b) => b.active_s - a.active_s), domains: [...(d.domains ?? [])].sort((a, b) => b.active_s - a.active_s) })),
   }
 }
 export type ActivityView = ReturnType<typeof activityView>

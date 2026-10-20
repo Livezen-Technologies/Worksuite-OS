@@ -12,6 +12,8 @@ export class ApiError extends Error {
 export interface Heartbeat {
   os_version: string; shell_version: string; kernel_version: string; policy_version: string;
   update_status?: string; observed?: Record<string, unknown>;
+  /** #39: device startup/shutdown while activity monitoring is on. */
+  power_events?: { at: number; type: 'startup' | 'shutdown' }[];
 }
 
 export interface DeviceApi {

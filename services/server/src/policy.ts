@@ -84,6 +84,9 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   activity_monitoring: (v) => typeof v === 'boolean',
   activity_retention_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 730,
   activity_idle_threshold_s: (v) => Number.isInteger(v) && (v as number) >= 60 && (v as number) <= 3600,
+  // #39 website tracking: off unless true, and only with activity_monitoring. Domain names from WorkSuite web-app
+  // windows only (never full URLs or page titles); disclosed to the employee when on.
+  activity_web_domains: (v) => typeof v === 'boolean',
   // Software Management (Admin Center): what users may do with software on their own. 'any' = any package from the
   // approved sources, 'approved' = only the allowlist, 'request' = the allowlist plus asking an administrator for other
   // catalog apps, 'block' = nothing (administrators still deploy remotely). Uninstall/update false = only the organization.

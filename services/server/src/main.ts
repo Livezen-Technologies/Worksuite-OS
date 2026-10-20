@@ -30,6 +30,7 @@ import * as identity from './identity.ts';
 import { setValidatedPolicy } from './policy.ts';
 import { apiRoutes, purgeTombstones } from './api.ts';
 import { purgeActivity } from './monitoring.ts';
+import { runHrWebhooks, type WebhookFetch } from './attendance.ts';
 import { openDb } from './db.ts';
 import { HttpError, makeCtx, Router, sendError } from './http.ts';
 import { log } from './log.ts';
@@ -37,7 +38,7 @@ import { oauthRoutes } from './oauth.ts';
 import { consoleRoutes } from './console.ts';
 
 /** webUrl: base the WorkSuite web apps live under (<webUrl>/<app>/); defaults to <publicUrl>/apps/. */
-export interface ServerOptions { publicUrl: string; clientIds?: string[]; updateHost?: string; aptDir?: string; webUrl?: string }
+export interface ServerOptions { publicUrl: string; clientIds?: string[]; updateHost?: string; aptDir?: string; webUrl?: string; webhookFetch?: WebhookFetch }
 
 const APT_TYPES: Record<string, string> = { '.deb': 'application/vnd.debian.binary-package', '.gz': 'application/gzip', '.xz': 'application/x-xz', '.gpg': 'application/pgp-signature' };
 
@@ -62,7 +63,7 @@ export function createHandler(db: DatabaseSync, o: ServerOptions) {
   oauthRoutes(r, db, { issuer, clientIds: o.clientIds ?? ['worksuite-os'] });
   const webUrl = o.webUrl ? o.webUrl.replace(/\/?$/, '/') : new URL('apps/', publicUrl).toString();
   apiRoutes(r, db, { publicUrl, issuer, updateHost: o.updateHost ?? new URL(publicUrl).host, webUrl });
-  consoleRoutes(r, db, { secureCookie: publicUrl.startsWith('https:'), publicUrl });
+  consoleRoutes(r, db, { secureCookie: publicUrl.startsWith('https:'), publicUrl, webhookFetch: o.webhookFetch });
   return async (req: IncomingMessage, res: ServerResponse) => {
     const ctx = makeCtx(req, res, publicUrl);
     const started = process.hrtime.bigint();
@@ -120,7 +121,10 @@ async function main(argv: string[]) {
       const [host, port] = [v.listen!.slice(0, v.listen!.lastIndexOf(':')), Number(v.listen!.slice(v.listen!.lastIndexOf(':') + 1))];
       purgeTombstones(db);
       purgeActivity(db);
-      setInterval(() => { purgeTombstones(db); purgeActivity(db); }, 3_600_000).unref();
+      // #39: yesterday's attendance to the organization's HR webhook, once it is over.
+      const hr = () => void runHrWebhooks(db, (url, init) => fetch(url, init)).catch((e) => log('error', 'hr_webhook_failed', { error: String(e) }));
+      hr();
+      setInterval(() => { purgeTombstones(db); purgeActivity(db); hr(); }, 3_600_000).unref();
       server.listen(port, host, () => log('info', 'listening', { listen: v.listen, public_url: v['public-url'] }));
       process.on('SIGTERM', () => server.close(() => process.exit(0)));
       return;

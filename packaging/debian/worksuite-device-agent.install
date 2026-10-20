@@ -7,3 +7,4 @@ services/device-agent/src usr/lib/worksuite/device-agent/
 services/device-agent/package.json usr/lib/worksuite/device-agent/
 services/device-agent/bin/worksuite-device-agent usr/bin/
 security/apparmor/worksuite-device-agent etc/apparmor.d/
+services/device-agent/systemd/worksuite-power-events.service usr/lib/systemd/system/

@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { SCHEMA as REMOTE_SUPPORT_SCHEMA } from './remoteSupport.ts';
 import { migrateMonitoring } from './monitoring.ts';
+import { migrateAttendance } from './attendance.ts';
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -124,6 +125,7 @@ export function openDb(path: string): DatabaseSync {
   if (!devCols.includes('last_ip')) db.exec('ALTER TABLE devices ADD COLUMN last_ip TEXT');
   if (!devCols.includes('assigned_user')) db.exec('ALTER TABLE devices ADD COLUMN assigned_user TEXT');
   migrateMonitoring(db);
+  migrateAttendance(db);
   db.exec('CREATE TABLE IF NOT EXISTS release_log (id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL, at INTEGER NOT NULL)');
   // Software Management (src/software.ts): installation requests, who signed in where, departments.
   db.exec(`CREATE TABLE IF NOT EXISTS software_requests (

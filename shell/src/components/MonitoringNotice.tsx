@@ -1,7 +1,7 @@
 // Employee monitoring (#22) in the taskbar: a persistent indicator while the organization's policy has monitoring on,
 // and the first-run disclosure (once per disclosure version) telling the employee what is and is not collected.
 import { Dialog, Svg, btnGhost, btnPrimary } from './Dk'
-import { EYE, useActivity } from '../screens/settings/Monitoring'
+import { CollectedList, EYE, useActivity } from '../screens/settings/Monitoring'
 import { os, type ActivityStatus } from '../lib/os'
 import { formatNumber, t } from '../i18n'
 
@@ -20,7 +20,7 @@ export function MonitoringIndicator({ onOpen, initial }: { onOpen: () => void; i
           <h2 id={titleId} className="m-0 flex items-center gap-2 text-lg font-bold text-[#E8EEFA]"><Svg d={EYE} size={20} stroke="#FFD08A" />{t('mon.disclosureTitle', { org })}</h2>
           <p className="m-0">{t('mon.disclosureBody')}</p>
           <div><div className="font-semibold text-[#E8EEFA]">{t('mon.collected')}</div>
-            <ul className="m-0 pl-4"><li>{t('mon.c.time')}</li><li>{t('mon.c.apps')}</li><li>{t('mon.c.events')}</li></ul></div>
+            <CollectedList s={s} /></div>
           <div><div className="font-semibold text-[#E8EEFA]">{t('mon.notCollected')}</div><p className="m-0">{t('mon.n.list')}</p></div>
           <p className="m-0 text-[#8FA3C8]">{t('mon.retention', { days: formatNumber(s.retention_days), minutes: formatNumber(Math.round(s.idle_threshold_s / 60)) })} {t('mon.disclosureSee')}</p>
         </div>
