@@ -324,6 +324,10 @@ export class Agent {
       }
       case 'IsolateEndpoint': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.isolate(c.args.hours); return true;
       case 'ReleaseIsolation': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.release(); return true;
+      // #38: the administrator decides from Admin Center › Security Center; force restores a file still detected.
+      case 'RestoreQuarantined': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.restore(String(c.args.quarantine_id), c.args.force === true, 'remote'); return true;
+      case 'DeleteQuarantined': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.deleteQuarantined(String(c.args.quarantine_id), 'remote'); return true;
+      case 'ResolveSuspendedProcess': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.resolveSuspended(String(c.args.event_id), c.args.action === 'resume' ? 'resume' : 'terminate', 'remote'); return true;
     }
   }
 

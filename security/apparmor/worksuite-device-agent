@@ -98,6 +98,17 @@ profile worksuite-device-agent flags=(attach_disconnected) {
   /etc/worksuite/freshclam.env{,.tmp} rw,
   /usr/bin/clamscan rix,
   /var/lib/clamav/** r,
+  # Protection layers (#38, src/protection.ts): clamonacc and worksuite-guard configuration (their units run them),
+  # the DNS blocklist for NetworkManager's dnsmasq, Downloads scans through clamd, quarantine restore (re-scan, then
+  # back to the owner's folder: /home/** above), and SIGCONT/SIGKILL to a process the guard suspended.
+  /etc/worksuite/{clamd-onaccess.conf,guard.conf}{,.tmp} rw,
+  /etc/NetworkManager/dnsmasq.d/ r,
+  /etc/NetworkManager/dnsmasq.d/worksuite-blocklist.conf{,.tmp} rw,
+  /etc/NetworkManager/conf.d/ r,
+  /etc/NetworkManager/conf.d/50-worksuite-dns.conf{,.tmp} rw,
+  /usr/bin/clamdscan rix,
+  /run/clamav/clamd.ctl rw,
+  signal (send) set=(stop, cont, kill),
 
   deny /root/** rwx,
   deny @{PROC}/sys/kernel/** w,

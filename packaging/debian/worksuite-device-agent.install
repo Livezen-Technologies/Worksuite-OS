@@ -3,6 +3,8 @@ services/device-agent/dbus/lk.worksuite.DeviceAgent1.conf usr/share/dbus-1/syste
 services/device-agent/node_modules usr/lib/worksuite/device-agent/
 services/device-agent/polkit/lk.worksuite.device.policy usr/share/polkit-1/actions/
 services/device-agent/systemd/worksuite-device-agent.service usr/lib/systemd/system/
+services/device-agent/systemd/worksuite-guard.service usr/lib/systemd/system/
+services/device-agent/systemd/worksuite-onaccess.service usr/lib/systemd/system/
 services/device-agent/src usr/lib/worksuite/device-agent/
 services/device-agent/package.json usr/lib/worksuite/device-agent/
 services/device-agent/bin/worksuite-device-agent usr/bin/

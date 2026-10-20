@@ -25,6 +25,19 @@
     <method name="StartSecurityScan">
       <arg name="kind" type="s" direction="in"/>
     </method>
+    <!-- polkit: lk.worksuite.security.quarantine (#38). id: a quarantine id from security.json "quarantine". The
+         file is re-scanned and put back at its original path; still detected → error STILL_DETECTED. -->
+    <method name="RestoreQuarantined">
+      <arg name="quarantine_id" type="s" direction="in"/>
+    </method>
+    <method name="DeleteQuarantined">
+      <arg name="quarantine_id" type="s" direction="in"/>
+    </method>
+    <!-- A process suspended for a burst of renames/deletions in protected folders: action resume | terminate. -->
+    <method name="ResolveSuspendedProcess">
+      <arg name="event_id" type="s" direction="in"/>
+      <arg name="action" type="s" direction="in"/>
+    </method>
     <property name="Enrolled" type="b" access="read"/>
     <property name="DeviceId" type="s" access="read"/>
     <property name="LastCheckIn" type="t" access="read"/>

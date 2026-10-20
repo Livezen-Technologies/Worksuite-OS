@@ -20,6 +20,10 @@ export const ALLOWED_COMMANDS = [
   'StartMalwareScan',
   'IsolateEndpoint',
   'ReleaseIsolation',
+  // Quarantine management and suspended processes (#38): the agent re-scans before restoring.
+  'RestoreQuarantined',
+  'DeleteQuarantined',
+  'ResolveSuspendedProcess',
 ] as const;
 export type CommandName = (typeof ALLOWED_COMMANDS)[number];
 
@@ -40,6 +44,9 @@ const MAX_TTL: Record<CommandName, number> = {
   StartMalwareScan: 7 * DAY,
   IsolateEndpoint: 1 * DAY,
   ReleaseIsolation: 7 * DAY,
+  RestoreQuarantined: 7 * DAY,
+  DeleteQuarantined: 7 * DAY,
+  ResolveSuspendedProcess: 2 * DAY,
 };
 const CLOCK_SKEW_MS = 5 * 60_000;
 
@@ -96,6 +103,9 @@ const ARG_CHECKS: Partial<Record<CommandName, (a: Record<string, unknown>) => bo
   RemoteSupportEnd: (a) => typeof a.session_id === 'string' && UUID.test(a.session_id),
   StartMalwareScan: (a) => a.kind === 'quick' || a.kind === 'full',
   IsolateEndpoint: (a) => Number.isInteger(a.hours) && (a.hours as number) >= 1 && (a.hours as number) <= 72,
+  RestoreQuarantined: (a) => typeof a.quarantine_id === 'string' && UUID.test(a.quarantine_id) && (a.force === undefined || typeof a.force === 'boolean'),
+  DeleteQuarantined: (a) => typeof a.quarantine_id === 'string' && UUID.test(a.quarantine_id),
+  ResolveSuspendedProcess: (a) => typeof a.event_id === 'string' && UUID.test(a.event_id) && (a.action === 'resume' || a.action === 'terminate'),
   CollectApprovedDiagnostics: (a) => (DIAGNOSTIC_PROFILES as readonly unknown[]).includes(a.bundle_profile),
 };
 

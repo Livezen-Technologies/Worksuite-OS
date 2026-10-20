@@ -1,0 +1,22 @@
+[Unit]
+Description=WorkSuite Security real-time protection (ClamAV on-access scanning)
+Documentation=file:///usr/share/doc/worksuite-device-agent/README.md
+# The device agent writes the configuration when the policy turns real-time protection on
+# (src/protection.ts renderOnAccessConf: include paths, exclusions, prevention) and starts or stops this unit.
+ConditionPathExists=/etc/worksuite/clamd-onaccess.conf
+Requires=clamav-daemon.service
+After=clamav-daemon.service
+
+[Service]
+Type=simple
+# clamonacc watches with fanotify and hands each file to clamd by descriptor; with OnAccessPrevention the open of an
+# infected file is refused. "<path>: <signature> FOUND" lines go to the journal, which the device agent follows to
+# quarantine the file and notify the user. --wait: clamd may still be loading signatures at boot.
+ExecStart=/usr/sbin/clamonacc --foreground --fdpass --wait --config-file=/etc/worksuite/clamd-onaccess.conf
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target

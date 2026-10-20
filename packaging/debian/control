@@ -104,8 +104,8 @@ Description: WorkSuite system package service (D-Bus + polkit)
 
 Package: worksuite-device-agent
 Architecture: amd64 arm64
-Depends: worksuite-shell (= ${binary:Version}), worksuite-archive-keyring, cryptsetup, dbus, systemd, ${misc:Depends}
-Recommends: tpm2-tools, network-manager, wireguard-tools, nftables, network-manager-openvpn, clamav, clamav-freshclam
+Depends: worksuite-shell (= ${binary:Version}), worksuite-archive-keyring, cryptsetup, dbus, systemd, ${shlibs:Depends}, ${misc:Depends}
+Recommends: tpm2-tools, network-manager, wireguard-tools, nftables, network-manager-openvpn, clamav, clamav-freshclam, clamav-daemon, clamdscan, dnsmasq-base
 Description: WorkSuite device agent (enrollment, policy, signed remote commands)
  Root agent for organization-managed devices: enrollment, signed policy,
  heartbeat, signed remote commands and remote wipe.

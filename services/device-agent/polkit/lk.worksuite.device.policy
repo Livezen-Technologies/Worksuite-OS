@@ -27,4 +27,15 @@
     <!-- lk.worksuite.DeviceAgent1.StartSecurityScan (Settings › Privacy & security › WorkSuite Security). A scan
          only reads files and quarantines detections under the organization's policy; it changes no setting. -->
   </action>
+  <action id="lk.worksuite.security.quarantine">
+    <description>Restore or delete quarantined files, and resume or end suspended programs</description>
+    <message>Authentication is required to change what WorkSuite Security has quarantined or suspended</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <!-- lk.worksuite.DeviceAgent1.RestoreQuarantined / DeleteQuarantined / ResolveSuspendedProcess (#38). Restoring
+         re-scans the file first and refuses one that is still detected. -->
+  </action>
 </policyconfig>

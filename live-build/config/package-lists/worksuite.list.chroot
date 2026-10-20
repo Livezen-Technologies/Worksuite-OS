@@ -62,6 +62,12 @@ nftables
 # WorkSuite Security antivirus (services/device-agent/src/security.ts).
 clamav
 clamav-freshclam
+# Real-time protection (#38): clamd + clamonacc (worksuite-onaccess.service) and clamdscan for Downloads scans; the
+# daemon idles until the policy turns real-time protection on. dnsmasq-base: NetworkManager's dnsmasq for the DNS
+# blocklist (services/device-agent/src/protection.ts).
+clamav-daemon
+clamdscan
+dnsmasq-base
 # OpenVPN profiles imported in Settings › Network › VPN (shell/electron/openvpn.ts)
 network-manager-openvpn
 bluez

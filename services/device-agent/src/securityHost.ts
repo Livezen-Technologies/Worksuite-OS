@@ -1,13 +1,14 @@
 // Linux effects for WorkSuite Security (src/securityCenter.ts): nft, ClamAV (clamscan, freshclam), systemd, the
 // kernel log. Fixed argument arrays only. Scans run as a transient unit at idle CPU/IO priority under the policy's
 // CPU quota (systemd-run), outside the agent's sandbox so they can read every file they are given.
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, lstatSync } from 'node:fs';
+import { chmodSync, chownSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, lstatSync, watch, type FSWatcher } from 'node:fs';
 import { lookup } from 'node:dns/promises';
 import { cpus, loadavg } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { SecurityHost } from './securityCenter.ts';
+import { CLAMD_SOCKET } from './protection.ts';
 import { exclusionArgs, FIREWALL_RULES, FRESHCLAM_ENV, LOG_PREFIX, parseClamscan, parseClamVersion, parseFirewallLog, POLICY_TABLE, walkFiles } from './security.ts';
 
 function run(cmd: string, args: string[], timeoutMs = 120_000): Promise<{ code: number; out: string }> {
@@ -54,7 +55,16 @@ export function linuxSecurityHost(o: { stateDir: string; runtimeDir: string; aud
       const ver = await run('clamscan', ['--version'], 20_000).catch(() => ({ code: 1, out: '' }));
       const fc = await run('systemctl', ['is-active', 'clamav-freshclam.service']).catch(() => ({ code: 1, out: '' }));
       const state = fc.out.trim();
+      const unitState = async (u: string, bin: string) => {
+        const r = await run('systemctl', ['is-active', u]).catch(() => ({ code: 1, out: '' }));
+        const v = r.out.trim();
+        return v === 'active' || v === 'activating' ? 'active' as const : v === 'failed' ? 'failed' as const : existsSync(bin) ? 'inactive' as const : 'missing' as const;
+      };
       return {
+        onaccess: await unitState('worksuite-onaccess.service', '/usr/sbin/clamonacc'),
+        guard: await unitState('worksuite-guard.service', '/usr/lib/worksuite/worksuite-guard'),
+        // NetworkManager starts its dnsmasq with this pid file once dns=dnsmasq is in effect.
+        dns_filter: existsSync('/etc/NetworkManager/conf.d/50-worksuite-dns.conf') && existsSync('/run/NetworkManager/dnsmasq.pid'),
         firewall_active: base.code === 0 && /policy drop/.test(base.out),
         policy_table_active: pol.code === 0,
         clamav: ver.code === 0 ? parseClamVersion(ver.out) : null,
@@ -126,5 +136,144 @@ export function linuxSecurityHost(o: { stateDir: string; runtimeDir: string; aud
     },
     publish(status) { writePublic(join(o.runtimeDir, 'security.json'), JSON.stringify(status, null, 2)); },
     audit: o.audit,
+
+    // ---- #38 protection layers ----
+    async homes() {
+      const r = await run('getent', ['passwd']).catch(() => ({ code: 1, out: '' }));
+      return r.out.split('\n').map((l) => l.split(':')).filter((f) => f.length >= 7 && Number(f[2]) >= 1000 && Number(f[2]) < 60000 && f[5].startsWith('/home/') && existsSync(f[5])).map((f) => f[5]);
+    },
+    writeConfig(path, content) {
+      let cur: string | null = null;
+      try { cur = readFileSync(path, 'utf8'); } catch { /* absent */ }
+      if (cur === content) return false;
+      if (content === null) rmSync(path, { force: true }); else writePublic(path, content);
+      return true;
+    },
+    async unit(name, action) {
+      const r = await run('systemctl', [action, name]);
+      if (r.code !== 0) throw new Error(`UNIT_${action.toUpperCase()}_FAILED`);
+    },
+    follow(unit, onLine) {
+      // From now on (-n 0); a journalctl that ends (journald restarted) is started again after a pause.
+      let stopped = false, child: ReturnType<typeof spawn> | null = null;
+      const start = () => {
+        if (stopped) return;
+        child = spawn('journalctl', ['-f', '-n', '0', '-o', 'cat', '-u', unit], { stdio: ['ignore', 'pipe', 'ignore'] });
+        let buf = '';
+        child.stdout!.setEncoding('utf8');
+        child.stdout!.on('data', (c: string) => {
+          buf += c;
+          let i;
+          while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); try { onLine(l); } catch { /* one bad line */ } }
+          if (buf.length > 1 << 20) buf = '';
+        });
+        child.on('exit', () => { child = null; if (!stopped) setTimeout(start, 10_000).unref(); });
+      };
+      start();
+      return () => { stopped = true; child?.kill(); };
+    },
+    async fetchFeed(url, maxBytes, sig) {
+      const get = async (u: string, optional: boolean): Promise<Buffer | null> => {
+        if (new URL(u).protocol !== 'https:') throw new Error('NOT_HTTPS');
+        const r = await fetch(u, { redirect: 'error', signal: AbortSignal.timeout(60_000) });
+        if (optional && r.status === 404) return null;
+        if (!r.ok || !r.body) throw new Error(`HTTP_${r.status}`);
+        const parts: Buffer[] = [];
+        let n = 0;
+        for await (const c of r.body as unknown as AsyncIterable<Uint8Array>) {
+          n += c.byteLength;
+          if (n > maxBytes) throw new Error('FEED_TOO_LARGE');
+          parts.push(Buffer.from(c));
+        }
+        return Buffer.concat(parts);
+      };
+      const body = (await get(url, false))!;
+      return { body, signature: sig ? await get(url + '.sig', true) : null };
+    },
+    feedCache(name, data) {
+      const p = join(o.stateDir, 'feeds', `${name}.json`);
+      if (data === undefined) { try { return readFileSync(p, 'utf8'); } catch { return null; } }
+      if (data === null) { rmSync(p, { force: true }); return null; }
+      mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
+      writeFileSync(p + '.tmp', data, { mode: 0o600 }); renameSync(p + '.tmp', p);
+      return data;
+    },
+    async reloadDns() {
+      // "conf" re-reads conf.d (dns=dnsmasq on or off); "dns-full" restarts the dnsmasq instance with the new list.
+      const r = await run('nmcli', ['general', 'reload', 'conf', 'dns-full']);
+      if (r.code !== 0) throw new Error('NM_RELOAD_FAILED');
+    },
+    watchFiles(dirs, onFile) {
+      // inotify per folder (new names: a browser's final rename, a copy). A file is handed over once its size has
+      // stayed the same for two seconds; partial downloads (.part, .crdownload) are skipped until renamed.
+      const ws: FSWatcher[] = [], pending = new Map<string, NodeJS.Timeout>();
+      const settle = (p: string, last = -1) => {
+        clearTimeout(pending.get(p));
+        pending.set(p, setTimeout(() => {
+          let st; try { st = lstatSync(p); } catch { pending.delete(p); return; }
+          if (!st.isFile()) { pending.delete(p); return; }
+          if (st.size !== last) return settle(p, st.size);
+          pending.delete(p); onFile(p);
+        }, 2000));
+      };
+      const add = (d: string) => {
+        try {
+          ws.push(watch(d, (_ev, name) => {
+            if (!name || /\.(part|crdownload|download|tmp)$/i.test(String(name)) || String(name).startsWith('.')) return;
+            settle(join(d, String(name)));
+          }));
+        } catch { /* folder missing: created later, picked up at the next policy application */ }
+      };
+      dirs.forEach(add);
+      return () => { ws.forEach((w) => w.close()); for (const t of pending.values()) clearTimeout(t); pending.clear(); };
+    },
+    async scanFiles(paths, s) {
+      const files = paths.filter((p) => { try { return lstatSync(p).isFile(); } catch { return false; } });
+      if (!files.length) return [];
+      // clamd (when real-time protection runs it) answers at once; otherwise clamscan loads the signatures itself.
+      const useClamd = existsSync(CLAMD_SOCKET);
+      const r = useClamd
+        ? await run('clamdscan', ['--fdpass', '--infected', '--no-summary', '--stdout', ...files], 10 * 60_000)
+        : await run('systemd-run', ['--quiet', '--wait', '--pipe', '--collect', '-p', `CPUQuota=${s.av_cpu_quota_percent}%`, '-p', 'Nice=10', '-p', 'MemoryHigh=768M',
+          '--', 'clamscan', '--infected', '--no-summary', '--stdout', '--max-filesize=200M', '--max-scansize=400M', ...files], 10 * 60_000);
+      if (r.code !== 0 && r.code !== 1 && r.code !== 2) throw new Error(`CLAMSCAN_${r.code}`);
+      return parseClamscan(r.out);
+    },
+    async restoreQuarantined(id, force) {
+      if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error('BAD_ID');
+      const meta = JSON.parse(readFileSync(join(qdir, `${id}.json`), 'utf8')) as { path: string; uid: number; mode: number; sha256: string };
+      const bin = join(qdir, `${id}.bin`);
+      if (existsSync(meta.path)) throw new Error('PATH_EXISTS');
+      // Re-scan a copy in the quarantine (root-only) before anything leaves it.
+      const tmp = join(qdir, `${id}.rescan`);
+      chmodSync(bin, 0o400); copyFileSync(bin, tmp); chmodSync(bin, 0o000);
+      try {
+        if (createHash('sha256').update(readFileSync(tmp)).digest('hex') !== meta.sha256) throw new Error('QUARANTINE_CORRUPT');
+        const r = await run('clamscan', ['--infected', '--no-summary', '--stdout', tmp], 10 * 60_000);
+        if (r.code === 1 && !force) throw new Error('STILL_DETECTED');
+        if (r.code !== 0 && r.code !== 1) throw new Error('RESCAN_FAILED');
+        mkdirSync(dirname(meta.path), { recursive: true });
+        // Written as its owner's file again; the copy is renamed into place so a half-written file never appears.
+        const dest = meta.path + `.ws-restore-${id.slice(0, 8)}`;
+        copyFileSync(tmp, dest);
+        chownSync(dest, meta.uid, meta.uid === 0 ? 0 : statSync(dirname(meta.path)).gid);
+        chmodSync(dest, meta.mode & 0o777);
+        renameSync(dest, meta.path);
+      } finally { rmSync(tmp, { force: true }); }
+      rmSync(bin, { force: true }); rmSync(join(qdir, `${id}.json`), { force: true });
+      return { path: meta.path };
+    },
+    async deleteQuarantined(id) {
+      if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error('BAD_ID');
+      if (!existsSync(join(qdir, `${id}.json`))) throw new Error('NOT_IN_QUARANTINE');
+      rmSync(join(qdir, `${id}.bin`), { force: true }); rmSync(join(qdir, `${id}.json`), { force: true });
+    },
+    async signal(pid, start, sig) {
+      let stat: string;
+      try { stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); } catch { return 'gone'; }
+      if (stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] !== start) return 'gone';
+      process.kill(pid, sig);
+      return 'ok';
+    },
   };
 }

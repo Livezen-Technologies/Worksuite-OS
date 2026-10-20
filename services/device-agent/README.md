@@ -36,7 +36,8 @@ An unsigned or tampered policy is rejected and the previous one stays in force.
 
 `RefreshPolicy`, `InstallApprovedApplication {catalog_id}`, `RemoveApplication {catalog_id}`, `ScheduleUpdate`, `RequestLock`,
 `RebootDuringWindow`, `CollectApprovedDiagnostics {bundle_profile}`, `RemoteWipe {scope: worksuite_data|full_device, approval_id}`.
-`StartMalwareScan {kind: quick|full}`, `IsolateEndpoint {hours: 1–72}`, `ReleaseIsolation` (WorkSuite Security, below).
+`StartMalwareScan {kind: quick|full}`, `IsolateEndpoint {hours: 1–72}`, `ReleaseIsolation`, `RestoreQuarantined {quarantine_id, force?}`,
+`DeleteQuarantined {quarantine_id}`, `ResolveSuspendedProcess {event_id, action: resume|terminate}` (WorkSuite Security, below).
 There is no shell, exec or file-read command (WSOS-MDM-006). Anything else is rejected `UNKNOWN_COMMAND`.
 
 `RemoteSupportRequest {session_id, mode: view|control, reason, admin_name, org_name, unattended?}` and
@@ -111,6 +112,33 @@ reason. Acks that cannot be sent are queued in state and delivered first on the 
   and the same summary in each heartbeat for Admin Center › Security Center. History older than
   `security_log_retention_days` is dropped. Every action is in the agent's audit log.
 - **Scan now**: `lk.worksuite.DeviceAgent1.StartSecurityScan(kind)` behind polkit `lk.worksuite.security.scan`.
+
+### Protection layers (issue #38) — `src/protection.ts`, `native/guard/`
+
+- **Real-time protection** (`realtime_protection`, `realtime_prevention`, `realtime_paths`; off unless the policy turns
+  it on, since clamd needs about 1 GB): `/etc/worksuite/clamd-onaccess.conf` for `worksuite-onaccess.service`
+  (clamonacc on fanotify, files passed to clamd by descriptor; includes the paths and every `~/Downloads`). The agent
+  follows the unit's journal: a `FOUND` line becomes an event, the file goes to quarantine and the shell notifies.
+- **Protected folders and ransomware** (`protected_folders` with `~/` per user, `protected_folders_mode: block|audit`,
+  `protected_folders_allow`, `ransomware_burst {count, seconds}`): `/etc/worksuite/guard.conf` for
+  `worksuite-guard.service` (`native/guard/worksuite-guard.c`). Opening a file in a protected folder for writing is
+  refused unless the program is a root-owned, non-writable system/app executable outside the user trees, or allowed
+  by policy. A process renaming/deleting (or, if untrusted, writing) more than the burst threshold is suspended
+  (SIGSTOP); Settings or the console resumes or ends it (pid + start time checked, so a reused pid is never signalled).
+- **Application control** (`app_denylist`: absolute paths or SHA-256): enforced by the same helper on
+  `FAN_OPEN_EXEC_PERM`, on top of `app_allowlist` for installs.
+- **Web & downloads**: `dns_blocklist` and `dns_threat_feeds` → `/etc/NetworkManager/dnsmasq.d/worksuite-blocklist.conf`
+  (NXDOMAIN) with `dns=dnsmasq` in `conf.d/50-worksuite-dns.conf`, then `nmcli general reload conf dns-full`. New files
+  in every `~/Downloads` are scanned (clamd when it runs, else clamscan) and quarantined (`download_scan`, on by default).
+- **Threat-intel feeds** (`firewall_threat_feeds`, `firewall_threat_max_entries`): https only, each feed pinned by
+  `sha256` or signed (`key`: Ed25519 public key, signature at `<url>.sig`); refreshed every 6 hours, merged into the
+  `threat_v4`/`threat_v6` interval sets of `inet worksuite_policy` (both directions). Private, loopback and too-wide
+  ranges and the management server are never added; a failing feed keeps the last good list.
+- **Quarantine**: restore re-scans a copy first and refuses a file that is still detected (only the administrator's
+  signed `RestoreQuarantined` with `force` overrides), then puts it back with its owner and mode; delete removes it.
+  Locally: `RestoreQuarantined`, `DeleteQuarantined`, `ResolveSuspendedProcess` behind `lk.worksuite.security.quarantine`.
+- **Security patches** (`security_auto_patch: immediate|window|off`) are applied by the package service's update
+  coordinator (`services/package-service/src/updates.ts`).
 
 ## Remote wipe (§14.3)
 
