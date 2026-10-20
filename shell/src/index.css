@@ -14,7 +14,7 @@
 /* WorkSuite UI tokens (WSOS-DSK-014): light and dark themes. */
 @theme {
   /* Noto Color Emoji (fonts-noto-color-emoji): emoji in the emoji picker, clipboard history and app text, not boxes. */
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif, "Noto Color Emoji";
+  --font-sans: "IBM Plex Sans", "Noto Sans Sinhala UI", "Noto Sans Sinhala", "Noto Sans Tamil UI", "Noto Sans Tamil", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif, "Noto Color Emoji";
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace, "Noto Color Emoji";
   --color-ws-ink: #0f172a;
   --color-ws-muted: #475569;

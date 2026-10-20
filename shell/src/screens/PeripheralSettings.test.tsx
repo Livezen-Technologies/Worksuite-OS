@@ -36,7 +36,7 @@ const fake: PeripheralsApi = {
   async cancelJob(id) { calls.push(`cancel ${id}`); return ok(true as const) },
   async screenCapture() { return ok(capturing) },
   async stopScreenCapture() { calls.push('stop capture'); const n = capturing; capturing = 0; return ok(n) },
-  async inputMethods() { return ok({ enabled, available: ['keyboard-us', 'm17n_si_wijesekara', 'm17n_ta_tamil99'] }) },
+  async inputMethods() { return ok({ enabled, available: ['keyboard-us', 'm17n_si_wijesekera', 'm17n_ta_tamil99'] }) },
   async setInputMethods(ids) { calls.push(`ims ${ids.join(',')}`); enabled = ids; return ok(true as const) },
   async syncFailed() { return { ok: true, value: [{ mutation_id: 'm-1', module: 'crm', object_id: 'lead-7', last_error: '403 forbidden' }] } },
   async syncRetry(id) { calls.push(`retry ${id}`); return { ok: true, value: true } },
@@ -122,7 +122,7 @@ describe('power, printers, input methods (WSOS-INT-005, 006, 011)', () => {
   it('turns on Sinhala input', async () => {
     const h = await render(<Mod.InputMethodsSection />)
     await click(h.querySelector('[aria-label="Sinhala (Wijesekara)"]')!)
-    expect(calls).toEqual(['ims keyboard-us,m17n_si_wijesekara'])
+    expect(calls).toEqual(['ims keyboard-us,m17n_si_wijesekera'])
   })
 })
 

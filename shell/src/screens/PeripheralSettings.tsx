@@ -295,7 +295,7 @@ function AddPrinterDialog({ api, onClose, onAdded }: { api: PeripheralsApi; onCl
 // ---------- input methods ----------
 const imCall = (a: PeripheralsApi) => a.inputMethods()
 const IM_KEYS: Record<string, MessageKey> = {
-  'keyboard-us': 'per.im.us', m17n_si_wijesekara: 'per.im.siWijesekara', m17n_si_singlish: 'per.im.siPhonetic',
+  'keyboard-us': 'per.im.us', m17n_si_wijesekera: 'per.im.siWijesekara', m17n_si_singlish: 'per.im.siPhonetic',
   m17n_ta_tamil99: 'per.im.taTamil99', m17n_ta_phonetic: 'per.im.taPhonetic',
 }
 export function InputMethodsSection() {

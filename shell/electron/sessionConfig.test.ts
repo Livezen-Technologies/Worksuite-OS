@@ -57,9 +57,23 @@ describe('input methods (WSOS-INT-011)', () => {
   })
   it('enables Sinhala and Tamil by default, all offered in Settings', () => {
     const ims = parseFcitxProfile(read('services/session/fcitx5/profile'))
-    expect(ims).toEqual(['keyboard-us', 'm17n_si_wijesekara', 'm17n_ta_tamil99'])
+    expect(ims).toEqual(['keyboard-us', 'm17n_si_wijesekera', 'm17n_si_singlish', 'm17n_ta_tamil99'])
     for (const id of ims) expect(INPUT_METHODS).toContain(id)
     expect(read('packaging/debian/worksuite-session.install')).toContain('services/session/fcitx5/profile etc/xdg/fcitx5/')
+  })
+  it('every default input method exists in m17n-db (the file is <lang>-<name>.mim)', () => {
+    // m17n_si_wijesekara (sic) shipped once and never loaded: the m17n file is si-wijesekera.mim.
+    const known = ['si-wijesekera', 'si-singlish', 'ta-tamil99', 'ta-phonetic']
+    for (const id of INPUT_METHODS.filter((m) => m.startsWith('m17n_'))) expect(known).toContain(id.slice(5).replace('_', '-'))
+  })
+  it('ships Sinhala and Tamil Unicode fonts and the fontconfig preferences for them', () => {
+    const list = read('live-build/config/package-lists/worksuite.list.chroot')
+    for (const p of ['fonts-noto-core', 'fonts-noto-ui-core', 'fonts-lklug-sinhala', 'fontconfig']) expect(list).toMatch(new RegExp(`^${p}$`, 'm'))
+    const conf = read('services/session/fontconfig/60-worksuite-sinhala-tamil.conf')
+    expect(conf).toContain('<string>Noto Sans Sinhala UI</string>')
+    expect(conf).toContain('<string>Noto Sans Tamil UI</string>')
+    expect(read('packaging/debian/worksuite-session.install')).toContain('services/session/fontconfig/60-worksuite-sinhala-tamil.conf etc/fonts/conf.d/')
+    expect(read('shell/src/index.css')).toMatch(/--font-sans: "IBM Plex Sans", "Noto Sans Sinhala UI"/)
   })
   it('starts fcitx5 with the session and sets the IM and compose environment', () => {
     expect(read('services/session/systemd/user/worksuite-session.target')).toMatch(/Wants=.*worksuite-input-method\.service/)

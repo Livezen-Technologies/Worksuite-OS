@@ -41,6 +41,12 @@ plymouth
 systemd-coredump
 # Scripts for the installer's language list and the desktop (Sinhala, Tamil, Devanagari, Arabic, ...)
 fonts-noto-core
+# Sinhala and Tamil Unicode text: Noto UI variants (tighter line height for the shell and installer), the LKLUG
+# Sinhala font as a second face, and fontconfig preferences in /etc/fonts/conf.d/60-worksuite-sinhala-tamil.conf.
+fonts-noto-ui-core
+fonts-lklug-sinhala
+fonts-noto-mono
+fontconfig
 # Emoji in the shell (emoji picker, clipboard history) and apps; without it they were empty boxes.
 fonts-noto-color-emoji
 # Recovery (§9.2)

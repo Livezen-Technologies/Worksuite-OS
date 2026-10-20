@@ -130,9 +130,11 @@ describe('printing (WSOS-INT-006)', () => {
 
 describe('input methods (WSOS-INT-011)', () => {
   it('round-trips a fcitx5 profile and always keeps the US keyboard', () => {
-    const text = renderFcitxProfile(['m17n_si_wijesekara', 'm17n_ta_tamil99'])
-    expect(parseFcitxProfile(text)).toEqual(['keyboard-us', 'm17n_si_wijesekara', 'm17n_ta_tamil99'])
-    expect(text).toContain('DefaultIM=m17n_si_wijesekara')
+    const text = renderFcitxProfile(['m17n_si_wijesekera', 'm17n_ta_tamil99'])
+    expect(parseFcitxProfile(text)).toEqual(['keyboard-us', 'm17n_si_wijesekera', 'm17n_ta_tamil99'])
+    expect(text).toContain('DefaultIM=m17n_si_wijesekera')
+    // A profile saved by an earlier image with the misspelled Sinhala keyboard name loads as the real one.
+    expect(parseFcitxProfile('[Groups/0/Items/0]\nName=m17n_si_wijesekara\n')).toEqual(['m17n_si_wijesekera'])
   })
   it('writes the user profile, refuses unknown ids, and reloads fcitx5', async () => {
     const fs = memFs({ '/etc/xdg/fcitx5/profile': renderFcitxProfile([]) })

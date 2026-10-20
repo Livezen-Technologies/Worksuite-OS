@@ -163,18 +163,21 @@ export function cupsError(text: string): string {
 
 // ---------- input methods (fcitx5) ----------
 /** Input methods Settings offers. Ids are fcitx5 names (fcitx5-m17n for Sinhala and Tamil). */
-export const INPUT_METHODS = ['keyboard-us', 'm17n_si_wijesekara', 'm17n_si_singlish', 'm17n_ta_tamil99', 'm17n_ta_phonetic'] as const
+export const INPUT_METHODS = ['keyboard-us', 'm17n_si_wijesekera', 'm17n_si_singlish', 'm17n_ta_tamil99', 'm17n_ta_phonetic'] as const
 export type InputMethodId = (typeof INPUT_METHODS)[number]
 const isIm = (s: string): s is InputMethodId => (INPUT_METHODS as readonly string[]).includes(s)
 
 /** Enabled methods from a fcitx5 profile (Groups/0/Items/N Name=…), in order. */
+/** Earlier images named the Sinhala keyboard m17n_si_wijesekara; m17n-db's file is si-wijesekera.mim, so fcitx5 never loaded it. */
+const RENAMED_IMS: Record<string, string> = { m17n_si_wijesekara: 'm17n_si_wijesekera' }
+
 export function parseFcitxProfile(text: string): string[] {
   const out: string[] = []; let inItem = false
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (line.startsWith('[')) { inItem = /^\[Groups\/0\/Items\/\d+\]$/.test(line); continue }
     const m = /^Name=(.+)$/.exec(line)
-    if (inItem && m) out.push(m[1].trim())
+    if (inItem && m) { const n = m[1].trim(); out.push(RENAMED_IMS[n] ?? n) }
   }
   return out
 }

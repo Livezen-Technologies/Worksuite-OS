@@ -40,6 +40,11 @@ for l in en_US.UTF-8 en_GB.UTF-8 si_LK.UTF-8 ta_LK.UTF-8; do
 done
 locale-gen
 for l in en_US.utf8 en_GB.utf8 si_LK.utf8 ta_LK.utf8; do locale -a | grep -qx "$l" || { echo "locale $l not generated" >&2; exit 1; }; done
+# Sinhala and Tamil Unicode text needs fonts for those scripts (fonts-noto-core, fonts-lklug-sinhala) and the
+# WorkSuite fontconfig preferences; without them both scripts render as empty boxes.
+fc-cache -f >/dev/null
+for l in si ta; do [ -n "$(fc-list :lang=$l family)" ] || { echo "no font for language $l" >&2; exit 1; }; done
+[ -e /etc/fonts/conf.d/60-worksuite-sinhala-tamil.conf ] || { echo "Sinhala/Tamil fontconfig preferences missing" >&2; exit 1; }
 [ -f /etc/default/locale ] || echo 'LANG=en_US.UTF-8' > /etc/default/locale
 # WSOS-INS-007: no machine-id baked into the image.
 : > /etc/machine-id
