@@ -18,6 +18,7 @@
 :root[data-theme="light"] .bg-\[rgba\(10\,24\,56\,0\.98\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(239,242,249,0.98); }
 :root[data-theme="light"] .bg-\[rgba\(10\,26\,56\,0\.55\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(239,243,249,0.94); }
 :root[data-theme="light"] .bg-\[rgba\(12\,28\,64\,0\.96\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(244,246,251,0.96); }
+:root[data-theme="light"] .bg-\[rgba\(120\,24\,16\,0\.55\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(254,251,251,0.94); }
 :root[data-theme="light"] .bg-\[rgba\(14\,32\,72\,0\.5\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(248,249,252,0.94); }
 :root[data-theme="light"] .bg-\[rgba\(14\,32\,72\,0\.55\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(248,249,252,0.94); }
 :root[data-theme="light"] .bg-\[rgba\(14\,32\,72\,0\.6\)\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: rgba(248,249,252,0.94); }
@@ -87,6 +88,7 @@
 :root[data-theme="light"] .border-white\/20:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.32); }
 :root[data-theme="light"] .border-white\/25:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.4); }
 :root[data-theme="light"] .border-white\/\[0\.12\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.192); }
+:root[data-theme="light"] .border-white\/\[0\.14\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.224); }
 :root[data-theme="light"] .border-white\/\[0\.18\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.288); }
 :root[data-theme="light"] .disabled\:bg-white\/\[0\.06\]:not(.ws-dark-zone *, .ws-dark-zone):disabled { background-color: rgba(15,23,42,0.06); }
 :root[data-theme="light"] .disabled\:hover\:bg-\[rgba\(14\,32\,72\,0\.55\)\]:not(.ws-dark-zone *, .ws-dark-zone):hover:disabled { background-color: rgba(248,249,252,0.94); }
@@ -157,6 +159,7 @@
 :root[data-theme="light"] .text-\[\#FFD08A\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #7B4D0A; }
 :root[data-theme="light"] .text-\[\#FFD27A\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #714E09; }
 :root[data-theme="light"] .text-\[\#FFD2CA\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #AA250E; }
+:root[data-theme="light"] .text-\[\#FFE1DC\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #AA240E; }
 :root[data-theme="light"] .text-\[\#FFE6A8\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #715309; }
 :root[data-theme="light"] .text-white:not(.ws-dark-zone *, .ws-dark-zone):not(:where(.bg-\[\#18D4F0\], .bg-\[\#1F6BFF\], .bg-\[\#25D366\], .bg-\[\#5FD39A\], .bg-\[\#B7791F\], .bg-\[\#C42B1C\], .bg-\[\#D9452B\], .bg-\[\#F4F7FC\], .bg-\[\#F59E0B\], .bg-\[\#FF8A7A\], .bg-\[\#f8fafc\], [style*="background"])) { color: #0F172A; }
 :root[data-theme="light"] .text-white\/60:not(.ws-dark-zone *, .ws-dark-zone):not(:where(.bg-\[\#18D4F0\], .bg-\[\#1F6BFF\], .bg-\[\#25D366\], .bg-\[\#5FD39A\], .bg-\[\#B7791F\], .bg-\[\#C42B1C\], .bg-\[\#D9452B\], .bg-\[\#F4F7FC\], .bg-\[\#F59E0B\], .bg-\[\#FF8A7A\], .bg-\[\#f8fafc\], [style*="background"])) { color: rgba(15,23,42,0.7); }

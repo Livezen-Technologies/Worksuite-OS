@@ -1,7 +1,10 @@
 export type WindowApp = 'files' | 'appcenter' | 'settings' | 'monitor' | 'snip'
 
 export interface GreeterProps { onSignIn: (user: string) => void }
-export interface LockProps { user: string; name?: string; onUnlock: () => void; notices?: { id: string; title: string; at: number; tone: 'ok' | 'warn' | 'error'; app?: string }[] }
+export interface LockProps { user: string; name?: string; onUnlock: () => void
+  /** How many of the newest notices are unread (useNotices); defaults to all of them. */
+  unread?: number
+  notices?: { id: string; title: string; at: number; tone: 'ok' | 'warn' | 'error'; app?: string }[] }
 export interface FirstRunProps { onDone: () => void; userName?: string }
 export interface DesktopProps {
   user: string

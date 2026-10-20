@@ -6,6 +6,8 @@ import { validateAccountName } from '../components/AAccount'
 import { AVATAR_GRADIENTS, Avatar, BG, Icon, P, glassBtn } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
 import A11yPanel from '../components/A11yPanel'
+import StatusIndicators from '../components/StatusIndicators'
+import AuthError from '../components/AuthError'
 import { LOCALES, useT, getLocale } from '../i18n'
 import { motionReduced } from '../lib/a11y'
 
@@ -82,7 +84,7 @@ export default function Greeter({ onSignIn }: GreeterProps) {
   }
 
   const bottomRight = (
-    <div className="absolute right-10 bottom-8 flex gap-2.5">
+    <div className="absolute right-4 bottom-6 flex gap-2.5 sm:right-10 sm:bottom-8">
       {view === 'password' && <button type="button" aria-label={t('greeter.network')} className={glassBtn}><Icon d={P.wifi} /></button>}
       <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11y} onClick={() => { setA11y((v) => !v); setPower(false) }} className={glassBtn}><Icon d={P.a11y}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
       <button type="button" aria-label={t('greeter.powerOptions')} aria-haspopup="menu" aria-expanded={power} data-power-toggle onClick={() => setPower((v) => !v)} className={glassBtn}><Icon d={P.power} /></button>
@@ -93,9 +95,9 @@ export default function Greeter({ onSignIn }: GreeterProps) {
 
   return (
     <div className="relative h-full w-full overflow-hidden font-sans text-white" style={{ background: BG.greeter }}>
-      <header className="absolute top-7 right-10 left-10 flex justify-between text-sm text-white/85">
+      <header className="absolute top-5 right-4 left-4 flex items-center justify-between gap-4 text-sm text-white/85 sm:top-7 sm:right-10 sm:left-10">
         <time dateTime={now.toISOString()}>{aShortDate(now)} · {aTime(now)}</time>
-        <span>{LOCALES.find((l) => l.id === getLocale())?.name}</span>
+        <span className="flex items-center gap-5"><StatusIndicators /><span>{LOCALES.find((l) => l.id === getLocale())?.name}</span></span>
       </header>
 
       {view === 'users' ? (
@@ -120,11 +122,11 @@ export default function Greeter({ onSignIn }: GreeterProps) {
           </ul>
         </main>
       ) : (
-        <main className="absolute top-[200px] right-0 left-0 flex flex-col items-center gap-3.5 px-4">
+        <main className="flex h-full flex-col items-center justify-center gap-3.5 overflow-y-auto px-4 pt-16 pb-28">
           <Avatar name={isOther ? '' : user!.name} size={128} font={46} bg={isOther ? 'rgba(255,255,255,0.08)' : AVATAR_GRADIENTS[userIndex % AVATAR_GRADIENTS.length]}
             style={{ boxShadow: '0 0 0 4px rgba(255,255,255,0.14), 0 20px 50px rgba(0,0,0,0.45)' }}>{isOther ? '+' : undefined}</Avatar>
           <h1 className="m-0 mt-1.5 text-[26px] font-semibold">{isOther ? t('greeter.otherUser') : user!.name}</h1>
-          <form ref={formRef} aria-label={t('greeter.signIn')} onSubmit={submit} noValidate className="mt-2.5 flex flex-col items-center gap-2.5">
+          <form ref={formRef} aria-label={t('greeter.signIn')} onSubmit={submit} noValidate className="mt-2.5 flex w-full flex-col items-center gap-2.5">
             {isOther && (
               <div className="flex h-12 w-[340px] max-w-full items-center rounded-xl border border-white/[0.18] bg-[rgba(8,20,48,0.6)] px-4 backdrop-blur-[16px] focus-within:border-[#7FB2FF]">
                 <label htmlFor="ws-user" className="sr-only">{t('greeter.userName')}</label>
@@ -140,20 +142,18 @@ export default function Greeter({ onSignIn }: GreeterProps) {
                 aria-invalid={wrong || undefined} aria-describedby="ws-pw-hint"
                 className="min-w-0 flex-1 border-0 bg-transparent text-[15px] text-white outline-none placeholder:text-white/50" />
               <button type="submit" aria-label={t('greeter.signIn')} disabled={busy}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-[9px] bg-[#1F6BFF] hover:bg-[#3A7DFF] disabled:opacity-70">
+                className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-[9px] bg-[#1F6BFF] outline-none hover:bg-[#3A7DFF] focus-visible:ring-2 focus-visible:ring-[#7FB2FF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A1A3A] disabled:opacity-70">
                 <Icon d={P.arrow} size={18} width={2.5} />
               </button>
             </div>
-            <span id="ws-pw-hint" role={error ? 'alert' : undefined} className={`text-[13px] ${error ? 'text-[#FFB4A8]' : 'text-white/60'}`}>
-              {error ?? (busy ? t('greeter.signingIn') : t('greeter.pressEnter'))}
-            </span>
+            <AuthError id="ws-pw-hint" error={error} hint={busy ? t('greeter.signingIn') : t('greeter.pressEnter')} />
           </form>
           <button type="button" className="cursor-pointer rounded-md p-1.5 text-[13px] text-[#7FB2FF] hover:text-[#B8D4FF]">{t('greeter.forgot')}</button>
         </main>
       )}
 
       {view === 'password' && (
-        <div className="absolute bottom-8 left-10 flex gap-2.5">
+        <div className="absolute bottom-6 left-4 flex gap-2.5 sm:bottom-8 sm:left-10">
           <button type="button" onClick={() => { setView('users'); setError(null); setWrong(false) }}
             className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-white/10 bg-[rgba(8,20,48,0.5)] py-2 pr-3.5 pl-2 text-sm text-white hover:bg-[rgba(8,20,48,0.75)]">
             <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-white/15"><Icon d={P.users} size={16}><circle cx="9" cy="8" r="3.5" /></Icon></span>

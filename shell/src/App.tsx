@@ -93,7 +93,7 @@ export default function App() {
       return <Greeter onSignIn={(u) => { setUser(u); send('authSuccess') }} />
     case 'locked':
     case 'suspending':
-      return <Lock user={user} name={realName || undefined} notices={notes.notices} onUnlock={() => send('unlock')} />
+      return <Lock user={user} name={realName || undefined} notices={notes.notices} unread={notes.unread} onUnlock={() => send('unlock')} />
     case 'recovery':
       return <Recovery onRestartShell={() => send('shellRestarted')} onLogout={() => send('logout')} />
     case 'loggingOut':
