@@ -2,9 +2,10 @@
 // found online and installs come from the package service (services/package-service/src/driverscan.ts).
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useRef, useState } from 'react'
-import { formatBytes, os, type Avail, type DriverOffer, type DriverReport, type HwDevice, type Printer } from '../lib/os'
-import { friendlyError } from '../lib/errors'
-import { KIND_ICON, STATUS_COLOR, deviceStatus, deviceSub, driverGroups, driverNotice, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerText, offerTitle, offerVersion, statusLabel } from '../lib/hardware'
+import { formatBytes, os, type Avail, type DriverOffer, type DriverReport, type HwDevice, type PackageJobEvent, type Printer } from '../lib/os'
+import { friendlyError, type FriendlyError } from '../lib/errors'
+import { ErrorDetails } from '../components/ErrorDetails'
+import { KIND_ICON, STATUS_COLOR, deviceStatus, driverJobPhase, type DriverStep, deviceSub, driverGroups, driverNotice, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerText, offerTitle, offerVersion, statusLabel } from '../lib/hardware'
 import { C, Dialog, OptionCard, Progress, Spinner, Svg, Tag, btnGhost, btnPrimary, card, dialogFooter, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { ICON } from './Updates'
 import { formatDate, formatNumber, t } from '../i18n'
@@ -95,7 +96,7 @@ export function DevicesPanel({ onProblem }: { onProblem?: (d: HwDevice) => void 
 /** Settings › Drivers (HwSettings page=drivers): devices by group with their driver status, drivers found online
  *  (package service: after Wi-Fi or Ethernet connects, daily, or "Check for drivers"), and installing them. */
 export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
-  const [devs] = useResource(os.hwDevices)
+  const [devs, reloadDevs] = useResource(os.hwDevices)
   const [report, setReport] = useState<Res<DriverReport>>({ state: 'loading' })
   const [checking, setChecking] = useState(false)
   const [sel, setSel] = useState<Set<string> | null>(null)
@@ -137,6 +138,12 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
       {r?.metered && list.length > 0 && <Note tone="amber">{t('drv.metered')}</Note>}
       {r?.gpu_fallback && <Note tone="amber">{t('drv.gpuFallback')}</Note>}
       {r?.mok?.pending && <MokSteps />}
+      {r?.restart_required && (
+        <div role="note" className="flex items-center gap-2.5 rounded-xl border border-[rgba(255,159,90,0.3)] bg-[rgba(255,159,90,0.08)] px-3.5 py-3 text-[13px] text-[#C9D6EE]">
+          <Svg d={ICON.restart} size={18} stroke={C.amber} /><span className="flex-1">{t('drv.restartPending')}</span>
+          <button type="button" onClick={() => void os.power('restart')} className={btnPrimary}>{t('upd.action.restart')}</button>
+        </div>
+      )}
       {gpu.map((o) => (
         <section key={o.id} aria-label={t('drv.nvidiaTitle')} className="flex flex-col gap-2.5 rounded-xl border border-[rgba(95,211,154,0.35)] bg-[rgba(95,211,154,0.08)] px-[18px] py-4">
           <div className="flex items-center gap-3">
@@ -179,6 +186,22 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
         </ul>
       </>}
       {r && r.state !== 'off' && !busy && list.length === 0 && <Empty title={t('hw.upToDate')}>{r.checked_at ? t('drv.lastChecked', { time: formatDate(r.checked_at) }) : undefined}</Empty>}
+      {!!r?.installed?.length && (
+        <section aria-label={t('drv.installedTitle')} className="flex flex-col gap-1.5">
+          <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('drv.installedTitle')}</h2>
+          <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
+            {r.installed.slice(0, 5).map((x) => (
+              <li key={x.id} className={`flex items-center gap-3.5 px-4 py-3 ${rowLine}`}>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate text-sm font-medium">{x.id.startsWith('gpu:') ? t('drv.nvidiaTitle') : x.name}</span>
+                  <span className="text-xs text-[#8FA3C8]">{t('drv.installedOn', { time: formatDate(x.at) })}{x.restart && r.restart_required ? ` · ${t('hw.restartRequired')}` : ''}</span>
+                </span>
+                {x.version && <span className="font-mono text-xs text-[#C9D6EE]">{x.version}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {devs.state === 'ok' && driverGroups(devs.value, r).map((g) => (
         <section key={g.group} aria-label={g.name} className="flex flex-col gap-1.5">
           <h2 className={`m-0 font-normal ${sectionLabel}`}>{g.name}</h2>
@@ -216,7 +239,7 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
           </ul>
         )}
       </section>
-      {installing && <DriverInstallDialog offers={installing} names={(o) => offerTitle(o, devName(o.device_id))} secureBoot={!!r?.secure_boot} onClose={() => { setInstalling(null); setSel(null); void load() }} />}
+      {installing && <DriverInstallDialog offers={installing} names={(o) => offerTitle(o, devName(o.device_id))} secureBoot={!!r?.secure_boot} onClose={() => { setInstalling(null); setSel(null); void load(); void reloadDevs() }} />}
     </div>
   )
 }
@@ -247,24 +270,49 @@ export function MokSteps() {
   )
 }
 
-/** H5: driver install progress from the package service job events (phase = offer id). */
+/** H5: driver install progress from the package service job events (phase "<offer id>|<step>"). Events can arrive
+ *  before the install call returns the job's path (a job that fails at once, #45), so they wait until it is known.
+ *  A failure says what went wrong, keeps the technical text for administrators and offers Try again for what didn't
+ *  finish; a success shows the version now installed. */
 export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, secureBoot = false }: { offers: DriverOffer[]; onClose: () => void; names?: (o: DriverOffer) => string; secureBoot?: boolean }) {
   const [pct, setPct] = useState<Record<string, number>>({})
-  const [error, setError] = useState<string | null>(null)
-  const job = useRef<string | null>(null)
+  const [step, setStep] = useState<Record<string, DriverStep>>({})
+  const [error, setError] = useState<FriendlyError | null>(null)
+  const [attempt, setAttempt] = useState<DriverOffer[]>(offers)
+  const [versions, setVersions] = useState<Record<string, string | null>>({})
   useEffect(() => {
-    const off = os.onPkgJob((e) => {
-      if (e.job !== job.current) return
-      if (e.kind === 'progress' && e.phase) setPct((p) => ({ ...p, [e.phase!]: e.percent ?? 0 }))
-      if (e.kind === 'finished' && e.result !== 'success') setError(friendlyError(e.error ?? 'failed', 'package').text || t('hw.installUnfinished'))
-      if (e.kind === 'finished' && e.result === 'success') setPct((p) => Object.fromEntries(offers.map((o) => [o.id, 100])) as typeof p)
-    })
-    void os.hwInstallDrivers(offers.map((o) => o.id)).then((r) => { if (r.ok) job.current = r.value; else setError(r.error === 'unavailable' ? t('hw.cantInstall') : friendlyError(r.error, 'package').text) })
+    let job: string | null = null
+    const early: PackageJobEvent[] = []
+    const handle = (e: PackageJobEvent) => {
+      if (e.kind === 'progress' && e.phase) {
+        const ph = driverJobPhase(e.phase)
+        setPct((p) => ({ ...p, [ph.offer]: Math.max(ph.step === 'done' ? 100 : 0, e.percent ?? 0) }))
+        setStep((s) => ({ ...s, [ph.offer]: ph.step }))
+      }
+      if (e.kind === 'finished' && e.result !== 'success') {
+        const f = friendlyError(e.error ?? 'failed', 'package')
+        setError({ ...f, text: f.text || t('hw.installUnfinished') })
+      }
+      if (e.kind === 'finished' && e.result === 'success') {
+        setPct((p) => ({ ...p, ...Object.fromEntries(attempt.map((o) => [o.id, 100])) }))
+        void os.hwDriverReport(false).then((r) => { if (r.ok) setVersions(Object.fromEntries((r.value.installed ?? []).map((x) => [x.id, x.version]))) }, () => {})
+      }
+    }
+    const off = os.onPkgJob((e) => { if (job === null) early.push(e); else if (e.job === job) handle(e) })
+    void os.hwInstallDrivers(attempt.map((o) => o.id)).then((r) => {
+      if (r.ok) { job = r.value; early.filter((e) => e.job === job).forEach(handle) }
+      else setError(r.error === 'unavailable' ? { kind: 'service', text: t('hw.cantInstall'), details: null } : friendlyError(r.error, 'package'))
+    }, (e) => setError(friendlyError(e, 'package')))
     return off
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [attempt]) // eslint-disable-line react-hooks/exhaustive-deps
+  const retry = () => { const rest = offers.filter((o) => (pct[o.id] ?? 0) < 100); setError(null); setAttempt(rest.length ? rest : offers) }
   const done = offers.every((o) => (pct[o.id] ?? 0) >= 100)
   const restart = offers.filter((o) => o.restart)
   const active = offers.find((o) => (pct[o.id] ?? 0) < 100 && pct[o.id] != null)
+  const stepText = (o: DriverOffer, n: string) => {
+    const s = step[o.id]
+    return s === 'refreshing' ? t('drv.step.refreshing') : s === 'downloading' ? t('drv.step.downloading', { percent: n }) : t('hw.installingPct', { percent: n })
+  }
   return (
     <Dialog width={500} onClose={onClose}>
       {(tid) => <>
@@ -275,22 +323,28 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
         <ul className="m-0 flex list-none flex-col gap-1.5 px-4 pt-2 pb-4" aria-live="polite">
           {offers.map((o) => {
             const p = pct[o.id]
-            const st = p == null ? 'wait' : p >= 100 ? 'done' : 'active'
+            const st = p == null ? (error ? 'stopped' : 'wait') : p >= 100 ? 'done' : error ? 'stopped' : 'active'
+            const v = versions[o.id]
             return (
               <li key={o.id} className="flex flex-col gap-2 rounded-xl px-3.5 py-3" style={{ background: st === 'active' ? 'rgba(24,212,240,0.08)' : 'transparent' }}>
                 <div className="flex items-center gap-3">
                   {st === 'done' && <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#5FD39A" /><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#0F2350" strokeWidth="2.4" strokeLinecap="round" /></svg>}
                   {st === 'active' && <Spinner size={20} />}
-                  {st === 'wait' && <span className="h-5 w-5 rounded-full border-2 border-[rgba(127,178,255,0.3)]" />}
+                  {(st === 'wait' || st === 'stopped') && <span className="h-5 w-5 rounded-full border-2 border-[rgba(127,178,255,0.3)]" />}
                   <span className="flex-1 text-sm font-medium">{names(o)}</span>
-                  <span className="text-xs text-[#8FA3C8]">{st === 'done' ? t('common.installed') : st === 'active' ? <CountUp value={p} render={(n) => t('hw.installingPct', { percent: n })} /> : `${t('hw.waiting')}${o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}`}</span>
+                  <span className="text-xs text-[#8FA3C8]">{st === 'done' ? (v ? t('drv.installedVersion', { version: v }) : t('common.installed')) : st === 'active' ? <CountUp value={p} render={(n) => stepText(o, n)} /> : st === 'stopped' ? t('drv.notInstalled') : `${t('hw.waiting')}${o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}`}</span>
                 </div>
                 {st === 'active' && <div className="ml-8"><Progress value={p} label={t('hw.progressOf', { name: names(o) })} height={4} /></div>}
               </li>
             )
           })}
         </ul>
-        {error && <p role="alert" className="mx-4 mb-4 rounded-xl border border-[rgba(255,138,122,0.3)] bg-[rgba(255,138,122,0.08)] px-3.5 py-3 text-[13px] text-[#FFB0A6]">{error}</p>}
+        {error && (
+          <div role="alert" className="mx-4 mb-4 flex flex-col gap-2 rounded-xl border border-[rgba(255,138,122,0.3)] bg-[rgba(255,138,122,0.08)] px-3.5 py-3 text-[13px] text-[#FFB0A6]">
+            <span>{error.text}</span>
+            <ErrorDetails details={error.details} />
+          </div>
+        )}
         {restart.length > 0 && (
           <div className="mx-4 mb-4 flex gap-2.5 rounded-xl border border-[rgba(255,159,90,0.3)] bg-[rgba(255,159,90,0.08)] px-3.5 py-3 text-[13px] text-[#C9D6EE]">
             <Svg d={ICON.restart} size={18} stroke={C.amber} /><span>{t('hw.needRestart', { names: restart.map(names).join(', ') })}{secureBoot && restart.some((o) => o.kind === 'gpu' || o.kind === 'dkms') ? ` ${t('drv.mok.atRestart')}` : ''}</span>
@@ -298,7 +352,8 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
         )}
         <div className={dialogFooter}>
           <button type="button" onClick={onClose} className={btnGhost}>{done || error ? t('common.close') : t('hw.background')}</button>
-          {restart.length > 0 && <button type="button" disabled={!done || !!active} onClick={() => void os.power('restart')} className={btnPrimary}>{t('upd.action.restart')}</button>}
+          {error && error.kind !== 'cancelled' && <button type="button" onClick={retry} className={btnPrimary}>{t('common.tryAgain')}</button>}
+          {!error && restart.length > 0 && <button type="button" disabled={!done || !!active} onClick={() => void os.power('restart')} className={btnPrimary}>{t('upd.action.restart')}</button>}
         </div>
       </>}
     </Dialog>

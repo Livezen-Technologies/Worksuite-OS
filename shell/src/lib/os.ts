@@ -133,7 +133,7 @@ export interface WorkSuiteApi {
   /** Settings › Drivers: the package service's report (devices with their driver status, offers found online).
    *  check = look online now (waits for the result). */
   hwDriverReport(check?: boolean): Promise<CloudResult<DriverReport>>
-  /** Install driver offers (administrator, polkit); progress arrives through onPkgJob with phase = offer id. */
+  /** Install driver offers (administrator, polkit); progress arrives through onPkgJob with phase "<offer id>|<step>". */
   hwInstallDrivers(ids: string[]): Promise<CloudResult<string>>
   /** The one-time Secure Boot password for MokManager: administrators only (polkit prompt); '' when none. */
   hwMokPassword(): Promise<CloudResult<string>>
@@ -301,6 +301,10 @@ export interface DriverReport {
   state: 'idle' | 'checking' | 'off' | 'error'; checked_at: number | null; online_search: boolean; metered: boolean; secure_boot: boolean
   devices: { id: string; kind: 'wifi' | 'ethernet' | 'display' | 'bluetooth' | 'other'; driver: string | null; status: DriverStatus; offers: string[] }[]
   offers: DriverOffer[]; auto_installed: string[]; gpu_fallback?: boolean; mok?: { pending: boolean }
+  /** Installed through Settings, newest first, with the version now on the system (#45). */
+  installed?: { id: string; name: string; version: string | null; restart: boolean; at: number }[]
+  /** Something installed needs a restart (cleared by the service after the next boot). */
+  restart_required?: boolean
 }
 
 export interface PackagePreview {
