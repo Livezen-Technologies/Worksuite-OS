@@ -4,6 +4,11 @@
   <core>
     <decoration>server</decoration>
     <gap>0</gap>
+    <!-- #16: variable refresh rate (VRR/FreeSync/G-Sync Compatible) for full-screen windows on displays that support
+         it; the desktop itself stays at the display's fixed rate (VRR there flickers on some panels). Frames are
+         synchronized to the display (no tearing). -->
+    <adaptiveSync>fullscreen</adaptiveSync>
+    <allowTearing>no</allowTearing>
   </core>
   <theme>
     <name>WorkSuite</name>
