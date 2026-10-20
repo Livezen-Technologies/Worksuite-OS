@@ -561,7 +561,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
       {qsOpen && (
         <QuickPanel state={quick} refresh={refreshQuick} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} onClose={() => setQsOpen(false)}
-          onSettings={() => { setQsOpen(false); openWin('settings') }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
+          onSettings={() => { setQsOpen(false); openWin('settings') }} onOpenSettings={(sec) => { setQsOpen(false); openSettingsAt(sec) }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
       )}
 
       {/* Taskbar (canvas G01/G02, "Centered" is the default style in Taskbar · styles): 52 px, edge-attached glass bar.
@@ -601,7 +601,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
             className={`flex size-9 cursor-pointer items-center justify-center rounded-[10px] ${assistant ? 'bg-[rgba(31,107,255,0.4)]' : 'hover:bg-white/10'}`}><Icon d={[AI_ICON]} size={18} /></button>
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setQsOpen(false) }}
             className="flex size-9 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
-          <QuickTray state={quick} open={qsOpen} onToggle={() => { setQsOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setA11yOpen(false) }} />
+          <QuickTray state={quick} open={qsOpen} onOpenSettings={(sec) => { setQsOpen(false); openSettingsAt(sec) }} onToggle={() => { setQsOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setA11yOpen(false) }} />
           <time dateTime={now.toISOString()} className="flex flex-col items-end whitespace-nowrap px-2 text-xs leading-[1.25]"><span>{time}</span><span className="text-[#8FA3C8]">{shortDate}</span></time>
           <button type="button" aria-label={unread > 0 ? `${t('notes.title')}, ${t('panel.newCount', { count: unread })}` : t('notes.title')} aria-expanded={trayOpen} aria-controls="ws-notifications"
             onClick={() => { setTrayOpen((v) => !v); setUnread(0); setPowerOpen(false); setQsOpen(false) }}

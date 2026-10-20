@@ -49,6 +49,7 @@ import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
 import { startTouchHost } from './touch'
+import { startSysWatch } from './sysWatch'
 import { startNotifications, windowForNotification } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
@@ -342,6 +343,8 @@ app.whenReady().then(() => {
   handle('ws:sysSetMute', (on) => sys.setMute(on === 'on'))
   handle('ws:sysSetDefaultAudio', (id) => sys.setDefaultAudio(Number(id)))
   handle('ws:sysBattery', () => sys.battery())
+  // The taskbar's Wi-Fi, Bluetooth and power indicators update when the services signal a change (#28).
+  void startSysWatch(broadcast)
   handle('ws:sysPrinters', () => sys.printers())
   handle('ws:sysDisplays', () => sys.displays())
   handle('ws:sysDisks', () => sys.disks())

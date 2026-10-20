@@ -130,6 +130,11 @@ contextBridge.exposeInMainWorld('worksuite', {
     ipcRenderer.on('ws:driversChanged', listener)
     return () => { ipcRenderer.removeListener('ws:driversChanged', listener) }
   },
+  onSysChanged: (cb: (kind: string) => void) => {
+    const listener = (_e: unknown, k: unknown) => cb(String(k))
+    ipcRenderer.on('ws:sysChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:sysChanged', listener) }
+  },
   onOpenSettings: (cb: (section: string) => void) => {
     const listener = (_e: unknown, s: unknown) => cb(String(s))
     ipcRenderer.on('ws:openSettings', listener)

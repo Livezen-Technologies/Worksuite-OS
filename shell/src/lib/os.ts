@@ -121,6 +121,8 @@ export interface WorkSuiteApi {
   /** A notice in the notification centre; clicking it opens Settings › Drivers (onOpenSettings). */
   driversNotify(summary: string, body: string): Promise<unknown>
   onOpenSettings(cb: (section: string) => void): () => void
+  /** NetworkManager, BlueZ or UPower signalled a change ('network' | 'bluetooth' | 'battery'; electron/sysWatch.ts). */
+  onSysChanged?(cb: (kind: string) => void): () => void
   /** Settings › Users: accounts on this computer (electron/users.ts). */
   sysUsers(): Promise<Avail<{ current: string; users: LocalUser[] }>>
   /** Settings › Users › Sign-in options: this device's PIN and security keys (electron/signin.ts). Changes go

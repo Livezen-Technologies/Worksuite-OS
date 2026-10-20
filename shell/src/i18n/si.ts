@@ -6,6 +6,7 @@ import { captureSi } from './capture'
 import { driversSi } from './drivers'
 import { whatsappSi } from './whatsapp'
 import { desktopsSi } from './desktops'
+import { desktopShellSi } from './desktopShell'
 import { bootuiSi } from './bootui'
 
 /** Machine-drafted: not yet reviewed by a native Sinhala speaker. See docs/i18n/README.md before changing. */
@@ -18,6 +19,7 @@ const si: Partial<Record<MessageKey, string>> = {
   ...driversSi,
   ...whatsappSi,
   ...desktopsSi,
+  ...desktopShellSi,
   ...bootuiSi,
   'panel.taskbar': 'කාර්ය තීරුව',
   'panel.openLauncher': 'දියත්කරනය විවෘත කරන්න',

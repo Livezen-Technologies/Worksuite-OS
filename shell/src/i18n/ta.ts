@@ -6,6 +6,7 @@ import { captureTa } from './capture'
 import { driversTa } from './drivers'
 import { whatsappTa } from './whatsapp'
 import { desktopsTa } from './desktops'
+import { desktopShellTa } from './desktopShell'
 import { bootuiTa } from './bootui'
 
 /** Machine-drafted: not yet reviewed by a native Tamil speaker. See docs/i18n/README.md before changing. */
@@ -18,6 +19,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   ...driversTa,
   ...whatsappTa,
   ...desktopsTa,
+  ...desktopShellTa,
   ...bootuiTa,
   'panel.taskbar': 'பணிப்பட்டி',
   'panel.openLauncher': 'தொடக்கியைத் திற',
