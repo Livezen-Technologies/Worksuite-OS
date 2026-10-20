@@ -229,6 +229,19 @@ paths:
                 policy_version: { type: string }
                 update_status: { type: string }
                 observed: { type: object, additionalProperties: true }
+                power_events:
+                  description: |
+                    Device startup/shutdown recorded by worksuite-power-events.service (#39). Sent only while the
+                    policy has activity_monitoring on; stored in the activity log, never kept in the heartbeat.
+                  type: array
+                  maxItems: 500
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [at, type]
+                    properties:
+                      at: { type: integer, description: epoch ms }
+                      type: { type: string, enum: [startup, shutdown] }
       responses:
         '200':
           description: Pending commands
@@ -547,13 +560,44 @@ paths:
                           properties:
                             at: { type: integer, description: epoch ms }
                             type: { type: string, enum: [login, logout, lock, unlock, startup, shutdown, idle, active] }
+                      domains:
+                        description: |
+                          Only when the policy has activity_web_domains on (else 403 WEB_TRACKING_DISABLED). Host names
+                          from WorkSuite web-app windows; a URL, path, port, IP address or title is refused with 400.
+                        type: array
+                        maxItems: 200
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [domain, active_s]
+                          properties:
+                            domain: { type: string, maxLength: 253, pattern: '^[a-z0-9.-]+$' }
+                            active_s: { type: integer, minimum: 0 }
       responses:
         '202': { description: Stored }
     get:
       tags: [os]
       summary: The signed-in user's own activity reports held by the organization (transparency)
       responses:
-        '200': { description: '{ items: [ { device_id, day, received_at, active_s, idle_s, locked_s, apps, events } ] }' }
+        '200': { description: '{ items: [ { device_id, day, received_at, active_s, idle_s, locked_s, apps, events, domains? } ], live: [ { device_id, state, app_id, at } ], device_events: [ { device_id, at, type } ] }' }
+  /desktop/v1/activity/live:
+    post:
+      tags: [os]
+      summary: Current state every 60 s while activity_monitoring is on (#39 live view)
+      description: Bearer of the user and X-WS-Device. Closed schema; 403 MONITORING_DISABLED when the policy has monitoring off.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [state]
+              properties:
+                state: { type: string, enum: [active, idle, locked] }
+                app_id: { type: [string, 'null'], pattern: '^[A-Za-z0-9._@+-]{1,128}$' }
+      responses:
+        '204': { description: Stored }
   /desktop/v1/problem-reports:
     post:
       tags: [os]

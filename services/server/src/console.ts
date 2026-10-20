@@ -15,7 +15,8 @@ import { setValidatedPolicy, validatePolicy } from './policy.ts';
 import { qrMatrix } from './qr.ts';
 import { REMOTE_SUPPORT_PERMISSION, getSignals as rsGetSignals, postSignal as rsPostSignal, dashboard as rsDashboard, history as rsHistory, requestSession, terminateSession } from './remoteSupport.ts';
 import { Throttle } from './throttle.ts';
-import { monitoringOverview, securityOverview } from './monitoring.ts';
+import { liveOverview, logFilter, monitoringOverview, searchLog, securityOverview } from './monitoring.ts';
+import { attendance, attendanceCsv, deliverAttendance, getHrWebhook, setHrWebhook, type WebhookFetch } from './attendance.ts';
 import { decideRequest, deploy, deployments, deviceSoftware, inventorySummary, reconcileRequired, validateAssignment, validDepartment } from './software.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
@@ -59,7 +60,7 @@ export function enrollmentLink(publicUrl: string, token: string): string {
   return `${new URL('enroll', publicUrl).toString()}#token=${encodeURIComponent(token)}`;
 }
 
-export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: boolean; publicUrl?: string }) {
+export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: boolean; publicUrl?: string; webhookFetch?: WebhookFetch }) {
   const log = (a: Admin, action: string, detail: Record<string, unknown> = {}) =>
     db.prepare('INSERT INTO admin_log (org_id, user_id, action, detail, at) VALUES (?, ?, ?, ?, ?)').run(a.org_id, a.id, action, JSON.stringify(detail), Date.now());
 
@@ -274,6 +275,49 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     if (!Number.isInteger(days) || days < 1 || days > 90) throw invalid('days', '1 to 90');
     log(a, 'monitoring_viewed', { days });   // who looked at employee activity is itself audited
     send(ctx, 200, monitoringOverview(db, a.org_id, days));
+  });
+  // #39: live status, the searchable log, attendance and the HR webhook. Every view and export is audited.
+  r.on('GET', '/admin/api/monitoring/live', (ctx) => {
+    const a = admin(ctx);
+    log(a, 'monitoring_live_viewed');
+    send(ctx, 200, liveOverview(db, a.org_id));
+  });
+  r.on('GET', '/admin/api/monitoring/log', (ctx) => {
+    const a = admin(ctx);
+    const f = logFilter(ctx.url.searchParams);
+    log(a, 'monitoring_log_viewed', { ...f });
+    const users = db.prepare("SELECT DISTINCT u.id, u.name FROM activity_log l JOIN users u ON u.id = l.user_id WHERE l.org_id = ? ORDER BY u.name").all(a.org_id);
+    const devices = db.prepare('SELECT DISTINCT d.id, d.hostname FROM activity_log l JOIN devices d ON d.id = l.device_id WHERE l.org_id = ? ORDER BY d.hostname').all(a.org_id);
+    send(ctx, 200, { ...searchLog(db, a.org_id, f), users, devices });
+  });
+  r.on('GET', '/admin/api/monitoring/attendance', (ctx) => {
+    const a = admin(ctx);
+    const q = ctx.url.searchParams;
+    const today = new Date().toISOString().slice(0, 10);
+    const from = q.get('from') ?? new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10), to = q.get('to') ?? today;
+    const rows = attendance(db, a.org_id, from, to);
+    if (q.get('format') === 'csv') {
+      log(a, 'attendance_exported', { from, to, rows: rows.length });
+      return send(ctx, 200, attendanceCsv(rows), { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="attendance-${from}-${to}.csv"` });
+    }
+    log(a, 'attendance_viewed', { from, to });
+    send(ctx, 200, { from, to, items: rows, webhook: getHrWebhook(db, a.org_id) });
+  });
+  r.on('PUT', '/admin/api/monitoring/hr-webhook', async (ctx) => {
+    const a = admin(ctx);
+    const b = await ctx.body() as Record<string, unknown>;
+    if (!b || typeof b !== 'object') throw invalid('body');
+    const res = setHrWebhook(db, a.org_id, b);
+    log(a, 'hr_webhook_changed', { url: b.url === null ? null : getHrWebhook(db, a.org_id).url ?? null, enabled: b.enabled !== false, secret_rotated: !!res.secret });
+    send(ctx, 200, { ...getHrWebhook(db, a.org_id), ...res });
+  });
+  r.on('POST', '/admin/api/monitoring/hr-webhook/send', async (ctx) => {
+    const a = admin(ctx);
+    const b = (await ctx.body() ?? {}) as Record<string, unknown>;
+    const day = typeof b.day === 'string' ? b.day : new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const r2 = await deliverAttendance(db, a.org_id, day, o.webhookFetch ?? ((url, init) => fetch(url, init)));
+    log(a, 'hr_webhook_sent', { day, status: r2.status, employees: r2.employees });
+    send(ctx, 200, r2);
   });
   r.on('POST', '/admin/api/devices/{id}/revoke', (ctx) => {
     const a = admin(ctx);

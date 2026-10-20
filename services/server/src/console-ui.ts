@@ -101,6 +101,8 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = fal
 const when = (ms) => ms ? new Date(ms).toLocaleString() : '—';
 const ago = (ms) => { if (!ms) return 'never'; const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
 const table = (head, rows) => h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, head.map((x) => h('th', {}, x)))), h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { colspan: head.length, class: 'muted' }, 'Nothing here yet.')))));
+const monNav = (cur) => h('nav', { class: 'row', 'aria-label': 'Employee monitoring' }, [['monitoring', 'Overview'], ['live', 'Live'], ['mlog', 'Activity log'], ['attendance', 'Attendance']]
+  .map(([v, l]) => h('a', { href: '#' + v, class: 'button', 'aria-current': v === cur ? 'page' : null }, l)));
 async function act(fn, ok) { try { await fn(); if (ok) toast(ok); route(); } catch (e) { toast(e.message); } }
 
 function showLogin() { $('#app').hidden = true; $('#login').hidden = false; $('#login-form').email.focus(); }
@@ -294,7 +296,7 @@ const views = {
         av_exclusions: list('av_exclusions').length ? list('av_exclusions') : null, firewall_outbound_block: list('firewall_outbound_block').length ? list('firewall_outbound_block') : null,
         firewall_log_blocked: f.firewall_log_blocked.value === '' ? null : f.firewall_log_blocked.value === 'true', security_log_retention_days: num('security_log_retention_days'),
         activity_monitoring: f.activity_monitoring.value === '' ? null : f.activity_monitoring.value === 'true', activity_retention_days: num('activity_retention_days'),
-        activity_idle_threshold_s: num('activity_idle_threshold_s'),
+        activity_idle_threshold_s: num('activity_idle_threshold_s'), activity_web_domains: f.activity_web_domains.value === '' ? null : f.activity_web_domains.value === 'true',
         app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
     } },
       h('div', { class: 'row' }, h('label', {}, 'Update ring', sel('update_ring', [['stable', 'Stable'], ['pilot', 'Pilot'], ['development', 'Development']])),
@@ -333,10 +335,11 @@ const views = {
         h('div', { class: 'row' }, h('label', { class: 'grow' }, 'Blocked destinations (IP or CIDR, one per line)', h('textarea', { name: 'firewall_outbound_block' }, (p.firewall_outbound_block || []).join('\n'))),
           h('label', {}, 'Report blocked connections', sel('firewall_log_blocked', [['true', 'On'], ['false', 'Off']])))),
       h('fieldset', {}, h('legend', {}, 'Employee monitoring'),
-        h('p', { class: 'muted' }, 'Off unless turned on. Employees see a persistent indicator, are told on their first sign-in what is collected, and can see their own data. Collected: active, idle and locked time, time per application, sign-in/out and lock events. Never: keystrokes, screenshots, window titles, web addresses or file contents.'),
+        h('p', { class: 'muted' }, 'Off unless turned on. Employees see a persistent indicator, are told on their first sign-in what is collected, and can see their own data. Collected: active, idle and locked time, time per application, sign-in/out and lock events, device startup and shutdown, and a once-a-minute current state (active/idle/locked and the app in use). Website domains only if turned on below. Never: keystrokes, screenshots, window titles, full web addresses, page titles or file contents.'),
         h('div', { class: 'row' }, h('label', {}, 'Activity monitoring', sel('activity_monitoring', [['true', 'On'], ['false', 'Off']])),
           h('label', {}, 'Keep reports (days)', h('input', { name: 'activity_retention_days', type: 'number', min: 1, max: 730, value: p.activity_retention_days ?? '' })),
-          h('label', {}, 'Idle after (seconds)', h('input', { name: 'activity_idle_threshold_s', type: 'number', min: 60, max: 3600, value: p.activity_idle_threshold_s ?? '' })))),
+          h('label', {}, 'Idle after (seconds)', h('input', { name: 'activity_idle_threshold_s', type: 'number', min: 60, max: 3600, value: p.activity_idle_threshold_s ?? '' })),
+          h('label', {}, 'Website domains (WorkSuite web apps only)', sel('activity_web_domains', [['true', 'On'], ['false', 'Off']])))),
       h('label', {}, 'Update mirror (https, optional)', h('input', { name: 'update_mirror', value: p.update_mirror || '' })),
       h('label', {}, 'Allowed apps (catalog IDs, one per line)', h('textarea', { name: 'app_allowlist' }, (p.app_allowlist || []).join('\n'))),
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),
@@ -346,7 +349,7 @@ const views = {
     if (p.ai_assistant !== undefined) f.ai_assistant.value = String(p.ai_assistant);
     if (p.desktop_widgets !== undefined) f.desktop_widgets.value = String(p.desktop_widgets);
     if (p.whatsapp !== undefined && p.whatsapp !== null) f.whatsapp.value = String(p.whatsapp);
-    for (const k of ['antivirus', 'firewall_log_blocked', 'activity_monitoring']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
+    for (const k of ['antivirus', 'firewall_log_blocked', 'activity_monitoring', 'activity_web_domains']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
     for (const k of ['drivers_online_search', 'drivers_auto_install', 'drivers_auto_install_gpu', 'software_uninstall', 'software_update']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
     return [h('h1', {}, 'Policy'), h('p', { class: 'muted' }, 'Current version ' + version + '. Devices verify the signature before applying it.'), f, kioskForm(p)];
   },
@@ -532,12 +535,85 @@ const views = {
           h('td', {}, s && s.antivirus && s.antivirus.last_scan ? s.antivirus.last_scan.kind + ', ' + ago(s.antivirus.last_scan.finished) + (s.antivirus.last_scan.error ? ' (failed)' : '') : '—'),
           h('td', {}, ago(d.last_seen))); }))];
   },
+  /** #39 Live: each employee's 60-second heartbeat (active, idle or locked, and the app in use). Opening it is audited. */
+  async live() {
+    const r = await api('GET', 'monitoring/live');
+    const tone = { active: 'ok', idle: 'warn', locked: 'muted', offline: 'muted' };
+    return [h('h1', {}, 'Employee monitoring'), monNav('live'),
+      h('p', { class: 'muted' }, 'Current state from each device\'s heartbeat, sent every minute while monitoring is on. A device silent for ' + Math.round(r.stale_after_s / 60) + ' minutes shows offline. Each time this page is opened or refreshed it is recorded in Activity.'),
+      h('div', { class: 'row' }, h('button', { onclick: () => route() }, 'Refresh')),
+      table(['Employee', 'Device', 'Status', 'Application', 'Last seen'], r.items.map((x) => h('tr', {},
+        h('td', {}, h('b', {}, x.name), h('div', { class: 'muted' }, x.email)), h('td', {}, x.device),
+        h('td', {}, h('span', { class: tone[x.status] || '' }, x.status.charAt(0).toUpperCase() + x.status.slice(1))),
+        h('td', {}, x.app_name || '—'), h('td', {}, ago(x.last_seen) + ' · ' + when(x.last_seen)))))];
+  },
+  /** #39 Activity log: filter by employee, device, dates, event type and application or domain; paginated; audited. */
+  async mlog(arg) {
+    const q = new URLSearchParams(arg || '');
+    const r = await api('GET', 'monitoring/log?' + q.toString());
+    const go = (over) => { const n = new URLSearchParams(q); for (const [k, v] of Object.entries(over)) { if (v === '' || v === null) n.delete(k); else n.set(k, String(v)); } location.hash = 'mlog/' + encodeURIComponent(n.toString()); };
+    const f = h('form', { class: 'card form', onsubmit: (e) => { e.preventDefault(); const x = e.target;
+      go({ user: x.user.value, device: x.device.value, from: x.from.value, to: x.to.value, type: x.type.value, app: x.app.value.trim(), page: 1 }); } },
+      h('div', { class: 'row' },
+        h('label', {}, 'Employee', h('select', { name: 'user' }, h('option', { value: '' }, 'Everyone'), r.users.map((u) => h('option', { value: u.id, selected: String(u.id) === q.get('user') }, u.name)))),
+        h('label', {}, 'Device', h('select', { name: 'device' }, h('option', { value: '' }, 'All devices'), r.devices.map((d) => h('option', { value: d.id, selected: d.id === q.get('device') }, d.hostname)))),
+        h('label', {}, 'From', h('input', { name: 'from', type: 'date', value: q.get('from') || '' })), h('label', {}, 'To', h('input', { name: 'to', type: 'date', value: q.get('to') || '' })),
+        h('label', {}, 'Type', h('select', { name: 'type' }, [['', 'All'], ['login', 'Sign-in'], ['logout', 'Sign-out'], ['lock', 'Lock'], ['unlock', 'Unlock'], ['idle', 'Idle'], ['active', 'Active again'], ['startup', 'Device startup'], ['shutdown', 'Device shutdown'], ['app', 'Application time'], ['web', 'Website (domain)']]
+          .map(([v, l]) => h('option', { value: v, selected: v === (q.get('type') || '') }, l)))),
+        h('label', {}, 'Application or domain', h('input', { name: 'app', value: q.get('app') || '' })),
+        h('button', {}, 'Search')));
+    const label = { app: 'Application', web: 'Website', startup: 'Device startup', shutdown: 'Device shutdown', login: 'Sign-in', logout: 'Sign-out', lock: 'Lock', unlock: 'Unlock', idle: 'Idle', active: 'Active again' };
+    return [h('h1', {}, 'Employee monitoring'), monNav('mlog'), f,
+      h('p', { class: 'muted' }, r.total + ' entries. Each search is recorded in Activity.'),
+      table(['Time', 'Employee', 'Device', 'Event', 'Detail'], r.items.map((x) => h('tr', {},
+        h('td', {}, x.type === 'app' || x.type === 'web' ? x.day : when(x.at)), h('td', {}, x.user || h('span', { class: 'muted' }, 'Device')), h('td', {}, x.device),
+        h('td', {}, label[x.type] || x.type),
+        h('td', {}, x.type === 'app' ? x.app_name + ' · ' + (x.duration_s / 3600).toFixed(1) + ' h' : x.type === 'web' ? x.domain + ' · ' + (x.duration_s / 3600).toFixed(1) + ' h' : '')))),
+      h('div', { class: 'row' }, h('button', { disabled: r.page <= 1, onclick: () => go({ page: r.page - 1 }) }, 'Previous'), h('span', { class: 'muted' }, 'Page ' + r.page + ' of ' + r.pages),
+        h('button', { disabled: r.page >= r.pages, onclick: () => go({ page: r.page + 1 }) }, 'Next'))];
+  },
+  /** #39 Attendance: first active, last active and total active time per employee and day; CSV; HR webhook. */
+  async attendance(arg) {
+    const q = new URLSearchParams(arg || '');
+    const r = await api('GET', 'monitoring/attendance?' + q.toString());
+    const t = (ms) => ms ? new Date(ms).toLocaleTimeString() : '—';
+    const w = r.webhook;
+    const url = h('input', { type: 'url', placeholder: 'https://hr.example.com/hooks/worksuite', value: w.url || '', 'aria-label': 'Webhook URL', class: 'grow' });
+    const secretBox = h('div', {});
+    const save = (body) => api('PUT', 'monitoring/hr-webhook', body).then((x) => {
+      if (x.secret) secretBox.replaceChildren(h('div', { class: 'card' }, h('b', {}, 'Signing secret (shown once): '), h('code', { class: 'mono' }, x.secret),
+        h('p', { class: 'muted' }, 'Verify X-WorkSuite-Signature: t=<seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>"> with this secret.')));
+      toast('Saved.');
+    }).catch((e) => toast(e.message));
+    return [h('h1', {}, 'Employee monitoring'), monNav('attendance'),
+      h('form', { class: 'row', onsubmit: (e) => { e.preventDefault(); location.hash = 'attendance/' + encodeURIComponent('from=' + e.target.from.value + '&to=' + e.target.to.value); } },
+        h('label', {}, 'From', h('input', { name: 'from', type: 'date', value: r.from })), h('label', {}, 'To', h('input', { name: 'to', type: 'date', value: r.to })), h('button', {}, 'Show'),
+        // Fetched with the X-WS-Admin header (a plain link could not send it), then saved from a blob.
+        h('button', { type: 'button', onclick: async () => {
+          const res = await fetch('/admin/api/monitoring/attendance?format=csv&from=' + r.from + '&to=' + r.to, { credentials: 'same-origin', headers: { 'x-ws-admin': '1' } });
+          if (!res.ok) { toast('Export failed (HTTP ' + res.status + ').'); return; }
+          const a = h('a', { href: URL.createObjectURL(await res.blob()), download: 'attendance-' + r.from + '-' + r.to + '.csv' }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+        } }, 'Export CSV')),
+      h('p', { class: 'muted' }, 'From the activity reports, across all of an employee\'s devices. Viewing and exporting are recorded in Activity.'),
+      table(['Day', 'Employee', 'First active', 'Last active', 'Active'], r.items.map((x) => h('tr', {},
+        h('td', {}, x.day), h('td', {}, h('b', {}, x.name), h('div', { class: 'muted' }, x.email)), h('td', {}, t(x.first_active)), h('td', {}, t(x.last_active)), h('td', {}, (x.active_s / 3600).toFixed(1) + ' h')))),
+      h('h2', {}, 'HR system webhook'),
+      h('div', { class: 'card form' },
+        h('p', { class: 'muted' }, 'After each day, its attendance (email, name, first and last active, active seconds; nothing else) is POSTed as JSON to this HTTPS address, signed with HMAC-SHA256.'),
+        h('div', { class: 'row' }, url, h('button', { onclick: () => save({ url: url.value, enabled: true }) }, w.configured ? 'Save' : 'Create'),
+          w.configured ? h('button', { onclick: () => save({ url: url.value, enabled: !w.enabled }).then(route) }, w.enabled ? 'Pause' : 'Resume') : null,
+          w.configured ? h('button', { onclick: () => save({ url: url.value, enabled: w.enabled, rotate_secret: true }) }, 'New secret') : null,
+          w.configured ? h('button', { onclick: () => act(() => api('POST', 'monitoring/hr-webhook/send', {}).then((x) => { if (!x.ok) throw new Error('HR system answered ' + x.status); }), 'Sent yesterday\'s attendance.') }, 'Send yesterday now') : null,
+          w.configured ? h('button', { class: 'danger', onclick: () => act(() => api('PUT', 'monitoring/hr-webhook', { url: null }), 'Removed.') }, 'Remove') : null),
+        w.configured ? h('p', { class: 'muted' }, (w.enabled ? 'Active' : 'Paused') + '. Last delivery: ' + (w.last_at ? when(w.last_at) + ' (' + w.last_status + ')' : 'none') + (w.last_day ? ' · last day accepted ' + w.last_day : '')) : null,
+        secretBox)];
+  },
   async monitoring(arg) {
     const days = Number(arg) || 7;
     const r = await api('GET', 'monitoring?days=' + days);
     const hrs = (s) => (s / 3600).toFixed(1) + ' h';
     const pick = h('select', { 'aria-label': 'Period', onchange: (e) => { location.hash = 'monitoring/' + e.target.value; } }, [1, 7, 30, 90].map((n) => h('option', { value: n, selected: n === days }, n === 1 ? 'Today' : 'Last ' + n + ' days')));
-    return [h('h1', {}, 'Employee monitoring'),
+    return [h('h1', {}, 'Employee monitoring'), monNav('monitoring'),
       h('div', { class: 'card' }, h('p', { class: r.enabled ? '' : 'warn' }, r.enabled ? 'On. Reports are kept for ' + r.retention_days + ' days.' : 'Off. Turn it on in Policy › Employee monitoring; no activity is collected until then.'),
         h('p', { class: 'muted' }, 'Aggregate work activity only: active, idle and locked time, time per application, sign-in and lock events. Employees see that monitoring is on and can view their own data. Each time this page is opened it is recorded in Activity.')),
       h('div', { class: 'row' }, pick),
@@ -682,7 +758,7 @@ async function route() {
   if (rsViewer.stop && !location.hash.startsWith('#viewer/')) rsViewer.stop();
   const [view, arg] = (location.hash.slice(1) || 'overview').split('/');
   const fn = views[view] || views.overview;
-  for (const a of document.querySelectorAll('.side a')) a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + (view === 'device' ? 'devices' : view === 'problem' ? 'problems' : view === 'viewer' ? 'support' : view));
+  for (const a of document.querySelectorAll('.side a')) a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + (view === 'device' ? 'devices' : view === 'problem' ? 'problems' : view === 'viewer' ? 'support' : ['live', 'mlog', 'attendance'].includes(view) ? 'monitoring' : view));
   for (const a of document.querySelectorAll('.side a[aria-current]')) a.setAttribute('aria-current', 'page');
   const main = $('#main');
   try { main.replaceChildren(...[await fn(arg ? decodeURIComponent(arg) : undefined)].flat(Infinity).filter((x) => x != null)); main.focus(); }
