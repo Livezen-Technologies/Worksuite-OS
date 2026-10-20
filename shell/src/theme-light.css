@@ -156,6 +156,7 @@
 :root[data-theme="light"] .text-\[\#FFB98A\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #8E400B; }
 :root[data-theme="light"] .text-\[\#FFD08A\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #7B4D0A; }
 :root[data-theme="light"] .text-\[\#FFD27A\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #714E09; }
+:root[data-theme="light"] .text-\[\#FFD2A8\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #84450B; }
 :root[data-theme="light"] .text-\[\#FFD2CA\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #AA250E; }
 :root[data-theme="light"] .text-\[\#FFE6A8\]:not(.ws-dark-zone *, .ws-dark-zone) { color: #715309; }
 :root[data-theme="light"] .text-white:not(.ws-dark-zone *, .ws-dark-zone):not(:where(.bg-\[\#18D4F0\], .bg-\[\#1F6BFF\], .bg-\[\#25D366\], .bg-\[\#5FD39A\], .bg-\[\#B7791F\], .bg-\[\#C42B1C\], .bg-\[\#D9452B\], .bg-\[\#F4F7FC\], .bg-\[\#F59E0B\], .bg-\[\#FF8A7A\], .bg-\[\#f8fafc\], [style*="background"])) { color: #0F172A; }

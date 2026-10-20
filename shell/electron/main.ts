@@ -33,6 +33,8 @@ import { startAIHost } from './ai'
 import { defaultEnv, driveDir, dropPlan, freeBytes, list, resolveIn, roots } from './files'
 import { eject, jobs as fileJobs, mkdirIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel, type PanelHooks } from './panelHost'
+import { startActivity } from './activityHost'
+import { startSecurity } from './securityCenter'
 import { captureHost, imageData, runBytes, screenshotFileName, screenshotsDir, wlCopyImage, type CaptureKind, type SnipMode } from './capture'
 import { clipboardAllowed } from './clipboard'
 import { applyShortcuts } from './shortcutsHost'
@@ -708,6 +710,16 @@ app.whenReady().then(() => {
     return notices.notify(DRIVERS_APP, 0, String(summary).slice(0, 200), String(body).slice(0, 400), ['default', ''], 1)
   })
   handle('ws:filesNotify', (summary, body) => notices.notify('Files', 0, String(summary).slice(0, 200), String(body).slice(0, 400), [], 1))
+  // WorkSuite Security (#20): status, Scan now, and notices for threats, firewall alerts, protection off, isolation.
+  startSecurity(handle, (n) => void notices.notify('WorkSuite Security', 0, n.title, n.body, [], n.kind === 'threat_detected' || n.kind === 'isolated' ? 2 : 1), broadcast)
+  // Employee monitoring (#22): only when the signed policy turns it on; Settings and the taskbar indicator show it.
+  const activity = startActivity(handle, {
+    home, broadcast, device: () => deviceCredential(),
+    session: async () => { const s = await loadSession(brokerFn, (url, init) => fetch(url, { headers: init?.headers }), () => deviceCredential()); return s.ok ? s.value : null },
+    fetch: (url, init) => fetch(url, init as RequestInit),
+  })
+  hooks.windows = (w) => activity.windows(w, ACTIVATED_FLAG)
+  app.on('before-quit', () => activity.stop())
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
   startPolkitBridge(handle, broadcast)
 })

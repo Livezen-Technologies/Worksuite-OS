@@ -44,6 +44,18 @@ export interface WorkSuiteApi {
   cloudAccounts(): Promise<CloudResult<CloudAccount[]>>
   /** Settings > About this device (WSOS-MDM-007, WSOS-WIPE-007): device agent status, or local facts when it isn't running. */
   deviceInfo(): Promise<DeviceInfo>
+  /** WorkSuite Security (#20): the device agent's security status; null when it is not available. */
+  securityStatus(): Promise<SecurityStatus | null>
+  /** Scan now through the device agent (polkit lk.worksuite.security.scan). */
+  securityScan(kind: 'quick' | 'full'): Promise<CloudResult<unknown>>
+  onSecurityChanged(cb: (s: SecurityStatus) => void): () => void
+  /** Employee monitoring (#22): policy, disclosure state and this user's own recorded days. */
+  activityStatus(): Promise<ActivityStatus>
+  /** The user has read the monitoring disclosure. */
+  activityAck(): Promise<ActivityStatus>
+  /** What the organization's server holds about this user. */
+  activityRemote(): Promise<CloudResult<ActivityDay[]>>
+  onActivityChanged(cb: (s: ActivityStatus) => void): () => void
   /** Enterprise enrollment through the device agent; asks for an administrator password (polkit). */
   enrollDevice(serverUrl: string, code: string): Promise<CloudResult<{ device_id: string; org_name: string | null }>>
   // App Center through the package service (catalog ids "apt:<name>" / "flatpak:<app id>").
@@ -347,6 +359,8 @@ export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
   lock_timeout_max_s: number | null; offline_access_days: number | null; usb_storage: string | null; bluetooth: boolean | null
   app_allowlist_size: number
+  /** Employee monitoring (#22) on in the signed policy. */
+  activity_monitoring?: boolean
   /** On-device AI assistant (services/ai): false = off for everyone; ai_models = catalog ids allowed. */
   ai_assistant?: boolean | null; ai_models?: string[] | null
   /** Desktop widgets (WorkSuite Desktop's Home on the wallpaper): false = off for everyone. Kiosk: always off. */
@@ -376,6 +390,26 @@ export interface DeviceInfo {
   specs?: { cpu_model: string | null; cpu_cores: number | null; memory_bytes: number | null }
 }
 
+/** /run/worksuite-device-agent/security.json (services/device-agent/src/security.ts securityStatus). */
+export interface SecurityStatus {
+  overall: 'protected' | 'attention' | 'at_risk' | 'unavailable'
+  issues: string[]
+  managed: boolean
+  scanning?: boolean
+  firewall: { active: boolean; policy_rules: number; log_blocked: boolean }
+  isolation: { since: number; until: number } | null
+  antivirus: { enabled: boolean; installed: boolean; engine: string | null; signatures: number | null; signatures_at: number | null; signatures_age_days: number | null; updates: string; schedule: string; exclusions: number
+    last_scan: { kind: string; trigger: string; started: number; finished: number; files: number; detections: number; error?: string } | null; last_full_scan: number | null }
+  threats: { active: number; quarantined: number }
+  history: { id: string; at: number; path: string; signature: string; action: string }[]
+  firewall_alerts: { at: number; dst: string; dport: number | null; proto: string }[]
+  retention_days: number
+}
+/** One day of activity (electron/activity.ts DayReport): aggregates only. */
+export interface ActivityDay { day: string; active_s: number; idle_s: number; locked_s: number; first_active: number | null; last_active: number | null
+  apps: { app_id: string; name: string; active_s: number; switches: number }[]; events: { at: number; type: string }[] }
+export interface ActivityStatus { enabled: boolean; org_name: string | null; retention_days: number; idle_threshold_s: number; disclosure_needed: boolean; last_sent: number | null; days: ActivityDay[] }
+
 /** Taskbar chip text: null when the device isn't managed (WSOS-MDM-007). */
 export function managedLabel(info: DeviceInfo | null): string | null {
   if (!info?.managed) return null
@@ -398,6 +432,7 @@ export function policyLines(p: DevicePolicies | null): string[] {
   if (p.screen_capture === 'disabled') out.push(t('mdm.captureOff'))
   if (p.clipboard_history === 'disabled') out.push(t('mdm.clipboardOff'))
   if (p.ai_assistant === false) out.push(t('mdm.aiOff'))
+  if (p.activity_monitoring === true) out.push(t('mdm.monitoringOn'))
   else if (p.ai_models?.length) out.push(t('mdm.aiLimited', { count: p.ai_models.length }))
   return out
 }
@@ -478,6 +513,26 @@ const stub: WorkSuiteApi = {
     stubPolls++
     return { ok: true, value: stubPolls < 2 ? { state: 'offline', pending: 14, failed: 0, conflicts: 0, last_sync: null } : { state: 'idle', pending: 0, failed: 0, conflicts: 0, last_sync: Date.now() } }
   },
+  async securityStatus() {
+    if (PV.get('security') === 'none') return null
+    const risk = PV.get('security') === 'threat'
+    return {
+      overall: risk ? 'at_risk' : 'protected', issues: risk ? ['threats_need_action'] : [], managed: stubManaged, scanning: false,
+      firewall: { active: true, policy_rules: stubManaged ? 3 : 0, log_blocked: stubManaged }, isolation: null,
+      antivirus: { enabled: true, installed: true, engine: '1.0.7', signatures: 27431, signatures_at: Date.now() - 86_400_000, signatures_age_days: 1, updates: 'active', schedule: 'weekly', exclusions: 0,
+        last_scan: { kind: 'quick', trigger: 'schedule', started: Date.now() - 7_300_000, finished: Date.now() - 7_200_000, files: 18_402, detections: risk ? 1 : 0 }, last_full_scan: Date.now() - 5 * 86_400_000 },
+      threats: { active: risk ? 1 : 0, quarantined: 1 },
+      history: [...(risk ? [{ id: 't2', at: Date.now() - 7_200_000, path: '/home/nimal/Downloads/invoice.pdf.exe', signature: 'Win.Trojan.Agent-1', action: 'detected' }] : []),
+        { id: 't1', at: Date.now() - 9 * 86_400_000, path: '/home/nimal/Downloads/eicar.com', signature: 'Win.Test.EICAR_HDB-1', action: 'quarantined' }],
+      firewall_alerts: [], retention_days: 90,
+    }
+  },
+  async securityScan() { return { ok: true, value: true } },
+  onSecurityChanged() { return () => {} },
+  async activityStatus() { return stubActivity() },
+  async activityAck() { stubActivityAck = true; return stubActivity() },
+  async activityRemote() { return { ok: true, value: stubActivity().days } },
+  onActivityChanged() { return () => {} },
   async enrollDevice(_url, code) {
     if (code === 'BAD-CODE') return { ok: false, error: 'enrollment_rejected' }
     stubManaged = true
@@ -864,6 +919,15 @@ function stubJob(_id: string, _kind: string): CloudResult<string> {
 let stubUnsent = 3
 let stubPolls = 0
 // Preview only: unmanaged until enrolled (first-run or Settings).
+let stubActivityAck = false
+/** Preview: ?monitoring=1 shows employee monitoring on (with the first-run disclosure until it is acknowledged). */
+function stubActivity(): ActivityStatus {
+  const on = PV.get('monitoring') === '1'
+  const day = new Date().toISOString().slice(0, 10)
+  return { enabled: on, org_name: on ? 'Livezen Technologies' : null, retention_days: 90, idle_threshold_s: 300, disclosure_needed: on && !stubActivityAck, last_sent: on ? Date.now() - 600_000 : null,
+    days: on ? [{ day, active_s: 13_320, idle_s: 1_800, locked_s: 2_700, first_active: Date.now() - 6 * 3_600_000, last_active: Date.now(), events: [{ at: Date.now() - 6 * 3_600_000, type: 'login' }],
+      apps: [{ app_id: 'org.worksuite.Office', name: 'WorkSuite Office', active_s: 7_900, switches: 31 }, { app_id: 'org.mozilla.firefox', name: 'Firefox', active_s: 3_600, switches: 24 }, { app_id: 'foot', name: 'Terminal', active_s: 1_820, switches: 9 }] }] : [] }
+}
 let stubManaged = typeof location !== 'undefined' && new URLSearchParams(location.search).get('managed') === '1'
 
 /** Broker error codes → text for the user. */

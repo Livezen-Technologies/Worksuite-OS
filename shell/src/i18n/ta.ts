@@ -2,6 +2,7 @@
 import type { LocaleReview, MessageKey } from './en'
 import { aiTa } from './ai'
 import { widgetsTa } from './widgets'
+import { securityTa } from './security'
 import { captureTa } from './capture'
 import { driversTa } from './drivers'
 import { whatsappTa } from './whatsapp'
@@ -14,6 +15,7 @@ export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedK
 const ta: Partial<Record<MessageKey, string>> = {
   ...aiTa,
   ...widgetsTa,
+  ...securityTa,
   ...captureTa,
   ...driversTa,
   ...whatsappTa,

@@ -2,6 +2,7 @@
 import type { LocaleReview, MessageKey } from './en'
 import { aiSi } from './ai'
 import { widgetsSi } from './widgets'
+import { securitySi } from './security'
 import { captureSi } from './capture'
 import { driversSi } from './drivers'
 import { whatsappSi } from './whatsapp'
@@ -14,6 +15,7 @@ export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedK
 const si: Partial<Record<MessageKey, string>> = {
   ...aiSi,
   ...widgetsSi,
+  ...securitySi,
   ...captureSi,
   ...driversSi,
   ...whatsappSi,

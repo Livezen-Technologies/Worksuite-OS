@@ -61,6 +61,21 @@ contextBridge.exposeInMainWorld('worksuite', {
   },
   sysDisks: () => ipcRenderer.invoke('ws:sysDisks'),
   enrollDevice: (serverUrl: string, code: string) => ipcRenderer.invoke('ws:enrollDevice', String(serverUrl), String(code)),
+  securityStatus: () => ipcRenderer.invoke('ws:securityStatus'),
+  securityScan: (kind: string) => ipcRenderer.invoke('ws:securityScan', kind === 'full' ? 'full' : 'quick'),
+  onSecurityChanged: (cb: (s: unknown) => void) => {
+    const listener = (_e: unknown, payload: unknown) => cb(payload)
+    ipcRenderer.on('ws:securityChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:securityChanged', listener) }
+  },
+  activityStatus: () => ipcRenderer.invoke('ws:activityStatus'),
+  activityAck: () => ipcRenderer.invoke('ws:activityAck'),
+  activityRemote: () => ipcRenderer.invoke('ws:activityRemote'),
+  onActivityChanged: (cb: (s: unknown) => void) => {
+    const listener = (_e: unknown, payload: unknown) => cb(payload)
+    ipcRenderer.on('ws:activityChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:activityChanged', listener) }
+  },
   pkgPreview: (catalogId: string, op: string) => ipcRenderer.invoke('ws:pkgPreview', String(catalogId), String(op)),
   pkgInstall: (catalogId: string) => ipcRenderer.invoke('ws:pkgInstall', String(catalogId)),
   pkgRemove: (catalogId: string) => ipcRenderer.invoke('ws:pkgRemove', String(catalogId)),

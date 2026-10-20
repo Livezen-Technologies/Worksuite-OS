@@ -43,6 +43,7 @@ import { DEFAULT_LAYOUT, loadLocalLayout, saveLocalLayout, widgetsAllowed, type 
 import SnipOverlay from '../components/SnipOverlay'
 import ClipboardFlyout, { type FlyoutTab } from '../components/ClipboardFlyout'
 import ShortcutHelp from '../components/ShortcutHelp'
+import { MonitoringIndicator } from '../components/MonitoringNotice'
 import { captureApi, SHELL_OPEN_EVENT, SNIP_EDIT_EVENT, snipState, type Captured, type ShellOpen, type SnipOpen } from '../lib/captureApi'
 
 /** How long a pop-up toast stays (services/session/toasts TIMEOUT_MS is the same). */
@@ -568,6 +569,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
           <TrayItems />
+          <MonitoringIndicator onOpen={() => openSettingsAt('Privacy & security')} />
           <CaptureBadge />
           <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />

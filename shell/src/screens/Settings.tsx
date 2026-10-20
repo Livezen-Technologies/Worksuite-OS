@@ -4,7 +4,7 @@
 import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { localTaskbarAlign, saveTaskbarAlign, shellPrefsFrom, type TaskbarAlign } from '../lib/shellPrefs'
-import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SecurityStatus, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
 import type { WindowProps } from './types'
 import { ACCENTS, DEFAULT_PRIVACY, KEYS, THEMES, accentColor, applyAppearance, loadAppearance, readJson, writeJson, type Appearance, type Privacy } from '../lib/setup'
@@ -22,6 +22,8 @@ import { KioskPanel } from './settings/Kiosk'
 import { AIPanel } from './settings/AI'
 import { MultitaskingPanel } from './settings/Multitasking'
 import { ClipboardPanel } from './settings/Clipboard'
+import { SecuritySection } from './settings/Security'
+import { MonitoringSection } from './settings/Monitoring'
 import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
@@ -353,11 +355,13 @@ function PrivacyPanel() {
   const set = (k: keyof Privacy) => (v: boolean) => { const n = { ...p, [k]: v }; setP(n); writeJson(KEYS.privacy, n) }
   const [lock, setLock] = useState<LockSettings | null>(null)
   useEffect(() => { void os.lockSettings().then(setLock).catch(() => {}) }, [])
+  const [sec, setSec] = useState<SecurityStatus | null>(null)
+  useEffect(() => { void os.securityStatus().then(setSec).catch(() => {}); return os.onSecurityChanged(setSec) }, [])
   const enc = info?.device?.encrypted
   type Tile = { t: string; d: string; ok: boolean | null; icon: string }
   const tiles: Tile[] = [
     { t: enc === false ? t('settings.priv.notEncrypted') : t('settings.priv.encryption'), d: enc ? t('settings.priv.luksOn') : enc === false ? t('settings.priv.readable') : t('settings.priv.statusUnavailable'), ok: enc ?? null, icon: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4' },
-    { t: t('settings.priv.firewall'), d: t('settings.priv.statusUnavailable'), ok: null, icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z' },
+    { t: t('settings.priv.firewall'), d: !sec ? t('settings.priv.statusUnavailable') : sec.firewall.active ? t('sec.firewallOn') : t('sec.firewallOff'), ok: sec ? sec.firewall.active : null, icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z' },
     status?.state === 'up_to_date'
       ? { t: t('settings.priv.upToDate'), d: t('settings.priv.checked', { when: status.last_check ? fmtWhen(status.last_check) : '—' }), ok: true, icon: 'M5 12.5l4.5 4.5L19 7.5' }
       : { t: needsAttention(status) ? t('settings.priv.updateWaiting') : t('settings.nav.Updates'), d: needsAttention(status) ? t('settings.priv.openUpdates') : status ? t('settings.priv.seeUpdates') : t('settings.priv.statusUnavailable'), ok: needsAttention(status) ? false : null, icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
@@ -418,6 +422,8 @@ function PrivacyPanel() {
         <div className={`${card} px-4 py-3 text-xs leading-relaxed text-[#C9D6EE]`}>{t('settings.priv.note')}</div>
       </section>
     </div>
+    <SecuritySection info={info} />
+    <MonitoringSection />
     <ClipboardSection />
   </>
 }
@@ -518,6 +524,8 @@ function AboutPanel() {
   const { status } = useOsUpdate()
   const [info, setInfo] = useState<DeviceInfo | null>(null)
   const [gpus, setGpus] = useState<string[] | null>(null)
+  const [fw, setFw] = useState<SecurityStatus | null>(null)
+  useEffect(() => { void os.securityStatus().then(setFw).catch(() => {}) }, [])
   const [free, setFree] = useState<number | null>(null)
   const [disk, setDisk] = useState<{ used: number; total: number } | null>(null)
   const [copied, setCopied] = useState(false)
@@ -544,7 +552,7 @@ function AboutPanel() {
   const sec = [
     { k: t('settings.priv.encryption'), v: d?.encrypted == null ? t('common.unknown') : d.encrypted ? t('settings.about.encrypted') : t('settings.about.notEncrypted'), c: d?.encrypted ? C.green : d?.encrypted === false ? C.amber : '#5E739C' },
     { k: t('settings.about.secureBoot'), v: na, c: '#5E739C' },
-    { k: t('settings.priv.firewall'), v: na, c: '#5E739C' },
+    { k: t('settings.priv.firewall'), v: !fw ? na : fw.firewall.active ? t('sec.firewallOn') : t('sec.firewallOff'), c: !fw ? '#5E739C' : fw.firewall.active ? C.green : C.amber },
     { k: t('settings.about.managedBy'), v: info.managed ? info.org_name ?? info.server ?? t('settings.about.yourOrg') : t('settings.about.notManaged'), c: info.managed ? '#B9A0FF' : '#5E739C' },
   ]
   const upToDate = status?.state === 'up_to_date'

@@ -2,6 +2,7 @@
 // Add a key here first; other locales may lag and fall back to English.
 import { aiEn } from './ai'
 import { widgetsEn } from './widgets'
+import { securityEn } from './security'
 import { captureEn } from './capture'
 import { driversEn } from './drivers'
 import { whatsappEn } from './whatsapp'
@@ -12,6 +13,7 @@ const en = {
   // On-device AI assistant (services/ai): src/i18n/ai.ts
   ...aiEn,
   ...widgetsEn,
+  ...securityEn,
   ...captureEn,
   ...driversEn,
   ...whatsappEn,
