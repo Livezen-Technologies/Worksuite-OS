@@ -289,3 +289,19 @@ test('§13.1 malicious IPC: hostile lines on the broker socket get errors and th
   srv.close();
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('a waiting browser sign-in can be cancelled, and a retry replaces it', async () => {
+  const s = await fakeOneAuth();
+  let opened = 0;
+  const { broker } = makeBroker(s, { openBrowser: async () => { opened++; }, signInTimeoutMs: 5_000 });
+  const first = broker.signIn(s.base);
+  while (opened < 1) await new Promise((r) => setTimeout(r, 5));
+  const second = broker.signIn(s.base);
+  await assert.rejects(first, (e: OidcError) => e.code === 'sign_in_cancelled');
+  while (opened < 2) await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(await dispatch(broker, { id: 1, method: 'CancelSignIn' }), { id: 1, result: true });
+  await assert.rejects(second, (e: OidcError) => e.code === 'sign_in_cancelled');
+  assert.equal((await dispatch(broker, { method: 'CancelSignIn' })).result, false, 'nothing left waiting');
+  assert.deepEqual(broker.list(), []);
+  s.server.close();
+});

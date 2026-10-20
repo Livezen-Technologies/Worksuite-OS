@@ -38,11 +38,21 @@ export class Broker {
   private inflight = new Map<string, Promise<Cached>>();
   private states = new Map<string, BrokerState>();
   private locked = false;
+  /** Browser sign-ins waiting for their redirect: one at a time, so a retry replaces a forgotten browser tab. */
+  private pendingSignIn: ((e: OidcError) => void) | null = null;
   private o: BrokerOptions & { now: () => number; signInTimeoutMs: number };
 
   constructor(opts: BrokerOptions) {
     this.o = { now: Date.now, signInTimeoutMs: 5 * 60_000, ...opts };
     for (const a of opts.accounts ?? []) { this.accounts.set(a.id, a); this.states.set(a.id, 'signed_in'); }
+  }
+
+  /** Stop a browser sign-in that is waiting for its redirect (the person gave up or wants to retry). */
+  cancelSignIn(): boolean {
+    const stop = this.pendingSignIn;
+    this.pendingSignIn = null;
+    stop?.(new OidcError('sign_in_cancelled'));
+    return stop !== null;
   }
 
   list() { return [...this.accounts.values()].map((a) => ({ ...a, state: this.state(a.id) })); }
@@ -54,6 +64,7 @@ export class Broker {
    */
   async signIn(serverUrl: string, mode: 'personal' | 'enterprise' = 'enterprise'): Promise<Account> {
     if (this.locked) throw new OidcError('locked');
+    this.cancelSignIn();
     const ep = await discover(serverUrl, this.o);
     const { verifier, challenge } = pkcePair();
     const state = randomState();
@@ -175,6 +186,8 @@ export class Broker {
 
   private awaitRedirect(state: string, open: (redirectUri: string) => Promise<void>): Promise<{ code: string; redirectUri: string }> {
     return new Promise((resolve, reject) => {
+      const stop = (e: OidcError) => { clearTimeout(timer); server.close(); if (this.pendingSignIn === stop) this.pendingSignIn = null; reject(e); };
+      this.pendingSignIn = stop;
       const server = createServer((req, res) => {
         const url = new URL(req.url ?? '/', 'http://127.0.0.1');
         if (url.pathname !== '/callback') { res.writeHead(404).end(); return; }
@@ -182,6 +195,7 @@ export class Broker {
           res.writeHead(ok ? 200 : 400, { 'content-type': 'text/plain; charset=utf-8' })
             .end(ok ? 'Signed in to WorkSuite. You can close this window.' : 'Sign-in failed. Return to WorkSuite and try again.');
           clearTimeout(timer); server.close();
+          if (this.pendingSignIn === stop) this.pendingSignIn = null;
         };
         // A wrong state is someone else's redirect: refuse it and keep waiting for ours.
         if (url.searchParams.get('state') !== state) { res.writeHead(400).end(); return; }
@@ -191,10 +205,10 @@ export class Broker {
         resolve({ code, redirectUri });
       });
       let redirectUri = '';
-      const timer = setTimeout(() => { server.close(); reject(new OidcError('sign_in_timeout')); }, this.o.signInTimeoutMs);
+      const timer = setTimeout(() => stop(new OidcError('sign_in_timeout')), this.o.signInTimeoutMs);
       server.listen(0, '127.0.0.1', () => {
         redirectUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}/callback`;
-        open(redirectUri).catch((e) => { clearTimeout(timer); server.close(); reject(e); });
+        open(redirectUri).catch((e) => stop(e instanceof OidcError ? e : new OidcError('browser_failed')));
       });
     });
   }

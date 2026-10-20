@@ -31,6 +31,7 @@ export async function dispatch(broker: Broker, req: Req) {
         const a = await broker.signIn(server, mode);
         return { id, result: { id: a.id, name: a.name ?? null, server_url: a.server_url } };
       }
+      case 'CancelSignIn': return { id, result: broker.cancelSignIn() };
       case 'SignOut': {
         const account = str(p.account_id, 512);
         if (!account) return { id, error: 'invalid_argument' };
