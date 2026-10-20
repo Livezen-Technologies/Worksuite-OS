@@ -1,6 +1,7 @@
 // SQLite schema and small helpers. Secrets (tokens, credentials, enrollment tokens) are stored only as SHA-256 hashes.
 import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { migrateMonitoring } from './monitoring.ts';
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -117,6 +118,7 @@ export function openDb(path: string): DatabaseSync {
   const wipeCols = (db.prepare('PRAGMA table_info(wipe_requests)').all() as { name: string }[]).map((c) => c.name);
   if (!wipeCols.includes('result')) db.exec('ALTER TABLE wipe_requests ADD COLUMN result TEXT');
   if (!wipeCols.includes('result_at')) db.exec('ALTER TABLE wipe_requests ADD COLUMN result_at INTEGER');
+  migrateMonitoring(db);
   db.exec('CREATE TABLE IF NOT EXISTS release_log (id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL, at INTEGER NOT NULL)');
   return db;
 }

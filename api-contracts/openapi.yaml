@@ -469,6 +469,65 @@ paths:
         '202': { description: Accepted }
         default: { $ref: '#/components/responses/Error' }
 
+  /desktop/v1/activity:
+    post:
+      tags: [os]
+      summary: Employee activity reports (aggregate, one per user, device and day) when policy activity_monitoring is on
+      description: |
+        Sent by the shell on a managed device (bearer of the user and X-WS-Device, both required). The schema is closed:
+        any other field (window titles, URLs, keystrokes, screenshots) is refused with 400. 403 MONITORING_DISABLED
+        when the organization's policy has monitoring off. Kept for activity_retention_days (default 90).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reports]
+              properties:
+                reports:
+                  type: array
+                  maxItems: 31
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [day, active_s, idle_s, locked_s, apps, events]
+                    properties:
+                      day: { type: string, format: date }
+                      active_s: { type: integer, minimum: 0 }
+                      idle_s: { type: integer, minimum: 0 }
+                      locked_s: { type: integer, minimum: 0 }
+                      first_active: { type: [integer, 'null'], description: epoch ms }
+                      last_active: { type: [integer, 'null'], description: epoch ms }
+                      apps:
+                        type: array
+                        maxItems: 200
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [app_id, name, active_s]
+                          properties:
+                            app_id: { type: string, pattern: '^[A-Za-z0-9._@+-]{1,128}$' }
+                            name: { type: string, maxLength: 80 }
+                            active_s: { type: integer, minimum: 0 }
+                            switches: { type: integer, minimum: 0 }
+                      events:
+                        type: array
+                        maxItems: 1000
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [at, type]
+                          properties:
+                            at: { type: integer, description: epoch ms }
+                            type: { type: string, enum: [login, logout, lock, unlock, startup, shutdown, idle, active] }
+      responses:
+        '202': { description: Stored }
+    get:
+      tags: [os]
+      summary: The signed-in user's own activity reports held by the organization (transparency)
+      responses:
+        '200': { description: '{ items: [ { device_id, day, received_at, active_s, idle_s, locked_s, apps, events } ] }' }
   /desktop/v1/problem-reports:
     post:
       tags: [os]
@@ -892,7 +951,7 @@ components:
       required: [id, command, device_id, issued_at, expires_at, args, signature]
       properties:
         id: { type: string, format: uuid }
-        command: { type: string, enum: [RefreshPolicy, InstallApprovedApplication, ScheduleUpdate, RequestLock, RebootDuringWindow, CollectApprovedDiagnostics, RemoteWipe] }
+        command: { type: string, enum: [RefreshPolicy, InstallApprovedApplication, ScheduleUpdate, RequestLock, RebootDuringWindow, CollectApprovedDiagnostics, RemoteWipe, StartMalwareScan, IsolateEndpoint, ReleaseIsolation] }
         device_id: { type: string }
         issued_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }

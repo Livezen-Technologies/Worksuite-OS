@@ -10,7 +10,9 @@ import { hashPassword } from './oauth.ts';
 import { activeKey, createKey, signEnvelope, signFlat } from './signing.ts';
 import { removePeer } from './vpn.ts';
 
-const COMMANDS = ['RefreshPolicy', 'InstallApprovedApplication', 'ScheduleUpdate', 'RequestLock', 'RebootDuringWindow', 'CollectApprovedDiagnostics', 'RemoteWipe'];
+const COMMANDS = ['RefreshPolicy', 'InstallApprovedApplication', 'ScheduleUpdate', 'RequestLock', 'RebootDuringWindow', 'CollectApprovedDiagnostics', 'RemoteWipe',
+  // WorkSuite Security remote incident response (services/device-agent/src/securityCenter.ts).
+  'StartMalwareScan', 'IsolateEndpoint', 'ReleaseIsolation'];
 
 export function createOrg(db: DatabaseSync, name: string, o: { requireDevice?: boolean } = {}): number {
   const r = db.prepare('INSERT INTO orgs (name, require_device, modules) VALUES (?, ?, ?)').run(name, o.requireDevice ? 1 : 0, JSON.stringify(DEFAULT_MODULES));

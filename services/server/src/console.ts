@@ -14,11 +14,13 @@ import { redactKiosk, type KioskPolicy } from './kiosk.ts';
 import { setValidatedPolicy, validatePolicy } from './policy.ts';
 import { qrMatrix } from './qr.ts';
 import { Throttle } from './throttle.ts';
+import { monitoringOverview, securityOverview } from './monitoring.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
 const SESSION_TTL = 8 * 3_600_000;
 const COOKIE = 'ws_admin';
-const ROUTINE = new Set(['RefreshPolicy', 'RequestLock', 'RebootDuringWindow', 'ScheduleUpdate', 'InstallApprovedApplication', 'CollectApprovedDiagnostics']);
+const ROUTINE = new Set(['RefreshPolicy', 'RequestLock', 'RebootDuringWindow', 'ScheduleUpdate', 'InstallApprovedApplication', 'CollectApprovedDiagnostics',
+  'StartMalwareScan', 'ReleaseIsolation', 'IsolateEndpoint']);
 /** CollectApprovedDiagnostics profiles: exactly what the device agent implements (services/device-agent/src/diagnostics.ts). */
 export const DIAG_PROFILES = new Set(['basic', 'session', 'network', 'update']);
 
@@ -195,9 +197,30 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
       if (!DIAG_PROFILES.has(p)) throw invalid('args.bundle_profile');
       args.bundle_profile = p;
     }
-    const id = issueCommand(db, d.id, command, args);
+    if (command === 'StartMalwareScan') {
+      const kind = String((b.args as Record<string, unknown> | undefined)?.kind ?? 'quick');
+      if (kind !== 'quick' && kind !== 'full') throw invalid('args.kind', 'quick or full');
+      args.kind = kind;
+    }
+    // Isolation cuts the device off the network except the management path: password again and the device name typed.
+    if (command === 'IsolateEndpoint') {
+      const hours = Number((b.args as Record<string, unknown> | undefined)?.hours ?? 24);
+      if (!Number.isInteger(hours) || hours < 1 || hours > 72) throw invalid('args.hours', '1 to 72');
+      reauth(ctx, a, b, d.hostname);
+      args.hours = hours;
+    }
+    const id = issueCommand(db, d.id, command, args, command === 'IsolateEndpoint' ? 12 : 24);
     log(a, 'command', { device_id: d.id, command, command_id: id });
     send(ctx, 201, { command_id: id });
+  });
+  // ---- Security Center (#20) and Employee monitoring (#22) ----
+  r.on('GET', '/admin/api/security', (ctx) => { const a = admin(ctx); send(ctx, 200, securityOverview(db, a.org_id)); });
+  r.on('GET', '/admin/api/monitoring', (ctx) => {
+    const a = admin(ctx);
+    const days = Number(ctx.url.searchParams.get('days') ?? 7);
+    if (!Number.isInteger(days) || days < 1 || days > 90) throw invalid('days', '1 to 90');
+    log(a, 'monitoring_viewed', { days });   // who looked at employee activity is itself audited
+    send(ctx, 200, monitoringOverview(db, a.org_id, days));
   });
   r.on('POST', '/admin/api/devices/{id}/revoke', (ctx) => {
     const a = admin(ctx);

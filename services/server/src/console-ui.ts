@@ -14,7 +14,7 @@ export const APP_HTML = `<!doctype html><html lang="en"><head><meta charset="utf
 <div id="app" class="shell" hidden>
 <nav class="side" aria-label="Sections"><div class="brand">${LOGO}<span>WorkSuite</span></div>
 <a href="#overview">Overview</a><a href="#devices">Devices</a><a href="#wipes">Wipe requests</a><a href="#users">Users</a>
-<a href="#enroll">Enrollment</a><a href="#policy">Policy</a><a href="#apps">App catalog</a><a href="#releases">Releases</a><a href="#problems">Problem reports</a><a href="#audit">Package audit</a><a href="#activity">Activity</a>
+<a href="#enroll">Enrollment</a><a href="#policy">Policy</a><a href="#apps">App catalog</a><a href="#releases">Releases</a><a href="#problems">Problem reports</a><a href="#security">Security Center</a><a href="#monitoring">Employee monitoring</a><a href="#audit">Package audit</a><a href="#activity">Activity</a>
 <div class="me"><span id="me-name"></span><span id="me-org" class="muted"></span><button id="logout" class="link">Sign out</button></div></nav>
 <main id="main" tabindex="-1"></main></div>
 <div id="toast" class="toast" role="status" hidden></div>
@@ -150,6 +150,22 @@ function wipeDialog(o) {
   back.append(dlg); document.body.append(back); document.addEventListener('keydown', onKey);
   (reason || pw).focus();
 }
+/** Endpoint isolation (#20 §12): password and the device name, like an erase; time-limited so a lockout ends. */
+function isolateDialog(id, hostname) {
+  const hours = h('input', { type: 'number', min: 1, max: 72, value: 24, 'aria-label': 'Hours' });
+  const pw = h('input', { type: 'password', autocomplete: 'current-password', 'aria-label': 'Your password' });
+  const name = h('input', { 'aria-label': 'Device name' });
+  const back = h('div', { class: 'modal-back' });
+  const close = () => back.remove();
+  const f = h('form', { class: 'card form', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Isolate device', onsubmit: (e) => { e.preventDefault();
+    act(() => api('POST', 'devices/' + id + '/commands', { command: 'IsolateEndpoint', args: { hours: Number(hours.value) }, password: pw.value, confirm_name: name.value }).then(close),
+      'Isolation sent. The device keeps only its connection to this server until it ends.'); } },
+    h('h2', {}, 'Isolate ' + hostname + ' from the network?'),
+    h('p', { class: 'muted' }, 'All traffic stops except DHCP, DNS and HTTPS to this server, so you can still scan, review and release it. Isolation ends on its own after the time below.'),
+    h('label', {}, 'Hours (1–72)', hours), h('label', {}, 'Your password', pw), h('label', {}, 'Type the device name to confirm', name),
+    h('div', { class: 'row' }, h('button', { class: 'danger' }, 'Isolate'), h('button', { type: 'button', onclick: close }, 'Cancel')));
+  back.append(f); document.body.append(back); pw.focus();
+}
 async function wipeSubmit(fn, msg) {
   try { const r = await fn(); toast(msg(r)); route(); return true; } catch (e) { toast(e.message); return false; }
 }
@@ -195,6 +211,9 @@ const views = {
         // Same names as DIAG_PROFILES (src/console.ts) and the device agent's services/device-agent/src/diagnostics.ts.
         (() => { const prof = h('select', { 'aria-label': 'Diagnostics profile' }, h('option', { value: 'basic' }, 'Basic'), h('option', { value: 'session' }, 'Session logs'), h('option', { value: 'network' }, 'Network'), h('option', { value: 'update' }, 'Updates'));
           return [prof, h('button', { onclick: () => send('CollectApprovedDiagnostics', { bundle_profile: prof.value }) }, 'Collect diagnostics')]; })(),
+        h('button', { onclick: () => send('StartMalwareScan', { kind: 'quick' }) }, 'Quick scan'), h('button', { onclick: () => send('StartMalwareScan', { kind: 'full' }) }, 'Full scan'),
+        h('button', { onclick: () => send('ReleaseIsolation') }, 'End isolation'),
+        h('button', { class: 'danger', onclick: () => isolateDialog(id, d.hostname) }, 'Isolate from network…'),
         h('button', { class: 'danger', onclick: () => { if (confirm('Revoke this device? It stops receiving policy and its credential stops working.')) act(() => api('POST', 'devices/' + id + '/revoke'), 'Device revoked.'); } }, 'Revoke')),
       kioskDevice(id, d.kiosk),
       h('h2', {}, 'Erase'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
@@ -261,6 +280,12 @@ const views = {
         drivers_auto_install: f.drivers_auto_install.value === '' ? null : f.drivers_auto_install.value === 'true',
         drivers_auto_install_gpu: f.drivers_auto_install_gpu.value === '' ? null : f.drivers_auto_install_gpu.value === 'true',
         screen_capture: f.screen_capture.value || null, clipboard_history: f.clipboard_history.value || null,
+        antivirus: f.antivirus.value === '' ? null : f.antivirus.value === 'true', av_scan_schedule: f.av_scan_schedule.value || null, av_scan_hour: num('av_scan_hour'),
+        av_signature_checks_per_day: num('av_signature_checks_per_day'), av_cpu_quota_percent: num('av_cpu_quota_percent'),
+        av_exclusions: list('av_exclusions').length ? list('av_exclusions') : null, firewall_outbound_block: list('firewall_outbound_block').length ? list('firewall_outbound_block') : null,
+        firewall_log_blocked: f.firewall_log_blocked.value === '' ? null : f.firewall_log_blocked.value === 'true', security_log_retention_days: num('security_log_retention_days'),
+        activity_monitoring: f.activity_monitoring.value === '' ? null : f.activity_monitoring.value === 'true', activity_retention_days: num('activity_retention_days'),
+        activity_idle_threshold_s: num('activity_idle_threshold_s'),
         app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
     } },
       h('div', { class: 'row' }, h('label', {}, 'Update ring', sel('update_ring', [['stable', 'Stable'], ['pilot', 'Pilot'], ['development', 'Development']])),
@@ -284,6 +309,21 @@ const views = {
       h('div', { class: 'row' }, h('label', {}, 'Look for drivers online after connecting', sel('drivers_online_search', [['true', 'On'], ['false', 'Off']])),
         h('label', {}, 'Install firmware automatically', sel('drivers_auto_install', [['true', 'On'], ['false', 'Off']])),
         h('label', {}, 'Install the NVIDIA driver automatically', sel('drivers_auto_install_gpu', [['true', 'On'], ['false', 'Off']]))),
+      h('fieldset', {}, h('legend', {}, 'WorkSuite Security'),
+        h('div', { class: 'row' }, h('label', {}, 'Antivirus (ClamAV)', sel('antivirus', [['true', 'On'], ['false', 'Off']])),
+          h('label', {}, 'Scheduled scans', sel('av_scan_schedule', [['daily', 'Daily quick, weekly full'], ['weekly', 'Weekly quick, monthly full'], ['off', 'Off']])),
+          h('label', {}, 'Not before (hour, 0–23)', h('input', { name: 'av_scan_hour', type: 'number', min: 0, max: 23, value: p.av_scan_hour ?? '' }))),
+        h('div', { class: 'row' }, h('label', {}, 'Signature checks per day', h('input', { name: 'av_signature_checks_per_day', type: 'number', min: 1, max: 24, value: p.av_signature_checks_per_day ?? '' })),
+          h('label', {}, 'Scan CPU limit (%)', h('input', { name: 'av_cpu_quota_percent', type: 'number', min: 10, max: 100, value: p.av_cpu_quota_percent ?? '' })),
+          h('label', {}, 'Security history kept (days)', h('input', { name: 'security_log_retention_days', type: 'number', min: 7, max: 3650, value: p.security_log_retention_days ?? '' }))),
+        h('label', {}, 'Scan exclusions (absolute paths, one per line; each one weakens protection)', h('textarea', { name: 'av_exclusions' }, (p.av_exclusions || []).join('\n'))),
+        h('div', { class: 'row' }, h('label', { class: 'grow' }, 'Blocked destinations (IP or CIDR, one per line)', h('textarea', { name: 'firewall_outbound_block' }, (p.firewall_outbound_block || []).join('\n'))),
+          h('label', {}, 'Report blocked connections', sel('firewall_log_blocked', [['true', 'On'], ['false', 'Off']])))),
+      h('fieldset', {}, h('legend', {}, 'Employee monitoring'),
+        h('p', { class: 'muted' }, 'Off unless turned on. Employees see a persistent indicator, are told on their first sign-in what is collected, and can see their own data. Collected: active, idle and locked time, time per application, sign-in/out and lock events. Never: keystrokes, screenshots, window titles, web addresses or file contents.'),
+        h('div', { class: 'row' }, h('label', {}, 'Activity monitoring', sel('activity_monitoring', [['true', 'On'], ['false', 'Off']])),
+          h('label', {}, 'Keep reports (days)', h('input', { name: 'activity_retention_days', type: 'number', min: 1, max: 730, value: p.activity_retention_days ?? '' })),
+          h('label', {}, 'Idle after (seconds)', h('input', { name: 'activity_idle_threshold_s', type: 'number', min: 60, max: 3600, value: p.activity_idle_threshold_s ?? '' })))),
       h('label', {}, 'Update mirror (https, optional)', h('input', { name: 'update_mirror', value: p.update_mirror || '' })),
       h('label', {}, 'Allowed apps (catalog IDs, one per line)', h('textarea', { name: 'app_allowlist' }, (p.app_allowlist || []).join('\n'))),
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),
@@ -293,6 +333,7 @@ const views = {
     if (p.ai_assistant !== undefined) f.ai_assistant.value = String(p.ai_assistant);
     if (p.desktop_widgets !== undefined) f.desktop_widgets.value = String(p.desktop_widgets);
     if (p.whatsapp !== undefined && p.whatsapp !== null) f.whatsapp.value = String(p.whatsapp);
+    for (const k of ['antivirus', 'firewall_log_blocked', 'activity_monitoring']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
     for (const k of ['drivers_online_search', 'drivers_auto_install', 'drivers_auto_install_gpu']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
     return [h('h1', {}, 'Policy'), h('p', { class: 'muted' }, 'Current version ' + version + '. Devices verify the signature before applying it.'), f, kioskForm(p)];
   },
@@ -345,6 +386,42 @@ const views = {
       table(['When', 'Device', 'Event', 'Details'], r.items.map((x) => h('tr', {}, h('td', {}, new Date(x.at).toLocaleString()), h('td', {}, h('a', { href: '#device/' + encodeURIComponent(x.device_id) }, x.hostname)),
         h('td', {}, x.type.replace(/^package\./, '').replace(/_/g, ' ')), h('td', { class: 'muted' }, detail(x.data))))),
       pager(r, 'audit', type ? '~' + type : '')];
+  },
+  async security() {
+    const r = await api('GET', 'security');
+    const t = r.totals;
+    const stat = (label, n, cls) => h('div', { class: 'card stat' }, h('b', { class: n ? cls : '' }, n), label);
+    const tone = { protected: 'ok', attention: 'warn', at_risk: 'bad', unavailable: 'muted' };
+    const label = { protected: 'Protected', attention: 'Needs attention', at_risk: 'At risk', unavailable: 'Unavailable' };
+    return [h('h1', {}, 'Security Center'), h('p', { class: 'muted' }, 'Firewall, antivirus and threats as each device last reported them at check-in. Scans, isolation and its release are on each device\'s page; settings are in Policy › WorkSuite Security.'),
+      h('div', { class: 'grid' }, stat('Devices reporting', t.reporting + ' / ' + t.devices), stat('Protected', t.protected, 'ok'), stat('Need attention', t.attention, 'warn'),
+        stat('At risk', t.at_risk, 'bad'), stat('Active threats', t.active_threats, 'bad'), stat('Isolated', t.isolated, 'warn'), stat('Firewall off', t.firewall_off, 'bad')),
+      h('h2', {}, 'Devices'), table(['Device', 'Status', 'Firewall', 'Antivirus', 'Threats', 'Last scan', 'Last seen'], r.devices.map((d) => { const s = d.security;
+        return h('tr', { class: 'click', tabindex: 0, onclick: () => { location.hash = 'device/' + d.id; }, onkeydown: (e) => { if (e.key === 'Enter') location.hash = 'device/' + d.id; } },
+          h('td', {}, h('b', {}, d.hostname || d.id)),
+          h('td', {}, !s ? h('span', { class: 'muted' }, 'Not reported') : h('span', { class: tone[s.overall] || '' }, (label[s.overall] || s.overall) + (s.isolation ? ' · isolated until ' + when(s.isolation.until) : ''))),
+          h('td', {}, !s ? '—' : s.firewall && s.firewall.active ? h('span', { class: 'ok' }, 'On' + (s.firewall.policy_rules ? ' · ' + s.firewall.policy_rules + ' blocked' : '')) : h('span', { class: 'bad' }, 'Off')),
+          h('td', {}, !s || !s.antivirus ? '—' : !s.antivirus.installed ? h('span', { class: 'bad' }, 'Not installed') : !s.antivirus.enabled ? 'Off by policy'
+            : h('span', { class: (s.antivirus.signatures_age_days ?? 0) > 3 ? 'warn' : '' }, 'ClamAV ' + s.antivirus.engine + (s.antivirus.signatures_age_days !== null ? ' · signatures ' + s.antivirus.signatures_age_days + ' d old' : ''))),
+          h('td', {}, !s || !s.threats ? '—' : h('span', { class: s.threats.active ? 'bad' : '' }, s.threats.active + ' active, ' + s.threats.quarantined + ' quarantined')),
+          h('td', {}, s && s.antivirus && s.antivirus.last_scan ? s.antivirus.last_scan.kind + ', ' + ago(s.antivirus.last_scan.finished) + (s.antivirus.last_scan.error ? ' (failed)' : '') : '—'),
+          h('td', {}, ago(d.last_seen))); }))];
+  },
+  async monitoring(arg) {
+    const days = Number(arg) || 7;
+    const r = await api('GET', 'monitoring?days=' + days);
+    const hrs = (s) => (s / 3600).toFixed(1) + ' h';
+    const pick = h('select', { 'aria-label': 'Period', onchange: (e) => { location.hash = 'monitoring/' + e.target.value; } }, [1, 7, 30, 90].map((n) => h('option', { value: n, selected: n === days }, n === 1 ? 'Today' : 'Last ' + n + ' days')));
+    return [h('h1', {}, 'Employee monitoring'),
+      h('div', { class: 'card' }, h('p', { class: r.enabled ? '' : 'warn' }, r.enabled ? 'On. Reports are kept for ' + r.retention_days + ' days.' : 'Off. Turn it on in Policy › Employee monitoring; no activity is collected until then.'),
+        h('p', { class: 'muted' }, 'Aggregate work activity only: active, idle and locked time, time per application, sign-in and lock events. Employees see that monitoring is on and can view their own data. Each time this page is opened it is recorded in Activity.')),
+      h('div', { class: 'row' }, pick),
+      h('h2', {}, 'Employees'), table(['Employee', 'Active', 'Idle', 'Locked', 'Days', 'Top applications', 'Last report'], r.employees.map((e) => h('tr', {},
+        h('td', {}, h('b', {}, e.name), h('div', { class: 'muted' }, e.email + ' · ' + e.devices.join(', '))), h('td', {}, hrs(e.active_s)), h('td', {}, hrs(e.idle_s)), h('td', {}, hrs(e.locked_s)),
+        h('td', {}, String(e.days_reported)), h('td', {}, e.top_apps.slice(0, 5).map((a) => h('div', {}, a.name + ' · ' + hrs(a.active_s)))), h('td', {}, ago(e.last_report))))),
+      h('h2', {}, 'Working hours'), table(['Day', 'Employee', 'Device', 'First active', 'Last active', 'Active', 'Idle'], r.daily.map((x) => h('tr', {},
+        h('td', {}, x.day), h('td', {}, x.name), h('td', {}, x.device), h('td', {}, x.first_active ? new Date(x.first_active).toLocaleTimeString() : '—'),
+        h('td', {}, x.last_active ? new Date(x.last_active).toLocaleTimeString() : '—'), h('td', {}, hrs(x.active_s)), h('td', {}, hrs(x.idle_s)))))];
   },
   async activity() {
     const { items } = await api('GET', 'log');

@@ -10,6 +10,7 @@ import { licenceFor, revokeDevice } from './admin.ts';
 import { issueLoginCode, setNewPassword, verifyDirectoryUser, type DirUserRow } from './identity.ts';
 import { Throttle } from './throttle.ts';
 import { deviceVpnConfig, isWgKey, registerPeer, removePeer } from './vpn.ts';
+import { ownActivity, storeActivity, validateActivityReport } from './monitoring.ts';
 
 export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string; webUrl: string }
 
@@ -539,6 +540,22 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
         .run(id, user.org_id, user.id, device?.id ?? null, JSON.stringify({ description, sections }), Date.now());
       return { status: 202 };
     });
+  });
+
+  // #22 Employee monitoring: one aggregate report per user, device and day, from the shell on a managed device.
+  r.on('POST', '/desktop/v1/activity', async (ctx) => {
+    const { user, device } = userCtx(db, ctx);
+    if (!device) throw new HttpError(403, 'DEVICE_REQUIRED', 'activity reports come from enrolled devices only');
+    const b = obj(await ctx.body());
+    if (!Array.isArray(b.reports) || b.reports.length > 31) throw invalid('reports', 'at most 31 days');
+    const reports = b.reports.map((x) => validateActivityReport(x));
+    tx(db, () => { for (const rep of reports) storeActivity(db, user.org_id, user.id, device.id, rep); });
+    send(ctx, 202, { stored: reports.map((x) => x.day) });
+  });
+  // Transparency: what the organization holds about the signed-in user.
+  r.on('GET', '/desktop/v1/activity', (ctx) => {
+    const { user } = userCtx(db, ctx);
+    send(ctx, 200, { items: ownActivity(db, user.id) });
   });
 
   // WSOS-SEC-008: privileged package changes on the device (package-service audit log, forwarded by the device agent).
