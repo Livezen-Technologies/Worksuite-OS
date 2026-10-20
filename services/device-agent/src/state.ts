@@ -46,6 +46,8 @@ export interface Policy {
   drivers_auto_install_gpu?: boolean;
   /** Remote support (issue #19): enabled (default true); unattended = no consent prompt on corporate devices (disclosed). */
   remote_support?: { enabled?: boolean; unattended?: boolean; max_session_minutes?: number };
+  /** App permissions (issue #21): deny rules the shell writes into each user's XDG permission store (never grants). */
+  app_permissions?: { deny?: Record<string, string[]> };
   [k: string]: unknown;
 }
 

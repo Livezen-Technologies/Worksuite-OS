@@ -37,6 +37,7 @@ import { onAssistantRequest, type AssistantRequest } from '../lib/assistantNav'
 import ShellRestartNotice from '../components/ShellRestartNotice'
 import AuthPrompt from '../components/AuthPrompt'
 import { RemoteSupportBadge, RemoteSupportPrompt } from '../components/RemoteSupport'
+import { MediaInUseBadge } from './settings/AppPermissions'
 import type { SearchHit } from '../../electron/search'
 import DesktopWidgets, { useWidgetData } from '../components/DesktopWidgets'
 import { WHATSAPP_APP_ID, whatsappAllowed } from '../../electron/whatsapp'
@@ -573,6 +574,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           <TrayItems />
           <CaptureBadge />
           <RemoteSupportBadge />
+          <MediaInUseBadge />
           <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <OskButton />

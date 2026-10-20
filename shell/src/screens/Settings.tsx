@@ -195,6 +195,7 @@ function BluetoothPanel() {
 import { DisplayPanel } from './DisplaySettings'
 // Settings › Default apps and clipboard history live in DesktopSettings.tsx (WSOS-DSK-008/009).
 import { ClipboardSection, DefaultAppsPanel } from './DesktopSettings'
+import { AppPermissionsSection } from './settings/AppPermissions'
 // Pairing, drives, power, printers, input methods, rejected sync changes (WSOS-INT-003…006, 011, SYN-004).
 import { BluetoothPairSection, DeviceExtras, SyncProblemsSection } from './PeripheralSettings'
 
@@ -418,6 +419,7 @@ function PrivacyPanel() {
         <div className={`${card} px-4 py-3 text-xs leading-relaxed text-[#C9D6EE]`}>{t('settings.priv.note')}</div>
       </section>
     </div>
+    <AppPermissionsSection />
     <ClipboardSection />
   </>
 }

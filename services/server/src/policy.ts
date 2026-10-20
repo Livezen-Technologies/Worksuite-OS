@@ -6,6 +6,8 @@ import { invalid } from './http.ts';
 import { validRsPolicy } from './remoteSupport.ts';
 import { normalizeKiosk, type KioskPolicy } from './kiosk.ts';
 
+const APP_PERMISSION_RESOURCES = new Set(['camera', 'microphone', 'location', 'notifications', 'screenshot', 'background']);
+
 const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   update_ring: (v) => v === 'development' || v === 'pilot' || v === 'stable',
   update_mode: (v) => v === 'automatic' || v === 'notify' || v === 'manual',
@@ -53,6 +55,16 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   // Remote support (issue #19): {enabled, unattended, max_session_minutes 5–240}. unattended applies to corporate-owned
   // devices only and is shown to their users in Settings; without it every session needs the user's consent.
   remote_support: validRsPolicy,
+  // App permissions (issue #21): {deny: {camera|microphone|location|notifications|screenshot|background: [app id | "*"]}}.
+  // Policy can only take access away (the shell writes "no" into each user's permission store); it never grants, and
+  // it never answers a consent prompt on the user's behalf.
+  app_permissions: (v) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+    const { deny, ...rest } = v as Record<string, unknown>;
+    if (Object.keys(rest).length || !deny || typeof deny !== 'object' || Array.isArray(deny)) return false;
+    return Object.entries(deny).every(([r, apps]) => APP_PERMISSION_RESOURCES.has(r) && Array.isArray(apps) && apps.length <= 500
+      && apps.every((a) => typeof a === 'string' && (a === '*' || /^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}$/.test(a))));
+  },
   ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 

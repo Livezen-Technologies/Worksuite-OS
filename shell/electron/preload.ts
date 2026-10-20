@@ -280,6 +280,16 @@ contextBridge.exposeInMainWorld('worksuiteMonitor', {
 })
 
 // Administrator prompts from the WorkSuite polkit agent — see electron/polkit.ts.
+// App permissions in the XDG permission store (issue #21) — see electron/appPermissions.ts.
+contextBridge.exposeInMainWorld('worksuiteAppPerms', {
+  state: () => ipcRenderer.invoke('ws:portalPerms'),
+  set: (resource: string, app: string, allow: boolean) => ipcRenderer.invoke('ws:portalPermSet', String(resource), String(app), allow ? 'on' : 'off'),
+  revoke: (resource: string, app: string) => ipcRenderer.invoke('ws:portalPermRevoke', String(resource), String(app)),
+  reset: (app: string) => ipcRenderer.invoke('ws:portalPermReset', String(app)),
+  recent: () => ipcRenderer.invoke('ws:portalPermRecent'),
+  inUse: () => ipcRenderer.invoke('ws:mediaInUse'),
+})
+
 // Remote support consent and indicator (issue #19) — see electron/remoteSupport.ts.
 contextBridge.exposeInMainWorld('worksuiteRemoteSupport', {
   state: () => ipcRenderer.invoke('ws:remoteSupportState'),

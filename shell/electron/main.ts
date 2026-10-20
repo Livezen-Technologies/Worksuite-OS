@@ -26,7 +26,7 @@ import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
 import { createWidgets } from './widgets'
 import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
-import { systemBridge } from './system'
+import { systemBridge, AGENT_POLICY_PATH } from './system'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { archiveJobs, listIn, locate } from './archives'
 import { startAIHost } from './ai'
@@ -49,6 +49,7 @@ import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
 import { startRemoteSupportHost } from './remoteSupport'
+import { appPermissionsBridge, startAppPermissionsHost } from './appPermissions'
 import { startTouchHost } from './touch'
 import { startNotifications, windowForNotification } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
@@ -672,6 +673,11 @@ app.whenReady().then(() => {
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
   startRemoteSupportHost(handle)
+  startAppPermissionsHost(handle, appPermissionsBridge({
+    exec: realExec,
+    readPolicy: () => { try { return readFileSync(AGENT_POLICY_PATH, 'utf8') } catch { return null } },
+    stateDir: path.join(app.getPath('home'), '.local/state/worksuite/permissions'),
+  }))
   startTouchHost(handle, broadcast, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
   // Clicking one (its "default" action) also raises the sender's window through the bridge, whatever the app does.
