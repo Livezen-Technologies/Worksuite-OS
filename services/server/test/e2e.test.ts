@@ -169,6 +169,7 @@ test('device agent: enrollment, signed policy, signed commands with acks, revoca
     publishCredential() {}, publishPolicy() {}, publishStatus() {},
     async lockAllSessions() { log.push('lock'); },
     async installApproved(id) { log.push(`install ${id}`); },
+    async removeApplication(id) { log.push(`remove ${id}`); },
     async scheduleUpdate() {}, async scheduleReboot() {},
     async collectDiagnostics(p) { return { profile: p, sha256: '', content: '' }; },
     async isFullyEncrypted() { return true; },

@@ -14,11 +14,12 @@ import { redactKiosk, type KioskPolicy } from './kiosk.ts';
 import { setValidatedPolicy, validatePolicy } from './policy.ts';
 import { qrMatrix } from './qr.ts';
 import { Throttle } from './throttle.ts';
+import { decideRequest, deploy, deployments, deviceSoftware, inventorySummary, reconcileRequired, validateAssignment, validDepartment } from './software.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
 const SESSION_TTL = 8 * 3_600_000;
 const COOKIE = 'ws_admin';
-const ROUTINE = new Set(['RefreshPolicy', 'RequestLock', 'RebootDuringWindow', 'ScheduleUpdate', 'InstallApprovedApplication', 'CollectApprovedDiagnostics']);
+const ROUTINE = new Set(['RefreshPolicy', 'RequestLock', 'RebootDuringWindow', 'ScheduleUpdate', 'InstallApprovedApplication', 'RemoveApplication', 'CollectApprovedDiagnostics']);
 /** CollectApprovedDiagnostics profiles: exactly what the device agent implements (services/device-agent/src/diagnostics.ts). */
 export const DIAG_PROFILES = new Set(['basic', 'session', 'network', 'update']);
 
@@ -148,7 +149,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
   // ---- devices ----
   r.on('GET', '/admin/api/devices', (ctx) => {
     const a = admin(ctx);
-    const rows = db.prepare(`SELECT d.id, d.hostname, d.arch, d.tpm_backed, d.revoked, d.enrolled_at, d.last_seen, d.heartbeat, d.ownership, d.wiped_at,
+    const rows = db.prepare(`SELECT d.id, d.hostname, d.arch, d.tpm_backed, d.revoked, d.enrolled_at, d.last_seen, d.heartbeat, d.ownership, d.wiped_at, d.department,
       (SELECT COUNT(*) FROM commands c WHERE c.device_id = d.id AND c.state IN ('pending','received','started') AND c.expires > ?) AS pending
       FROM devices d WHERE d.org_id = ? ORDER BY d.revoked, d.hostname`).all(Date.now(), a.org_id) as Record<string, unknown>[];
     send(ctx, 200, { items: rows.map(({ heartbeat, ...d }) => {
@@ -159,7 +160,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
   r.on('GET', '/admin/api/devices/{id}', (ctx) => {
     const a = admin(ctx);
     device(a, ctx.params.id);
-    const d = db.prepare('SELECT id, hostname, arch, tpm_backed, revoked, enrolled_at, last_seen, heartbeat, ownership, wiped_at FROM devices WHERE id = ?').get(ctx.params.id) as Record<string, unknown>;
+    const d = db.prepare('SELECT id, hostname, arch, tpm_backed, revoked, enrolled_at, last_seen, heartbeat, ownership, wiped_at, department FROM devices WHERE id = ?').get(ctx.params.id) as Record<string, unknown>;
     const commands = (db.prepare('SELECT id, envelope, state, reason, updated FROM commands WHERE device_id = ? ORDER BY rowid DESC LIMIT 50').all(ctx.params.id) as { id: string; envelope: string; state: string; reason: string | null; updated: number }[])
       .map((c) => { const e = json<{ command: string; issued_at: string; expires_at: string }>(c.envelope); return { id: c.id, command: e.command, issued_at: e.issued_at, expires_at: e.expires_at, state: c.state, reason: c.reason, updated: c.updated, observed: observedCommand(c.state, e.expires_at, Date.now()) }; });
     const policyRow = db.prepare('SELECT version, body FROM policies WHERE org_id = ?').get(a.org_id) as { version: number; body: string } | undefined;
@@ -185,10 +186,15 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const command = String(b.command ?? '');
     if (!ROUTINE.has(command)) throw invalid('command', command === 'RemoteWipe' ? 'use a wipe request (needs a second admin)' : 'not an allowed command');
     const args: Record<string, unknown> = {};
-    if (command === 'InstallApprovedApplication') {
+    if (command === 'InstallApprovedApplication' || command === 'RemoveApplication') {
       const id = String((b.args as Record<string, unknown> | undefined)?.catalog_id ?? '');
       if (!db.prepare('SELECT 1 FROM catalog WHERE id = ?').get(id)) throw invalid('args.catalog_id', 'not in the catalog');
-      args.catalog_id = id;
+      if (id.startsWith('appimage:')) throw invalid('args.catalog_id', 'AppImages are imported by the user, not deployed');
+      // Through the deployment path so the app is allowlisted in the signed policy the device checks.
+      const cid = deploy(db, a.org_id, d.id, command, id);
+      if (!cid) throw new HttpError(409, 'ALREADY_PENDING', 'this app already has an open deployment on the device');
+      log(a, 'command', { device_id: d.id, command, command_id: cid, catalog_id: id });
+      return send(ctx, 201, { command_id: cid });
     }
     if (command === 'CollectApprovedDiagnostics') {
       const p = String((b.args as Record<string, unknown> | undefined)?.bundle_profile ?? 'basic');
@@ -282,7 +288,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
   // ---- users ----
   r.on('GET', '/admin/api/users', (ctx) => {
     const a = admin(ctx);
-    send(ctx, 200, { items: (db.prepare('SELECT id, email, name, role, disabled FROM users WHERE org_id = ? ORDER BY name').all(a.org_id) as Record<string, unknown>[])
+    send(ctx, 200, { items: (db.prepare('SELECT id, email, name, role, disabled, department FROM users WHERE org_id = ? ORDER BY name').all(a.org_id) as Record<string, unknown>[])
       .map((u) => ({ ...u, disabled: !!u.disabled })) });
   });
   r.on('POST', '/admin/api/users', async (ctx) => {
@@ -389,17 +395,99 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     if (!arches.length) throw invalid('arches', 'amd64 and/or arm64');
     if (source === 'appimage' && !/^[0-9a-f]{64}$/.test(String(b.sha256 ?? ''))) throw invalid('sha256', 'AppImages need a sha256');
     const text = (k: string, max: number) => (typeof b[k] === 'string' && (b[k] as string).trim() ? { [k]: (b[k] as string).trim().slice(0, max) } : {});
+    const assign = validateAssignment(b.assign);
     const item = { id, source, name, arches, required: b.required === true, blocked: b.blocked === true, ...(source === 'appimage' ? { sha256: b.sha256 } : {}),
-      ...text('category', 40), ...text('summary', 200), ...text('publisher', 100) };
+      ...text('category', 40), ...text('summary', 200), ...text('publisher', 100), ...(assign ? { assign } : {}) };
     putCatalogItem(db, item);
     log(a, 'catalog_put', { id });
-    send(ctx, 200, item);
+    // Required apps deploy to the devices they are assigned to straight away.
+    const deployed = item.required && !item.blocked ? reconcileRequired(db, a.org_id).filter((x) => x.catalog_id === id).length : 0;
+    send(ctx, 200, { ...item, deployed });
   });
   r.on('DELETE', '/admin/api/catalog/{id}', (ctx) => {
     const a = admin(ctx);
     db.prepare('DELETE FROM catalog WHERE id = ?').run(ctx.params.id);
     log(a, 'catalog_deleted', { id: ctx.params.id });
     send(ctx, 204);
+  });
+
+  // ---- Software Management (Device Management › Software Management) ----
+  r.on('GET', '/admin/api/software/inventory', (ctx) => {
+    const a = admin(ctx);
+    send(ctx, 200, inventorySummary(db, a.org_id));
+  });
+  r.on('GET', '/admin/api/software/deployments', (ctx) => {
+    const a = admin(ctx);
+    send(ctx, 200, { items: deployments(db, a.org_id) });
+  });
+  r.on('GET', '/admin/api/devices/{id}/software', (ctx) => {
+    const a = admin(ctx);
+    device(a, ctx.params.id);
+    send(ctx, 200, deviceSoftware(db, ctx.params.id));
+  });
+  /** Remote install or uninstall of one catalog app on several devices at once. */
+  r.on('POST', '/admin/api/software/deploy', async (ctx) => {
+    const a = admin(ctx);
+    const b = await body(ctx);
+    const catalogId = String(b.catalog_id ?? '');
+    const action = b.action === 'uninstall' ? 'RemoveApplication' : b.action === 'install' ? 'InstallApprovedApplication' : null;
+    if (!action) throw invalid('action', 'install or uninstall');
+    const row = db.prepare('SELECT item FROM catalog WHERE id = ?').get(catalogId) as { item: string } | undefined;
+    if (!row) throw invalid('catalog_id', 'not in the catalog');
+    if (catalogId.startsWith('appimage:')) throw invalid('catalog_id', 'AppImages are imported by the user, not deployed');
+    if (action === 'InstallApprovedApplication' && json<{ blocked?: boolean }>(row.item).blocked) throw invalid('catalog_id', 'the app is blocked');
+    const ids = Array.isArray(b.devices) ? [...new Set(b.devices.map(String))].slice(0, 1000) : [];
+    if (!ids.length) throw invalid('devices', 'at least one device');
+    const results = ids.map((id) => {
+      const d = db.prepare('SELECT id, revoked, arch FROM devices WHERE id = ? AND org_id = ?').get(id, a.org_id) as { id: string; revoked: number; arch: string } | undefined;
+      if (!d) return { device_id: id, error: 'not_found' };
+      if (d.revoked) return { device_id: id, error: 'revoked' };
+      if (action === 'InstallApprovedApplication' && !json<{ arches: string[] }>(row.item).arches.includes(d.arch)) return { device_id: id, error: 'arch' };
+      const cid = deploy(db, a.org_id, d.id, action, catalogId);
+      return cid ? { device_id: id, command_id: cid } : { device_id: id, error: 'already_pending' };
+    });
+    log(a, action === 'RemoveApplication' ? 'software_uninstall' : 'software_install', { catalog_id: catalogId, devices: results.filter((x) => 'command_id' in x).length });
+    send(ctx, 201, { results });
+  });
+  r.on('GET', '/admin/api/software/requests', (ctx) => {
+    const a = admin(ctx);
+    const state = ctx.url.searchParams.get('state');
+    if (state && !['pending', 'approved', 'rejected'].includes(state)) throw invalid('state');
+    const rows = db.prepare(`SELECT r.id, r.device_id, d.hostname, r.catalog_id, r.username, r.reason, r.state, r.note, r.at, r.decided_at, r.command_id,
+      (SELECT c.state FROM commands c WHERE c.id = r.command_id) AS install_state
+      FROM software_requests r LEFT JOIN devices d ON d.id = r.device_id WHERE r.org_id = ? ${state ? 'AND r.state = ?' : ''} ORDER BY r.state = 'pending' DESC, r.at DESC LIMIT 500`)
+      .all(...(state ? [a.org_id, state] : [a.org_id]));
+    send(ctx, 200, { items: rows });
+  });
+  const decide = (approve: boolean) => async (ctx: Ctx) => {
+    const a = admin(ctx);
+    const b = await ctx.body().catch(() => null) as Record<string, unknown> | null;
+    const note = typeof b?.note === 'string' && b.note.trim() ? b.note.trim().slice(0, 300) : null;
+    const r = decideRequest(db, a.org_id, ctx.params.id, a.id, approve, note);
+    if (!r) throw new HttpError(404, 'NOT_FOUND', 'no such request');
+    log(a, approve ? 'software_request_approved' : 'software_request_rejected', { request_id: r.id, catalog_id: r.catalog_id, device_id: r.device_id });
+    send(ctx, 200, r);
+  };
+  r.on('POST', '/admin/api/software/requests/{id}/approve', decide(true));
+  r.on('POST', '/admin/api/software/requests/{id}/reject', decide(false));
+  // Departments drive department assignments: a device's own, and its signed-in users'.
+  r.on('PUT', '/admin/api/devices/{id}/department', async (ctx) => {
+    const a = admin(ctx);
+    const d = device(a, ctx.params.id);
+    const dept = validDepartment((await body(ctx)).department);
+    db.prepare('UPDATE devices SET department = ? WHERE id = ?').run(dept, d.id);
+    log(a, 'device_department', { device_id: d.id, department: dept });
+    reconcileRequired(db, a.org_id, Date.now(), d.id);
+    send(ctx, 200, { department: dept });
+  });
+  r.on('PUT', '/admin/api/users/{id}/department', async (ctx) => {
+    const a = admin(ctx);
+    const dept = validDepartment((await body(ctx)).department);
+    const res = db.prepare('UPDATE users SET department = ? WHERE id = ? AND org_id = ?').run(dept, Number(ctx.params.id), a.org_id);
+    if (!res.changes) throw new HttpError(404, 'NOT_FOUND', 'no such user');
+    log(a, 'user_department', { user_id: Number(ctx.params.id), department: dept });
+    reconcileRequired(db, a.org_id);
+    send(ctx, 200, { department: dept });
   });
 
   // ---- releases (read-only here: publishing signs with the release key, via the CLI) ----

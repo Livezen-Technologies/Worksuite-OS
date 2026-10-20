@@ -44,6 +44,12 @@ export interface Policy {
   drivers_online_search?: boolean;
   drivers_auto_install?: boolean;
   drivers_auto_install_gpu?: boolean;
+  /** Software Management: what users may install themselves, and whether they may uninstall or update apps. */
+  software_install?: 'any' | 'approved' | 'request' | 'block';
+  software_uninstall?: boolean;
+  software_update?: boolean;
+  /** Update Manager: download limit for OS and app updates in KiB/s (0 = none). */
+  update_bandwidth_kbps?: number;
   [k: string]: unknown;
 }
 
