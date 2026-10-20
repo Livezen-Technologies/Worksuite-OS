@@ -31,6 +31,14 @@ policy, app catalog, releases (read-only) and an activity log.
   administrator approves it, which issues the signed `RemoteWipe` command with `approval_id` set to the request.
 - **Policy changes:** validated field by field, versioned and signed, and every active device gets a `RefreshPolicy`.
 - **Releases:** shown read-only, because publishing signs with the release key (CLI only).
+- **Remote Support** (Device Management, issue #19; `src/remoteSupport.ts`): dashboard cards, device list
+  (online/offline/in session from the agent's 10 s poll), session history, request and disconnect. Needs the
+  `desktop.devices.remote_support` permission; remote control also needs the administrator's TOTP code. A request
+  sends a signed `RemoteSupportRequest` whose lifetime is the session limit (policy `remote_support.max_session_minutes`,
+  default 60, at most 240); the device's user approves or denies it, and the session is shown active only once the
+  device reports the user's choice. `remote_support.unattended` skips the prompt on corporate-owned devices only, is
+  shown to their users, and the indicator stays visible. Unanswered requests expire after 3 minutes. Every
+  transition is in the activity log. Desktop streaming, chat, file transfer and clipboard are not served yet (below).
 
 ## Security model
 
@@ -79,6 +87,9 @@ node src/main.ts devices --db ws.db ; node src/main.ts device-revoke --db ws.db 
 
 - Federation to an external OneAuth or AD/LDAP. Users are local.
 - Resumable binary diagnostic bundles. JSON summaries are accepted.
+- Remote support media: the screen/input stream (WebRTC over the device's ScreenCast/RemoteDesktop portals), chat,
+  file transfer, clipboard sync, monitor/quality selection and session recording. Consent, sessions, policy and audit
+  are in place; the viewer page is not.
 - Push (`sync/events` is accepted but not acted on), and multi-node deployment (SQLite, one process).
 
 ## Tests

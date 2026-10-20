@@ -3,6 +3,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { setPolicy } from './admin.ts';
 import { invalid } from './http.ts';
+import { validRsPolicy } from './remoteSupport.ts';
 import { normalizeKiosk, type KioskPolicy } from './kiosk.ts';
 
 const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
@@ -49,6 +50,9 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   drivers_online_search: (v) => typeof v === 'boolean',
   drivers_auto_install: (v) => typeof v === 'boolean',
   drivers_auto_install_gpu: (v) => typeof v === 'boolean',
+  // Remote support (issue #19): {enabled, unattended, max_session_minutes 5–240}. unattended applies to corporate-owned
+  // devices only and is shown to their users in Settings; without it every session needs the user's consent.
+  remote_support: validRsPolicy,
   ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 

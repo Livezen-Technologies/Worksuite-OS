@@ -1,5 +1,6 @@
 // desktop/v1 and desktop/v1/os (api-contracts/openapi.yaml). Tenant scoping comes from the authenticated user or
 // device, never from the request. Idempotency-Key replays within 24 h return the stored response.
+import { pendingCommands as rsPendingCommands, deviceReport as rsDeviceReport } from './remoteSupport.ts';
 import { createPublicKey, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { DEFAULT_WEB_APPS, nextSeq, secret, sha256, tx } from './db.ts';
@@ -395,6 +396,20 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
           }
         }
       }
+      return { status: 204 };
+    });
+  });
+
+  // Remote support (issue #19): the agent's fast poll and its consent/session reports.
+  r.on('GET', '/desktop/v1/os/remote-support/commands', (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    db.prepare('UPDATE devices SET last_ip = ? WHERE id = ?').run((ctx.req.socket.remoteAddress ?? '').slice(0, 64) || null, d.id);
+    send(ctx, 200, { commands: rsPendingCommands(db, d.id) });
+  });
+  r.on('POST', '/desktop/v1/os/remote-support/sessions/{id}/state', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    await idempotent(db, ctx, `device:${d.id}`, ctx.header('idempotency-key'), async () => {
+      rsDeviceReport(db, d.id, ctx.params.id, obj(await ctx.body()));
       return { status: 204 };
     });
   });

@@ -13,6 +13,7 @@ import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
 import { redactKiosk, type KioskPolicy } from './kiosk.ts';
 import { setValidatedPolicy, validatePolicy } from './policy.ts';
 import { qrMatrix } from './qr.ts';
+import { REMOTE_SUPPORT_PERMISSION, dashboard as rsDashboard, history as rsHistory, requestSession, terminateSession } from './remoteSupport.ts';
 import { Throttle } from './throttle.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
@@ -199,6 +200,43 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     log(a, 'command', { device_id: d.id, command, command_id: id });
     send(ctx, 201, { command_id: id });
   });
+  // ---- remote support (issue #19): Admin Center › Device Management › Remote Support ----
+  const rsAdmin = (ctx: Ctx) => {
+    const a = admin(ctx);
+    if (!permissionsOf(a).includes(REMOTE_SUPPORT_PERMISSION)) throw new HttpError(403, 'PERMISSION_DENIED', `requires ${REMOTE_SUPPORT_PERMISSION}`);
+    return a;
+  };
+  r.on('GET', '/admin/api/remote-support', (ctx) => send(ctx, 200, rsDashboard(db, rsAdmin(ctx).org_id)));
+  r.on('GET', '/admin/api/remote-support/sessions', (ctx) => send(ctx, 200, { items: rsHistory(db, rsAdmin(ctx).org_id) }));
+  r.on('POST', '/admin/api/remote-support/sessions', async (ctx) => {
+    const a = rsAdmin(ctx);
+    const b = await body(ctx);
+    const d = device(a, String(b.device_id ?? ''));
+    if (d.revoked) throw new HttpError(409, 'DEVICE_REVOKED', 'device is revoked');
+    const pol = db.prepare('SELECT body FROM policies WHERE org_id = ?').get(a.org_id) as { body: string } | undefined;
+    const own = (db.prepare('SELECT ownership FROM devices WHERE id = ?').get(d.id) as { ownership: string }).ownership;
+    const org = (db.prepare('SELECT name FROM orgs WHERE id = ?').get(a.org_id) as { name: string }).name;
+    const res = requestSession(db, a, { device_id: d.id, mode: b.mode, reason: b.reason, otp: b.otp, policy: json<Record<string, unknown>>(pol?.body ?? null) ?? {}, ownership: own, org_name: org });
+    log(a, 'remote_support_requested', { device_id: d.id, session_id: res.session_id, mode: b.mode, unattended: res.unattended });
+    send(ctx, 201, res);
+  });
+  r.on('POST', '/admin/api/remote-support/sessions/{id}/terminate', (ctx) => {
+    const a = rsAdmin(ctx);
+    const res = terminateSession(db, a, ctx.params.id);
+    log(a, 'remote_support_terminated', { session_id: ctx.params.id });
+    send(ctx, 200, res);
+  });
+  r.on('PUT', '/admin/api/devices/{id}/assignee', async (ctx) => {
+    const a = admin(ctx);
+    const d = device(a, ctx.params.id);
+    const b = await body(ctx);
+    const v = b.assigned_user === null || b.assigned_user === '' ? null : typeof b.assigned_user === 'string' && b.assigned_user.length <= 200 ? b.assigned_user.trim() : undefined;
+    if (v === undefined) throw invalid('assigned_user');
+    db.prepare('UPDATE devices SET assigned_user = ? WHERE id = ?').run(v, d.id);
+    log(a, 'device_assigned', { device_id: d.id, assigned_user: v });
+    send(ctx, 204);
+  });
+
   r.on('POST', '/admin/api/devices/{id}/revoke', (ctx) => {
     const a = admin(ctx);
     const d = device(a, ctx.params.id);

@@ -1,6 +1,7 @@
 // SQLite schema and small helpers. Secrets (tokens, credentials, enrollment tokens) are stored only as SHA-256 hashes.
 import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { SCHEMA as REMOTE_SUPPORT_SCHEMA } from './remoteSupport.ts';
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -117,6 +118,10 @@ export function openDb(path: string): DatabaseSync {
   const wipeCols = (db.prepare('PRAGMA table_info(wipe_requests)').all() as { name: string }[]).map((c) => c.name);
   if (!wipeCols.includes('result')) db.exec('ALTER TABLE wipe_requests ADD COLUMN result TEXT');
   if (!wipeCols.includes('result_at')) db.exec('ALTER TABLE wipe_requests ADD COLUMN result_at INTEGER');
+  // Remote support (issue #19): sessions, and the device's last address and assigned employee for the dashboard.
+  db.exec(REMOTE_SUPPORT_SCHEMA);
+  if (!devCols.includes('last_ip')) db.exec('ALTER TABLE devices ADD COLUMN last_ip TEXT');
+  if (!devCols.includes('assigned_user')) db.exec('ALTER TABLE devices ADD COLUMN assigned_user TEXT');
   db.exec('CREATE TABLE IF NOT EXISTS release_log (id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL, at INTEGER NOT NULL)');
   return db;
 }

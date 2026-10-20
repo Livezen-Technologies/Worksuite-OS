@@ -13,7 +13,7 @@ export const APP_HTML = `<!doctype html><html lang="en"><head><meta charset="utf
 <button class="primary" type="submit">Sign in</button></form></div>
 <div id="app" class="shell" hidden>
 <nav class="side" aria-label="Sections"><div class="brand">${LOGO}<span>WorkSuite</span></div>
-<a href="#overview">Overview</a><a href="#devices">Devices</a><a href="#wipes">Wipe requests</a><a href="#users">Users</a>
+<a href="#overview">Overview</a><a href="#devices">Devices</a><a href="#support">Remote Support</a><a href="#wipes">Wipe requests</a><a href="#users">Users</a>
 <a href="#enroll">Enrollment</a><a href="#policy">Policy</a><a href="#apps">App catalog</a><a href="#releases">Releases</a><a href="#problems">Problem reports</a><a href="#audit">Package audit</a><a href="#activity">Activity</a>
 <div class="me"><span id="me-name"></span><span id="me-org" class="muted"></span><button id="logout" class="link">Sign out</button></div></nav>
 <main id="main" tabindex="-1"></main></div>
@@ -345,6 +345,40 @@ const views = {
       table(['When', 'Device', 'Event', 'Details'], r.items.map((x) => h('tr', {}, h('td', {}, new Date(x.at).toLocaleString()), h('td', {}, h('a', { href: '#device/' + encodeURIComponent(x.device_id) }, x.hostname)),
         h('td', {}, x.type.replace(/^package\./, '').replace(/_/g, ' ')), h('td', { class: 'muted' }, detail(x.data))))),
       pager(r, 'audit', type ? '~' + type : '')];
+  },
+  // Device Management › Remote Support (issue #19). The device's user approves each session unless the policy's
+  // disclosed unattended access applies; what the console shows as active is what the device reported.
+  async support() {
+    const r = await api('GET', 'remote-support');
+    const c = r.cards;
+    const stat = (label, n, cls) => h('div', { class: 'card stat' }, h('b', { class: cls }, n), label);
+    const dur = (s) => s ? Math.floor(s / 60) + ' min ' + (s % 60) + ' s' : '—';
+    const STATUS = { online: 'Online', offline: 'Offline', busy: 'In session' };
+    const END = { denied: 'Denied by user', consent_timeout: 'No answer', user_ended: 'Ended by user', admin_ended: 'Ended by administrator', expired: 'Timed out', no_user: 'Nobody signed in', unenrolled: 'Device unenrolled', busy: 'Device busy' };
+    const start = (d) => {
+      const reason = prompt('Reason for access (shown to ' + (d.assigned_user || 'the user') + ')');
+      if (!reason) return;
+      const control = confirm('Request keyboard and mouse control?\nOK = remote control (needs your authenticator code), Cancel = view only.');
+      const otp = control ? prompt('Authenticator code') : undefined;
+      if (control && !otp) return;
+      act(() => api('POST', 'remote-support/sessions', { device_id: d.id, mode: control ? 'control' : 'view', reason, otp }), 'Request sent. The user is asked to allow it.');
+    };
+    const end = (id) => act(() => api('POST', 'remote-support/sessions/' + encodeURIComponent(id) + '/terminate'), 'Session ended.');
+    return [h('h1', {}, 'Remote Support'),
+      h('p', { class: 'muted' }, 'Every session needs the user\'s approval on the device, who sees an indicator and can stop it at any time, unless the device policy enables unattended access for corporate devices.'),
+      h('div', { class: 'grid' }, stat('Online devices', c.online_devices), stat('Active sessions', c.active_sessions), stat('Pending requests', c.pending_requests, c.pending_requests ? 'warn' : ''),
+        stat('Offline devices', c.offline_devices), stat('Support technicians', c.support_technicians), stat('Completed sessions', c.completed_sessions)),
+      h('h2', {}, 'Devices'),
+      table(['Device', 'Assigned employee', 'Organization', 'IP address', 'OS version', 'Status', 'Last seen', ''], r.devices.map((d) => h('tr', {},
+        h('td', {}, h('a', { href: '#device/' + encodeURIComponent(d.id) }, d.name)), h('td', {}, d.assigned_user || '—'), h('td', {}, d.organization), h('td', {}, d.ip_address || '—'),
+        h('td', {}, d.os_version || '—'), h('td', {}, h('span', { class: 'chip' + (d.status === 'offline' ? ' bad' : '') }, STATUS[d.status])), h('td', {}, ago(d.last_seen)),
+        h('td', {}, h('button', { type: 'button', disabled: d.status !== 'online', onclick: () => start(d) }, 'Request support'))))),
+      h('h2', {}, 'Session history'),
+      table(['Administrator', 'Device', 'User', 'Start', 'End', 'Duration', 'Mode', 'Status', ''], r.history.map((x) => h('tr', {},
+        h('td', {}, x.administrator), h('td', {}, x.device), h('td', {}, x.user || '—'), h('td', {}, x.started_at ? when(x.started_at) : '—'), h('td', {}, x.ended_at ? when(x.ended_at) : '—'),
+        h('td', {}, dur(x.duration_s)), h('td', {}, (x.granted_mode || x.mode) === 'control' ? 'Full control' : 'View only', x.unattended ? h('div', { class: 'muted' }, 'Unattended policy') : null),
+        h('td', {}, x.state === 'ended' ? (END[x.end_reason] || 'Ended') : x.state === 'active' ? h('span', { class: 'ok' }, 'Active') : 'Waiting for user'),
+        h('td', {}, x.state !== 'ended' ? h('button', { type: 'button', onclick: () => end(x.id) }, 'Disconnect') : null))))];
   },
   async activity() {
     const { items } = await api('GET', 'log');
