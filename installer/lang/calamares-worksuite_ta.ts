@@ -466,6 +466,14 @@
       <source>Search languages</source>
       <translation>மொழிகளைத் தேடு</translation>
     </message>
+    <message>
+      <source>No language matches "%1".</source>
+      <translation>"%1" உடன் பொருந்தும் மொழி இல்லை.</translation>
+    </message>
+    <message>
+      <source>Applying the language…</source>
+      <translation>மொழியைப் பயன்படுத்துகிறது…</translation>
+    </message>
   </context>
   <context>
     <name>WorksuiteConfirmViewStep</name>
@@ -490,8 +498,56 @@
       <translation>தெரியாத வட்டு</translation>
     </message>
     <message>
+      <source>Windows</source>
+      <translation>Windows</translation>
+    </message>
+    <message>
+      <source>macOS</source>
+      <translation>macOS</translation>
+    </message>
+    <message>
+      <source>Linux</source>
+      <translation>Linux</translation>
+    </message>
+    <message>
+      <source>Another system</source>
+      <translation>வேறு ஓர் இயக்க முறைமை</translation>
+    </message>
+    <message>
+      <source>The target disk could not be identified. Go back and choose the disk again.</source>
+      <translation>இலக்கு வட்டை அடையாளம் காண முடியவில்லை. பின்சென்று வட்டை மீண்டும் தேர்ந்தெடுக்கவும்.</translation>
+    </message>
+    <message>
+      <source>Wait until the disk has been read.</source>
+      <translation>வட்டு படிக்கப்படும் வரை காத்திருக்கவும்.</translation>
+    </message>
+    <message>
+      <source>Type %1 to continue.</source>
+      <translation>தொடர %1 என தட்டச்சு செய்யவும்.</translation>
+    </message>
+    <message>
+      <source>That is not the disk name. Type %1 exactly, in lower case.</source>
+      <translation>அது வட்டின் பெயர் அல்ல. %1 என சிறிய எழுத்துகளில் சரியாக தட்டச்சு செய்யவும்.</translation>
+    </message>
+    <message>
+      <source>Tick the box to confirm that the systems on this disk will be removed.</source>
+      <translation>இந்த வட்டிலுள்ள முறைமைகள் அகற்றப்படும் என்பதை உறுதிப்படுத்த பெட்டியைத் தேர்வு செய்யவும்.</translation>
+    </message>
+    <message>
+      <source>Reading the disk…</source>
+      <translation>வட்டைப் படிக்கிறது…</translation>
+    </message>
+    <message>
+      <source>Operating systems on this disk</source>
+      <translation>இந்த வட்டிலுள்ள இயக்க முறைமைகள்</translation>
+    </message>
+    <message>
       <source>Type the disk name to confirm</source>
       <translation>உறுதிப்படுத்த வட்டின் பெயரைத் தட்டச்சிடுக</translation>
+    </message>
+    <message>
+      <source>Confirmation status</source>
+      <translation>உறுதிப்படுத்தல் நிலை</translation>
     </message>
     <message>
       <source>Server address</source>
@@ -548,10 +604,6 @@
     <message>
       <source>This will erase your disk</source>
       <translation>இது உங்கள் வட்டை அழிக்கும்</translation>
-    </message>
-    <message>
-      <source>The target disk could not be identified. Go back and choose the disk again.</source>
-      <translation>இலக்கு வட்டை அடையாளம் காண முடியவில்லை. பின்சென்று வட்டை மீண்டும் தேர்ந்தெடுக்கவும்.</translation>
     </message>
     <message>
       <source>Once the installation starts, these changes can't be undone.</source>
@@ -645,6 +697,18 @@
       <source>No enrollment QR code was read. Try again, or type the code.</source>
       <translation>பதிவு QR குறியீடு எதுவும் படிக்கப்படவில்லை. மீண்டும் முயலவும், அல்லது குறியீட்டைத் தட்டச்சு செய்யவும்.</translation>
     </message>
+    <message>
+      <source>This disk already has an operating system on it. Installing WorkSuite OS removes it and everything stored with it; it will no longer start:</source>
+      <translation>இந்த வட்டில் ஏற்கனவே ஓர் இயக்க முறைமை உள்ளது. WorkSuite OS ஐ நிறுவுவது அதையும் அதில் சேமிக்கப்பட்ட அனைத்தையும் அகற்றும்; அது இனி தொடங்காது:</translation>
+    </message>
+    <message>
+      <source>I understand that the systems listed above will be permanently removed</source>
+      <translation>மேலே பட்டியலிடப்பட்ட முறைமைகள் நிரந்தரமாக அகற்றப்படும் என்பதை நான் புரிந்துகொள்கிறேன்</translation>
+    </message>
+    <message>
+      <source>Ready. Press Continue to review the terms; nothing is written before Install.</source>
+      <translation>தயார். நிபந்தனைகளைப் பார்க்க தொடர் என்பதை அழுத்தவும்; நிறுவலுக்கு முன் எதுவும் எழுதப்படாது.</translation>
+    </message>
   </context>
   <context>
     <name>WsIntro</name>
@@ -690,6 +754,10 @@
     <message>
       <source>Deletes &lt;b style="color:#FFB98A"&gt;all data&lt;/b&gt; on the selected device.</source>
       <translation>தேர்ந்தெடுத்த சாதனத்திலுள்ள &lt;b style="color:#FFB98A"&gt;எல்லாத் தரவையும்&lt;/b&gt; அழிக்கும்.</translation>
+    </message>
+    <message>
+      <source>Looking for disks and the systems on them…</source>
+      <translation>வட்டுகளையும் அவற்றிலுள்ள முறைமைகளையும் தேடுகிறது…</translation>
     </message>
     <message>
       <source>Before</source>
@@ -770,6 +838,10 @@
     <message>
       <source>Passphrases match</source>
       <translation>கடவுச்சொற்றொடர்கள் பொருந்துகின்றன</translation>
+    </message>
+    <message>
+      <source>Other operating systems are on this disk. Erasing it removes them and they will no longer start. Back up first, or choose another disk:</source>
+      <translation>இந்த வட்டில் வேறு இயக்க முறைமைகள் உள்ளன. இதை அழிப்பது அவற்றை அகற்றும், அவை இனி தொடங்காது. முதலில் காப்புப் பிரதி எடுக்கவும், அல்லது வேறு வட்டைத் தேர்வு செய்யவும்:</translation>
     </message>
     <message>
       <source>Quit the installer?</source>
