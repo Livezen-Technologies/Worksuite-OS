@@ -1,4 +1,5 @@
 #include "WsStyle.h"
+#include "WorksuiteConfirmViewStep.h"
 
 #include "ViewManager.h"
 
@@ -549,6 +550,25 @@ private:
         cl->addLayout( texts, 1 );
         l->addWidget( card );
 
+        // Until the partition module has listed the disks (it probes each one, os-prober included).
+        m_scanning = label( QStringLiteral( "wsDiskBusy" ), tr( "Looking for disks and the systems on them…" ) );
+        m_scanning->hide();
+        l->addWidget( m_scanning );
+
+        // Systems already on the selected disk (dual boot), by name: erasing removes them.
+        m_sysBox = new QFrame;
+        m_sysBox->setObjectName( QStringLiteral( "wsSystemsBox" ) );
+        auto* sbl = new QHBoxLayout( m_sysBox );
+        sbl->setContentsMargins( 16, 14, 16, 14 );
+        sbl->setSpacing( 12 );
+        sbl->addWidget( iconLabel( QStringLiteral( "warn" ), QColor( "#FF8A7A" ), 18 ), 0, Qt::AlignTop );
+        m_sysText = label( QStringLiteral( "wsSystemsText" ) );
+        m_sysText->setWordWrap( true );
+        m_sysText->setTextFormat( Qt::PlainText );
+        sbl->addWidget( m_sysText, 1 );
+        m_sysBox->hide();
+        l->addWidget( m_sysBox );
+
         auto* preview = new QFrame;
         preview->setObjectName( QStringLiteral( "wsPreview" ) );
         auto* g = new QGridLayout( preview );
@@ -830,9 +850,58 @@ private:
         setState( "encrypt", enc );
     }
 
+    // Operating systems on the selected disk, from the partition module's "before" model.
+    static QStringList systemsIn( QAbstractItemModel* model )
+    {
+        QStringList out;
+        if ( !model )
+        {
+            return out;
+        }
+        for ( int row = 0; row < model->rowCount(); ++row )
+        {
+            const QModelIndex i = model->index( row, NameColumn );
+            if ( i.data( IsFreeSpaceRole ).toBool() )
+            {
+                continue;
+            }
+            const QString fs = model->index( row, FileSystemColumn ).data().toString();
+            const QString name = i.data( FileSystemLabelRole ).toString();
+            const QString system = WorksuiteConfirmViewStep::systemOf( fs, name, QString() );
+            if ( !system.isEmpty() )
+            {
+                out << system + QStringLiteral( " · " ) + i.data().toString() + QStringLiteral( " · " )
+                        + WsStyle::sizeText( i.data( SizeRole ).toLongLong() ) + ( name.isEmpty() ? QString() : QStringLiteral( " · " ) + name );
+            }
+        }
+        return out;
+    }
+
+    void refreshScanning()
+    {
+        if ( m_scanning )
+        {
+            m_scanning->setVisible( !m_drives || m_drives->count() == 0 );
+        }
+    }
+
     void refreshBars()
     {
-        auto before = segmentsOf( barsModel( m_beforeFrame ), false );
+        refreshScanning();
+        auto* beforeModel = barsModel( m_beforeFrame );
+        const QStringList systems = systemsIn( beforeModel );
+        m_sysBox->setVisible( !systems.isEmpty() );
+        if ( !systems.isEmpty() )
+        {
+            const QString text = tr( "Other operating systems are on this disk. Erasing it removes them and they will no "
+                                     "longer start. Back up first, or choose another disk:" )
+                + QStringLiteral( "\n  • " ) + systems.join( QStringLiteral( "\n  • " ) );
+            if ( m_sysText->text() != text )
+            {
+                m_sysText->setText( text );
+            }
+        }
+        auto before = segmentsOf( beforeModel, false );
         auto after = segmentsOf( barsModel( m_afterFrame ), true );
         QString sig;
         for ( const auto& s : before + after )
@@ -977,6 +1046,9 @@ private:
     QPushButton* m_off = nullptr;
     QFrame* m_passCard = nullptr;
     QFrame* m_warn = nullptr;
+    QFrame* m_sysBox = nullptr;
+    QLabel* m_sysText = nullptr;
+    QLabel* m_scanning = nullptr;
     QList< QFrame* > m_bars;
     QLabel* m_msg = nullptr;
     QLabel* m_strength = nullptr;

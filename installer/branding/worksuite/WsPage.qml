@@ -91,8 +91,9 @@ Item {
         }
     }
 
-    // Rendered at its on-screen size, so the background is never scaled.
-    Image { anchors.fill: parent; source: page.background; sourceSize: Qt.size(Math.max(1, width), Math.max(1, height)); smooth: false; cache: false }
+    // Rendered at its on-screen size, so the background is never scaled. Off the UI thread and cached: every page
+    // shares the same SVG at the same size, so it is rasterised once instead of on each page change.
+    Image { anchors.fill: parent; source: page.background; sourceSize: Qt.size(Math.max(1, width), Math.max(1, height)); smooth: false; asynchronous: true; cache: true }
 
     ColumnLayout {
         anchors.fill: parent

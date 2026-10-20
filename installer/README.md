@@ -12,6 +12,10 @@ Two WorkSuite modules, installed next to the stock ones in `/usr/lib/<multiarch>
   - `@erase` after the summary: reads the target disk from the partition step's planned jobs (the same list the summary
     shows; refuses if there isn't exactly one disk), shows its model and size from `lsblk`, and keeps Next disabled
     until the disk name (`nvme0n1`, `sda`, optionally with `/dev/`) is typed exactly (WSOS-INS-003).
+    The disk is read with `lsblk` in the background ("Reading the disk…"). Operating systems already on it (dual-boot
+    machines: Windows/NTFS/BitLocker, Linux, macOS) are listed by name and partition, and Install also needs the box
+    "I understand that the systems listed above will be permanently removed"; a line under the field says what is
+    still missing. The Disk page (`WsStyle.cpp`) names the same systems as soon as a disk is selected.
   - `@enroll` after the account page (optional, WSOS-INS-006): server and code, the console's link or its QR code.
     **Skip for now** (or Continue with both fields empty) clears the fields, writes no token file and moves on; the
     sidebar marks Your account › Enrollment as skipped.
