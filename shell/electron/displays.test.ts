@@ -1,11 +1,11 @@
 import { execFile, spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { chmodSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   arrange, currentLayout, displayManager, mirrorCommands, monitorSetKey, outputRects, parseOutputs, parseOutputsText, randrArgs,
-  readStore, RevertTimer, validateLayout, type Clock, type Layout, type OutputInfo,
+  readStore, RevertTimer, validateLayout, withOfferedModes, drmDrivers, layoutMatches, type Clock, type Layout, type OutputInfo,
 } from './displays'
 import type { Exec } from './system'
 
@@ -221,6 +221,22 @@ describe('display manager', () => {
     expect(readStore(path.join(dir, 'displays.json')).profiles).toEqual({})
   })
 
+  it('goes straight back when the compositor substitutes another mode (#32)', async () => {
+    const r = fakeRandr()
+    const { clock } = fakeClock()
+    const exec: Exec = async (cmd, args) => {
+      // This monitor "accepts" 1920×1080 but keeps running its native mode.
+      if (args.includes('1920x1080@60Hz')) return { code: 0, stdout: '', stderr: '' }
+      return r.exec(cmd, args)
+    }
+    const dm = displayManager({ exec, storeFile: path.join(dir, 'displays.json'), clock, drivers: () => ({}) })
+    const l = currentLayout(r.get())
+    const res = await dm.apply(arrange({ ...l, outputs: l.outputs.map((o) => (o.name === 'HDMI-A-1' ? { ...o, width: 1920, height: 1080, refresh: 60, scale: 2 } : o)) }))
+    expect(res).toEqual({ ok: false, error: 'mode_not_applied' })
+    expect(dm.timer.pending).toBe(false)
+    expect(r.get()[1].modes.find((m) => m.current)).toMatchObject({ width: 3840 })
+  })
+
   it('keeps and saves per monitor set; re-applies at login; rejects bad layouts', async () => {
     const r = fakeRandr()
     const { clock, advance } = fakeClock()
@@ -249,6 +265,59 @@ describe('display manager', () => {
     const calls = r.calls.length
     expect(await login.applySaved()).toEqual({ ok: true, value: false })
     expect(r.calls.slice(calls).some((a) => a.includes('--output'))).toBe(false)
+  })
+})
+
+describe('offered modes (#32)', () => {
+  const vm = (driver?: string, name = 'Virtual-1'): OutputInfo => ({ name, description: '', make: '', model: '', serial: '', enabled: true, x: 0, y: 0, scale: 1, transform: 'normal', driver,
+    modes: [{ width: 1280, height: 800, refresh: 59.81, preferred: true, current: true }, { width: 1280, height: 800, refresh: 59.81, preferred: false, current: false }, { width: 0, height: 0, refresh: 0, preferred: false, current: false }] })
+
+  it('offers standard sizes as custom modes on a virtual GPU whose list has one mode', () => {
+    const o = withOfferedModes(vm('virtio_gpu'))
+    const sizes = o.modes.map((m) => `${m.width}x${m.height}`)
+    expect(sizes[0]).toBe('1280x800')
+    expect(sizes).toContain('1920x1080')
+    expect(sizes).toContain('1024x768')
+    expect(sizes).not.toContain('2560x1440')            // larger than the output allows (max 1920×1080 here)
+    expect(sizes.filter((x) => x === '1280x800')).toHaveLength(1)   // duplicates and the 0×0 entry dropped
+    expect(o.modes.find((m) => m.width === 1920)).toMatchObject({ custom: true, refresh: 0 })
+    expect(withOfferedModes(vm(undefined, 'HEADLESS-1')).modes.length).toBeGreaterThan(5)
+  })
+
+  it('offers nothing extra on real monitors or the firmware framebuffer', () => {
+    const real = withOfferedModes({ ...outs()[1], driver: 'i915' })
+    expect(real.modes).toHaveLength(3)
+    const fw = withOfferedModes(vm('simpledrm'))
+    expect(fw.fixedMode).toBe(true)
+    expect(fw.modes).toHaveLength(1)
+  })
+
+  it('applies custom sizes with --custom-mode', () => {
+    const o = withOfferedModes(vm('virtio_gpu'))
+    const l: Layout = { arrangement: 'extend', primary: 'Virtual-1', outputs: [{ name: 'Virtual-1', enabled: true, width: 1920, height: 1080, refresh: 0, scale: 1, x: 0, y: 0 }] }
+    expect(validateLayout(l, [o])).toBeNull()
+    expect(randrArgs(l, [o])).toEqual(['--output', 'Virtual-1', '--on', '--custom-mode', '1920x1080', '--pos', '0,0', '--scale', '1'])
+    expect(randrArgs({ ...l, outputs: [{ ...l.outputs[0], width: 1280, height: 800, refresh: 59.81 }] }, [o])).toContain('--mode')
+    expect(validateLayout({ ...l, outputs: [{ ...l.outputs[0], width: 1600, height: 1200 }] }, [o])).toBe('bad_mode')
+  })
+
+  it('reads connector drivers from sysfs', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'ws-drm-'))
+    try {
+      mkdirSync(path.join(root, 'drv', 'virtio_gpu'), { recursive: true })
+      mkdirSync(path.join(root, 'card0-Virtual-1', 'device'), { recursive: true })
+      symlinkSync(path.join(root, 'drv', 'virtio_gpu'), path.join(root, 'card0-Virtual-1', 'device', 'driver'))
+      mkdirSync(path.join(root, 'card0'))
+      expect(drmDrivers(root)).toEqual({ 'Virtual-1': 'virtio_gpu' })
+      expect(drmDrivers(path.join(root, 'missing'))).toEqual({})
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('checks that the compositor runs what was asked', () => {
+    const o = outs()
+    const l = currentLayout(o)
+    expect(layoutMatches(l, o)).toBe(true)
+    expect(layoutMatches({ ...l, outputs: l.outputs.map((c) => ({ ...c, width: 1920, height: 1080 })) }, o)).toBe(false)
   })
 })
 

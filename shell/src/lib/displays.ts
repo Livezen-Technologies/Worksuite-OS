@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react'
 import type { PanelWindow } from './panel'
 import { t } from '../i18n'
 
-export interface DisplayMode { width: number; height: number; refresh: number; preferred: boolean; current: boolean }
-export interface DisplayOutput { name: string; description: string; make: string; model: string; serial: string; enabled: boolean; modes: DisplayMode[]; x: number; y: number; scale: number; transform: string }
+/** `custom`: a standard size offered on a virtual GPU that takes any size (electron/displays.ts withOfferedModes). */
+export interface DisplayMode { width: number; height: number; refresh: number; preferred: boolean; current: boolean; custom?: boolean }
+/** `fixedMode`: the firmware framebuffer (simpledrm/efifb) runs this output; it has one mode until a GPU driver loads. */
+export interface DisplayOutput { name: string; description: string; make: string; model: string; serial: string; enabled: boolean; modes: DisplayMode[]; x: number; y: number; scale: number; transform: string; driver?: string; fixedMode?: boolean }
 export interface DisplayOutputConfig { name: string; enabled: boolean; width: number; height: number; refresh: number; scale: number; x: number; y: number }
 export type Arrangement = 'extend' | 'mirror'
 export interface DisplayLayout { arrangement: Arrangement; primary: string; outputs: DisplayOutputConfig[] }
