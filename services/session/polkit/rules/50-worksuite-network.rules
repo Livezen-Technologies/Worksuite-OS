@@ -1,0 +1,13 @@
+// WorkSuite (#42): the person at the desk (an active local session) saves Wi-Fi networks as system connections.
+// Without this NetworkManager's default (auth_admin_keep for settings.modify.system) makes nmcli save a network the
+// user joined as a private profile whose password is "agent-owned": only a secret agent in the session may give it
+// back, and the WorkSuite session has none running. Every re-association (roaming, rekeying, waking from sleep) then
+// failed for want of the password: the connection dropped, autoconnect could not rejoin, and the password was asked
+// for again. System connections keep the secret in NetworkManager's root-only keyfile.
+polkit.addRule(function (action, subject) {
+    var own = ["org.freedesktop.NetworkManager.settings.modify.system", "org.freedesktop.NetworkManager.network-control",
+               "org.freedesktop.NetworkManager.enable-disable-wifi"];
+    if (own.indexOf(action.id) >= 0 && subject.local && subject.active) {
+        return polkit.Result.YES;
+    }
+});
