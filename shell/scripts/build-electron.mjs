@@ -6,6 +6,8 @@ for (const [entry, out] of [['electron/main.ts', 'dist-electron/main.cjs'], ['el
   // Kiosk mode (WSOS-AUTH-002): its own main process and preloads.
   ['electron/kioskMain.ts', 'dist-electron/kiosk.cjs'], ['electron/kioskPreload.ts', 'dist-electron/kioskPreload.cjs'], ['electron/kioskExitPreload.ts', 'dist-electron/kioskExitPreload.cjs'],
   // WhatsApp window: focus on notification click (electron/whatsappPreload.ts).
-  ['electron/whatsappPreload.ts', 'dist-electron/whatsappPreload.cjs']]) {
+  ['electron/whatsappPreload.ts', 'dist-electron/whatsappPreload.cjs'],
+  // Remote support capture window (issue #19).
+  ['electron/rsCapture.ts', 'dist-electron/rsCapture.cjs']]) {
   await build({ entryPoints: [entry], outfile: out, bundle: true, platform: 'node', format: 'cjs', target: 'node20', external })
 }

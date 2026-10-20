@@ -296,6 +296,8 @@ contextBridge.exposeInMainWorld('worksuiteRemoteSupport', {
   decide: (decision: string) => ipcRenderer.invoke('ws:remoteSupportDecide', String(decision)),
   revokeControl: () => ipcRenderer.invoke('ws:remoteSupportRevokeControl'),
   end: () => ipcRenderer.invoke('ws:remoteSupportEnd'),
+  chat: () => ipcRenderer.invoke('ws:remoteSupportChat'),
+  sendChat: (text: string) => ipcRenderer.invoke('ws:remoteSupportSendChat', String(text)),
 })
 
 contextBridge.exposeInMainWorld('worksuitePolkit', {

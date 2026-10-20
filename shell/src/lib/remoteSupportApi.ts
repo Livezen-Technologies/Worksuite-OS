@@ -22,6 +22,9 @@ export interface RemoteSupportApi {
   decide(decision: 'deny' | 'view' | 'control'): Promise<Reply<RsSession | null>>
   revokeControl(): Promise<Reply<RsSession | null>>
   end(): Promise<Reply<RsSession | null>>
+  /** Chat with the administrator over the session's data channel (older bridges lack it). */
+  chat?(): Promise<{ from: 'admin' | 'user'; text: string; at: number }[]>
+  sendChat?(text: string): Promise<boolean>
 }
 
 declare global {

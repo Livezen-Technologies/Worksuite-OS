@@ -58,18 +58,46 @@ export function RemoteSupportPrompt({ onOpen, pollMs }: { onOpen?: (open: boolea
   )
 }
 
+/** Chat with the administrator (data channel of the session). */
+function RsChat({ api }: { api: NonNullable<ReturnType<typeof useRemoteSupport>['api']> }) {
+  const t = useT()
+  const [lines, setLines] = useState<{ from: 'admin' | 'user'; text: string; at: number }[]>([])
+  const [text, setText] = useState('')
+  useEffect(() => {
+    if (!api.chat) return
+    let live = true
+    const tick = () => { void api.chat!().then((l) => { if (live) setLines(l) }).catch(() => {}) }
+    tick()
+    const id = setInterval(tick, 1500)
+    return () => { live = false; clearInterval(id) }
+  }, [api])
+  return (
+    <div role="dialog" aria-label={t('rs.chat')} className="absolute right-0 bottom-10 z-50 flex w-[300px] flex-col gap-2 rounded-xl border border-[rgba(127,178,255,0.25)] bg-[#0F2350] p-3 text-xs font-normal text-[#E8EEFA] shadow-xl">
+      <div aria-live="polite" className="flex max-h-[220px] flex-col gap-1 overflow-auto">
+        {lines.length === 0 && <span className="text-[#8FA3C8]">{t('rs.chatEmpty')}</span>}
+        {lines.map((l, i) => <span key={i}><b>{l.from === 'admin' ? t('rs.admin') : t('rs.you')}:</b> {l.text}</span>)}
+      </div>
+      <form className="flex gap-1.5" onSubmit={(e) => { e.preventDefault(); if (!text.trim()) return; void api.sendChat?.(text).then(() => api.chat?.().then(setLines)); setText('') }}>
+        <input aria-label={t('rs.chatMessage')} value={text} maxLength={500} onChange={(e) => setText(e.target.value)} className="min-w-0 flex-1 rounded-md border border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.6)] px-2 py-1 text-white" />
+        <button type="submit" className="rounded-md bg-[#1F6BFF] px-2.5 py-1 font-semibold text-white">{t('rs.send')}</button>
+      </form>
+    </div>
+  )
+}
+
 /** Taskbar indicator for as long as a session is active. */
 export function RemoteSupportBadge({ pollMs }: { pollMs?: number } = {}) {
   const t = useT()
   const { api, session, refresh } = useRemoteSupport(pollMs)
   const [busy, setBusy] = useState(false)
+  const [chat, setChat] = useState(false)
   if (!api || !session || session.state !== 'active') return null
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); await fn().catch(() => {}); setBusy(false); void refresh() }
   const s: RsSession = session
   const control = s.granted_mode === 'control'
   const hint = t(s.consent === 'unattended_policy' ? 'rs.hintUnattended' : 'rs.hint', { admin: s.admin_name, org: s.org_name || '—' })
   return (
-    <span role="status" title={hint} className="flex items-center gap-1.5 rounded-full bg-[#B3541B] py-1 pl-2.5 pr-1 text-xs font-semibold text-white">
+    <span role="status" title={hint} className="relative flex items-center gap-1.5 rounded-full bg-[#B3541B] py-1 pl-2.5 pr-1 text-xs font-semibold text-white">
       <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-white" />
       {control ? t('rs.activeControl') : t('rs.activeView')}
       <span className="sr-only">{hint}</span>
@@ -77,6 +105,11 @@ export function RemoteSupportBadge({ pollMs }: { pollMs?: number } = {}) {
         <button type="button" disabled={busy} onClick={() => void run(() => api.revokeControl())}
           className="ml-1 rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-white/30 disabled:opacity-60">{t('rs.viewOnly')}</button>
       )}
+      {api.chat && (
+        <button type="button" aria-expanded={chat} onClick={() => setChat((v) => !v)}
+          className="ml-1 rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-white/30">{t('rs.chat')}</button>
+      )}
+      {chat && api.chat && <RsChat api={api} />}
       <button type="button" disabled={busy} onClick={() => void run(() => api.end())}
         className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-[#8A3A10] hover:bg-[#FFE9DA] disabled:opacity-60">{t('rs.end')}</button>
     </span>

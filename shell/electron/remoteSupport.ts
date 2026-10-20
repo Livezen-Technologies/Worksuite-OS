@@ -5,6 +5,8 @@
 import { readFile } from 'node:fs/promises'
 import { createConnection } from 'node:net'
 import { join } from 'node:path'
+import { RemoteSessionController, type CaptureWindow } from './remoteSession'
+import type { Exec } from './system'
 
 export const RS_DIR = '/run/worksuite-device-agent'
 export type RsMode = 'view' | 'control'
@@ -85,8 +87,54 @@ export function remoteSupportBridge(d: RsDeps = realDeps(), dir = RS_DIR) {
   }
 }
 
+/** Hidden capture window for the media session: its own partition, screen capture through the portal only. */
+async function captureWindow(): Promise<CaptureWindow & { wc: Electron.WebContents }> {
+  const { BrowserWindow, desktopCapturer, session } = await import('electron')
+  const ses = session.fromPartition('ws-remote-support')
+  ses.setPermissionRequestHandler((_wc, perm, cb) => cb(perm === 'media'))
+  // getSources goes to the ScreenCast portal, whose chooser asks which screen (multi-monitor) every time.
+  ses.setDisplayMediaRequestHandler((_req, cb) => {
+    desktopCapturer.getSources({ types: ['screen'] }).then((src) => cb(src[0] ? { video: src[0] } : {})).catch(() => cb({}))
+  })
+  const w = new BrowserWindow({ show: false, webPreferences: { session: ses, preload: join(__dirname, 'rsCapture.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } })
+  w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  w.webContents.on('will-navigate', (e) => e.preventDefault())
+  void w.loadURL('about:blank')
+  return { wc: w.webContents, send: (ch, data) => { if (!w.isDestroyed()) w.webContents.send(ch, data) }, close: () => { if (!w.isDestroyed()) w.destroy() } }
+}
+
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
-export function startRemoteSupportHost(handle: Handle, b = remoteSupportBridge()) {
+export function startRemoteSupportHost(handle: Handle, b = remoteSupportBridge(), o: { exec: Exec; credential: () => string | null; serverBase: () => string | null }) {
+  let wc: Electron.WebContents | null = null
+  const ctl = new RemoteSessionController({
+    state: () => b.state(), end: () => b.end(), credential: o.credential, serverBase: o.serverBase, fetch, exec: o.exec,
+    openWindow: () => {
+      // The window is created asynchronously; messages sent before it loads are queued until then.
+      const q: [string, unknown][] = []
+      let win: (CaptureWindow & { wc: Electron.WebContents }) | null = null
+      let closed = false
+      void captureWindow().then((w) => {
+        if (closed) { w.close(); return }
+        win = w; wc = w.wc
+        w.wc.once('did-finish-load', () => { for (const [c, d] of q.splice(0)) w.send(c, d) })
+      })
+      return {
+        send: (c, d) => { if (win && !win.wc.isLoading()) win.send(c, d); else q.push([c, d]) },
+        close: () => { closed = true; win?.close(); wc = null },
+      }
+    },
+  })
+  void import('electron').then(({ ipcMain }) => {
+    const from = (e: Electron.IpcMainEvent) => wc !== null && e.sender === wc
+    ipcMain.on('rs:signal-out', (e, m) => { if (from(e)) void ctl.signalOut(m) })
+    ipcMain.on('rs:input', (e, m) => { if (from(e)) void ctl.onInput(m) })
+    ipcMain.on('rs:screen', (e, m) => { if (from(e)) ctl.setScreen(m) })
+    ipcMain.on('rs:chat-in', (e, t) => { if (from(e)) ctl.chatIn(String(t)) })
+    ipcMain.on('rs:ended', (e) => { if (from(e)) void ctl.ended() })
+  })
+  setInterval(() => { void ctl.tick() }, 1000).unref?.()
+  handle('ws:remoteSupportChat', () => ctl.chatLog())
+  handle('ws:remoteSupportSendChat', (text) => ctl.chatOut(text))
   handle('ws:remoteSupportState', () => b.state())
   handle('ws:remoteSupportDecide', (decision) => b.decide(decision))
   handle('ws:remoteSupportRevokeControl', () => b.revokeControl())

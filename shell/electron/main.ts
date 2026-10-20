@@ -12,7 +12,7 @@ import { appWebPreferences, appWindows } from './appwindows'
 import { bootMode } from './bootmode'
 import { appLaunchCommand, scopeCommand, lockPaths, logoutCommand, readLockSettings, writeLockTimeout } from './session'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
-import { deviceCredential, deviceInfo, enrollDevice } from './device'
+import { deviceCredential, deviceInfo, enrollDevice, STATUS_PATH } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
 import { listDevices } from './hardware'
 import { checkOwnPassword, localUsers } from './users'
@@ -672,7 +672,10 @@ app.whenReady().then(() => {
   startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
-  startRemoteSupportHost(handle)
+  startRemoteSupportHost(handle, undefined, {
+    exec: realExec, credential: () => deviceCredential(),
+    serverBase: () => { try { const h = JSON.parse(readFileSync(STATUS_PATH, 'utf8'))?.server; return typeof h === 'string' && /^[A-Za-z0-9.:[\]-]+$/.test(h) ? `https://${h}/` : null } catch { return null } },
+  })
   startAppPermissionsHost(handle, appPermissionsBridge({
     exec: realExec,
     readPolicy: () => { try { return readFileSync(AGENT_POLICY_PATH, 'utf8') } catch { return null } },
