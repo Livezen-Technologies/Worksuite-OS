@@ -13,7 +13,7 @@ provider for the credentials broker. Node 22 TypeScript, `node:sqlite`, no runti
 | Session | `desktop/v1/bootstrap`, `apps`, `links/resolve`, `audit` | broker (sync config), shell |
 | Sync | `desktop/v1/sync/mutations`, `sync/changes`, `sync/events`, `files/{id}/lock` | sync service |
 | Devices | `desktop/v1/devices/register`, `heartbeat`, `commands/{id}/ack`, `policies` | device agent |
-| OS | `desktop/v1/os/catalog`, `inventory`, `update-results`, `diagnostics`, `directory`, `break-glass` | device agent, package service |
+| OS | `desktop/v1/os/catalog`, `software-requests`, `inventory`, `update-results`, `diagnostics`, `directory`, `break-glass` | device agent, package service |
 | Releases | `/os/manifests/{ring}/{arch}.json`, `desktop/v1/releases/manifest?platform=os` | update coordinator |
 | APT repository | `/os/apt/` (static, with `--apt-dir`; built by `tools/repo/publish.sh`) | apt on devices |
 | Admin console | `/admin` (UI), `/admin/api/*` | administrators in a browser |
@@ -31,6 +31,31 @@ policy, app catalog, releases (read-only) and an activity log.
   administrator approves it, which issues the signed `RemoteWipe` command with `approval_id` set to the request.
 - **Policy changes:** validated field by field, versioned and signed, and every active device gets a `RefreshPolicy`.
 - **Releases:** shown read-only, because publishing signs with the release key (CLI only).
+- **Remote Support** (Device Management, issue #19; `src/remoteSupport.ts`): dashboard cards, device list
+  (online/offline/in session from the agent's 10 s poll), session history, request and disconnect. Needs the
+  `desktop.devices.remote_support` permission; remote control also needs the administrator's TOTP code. A request
+  sends a signed `RemoteSupportRequest` whose lifetime is the session limit (policy `remote_support.max_session_minutes`,
+  default 60, at most 240); the device's user approves or denies it, and the session is shown active only once the
+  device reports the user's choice. `remote_support.unattended` skips the prompt on corporate-owned devices only, is
+  shown to their users, and the indicator stays visible. Unanswered requests expire after 3 minutes. Every
+  transition is in the activity log.
+- **Remote desktop viewer** (`#viewer/<session>`): WebRTC video of the device's screen (captured by the shell through the
+  ScreenCast portal, after consent), mouse/keyboard over the data channel (applied on the device only while its user
+  grants control: RemoteDesktop portal when the backend has it, else labwc's virtual pointer/keyboard via wlrctl/wtype),
+  chat, full screen, view only, reconnect, disconnect, and live stats (resolution, fps, bitrate, loss, RTT) from
+  getStats. Signalling is relayed by `…/sessions/{id}/signal` (device: X-WS-Device; admin: console session) only while
+  the session is active; media is DTLS-SRTP, peer to peer. STUN/TURN: `WORKSUITE_ICE_SERVERS` (JSON RTCIceServer[]);
+  without it only devices reachable on the same network connect.
+- **Software Management** (`src/software.ts`, Device Management › Software Management): installation requests from the
+  App Center (approve → the app is added to the signed `app_allowlist` and an `InstallApprovedApplication` goes to the
+  requesting device; reject with a note the user sees), software inventory per app and per device (from the devices'
+  inventory reports), remote install/uninstall on one or many devices (`RemoveApplication`), and the deployment
+  history with each command's device-reported status. Catalog apps can be assigned to devices, users (followed to the
+  devices they sign in on) and departments (of the device or the signed-in user); an assigned app is listed only where
+  it is assigned, and a **required** app is deployed to every assigned device that doesn't report it installed
+  (after catalog changes, inventory reports and sign-ins; a failed automatic deployment is retried after 6 hours).
+  Policy fields: `software_install` (`any` | `approved` | `request` | `block`), `software_uninstall`,
+  `software_update`, and the Update Manager's `update_bandwidth_kbps`.
 
 ## Security model
 
@@ -79,6 +104,8 @@ node src/main.ts devices --db ws.db ; node src/main.ts device-revoke --db ws.db 
 
 - Federation to an external OneAuth or AD/LDAP. Users are local.
 - Resumable binary diagnostic bundles. JSON summaries are accepted.
+- Remote support: file transfer, clipboard sync, in-session monitor switching (the portal chooser picks the screen at
+  start), quality presets, session recording, and a bundled TURN server.
 - Push (`sync/events` is accepted but not acted on), and multi-node deployment (SQLite, one process).
 
 ## Tests

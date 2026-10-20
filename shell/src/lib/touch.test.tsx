@@ -2,7 +2,7 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { applyTouchMode, isTextField, type TouchApi, type TouchState } from './touch'
+import { applyTouchMode, installOskFocus, isTextField, oskShowOnFocus, type TouchApi, type TouchState } from './touch'
 import { KeyboardPanel, TouchPanel } from '../screens/settings/Touch'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -78,5 +78,61 @@ describe('Settings › Keyboard', () => {
     await act(async () => { large.click() })
     expect(api.set).toHaveBeenCalledWith({ oskSize: 'large' })
     r.done()
+  })
+})
+
+describe('on-screen keyboard and focus (dismiss reliably, no reappearing)', () => {
+  function setup() {
+    document.body.innerHTML = '<label id="l">Search <input id="q"></label><button id="b">x</button><input id="other">'
+    const calls: boolean[] = []
+    let t = 1000
+    const off = installOskFocus(document, { osk: async (v) => { calls.push(v); return { available: true, value: v } } }, () => t)
+    const tap = (el: Element) => { el.dispatchEvent(new Event('pointerdown', { bubbles: true })); el.dispatchEvent(new Event('pointerup', { bubbles: true })) }
+    return { calls, off, tap, advance: (ms: number) => { t += ms }, $: (id: string) => document.getElementById(id) as HTMLElement }
+  }
+  afterEach(() => { document.body.innerHTML = '' })
+
+  it('shows only for a field the person tapped, not for focus moved by the shell', () => {
+    const s = setup()
+    s.$('q').focus()                          // a panel focusing its own search field as it opens
+    expect(s.calls).toEqual([])
+    s.$('q').blur()
+    s.$('q').dispatchEvent(new Event('pointerdown', { bubbles: true })); s.$('q').focus()
+    expect(s.calls).toEqual([true])
+    s.off()
+  })
+
+  it('hides when the focus leaves, when the field goes away and when the window loses the focus', () => {
+    const s = setup()
+    s.$('q').dispatchEvent(new Event('pointerdown', { bubbles: true })); s.$('q').focus()
+    s.$('b').focus()
+    expect(s.calls).toEqual([true, false])
+    s.advance(5000)
+    s.$('q').focus()                          // the window getting the focus back: no keyboard
+    expect(s.calls).toEqual([true, false])
+    s.$('other').dispatchEvent(new Event('pointerdown', { bubbles: true })); s.$('other').focus()
+    window.dispatchEvent(new Event('blur'))
+    expect(s.calls).toEqual([true, false, true, false])
+    s.off()
+  })
+
+  it('hides when the focused field is removed (a search panel closing)', async () => {
+    const s = setup()
+    s.$('q').dispatchEvent(new Event('pointerdown', { bubbles: true })); s.$('q').focus()
+    s.$('l').remove()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(s.calls).toEqual([true, false])
+    s.off()
+  })
+
+  it('a tap on the focused field brings a closed keyboard back; label taps count', () => {
+    const s = setup()
+    s.$('l').dispatchEvent(new Event('pointerdown', { bubbles: true })); s.$('q').focus()
+    expect(s.calls).toEqual([true])
+    s.tap(s.$('q'))
+    expect(s.calls).toEqual([true, true])
+    expect(oskShowOnFocus(s.$('q'), { target: s.$('q'), at: 0 }, 5000)).toBe(false)   // too long ago
+    expect(oskShowOnFocus(s.$('b'), { target: s.$('b'), at: 0 }, 1)).toBe(false)      // not a text field
+    s.off()
   })
 })

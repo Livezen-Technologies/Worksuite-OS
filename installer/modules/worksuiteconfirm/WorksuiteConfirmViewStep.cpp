@@ -19,6 +19,8 @@
 #include <QFile>
 #include <QFrame>
 #include <QGridLayout>
+#include <QHash>
+#include <QStyle>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -541,6 +543,104 @@ WorksuiteConfirmViewStep::diskTitle( const QString& disk, const QString& model, 
 }
 
 QString
+WorksuiteConfirmViewStep::systemOf( const QString& fstype, const QString& label, const QString& partlabel )
+{
+    const QString fs = fstype.toLower(), l = label.toLower(), pl = partlabel.toLower();
+    if ( fs.isEmpty() || fs == QLatin1String( "swap" ) || fs == QLatin1String( "vfat" ) )
+    {
+        // Unformatted, swap, or the EFI system partition (shared by every system's boot loader): not a system itself.
+        return QString();
+    }
+    if ( fs == QLatin1String( "ntfs" ) || fs == QLatin1String( "bitlocker" ) || fs == QLatin1String( "refs" )
+         || pl.contains( QLatin1String( "microsoft" ) ) || pl.contains( QLatin1String( "basic data" ) ) || l.contains( QLatin1String( "windows" ) ) )
+    {
+        return tr( "Windows" );
+    }
+    if ( fs == QLatin1String( "apfs" ) || fs == QLatin1String( "hfsplus" ) || fs == QLatin1String( "hfs" ) )
+    {
+        return tr( "macOS" );
+    }
+    static const QStringList linuxFs = { QStringLiteral( "ext2" ),        QStringLiteral( "ext3" ),        QStringLiteral( "ext4" ),
+                                         QStringLiteral( "btrfs" ),       QStringLiteral( "xfs" ),         QStringLiteral( "f2fs" ),
+                                         QStringLiteral( "jfs" ),         QStringLiteral( "reiserfs" ),    QStringLiteral( "zfs_member" ),
+                                         QStringLiteral( "crypto_luks" ), QStringLiteral( "lvm2_member" ), QStringLiteral( "linux_raid_member" ) };
+    if ( linuxFs.contains( fs ) )
+    {
+        return tr( "Linux" );
+    }
+    if ( fs == QLatin1String( "exfat" ) )
+    {
+        return QString();   // a data volume, not a system; still erased with the rest
+    }
+    return tr( "Another system" );
+}
+
+QStringList
+WorksuiteConfirmViewStep::existingSystems( const QString& lsblkOut )
+{
+    static const QRegularExpression pair( QStringLiteral( "([A-Z]+)=\"([^\"]*)\"" ) );
+    QStringList out;
+    for ( const QString& line : lsblkOut.split( QLatin1Char( '\n' ), Qt::SkipEmptyParts ) )
+    {
+        QHash< QString, QString > v;
+        auto it = pair.globalMatch( line );
+        while ( it.hasNext() )
+        {
+            const auto m = it.next();
+            v.insert( m.captured( 1 ), m.captured( 2 ).simplified() );
+        }
+        if ( v.value( QStringLiteral( "TYPE" ) ) != QLatin1String( "part" ) )
+        {
+            continue;
+        }
+        const QString fs = v.value( QStringLiteral( "FSTYPE" ) );
+        const QString system = systemOf( fs, v.value( QStringLiteral( "LABEL" ) ), v.value( QStringLiteral( "PARTLABEL" ) ) );
+        if ( system.isEmpty() )
+        {
+            continue;
+        }
+        QString text = system + QStringLiteral( " · " ) + v.value( QStringLiteral( "NAME" ) );
+        if ( !v.value( QStringLiteral( "SIZE" ) ).isEmpty() )
+        {
+            text += QStringLiteral( " · " ) + v.value( QStringLiteral( "SIZE" ) );
+        }
+        const QString name = v.value( QStringLiteral( "LABEL" ) ).isEmpty() ? v.value( QStringLiteral( "PARTLABEL" ) ) : v.value( QStringLiteral( "LABEL" ) );
+        QStringList extra;
+        if ( !name.isEmpty() )
+        {
+            extra << QStringLiteral( "“%1”" ).arg( name );
+        }
+        extra << fs;
+        text += QStringLiteral( " (%1)" ).arg( extra.join( QStringLiteral( ", " ) ) );
+        out << text;
+    }
+    return out;
+}
+
+QString
+WorksuiteConfirmViewStep::eraseBlocker( const QString& typed, const QString& disk, bool reading, bool hasSystems, bool acknowledged )
+{
+    if ( disk.isEmpty() )
+    {
+        return tr( "The target disk could not be identified. Go back and choose the disk again." );
+    }
+    if ( reading )
+    {
+        return tr( "Wait until the disk has been read." );
+    }
+    if ( !confirmationMatches( typed, disk ) )
+    {
+        return typed.trimmed().isEmpty() ? tr( "Type %1 to continue." ).arg( disk )
+                                         : tr( "That is not the disk name. Type %1 exactly, in lower case." ).arg( disk );
+    }
+    if ( hasSystems && !acknowledged )
+    {
+        return tr( "Tick the box to confirm that the systems on this disk will be removed." );
+    }
+    return QString();
+}
+
+QString
 WorksuiteConfirmViewStep::opKind( const QString& description )
 {
     const QString lower = description.toLower();
@@ -645,12 +745,40 @@ WorksuiteConfirmViewStep::widget()
         cardLayout->addLayout( m_ops );
         layout->addWidget( card );
 
+        // Shown while lsblk reads the disk in the background.
+        m_busy = label( QStringLiteral( "wsBusy" ) );
+        m_busy->setTextFormat( Qt::PlainText );
+        m_busy->setText( tr( "Reading the disk…" ) );
+        m_busy->hide();
+        layout->addWidget( m_busy );
+
+        // Operating systems already on the disk (dual boot): named, and removed only with a second acknowledgement.
+        m_systemsBox = new QFrame;
+        m_systemsBox->setObjectName( QStringLiteral( "wsSystemsBox" ) );
+        auto* sl = new QVBoxLayout( m_systemsBox );
+        sl->setContentsMargins( 16, 14, 16, 14 );
+        sl->setSpacing( 10 );
+        m_systems = label( QStringLiteral( "wsSystemsText" ) );
+        m_systems->setTextFormat( Qt::PlainText );
+        m_systems->setAccessibleName( tr( "Operating systems on this disk" ) );
+        m_systemsAck = new QCheckBox;
+        m_systemsAck->setObjectName( QStringLiteral( "wsAck" ) );
+        sl->addWidget( m_systems );
+        sl->addWidget( m_systemsAck );
+        m_systemsBox->hide();
+        layout->addWidget( m_systemsBox );
+        connect( m_systemsAck, &QCheckBox::toggled, this, [ this ] { refresh(); } );
+
         m_inputLabel = label( QStringLiteral( "wsFieldLabel" ) );
         m_input = new QLineEdit;
         m_input->setObjectName( QStringLiteral( "wsConfirmInput" ) );
         m_input->setAccessibleName( tr( "Type the disk name to confirm" ) );
         layout->addWidget( m_inputLabel );
         layout->addWidget( m_input );
+        m_validation = label( QStringLiteral( "wsValidation" ) );
+        m_validation->setTextFormat( Qt::PlainText );
+        m_validation->setAccessibleName( tr( "Confirmation status" ) );
+        layout->addWidget( m_validation );
         connect( m_input, &QLineEdit::textChanged, this, [ this ] { refresh(); } );
     }
     else if ( m_mode == Mode::Enroll )
@@ -811,20 +939,12 @@ WorksuiteConfirmViewStep::onActivate()
         {
             recordEncryption( true );
         }
-        QString model, size;
-        if ( !m_disk.isEmpty() )
-        {
-            QProcess p;
-            p.start( QStringLiteral( "lsblk" ), { QStringLiteral( "-dnPo" ), QStringLiteral( "MODEL,SIZE" ), QStringLiteral( "/dev/" ) + m_disk } );
-            p.waitForFinished( 5000 );
-            parseLsblk( QString::fromUtf8( p.readAllStandardOutput() ), model, size );
-        }
         m_eyebrow->setText( tr( "STEP 5 · CONFIRM DISK" ) );
         m_title->setText( tr( "This will erase your disk" ) );
         m_details->setText( m_disk.isEmpty()
                                 ? tr( "The target disk could not be identified. Go back and choose the disk again." )
                                 : tr( "Once the installation starts, these changes can't be undone." ) );
-        m_diskName->setText( diskTitle( m_disk, model, size ) );
+        m_diskName->setText( diskTitle( m_disk, QString(), QString() ) );
         m_diskNode->setText( m_disk.isEmpty() ? QString() : QStringLiteral( "/dev/" ) + m_disk );
         while ( auto* item = m_ops->takeAt( 0 ) )
         {
@@ -850,6 +970,10 @@ WorksuiteConfirmViewStep::onActivate()
         m_input->clear();
         m_input->setEnabled( !m_disk.isEmpty() );
         m_input->setFocus();
+        m_systemsAck->setChecked( false );
+        m_systemsBox->hide();
+        readDisk();
+        refresh();
     }
     else if ( m_mode == Mode::Enroll )
     {
@@ -1086,6 +1210,72 @@ WorksuiteConfirmViewStep::scanQr()
     p->start( QStringLiteral( "zbarcam" ), { QStringLiteral( "--raw" ), QStringLiteral( "--oneshot" ), QStringLiteral( "-Sdisable" ), QStringLiteral( "-Sqrcode.enable" ) } );
 }
 
+// The disk's model, size and partitions, read without blocking the page: on a dual-boot machine lsblk can take
+// seconds while the kernel probes the other systems' partitions.
+void
+WorksuiteConfirmViewStep::readDisk()
+{
+    if ( m_lsblk )
+    {
+        m_lsblk->disconnect( this );
+        m_lsblk->kill();
+        m_lsblk->deleteLater();
+        m_lsblk = nullptr;
+    }
+    m_reading = !m_disk.isEmpty();
+    m_busy->setVisible( m_reading );
+    if ( !m_reading )
+    {
+        return;
+    }
+    auto* p = new QProcess( this );
+    m_lsblk = p;
+    connect( p, qOverload< int, QProcess::ExitStatus >( &QProcess::finished ), this, [ this, p ] {
+        if ( p != m_lsblk )
+        {
+            return;
+        }
+        m_lsblk = nullptr;
+        p->deleteLater();
+        diskRead( QString::fromUtf8( p->readAllStandardOutput() ) );
+    } );
+    connect( p, &QProcess::errorOccurred, this, [ this, p ]( QProcess::ProcessError e ) {
+        if ( p != m_lsblk || e != QProcess::FailedToStart )
+        {
+            return;
+        }
+        m_lsblk = nullptr;
+        p->deleteLater();
+        diskRead( QString() );
+    } );
+    QTimer::singleShot( 15000, p, [ p ] { p->kill(); } );
+    p->start( QStringLiteral( "lsblk" ),
+              { QStringLiteral( "-nPo" ), QStringLiteral( "NAME,TYPE,MODEL,SIZE,FSTYPE,LABEL,PARTLABEL" ), QStringLiteral( "/dev/" ) + m_disk } );
+}
+
+void
+WorksuiteConfirmViewStep::diskRead( const QString& lsblkOut )
+{
+    m_reading = false;
+    m_busy->hide();
+    // The first line is the disk itself.
+    QString model, size;
+    parseLsblk( lsblkOut.section( QLatin1Char( '\n' ), 0, 0 ), model, size );
+    m_diskName->setText( diskTitle( m_disk, model, size ) );
+    const QStringList systems = existingSystems( lsblkOut );
+    m_systemsBox->setVisible( !systems.isEmpty() );
+    if ( !systems.isEmpty() )
+    {
+        cDebug() << "worksuiteconfirm: existing systems on" << m_disk << systems;
+        m_systems->setText( tr( "This disk already has an operating system on it. Installing WorkSuite OS removes it "
+                                "and everything stored with it; it will no longer start:" )
+                            + QStringLiteral( "\n  • " ) + systems.join( QStringLiteral( "\n  • " ) ) );
+        m_systemsAck->setText( tr( "I understand that the systems listed above will be permanently removed" ) );
+    }
+    m_systemsAck->setChecked( false );
+    refresh();
+}
+
 void
 WorksuiteConfirmViewStep::refresh()
 {
@@ -1099,7 +1289,21 @@ WorksuiteConfirmViewStep::refresh()
         termsChanged();
         return;
     }
-    const bool ok = m_mode == Mode::Erase ? confirmationMatches( m_input->text(), m_disk ) : m_saved->isChecked();
+    bool ok = false;
+    if ( m_mode == Mode::Erase )
+    {
+        const QString blocker = eraseBlocker( m_input->text(), m_disk, m_reading, m_systemsBox->isVisibleTo( m_widget ),
+                                              m_systemsAck->isChecked() );
+        ok = blocker.isEmpty();
+        m_validation->setText( ok ? tr( "Ready. Press Continue to review the terms; nothing is written before Install." ) : blocker );
+        m_validation->setProperty( "wsState", ok ? "good" : m_input->text().trimmed().isEmpty() ? "hint" : "bad" );
+        m_validation->style()->unpolish( m_validation );
+        m_validation->style()->polish( m_validation );
+    }
+    else
+    {
+        ok = m_saved->isChecked();
+    }
     if ( ok != m_ok )
     {
         m_ok = ok;

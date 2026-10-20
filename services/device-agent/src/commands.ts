@@ -2,15 +2,24 @@
 // There is deliberately no "RunShell"/"Exec" command: unknown commands are rejected.
 import { verify, type KeyObject } from 'node:crypto';
 import { DIAGNOSTIC_PROFILES } from './diagnostics.ts';
+import { parseRequest } from './remoteSupport.ts';
 
 export const ALLOWED_COMMANDS = [
   'RefreshPolicy',
   'InstallApprovedApplication',
+  'RemoveApplication',
   'ScheduleUpdate',
   'RequestLock',
   'RebootDuringWindow',
   'CollectApprovedDiagnostics',
   'RemoteWipe',
+  // Remote support (issue #19): a request only asks; the user's consent on the device starts anything.
+  'RemoteSupportRequest',
+  'RemoteSupportEnd',
+  // WorkSuite Security remote incident response (#20 §12, src/securityCenter.ts).
+  'StartMalwareScan',
+  'IsolateEndpoint',
+  'ReleaseIsolation',
 ] as const;
 export type CommandName = (typeof ALLOWED_COMMANDS)[number];
 
@@ -19,11 +28,18 @@ const DAY = 86_400_000;
 const MAX_TTL: Record<CommandName, number> = {
   RefreshPolicy: 7 * DAY,
   InstallApprovedApplication: 7 * DAY,
+  RemoveApplication: 7 * DAY,
   ScheduleUpdate: 30 * DAY,
   RequestLock: 7 * DAY,
   RebootDuringWindow: 30 * DAY,
   CollectApprovedDiagnostics: 7 * DAY,
   RemoteWipe: 30 * DAY,
+  // Time-limited session token: the session ends at the envelope's expiry.
+  RemoteSupportRequest: 4 * 3_600_000,
+  RemoteSupportEnd: 4 * 3_600_000,
+  StartMalwareScan: 7 * DAY,
+  IsolateEndpoint: 1 * DAY,
+  ReleaseIsolation: 7 * DAY,
 };
 const CLOCK_SKEW_MS = 5 * 60_000;
 
@@ -70,13 +86,18 @@ export function signingBytes(env: Omit<CommandEnvelope, 'signature'> & { signatu
   return Buffer.from(canonical(rest), 'utf8');
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const ARG_CHECKS: Partial<Record<CommandName, (a: Record<string, unknown>) => boolean>> = {
   InstallApprovedApplication: (a) => typeof a.catalog_id === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(a.catalog_id),
+  RemoveApplication: (a) => typeof a.catalog_id === 'string' && /^(apt|flatpak):[A-Za-z0-9._+-]{1,200}$/.test(a.catalog_id),
   RemoteWipe: (a) => (a.scope === 'worksuite_data' || a.scope === 'full_device') && typeof a.approval_id === 'string',
+  RemoteSupportRequest: (a) => parseRequest(a, 0) !== null,
+  RemoteSupportEnd: (a) => typeof a.session_id === 'string' && UUID.test(a.session_id),
+  StartMalwareScan: (a) => a.kind === 'quick' || a.kind === 'full',
+  IsolateEndpoint: (a) => Number.isInteger(a.hours) && (a.hours as number) >= 1 && (a.hours as number) <= 72,
   CollectApprovedDiagnostics: (a) => (DIAGNOSTIC_PROFILES as readonly unknown[]).includes(a.bundle_profile),
 };
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface ValidatorDeps {
   deviceId: string;

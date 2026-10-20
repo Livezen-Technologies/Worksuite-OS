@@ -9,6 +9,8 @@ function kioskSummary(k: ReturnType<typeof activeKiosk>) {
   return k ? { user: k.user, app: k.app, allowed_urls: k.allowed_urls, idle_reset_minutes: k.idle_reset_minutes, show_on_screen_keyboard: k.show_on_screen_keyboard, exit_pin: k.verifier !== null, orientation: k.orientation, screen_off: k.screen_off } : null;
 }
 import type { AgentState, Policy, StateFile } from './state.ts';
+import { parseRequest, type RemoteSupport } from './remoteSupport.ts';
+import type { SecurityCenter } from './securityCenter.ts';
 import { rotationDue, userVpnsToRemove, vpnPlan, type NmConnection, type VpnConfig, type VpnPlan } from './vpn.ts';
 
 export interface Host {
@@ -26,6 +28,8 @@ export interface Host {
   /** Notice text → local sign-in refused with it (pam_nologin); null → allowed again. */
   setOfflineAccessBlock(notice: string | null): void;
   installApproved(catalogId: string): Promise<void>;
+  /** Software Management remote uninstall; the package service refuses system packages (critical set). */
+  removeApplication(catalogId: string): Promise<void>;
   scheduleUpdate(): Promise<void>;
   scheduleReboot(window: string | undefined): Promise<void>;
   /** Approved profiles only; unknown profile → throws. No file contents beyond the profile's fixed list. */
@@ -56,6 +60,10 @@ export interface AgentOptions {
   /** Server signing keys for commands and policy, by key id (shipped in worksuite-archive-keyring). */
   keys: (keyId: string) => KeyObject | undefined;
   now?: () => number;
+  /** Remote support consent and sessions (issue #19); without it remote-support commands fail NOT_SUPPORTED. */
+  remoteSupport?: RemoteSupport;
+  /** WorkSuite Security (#20); absent = the device has no security module (tests, rescue). */
+  security?: SecurityCenter;
 }
 
 const DAY = 86_400_000;
@@ -121,6 +129,7 @@ export class Agent {
       this.o.host.audit('policy_enforce_failed', { version: p?.version ?? null, error: e instanceof Error ? e.message : String(e) });
     }
     await this.enforceVpn(p);
+    await this.o.security?.enforce().catch(() => {});
     if (!this.s.enrolled && this.s.offline_access_expired) this.setOfflineBlock(false);
   }
 
@@ -206,6 +215,14 @@ export class Agent {
     try { return verify(null, Buffer.from(canonical(rest)), key, Buffer.from(value, 'base64')); } catch { return false; }
   }
 
+  /** Remote-support requests are polled every few seconds (src/main.ts), not only at the 15-minute check-in. */
+  async pollRemoteSupport(): Promise<void> {
+    if (!this.s.enrolled || !this.o.remoteSupport) return;
+    await this.o.remoteSupport.tick();
+    const res = await this.o.api.remoteSupportCommands();
+    for (const c of res.commands ?? []) await this.handle(c);
+  }
+
   /** One check-in: flush pending acks, heartbeat, then validate and run returned commands in order. */
   async checkIn(): Promise<void> {
     if (!this.s.enrolled) return;
@@ -217,6 +234,8 @@ export class Agent {
         policy_version: this.s.policy?.version ?? '', update_status: f.update_status,
         // Unknown encryption (e.g. an overlay root on the live ISO) reports false; it must never block the check-in.
         observed: { policy_version: this.s.policy?.version ?? null, encrypted: await this.o.host.isFullyEncrypted().catch(() => false) },
+        // Admin Center › Security Center: firewall, antivirus, threats, isolation (no file contents).
+        ...(this.o.security ? { security: await this.o.security.summary().catch(() => null) } : {}),
       });
       await this.refreshFacts();
       this.o.state.update((s) => { s.last_check_in = this.o.now(); });
@@ -265,7 +284,14 @@ export class Agent {
         const id = String(c.args.catalog_id);
         // Server-side approval is not enough: the device's own signed allowlist must contain it too.
         if (!(this.s.policy?.app_allowlist ?? []).includes(id)) throw new Error('NOT_IN_ALLOWLIST');
-        await h.installApproved(id); return true;
+        await h.installApproved(id);
+        await this.reportInventory();
+        return true;
+      }
+      case 'RemoveApplication': {
+        await h.removeApplication(String(c.args.catalog_id));
+        await this.reportInventory();
+        return true;
       }
       case 'ScheduleUpdate': await h.scheduleUpdate(); return true;
       case 'RebootDuringWindow': await h.scheduleReboot(this.s.policy?.maintenance_window); return true;
@@ -275,7 +301,35 @@ export class Agent {
         return true;
       }
       case 'RemoteWipe': await this.wipe(c); return false;
+      case 'RemoteSupportRequest': {
+        const rs = this.o.remoteSupport;
+        if (!rs) throw new Error('NOT_SUPPORTED');
+        if (this.s.policy?.remote_support?.enabled === false) throw new Error('REMOTE_SUPPORT_DISABLED');
+        const req = parseRequest(c.args, Date.parse(c.expires_at));
+        if (!req) throw new Error('BAD_ARGS');
+        // "completed" means delivered to the device; consent and the session's life are reported on their own.
+        await rs.request(req);
+        return true;
+      }
+      case 'RemoteSupportEnd': {
+        if (!this.o.remoteSupport) throw new Error('NOT_SUPPORTED');
+        await this.o.remoteSupport.end('admin_ended', String(c.args.session_id));
+        return true;
+      }
+      case 'StartMalwareScan': {
+        if (!this.o.security) throw new Error('NOT_SUPPORTED');
+        // Acked when it has started; the result reaches the server with the next check-in's security summary.
+        void this.o.security.scan(c.args.kind === 'full' ? 'full' : 'quick', 'remote').catch(() => {});
+        return true;
+      }
+      case 'IsolateEndpoint': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.isolate(c.args.hours); return true;
+      case 'ReleaseIsolation': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.release(); return true;
     }
+  }
+
+  /** After a remote install or removal, so Software Management shows the new state without waiting for the daily inventory. */
+  private async reportInventory() {
+    try { await this.o.api.inventory(await this.o.host.inventory()); } catch { /* the periodic inventory catches up */ }
   }
 
   /** §14.3. Ack "started" reaches the server before anything is destroyed (WSOS-WIPE-005). */
@@ -324,6 +378,7 @@ export class Agent {
     // WSOS-IDN-007: revocation ends managed sync and policy, never the local accounts: an offline-period block from
     // the old policy no longer applies.
     if (this.s.offline_access_expired) this.setOfflineBlock(false);
+    void this.o.remoteSupport?.end('unenrolled');
     this.o.host.audit('unenrolled', { reason });
     void this.enforce();
   }
@@ -367,8 +422,15 @@ export class Agent {
         screen_capture: p.screen_capture ?? null, clipboard_history: p.clipboard_history ?? null,
         drivers_online_search: p.drivers_online_search ?? null, drivers_auto_install: p.drivers_auto_install ?? null,
         drivers_auto_install_gpu: p.drivers_auto_install_gpu ?? null,
+        software_install: p.software_install ?? null, software_uninstall: p.software_uninstall ?? null, software_update: p.software_update ?? null,
+        update_bandwidth_kbps: p.update_bandwidth_kbps ?? null,
         kiosk: this.s.enrolled && activeKiosk(p, this.s.device_id) !== null,
+        // Disclosure (issue #19): the organization may start remote support without asking on this device.
+        remote_support_unattended: unattendedRemoteSupport(p),
+        // Employee monitoring (#22): shown in the management notice so the employee knows.
+        activity_monitoring: p.activity_monitoring === true, antivirus: p.antivirus ?? null,
       } : null,
+      remote_support: this.o.remoteSupport?.snapshot() ?? null,
       // Settings › Managed › Kiosk mode (board KioskSettings): what this device's kiosk runs. Never the exit PIN or its verifier.
       kiosk: this.s.enrolled ? kioskSummary(activeKiosk(p, this.s.device_id)) : null,
       // Managed VPN as configured (connection state itself comes from NetworkManager in Settings).
@@ -383,4 +445,10 @@ export class Agent {
   }
 
   publishStatus() { this.o.host.publishStatus(this.status()); }
+}
+
+/** Signed policy remote_support: {enabled?, unattended?}. Unattended access only on a managed device. */
+export function unattendedRemoteSupport(p: Policy | undefined): boolean {
+  const rs = p?.remote_support as { enabled?: unknown; unattended?: unknown } | undefined;
+  return !!rs && typeof rs === 'object' && rs.enabled !== false && rs.unattended === true;
 }

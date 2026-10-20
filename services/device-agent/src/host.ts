@@ -2,7 +2,7 @@
 // WSOS-LCH-001); package changes go through lk.worksuite.PackageService1, never apt directly.
 import { execFile } from 'node:child_process';
 import { createHash, generateKeyPairSync } from 'node:crypto';
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, chownSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, hostname, release, totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Host } from './agent.ts';
@@ -11,7 +11,9 @@ import { ENFORCED_PATHS, type Enforcement } from './enforce.ts';
 import { KILLSWITCH_TABLE, parseNmConnections, renderKillSwitch, renderNmConnection, VPN_CONNECTION_UUID, VPN_KEYFILE, wgKeyPair, wgPublicKey } from './vpn.ts';
 import type { Policy } from './state.ts';
 import { collectHardware, readUpdateStatus } from './inventory.ts';
+import { runPackageJob, systemJobBus } from './packageJob.ts';
 import { diagnosticProfiles, type DiagnosticProfile } from './diagnostics.ts';
+import { parseSeatSessions, type RsDeps } from './remoteSupport.ts';
 
 export interface HostPaths { stateDir: string; runtimeDir: string; auditLog: string }
 
@@ -186,9 +188,16 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
       else rmSync(ENFORCED_PATHS.offlineExpired, { force: true });
     },
 
+    // Software Management: wait for the package job so the server sees whether it really installed or why not.
     async installApproved(catalogId) {
       const [source, name] = splitCatalogId(catalogId);
-      await run('busctl', ['call', '--system', 'lk.worksuite.PackageService1', '/lk/worksuite/PackageService1', 'lk.worksuite.PackageService1', 'Install', 'ss', source, name], 600_000);
+      const bus = await systemJobBus();
+      try { await runPackageJob(bus, 'Install', source, name); } finally { bus.close(); }
+    },
+    async removeApplication(catalogId) {
+      const [source, name] = splitCatalogId(catalogId);
+      const bus = await systemJobBus();
+      try { await runPackageJob(bus, 'Remove', source, name); } finally { bus.close(); }
     },
 
     async scheduleUpdate() {
@@ -301,5 +310,47 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
     },
 
     audit,
+  };
+}
+
+/**
+ * Linux side of remote support (issue #19). remote-support.json (0644) is what the shell's consent dialog and
+ * indicator show; consent/<uid> (0400, owned by the seat user) holds the dialog's nonce so only that user can grant.
+ */
+export function remoteSupportHost(paths: HostPaths = DEFAULT_PATHS): Pick<RsDeps, 'seatUser' | 'publish' | 'stopStreams'> {
+  const file = join(paths.runtimeDir, 'remote-support.json');
+  const consentDir = join(paths.runtimeDir, 'consent');
+  const seatUser = async () => {
+    const list = await run('loginctl', ['list-sessions', '-o', 'json'], 10_000);
+    const props = new Map<string, Record<string, string>>();
+    let ids: { session: string }[] = [];
+    try { ids = JSON.parse(list); } catch { return null; }
+    for (const r of Array.isArray(ids) ? ids : []) {
+      if (!/^[A-Za-z0-9]{1,32}$/.test(String(r.session))) continue;
+      const out = await run('loginctl', ['show-session', String(r.session), '-p', 'Active', '-p', 'State', '-p', 'Type', '-p', 'Class'], 10_000).catch(() => '');
+      props.set(String(r.session), Object.fromEntries(out.split('\n').filter((l) => l.includes('=')).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)])));
+    }
+    return parseSeatSessions(list, (id) => props.get(id) ?? {});
+  };
+  return {
+    seatUser,
+    publish(session, consent) {
+      rmSync(consentDir, { recursive: true, force: true });
+      if (!session) { rmSync(file, { force: true }); return; }
+      writePublic(file, JSON.stringify(session, null, 2));
+      if (consent) {
+        mkdirSync(consentDir, { mode: 0o755 });
+        chmodSync(consentDir, 0o755);
+        const p = join(consentDir, String(consent.uid));
+        writeFileSync(p, consent.nonce, { mode: 0o400 });
+        chownSync(p, consent.uid, consent.uid);
+      }
+    },
+    // The portal streams run in the user's session: worksuite-screencast-stop as that user.
+    async stopStreams() {
+      const u = await seatUser().catch(() => null);
+      if (!u) return;
+      await run('systemd-run', ['--user', `--machine=${u.user}@.host`, '--wait', '--quiet', '--collect', '/usr/lib/worksuite/worksuite-screencast-stop'], 30_000);
+    },
   };
 }

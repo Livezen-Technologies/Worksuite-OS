@@ -1,6 +1,8 @@
 /* WorkSuite OS installer steps (SRS §9.4):
  *  mode "erase":    shows the target disk's model and size and keeps Install disabled until the disk name is typed
- *                   exactly (WSOS-INS-003).
+ *                   exactly (WSOS-INS-003). Operating systems already on the disk (Windows, Linux, macOS: dual-boot
+ *                   machines) are listed by name and need a second, explicit acknowledgement. The disk is read with
+ *                   lsblk in the background, behind a "Reading the disk" indicator, so the page never blocks.
  *  mode "recovery": shows the LUKS2 recovery key created by the worksuiterecovery job once, and keeps Next disabled
  *                   until the user confirms they saved it (WSOS-INS-004). Skipped for unencrypted installs.
  *  mode "enroll":   optional, after the account page (WSOS-INS-006): an enrollment code and server, or the admin
@@ -56,6 +58,14 @@ public:
     static QString dialogStyleSheet( const QString& sheet );
     /// MODEL and SIZE from `lsblk -dnPo MODEL,SIZE` output (KEY="value" pairs); either may be empty.
     static void parseLsblk( const QString& out, QString& model, QString& size );
+    /// The operating system a partition belongs to, from lsblk's FSTYPE, LABEL and PARTLABEL: "Windows", "macOS",
+    /// "Linux", or empty for partitions that hold no system of their own (EFI, swap, unformatted).
+    static QString systemOf( const QString& fstype, const QString& label, const QString& partlabel );
+    /// Existing systems on a disk from `lsblk -nPo NAME,TYPE,FSTYPE,LABEL,PARTLABEL,SIZE` output: one line per
+    /// partition with a system, "Windows · sda3 · 200G (ntfs)".
+    static QStringList existingSystems( const QString& lsblkOut );
+    /// What still keeps Install disabled on the erase page, empty when nothing does.
+    static QString eraseBlocker( const QString& typed, const QString& disk, bool reading, bool hasSystems, bool acknowledged );
     /// Disk card header: "Model · Size (node)", or "node · Size" when the model is empty.
     static QString diskTitle( const QString& disk, const QString& model, const QString& size );
     /// Tag kind for one planned partition job: "FORMAT", "DELETE", "CREATE", "OTHER" (neutral) or empty (hidden:
@@ -75,6 +85,8 @@ public:
 
 private:
     void refresh();
+    void readDisk();
+    void diskRead( const QString& lsblkOut );
 
     void scanQr();
     void enrollChanged();
@@ -91,6 +103,13 @@ private:
     QLabel* m_diskNode = nullptr;
     QVBoxLayout* m_ops = nullptr;   // erase: the planned partition changes
     QLabel* m_inputLabel = nullptr;
+    QLabel* m_busy = nullptr;       // erase: "Reading the disk…" while lsblk runs
+    QFrame* m_systemsBox = nullptr; // erase: the operating systems found on the disk
+    QLabel* m_systems = nullptr;
+    QCheckBox* m_systemsAck = nullptr;
+    QLabel* m_validation = nullptr; // erase: what still keeps Install disabled
+    class QProcess* m_lsblk = nullptr;
+    bool m_reading = false;
     QFrame* m_keyBox = nullptr;     // recovery: the key in groups
     QGridLayout* m_keyGrid = nullptr;
     QLineEdit* m_input = nullptr;

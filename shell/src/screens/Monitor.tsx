@@ -2,7 +2,7 @@
 // (electron/monitor.ts), usage per app, the user's processes, startup apps and this device's performance numbers
 // against the SRS §16 limits. Values the device doesn't measure say so instead of showing a number.
 import { AnimatedProgress } from '../components/AnimatedProgress'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { C, card, Svg } from '../components/Dk'
 import { formatBytes } from '../lib/os'
@@ -37,7 +37,9 @@ function healthGoal(h: HealthItem): string {
   return formatNumber(h.limit)
 }
 
-export default function Monitor({ onClose }: WindowProps) {
+export default function Monitor({ onClose, active }: WindowProps) {
+  const activeRef = useRef(active)
+  activeRef.current = active
   useT()
   const [tab, setTab] = useState<Tab>('overview')
   const [snap, setSnap] = useState<MonitorSnapshot | null>(null)
@@ -75,7 +77,7 @@ export default function Monitor({ onClose }: WindowProps) {
     if (tab === 'startup' && !startup) void monitorApi.monitorStartup().then((r) => setStartup(r.available ? r.value : []))
   }, [tab, startup])
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeRef.current !== false) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
@@ -124,12 +126,11 @@ export default function Monitor({ onClose }: WindowProps) {
   )
 
   return (
-    <div role="dialog" aria-modal="false" aria-label={t('monitor.title')} className="fixed inset-x-0 top-0 bottom-[52px] z-50 flex flex-col gap-4 overflow-hidden px-8 py-[26px] font-sans"
+    <div role="dialog" aria-modal="false" aria-label={t('monitor.title')} className="relative flex h-full w-full flex-col gap-4 overflow-hidden px-8 py-[26px] font-sans"
       style={{ color: C.ink, background: 'radial-gradient(ellipse 80% 50% at 80% 0%, var(--ws-g-glow) 0%, var(--ws-g-page) 60%)' }}>
       <div className="flex items-center gap-3">
         <h1 className="m-0 text-2xl font-bold">{t('monitor.title')}</h1>
         <div role="tablist" aria-label={t('monitor.title')} className="ml-5 flex overflow-hidden rounded-[9px] border border-[rgba(127,178,255,0.2)] text-[13px]">{TABS.map(tabBtn)}</div>
-        <button type="button" aria-label={t('common.close')} onClick={onClose} className="ml-auto flex size-9 cursor-pointer items-center justify-center rounded-lg hover:bg-white/10" style={{ color: C.soft }}><Svg d="M6 6l12 12M18 6L6 18" size={16} /></button>
       </div>
 
       {notice && <div role="status" className="rounded-xl px-4 py-2 text-[13px]" style={{ background: 'rgba(31,107,255,0.15)' }}>{notice}</div>}

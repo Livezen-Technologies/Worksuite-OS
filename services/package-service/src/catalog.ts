@@ -13,6 +13,10 @@ export interface CatalogEntry extends CatalogItem {
   available: boolean;
   /** Why the user can't install it here; null when they can. */
   blocked_reason: string | null;
+  /** Software Management: the user may ask an administrator to approve it (policy software_install = request). */
+  requestable: boolean;
+  /** This user's latest request for it from this device, if any. */
+  request: { id: string; state: 'pending' | 'approved' | 'rejected'; note: string | null; at: number } | null;
 }
 export type CatalogResult =
   | { state: 'ok'; arch: string; items: CatalogEntry[]; fetched_at: number }
@@ -22,6 +26,8 @@ export interface CatalogEnv {
   /** Enrolled server host and device credential, or null on an unmanaged device. */
   server(): { host: string; token: string } | null;
   fetchJson(url: string, headers: Record<string, string>): Promise<unknown>;
+  /** POST JSON with the device credential (installation requests). */
+  postJson?(url: string, headers: Record<string, string>, body: unknown): Promise<unknown>;
   arch: 'amd64' | 'arm64';
   policy(): DevicePolicy | null;
   runner: Runner;
@@ -60,7 +66,32 @@ async function installedSets(runner: Runner) {
   return { apt, flatpak };
 }
 
-export async function loadCatalog(env: CatalogEnv): Promise<CatalogResult> {
+type RequestRow = { id: string; catalog_id: string; username: string; state: 'pending' | 'approved' | 'rejected'; note: string | null; at: number };
+
+/** This device's installation requests (pending, or decided in the last 30 days); [] when the server can't say. */
+async function requests(env: CatalogEnv, host: string, token: string): Promise<RequestRow[]> {
+  try {
+    const r = await env.fetchJson(new URL('/desktop/v1/os/software-requests', `https://${host}`).toString(), { 'x-ws-device': token }) as { items?: RequestRow[] };
+    return Array.isArray(r.items) ? r.items : [];
+  } catch { return []; }
+}
+
+/**
+ * Software Management: ask the organization to approve installing a catalog app. `user` is the caller's local account
+ * name (from the bus credentials, never from arguments). Only on enrolled devices whose policy allows requests.
+ */
+export async function requestApp(env: CatalogEnv, user: string, catalogId: string, reason: string): Promise<RequestRow> {
+  if (!/^(apt|flatpak):[A-Za-z0-9._+-]{1,200}$/.test(catalogId)) throw Object.assign(new Error('catalog id'), { code: 'InvalidArgs' });
+  const srv = env.server();
+  if (!srv || !env.postJson) throw Object.assign(new Error('this device is not managed by an organization'), { code: 'PreconditionFailed' });
+  const mode = env.policy()?.software_install;
+  if (mode !== 'request') throw Object.assign(new Error('your organization does not take installation requests'), { code: 'NotAuthorized' });
+  const text = reason.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 500);
+  return await env.postJson(new URL('/desktop/v1/os/software-requests', `https://${srv.host}`).toString(), { 'x-ws-device': srv.token },
+    { catalog_id: catalogId, username: user, ...(text ? { reason: text } : {}) }) as RequestRow;
+}
+
+export async function loadCatalog(env: CatalogEnv, user?: string): Promise<CatalogResult> {
   const arch = env.arch;
   const srv = env.server();
   if (!srv) return { state: 'not_enrolled', arch, items: [], error: 'This device is not enrolled with a WorkSuite server, so there is no approved app catalog.' };
@@ -78,16 +109,25 @@ export async function loadCatalog(env: CatalogEnv): Promise<CatalogResult> {
   const ids = new Set(mine.map((i) => i.id));
   const policy = env.policy();
   const allow = policy?.app_allowlist;
+  const mode = policy?.software_install;
+  const reqs = user ? (await requests(env, srv.host, srv.token)).filter((r) => r.username === user) : [];
   const inst = await installedSets(env.runner);
   const entry = (i: CatalogItem, available: boolean): CatalogEntry => {
     const name = i.id.slice(i.source.length + 1);
     const installed = i.source === 'apt' ? inst.apt.has(name) : i.source === 'flatpak' ? inst.flatpak.has(name) : false;
     let blocked_reason: string | null = null;
+    let requestable = false;
     if (!available) blocked_reason = `Not available for ${ARCH_LABEL[arch]}`;
     else if (i.blocked) blocked_reason = 'Blocked by your organization';
     else if (i.source === 'appimage' && policy?.appimages === 'block') blocked_reason = 'Your organization does not allow AppImages';
-    else if (allow && allow.length && i.source !== 'appimage' && !allow.includes(i.id)) blocked_reason = 'Not on your organization’s approved list';
-    return { ...i, installed, available, blocked_reason };
+    else if (mode === 'block' && i.source !== 'appimage') blocked_reason = 'Your organization installs apps for you';
+    else if (mode !== 'any' && allow && allow.length && i.source !== 'appimage' && !allow.includes(i.id)) {
+      blocked_reason = 'Not on your organization’s approved list';
+      requestable = mode === 'request';
+    }
+    const latest = reqs.filter((r) => r.catalog_id === i.id).sort((a, b) => b.at - a.at)[0];
+    const request = latest ? { id: latest.id, state: latest.state, note: latest.note ?? null, at: latest.at } : null;
+    return { ...i, installed, available, blocked_reason, requestable, request };
   };
   const items = [...mine.map((i) => entry(i, true)), ...other.filter((i) => !ids.has(i.id)).map((i) => entry(i, false))]
     .sort((a, b) => a.name.localeCompare(b.name));

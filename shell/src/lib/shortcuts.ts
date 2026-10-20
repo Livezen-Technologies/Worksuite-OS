@@ -37,6 +37,10 @@ export const SYSTEM_SHORTCUTS: SystemShortcut[] = [
   // Windows and desktops
   { id: 'switch', category: 'windows', keys: ['A-Tab'], action: '<action name="NextWindow"/>', editable: true },
   { id: 'close', category: 'windows', keys: ['A-F4'], action: '<action name="Close"/>', editable: true },
+  { id: 'maximize', category: 'windows', keys: ['W-Up'], action: '<action name="Maximize"/>', editable: true },
+  { id: 'minimize', category: 'windows', keys: ['W-Down'], action: '<action name="If"><query maximized="both"/><then><action name="UnMaximize"/></then><else><action name="Iconify"/></else></action>', editable: true },
+  { id: 'snapLeft', category: 'windows', keys: ['W-Left'], action: '<action name="SnapToEdge" direction="left"/>', editable: true },
+  { id: 'snapRight', category: 'windows', keys: ['W-Right'], action: '<action name="SnapToEdge" direction="right"/>', editable: true },
   { id: 'taskview', category: 'windows', keys: ['W-Tab'], action: shellCall('ToggleTaskView'), editable: true },
   { id: 'desktop', category: 'windows', keys: ['W-d'], action: shellCall('ShowDesktop'), editable: true },
   { id: 'newDesktop', category: 'windows', keys: ['C-W-d'], action: exec(`${WS_EVENT} new`), editable: true },

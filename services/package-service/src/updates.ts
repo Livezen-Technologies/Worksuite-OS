@@ -23,6 +23,14 @@ export interface Manifest {
   rollback_directive?: { from_version: string; reason: string } | null;
   /** WSOS-AUP-012: edition entitlement a feature release needs (e.g. "business"); absent = everyone. */
   entitlement?: string;
+  /** Update Manager: a version upgrade (not a patch release). Scheduled separately: in Automatic mode it installs only
+   *  in the maintenance window, otherwise it waits for the person (or the deadline, when mandatory). */
+  upgrade?: boolean;
+  /** What the Update Manager shows before installing: plain-text release notes, a link to the full notes, and sizes. */
+  notes?: string;
+  notes_url?: string;
+  download_bytes?: number;
+  installed_bytes?: number;
   signature: string;
 }
 
@@ -119,7 +127,7 @@ export interface DecideInput {
 export type Decision =
   | { action: 'none'; reason: 'up_to_date' | 'paused' | 'pulled' | 'not_in_rollout' | 'manual_mode' | 'not_entitled' }
   | { action: 'refuse'; reason: 'downgrade' }
-  | { action: 'wait'; reason: 'metered' | 'outside_window' | 'waiting_for_user' | 'not_idle' }
+  | { action: 'wait'; reason: 'metered' | 'outside_window' | 'waiting_for_user' | 'not_idle' | 'major_upgrade' }
   | { action: 'install'; reason: 'automatic' | 'security' | 'deadline' | 'user' }
   | { action: 'warn_restart'; minutes: 15 };
 
@@ -160,6 +168,8 @@ export function decide(i: DecideInput): Decision {
   // WSOS-AUP-005: security releases install in Automatic and Notify.
   if (m.security) return inWindow(i.window, i.now) || i.idle ? { action: 'install', reason: 'security' } : { action: 'wait', reason: 'outside_window' };
   if (mode === 'notify') return { action: 'wait', reason: 'waiting_for_user' };
+  // Major upgrades are scheduled apart from routine updates: only in the maintenance window, else the person chooses.
+  if (m.upgrade) return i.window && inWindow(i.window, i.now) ? { action: 'install', reason: 'automatic' } : { action: 'wait', reason: 'major_upgrade' };
   // Automatic: install at idle or in the maintenance window (WSOS-UPD-003).
   if (i.window ? inWindow(i.window, i.now) : i.idle) return { action: 'install', reason: 'automatic' };
   return { action: 'wait', reason: i.window ? 'outside_window' : 'not_idle' };

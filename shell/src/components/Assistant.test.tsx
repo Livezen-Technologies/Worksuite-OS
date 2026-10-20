@@ -246,7 +246,10 @@ describe('Settings › AI', () => {
     fakeAI(status({ policy: { managed: true, enabled: false, models: null } }), [])
     await render(<AIPanel />)
     expect(text()).toContain('Your organization has turned off the AI assistant on this device')
-    expect((host!.querySelector('[role="switch"]') as HTMLButtonElement).disabled).toBe(true)
+    const sw = host!.querySelector('[role="switch"]') as HTMLButtonElement
+    // Locked: still focusable so the reason can be read, but it can't be changed (components/Dk.tsx Switch).
+    expect(sw.getAttribute('aria-disabled')).toBe('true')
+    expect(sw.getAttribute('aria-checked')).toBe('false')
   })
 })
 

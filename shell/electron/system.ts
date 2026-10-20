@@ -302,6 +302,15 @@ export const realVpnDeps: VpnDeps = {
   async removeCerts(connName) { await rm(certDirFor(homedir(), connName), { recursive: true, force: true }) },
 }
 
+/** nmcli's error text for a failed `device wifi connect` → a reason the UI explains. */
+export function wifiConnectError(stderr: string): string {
+  if (/secrets were required|password|802-1x|psk|4-way|handshake/i.test(stderr)) return 'bad_password'
+  if (/no network with ssid/i.test(stderr)) return 'not_found'
+  if (/no wi-?fi device|no suitable device|device.*not available|unavailable/i.test(stderr)) return 'no_adapter'
+  if (/timeout|timed out/i.test(stderr)) return 'timeout'
+  return 'connect_failed'
+}
+
 // ---------- bridge ----------
 const SSID_MAX = 32
 const BT_ADDR = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i
@@ -329,8 +338,28 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
       return { available: true, value: { wifi_enabled: radio.stdout.trim() === 'enabled', devices: parseNmDevices(dev.stdout), networks: list.code === 0 ? parseWifiList(list.stdout) : [] } }
     },
     async setWifi(on: boolean): Promise<Avail<true>> {
+      // A radio blocked in software (airplane mode, a previous session) stays off whatever NetworkManager says (#31).
+      if (on) await exec('rfkill', ['unblock', 'wlan'])
       const r = await exec('nmcli', ['radio', 'wifi', on ? 'on' : 'off'])
       return r.code === 0 ? { available: true, value: true } : unavailable(r, 'nmcli')
+    },
+    /** Asks the Wi-Fi adapters to scan now; the list arrives with the next network() read. */
+    async wifiRescan(): Promise<Avail<true>> {
+      const r = await exec('nmcli', ['device', 'wifi', 'rescan'])
+      // NetworkManager refuses a rescan right after another one; the list is fresh then anyway.
+      return r.code === 0 || /not allowed|scanning/i.test(r.stderr) ? { available: true, value: true } : unavailable(r, 'nmcli')
+    },
+    /** Disconnects the Wi-Fi network in use (the device stays up and does not reconnect by itself until asked). */
+    async wifiDisconnect(): Promise<Avail<true>> {
+      const dev = await exec('nmcli', ['-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device'])
+      if (dev.code !== 0) return unavailable(dev, 'nmcli')
+      const wifi = parseNmDevices(dev.stdout).filter((d) => d.type === 'wifi' && d.connection)
+      if (!wifi.length) return { available: false, reason: 'not_connected' }
+      for (const d of wifi) {
+        const r = await exec('nmcli', ['device', 'disconnect', d.device])
+        if (r.code !== 0) return unavailable(r, 'nmcli')
+      }
+      return { available: true, value: true }
     },
     /** Password goes to nmcli's stdin (`--ask`), never argv. Empty password = open network. */
     async wifiConnect(ssid: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -338,7 +367,7 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
       const r = await withStdin('nmcli', ['--ask', '-w', '45', 'device', 'wifi', 'connect', ssid], password ? `${password}\n` : '\n')
       if (r.code === 0) return { ok: true }
       if (r.stderr === 'spawn_failed') return { ok: false, error: 'unavailable' }
-      return { ok: false, error: /secrets were required|password|802-1x|psk/i.test(r.stderr) ? 'bad_password' : 'connect_failed' }
+      return { ok: false, error: wifiConnectError(r.stderr) }
     },
     // VPN (WSOS-INT-001): the managed "WorkSuite VPN" comes from the device agent; users may import WireGuard .conf
     // files unless policy user_vpn=block. NetworkManager keeps the private key in its root-only keyfile.
@@ -444,6 +473,9 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
       return r.code === 0 ? { available: true, value: parseConnectivity(r.stdout) } : unavailable(r, 'nmcli')
     },
     async bluetooth(): Promise<Avail<BluetoothState>> {
+      // bluetoothctl waits for bluetoothd when it isn't running; say so instead of timing out (#31).
+      const svc = await exec('systemctl', ['is-active', 'bluetooth.service'])
+      if (!svc.missing && svc.stdout.trim() && svc.stdout.trim() !== 'active' && svc.stdout.trim() !== 'activating') return { available: false, reason: 'service_stopped' }
       const show = await exec('bluetoothctl', ['show'])
       if (show.code !== 0) return unavailable(show, 'bluetoothctl')
       const ctl = parseBtShow(show.stdout)
@@ -453,8 +485,12 @@ export function systemBridge(exec: Exec = realExec, withStdin: WithStdin = realW
       return { available: true, value: { ...ctl, paired: parseBtDevices(paired.stdout).map((d) => ({ ...d, connected: conn.has(d.address) })) } }
     },
     async setBluetooth(on: boolean): Promise<Avail<true>> {
+      // Powering on a controller blocked in software fails with org.bluez.Error.Blocked: unblock it first (#31).
+      if (on) await exec('rfkill', ['unblock', 'bluetooth'])
       const r = await exec('bluetoothctl', ['power', on ? 'on' : 'off'])
-      return r.code === 0 ? { available: true, value: true } : unavailable(r, 'bluetoothctl')
+      if (r.code === 0 && !/Failed|Error/i.test(r.stdout)) return { available: true, value: true }
+      if (/Blocked|rfkill/i.test(r.stdout + r.stderr)) return { available: false, reason: 'blocked' }
+      return unavailable(r, 'bluetoothctl')
     },
     async btConnect(address: string, on: boolean): Promise<Avail<true>> {
       if (!BT_ADDR.test(address)) return { available: false, reason: 'invalid_argument' }

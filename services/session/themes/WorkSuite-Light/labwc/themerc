@@ -1,0 +1,49 @@
+# WorkSuite Light window theme for Labwc (issues #15, #33): one Windows 11-style title bar for every app's window, in step
+# with the shell's own windows (shell/src/components/ShellWindow.tsx, --ws-win-* in shell/src/index.css).
+# 32 px title bar, Minimize / Maximize-Restore / Close as 46 x 32 px buttons at the top right (rc.xml <titlebar><layout>),
+# images from make-buttons.py (red Close on hover), 8 px rounded corners (rc.xml <cornerRadius>), a soft shadow.
+# Labwc scales the whole frame with the output scale, so it looks the same at 100, 125, 150 and 200 %.
+
+border.width: 1
+padding.width: 0
+padding.height: 0
+window.titlebar.padding.width: 0
+window.titlebar.padding.height: 0
+window.button.width: 46
+window.button.height: 32
+window.button.spacing: 0
+window.button.hover.bg.corner-radius: 0
+
+window.active.border.color: #A9B9D6
+window.inactive.border.color: #CBD5E6
+window.active.indicator.toggled-keybind.color: #C42B1C
+
+window.active.title.bg.color: #EEF2F9
+window.inactive.title.bg.color: #F3F6FB
+window.active.label.text.color: #0F172A
+window.inactive.label.text.color: #4A5B80
+window.label.text.justification: left
+
+window.active.button.unpressed.image.color: #0F172A
+window.inactive.button.unpressed.image.color: #4A5B80
+
+window.active.shadow.size: 40
+window.inactive.shadow.size: 20
+window.active.shadow.color: #02061773
+window.inactive.shadow.color: #02061740
+
+menu.border.width: 1
+menu.border.color: #CBD5E6
+menu.items.bg.color: #EEF2F9
+menu.items.text.color: #0F172A
+menu.items.active.bg.color: #1F6BFF
+menu.items.active.text.color: #FFFFFF
+menu.items.padding.x: 10
+menu.items.padding.y: 6
+menu.separator.color: #CBD5E6
+menu.title.bg.color: #F3F6FB
+menu.title.text.color: #0F172A
+
+osd.bg.color: #EEF2F9
+osd.border.color: #A9B9D6
+osd.label.text.color: #0F172A

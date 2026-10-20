@@ -17,7 +17,7 @@ import { QuickPanel, QuickTray, useQuickState } from '../components/QuickSetting
 import { OskButton } from '../components/TouchItems'
 import { useTouchMode } from '../lib/touch'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
-import { panel, showDesktopTargets, type PanelWindow, type ShellAction, type TaskViewOpen } from '../lib/panel'
+import { ACTIVATED, panel, showDesktopTargets, type PanelWindow, type ShellAction, type TaskViewOpen } from '../lib/panel'
 import A11yPanel from '../components/A11yPanel'
 import NotifDock, { MOON } from '../components/NotifDock'
 import { CaptureBadge } from '../components/CaptureBadge'
@@ -31,11 +31,15 @@ import { applyShellPrefs, shellPrefsFrom, TASKBAR_ALIGN_EVENT, taskbarAlign, tas
 import { AppGlyph } from '../components/AppGlyph'
 import { alphaGroups, appForWindow, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
-import GlobalSearch from '../components/GlobalSearch'
+import SearchFlyout from '../components/SearchFlyout'
+import { DesktopIcons, DesktopMenu, createOnDesktop, useDesktopFolder } from '../components/DesktopIcons'
+import { loadDeskView, saveDeskView, type DeskView } from '../lib/desktopIcons'
 import Assistant, { AI_ICON } from '../components/Assistant'
 import { onAssistantRequest, type AssistantRequest } from '../lib/assistantNav'
 import ShellRestartNotice from '../components/ShellRestartNotice'
 import AuthPrompt from '../components/AuthPrompt'
+import { RemoteSupportBadge, RemoteSupportPrompt } from '../components/RemoteSupport'
+import { MediaInUseBadge } from './settings/AppPermissions'
 import type { SearchHit } from '../../electron/search'
 import DesktopWidgets, { useWidgetData } from '../components/DesktopWidgets'
 import { WHATSAPP_APP_ID, whatsappAllowed } from '../../electron/whatsapp'
@@ -43,6 +47,7 @@ import { DEFAULT_LAYOUT, loadLocalLayout, saveLocalLayout, widgetsAllowed, type 
 import SnipOverlay from '../components/SnipOverlay'
 import ClipboardFlyout, { type FlyoutTab } from '../components/ClipboardFlyout'
 import ShortcutHelp from '../components/ShortcutHelp'
+import { MonitoringIndicator } from '../components/MonitoringNotice'
 import { captureApi, SHELL_OPEN_EVENT, SNIP_EDIT_EVENT, snipState, type Captured, type ShellOpen, type SnipOpen } from '../lib/captureApi'
 
 /** How long a pop-up toast stays (services/session/toasts TIMEOUT_MS is the same). */
@@ -84,7 +89,7 @@ function useClock() {
   return now
 }
 
-export default function Desktop({ user, fullName, onLock, onLogout, onOpen, notes, children }: DesktopProps) {
+export default function Desktop({ user, fullName, onLock, onLogout, onOpen, notes, children, shellWindows, onShellWindow }: DesktopProps) {
   const t = useT()
   const now = useClock()
   const [launcher, setLauncher] = useState(false)
@@ -120,6 +125,9 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const [qsOpen, setQsOpen] = useState(false)
   const [quick, refreshQuick] = useQuickState()
   const [query, setQuery] = useState('')
+  // The taskbar's search panel (#29): its query, where it sits, and the app that had the focus when it opened (it gets
+  // the focus back when the panel is closed without opening anything, #30).
+  const [search, setSearch] = useState<{ query: string; left: number; previous: string } | null>(null)
   const [powerOpen, setPowerOpen] = useState(false)
   const [confirmShutdown, setConfirmShutdown] = useState(false)
   // Shutdown / restart / sign-out overlay (components/SessionEnd.tsx), on every display.
@@ -163,6 +171,22 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const desk = useDesktops(device?.policies?.kiosk !== true)
   const desktopsOn = desktopsAllowed(desk.ws, device?.policies ?? null)
   const panelWindows = usePanelWindows()
+  const panelWindowsRef = useRef(panelWindows)
+  panelWindowsRef.current = panelWindows
+  function openSearch(query: string) {
+    const previous = panelWindowsRef.current.find((w) => w.flags & ACTIVATED && !SHELL_APP_IDS.has(w.appId.toLowerCase()))?.handle ?? ''
+    const left = searchControl.current?.getBoundingClientRect().left ?? 12
+    setLauncher(false)
+    setSearch((s) => ({ query, left, previous: s?.previous ?? previous }))
+  }
+  /** restore: closed without opening anything (Escape, outside click, the control again), so focus goes back. */
+  function closeSearch(restore: boolean) {
+    const prev = search?.previous ?? ''
+    setSearch(null)
+    if (!restore) return
+    if (prev) void panel.activate(prev)
+    else searchControl.current?.focus()
+  }
   const [flyout, setFlyout] = useState(false)
   const flyoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hoverTaskView = (on: boolean) => {
@@ -176,7 +200,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false); setQsOpen(false) }
+      if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false); setQsOpen(false); setSearch(null) }
       // Super+A inside the shell's own window (the compositor binding covers everywhere else).
       else if (e.metaKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setLauncher(false); setAssistant((v) => !v) }
       // Super+Tab with the shell focused (Labwc's binding covers everywhere else).
@@ -233,6 +257,28 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const [widgetEdit, setWidgetEdit] = useState(false)
   const [widgetPicker, setWidgetPicker] = useState(false)
   const [wallMenu, setWallMenu] = useState<{ x: number; y: number } | null>(null)
+  // The Desktop folder on the wallpaper and the right-click menu's view, sort and "New" (#27); not on a kiosk.
+  const deskFolder = useDesktopFolder(device?.policies?.kiosk !== true)
+  const [deskView, setDeskViewState] = useState<DeskView>(() => loadDeskView())
+  const setDeskView = (v: DeskView) => { setDeskViewState(v); saveDeskView(v) }
+  const [deskSel, setDeskSel] = useState<string | null>(null)
+  const [templates, setTemplates] = useState<string[]>([])
+  const openWallMenu = (x: number, y: number) => {
+    setWallMenu({ x, y })
+    void (os.filesTemplates?.() ?? Promise.resolve([])).then(setTemplates).catch(() => setTemplates([]))
+  }
+  const deskError = (title: string, error: string) => setToast({ id: `desk-${Date.now()}`, title, body: error === 'exists' ? t('desk.exists') : error === 'unavailable' ? t('desk.unavailable') : t('desk.createFailedBody'), tone: 'error' })
+  const deskCreate = async (kind: { folder: true } | { template: string | null }) => {
+    const r = await createOnDesktop(deskFolder, kind, { folder: t('desk.defaultFolder'), text: t('desk.defaultText') })
+    if (!r.ok) { deskError(t('desk.createFailed', { name: r.name }), r.error); return }
+    if (!deskView.show) setDeskView({ ...deskView, show: true })
+    await deskFolder.reload()
+    setDeskSel(r.name)
+  }
+  const deskOpen = (name: string) => {
+    if (deskFolder.rel === null) return
+    void os.filesOpen('home', deskFolder.rel ? `${deskFolder.rel}/${name}` : name).then((r) => { if (!r.ok) setToast({ id: `desk-${Date.now()}`, title: t('desk.openFailed', { name }), body: r.error === 'windows_program' ? t('desk.unavailable') : r.error, tone: 'error' }) }).catch(() => undefined)
+  }
   const widgetLayout: WidgetLayout = prefs.widgets ?? loadLocalLayout(user) ?? DEFAULT_LAYOUT
   const setWidgetLayout = (l: WidgetLayout) => {
     const next = { ...prefs, widgets: l }
@@ -249,9 +295,15 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   }, [])
   const align = alignOverride ?? taskbarAlign(prefs)
   const centered = align === 'center'
+  // Taskbar search (#29): a compact control (an icon on narrow screens) that opens a floating panel above it. Typing
+  // with the control focused goes straight into the panel's field.
+  const searchControl = useRef<HTMLButtonElement>(null)
   const searchButton = (
-    <button type="button" onClick={() => setLauncher(true)} className={`box-border hidden h-9 shrink-0 ${centered ? 'w-[160px]' : 'w-[200px]'} cursor-text items-center gap-2 rounded-[9px] bg-white/[0.06] px-3 text-[13px] text-[#8FA3C8] hover:bg-white/10 md:flex`}>
-      <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={14} width={2.2} />{t('launcher.search')}
+    <button ref={searchControl} type="button" data-search-toggle aria-label={t('launcher.search')} aria-haspopup="dialog" aria-expanded={!!search} aria-controls="ws-search"
+      onClick={() => (search ? closeSearch(false) : openSearch(''))}
+      onKeyDown={(e) => { if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== ' ') { e.preventDefault(); openSearch(e.key) } }}
+      className={`box-border flex h-9 shrink-0 cursor-text items-center gap-2 rounded-[9px] px-2.5 text-[13px] text-[#8FA3C8] md:w-[132px] ${search ? 'bg-white/[0.14]' : 'bg-white/[0.06] hover:bg-white/10'}`}>
+      <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={14} width={2.2} /><span aria-hidden="true" className="hidden truncate md:inline">{t('launcher.search')}</span>
     </button>
   )
   const appsLoaded = useRef(false)
@@ -292,17 +344,23 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const [behind, setBehind] = useState(false)
   // An administrator prompt (polkit, WorkSuite's agent) over the apps and over the restart overlay.
   const [authOpen, setAuthOpen] = useState(false)
+  const [rsOpen, setRsOpen] = useState(false)
   const [liftSeq, setLiftSeq] = useState(0)
   const openWin = (screen: Parameters<typeof onOpen>[0]) => { setBehind(false); setLiftSeq((n) => n + 1); onOpen(screen) }
   useEffect(() => panel.onShellBehind?.(() => {
     setLauncher(false); setA11yOpen(false); setAssistant(false); setQsOpen(false); setPowerOpen(false); setTrayOpen(false)
-    setFlyout(false); setWidgetPicker(false); setBehind(true)
+    setFlyout(false); setWidgetPicker(false); setSearch(null); setWallMenu(null); setBehind(true)
   }), [])
   const closeTray = useCallback(() => setTrayOpen(false), [])
-  const hasWindow = Children.toArray(children).length > 0
+  // A shell window showing (minimized ones stay mounted, on the taskbar only, and let the shell go below the apps).
+  const hasWindow = shellWindows ? shellWindows.some((w) => !w.minimized) : Children.toArray(children).length > 0
+  const pressShellWin = (app: Parameters<typeof onOpen>[0]) => {
+    const how = behind ? 'focus' : 'toggle'
+    setBehind(false); setLiftSeq((n) => n + 1); onShellWindow?.(app, how)
+  }
   useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
-    || flyout || widgetPicker || authOpen || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
+    || flyout || widgetPicker || authOpen || rsOpen || !!search || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
   // Once the shell is over the apps it has the keyboard (the bridge activates it): give it to the launcher's search
   // again, which was focused while an app still had the keyboard (Start opened with the mouse).
   const focusSearch = useRef(() => undefined as void)
@@ -324,11 +382,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     void os.recentFiles().then((r) => { if (live) setRecent([...r.local, ...r.cloud.hits].slice(0, RECENT_MAX)) }).catch(() => { if (live) setRecent([]) })
     return () => { live = false }
   }, [launcher])
-  const q = query.trim().toLowerCase()
-  const apps = useMemo(() => filterApps(allApps, 'all', q), [allApps, q])
   const pins = useMemo(() => startPins(allApps, 12, [SETTINGS_TILE]), [allApps])
   const groups = useMemo(() => alphaGroups(allApps), [allApps])
-  const settingsHits = useMemo(() => (q ? SETTINGS_PAGES.map(([k, section]) => ({ label: t(k), section })).filter((s) => s.label.toLowerCase().includes(q)) : []), [q, t])
+  // The search panel: matching apps and Settings pages; with nothing typed yet, the pinned apps as suggestions.
+  const sq = (search?.query ?? '').trim().toLowerCase()
+  const searchApps = useMemo(() => (sq ? filterApps(allApps, 'all', sq) : startPins(allApps, 6, [])), [allApps, sq])
+  const searchSettings = useMemo(() => (sq ? SETTINGS_PAGES.map(([k, section]) => ({ label: t(k), section })).filter((x) => x.label.toLowerCase().includes(sq)) : []), [sq, t])
 
   const launch = (id: string) => {
     setLauncher(false)
@@ -391,8 +450,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
   return (
     <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: seeThrough ? 'transparent' : monitorWallpaper }}
-      onContextMenu={(e) => { if (e.target !== e.currentTarget || !widgetsOn) return; e.preventDefault(); setWallMenu({ x: e.clientX, y: e.clientY }) }}
-      onMouseDown={(e) => { if (wallMenu && !(e.target as HTMLElement).closest?.('#ws-wall-menu')) setWallMenu(null) }}>
+      onContextMenu={(e) => {
+        // Right-click on the empty wallpaper (or between the desktop icons) opens the desktop menu (#27).
+        if (seeThrough || (e.target !== e.currentTarget && !(e.target as HTMLElement).hasAttribute?.('data-desktop-bg'))) return
+        e.preventDefault(); openWallMenu(e.clientX, e.clientY)
+      }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) setDeskSel(null) }}>
       {/* This desktop's wallpaper, sliding in on a switch (reduced motion: no slide). */}
       {desktopsOn && !seeThrough && <div key={desk.ws.current} aria-hidden="true" className={`pointer-events-none absolute inset-0 ${slide}`} style={{ background: wallpaperOf(desk.ws.current) }} />}
       {/* On the wallpaper: keeps its light text in the light theme (ws-dark-zone). */}
@@ -406,19 +469,21 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           editing={widgetEdit} onEditing={(v) => { setWidgetEdit(v); if (!v) setWidgetPicker(false) }} picker={widgetPicker} onPicker={setWidgetPicker}
           onRefresh={widgetData.refresh} onSignIn={() => openSettingsAt('Users')} now={now} />
       )}
+      {!seeThrough && deskFolder.rel !== null && (
+        <DesktopIcons folder={deskFolder} view={deskView} selected={deskSel} onSelect={setDeskSel} onOpen={(e) => deskOpen(e.name)} />
+      )}
       {wallMenu && (
-        <div id="ws-wall-menu" role="menu" aria-label={t('widgets.menu')} className="absolute z-50 flex min-w-[180px] flex-col rounded-xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] p-1 text-[13px] text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
-          style={{ left: Math.min(wallMenu.x, window.innerWidth - 200), top: Math.min(wallMenu.y, window.innerHeight - 140) }}
-          onKeyDown={(e) => { if (e.key === 'Escape') setWallMenu(null) }}>
-          <button type="button" role="menuitem" autoFocus onClick={() => { setWallMenu(null); setWidgetEdit(true) }} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10">{t('widgets.edit')}</button>
-          <button type="button" role="menuitem" onClick={() => { setWallMenu(null); setWidgetEdit(true); setWidgetPicker(true) }} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10">{t('widgets.add')}</button>
-          <button type="button" role="menuitem" onClick={() => { setWallMenu(null); openSettingsAt('Appearance') }} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10">{t('settings.nav.Appearance')}</button>
-        </div>
+        <DesktopMenu x={wallMenu.x} y={wallMenu.y} view={deskView} onView={setDeskView} templates={templates} canCreate={deskFolder.rel !== null}
+          onRefresh={() => { void deskFolder.reload(); if (widgetsOn) widgetData.refresh() }}
+          onNewFolder={() => void deskCreate({ folder: true })} onNewFile={(tpl) => void deskCreate({ template: tpl })}
+          onWallpaper={() => openSettingsAt('Display')} onDisplay={() => openSettingsAt('Display')} onPersonalize={() => openSettingsAt('Appearance')}
+          extra={widgetsOn ? [{ label: t('widgets.edit'), run: () => setWidgetEdit(true) }, { label: t('widgets.add'), run: () => { setWidgetEdit(true); setWidgetPicker(true) } }] : undefined}
+          onClose={() => setWallMenu(null)} />
       )}
 
       {/* Work area for open windows, above the taskbar */}
       {/* Only with a window open: an empty work area would cover the wallpaper (its widgets and right-click menu). */}
-      {Children.toArray(children).length > 0 && <div className="absolute inset-x-0 top-0 bottom-[52px] z-10 px-6 pt-5 pb-5">{children}</div>}
+      {Children.toArray(children).length > 0 && <div className={`absolute inset-x-0 top-0 bottom-[52px] z-10 ${shellWindows ? 'pointer-events-none' : 'px-6 pt-5 pb-5'}`}>{children}</div>}
 
       {toast && !dnd && !trayOpen && !externalToasts && (
         <div role="status" onMouseEnter={() => setToastHover(true)} onMouseLeave={() => setToastHover(false)} className="absolute top-6 right-6 z-20 flex w-[380px] gap-3 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.94)] p-4 text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
@@ -436,6 +501,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       {/* G12: the shell was restarted by systemd; apps in their own scopes kept running */}
       <ShellRestartNotice />
       <AuthPrompt onOpen={setAuthOpen} />
+      <RemoteSupportPrompt onOpen={setRsOpen} />
 
       {/* OS updates (U1, U4–U7) and new devices (H1, H2, H6) */}
       <div className="pointer-events-none absolute right-5 bottom-[76px] z-30 flex w-[400px] max-w-[calc(100%-40px)] flex-col gap-2.5">
@@ -445,21 +511,14 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
       {trayOpen && <NotifDock onClose={closeTray} now={now} time={time} notices={notices} setNotices={setNotices} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} />}
 
-      {launcher && q && (
-        <div className="absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-start justify-center bg-[rgba(2,6,16,0.45)] px-4 pt-[90px] backdrop-blur-[6px]" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
-          <GlobalSearch query={query} onQuery={setQuery} apps={apps} settings={settingsHits} onLaunchApp={launch}
-            onOpenSettings={(s) => { setLauncher(false); openSettingsAt(s) }} onClose={() => setLauncher(false)}
-            onAskAI={(text) => { setLauncher(false); setAssistantReq({ kind: 'ask', text }); setAssistant(true) }} />
-        </div>
-      )}
-      {launcher && !q && (
+      {launcher && (
         <div className={`absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-end p-3 ${centered ? 'justify-center' : 'justify-start'}`} onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
           <div id="ws-launcher" role="dialog" aria-modal="true" aria-label={t('launcher.title')} className="ws-rise flex h-[660px] max-h-full w-[660px] max-w-full flex-col overflow-hidden rounded-[22px] border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] text-[#E8EEFA] shadow-[0_40px_90px_rgba(0,0,0,0.6)] backdrop-blur-[24px]">
             <div className="flex min-h-0 flex-1 flex-col gap-[18px] px-[26px] pt-[22px]">
               <label className="box-border flex h-11 shrink-0 items-center gap-2.5 rounded-[22px] border border-[rgba(127,178,255,0.18)] bg-[rgba(4,10,26,0.6)] px-4 text-[#8FA3C8] focus-within:border-[#1F6BFF]">
                 <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={16} width={2.2} />
                 <span className="sr-only">{t('launcher.search')}</span>
-                <input ref={searchRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('launcher.searchPlaceholder')} className="grow border-0 bg-transparent text-sm focus-visible:shadow-none focus-visible:outline-none text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8]" />
+                <input ref={searchRef} type="text" value={query} onChange={(e) => { if (e.target.value.trim()) { setLauncher(false); openSearch(e.target.value) } else setQuery(e.target.value) }} placeholder={t('launcher.searchPlaceholder')} className="grow border-0 bg-transparent text-sm focus-visible:shadow-none focus-visible:outline-none text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8]" />
                 <span aria-hidden="true" className="rounded border border-[#3D5280] px-1.5 py-0.5 font-mono text-[10px]">Super</span>
               </label>
               <div className="flex items-center justify-between">
@@ -532,11 +591,17 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
         </div>
       )}
 
+      {search && (
+        <SearchFlyout anchorLeft={search.left} toggleSelector="[data-search-toggle]" query={search.query} onQuery={(v) => setSearch((x) => (x ? { ...x, query: v } : x))}
+          apps={searchApps} settings={searchSettings} onLaunchApp={(id) => { setSearch(null); launch(id) }}
+          onOpenSettings={(sec) => { setSearch(null); openSettingsAt(sec) }} onClose={() => closeSearch(true)}
+          onAskAI={(text) => { setSearch(null); setAssistantReq({ kind: 'ask', text }); setAssistant(true) }} />
+      )}
       {assistant && <Assistant onClose={() => setAssistant(false)} onOpenSettings={() => { setAssistant(false); openSettingsAt('AI') }} request={assistantReq} onRequestHandled={() => setAssistantReq(null)} />}
 
       {qsOpen && (
         <QuickPanel state={quick} refresh={refreshQuick} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} onClose={() => setQsOpen(false)}
-          onSettings={() => { setQsOpen(false); openWin('settings') }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
+          onSettings={() => { setQsOpen(false); openWin('settings') }} onOpenSettings={(sec) => { setQsOpen(false); openSettingsAt(sec) }} onLock={() => { setQsOpen(false); onLock() }} onPower={() => { setQsOpen(false); setPowerOpen(true) }} />
       )}
 
       {/* Taskbar (canvas G01/G02, "Centered" is the default style in Taskbar · styles): 52 px, edge-attached glass bar.
@@ -561,6 +626,15 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           )}
           <span aria-hidden="true" className="mx-1 hidden h-6 w-px shrink-0 bg-[rgba(127,178,255,0.15)] md:block" />
           <RunningApps pinned={taskbar.map((a) => a.id)} info={(id) => { const a = allApps.find((x) => x.id === id) ?? appForWindow(allApps, id); return a && { ...a, bg: tileColor(a), fg: '#FFFFFF' } }} onLaunch={launch} only={onPrimary} scope={desk.prefs.taskbar} />
+          {/* The shell's own open windows (Files, Settings…): restore a minimized one, minimize the active one (Windows 11). */}
+          {shellWindows?.map((w) => (
+            <button key={w.app} type="button" data-shell-task={w.app} aria-pressed={w.active && !behind} title={w.title} onClick={() => pressShellWin(w.app)}
+              aria-label={w.active && !behind ? t('panel.active', { name: w.title }) : t('panel.running', { name: w.title })}
+              className={`relative flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${w.active && !behind ? 'bg-white/10' : 'hover:bg-white/10'}`}>
+              <BIcon name={w.icon} size={20} />
+              <span aria-hidden="true" data-indicator={w.active && !behind ? 'active' : 'running'} className={`ws-run-dot absolute bottom-[2px] h-[3px] rounded-sm ${w.active && !behind ? 'w-4 bg-[#18D4F0]' : 'w-[5px] bg-[var(--ws-g-muted)]'}`} />
+            </button>
+          ))}
         </div>
         <div data-testid="taskbar-end" className={`flex shrink-0 items-center justify-end gap-1.5 ${centered ? 'flex-[1_0_0]' : 'ms-auto'}`}>
           {managed && (
@@ -568,7 +642,10 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
               className="hidden cursor-pointer rounded-full bg-[rgba(31,107,255,0.25)] px-2.5 py-1 text-xs text-[#C9D6EE] hover:bg-[rgba(31,107,255,0.4)] lg:inline">{managed}</button>
           )}
           <TrayItems />
+          <MonitoringIndicator onOpen={() => openSettingsAt('Privacy & security')} />
           <CaptureBadge />
+          <RemoteSupportBadge />
+          <MediaInUseBadge />
           <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
           <OskButton />
@@ -576,7 +653,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
             className={`flex size-9 cursor-pointer items-center justify-center rounded-[10px] ${assistant ? 'bg-[rgba(31,107,255,0.4)]' : 'hover:bg-white/10'}`}><Icon d={[AI_ICON]} size={18} /></button>
           <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11yOpen} onClick={() => { setA11yOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setQsOpen(false) }}
             className="flex size-9 cursor-pointer items-center justify-center rounded-[10px] hover:bg-white/10"><Icon d={P.a11y} size={18}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
-          <QuickTray state={quick} open={qsOpen} onToggle={() => { setQsOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setA11yOpen(false) }} />
+          <QuickTray state={quick} open={qsOpen} onOpenSettings={(sec) => { setQsOpen(false); openSettingsAt(sec) }} onToggle={() => { setQsOpen((v) => !v); setTrayOpen(false); setPowerOpen(false); setA11yOpen(false) }} />
           <time dateTime={now.toISOString()} className="flex flex-col items-end whitespace-nowrap px-2 text-xs leading-[1.25]"><span>{time}</span><span className="text-[#8FA3C8]">{shortDate}</span></time>
           <button type="button" aria-label={unread > 0 ? `${t('notes.title')}, ${t('panel.newCount', { count: unread })}` : t('notes.title')} aria-expanded={trayOpen} aria-controls="ws-notifications"
             onClick={() => { setTrayOpen((v) => !v); setUnread(0); setPowerOpen(false); setQsOpen(false) }}

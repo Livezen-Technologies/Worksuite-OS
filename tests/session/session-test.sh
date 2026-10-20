@@ -43,10 +43,10 @@ check "malformed user values are ignored" "$(sh "$BIN/worksuite-idle" --print-ti
 stub swayidle 'for a in "$@"; do printf "[%s]" "$a"; done'
 echo "LOCK_TIMEOUT_S=240" > "$WORKSUITE_LOCK_USER"
 check "swayidle locks on idle, on lock-session and before sleep (waiting for the locker)" \
-    "$(WORKSUITE_LOCK_CMD=/x/lock sh "$BIN/worksuite-idle")" "[-w][timeout][240][loginctl lock-session][lock][/x/lock][before-sleep][/x/lock]"
+    "$(WORKSUITE_LOCK_CMD=/x/lock sh "$BIN/worksuite-idle")" "[-w][idlehint][60][timeout][240][loginctl lock-session][lock][/x/lock][before-sleep][/x/lock]"
 echo "LOCK_TIMEOUT_S=0" > "$WORKSUITE_LOCK_USER"
 check "no idle timeout when never, still locks before sleep" \
-    "$(WORKSUITE_LOCK_CMD=/x/lock sh "$BIN/worksuite-idle")" "[-w][lock][/x/lock][before-sleep][/x/lock]"
+    "$(WORKSUITE_LOCK_CMD=/x/lock sh "$BIN/worksuite-idle")" "[-w][idlehint][60][lock][/x/lock][before-sleep][/x/lock]"
 
 # ---- locker: lock before returning, fail closed (WSOS-LOCK-002/004) ----
 # Stub gtklock: runs its -L command (it holds the lock), then exits with the next status from $T/gtklock-rc.
@@ -151,6 +151,41 @@ stub xdg-user-dirs-update 'echo "xdg-user-dirs-update" >> "$LOG"'
 WORKSUITE_SESSION_JOURNAL=1 WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"
 grep -q "^xdg-user-dirs-update" "$LOG" && ok "session start creates the XDG user folders" || bad "session start creates the XDG user folders"
 [ -e "$T/notice/uid-$(id -u)" ] && bad "clean exit leaves no notice" || ok "clean exit leaves no notice"
+
+# ---- renderer choice and software fallback (#16): wlr-env over a fake sysfs, worksuite-session on a GPU failure ----
+FS="$T/sysfs"; mkdir -p "$FS/class/drm" "$FS/drivers/virtio_gpu" "$FS/drivers/i915"
+card() { mkdir -p "$FS/class/drm/$1/device"; ln -sfn "$FS/drivers/$2" "$FS/class/drm/$1/device/driver"; }
+renderer() {  # → "WORKSUITE_RENDERER WORKSUITE_RENDERER_REASON WLR_RENDERER GSK_RENDERER"
+    env -u WLR_RENDERER -u GSK_RENDERER WORKSUITE_SYSFS="$FS" sh -c '. "$1"; echo "$WORKSUITE_RENDERER ${WORKSUITE_RENDERER_REASON:-} ${WLR_RENDERER:--} ${GSK_RENDERER:--}"' _ "$BIN/wlr-env"
+}
+GCONF="$T/home/.config/worksuite/graphics.conf"; FB="$T/home/.local/state/worksuite/renderer-fallback"
+rm -f "$GCONF" "$FB"
+check "wlr-env: no display adapter" "$(renderer)" "unknown no_display - -"
+card card0 virtio_gpu
+check "wlr-env: virtual adapter renders in software" "$(renderer)" "software virtual_gpu pixman cairo"
+card card1 i915
+check "wlr-env: a real GPU wins over a basic adapter" "$(renderer)" "gpu auto - -"
+rm -rf "$FS/class/drm/card1"
+echo 'renderer=gpu' > "$GCONF"
+check "wlr-env: GPU chosen in Settings (a VM with 3D)" "$(renderer)" "gpu choice - -"
+echo 'renderer=software' > "$GCONF"; card card1 i915
+check "wlr-env: software chosen in Settings" "$(renderer)" "software choice pixman cairo"
+rm -f "$GCONF"; mkdir -p "$(dirname "$FB")"; echo software > "$FB"
+check "wlr-env: software after a GPU failure" "$(renderer)" "software fallback pixman cairo"
+rm -f "$FB"
+check "wlr-env: explicit WLR_RENDERER wins" "$(WLR_RENDERER=pixman WORKSUITE_SYSFS="$FS" sh -c '. "$1"; echo "$WORKSUITE_RENDERER $WORKSUITE_RENDERER_REASON"' _ "$BIN/wlr-env")" "software environment"
+stub labwc 'exit 1'
+printf 'export WORKSUITE_RENDERER=gpu WORKSUITE_RENDERER_REASON=auto\n' > "$T/wlr-env"
+WORKSUITE_SESSION_JOURNAL=1 WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"
+[ -f "$FB" ] && ok "compositor failing on the GPU → next session in software" || bad "compositor failing on the GPU → next session in software"
+rm -f "$FB"
+printf 'export WORKSUITE_RENDERER=gpu WORKSUITE_RENDERER_REASON=choice\n' > "$T/wlr-env"; echo 'renderer=gpu' > "$GCONF"
+WORKSUITE_SESSION_JOURNAL=1 WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"
+grep -qx 'renderer=auto' "$GCONF" && [ ! -f "$FB" ] && ok "a forced GPU that fails goes back to Automatic" || bad "a forced GPU that fails goes back to Automatic"
+printf 'export WORKSUITE_RENDERER=software WORKSUITE_RENDERER_REASON=virtual_gpu\n' > "$T/wlr-env"
+WORKSUITE_SESSION_JOURNAL=1 WORKSUITE_WLR_ENV="$T/wlr-env" sh "$BIN/worksuite-session"
+[ -f "$FB" ] && bad "a software session never writes a fallback" || ok "a software session never writes a fallback"
+rm -f "$GCONF" "$T/notice/uid-$(id -u)"; echo ': wlr env' > "$T/wlr-env"; stub labwc 'exit 0'
 
 # ---- unit wiring ----
 U=$ROOT/services/session/systemd/user

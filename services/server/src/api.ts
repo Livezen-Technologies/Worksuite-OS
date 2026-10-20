@@ -1,5 +1,6 @@
 // desktop/v1 and desktop/v1/os (api-contracts/openapi.yaml). Tenant scoping comes from the authenticated user or
 // device, never from the request. Idempotency-Key replays within 24 h return the stored response.
+import { pendingCommands as rsPendingCommands, deviceReport as rsDeviceReport, getSignals as rsGetSignals, postSignal as rsPostSignal } from './remoteSupport.ts';
 import { createPublicKey, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { DEFAULT_WEB_APPS, nextSeq, secret, sha256, tx } from './db.ts';
@@ -9,7 +10,9 @@ import { activeKey, signFlat } from './signing.ts';
 import { licenceFor, revokeDevice } from './admin.ts';
 import { issueLoginCode, setNewPassword, verifyDirectoryUser, type DirUserRow } from './identity.ts';
 import { Throttle } from './throttle.ts';
+import { assignedTo, createRequest, reconcileRequired, type CatalogItem } from './software.ts';
 import { deviceVpnConfig, isWgKey, registerPeer, removePeer } from './vpn.ts';
+import { ownActivity, storeActivity, validateActivityReport } from './monitoring.ts';
 
 export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string; webUrl: string }
 
@@ -399,6 +402,31 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     });
   });
 
+  // Remote support (issue #19): the agent's fast poll and its consent/session reports.
+  r.on('GET', '/desktop/v1/os/remote-support/commands', (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    db.prepare('UPDATE devices SET last_ip = ? WHERE id = ?').run((ctx.req.socket.remoteAddress ?? '').slice(0, 64) || null, d.id);
+    send(ctx, 200, { commands: rsPendingCommands(db, d.id) });
+  });
+  r.on('POST', '/desktop/v1/os/remote-support/sessions/{id}/state', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    await idempotent(db, ctx, `device:${d.id}`, ctx.header('idempotency-key'), async () => {
+      rsDeviceReport(db, d.id, ctx.params.id, obj(await ctx.body()));
+      return { status: 204 };
+    });
+  });
+
+  // WebRTC signalling for a consented session (the shell's capture window, with the device credential).
+  r.on('GET', '/desktop/v1/os/remote-support/sessions/{id}/signal', (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    send(ctx, 200, rsGetSignals(db, 'device', ctx.params.id, { device_id: d.id }, Number(ctx.url.searchParams.get('after')) || 0));
+  });
+  r.on('POST', '/desktop/v1/os/remote-support/sessions/{id}/signal', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    rsPostSignal(db, 'device', ctx.params.id, { device_id: d.id }, obj(await ctx.body()));
+    send(ctx, 204);
+  });
+
   r.on('GET', '/desktop/v1/policies', (ctx) => {
     const d = deviceFromHeader(db, ctx, false);
     const orgId = d ? d.org_id : userFromBearer(db, ctx).org_id;
@@ -407,13 +435,33 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
 
   // ---- desktop/v1/os ----
   r.on('GET', '/desktop/v1/os/catalog', (ctx) => {
-    deviceFromHeader(db, ctx, true);
+    const d = deviceFromHeader(db, ctx, true);
     const arch = ctx.url.searchParams.get('arch') ?? '';
     if (!ARCHES.has(arch)) throw invalid('arch', 'amd64 or arm64');
     const limit = limitOf(ctx);
+    // Software Management: an app assigned to particular devices, users or departments is listed only where it is
+    // assigned. The assignment itself (other people's addresses) never leaves the server.
+    const dev = db.prepare('SELECT id, org_id, arch, department FROM devices WHERE id = ?').get(d.id) as { id: string; org_id: number; arch: string; department: string | null };
     const rows = (db.prepare('SELECT id, item FROM catalog WHERE id > ? ORDER BY id').all(ctx.url.searchParams.get('cursor') ?? '') as { id: string; item: string }[])
-      .filter((r) => (json<{ arches: string[] }>(r.item).arches ?? []).includes(arch)).slice(0, limit + 1);
+      .filter((r) => (json<{ arches: string[] }>(r.item).arches ?? []).includes(arch) && assignedTo(db, json<CatalogItem>(r.item), dev))
+      .map((r) => { const { assign: _a, ...item } = json<CatalogItem>(r.item); return { id: r.id, item: JSON.stringify(item) }; })
+      .slice(0, limit + 1);
     send(ctx, 200, page(rows, limit));
+  });
+
+  // Software requests from the App Center (Software Management): the package service sends them with the device
+  // credential and the local account name of the person asking; an administrator approves or rejects them.
+  r.on('POST', '/desktop/v1/os/software-requests', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    const dev = db.prepare('SELECT id, org_id, arch, department FROM devices WHERE id = ?').get(d.id) as { id: string; org_id: number; arch: string; department: string | null };
+    const req = createRequest(db, dev, obj(await ctx.body()));
+    send(ctx, 201, req);
+  });
+  r.on('GET', '/desktop/v1/os/software-requests', (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    const items = db.prepare(`SELECT id, catalog_id, username, state, note, at, decided_at FROM software_requests WHERE device_id = ?
+      AND (state = 'pending' OR decided_at > ?) ORDER BY at DESC LIMIT 200`).all(d.id, Date.now() - 30 * DAY);
+    send(ctx, 200, { items });
   });
 
   // WSOS-AUP-012: the organization's licence state for the update coordinator (signed, device-bound, 7 days).
@@ -443,7 +491,10 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
       await idempotent(db, ctx, `device:${d.id}`, ctx.header('idempotency-key'), async () => {
         const b = obj(await ctx.body());
         for (const k of required) if (b[k] === undefined) throw invalid(k, 'required');
-        if (table === 'inventory') db.prepare('INSERT INTO inventory (device_id, body, at) VALUES (?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET body = excluded.body, at = excluded.at').run(d.id, JSON.stringify(b), Date.now());
+        if (table === 'inventory') {
+          db.prepare('INSERT INTO inventory (device_id, body, at) VALUES (?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET body = excluded.body, at = excluded.at').run(d.id, JSON.stringify(b), Date.now());
+          reconcileRequired(db, d.org_id, Date.now(), d.id);   // required apps the device doesn't have yet
+        }
         else db.prepare(`INSERT INTO ${table} (device_id, body, at) VALUES (?, ?, ?)`).run(d.id, JSON.stringify(b), Date.now());
         return { status: 202 };
       });
@@ -478,6 +529,9 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
       if (v.code === 'MFA_REQUIRED') throw new HttpError(401, 'MFA_REQUIRED', 'a verification code is required');
       throw new HttpError(401, 'INVALID_CREDENTIALS', 'wrong username or password');
     }
+    // Software Management: apps assigned to this user follow them to the devices they sign in on.
+    db.prepare('INSERT INTO device_users (device_id, user_id, last_at) VALUES (?, ?, ?) ON CONFLICT(device_id, user_id) DO UPDATE SET last_at = excluded.last_at').run(d.id, v.user.id, Date.now());
+    reconcileRequired(db, d.org_id, Date.now(), d.id);
     send(ctx, 200, loginReply(v.user, dir, d.id));
   });
   const loginReply = (u: DirUserRow, dir: DirectorySettings, deviceId: string) => ({
@@ -539,6 +593,22 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
         .run(id, user.org_id, user.id, device?.id ?? null, JSON.stringify({ description, sections }), Date.now());
       return { status: 202 };
     });
+  });
+
+  // #22 Employee monitoring: one aggregate report per user, device and day, from the shell on a managed device.
+  r.on('POST', '/desktop/v1/activity', async (ctx) => {
+    const { user, device } = userCtx(db, ctx);
+    if (!device) throw new HttpError(403, 'DEVICE_REQUIRED', 'activity reports come from enrolled devices only');
+    const b = obj(await ctx.body());
+    if (!Array.isArray(b.reports) || b.reports.length > 31) throw invalid('reports', 'at most 31 days');
+    const reports = b.reports.map((x) => validateActivityReport(x));
+    tx(db, () => { for (const rep of reports) storeActivity(db, user.org_id, user.id, device.id, rep); });
+    send(ctx, 202, { stored: reports.map((x) => x.day) });
+  });
+  // Transparency: what the organization holds about the signed-in user.
+  r.on('GET', '/desktop/v1/activity', (ctx) => {
+    const { user } = userCtx(db, ctx);
+    send(ctx, 200, { items: ownActivity(db, user.id) });
   });
 
   // WSOS-SEC-008: privileged package changes on the device (package-service audit log, forwarded by the device agent).

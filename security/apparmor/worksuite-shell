@@ -49,6 +49,8 @@ profile worksuite-shell flags=(attach_disconnected, complain) {
   /tmp/** rwk,
   /run/user/@{uid}/** rwk,
   /run/worksuite-device-agent/** r,
+  # Remote support consent (issue #19): the shell answers the consent dialog over this socket.
+  /run/worksuite-device-agent/remote-support.sock rw,
   owner @{HOME}/** rwlk,
 
   # Fixed helpers the shell starts (WSOS-LCH-001); apps launched by gtk-launch get their own confinement.
@@ -58,6 +60,8 @@ profile worksuite-shell flags=(attach_disconnected, complain) {
   # Archives in Files (shell/electron/archives.ts): the tools run under this profile; tar starts the compressors.
   /usr/bin/{tar,7z,7zz,bsdtar,zip,gzip,xz,bzip2,zstd} ix,
   /usr/lib/7zip/** mrix,
+  # Remote support input (issue #19): wlroots virtual pointer/keyboard when the RemoteDesktop portal is not available.
+  /usr/bin/{wlrctl,wtype} ix,
   owner /{media,run/media}/*/** rwlk,
 
   deny /etc/shadow r,

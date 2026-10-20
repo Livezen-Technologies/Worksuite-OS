@@ -44,6 +44,18 @@ export interface WorkSuiteApi {
   cloudAccounts(): Promise<CloudResult<CloudAccount[]>>
   /** Settings > About this device (WSOS-MDM-007, WSOS-WIPE-007): device agent status, or local facts when it isn't running. */
   deviceInfo(): Promise<DeviceInfo>
+  /** WorkSuite Security (#20): the device agent's security status; null when it is not available. */
+  securityStatus(): Promise<SecurityStatus | null>
+  /** Scan now through the device agent (polkit lk.worksuite.security.scan). */
+  securityScan(kind: 'quick' | 'full'): Promise<CloudResult<unknown>>
+  onSecurityChanged(cb: (s: SecurityStatus) => void): () => void
+  /** Employee monitoring (#22): policy, disclosure state and this user's own recorded days. */
+  activityStatus(): Promise<ActivityStatus>
+  /** The user has read the monitoring disclosure. */
+  activityAck(): Promise<ActivityStatus>
+  /** What the organization's server holds about this user. */
+  activityRemote(): Promise<CloudResult<ActivityDay[]>>
+  onActivityChanged(cb: (s: ActivityStatus) => void): () => void
   /** Enterprise enrollment through the device agent; asks for an administrator password (polkit). */
   enrollDevice(serverUrl: string, code: string): Promise<CloudResult<{ device_id: string; org_name: string | null }>>
   // App Center through the package service (catalog ids "apt:<name>" / "flatpak:<app id>").
@@ -73,6 +85,12 @@ export interface WorkSuiteApi {
   /** File-name search below root/rel; kind 'any' | 'documents' | 'spreadsheets'; days 0 = any time. */
   filesSearch(root: string, rel: string, q: string, kind: string, days: number): Promise<CloudResult<{ hits: FileHit[]; ms: number; truncated: boolean }>>
   filesMkdir(root: string, rel: string, name: string): Promise<CloudResult<string>>
+  /** The XDG Desktop folder relative to home (created if missing). */
+  desktopDir?(): Promise<CloudResult<string>>
+  /** File names in ~/Templates, offered under the desktop menu's "New". */
+  filesTemplates?(): Promise<string[]>
+  /** A new empty file (template null) or a copy of a template; never overwrites. */
+  filesNewFile?(root: string, rel: string, name: string, template: string | null): Promise<CloudResult<string>>
   filesRename(root: string, rel: string, name: string): Promise<CloudResult<string>>
   /** Move to the freedesktop.org Trash. */
   filesTrash(root: string, rels: string[]): Promise<CloudResult<{ count: number; ids: string[] }>>
@@ -121,6 +139,8 @@ export interface WorkSuiteApi {
   /** A notice in the notification centre; clicking it opens Settings › Drivers (onOpenSettings). */
   driversNotify(summary: string, body: string): Promise<unknown>
   onOpenSettings(cb: (section: string) => void): () => void
+  /** NetworkManager, BlueZ or UPower signalled a change ('network' | 'bluetooth' | 'battery'; electron/sysWatch.ts). */
+  onSysChanged?(cb: (kind: string) => void): () => void
   /** Settings › Users: accounts on this computer (electron/users.ts). */
   sysUsers(): Promise<Avail<{ current: string; users: LocalUser[] }>>
   /** Settings › Users › Sign-in options: this device's PIN and security keys (electron/signin.ts). Changes go
@@ -141,6 +161,13 @@ export interface WorkSuiteApi {
   reportSend(id: string, keep: string[], description: string): Promise<CloudResult<string>>
   /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
   pkgCatalog(): Promise<CloudResult<AppCatalog>>
+  /** Software Management: ask the organization to approve installing a catalog app (policy software_install = request). */
+  pkgRequestApp(catalogId: string, reason: string): Promise<CloudResult<AppRequest>>
+  /** Update Manager: installed, failed and pending updates (OS, drivers, firmware, apps). */
+  updateHistory(): Promise<CloudResult<UpdateHistory>>
+  /** Flatpak apps with an update, and updating them (empty list = all); a job like pkgInstall. */
+  appUpdates(): Promise<CloudResult<AppUpdate[]>>
+  updateApps(ids: string[]): Promise<CloudResult<string>>
   /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
   pickFile(kind: 'deb' | 'appimage' | 'wsupdate' | 'wgconf' | 'ovpn'): Promise<CloudResult<{ handle: string; name: string }>>
   localDebPreview(handle: string): Promise<CloudResult<LocalDebPreview>>
@@ -190,6 +217,20 @@ export interface WorkSuiteApi {
   sysBluetooth(): Promise<Avail<BluetoothState>>
   sysSetBluetooth(on: boolean): Promise<Avail<true>>
   sysBtConnect(address: string, on: boolean): Promise<Avail<true>>
+  /** Starts a Wi-Fi scan; results come with the next sysNetwork(). */
+  sysWifiRescan(): Promise<Avail<true>>
+  /** Disconnects from the Wi-Fi network in use ('not_connected' when there is none). */
+  sysWifiDisconnect(): Promise<Avail<true>>
+  /** #31: adapters, drivers, radio switches and services behind Wi-Fi or Bluetooth, with the problems found. */
+  radioDiagnose(kind: RadioKind): Promise<CloudResult<RadioDiagnosis & { text: string }>>
+  /** Unblocks the radio (rfkill) or restarts its service (an administrator confirms). */
+  radioFix(kind: RadioKind, fix: Exclude<RadioFix, 'find_driver'>): Promise<CloudResult<true>>
+  /** #16: GPU, drivers, graphics APIs and what renders the desktop and the apps. */
+  graphics(): Promise<CloudResult<GraphicsState>>
+  /** Renderer for the desktop from the next sign-in. */
+  graphicsSetRenderer(choice: RendererChoice): Promise<CloudResult<true>>
+  /** Forgets an automatic fallback to software rendering, so the next sign-in tries the GPU again. */
+  graphicsReset(): Promise<CloudResult<true>>
   sysSound(): Promise<Avail<SoundState>>
   sysSetVolume(percent: number): Promise<Avail<true>>
   sysSetMute(muted: boolean): Promise<Avail<true>>
@@ -236,6 +277,8 @@ export interface RecoveryInfo {
 import { withAppCenterPreview } from './appcenterPreview'
 import type { DesktopModule } from './launcher'
 import type { HwDevice, HwKind } from '../../electron/hardware'
+import type { RadioDiagnosis, RadioFix, RadioKind } from '../../electron/radios'
+import type { GraphicsState, RendererChoice } from '../../electron/graphics'
 import type { LocalUser } from '../../electron/users'
 import type { SecurityKey, SignInMethod, SignInMethods, SigninResult } from '../../electron/signin'
 import type { SearchHit, SearchResponse, SourceState } from '../../electron/search'
@@ -271,11 +314,24 @@ export interface OsUpdateStatus {
   critical?: boolean; resumed?: boolean
   /** Update Center (or the organisation's mirror) the coordinator checked, and the device's ring. */
   update_host?: string; ring?: 'development' | 'pilot' | 'stable'
+  /** From the signed manifest: release notes (plain text), sizes, a version upgrade, a security release. */
+  notes?: string | null; notes_url?: string | null; download_bytes?: number | null; installed_bytes?: number | null; upgrade?: boolean; security?: boolean
 }
+export interface AppRequest { id: string; state: 'pending' | 'approved' | 'rejected'; note: string | null; at: number }
+export interface UpdateHistoryEntry {
+  id: string; kind: 'os' | 'driver' | 'firmware' | 'app'; title: string; version: string | null
+  result: 'success' | 'failed' | 'cancelled' | 'pending'; finished_at?: number; started_at: number | null; reboot_required?: boolean
+  /** For administrators (diagnostics); people see a worded result. */
+  error?: string | null
+}
+export interface UpdateHistory { pending: UpdateHistoryEntry[]; entries: UpdateHistoryEntry[] }
+export interface AppUpdate { id: string; name: string; version: string | null; download_size: string | null }
 export interface CatalogEntry {
   id: string; source: 'apt' | 'flatpak' | 'appimage'; name: string; arches: string[]
   required?: boolean; blocked?: boolean; sha256?: string; category?: string; summary?: string; publisher?: string
   installed: boolean; available: boolean; blocked_reason: string | null
+  /** Software Management (older services omit both): the person may ask for approval; their latest request. */
+  requestable?: boolean; request?: AppRequest | null
 }
 export type AppCatalog =
   | { state: 'ok'; arch: string; items: CatalogEntry[]; fetched_at: number }
@@ -347,6 +403,8 @@ export interface DevicePolicies {
   version: string; update_ring: string | null; update_mode: string | null; maintenance_window: string | null
   lock_timeout_max_s: number | null; offline_access_days: number | null; usb_storage: string | null; bluetooth: boolean | null
   app_allowlist_size: number
+  /** Employee monitoring (#22) on in the signed policy. */
+  activity_monitoring?: boolean
   /** On-device AI assistant (services/ai): false = off for everyone; ai_models = catalog ids allowed. */
   ai_assistant?: boolean | null; ai_models?: string[] | null
   /** Desktop widgets (WorkSuite Desktop's Home on the wallpaper): false = off for everyone. Kiosk: always off. */
@@ -355,6 +413,11 @@ export interface DevicePolicies {
   whatsapp?: boolean | null
   /** Screenshots and the snipping tool; clipboard history (Super+V). 'disabled' = off; kiosks: always off. */
   screen_capture?: 'allowed' | 'disabled' | null; clipboard_history?: 'allowed' | 'disabled' | null
+  /** Remote support without asking first (issue #19): disclosed to the user here and in the session indicator. */
+  remote_support_unattended?: boolean
+  /** Software Management and the Update Manager's download limit (KiB/s, 0 = none). */
+  software_install?: 'any' | 'approved' | 'request' | 'block' | null; software_uninstall?: boolean | null; software_update?: boolean | null
+  update_bandwidth_kbps?: number | null
 }
 export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
 export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean
@@ -375,6 +438,26 @@ export interface DeviceInfo {
   /** Processor and memory (electron/device.ts hostSpecs). */
   specs?: { cpu_model: string | null; cpu_cores: number | null; memory_bytes: number | null }
 }
+
+/** /run/worksuite-device-agent/security.json (services/device-agent/src/security.ts securityStatus). */
+export interface SecurityStatus {
+  overall: 'protected' | 'attention' | 'at_risk' | 'unavailable'
+  issues: string[]
+  managed: boolean
+  scanning?: boolean
+  firewall: { active: boolean; policy_rules: number; log_blocked: boolean }
+  isolation: { since: number; until: number } | null
+  antivirus: { enabled: boolean; installed: boolean; engine: string | null; signatures: number | null; signatures_at: number | null; signatures_age_days: number | null; updates: string; schedule: string; exclusions: number
+    last_scan: { kind: string; trigger: string; started: number; finished: number; files: number; detections: number; error?: string } | null; last_full_scan: number | null }
+  threats: { active: number; quarantined: number }
+  history: { id: string; at: number; path: string; signature: string; action: string }[]
+  firewall_alerts: { at: number; dst: string; dport: number | null; proto: string }[]
+  retention_days: number
+}
+/** One day of activity (electron/activity.ts DayReport): aggregates only. */
+export interface ActivityDay { day: string; active_s: number; idle_s: number; locked_s: number; first_active: number | null; last_active: number | null
+  apps: { app_id: string; name: string; active_s: number; switches: number }[]; events: { at: number; type: string }[] }
+export interface ActivityStatus { enabled: boolean; org_name: string | null; retention_days: number; idle_threshold_s: number; disclosure_needed: boolean; last_sent: number | null; days: ActivityDay[] }
 
 /** Taskbar chip text: null when the device isn't managed (WSOS-MDM-007). */
 export function managedLabel(info: DeviceInfo | null): string | null {
@@ -397,7 +480,9 @@ export function policyLines(p: DevicePolicies | null): string[] {
   if (p.whatsapp === false) out.push(t('mdm.whatsappOff'))
   if (p.screen_capture === 'disabled') out.push(t('mdm.captureOff'))
   if (p.clipboard_history === 'disabled') out.push(t('mdm.clipboardOff'))
+  if (p.remote_support_unattended) out.push(t('mdm.remoteUnattended'))
   if (p.ai_assistant === false) out.push(t('mdm.aiOff'))
+  if (p.activity_monitoring === true) out.push(t('mdm.monitoringOn'))
   else if (p.ai_models?.length) out.push(t('mdm.aiLimited', { count: p.ai_models.length }))
   return out
 }
@@ -478,6 +563,26 @@ const stub: WorkSuiteApi = {
     stubPolls++
     return { ok: true, value: stubPolls < 2 ? { state: 'offline', pending: 14, failed: 0, conflicts: 0, last_sync: null } : { state: 'idle', pending: 0, failed: 0, conflicts: 0, last_sync: Date.now() } }
   },
+  async securityStatus() {
+    if (PV.get('security') === 'none') return null
+    const risk = PV.get('security') === 'threat'
+    return {
+      overall: risk ? 'at_risk' : 'protected', issues: risk ? ['threats_need_action'] : [], managed: stubManaged, scanning: false,
+      firewall: { active: true, policy_rules: stubManaged ? 3 : 0, log_blocked: stubManaged }, isolation: null,
+      antivirus: { enabled: true, installed: true, engine: '1.0.7', signatures: 27431, signatures_at: Date.now() - 86_400_000, signatures_age_days: 1, updates: 'active', schedule: 'weekly', exclusions: 0,
+        last_scan: { kind: 'quick', trigger: 'schedule', started: Date.now() - 7_300_000, finished: Date.now() - 7_200_000, files: 18_402, detections: risk ? 1 : 0 }, last_full_scan: Date.now() - 5 * 86_400_000 },
+      threats: { active: risk ? 1 : 0, quarantined: 1 },
+      history: [...(risk ? [{ id: 't2', at: Date.now() - 7_200_000, path: '/home/nimal/Downloads/invoice.pdf.exe', signature: 'Win.Trojan.Agent-1', action: 'detected' }] : []),
+        { id: 't1', at: Date.now() - 9 * 86_400_000, path: '/home/nimal/Downloads/eicar.com', signature: 'Win.Test.EICAR_HDB-1', action: 'quarantined' }],
+      firewall_alerts: [], retention_days: 90,
+    }
+  },
+  async securityScan() { return { ok: true, value: true } },
+  onSecurityChanged() { return () => {} },
+  async activityStatus() { return stubActivity() },
+  async activityAck() { stubActivityAck = true; return stubActivity() },
+  async activityRemote() { return { ok: true, value: stubActivity().days } },
+  onActivityChanged() { return () => {} },
   async enrollDevice(_url, code) {
     if (code === 'BAD-CODE') return { ok: false, error: 'enrollment_rejected' }
     stubManaged = true
@@ -666,6 +771,10 @@ const stub: WorkSuiteApi = {
   async reportSend() { return { ok: false, error: 'service_unavailable' } },
   // Browser preview: there is no package service or server here, so these answer honestly instead of inventing apps.
   async pkgCatalog() { return { ok: true, value: { state: 'not_enrolled', arch: 'amd64', items: [], error: 'Preview mode: no package service, so there is no app catalog.' } } },
+  async pkgRequestApp() { return { ok: false, error: 'service_unavailable' } },
+  async updateHistory() { return { ok: false, error: 'service_unavailable' } },
+  async appUpdates() { return { ok: false, error: 'service_unavailable' } },
+  async updateApps() { return { ok: false, error: 'service_unavailable' } },
   async pickFile() { return { ok: false, error: 'service_unavailable' } },
   async localDebPreview() { return { ok: false, error: 'service_unavailable' } },
   async localDebInstall() { return { ok: false, error: 'service_unavailable' } },
@@ -736,6 +845,28 @@ const stub: WorkSuiteApi = {
   async sysBluetooth() { return stubAvail(stubSys.bt) },
   async sysSetBluetooth(on) { stubSys.bt.powered = on; return stubAvail(true as const) },
   async sysBtConnect(address, on) { stubSys.bt.paired = stubSys.bt.paired.map((d) => d.address === address ? { ...d, connected: on } : d); return stubAvail(true as const) },
+  async sysWifiRescan() { return stubAvail(true as const) },
+  async sysWifiDisconnect() { stubSys.net.networks = stubSys.net.networks.map((n) => ({ ...n, in_use: false })); return stubAvail(true as const) },
+  async radioDiagnose(kind) {
+    if (stubSim === 'none') return { ok: false, error: 'unavailable' }
+    const d: RadioDiagnosis = kind === 'wifi'
+      ? { kind, status: 'ok', service: 'active', problems: [], hardware: [{ name: 'Wi-Fi 6E AX211 160MHz', driver: 'iwlwifi', ids: '8086:51f0' }], adapters: [{ name: 'wlan0', device: 'Wi-Fi 6E AX211 160MHz', driver: 'iwlwifi', soft_blocked: false, hard_blocked: false }] }
+      : { kind, status: stubSys.bt.powered ? 'ok' : 'off', service: 'active', problems: [], hardware: [], adapters: [{ name: 'hci0', device: null, driver: 'btusb', soft_blocked: false, hard_blocked: false }] }
+    return { ok: true, value: { ...d, text: `${kind}: ${d.status}` } }
+  },
+  async radioFix() { return { ok: true, value: true } },
+  async graphics() {
+    if (stubSim === 'none') return { ok: false, error: 'unavailable' }
+    return { ok: true, value: {
+      gpus: [{ name: 'Alder Lake-P GT2 [Iris Xe Graphics]', vendor: 'Intel Corporation', ids: '8086:46a6', driver: 'i915', driver_version: null, proprietary: false, virtual: false }],
+      compositor: { renderer: 'gpu', reason: null, choice: 'auto', fell_back: false },
+      apps: { accelerated: true, disabled_reason: null, features: { gpu_compositing: 'enabled', rasterization: 'enabled', video_decode: 'enabled', webgl: 'enabled', webgpu: 'disabled_off' }, gl_renderer: 'Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2)', gl_version: 'OpenGL ES 3.2 Mesa 25.0.7', driver_vendor: 'Mesa', driver_version: '25.0.7' },
+      vaapi: { available: true, driver: 'Intel iHD driver for Intel(R) Gen Graphics - 25.2.3', decode: ['H264Main', 'HEVCMain', 'VP9Profile0', 'AV1Profile0'], encode: ['H264Main', 'HEVCMain'] },
+      vulkan: { available: true, api_version: '1.4.305', devices: [{ name: 'Intel(R) Iris(R) Xe Graphics (ADL GT2)', type: 'integrated_gpu', driver: 'Intel open-source Mesa driver Mesa 25.0.7' }] },
+    } }
+  },
+  async graphicsSetRenderer() { return { ok: true, value: true } },
+  async graphicsReset() { return { ok: true, value: true } },
   async sysSound() { return stubAvail(stubSys.sound) },
   async sysSetVolume(p) { stubSys.sound.volume = Math.max(0, Math.min(100, Math.round(p))); return stubAvail(true as const) },
   async sysSetMute(m) { stubSys.sound.muted = m; return stubAvail(true as const) },
@@ -864,6 +995,15 @@ function stubJob(_id: string, _kind: string): CloudResult<string> {
 let stubUnsent = 3
 let stubPolls = 0
 // Preview only: unmanaged until enrolled (first-run or Settings).
+let stubActivityAck = false
+/** Preview: ?monitoring=1 shows employee monitoring on (with the first-run disclosure until it is acknowledged). */
+function stubActivity(): ActivityStatus {
+  const on = PV.get('monitoring') === '1'
+  const day = new Date().toISOString().slice(0, 10)
+  return { enabled: on, org_name: on ? 'Livezen Technologies' : null, retention_days: 90, idle_threshold_s: 300, disclosure_needed: on && !stubActivityAck, last_sent: on ? Date.now() - 600_000 : null,
+    days: on ? [{ day, active_s: 13_320, idle_s: 1_800, locked_s: 2_700, first_active: Date.now() - 6 * 3_600_000, last_active: Date.now(), events: [{ at: Date.now() - 6 * 3_600_000, type: 'login' }],
+      apps: [{ app_id: 'org.worksuite.Office', name: 'WorkSuite Office', active_s: 7_900, switches: 31 }, { app_id: 'org.mozilla.firefox', name: 'Firefox', active_s: 3_600, switches: 24 }, { app_id: 'foot', name: 'Terminal', active_s: 1_820, switches: 9 }] }] : [] }
+}
 let stubManaged = typeof location !== 'undefined' && new URLSearchParams(location.search).get('managed') === '1'
 
 /** Broker error codes → text for the user. */

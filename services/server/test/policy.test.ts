@@ -39,3 +39,8 @@ test('policy-set refuses what the console refuses, and stores what it accepts', 
     assert.deepEqual(JSON.parse(row.body), { update_ring: 'pilot', usb_storage: 'block' }, 'cleared and signed fields dropped, as in the console');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('policy: app_permissions deny rules only', () => {
+  assert.deepEqual(validatePolicy({ app_permissions: { deny: { camera: ['*'], location: ['org.gnome.Maps'] } } }).app_permissions, { deny: { camera: ['*'], location: ['org.gnome.Maps'] } });
+  for (const bad of [{ allow: { camera: ['*'] } }, { deny: { root: ['*'] } }, { deny: { camera: ['../x'] } }, { deny: [] }, 'x']) assert.throws(() => validatePolicy({ app_permissions: bad }), JSON.stringify(bad));
+});

@@ -13,14 +13,18 @@ export const APP_HTML = `<!doctype html><html lang="en"><head><meta charset="utf
 <button class="primary" type="submit">Sign in</button></form></div>
 <div id="app" class="shell" hidden>
 <nav class="side" aria-label="Sections"><div class="brand">${LOGO}<span>WorkSuite</span></div>
-<a href="#overview">Overview</a><a href="#devices">Devices</a><a href="#wipes">Wipe requests</a><a href="#users">Users</a>
-<a href="#enroll">Enrollment</a><a href="#policy">Policy</a><a href="#apps">App catalog</a><a href="#releases">Releases</a><a href="#problems">Problem reports</a><a href="#audit">Package audit</a><a href="#activity">Activity</a>
+<a href="#overview">Overview</a><a href="#devices">Devices</a><a href="#support">Remote Support</a><a href="#wipes">Wipe requests</a><a href="#users">Users</a>
+<a href="#enroll">Enrollment</a><a href="#policy">Policy</a><a href="#apps">App catalog</a><a href="#software">Software Management</a><a href="#releases">Releases</a><a href="#problems">Problem reports</a><a href="#security">Security Center</a><a href="#monitoring">Employee monitoring</a><a href="#audit">Package audit</a><a href="#activity">Activity</a>
 <div class="me"><span id="me-name"></span><span id="me-org" class="muted"></span><button id="logout" class="link">Sign out</button></div></nav>
 <main id="main" tabindex="-1"></main></div>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="/admin/app.js"></script></body></html>`;
 
-export const APP_CSS = `
+export const APP_CSS = `.rs-view{display:grid;grid-template-columns:1fr 280px;gap:14px}.rs-screen{position:relative;background:#000;border-radius:10px;overflow:hidden;min-height:300px}
+.rs-screen video{width:100%;height:auto;display:block;outline:none;cursor:crosshair}.rs-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.rs-chat{display:flex;flex-direction:column;gap:8px}.rs-log{height:260px;overflow:auto;border:1px solid #8884;border-radius:8px;padding:8px;font-size:13px}
+.rs-stats{font-size:12px;line-height:1.6}@media (max-width:900px){.rs-view{grid-template-columns:1fr}}
+
 :root{--bg:#f5f7fb;--panel:#fff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--accent:#0A6CFF;--accent-text:#fff;--side:#001842;--side-text:#cbd5e1;
 --ok:#15803d;--warn:#b45309;--bad:#b91c1c;--chip:#eef2ff;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--bg:#0b1120;--panel:#111a2e;--text:#e2e8f0;--muted:#94a3b8;--line:#1e293b;--side:#050b18;--side-text:#94a3b8;
@@ -150,6 +154,22 @@ function wipeDialog(o) {
   back.append(dlg); document.body.append(back); document.addEventListener('keydown', onKey);
   (reason || pw).focus();
 }
+/** Endpoint isolation (#20 §12): password and the device name, like an erase; time-limited so a lockout ends. */
+function isolateDialog(id, hostname) {
+  const hours = h('input', { type: 'number', min: 1, max: 72, value: 24, 'aria-label': 'Hours' });
+  const pw = h('input', { type: 'password', autocomplete: 'current-password', 'aria-label': 'Your password' });
+  const name = h('input', { 'aria-label': 'Device name' });
+  const back = h('div', { class: 'modal-back' });
+  const close = () => back.remove();
+  const f = h('form', { class: 'card form', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Isolate device', onsubmit: (e) => { e.preventDefault();
+    act(() => api('POST', 'devices/' + id + '/commands', { command: 'IsolateEndpoint', args: { hours: Number(hours.value) }, password: pw.value, confirm_name: name.value }).then(close),
+      'Isolation sent. The device keeps only its connection to this server until it ends.'); } },
+    h('h2', {}, 'Isolate ' + hostname + ' from the network?'),
+    h('p', { class: 'muted' }, 'All traffic stops except DHCP, DNS and HTTPS to this server, so you can still scan, review and release it. Isolation ends on its own after the time below.'),
+    h('label', {}, 'Hours (1–72)', hours), h('label', {}, 'Your password', pw), h('label', {}, 'Type the device name to confirm', name),
+    h('div', { class: 'row' }, h('button', { class: 'danger' }, 'Isolate'), h('button', { type: 'button', onclick: close }, 'Cancel')));
+  back.append(f); document.body.append(back); pw.focus();
+}
 async function wipeSubmit(fn, msg) {
   try { const r = await fn(); toast(msg(r)); route(); return true; } catch (e) { toast(e.message); return false; }
 }
@@ -195,8 +215,12 @@ const views = {
         // Same names as DIAG_PROFILES (src/console.ts) and the device agent's services/device-agent/src/diagnostics.ts.
         (() => { const prof = h('select', { 'aria-label': 'Diagnostics profile' }, h('option', { value: 'basic' }, 'Basic'), h('option', { value: 'session' }, 'Session logs'), h('option', { value: 'network' }, 'Network'), h('option', { value: 'update' }, 'Updates'));
           return [prof, h('button', { onclick: () => send('CollectApprovedDiagnostics', { bundle_profile: prof.value }) }, 'Collect diagnostics')]; })(),
+        h('button', { onclick: () => send('StartMalwareScan', { kind: 'quick' }) }, 'Quick scan'), h('button', { onclick: () => send('StartMalwareScan', { kind: 'full' }) }, 'Full scan'),
+        h('button', { onclick: () => send('ReleaseIsolation') }, 'End isolation'),
+        h('button', { class: 'danger', onclick: () => isolateDialog(id, d.hostname) }, 'Isolate from network…'),
         h('button', { class: 'danger', onclick: () => { if (confirm('Revoke this device? It stops receiving policy and its credential stops working.')) act(() => api('POST', 'devices/' + id + '/revoke'), 'Device revoked.'); } }, 'Revoke')),
       kioskDevice(id, d.kiosk),
+      await deviceSoftwareSection(id, d),
       h('h2', {}, 'Erase'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
         h('button', { class: 'danger', onclick: () => wipeDialog({ request: true, hostname: d.hostname, label: 'Erase device', meta: 'Last seen ' + ago(d.last_seen) + ' · ' + (d.ownership === 'personal' ? 'personal' : 'corporate') + ' device.', note: 'Logged to the audit trail',
           submit: (c, x) => wipeSubmit(() => api('POST', 'wipes', { device_id: id, ...x, ...c }), (r) => r.waived_second_approver ? 'Erase sent. It runs the next time the device connects.' : 'Erase requested. Another administrator must approve it.') }) }, 'Erase device…'))],
@@ -260,7 +284,17 @@ const views = {
         drivers_online_search: f.drivers_online_search.value === '' ? null : f.drivers_online_search.value === 'true',
         drivers_auto_install: f.drivers_auto_install.value === '' ? null : f.drivers_auto_install.value === 'true',
         drivers_auto_install_gpu: f.drivers_auto_install_gpu.value === '' ? null : f.drivers_auto_install_gpu.value === 'true',
+        software_install: f.software_install.value || null,
+        software_uninstall: f.software_uninstall.value === '' ? null : f.software_uninstall.value === 'true',
+        software_update: f.software_update.value === '' ? null : f.software_update.value === 'true',
+        update_bandwidth_kbps: num('update_bandwidth_kbps'),
         screen_capture: f.screen_capture.value || null, clipboard_history: f.clipboard_history.value || null,
+        antivirus: f.antivirus.value === '' ? null : f.antivirus.value === 'true', av_scan_schedule: f.av_scan_schedule.value || null, av_scan_hour: num('av_scan_hour'),
+        av_signature_checks_per_day: num('av_signature_checks_per_day'), av_cpu_quota_percent: num('av_cpu_quota_percent'),
+        av_exclusions: list('av_exclusions').length ? list('av_exclusions') : null, firewall_outbound_block: list('firewall_outbound_block').length ? list('firewall_outbound_block') : null,
+        firewall_log_blocked: f.firewall_log_blocked.value === '' ? null : f.firewall_log_blocked.value === 'true', security_log_retention_days: num('security_log_retention_days'),
+        activity_monitoring: f.activity_monitoring.value === '' ? null : f.activity_monitoring.value === 'true', activity_retention_days: num('activity_retention_days'),
+        activity_idle_threshold_s: num('activity_idle_threshold_s'),
         app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
     } },
       h('div', { class: 'row' }, h('label', {}, 'Update ring', sel('update_ring', [['stable', 'Stable'], ['pilot', 'Pilot'], ['development', 'Development']])),
@@ -284,6 +318,25 @@ const views = {
       h('div', { class: 'row' }, h('label', {}, 'Look for drivers online after connecting', sel('drivers_online_search', [['true', 'On'], ['false', 'Off']])),
         h('label', {}, 'Install firmware automatically', sel('drivers_auto_install', [['true', 'On'], ['false', 'Off']])),
         h('label', {}, 'Install the NVIDIA driver automatically', sel('drivers_auto_install_gpu', [['true', 'On'], ['false', 'Off']]))),
+      h('div', { class: 'row' }, h('label', {}, 'Users may install', sel('software_install', [['any', 'Any software'], ['approved', 'Approved software'], ['request', 'Approved software, and request others'], ['block', 'Nothing (remote installation only)']])),
+        h('label', {}, 'Users may uninstall apps', sel('software_uninstall', [['true', 'Allowed'], ['false', 'Organization only']])),
+        h('label', {}, 'Users may update apps', sel('software_update', [['true', 'Allowed'], ['false', 'Organization only']]))),
+      h('label', {}, 'Update download limit (KiB/s, 0 = none)', h('input', { name: 'update_bandwidth_kbps', type: 'number', min: 0, value: p.update_bandwidth_kbps ?? '' })),
+      h('fieldset', {}, h('legend', {}, 'WorkSuite Security'),
+        h('div', { class: 'row' }, h('label', {}, 'Antivirus (ClamAV)', sel('antivirus', [['true', 'On'], ['false', 'Off']])),
+          h('label', {}, 'Scheduled scans', sel('av_scan_schedule', [['daily', 'Daily quick, weekly full'], ['weekly', 'Weekly quick, monthly full'], ['off', 'Off']])),
+          h('label', {}, 'Not before (hour, 0–23)', h('input', { name: 'av_scan_hour', type: 'number', min: 0, max: 23, value: p.av_scan_hour ?? '' }))),
+        h('div', { class: 'row' }, h('label', {}, 'Signature checks per day', h('input', { name: 'av_signature_checks_per_day', type: 'number', min: 1, max: 24, value: p.av_signature_checks_per_day ?? '' })),
+          h('label', {}, 'Scan CPU limit (%)', h('input', { name: 'av_cpu_quota_percent', type: 'number', min: 10, max: 100, value: p.av_cpu_quota_percent ?? '' })),
+          h('label', {}, 'Security history kept (days)', h('input', { name: 'security_log_retention_days', type: 'number', min: 7, max: 3650, value: p.security_log_retention_days ?? '' }))),
+        h('label', {}, 'Scan exclusions (absolute paths, one per line; each one weakens protection)', h('textarea', { name: 'av_exclusions' }, (p.av_exclusions || []).join('\n'))),
+        h('div', { class: 'row' }, h('label', { class: 'grow' }, 'Blocked destinations (IP or CIDR, one per line)', h('textarea', { name: 'firewall_outbound_block' }, (p.firewall_outbound_block || []).join('\n'))),
+          h('label', {}, 'Report blocked connections', sel('firewall_log_blocked', [['true', 'On'], ['false', 'Off']])))),
+      h('fieldset', {}, h('legend', {}, 'Employee monitoring'),
+        h('p', { class: 'muted' }, 'Off unless turned on. Employees see a persistent indicator, are told on their first sign-in what is collected, and can see their own data. Collected: active, idle and locked time, time per application, sign-in/out and lock events. Never: keystrokes, screenshots, window titles, web addresses or file contents.'),
+        h('div', { class: 'row' }, h('label', {}, 'Activity monitoring', sel('activity_monitoring', [['true', 'On'], ['false', 'Off']])),
+          h('label', {}, 'Keep reports (days)', h('input', { name: 'activity_retention_days', type: 'number', min: 1, max: 730, value: p.activity_retention_days ?? '' })),
+          h('label', {}, 'Idle after (seconds)', h('input', { name: 'activity_idle_threshold_s', type: 'number', min: 60, max: 3600, value: p.activity_idle_threshold_s ?? '' })))),
       h('label', {}, 'Update mirror (https, optional)', h('input', { name: 'update_mirror', value: p.update_mirror || '' })),
       h('label', {}, 'Allowed apps (catalog IDs, one per line)', h('textarea', { name: 'app_allowlist' }, (p.app_allowlist || []).join('\n'))),
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),
@@ -293,20 +346,28 @@ const views = {
     if (p.ai_assistant !== undefined) f.ai_assistant.value = String(p.ai_assistant);
     if (p.desktop_widgets !== undefined) f.desktop_widgets.value = String(p.desktop_widgets);
     if (p.whatsapp !== undefined && p.whatsapp !== null) f.whatsapp.value = String(p.whatsapp);
-    for (const k of ['drivers_online_search', 'drivers_auto_install', 'drivers_auto_install_gpu']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
+    for (const k of ['antivirus', 'firewall_log_blocked', 'activity_monitoring']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
+    for (const k of ['drivers_online_search', 'drivers_auto_install', 'drivers_auto_install_gpu', 'software_uninstall', 'software_update']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
     return [h('h1', {}, 'Policy'), h('p', { class: 'muted' }, 'Current version ' + version + '. Devices verify the signature before applying it.'), f, kioskForm(p)];
   },
   async apps() {
     const { items } = await api('GET', 'catalog');
     const f = h('form', { class: 'card form', onsubmit: (e) => { e.preventDefault();
       const arches = [f.amd64.checked && 'amd64', f.arm64.checked && 'arm64'].filter(Boolean);
-      act(() => api('PUT', 'catalog/' + encodeURIComponent(f.source.value + ':' + f.pkg.value), { source: f.source.value, name: f.name.value, arches, required: f.required.checked, sha256: f.sha256.value || undefined }), 'Catalog updated.'); } },
+      act(() => api('PUT', 'catalog/' + encodeURIComponent(f.source.value + ':' + f.pkg.value), { source: f.source.value, name: f.name.value, arches, required: f.required.checked, blocked: f.blocked.checked, sha256: f.sha256.value || undefined,
+        assign: { devices: lines(f.a_devices), users: lines(f.a_users), departments: f.a_departments.value.split('\n').map((x) => x.trim()).filter(Boolean) } }),
+        'Catalog updated. Required apps are sent to their devices now.'); } },
       h('div', { class: 'row' }, h('label', {}, 'Source', h('select', { name: 'source' }, h('option', { value: 'flatpak' }, 'Flatpak'), h('option', { value: 'apt' }, 'APT'), h('option', { value: 'appimage' }, 'AppImage'))),
         h('label', {}, 'Package / app ID', h('input', { name: 'pkg', required: true, placeholder: 'org.gimp.GIMP' })), h('label', {}, 'Display name', h('input', { name: 'name', required: true }))),
       h('div', { class: 'row' }, h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'amd64', checked: true }), ' amd64')), h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'arm64', checked: true }), ' arm64')),
-        h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'required' }), ' Required on every device'))),
+        h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'required' }), ' Required (deployed automatically)')),
+        h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'blocked' }), ' Blocked'))),
+      h('p', { class: 'muted' }, 'Assign to (leave all empty for everyone):'),
+      h('div', { class: 'row' }, h('label', {}, 'Devices (IDs)', h('textarea', { name: 'a_devices' })), h('label', {}, 'Users (emails)', h('textarea', { name: 'a_users' })),
+        h('label', {}, 'Departments (one per line)', h('textarea', { name: 'a_departments' }))),
       h('label', {}, 'SHA-256 (AppImages only)', h('input', { name: 'sha256' })), h('div', {}, h('button', { class: 'primary' }, 'Add or update')));
-    return [h('h1', {}, 'App catalog'), table(['App', 'ID', 'Arch', ''], items.map((i) => h('tr', {}, h('td', {}, i.name, i.required ? h('span', { class: 'chip' }, ' required') : null), h('td', {}, i.id), h('td', {}, i.arches.join(', ')),
+    return [h('h1', {}, 'App catalog'), table(['App', 'ID', 'Arch', ''], items.map((i) => h('tr', {}, h('td', {}, i.name, i.required ? h('span', { class: 'chip' }, ' required') : null, i.blocked ? h('span', { class: 'chip bad' }, ' blocked') : null,
+      i.assign ? h('div', { class: 'muted' }, assignText(i.assign)) : null), h('td', {}, i.id), h('td', {}, i.arches.join(', ')),
       h('td', {}, h('button', { class: 'danger', onclick: () => act(() => api('DELETE', 'catalog/' + encodeURIComponent(i.id)), 'Removed from the catalog.') }, 'Remove'))))),
       h('h2', {}, 'Add an app'), f];
   },
@@ -345,6 +406,147 @@ const views = {
       table(['When', 'Device', 'Event', 'Details'], r.items.map((x) => h('tr', {}, h('td', {}, new Date(x.at).toLocaleString()), h('td', {}, h('a', { href: '#device/' + encodeURIComponent(x.device_id) }, x.hostname)),
         h('td', {}, x.type.replace(/^package\./, '').replace(/_/g, ' ')), h('td', { class: 'muted' }, detail(x.data))))),
       pager(r, 'audit', type ? '~' + type : '')];
+  },
+  // Device Management › Remote Support (issue #19). The device's user approves each session unless the policy's
+  // disclosed unattended access applies; what the console shows as active is what the device reported.
+  async support() {
+    const r = await api('GET', 'remote-support');
+    const c = r.cards;
+    const stat = (label, n, cls) => h('div', { class: 'card stat' }, h('b', { class: cls }, n), label);
+    const dur = (s) => s ? Math.floor(s / 60) + ' min ' + (s % 60) + ' s' : '—';
+    const STATUS = { online: 'Online', offline: 'Offline', busy: 'In session' };
+    const END = { denied: 'Denied by user', consent_timeout: 'No answer', user_ended: 'Ended by user', admin_ended: 'Ended by administrator', expired: 'Timed out', no_user: 'Nobody signed in', unenrolled: 'Device unenrolled', busy: 'Device busy' };
+    const start = (d) => {
+      const reason = prompt('Reason for access (shown to ' + (d.assigned_user || 'the user') + ')');
+      if (!reason) return;
+      const control = confirm('Request keyboard and mouse control?\nOK = remote control (needs your authenticator code), Cancel = view only.');
+      const otp = control ? prompt('Authenticator code') : undefined;
+      if (control && !otp) return;
+      act(() => api('POST', 'remote-support/sessions', { device_id: d.id, mode: control ? 'control' : 'view', reason, otp }), 'Request sent. The user is asked to allow it.');
+    };
+    const end = (id) => act(() => api('POST', 'remote-support/sessions/' + encodeURIComponent(id) + '/terminate'), 'Session ended.');
+    return [h('h1', {}, 'Remote Support'),
+      h('p', { class: 'muted' }, 'Every session needs the user\'s approval on the device, who sees an indicator and can stop it at any time, unless the device policy enables unattended access for corporate devices.'),
+      h('div', { class: 'grid' }, stat('Online devices', c.online_devices), stat('Active sessions', c.active_sessions), stat('Pending requests', c.pending_requests, c.pending_requests ? 'warn' : ''),
+        stat('Offline devices', c.offline_devices), stat('Support technicians', c.support_technicians), stat('Completed sessions', c.completed_sessions)),
+      h('h2', {}, 'Devices'),
+      table(['Device', 'Assigned employee', 'Organization', 'IP address', 'OS version', 'Status', 'Last seen', ''], r.devices.map((d) => h('tr', {},
+        h('td', {}, h('a', { href: '#device/' + encodeURIComponent(d.id) }, d.name)), h('td', {}, d.assigned_user || '—'), h('td', {}, d.organization), h('td', {}, d.ip_address || '—'),
+        h('td', {}, d.os_version || '—'), h('td', {}, h('span', { class: 'chip' + (d.status === 'offline' ? ' bad' : '') }, STATUS[d.status])), h('td', {}, ago(d.last_seen)),
+        h('td', {}, h('button', { type: 'button', disabled: d.status !== 'online', onclick: () => start(d) }, 'Request support'))))),
+      h('h2', {}, 'Session history'),
+      table(['Administrator', 'Device', 'User', 'Start', 'End', 'Duration', 'Mode', 'Status', ''], r.history.map((x) => h('tr', {},
+        h('td', {}, x.administrator), h('td', {}, x.device), h('td', {}, x.user || '—'), h('td', {}, x.started_at ? when(x.started_at) : '—'), h('td', {}, x.ended_at ? when(x.ended_at) : '—'),
+        h('td', {}, dur(x.duration_s)), h('td', {}, (x.granted_mode || x.mode) === 'control' ? 'Full control' : 'View only', x.unattended ? h('div', { class: 'muted' }, 'Unattended policy') : null),
+        h('td', {}, x.state === 'ended' ? (END[x.end_reason] || 'Ended') : x.state === 'active' ? h('span', { class: 'ok' }, 'Active') : 'Waiting for user'),
+        h('td', {}, x.state === 'active' ? h('a', { href: '#viewer/' + encodeURIComponent(x.id) }, 'Open ') : null, x.state !== 'ended' ? h('button', { type: 'button', onclick: () => end(x.id) }, 'Disconnect') : null))))];
+  },
+  // Remote desktop viewer (issue #19): WebRTC from the device's portal screen capture, encrypted by DTLS-SRTP; mouse,
+  // keyboard and chat go over the data channel. The device applies input only while its user has granted control.
+  async viewer(id) {
+    if (rsViewer.stop) rsViewer.stop();
+    const base = 'remote-support/sessions/' + encodeURIComponent(id) + '/signal';
+    const video = h('video', { autoplay: true, playsinline: true, muted: true, tabindex: 0, 'aria-label': 'Remote screen' });
+    const status = h('span', { class: 'muted', role: 'status' }, 'Connecting…');
+    const stats = h('div', { class: 'rs-stats muted' }, '—');
+    const log = h('div', { class: 'rs-log', 'aria-live': 'polite' });
+    const say = (who, text) => { log.append(h('div', {}, h('b', {}, who + ': '), text)); log.scrollTop = log.scrollHeight; };
+    let pc = null, dc = null, after = 0, live = true, granted = null, viewOnly = false, lastBytes = 0, lastAt = 0;
+    const send = (m) => { if (dc && dc.readyState === 'open') dc.send(JSON.stringify(m)); };
+    const mode = h('button', { type: 'button', onclick: () => { viewOnly = !viewOnly; mode.textContent = viewOnly ? 'Remote control' : 'View only'; } }, 'View only');
+    const stop = async (sayBye) => {
+      live = false; rsViewer.stop = null;
+      if (sayBye) await api('POST', base, { type: 'bye' }).catch(() => {});
+      if (pc) pc.close();
+    };
+    rsViewer.stop = () => stop(true);
+    const end = () => act(async () => { await stop(true); await api('POST', 'remote-support/sessions/' + encodeURIComponent(id) + '/terminate'); location.hash = 'support'; }, 'Session ended.');
+    const pos = (e) => { const r = video.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }; };
+    const input = (m) => { if (!viewOnly && granted === 'control') send(m); };
+    video.addEventListener('mousemove', (e) => input({ t: 'pm', ...pos(e) }));
+    video.addEventListener('mousedown', (e) => { video.focus(); input({ t: 'pb', b: e.button, down: true, ...pos(e) }); e.preventDefault(); });
+    video.addEventListener('mouseup', (e) => input({ t: 'pb', b: e.button, down: false, ...pos(e) }));
+    video.addEventListener('contextmenu', (e) => e.preventDefault());
+    video.addEventListener('wheel', (e) => { input({ t: 'ax', dx: Math.sign(e.deltaX), dy: Math.sign(e.deltaY) }); e.preventDefault(); }, { passive: false });
+    video.addEventListener('keydown', (e) => { input({ t: 'k', key: e.key, code: e.code, down: true }); e.preventDefault(); });
+    video.addEventListener('keyup', (e) => { input({ t: 'k', key: e.key, code: e.code, down: false }); e.preventDefault(); });
+    const chatIn = h('input', { type: 'text', 'aria-label': 'Message', maxlength: 500 });
+    const chatForm = h('form', { class: 'row', onsubmit: (e) => { e.preventDefault(); const t = chatIn.value.trim(); if (!t) return; send({ t: 'chat', text: t }); say('You', t); chatIn.value = ''; } }, chatIn, h('button', { type: 'submit' }, 'Send'));
+    const poll = async () => {
+      while (live) {
+        try {
+          const r = await api('GET', base + '?after=' + after);
+          granted = r.granted_mode;
+          status.textContent = (pc && pc.connectionState === 'connected' ? 'Connected' : 'Waiting for the device') + ' · ' + (granted === 'control' ? 'user allowed remote control' : 'user allowed view only');
+          if (!pc) {
+            pc = new RTCPeerConnection({ iceServers: r.ice_servers || [] });
+            pc.ontrack = (e) => { video.srcObject = e.streams[0] || new MediaStream([e.track]); };
+            pc.onicecandidate = (e) => { if (e.candidate) api('POST', base, { type: 'ice', candidate: e.candidate.toJSON() }).catch(() => {}); };
+            pc.ondatachannel = (e) => { dc = e.channel; dc.onmessage = (m) => { try { const x = JSON.parse(m.data); if (x.t === 'chat') say('User', String(x.text).slice(0, 500)); } catch {} }; };
+          }
+          for (const m of r.messages) {
+            after = Math.max(after, m.id);
+            if (m.type === 'offer') { await pc.setRemoteDescription({ type: 'offer', sdp: m.sdp }); await pc.setLocalDescription(await pc.createAnswer()); await api('POST', base, { type: 'answer', sdp: pc.localDescription.sdp }); }
+            else if (m.type === 'ice' && m.candidate) await pc.addIceCandidate(m.candidate).catch(() => {});
+            else if (m.type === 'bye') { status.textContent = 'The user stopped sharing.'; await stop(false); return; }
+          }
+          if (pc) {
+            const rep = await pc.getStats(); let s = '';
+            rep.forEach((x) => {
+              if (x.type === 'inbound-rtp' && x.kind === 'video') {
+                const now = x.timestamp, kbps = lastAt ? Math.round(((x.bytesReceived - lastBytes) * 8) / (now - lastAt)) : 0; lastBytes = x.bytesReceived; lastAt = now;
+                s += (x.frameWidth || 0) + '×' + (x.frameHeight || 0) + ' · ' + Math.round(x.framesPerSecond || 0) + ' fps · ' + kbps + ' kbit/s · lost ' + (x.packetsLost || 0) + ' packets · ';
+              }
+              if (x.type === 'candidate-pair' && x.state === 'succeeded' && x.nominated) s += 'RTT ' + Math.round((x.currentRoundTripTime || 0) * 1000) + ' ms · ';
+            });
+            stats.textContent = s || '—';
+          }
+        } catch (e) { status.textContent = e.message; if (/ended|waiting/.test(e.message)) { await stop(false); return; } }
+        await new Promise((res) => setTimeout(res, 1000));
+      }
+    };
+    poll();
+    return [h('p', {}, h('a', { href: '#support' }, '← Remote Support')), h('h1', {}, 'Remote session'),
+      h('div', { class: 'rs-bar' }, h('button', { type: 'button', onclick: () => video.requestFullscreen && video.requestFullscreen() }, 'Full screen'), mode,
+        h('button', { type: 'button', onclick: () => { stop(true); setTimeout(() => route(), 300); } }, 'Reconnect'), h('button', { type: 'button', class: 'danger', onclick: end }, 'Disconnect'), status),
+      h('div', { class: 'rs-view' }, h('div', { class: 'rs-screen' }, video),
+        h('div', { class: 'rs-chat' }, h('h2', {}, 'Chat'), log, chatForm, h('h2', {}, 'Session information'), stats))];
+  },
+  async security() {
+    const r = await api('GET', 'security');
+    const t = r.totals;
+    const stat = (label, n, cls) => h('div', { class: 'card stat' }, h('b', { class: n ? cls : '' }, n), label);
+    const tone = { protected: 'ok', attention: 'warn', at_risk: 'bad', unavailable: 'muted' };
+    const label = { protected: 'Protected', attention: 'Needs attention', at_risk: 'At risk', unavailable: 'Unavailable' };
+    return [h('h1', {}, 'Security Center'), h('p', { class: 'muted' }, 'Firewall, antivirus and threats as each device last reported them at check-in. Scans, isolation and its release are on each device\'s page; settings are in Policy › WorkSuite Security.'),
+      h('div', { class: 'grid' }, stat('Devices reporting', t.reporting + ' / ' + t.devices), stat('Protected', t.protected, 'ok'), stat('Need attention', t.attention, 'warn'),
+        stat('At risk', t.at_risk, 'bad'), stat('Active threats', t.active_threats, 'bad'), stat('Isolated', t.isolated, 'warn'), stat('Firewall off', t.firewall_off, 'bad')),
+      h('h2', {}, 'Devices'), table(['Device', 'Status', 'Firewall', 'Antivirus', 'Threats', 'Last scan', 'Last seen'], r.devices.map((d) => { const s = d.security;
+        return h('tr', { class: 'click', tabindex: 0, onclick: () => { location.hash = 'device/' + d.id; }, onkeydown: (e) => { if (e.key === 'Enter') location.hash = 'device/' + d.id; } },
+          h('td', {}, h('b', {}, d.hostname || d.id)),
+          h('td', {}, !s ? h('span', { class: 'muted' }, 'Not reported') : h('span', { class: tone[s.overall] || '' }, (label[s.overall] || s.overall) + (s.isolation ? ' · isolated until ' + when(s.isolation.until) : ''))),
+          h('td', {}, !s ? '—' : s.firewall && s.firewall.active ? h('span', { class: 'ok' }, 'On' + (s.firewall.policy_rules ? ' · ' + s.firewall.policy_rules + ' blocked' : '')) : h('span', { class: 'bad' }, 'Off')),
+          h('td', {}, !s || !s.antivirus ? '—' : !s.antivirus.installed ? h('span', { class: 'bad' }, 'Not installed') : !s.antivirus.enabled ? 'Off by policy'
+            : h('span', { class: (s.antivirus.signatures_age_days ?? 0) > 3 ? 'warn' : '' }, 'ClamAV ' + s.antivirus.engine + (s.antivirus.signatures_age_days !== null ? ' · signatures ' + s.antivirus.signatures_age_days + ' d old' : ''))),
+          h('td', {}, !s || !s.threats ? '—' : h('span', { class: s.threats.active ? 'bad' : '' }, s.threats.active + ' active, ' + s.threats.quarantined + ' quarantined')),
+          h('td', {}, s && s.antivirus && s.antivirus.last_scan ? s.antivirus.last_scan.kind + ', ' + ago(s.antivirus.last_scan.finished) + (s.antivirus.last_scan.error ? ' (failed)' : '') : '—'),
+          h('td', {}, ago(d.last_seen))); }))];
+  },
+  async monitoring(arg) {
+    const days = Number(arg) || 7;
+    const r = await api('GET', 'monitoring?days=' + days);
+    const hrs = (s) => (s / 3600).toFixed(1) + ' h';
+    const pick = h('select', { 'aria-label': 'Period', onchange: (e) => { location.hash = 'monitoring/' + e.target.value; } }, [1, 7, 30, 90].map((n) => h('option', { value: n, selected: n === days }, n === 1 ? 'Today' : 'Last ' + n + ' days')));
+    return [h('h1', {}, 'Employee monitoring'),
+      h('div', { class: 'card' }, h('p', { class: r.enabled ? '' : 'warn' }, r.enabled ? 'On. Reports are kept for ' + r.retention_days + ' days.' : 'Off. Turn it on in Policy › Employee monitoring; no activity is collected until then.'),
+        h('p', { class: 'muted' }, 'Aggregate work activity only: active, idle and locked time, time per application, sign-in and lock events. Employees see that monitoring is on and can view their own data. Each time this page is opened it is recorded in Activity.')),
+      h('div', { class: 'row' }, pick),
+      h('h2', {}, 'Employees'), table(['Employee', 'Active', 'Idle', 'Locked', 'Days', 'Top applications', 'Last report'], r.employees.map((e) => h('tr', {},
+        h('td', {}, h('b', {}, e.name), h('div', { class: 'muted' }, e.email + ' · ' + e.devices.join(', '))), h('td', {}, hrs(e.active_s)), h('td', {}, hrs(e.idle_s)), h('td', {}, hrs(e.locked_s)),
+        h('td', {}, String(e.days_reported)), h('td', {}, e.top_apps.slice(0, 5).map((a) => h('div', {}, a.name + ' · ' + hrs(a.active_s)))), h('td', {}, ago(e.last_report))))),
+      h('h2', {}, 'Working hours'), table(['Day', 'Employee', 'Device', 'First active', 'Last active', 'Active', 'Idle'], r.daily.map((x) => h('tr', {},
+        h('td', {}, x.day), h('td', {}, x.name), h('td', {}, x.device), h('td', {}, x.first_active ? new Date(x.first_active).toLocaleTimeString() : '—'),
+        h('td', {}, x.last_active ? new Date(x.last_active).toLocaleTimeString() : '—'), h('td', {}, hrs(x.active_s)), h('td', {}, hrs(x.idle_s)))))];
   },
   async activity() {
     const { items } = await api('GET', 'log');
@@ -427,10 +629,60 @@ function kioskDevice(id, on) {
     h('a', { href: '#policy' }, 'Kiosk settings'))];
 }
 
+const rsViewer = { stop: null };
+const lines = (el) => el.value.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+const assignText = (a) => [a.devices && a.devices.length + ' device(s)', a.users && a.users.join(', '), a.departments && 'departments: ' + a.departments.join(', ')].filter(Boolean).join(' · ');
+const STATE_CLASS = { completed: 'ok', failed: 'bad', rejected: 'bad', expired: 'bad' };
+
+/** Device page: department, installed software from the last inventory, remote install and uninstall. */
+async function deviceSoftwareSection(id, d) {
+  const [sw, cat] = await Promise.all([api('GET', 'devices/' + encodeURIComponent(id) + '/software'), api('GET', 'catalog')]);
+  const dept = h('input', { 'aria-label': 'Department', value: d.department || '', placeholder: 'e.g. Finance' });
+  const pick = h('select', { 'aria-label': 'Catalog app' }, cat.items.filter((i) => i.source !== 'appimage').map((i) => h('option', { value: i.id }, i.name + ' (' + i.id + ')')));
+  const go = (action) => act(() => api('POST', 'software/deploy', { catalog_id: pick.value, action, devices: [id] }), (action === 'install' ? 'Installation' : 'Removal') + ' sent. It runs at the next check-in.');
+  return [h('h2', {}, 'Software'),
+    h('div', { class: 'card row' }, h('label', {}, 'Department', dept), h('button', { onclick: () => act(() => api('PUT', 'devices/' + id + '/department', { department: dept.value }), 'Department saved.') }, 'Save'),
+      d.revoked ? null : [pick, h('button', { onclick: () => go('install') }, 'Install'), h('button', { class: 'danger', onclick: () => go('uninstall') }, 'Uninstall')]),
+    h('p', { class: 'muted' }, sw.reported_at ? sw.items.length + ' installed packages and apps, reported ' + ago(sw.reported_at) + '. Catalog apps first.' : 'The device has not reported its inventory yet.'),
+    table(['App', 'ID', 'Version'], sw.items.slice().sort((a, b) => (b.catalog_name ? 1 : 0) - (a.catalog_name ? 1 : 0)).slice(0, 300).map((x) =>
+      h('tr', {}, h('td', {}, x.catalog_name || '—'), h('td', { class: 'mono' }, x.id), h('td', {}, x.version || '—'))))];
+}
+
+views.software = async () => {
+  const [reqs, inv, dep] = await Promise.all([api('GET', 'software/requests'), api('GET', 'software/inventory'), api('GET', 'software/deployments')]);
+  const host = new Map(inv.devices.map((d) => [d.id, d.hostname || d.id]));
+  const decide = (r, ok) => { const note = ok ? '' : (prompt('Reason shown to the user (optional)') || ''); act(() => api('POST', 'software/requests/' + r.id + '/' + (ok ? 'approve' : 'reject'), { note }), ok ? 'Approved. The app installs at the device\'s next check-in.' : 'Request rejected.'); };
+  const bulk = (app, action) => {
+    const ids = action === 'uninstall' ? app.installed_on : inv.devices.map((d) => d.id).filter((x) => !app.installed_on.includes(x));
+    if (!ids.length) { toast('No devices to change.'); return; }
+    if (confirm((action === 'install' ? 'Install ' : 'Uninstall ') + app.name + ' on ' + ids.length + ' device(s)?')) act(() => api('POST', 'software/deploy', { catalog_id: app.id, action, devices: ids }), 'Sent to ' + ids.length + ' device(s).');
+  };
+  return [h('h1', {}, 'Software Management'),
+    h('p', { class: 'muted' }, 'Who may install what is set on the Policy page (Users may install / uninstall / update). Assign apps and mark them required in the App catalog.'),
+    h('h2', {}, 'Installation requests'),
+    table(['App', 'Requested by', 'Device', 'Reason', 'When', 'Decision'], reqs.items.map((r) => h('tr', {},
+      h('td', { class: 'mono' }, r.catalog_id), h('td', {}, r.username), h('td', {}, r.hostname || r.device_id), h('td', {}, r.reason || '—'), h('td', {}, when(r.at)),
+      h('td', {}, r.state === 'pending' ? h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => decide(r, true) }, 'Approve'), h('button', { onclick: () => decide(r, false) }, 'Reject'))
+        : h('span', { class: r.state === 'approved' ? 'ok' : 'bad' }, r.state + (r.install_state ? ' · install ' + r.install_state : '') + (r.note ? ' (' + r.note + ')' : '')))))),
+    h('h2', {}, 'Inventory'),
+    table(['App', 'Assigned', 'Installed', 'Missing (required)', ''], inv.apps.map((a) => h('tr', {},
+      h('td', {}, h('b', {}, a.name), a.required ? h('span', { class: 'chip' }, ' required') : null, a.blocked ? h('span', { class: 'chip bad' }, ' blocked') : null, h('div', { class: 'muted mono' }, a.id)),
+      h('td', {}, a.assign ? assignText(a.assign) : 'Everyone', h('div', { class: 'muted' }, a.assigned_devices + ' device(s)')),
+      h('td', {}, String(a.installed_on.length)), h('td', { class: a.missing_on.length ? 'warn' : '' }, a.missing_on.map((x) => host.get(x)).join(', ') || '—'),
+      h('td', {}, a.id.startsWith('appimage:') ? null : h('div', { class: 'row' }, a.blocked ? null : h('button', { onclick: () => bulk(a, 'install') }, 'Install everywhere'), h('button', { class: 'danger', onclick: () => bulk(a, 'uninstall') }, 'Uninstall everywhere')))))),
+    h('h2', {}, 'Devices'),
+    table(['Device', 'Department', 'Apps', 'Catalog apps'], inv.devices.map((d) => h('tr', { class: 'click', tabindex: 0, onclick: () => { location.hash = 'device/' + d.id; } },
+      h('td', {}, d.hostname || d.id), h('td', {}, d.department || '—'), h('td', {}, d.reported ? String(d.app_count) : 'not reported'), h('td', {}, d.catalog_apps.join(', ') || '—')))),
+    h('h2', {}, 'Deployments'),
+    table(['App', 'Action', 'Device', 'Sent', 'Status'], dep.items.map((x) => h('tr', {}, h('td', { class: 'mono' }, x.catalog_id), h('td', {}, x.action), h('td', {}, x.hostname || x.device_id), h('td', {}, when(Date.parse(x.issued_at))),
+      h('td', {}, h('span', { class: STATE_CLASS[x.state] || 'warn' }, x.state + (x.reason ? ' (' + x.reason + ')' : ''))))))];
+};
+
 async function route() {
+  if (rsViewer.stop && !location.hash.startsWith('#viewer/')) rsViewer.stop();
   const [view, arg] = (location.hash.slice(1) || 'overview').split('/');
   const fn = views[view] || views.overview;
-  for (const a of document.querySelectorAll('.side a')) a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + (view === 'device' ? 'devices' : view === 'problem' ? 'problems' : view));
+  for (const a of document.querySelectorAll('.side a')) a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + (view === 'device' ? 'devices' : view === 'problem' ? 'problems' : view === 'viewer' ? 'support' : view));
   for (const a of document.querySelectorAll('.side a[aria-current]')) a.setAttribute('aria-current', 'page');
   const main = $('#main');
   try { main.replaceChildren(...[await fn(arg ? decodeURIComponent(arg) : undefined)].flat(Infinity).filter((x) => x != null)); main.focus(); }

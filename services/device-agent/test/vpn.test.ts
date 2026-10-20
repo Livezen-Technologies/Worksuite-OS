@@ -133,6 +133,8 @@ function world(opts: { orgVpn?: Partial<VpnConfig> | false; policy?: Omit<Policy
     async ack() {}, async inventory() {}, async diagnostics() {}, async audit() {},
     async vpn() { return vpnFor() as VpnConfig; },
     async vpnPeer(pub) { s.sentBodies.push({ public_key: pub }); s.peerKey = pub; return vpnFor() as VpnConfig; },
+    async remoteSupportCommands() { return { commands: [] }; },
+    async remoteSupportState() {},
   };
   const host: Host = {
     async generateDeviceKey() { return { publicKeyPem: 'PEM', tpmBacked: false }; },
@@ -140,7 +142,7 @@ function world(opts: { orgVpn?: Partial<VpnConfig> | false; policy?: Omit<Policy
     async inventory() { return {}; },
     publishCredential() {}, publishPolicy() {}, publishStatus() {},
     async lockAllSessions() {}, async applyEnforcement() {}, setOfflineAccessBlock() {},
-    async installApproved() {}, async scheduleUpdate() {}, async scheduleReboot() {},
+    async installApproved() {}, async removeApplication() {}, async scheduleUpdate() {}, async scheduleReboot() {},
     async collectDiagnostics(p) { return { profile: p, sha256: '', content: '' }; },
     async isFullyEncrypted() { return true; },
     async wipeWorkSuiteData() {}, async cryptoErase() {}, audit() {},

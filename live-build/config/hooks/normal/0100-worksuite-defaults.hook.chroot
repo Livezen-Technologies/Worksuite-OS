@@ -19,6 +19,13 @@ systemctl enable greetd.service worksuite-device-agent.service worksuite-package
 systemctl enable nftables.service
 grep -q "table inet worksuite_filter" /etc/nftables.conf || { echo "WorkSuite nftables.conf missing" >&2; exit 1; }
 systemctl set-default graphical.target
+# Wi-Fi and Bluetooth (#31): NetworkManager (wpa_supplicant is D-Bus activated by it) and bluetoothd start at boot, and
+# systemd-rfkill restores each radio's last state. A missing piece meant no Wi-Fi networks or no Bluetooth at all.
+systemctl enable NetworkManager.service bluetooth.service
+for b in wpa_supplicant rfkill bluetoothctl nmcli; do
+  PATH=/usr/sbin:/usr/bin:/sbin:/bin command -v "$b" >/dev/null || { echo "$b missing: Wi-Fi/Bluetooth would not work" >&2; exit 1; }
+done
+grep -qx 'wifi.backend=wpa_supplicant' /etc/NetworkManager/conf.d/10-worksuite-wifi.conf || { echo "NetworkManager Wi-Fi config missing" >&2; exit 1; }
 # Seat access through logind (pam_systemd gives the active session the seat). seatd, when present, is tried first by
 # libseat and only admits the video group, which locked out the greeter (_greetd) and every user: no display at all.
 if [ -e /usr/lib/systemd/system/seatd.service ]; then systemctl disable seatd.service >/dev/null 2>&1 || true; systemctl mask seatd.service; fi

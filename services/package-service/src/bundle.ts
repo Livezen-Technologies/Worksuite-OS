@@ -116,5 +116,6 @@ export function extractBundle(path: string, dir: string, o: OpenBundleOptions): 
       debs.push(dest);
     }
   } finally { closeSync(fd); }
-  return { manifest, debs };
+  // Sorted, so apt gets the same command line whatever order the archive lists its members in.
+  return { manifest, debs: debs.sort() };
 }

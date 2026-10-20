@@ -14,6 +14,7 @@ import {
 } from './webapps'
 import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
 import { xdgDirs } from './xdgDirs'
+import { APP_WINDOW } from './windowDefaults'
 
 const fetchFn: Fetch = (url, init) => fetch(url, { headers: init?.headers, redirect: 'follow' })
 const broker = (m: string, p?: Record<string, unknown>) => brokerCall(m, p ?? {}, m === 'SignIn' ? 6 * 60_000 : 15_000)
@@ -160,7 +161,7 @@ ${action ? `<button id="b">${esc(action)}</button><script>document.getElementByI
 
   function makeWindow(accountId?: string) {
     const w = new BrowserWindow({
-      width: 1280, height: 820, minWidth: 480, minHeight: 360, autoHideMenuBar: true, backgroundColor: '#f8fafc',
+      ...APP_WINDOW, width: 1280, height: 820, backgroundColor: '#f8fafc',
       title: `WorkSuite ${TITLE[req.id] ?? req.id}`,
       icon: `/usr/share/icons/hicolor/256x256/apps/worksuite-${req.id}.png`,
       webPreferences: webPrefs(accountId),

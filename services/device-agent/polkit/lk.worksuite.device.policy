@@ -16,4 +16,15 @@
          "worksuite-device-agent enroll" through pkexec: server URL as an option, token on stdin. -->
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/worksuite-device-agent</annotate>
   </action>
+  <action id="lk.worksuite.security.scan">
+    <description>Scan this device for malware</description>
+    <message>Authentication is required to scan this device for malware</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <!-- lk.worksuite.DeviceAgent1.StartSecurityScan (Settings › Privacy & security › WorkSuite Security). A scan
+         only reads files and quarantines detections under the organization's policy; it changes no setting. -->
+  </action>
 </policyconfig>

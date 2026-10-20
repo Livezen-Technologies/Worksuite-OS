@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, oskControlLine, oskSocketSender, worksuiteOskArgs, labwcTouchBlock, carryDesktops, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
+  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, parseOskState, oskControlLine, oskSocketSender, worksuiteOskArgs, labwcTouchBlock, carryDesktops, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
   parseOrientation, parsePenLine, parseSwitchLine, parseUdevProps, saveTouch, touchBridge, touchModeOn, type Spawn,
 } from './touch'
 import type { Exec } from './system'
@@ -190,6 +190,22 @@ describe('WorkSuite keyboard (worksuite-osk)', () => {
     b.oskToggle()
     b.oskToggle()
     expect(lines.slice(-2)).toEqual(['toggle\n', 'toggle\n'])
+  })
+  it('follows the keyboard\'s own show/hide reports, so a closed keyboard is not shown as open', async () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))
+    let out: (l: string) => void = () => {}
+    const sp: Spawn = () => ({ kill: () => {}, onLine: (cb) => { out = cb }, onExit: () => {} })
+    const states: boolean[] = []
+    const b = touchBridge(home, async () => ({ code: 1, stdout: '', stderr: '' }), sp, home, () => true, () => {})
+    b.onChange((s) => states.push(s.osk.visible))
+    await b.start()
+    b.osk(true)
+    out('visible 0')     // its own hide key
+    expect((await b.state()).available && ((await b.state()) as { value: { osk: { visible: boolean } } }).value.osk.visible).toBe(false)
+    expect(states.at(-1)).toBe(false)
+    expect(parseOskState('visible 1')).toBe(true)
+    expect(parseOskState('visible 2')).toBeNull()
+    expect(parseOskState('noise')).toBeNull()
   })
   it('falls back to wvkbd at once when worksuite-osk cannot run (Settings never says "not installed")', async () => {
     const home = mkdtempSync(path.join(tmpdir(), 'ws-osk-'))

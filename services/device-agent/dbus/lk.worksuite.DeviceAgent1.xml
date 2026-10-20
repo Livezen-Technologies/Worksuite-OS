@@ -20,6 +20,11 @@
     </method>
     <!-- No authorization required: triggers a policy fetch + heartbeat. -->
     <method name="RefreshNow"/>
+    <!-- polkit: lk.worksuite.security.scan. kind: quick (files changed since the last scan) | full. Returns once
+         started; progress and results are in /run/worksuite-device-agent/security.json. -->
+    <method name="StartSecurityScan">
+      <arg name="kind" type="s" direction="in"/>
+    </method>
     <property name="Enrolled" type="b" access="read"/>
     <property name="DeviceId" type="s" access="read"/>
     <property name="LastCheckIn" type="t" access="read"/>

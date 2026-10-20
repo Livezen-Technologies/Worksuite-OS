@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { nextState, requestLock, type SessionEvent, type SessionState } from './lib/session'
 import { os } from './lib/os'
 import type { WindowApp } from './screens/types'
@@ -18,6 +18,9 @@ import SafeLauncher from './screens/SafeLauncher'
 import SnippingTool, { OPEN_FILES_EVENT } from './screens/SnippingTool'
 import TextContextMenu from './components/TextContextMenu'
 import { captureApi, SNIP_EDIT_EVENT, snipState, type SnipMode } from './lib/captureApi'
+import { ShellWindowsHost, SHELL_APP_ICON, type ShellWindowActions, type ShellWindowContent } from './components/ShellWindow'
+import { activeWin, closeWin, focusWin, minimizeWin, openWin, setRect, taskbarClick, toggleMaxWin, type ShellWins } from './lib/shellWindows'
+import { t } from './i18n'
 
 // `?mode=installer` boots the live-ISO installer; `?mode=recovery` the recovery launcher.
 const mode = new URLSearchParams(location.search).get('mode')
@@ -33,7 +36,10 @@ export default function App() {
   // The account's full name from /etc/passwd (GECOS), shown on the lock screen and the first-run greeting.
   const [realName, setRealName] = useState('')
   const [firstRun, setFirstRun] = useState(() => localStorageGet('ws.firstRunDone') !== '1')
-  const [win, setWin] = useState<WindowApp | null>(null)
+  // The shell's own windows, bottom to top (lib/shellWindows.ts): several can be open, moved, resized, minimized.
+  const [wins, setWins] = useState<ShellWins>([])
+  const setWin = useCallback((app: WindowApp | null) => setWins((w) => (app ? openWin(w, app) : [])), [])
+  const closeApp = useCallback((app: WindowApp) => setWins((w) => closeWin(w, app)), [])
   // An archive opened from elsewhere (Files is the default handler for archive types): open it in Files.
   const [archive, setArchive] = useState<{ root: string; rel: string; n: number } | null>(null)
   useEffect(() => os.onOpenArchive((at) => { setArchive({ ...at, n: Date.now() }); setWin('files') }), [])
@@ -48,11 +54,35 @@ export default function App() {
     return () => { window.removeEventListener(OPEN_FILES_EVENT, files); window.removeEventListener(SNIP_EDIT_EVENT, edit) }
   }, [])
   // New in the Snipping Tool: the window closes (the shell goes below the apps) and the snip opens back in it.
-  const newSnip = (mode: SnipMode, delay: number) => { snipState.fromApp = true; setWin(null); void captureApi?.snipStart(mode, delay) }
+  const newSnip = (mode: SnipMode, delay: number) => { snipState.fromApp = true; closeApp('snip'); void captureApi?.snipStart(mode, delay) }
   const [installing, setInstalling] = useState(mode === 'installer')
   const inSession = (state === 'active' && !firstRun) || state === 'locked' || state === 'suspending'
   const notes = useNotices(inSession)
   const send = useCallback((e: SessionEvent) => setState((s) => nextState(s, e)), [])
+  const actions = useMemo<ShellWindowActions>(() => ({
+    focus: (app) => setWins((w) => focusWin(w, app)),
+    close: (app) => {
+      setWins((w) => closeWin(w, app))
+      if (app === 'files') { setArchive(null); setFolder(null) }
+      if (app === 'snip') setShotId(0)
+    },
+    minimize: (app) => setWins((w) => minimizeWin(w, app)),
+    toggleMax: (app) => setWins((w) => toggleMaxWin(w, app)),
+    move: (app, r) => setWins((w) => setRect(w, app, r)),
+  }), [])
+  const active = activeWin(wins)
+  const content = (app: WindowApp): ShellWindowContent => {
+    const close = () => actions.close(app)
+    const on = active === app
+    switch (app) {
+      case 'files': return { title: t('files.title'), icon: SHELL_APP_ICON.files, closeLabel: t('files.close'), body: <Files archive={archive} folder={folder} active={on} onClose={close} /> }
+      case 'appcenter': return { title: t('launcher.appCenter'), icon: SHELL_APP_ICON.appcenter, body: <AppCenter active={on} onClose={close} /> }
+      case 'settings': return { title: t('launcher.settings'), icon: SHELL_APP_ICON.settings, closeLabel: t('settings.close'), body: <Settings active={on} onClose={close} /> }
+      case 'monitor': return { title: t('monitor.title'), icon: SHELL_APP_ICON.monitor, body: <Monitor active={on} onClose={close} /> }
+      case 'snip': return { title: t('snip.app'), icon: SHELL_APP_ICON.snip, body: <SnippingTool shotId={shotId} active={on} onNew={newSnip} onClose={close} /> }
+    }
+  }
+  const taskbarWins = wins.map((w) => ({ app: w.app, title: content(w.app).title, icon: SHELL_APP_ICON[w.app], minimized: w.minimized, active: active === w.app }))
 
   // The lock screen and first-run greeting name the real session user (the login name), never a placeholder, also
   // when the session started without the shell's own sign-in.
@@ -93,7 +123,7 @@ export default function App() {
       return <Greeter onSignIn={(u) => { setUser(u); send('authSuccess') }} />
     case 'locked':
     case 'suspending':
-      return <Lock user={user} name={realName || undefined} notices={notes.notices} onUnlock={() => send('unlock')} />
+      return <Lock user={user} name={realName || undefined} notices={notes.notices} unread={notes.unread} onUnlock={() => send('unlock')} />
     case 'recovery':
       return <Recovery onRestartShell={() => send('shellRestarted')} onLogout={() => send('logout')} />
     case 'loggingOut':
@@ -101,12 +131,9 @@ export default function App() {
     case 'active':
       if (firstRun) return <FirstRun userName={realName || displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
       return (
-        <Desktop user={user} fullName={realName || undefined} onLock={() => { void requestLock(() => os.lock(), () => send('lock')) }} onLogout={() => { void os.logout(); if (!(window as { worksuite?: unknown }).worksuite) send('logout') /* Electron: the session ends; never the preview greeter */ }} onOpen={setWin} notes={notes}>
-          {win === 'files' && <Files archive={archive} folder={folder} onClose={() => { setWin(null); setArchive(null); setFolder(null) }} />}
-          {win === 'appcenter' && <AppCenter onClose={() => setWin(null)} />}
-          {win === 'settings' && <Settings onClose={() => setWin(null)} />}
-          {win === 'monitor' && <Monitor onClose={() => setWin(null)} />}
-          {win === 'snip' && <SnippingTool shotId={shotId} onNew={newSnip} onClose={() => { setWin(null); setShotId(0) }} />}
+        <Desktop user={user} fullName={realName || undefined} onLock={() => { void requestLock(() => os.lock(), () => send('lock')) }} onLogout={() => { void os.logout(); if (!(window as { worksuite?: unknown }).worksuite) send('logout') /* Electron: the session ends; never the preview greeter */ }} onOpen={setWin} notes={notes}
+          shellWindows={taskbarWins} onShellWindow={(app, how) => setWins((w) => (how === 'focus' ? focusWin(w, app) : taskbarClick(w, app)))}>
+          {wins.length > 0 && <ShellWindowsHost wins={wins} content={content} actions={actions} />}
         </Desktop>
       )
   }

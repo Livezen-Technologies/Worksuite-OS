@@ -19,6 +19,8 @@ import path from 'node:path'
 import { realExec, type Avail, type Exec } from './system'
 import { xdgDirs } from './xdgDirs'
 import { extractShortcutsBlock, mergeShortcutsBlock } from '../src/lib/shortcuts'
+import { rcWithTheme } from './windowTheme'
+import { extractPointerBlock, mergePointerBlock } from './pointer'
 
 // ---------- devices ----------
 export type DevKind = 'touchscreen' | 'tablet' | 'tablet-pad' | 'switch'
@@ -212,15 +214,22 @@ const DESKTOPS = /<desktops\b[^>]*\/>|<desktops\b[^>]*>[\s\S]*?<\/desktops>/
 const SWITCHER = /<windowSwitcher\b[^>]*?\/?>/
 /** The Wayland bridge keeps the desktops (count, names) and Alt+Tab's scope in the user's rc.xml
  *  (native/wayland-bridge/worksuite_bridge/workspace.py), and Settings › Keyboard › Shortcuts its block of key
- *  bindings (src/lib/shortcuts.ts): a rewrite from the system file carries them over. */
+ *  bindings (src/lib/shortcuts.ts), Settings › Mouse & touchpad its pointer block: a rewrite from the system file
+ *  carries them over. */
 export function carryDesktops(previous: string, next: string): string {
   let out = next
   for (const re of [DESKTOPS, SWITCHER]) {
     const old = previous.match(re)?.[0]
     if (old && re.test(out)) out = out.replace(re, () => old)
   }
+  // The title bar theme Settings › Appearance chose (electron/windowTheme.ts).
+  const theme = /<theme>(?:(?!<\/theme>)[\s\S])*?<name>([^<]*)<\/name>/.exec(previous)?.[1]
+  if (theme) out = rcWithTheme(out, theme.trim()) ?? out
   const keys = extractShortcutsBlock(previous)
-  return keys ? mergeShortcutsBlock(out, keys) : out
+  if (keys) out = mergeShortcutsBlock(out, keys)
+  // Settings › Mouse & touchpad keeps its <libinput> block here too (electron/pointer.ts).
+  const pointer = extractPointerBlock(previous)
+  return pointer ? mergePointerBlock(out, pointer) : out
 }
 
 // ---------- on-screen keyboard ----------
@@ -285,6 +294,12 @@ const realSpawn: Spawn = (cmd, args) => {
     p.stdout?.on('data', (c: string) => { buf += c; let i; while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); subs.forEach((f) => f(l)) } })
     return { kill: (sig) => { p.kill(sig) }, onLine: (cb) => { subs.push(cb) }, onExit: (cb) => { p.on('exit', cb) } }
   } catch { return null }
+}
+
+/** worksuite-osk's stdout state line ("visible 1" / "visible 0", services/session/osk control.state_line) → shown. */
+export function parseOskState(line: string): boolean | null {
+  const m = /^visible ([01])$/.exec(line.trim())
+  return m ? m[1] === '1' : null
 }
 
 /** One line to worksuite-osk's control socket (0600, in the user's runtime dir). */
@@ -423,6 +438,12 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
     oskStarted = Date.now()
     const ours = oskIsOurs
     const self = osk
+    // worksuite-osk reports each show/hide, also its own hide key: the shell's state follows the keyboard.
+    osk?.onLine((l) => {
+      const v = parseOskState(l)
+      if (v === null || osk !== self || v === st.osk.visible) return
+      st.osk.visible = v; emit()
+    })
     osk?.onExit(() => {
       if (osk !== self) return   // stopOsk() or a newer keyboard
       osk = null; st.osk = { available: false, visible: false }

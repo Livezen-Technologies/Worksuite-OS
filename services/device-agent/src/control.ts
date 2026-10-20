@@ -34,6 +34,14 @@ export async function controlDispatch(h: ControlHandlers, line: string): Promise
 }
 
 export function serveControl(path: string, h: ControlHandlers): Server {
+  return serveSocket(path, (line) => controlDispatch(h, line), 0o600);
+}
+
+/**
+ * One JSON request line → one JSON reply. mode 0o600: root only. The remote-support consent socket is 0o666: any
+ * local user may end a session or drop control; granting needs the seat user's nonce (src/remoteSupport.ts).
+ */
+export function serveSocket(path: string, dispatch: (line: string) => Promise<{ result?: unknown; error?: string }>, mode: number): Server {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   rmSync(path, { force: true });
   const server = createServer((sock) => {
@@ -44,13 +52,13 @@ export function serveControl(path: string, h: ControlHandlers): Server {
       if (buf.length > 16 * 1024) return sock.destroy();
       const nl = buf.indexOf('\n'); if (nl < 0) return;
       const line = buf.slice(0, nl); buf = '';
-      const res = await controlDispatch(h, line);
+      const res = await dispatch(line);
       if (!sock.destroyed) sock.end(JSON.stringify(res) + '\n');
     });
     sock.on('error', () => {});
   });
   // umask first, then chmod: the socket is never reachable by another user, not even for an instant.
   const old = process.umask(0o177);
-  server.listen(path, () => { process.umask(old); chmodSync(path, 0o600); });
+  server.listen(path, () => { process.umask(old); chmodSync(path, mode); });
   return server;
 }

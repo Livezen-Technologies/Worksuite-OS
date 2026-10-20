@@ -10,7 +10,9 @@ import { hashPassword } from './oauth.ts';
 import { activeKey, createKey, signEnvelope, signFlat } from './signing.ts';
 import { removePeer } from './vpn.ts';
 
-const COMMANDS = ['RefreshPolicy', 'InstallApprovedApplication', 'ScheduleUpdate', 'RequestLock', 'RebootDuringWindow', 'CollectApprovedDiagnostics', 'RemoteWipe'];
+const COMMANDS = ['RefreshPolicy', 'InstallApprovedApplication', 'ScheduleUpdate', 'RequestLock', 'RebootDuringWindow', 'CollectApprovedDiagnostics', 'RemoteWipe', 'RemoveApplication',
+  // WorkSuite Security remote incident response (services/device-agent/src/securityCenter.ts).
+  'StartMalwareScan', 'IsolateEndpoint', 'ReleaseIsolation', 'RemoteSupportRequest', 'RemoteSupportEnd'];
 
 export function createOrg(db: DatabaseSync, name: string, o: { requireDevice?: boolean } = {}): number {
   const r = db.prepare('INSERT INTO orgs (name, require_device, modules) VALUES (?, ?, ?)').run(name, o.requireDevice ? 1 : 0, JSON.stringify(DEFAULT_MODULES));
@@ -147,7 +149,8 @@ export function emergencyRelease(db: DatabaseSync, m: Record<string, unknown>, a
 }
 
 export function grantPermission(db: DatabaseSync, email: string, permission: string, grant = true) {
-  if (permission !== RELEASE_PERMISSION && permission !== WIPE_PERMISSION) throw new Error(`unknown permission ${permission}`);
+  // desktop.devices.remote_support: Remote Support (src/remoteSupport.ts REMOTE_SUPPORT_PERMISSION).
+  if (permission !== RELEASE_PERMISSION && permission !== WIPE_PERMISSION && permission !== 'desktop.devices.remote_support') throw new Error(`unknown permission ${permission}`);
   const u = db.prepare('SELECT id, permissions FROM users WHERE email = ?').get(email.trim().toLowerCase()) as { id: number; permissions: string } | undefined;
   if (!u) throw new Error('no such user');
   const set = new Set(JSON.parse(u.permissions) as string[]);
