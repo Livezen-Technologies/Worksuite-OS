@@ -49,7 +49,7 @@ export default function SnippingTool({ onClose, shotId = 0, onNew }: WindowProps
   }
 
   return (
-    <div role="dialog" aria-modal="false" aria-label={t('snip.app')} className="fixed inset-x-0 top-0 bottom-[52px] z-50 flex flex-col bg-[#0A1A3D] font-sans text-[#E8EEFA]"
+    <div role="dialog" aria-modal="false" aria-label={t('snip.app')} className="relative flex h-full w-full flex-col bg-[#0A1A3D] font-sans text-[#E8EEFA]"
       onKeyDown={(e) => { if (e.key === 'Escape' && !document.querySelector('[aria-modal="true"]') && !(e.target as HTMLElement).closest('textarea')) onClose() }}>
       <header className="flex flex-wrap items-center gap-2 border-b border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.6)] px-4 py-2.5">
         <span className="flex items-center gap-2 pe-3 text-sm font-semibold"><Svg d="M6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12" size={18} stroke="#18D4F0" />{t('snip.app')}</span>
@@ -70,9 +70,6 @@ export default function SnippingTool({ onClose, shotId = 0, onNew }: WindowProps
           </select>
         </label>
         <span className="flex-1" />
-        <button type="button" aria-label={t('common.close')} title={t('common.close')} onClick={onClose} className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#8FA3C8] hover:bg-white/10 hover:text-white">
-          <Svg d="M6 6l12 12M18 6L6 18" size={16} />
-        </button>
       </header>
       {allowed === false && captureApi && <p role="status" className="m-0 bg-[rgba(217,69,43,0.15)] px-4 py-2 text-[13px] text-[#FFB4A6]">{t('snip.blockedBody')}</p>}
       {shot ? <Editor key={shot.id} shot={shot} /> : (
