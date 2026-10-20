@@ -33,6 +33,9 @@ describe('batterySummary', () => {
     expect(batterySummary(bat({ state: 'fully-charged', on_battery: false, percentage: 100 }))?.full).toBe(true)
     expect(batterySummary(bat({ percentage: 9 }))).toEqual({ percent: 9, charging: false, full: false, low: true })
   })
+  it('#43: plugged in at a charge threshold is neither charging nor low', () => {
+    expect(batterySummary(bat({ state: 'pending-charge', on_battery: false, percentage: 10 }))).toEqual({ percent: 10, charging: false, full: false, low: false })
+  })
 })
 
 describe('unreadCounts', () => {

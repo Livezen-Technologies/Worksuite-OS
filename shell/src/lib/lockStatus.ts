@@ -37,8 +37,10 @@ export function batterySummary(r: Avail<BatteryState> | null): BatterySummary | 
   const b = r.value
   const percent = b.percentage == null ? null : Math.max(0, Math.min(100, Math.round(b.percentage)))
   const full = b.state === 'fully-charged'
-  const charging = b.state === 'charging' || (!b.on_battery && !full && b.state !== 'discharging')
-  return { percent, charging, full, low: !charging && !full && percent != null && percent <= 15 }
+  // Only a battery that says so is charging: on AC at a charge threshold ("pending-charge") it is just plugged in,
+  // as the taskbar and Settings › Power say (#43).
+  const charging = !b.on_battery && b.state === 'charging'
+  return { percent, charging, full, low: b.on_battery && percent != null && percent <= 15 }
 }
 
 // App names that carry messages (WorkSuite Mail and Chat, and the messengers users install from the App Center).

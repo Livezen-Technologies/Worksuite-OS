@@ -165,6 +165,7 @@ const si: Partial<Record<MessageKey, string>> = {
   'settings.net.noWifi': 'Wi-Fi ඇඩැප්ටරයක් නැත',
   'common.off': 'අක්‍රියයි',
   'settings.net.connectedTo': '{name} වෙත සම්බන්ධිතයි',
+  'settings.net.saved': 'සුරකින ලදී',
   'common.notConnected': 'සම්බන්ධ නැත',
   'settings.net.available': 'ලබා ගත හැකි ජාල',
   'settings.net.none': 'ජාල හමු නොවීය',

@@ -165,6 +165,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'settings.net.noWifi': 'Wi-Fi தகவி இல்லை',
   'common.off': 'அணை',
   'settings.net.connectedTo': '{name} உடன் இணைக்கப்பட்டது',
+  'settings.net.saved': 'சேமிக்கப்பட்டது',
   'common.notConnected': 'இணைக்கப்படவில்லை',
   'settings.net.available': 'கிடைக்கும் பிணையங்கள்',
   'settings.net.none': 'பிணையங்கள் எதுவும் கிடைக்கவில்லை',

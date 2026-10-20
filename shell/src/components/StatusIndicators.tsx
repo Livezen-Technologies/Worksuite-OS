@@ -53,8 +53,8 @@ function BatteryGlyph({ b }: { b: BatterySummary }) {
 
 /** The status row; each indicator has a text label for screen readers and a tooltip. */
 export default function StatusIndicators({ className = '' }: { className?: string }) {
-  const net = netSummary(useSystem(loaders.network, POLL_MS).state)
-  const bat = batterySummary(useSystem(loaders.battery, POLL_MS).state)
+  const net = netSummary(useSystem(loaders.network, POLL_MS, 'network').state)
+  const bat = batterySummary(useSystem(loaders.battery, POLL_MS, 'battery').state)
   const nl = netLabel(net)
   return (
     <ul aria-label={t('lock.status')} className={`m-0 flex list-none items-center gap-4 p-0 ${className}`}>
