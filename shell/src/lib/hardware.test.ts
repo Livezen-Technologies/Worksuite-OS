@@ -27,3 +27,12 @@ describe('hardware view', () => {
     expect(offerLocked({ ...o, category: 'security' })).toBe(true)
   })
 })
+
+describe('driver job phases (#45)', () => {
+  it('splits "<offer>|<step>" and reads older offer-only phases as installing', async () => {
+    const { driverJobPhase } = await import('./hardware')
+    expect(driverJobPhase('fwupd:0123|downloading')).toEqual({ offer: 'fwupd:0123', step: 'downloading' })
+    expect(driverJobPhase('fw:firmware-iwlwifi|done')).toEqual({ offer: 'fw:firmware-iwlwifi', step: 'done' })
+    expect(driverJobPhase('gpu:nvidia-driver')).toEqual({ offer: 'gpu:nvidia-driver', step: 'installing' })
+  })
+})

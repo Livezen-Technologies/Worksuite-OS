@@ -46,6 +46,13 @@ export const driversEn = {
   'drv.notice.generic': 'Drivers available for this computer',
   'drv.notice.body': 'Open Settings › Drivers to install them.',
   'drv.notice.view': 'View',
+  'drv.step.refreshing': 'Getting the latest package list…',
+  'drv.step.downloading': 'Downloading… {percent}%',
+  'drv.installedVersion': 'Installed · {version}',
+  'drv.notInstalled': 'Not installed',
+  'drv.installedTitle': 'Recently installed',
+  'drv.installedOn': 'Installed {time}',
+  'drv.restartPending': 'Restart your computer to finish installing drivers.',
 }
 
 export const driversSi: Record<keyof typeof driversEn, string> = {
@@ -92,6 +99,13 @@ export const driversSi: Record<keyof typeof driversEn, string> = {
   'drv.notice.generic': 'මෙම පරිගණකය සඳහා ධාවක ඇත',
   'drv.notice.body': 'ඒවා ස්ථාපනය කිරීමට සැකසුම් › ධාවක විවෘත කරන්න.',
   'drv.notice.view': 'බලන්න',
+  'drv.step.refreshing': 'නවතම පැකේජ ලැයිස්තුව ලබා ගනිමින්…',
+  'drv.step.downloading': 'බාගත වෙමින්… {percent}%',
+  'drv.installedVersion': 'ස්ථාපිතයි · {version}',
+  'drv.notInstalled': 'ස්ථාපනය නොවීය',
+  'drv.installedTitle': 'මෑතකදී ස්ථාපිත',
+  'drv.installedOn': 'ස්ථාපිත {time}',
+  'drv.restartPending': 'ධාවක ස්ථාපනය අවසන් කිරීමට ඔබේ පරිගණකය නැවත අරඹන්න.',
 }
 
 export const driversTa: Record<keyof typeof driversEn, string> = {
@@ -138,4 +152,11 @@ export const driversTa: Record<keyof typeof driversEn, string> = {
   'drv.notice.generic': 'இந்தக் கணினிக்கு இயக்கிகள் உள்ளன',
   'drv.notice.body': 'அவற்றை நிறுவ அமைப்புகள் › இயக்கிகள் ஐத் திறக்கவும்.',
   'drv.notice.view': 'பார்',
+  'drv.step.refreshing': 'சமீபத்திய தொகுப்புப் பட்டியலைப் பெறுகிறது…',
+  'drv.step.downloading': 'பதிவிறக்குகிறது… {percent}%',
+  'drv.installedVersion': 'நிறுவப்பட்டது · {version}',
+  'drv.notInstalled': 'நிறுவப்படவில்லை',
+  'drv.installedTitle': 'சமீபத்தில் நிறுவப்பட்டவை',
+  'drv.installedOn': 'நிறுவப்பட்டது {time}',
+  'drv.restartPending': 'இயக்கிகளை நிறுவி முடிக்க உங்கள் கணினியை மறுதொடக்கம் செய்யுங்கள்.',
 }

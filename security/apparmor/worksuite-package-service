@@ -13,6 +13,9 @@ profile worksuite-package-service flags=(attach_disconnected) {
   capability dac_override dac_read_search fowner chown setuid setgid kill,
   network inet stream,
   network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network netlink raw,
   network unix stream,
   dbus (send, receive, bind) bus=system,
   unix (create, connect, send, receive) type=stream,
@@ -38,6 +41,9 @@ profile worksuite-package-service flags=(attach_disconnected) {
   /var/log/worksuite/** rwk,
   /run/worksuite-device-agent/policy.json r,
   /run/reboot-required r,
+  # Unsigned duplicates of the signed Debian sources are commented out at start (#45, main.ts tidySources).
+  /etc/apt/sources.list rw,
+  /etc/apt/sources.list.worksuite-tmp rw,
   /var/lib/dpkg/** r,
   /var/lib/apt/** r,
 

@@ -130,6 +130,44 @@ describe('Settings › Drivers', () => {
   })
 })
 
+describe('Settings › Drivers installs on real hardware (#45)', () => {
+  it('a job that fails before the install call returns still shows its error, and Try again installs again', async () => {
+    mockOs(report())
+    const listeners: ((e: PackageJobEvent) => void)[] = []
+    vi.spyOn(os, 'onPkgJob').mockImplementation((cb) => { listeners.push(cb); return () => { listeners.splice(listeners.indexOf(cb), 1) } })
+    let n = 0
+    const install = vi.spyOn(os, 'hwInstallDrivers').mockImplementation(async () => {
+      const job = `/job/${++n}`
+      // The service queues and fails the job before busctl has printed its path.
+      if (n === 1) listeners.forEach((l) => l({ job, kind: 'finished', result: 'failed', error: "apt-get: E: Failed to fetch https://deb.debian.org/x.deb  Temporary failure resolving 'deb.debian.org'" }))
+      return { ok: true, value: job }
+    })
+    const el = await mount(<DriversPanel onOpenUpdates={() => {}} />)
+    await act(async () => { [...el.querySelectorAll('button')].find((b) => b.textContent === 'Install selected')!.click() })
+    await flush()
+    const alert = document.body.querySelector('[role=alert]')!
+    expect(alert.textContent).toMatch(/internet|connect|offline/i)
+    expect(document.body.textContent).toContain('Not installed')
+    await act(async () => { [...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Try again')!.click() })
+    await flush()
+    expect(install).toHaveBeenCalledTimes(2)
+    expect(document.body.querySelector('[role=alert]')).toBeNull()
+    vi.spyOn(os, 'hwDriverReport').mockResolvedValue({ ok: true, value: report({ offers: [NV], installed: [{ id: FW.id, name: FW.name, version: '20250410-2', restart: false, at: 2 }] }) })
+    await act(async () => { listeners.forEach((l) => l({ job: '/job/2', kind: 'progress', percent: 30, phase: 'fw:firmware-iwlwifi|downloading' })) })
+    expect(document.body.textContent).toContain('Downloading… ')
+    await act(async () => { listeners.forEach((l) => l({ job: '/job/2', kind: 'finished', result: 'success' })) })
+    await flush()
+    expect(document.body.textContent).toContain('Installed · 20250410-2')
+  })
+
+  it('shows the restart notice and what was installed with its version', async () => {
+    mockOs(report({ offers: [], restart_required: true, installed: [{ id: NV.id, name: NV.name, version: '550.163.01-2', restart: true, at: 2 }] }))
+    const el = await mount(<DriversPanel onOpenUpdates={() => {}} />)
+    expect(el.textContent).toContain('Restart your computer to finish installing drivers.')
+    expect(section(el, 'Recently installed').textContent).toContain('550.163.01-2')
+  })
+})
+
 describe('driver helpers', () => {
   it('groups and labels display drivers', () => {
     const gs = driverGroups(DEVS, report())

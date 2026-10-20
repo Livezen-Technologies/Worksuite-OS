@@ -26,11 +26,15 @@ ProtectHostname=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=no
 LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# AF_NETLINK: glibc's getaddrinfo (apt's download methods, fwupd's client) asks the kernel for the addresses in use (#45).
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 RestrictNamespaces=no
 SystemCallArchitectures=native
 UMask=0022
 ReadWritePaths=/var/lib/worksuite-package-service /var/lib/dpkg /var/lib/apt /var/cache/apt /var/lib/flatpak /var/log/worksuite /boot /usr /etc /opt
+# Drivers (#45): mokutil queues the Secure Boot key in an EFI variable (ProtectKernelTunables
+# makes /sys read-only otherwise), and the ESP may be its own mount below /boot.
+ReadWritePaths=-/sys/firmware/efi/efivars -/boot/efi
 LogsDirectory=worksuite
 StateDirectory=worksuite-package-service
 # update-status.json for the device agent (WSOS-MDM-001)

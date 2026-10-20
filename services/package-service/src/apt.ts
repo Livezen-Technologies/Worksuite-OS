@@ -94,3 +94,27 @@ export class ServiceError extends Error {
   readonly code: 'NotAuthorized' | 'NotInCatalog' | 'ArchMismatch' | 'Busy' | 'PreconditionFailed' | 'SignatureInvalid' | 'Failed' | 'InvalidArgs' | 'Protected' | 'SourcesInvalid' | 'NoSuchJob';
   constructor(code: ServiceError['code'], message: string = code) { super(message); this.code = code; }
 }
+
+/** live-build's binary stage writes /etc/apt/sources.list with the image's mirrors and no Signed-By; the image already
+ *  has the same archives, signed, in sources.list.d/debian.sources. Those unsigned lines made every install fail the
+ *  sources check (#45), and apt warned "configured multiple times". Lines a signed, enabled deb822 stanza already
+ *  covers (same URI, suite, and its components) are commented out; anything else is left for checkSources to judge.
+ *  Returns the new text, or null when nothing changes. */
+export function tidyLegacySources(list: string, deb822: string[]): string | null {
+  const norm = (u: string) => u.replace(/\/+$/, '');
+  const stanzas = deb822.flatMap((t) => t.split(/\n\s*\n/)).map((st) => Object.fromEntries(st.split('\n').map((l) => /^([A-Za-z-]+):\s*(.*)$/.exec(l)).filter(Boolean).map((m) => [m![1].toLowerCase(), m![2].trim()])))
+    .filter((f) => f.uris && f['signed-by'] && (f.enabled ?? 'yes').toLowerCase() !== 'no' && (f.types ?? 'deb').split(/\s+/).includes('deb'));
+  let changed = false;
+  const out = list.split('\n').map((raw) => {
+    const line = raw.replace(/#.*/, '').trim();
+    const m = /^deb\s+(?:\[[^\]]*\]\s+)?(\S+)\s+(\S+)\s*(.*)$/.exec(line);
+    if (!m) return raw;
+    const [, uri, suite, comps] = m;
+    const covered = stanzas.some((f) => f.uris.split(/\s+/).map(norm).includes(norm(uri)) && (f.suites ?? '').split(/\s+/).includes(suite)
+      && comps.split(/\s+/).filter(Boolean).every((c) => (f.components ?? '').split(/\s+/).includes(c)));
+    if (!covered) return raw;
+    changed = true;
+    return `# ${raw.trim()}   # in sources.list.d (signed); disabled by worksuite-package-service`;
+  });
+  return changed ? out.join('\n') : null;
+}

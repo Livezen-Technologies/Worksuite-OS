@@ -194,7 +194,9 @@ export function parseMonitorLine(line: string): JobEvent | null {
   if (m) return { job: m[1], kind: 'progress', percent: Number(m[2]), phase: m[3] }
   m = /\.JobFinished \(objectpath '([^']+)', '(\w+)', \{(.*)\}\)/.exec(line)
   if (m) {
-    const err = /'error': <'((?:[^'\\]|\\.)*)'>/.exec(m[3])?.[1]?.replace(/\\(.)/g, '$1')
+    // GVariant quotes a string that contains ' with double quotes ("Couldn't …"): both forms (#45).
+    const q = /'error': <(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")>/.exec(m[3])
+    const err = (q?.[1] ?? q?.[2])?.replace(/\\(.)/g, '$1')
     return { job: m[1], kind: 'finished', result: m[2], ...(err ? { error: err } : {}) }
   }
   // GVariant string: single-quoted with \' and \\ escapes (JSON itself uses double quotes).

@@ -124,6 +124,15 @@ export function offerText(o: DriverOffer): string {
   return Object.hasOwn(SUMMARY_TEXT, o.summary) ? SUMMARY_TEXT[o.summary as keyof typeof SUMMARY_TEXT] : o.summary
 }
 
+export type DriverStep = 'refreshing' | 'downloading' | 'installing' | 'done'
+/** A driver job's phase: "<offer id>|<step>" from the package service (older services sent the offer id alone). */
+export function driverJobPhase(phase: string): { offer: string; step: DriverStep } {
+  const i = phase.lastIndexOf('|')
+  if (i < 0) return { offer: phase, step: 'installing' }
+  const step = phase.slice(i + 1)
+  return { offer: phase.slice(0, i), step: step === 'refreshing' || step === 'downloading' || step === 'done' ? step : 'installing' }
+}
+
 /** The notice after a background check: offers a person must choose (not the ones that installed themselves). */
 export function driverNotice(r: DriverReport, devs: HwDevice[], seen: Set<string>): { title: string; body: string } | null {
   const fresh = r.offers.filter((o) => !r.auto_installed.includes(o.id) && !seen.has(o.id))

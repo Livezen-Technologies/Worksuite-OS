@@ -1,14 +1,15 @@
 // Driver search: modalias / Contents mapping, kernel-log parsing, the once-a-day trigger, policy, metered, GPUs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   aliasMatches, autoInstallable, contentsLookup, DAY, deviceKind, deviceStatuses, displayDriverLabel, dkmsFor, driverPolicy, gpuOffer,
   needsGpuFallback, nvidiaPick, parseFirmwareFailures, parseFwupd, parseIsenkram, shouldCheck, type DriverOffer, type ScannedDevice,
 } from '../src/drivers.ts';
-import { DriverManager, mokPassword, parseModulesAlias, scanSysfs, type DriverEnv } from '../src/driverscan.ts';
+import { aptError, DriverManager, mokPassword, parseAptStatus, parseModulesAlias, scanSysfs, type DriverEnv } from '../src/driverscan.ts';
+import { checkSources, tidyLegacySources } from '../src/apt.ts';
 
 const INTEL_AX211 = 'pci:v00008086d000051F0sv00008086sd00000094bc02sc80i00';
 const dev = (o: Partial<ScannedDevice>): ScannedDevice => ({ id: 'pci:0000:00:14.3', bus: 'pci', modaliases: [INTEL_AX211], driver: 'iwlwifi', module: 'iwlwifi', cls: '0x028000', vendor: '8086', product: '51f0', ...o });
@@ -241,4 +242,85 @@ test('MOK password: only through the polkit-guarded call; cleared once the key i
   assert.equal(await enrolled.mokPassword(), null);
   assert.equal((m.state() as { mok?: unknown }).mok, undefined);
   assert.equal(enrolled.status().mok, undefined);
+});
+
+// #45: real-world install path (a fresh install has no package lists; apt prints warnings before its error; progress).
+test('install: refreshes the package lists, downloads then installs with progress, records the installed version', async () => {
+  const phases: [string, number][] = [];
+  const m = managerEnv({
+    enqueue: (_c, body) => { void body((ph, pct) => phases.push([ph, pct])); return 1; },
+    runLines: async (cmd, args, onLine) => {
+      m.calls.push([cmd, ...args].join(' '));
+      if (args.includes('--download-only')) for (const l of ['dlstatus:1:0:Retrieving file 1 of 1', 'dlstatus:1:50:Retrieving file 1 of 1', 'dlstatus:1:100:Retrieving file 1 of 1']) onLine(l);
+      else for (const l of ['Selecting previously unselected package firmware-iwlwifi.', 'pmstatus:firmware-iwlwifi:20:Preparing', 'pmstatus:firmware-iwlwifi:100:Installed firmware-iwlwifi']) onLine(l);
+      return { code: 0, stdout: '', stderr: '' };
+    },
+    version: (p) => (p === 'firmware-iwlwifi' ? '20250410-2' : null),
+    policy: () => ({ drivers_auto_install: false }),
+  });
+  const d = new DriverManager(m.env);
+  await d.check('manual');
+  d.install(1000, ['fw:firmware-iwlwifi']);
+  await new Promise((res) => setTimeout(res, 10));
+  const apt = m.calls.filter((c) => c.startsWith('apt-get'));
+  assert.equal(apt[0], 'apt-get -q update');
+  assert.match(apt[1], /--download-only install -- firmware-iwlwifi$/);
+  assert.match(apt[2], /--no-download install -- firmware-iwlwifi$/);
+  assert.deepEqual(phases.map((p) => p[0].split('|')[1]).filter((x, i, a) => a.indexOf(x) === i), ['refreshing', 'downloading', 'installing', 'done']);
+  const pcts = phases.map((p) => p[1]);
+  assert.deepEqual(pcts, [...pcts].sort((a, b) => a - b), 'progress only rises');
+  assert.ok(phases.some(([ph, p]) => ph.endsWith('|downloading') && p > 5 && p < 60));
+  const r = d.status();
+  assert.ok(!r.offers.some((o) => o.id === 'fw:firmware-iwlwifi'));
+  assert.deepEqual(r.installed?.map((x) => [x.id, x.version]), [['fw:firmware-iwlwifi', '20250410-2']]);
+});
+
+test('install: a failure carries apt\'s E: line (not the first warning) and leaves the offer for a retry', async () => {
+  const m = managerEnv({
+    policy: () => ({ drivers_auto_install: false }),
+    run: async (cmd, args) => {
+      m.calls.push([cmd, ...args].join(' '));
+      if (cmd === 'apt-get' && args.includes('install')) return { code: 100, stdout: '', stderr: 'W: Target Packages (non-free-firmware/binary-amd64/Packages) is configured multiple times in /etc/apt/sources.list:1 and /etc/apt/sources.list.d/debian.sources:1\nE: Unable to locate package firmware-iwlwifi\n' };
+      return { code: cmd === 'isenkram-lookup' || cmd === 'fwupdmgr' ? 2 : 0, stdout: '', stderr: '' };
+    },
+  });
+  let failure: unknown = null;
+  m.env.enqueue = (_c, body) => { body(() => {}).catch((e) => { failure = e; }); return 1; };
+  const d = new DriverManager(m.env);
+  await d.check('manual');
+  d.install(1000, ['fw:firmware-iwlwifi']);
+  await new Promise((res) => setTimeout(res, 10));
+  assert.equal((failure as Error).message, 'apt-get: E: Unable to locate package firmware-iwlwifi');
+  assert.ok(d.status().offers.some((o) => o.id === 'fw:firmware-iwlwifi'), 'still offered: Try again works');
+});
+
+test('install: a restart notice stays until the next boot', async () => {
+  const m = managerEnv({ policy: () => ({ drivers_auto_install: false }) });
+  const d = new DriverManager(m.env);
+  await d.check('manual');
+  d.install(1000, ['gpu:nvidia-driver']);
+  await new Promise((res) => setTimeout(res, 10));
+  assert.equal(d.status().restart_required, true);
+  assert.equal(new DriverManager(m.env).status().restart_required, true);
+  assert.equal(new DriverManager({ ...m.env, bootId: () => 'boot-2' }).status().restart_required, false);
+});
+
+test('apt status lines and errors', () => {
+  assert.deepEqual(parseAptStatus('dlstatus:2:48.5:Retrieving file 2 of 3'), { stage: 'download', pct: 48.5 });
+  assert.deepEqual(parseAptStatus('pmstatus:firmware-iwlwifi:66.6667:Installed firmware-iwlwifi (20250410-2)'), { stage: 'install', pct: 66.6667 });
+  assert.equal(parseAptStatus('Get:1 https://deb.debian.org/debian trixie/non-free-firmware amd64 firmware-iwlwifi all 20250410-2 [9,342 kB]'), null);
+  assert.equal(aptError('W: Some index files failed to download.\nE: Failed to fetch https://deb.debian.org/debian/pool/x.deb  Temporary failure resolving \'deb.debian.org\''), 'E: Failed to fetch https://deb.debian.org/debian/pool/x.deb  Temporary failure resolving \'deb.debian.org\'');
+  assert.equal(aptError('dpkg: error processing package nvidia-kernel-dkms (--configure):\n installed post-installation script returned error exit status 10'), 'dpkg: error processing package nvidia-kernel-dkms (--configure):');
+});
+
+test('sources: live-build\'s unsigned sources.list duplicates are disabled, anything else is left alone', () => {
+  const deb822 = readFileSync(new URL('../../../live-build/config/includes.chroot/etc/apt/sources.list.d/debian.sources', import.meta.url), 'utf8');
+  const lb = 'deb https://deb.debian.org/debian/ trixie main contrib non-free non-free-firmware\ndeb https://security.debian.org/debian-security/ trixie-security main contrib non-free non-free-firmware\ndeb https://deb.debian.org/debian/ trixie-updates main contrib non-free non-free-firmware\n';
+  const out = tidyLegacySources(lb, [deb822])!;
+  assert.deepEqual(checkSources(out, '/etc/apt/sources.list'), []);
+  assert.ok(checkSources(lb, '/etc/apt/sources.list').length > 0, 'it did fail the sources check before');
+  assert.equal(tidyLegacySources(out, [deb822]), null, 'idempotent');
+  const other = 'deb http://example.com/debian trixie main\n';
+  assert.equal(tidyLegacySources(other, [deb822]), null);
+  assert.equal(tidyLegacySources('deb https://deb.debian.org/debian trixie main\n', []), null, 'no signed copy: kept');
 });
