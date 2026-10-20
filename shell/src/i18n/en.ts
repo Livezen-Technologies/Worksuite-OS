@@ -295,6 +295,7 @@ const en = {
   'settings.net.connectEllipsis': 'Connect…',
   'settings.net.connectFailed': 'Couldn’t connect to that network.',
   'settings.net.connectedTo': 'Connected to {name}',
+  'settings.net.saved': 'Saved',
   'settings.net.ethernet': 'Ethernet',
   'settings.net.info': 'Network information',
   'settings.net.noEthernet': 'No Ethernet adapter',

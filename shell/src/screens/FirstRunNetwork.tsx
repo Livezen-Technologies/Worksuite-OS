@@ -4,20 +4,26 @@
 import { useCallback, useEffect, useState } from 'react'
 import { os, type Avail, type NetworkState } from '../lib/os'
 import { t } from '../i18n'
-
-type Join = { ssid: string; secure: boolean; password: string; error: string | null; busy: boolean }
+import { reconcileJoin, wifiPhase, type Join } from '../lib/wifiState'
 
 export default function FirstRunNetwork() {
   const [r, setR] = useState<Avail<NetworkState> | null>(null)
   const [join, setJoin] = useState<Join | null>(null)
   const reload = useCallback(async () => { try { setR(await os.sysNetwork()) } catch { setR({ available: false, reason: 'service_unavailable' }) } }, [])
-  useEffect(() => { void reload() }, [reload])
+  useEffect(() => {
+    void reload()
+    // NetworkManager's changes (electron/sysWatch.ts) keep the status and the form honest while a join completes (#42).
+    return os.onSysChanged?.((k) => { if (k === 'network') void reload() })
+  }, [reload])
+  useEffect(() => { setJoin((j) => reconcileJoin(j, r?.available ? r.value : null)) }, [r])
 
-  const connect = async () => {
-    if (!join) return
-    setJoin({ ...join, busy: true, error: null })
-    const res = await os.sysWifiConnect(join.ssid, join.password)
-    if (res.ok) { setJoin(null); void reload() } else setJoin({ ...join, busy: false, password: '', error: res.error === 'bad_password' ? t('settings.net.badPassword') : t('settings.net.connectFailed') })
+  const connect = async (j: Join | null = join) => {
+    if (!j) return
+    setJoin({ ...j, busy: true, error: null })
+    const res = await os.sysWifiConnect(j.ssid, j.password)
+    if (res.ok) setJoin(null)
+    else setJoin({ ...j, secure: j.secure || res.error === 'bad_password', busy: false, password: '', error: res.error === 'bad_password' ? t('settings.net.badPassword') : t('settings.net.connectFailed') })
+    void reload()
   }
 
   let status: string
@@ -28,7 +34,7 @@ export default function FirstRunNetwork() {
     const n = r.value
     const wired = n.devices.find((d) => d.type === 'ethernet' && d.state === 'connected')
     const active = n.networks.find((w) => w.in_use)
-    status = active ? t('settings.net.connectedTo', { name: active.ssid }) : wired ? t('setup.networkWired') : t('common.notConnected')
+    status = active ? t('settings.net.connectedTo', { name: active.ssid }) : wifiPhase(n) === 'connecting' ? t('common.connecting') : wired ? t('setup.networkWired') : t('common.notConnected')
     list = n.wifi_enabled ? n.networks.slice(0, 6) : []
   }
 
@@ -47,7 +53,7 @@ export default function FirstRunNetwork() {
             <li key={w.ssid} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5">
               <span className="flex-1 text-sm">{w.ssid}</span>
               <span className="text-xs text-[#8FA3C8]">{t('settings.net.signal', { security: w.security || t('settings.net.open'), signal: w.signal })}</span>
-              {!w.in_use && <button type="button" onClick={() => setJoin({ ssid: w.ssid, secure: !!w.security, password: '', error: null, busy: false })}
+              {!w.in_use && <button type="button" onClick={() => { const j = { ssid: w.ssid, secure: !!w.security && !w.saved, password: '', error: null, busy: false }; if (j.secure) setJoin(j); else void connect(j) }}
                 className="cursor-pointer rounded-md border border-[rgba(127,178,255,0.3)] px-3 py-1 text-xs font-semibold text-[#E8EEFA] hover:bg-white/5">{t('common.connect')}</button>}
             </li>
           ))}

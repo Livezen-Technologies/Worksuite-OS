@@ -207,7 +207,7 @@ export interface WorkSuiteApi {
   sysNetwork(): Promise<Avail<NetworkState>>
   sysSetWifi(on: boolean): Promise<Avail<true>>
   /** The password reaches nmcli on stdin only. */
-  sysWifiConnect(ssid: string, password: string): Promise<{ ok: true } | { ok: false; error: string }>
+  sysWifiConnect(ssid: string, password: string): Promise<{ ok: true; pending?: boolean } | { ok: false; error: string }>
   /** VPN profiles (managed "WorkSuite VPN" first) and whether policy allows user VPNs (WSOS-INT-001). */
   sysVpn(): Promise<Avail<VpnState>>
   /** Imports the WireGuard .conf behind a pickFile('wgconf') handle; the private key never reaches the renderer. */
@@ -245,7 +245,7 @@ export interface WorkSuiteApi {
 }
 
 export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
-export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean }
+export interface WifiNetwork { ssid: string; signal: number; security: string; in_use: boolean; saved?: boolean }
 export interface NetDevice { device: string; type: string; state: string; connection: string | null }
 export interface NetworkState { wifi_enabled: boolean; devices: NetDevice[]; networks: WifiNetwork[] }
 export interface VpnConnection { name: string; uuid: string; type: 'wireguard' | 'vpn'; kind: 'wireguard' | 'openvpn' | 'vpn'; active: boolean; device: string | null; managed: boolean; needs_credentials: boolean }
