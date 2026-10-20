@@ -25,6 +25,23 @@ describe('WorkSuite Security notices', () => {
     expect(securityNotices(next, next)).toEqual([])
     expect(securityNotices(next, { ...next, isolation: null }).map((n) => n.kind)).toEqual(['isolation_ended'])
   })
+  it('#38: blocks and suspended programs notify once; report-only events and real-time stopping', () => {
+    const ev = (id: string, kind: string, enforced = true) => ({ id, at: 1, kind, path: `/home/u/Documents/${id}`, exe: '/usr/bin/python3', signature: null, enforced, resolved: null }) as NonNullable<SecurityStatus['events']>[number]
+    const prev: SecurityStatus = { ...base, events: [] }
+    const one = { ...prev, events: [ev('a', 'write_blocked')] }
+    expect(securityNotices(prev, one)).toEqual([{ kind: 'blocked', title: 'WorkSuite Security blocked a threat', body: 'python3 was not allowed to change a in a protected folder.' }])
+    expect(securityNotices(one, one)).toEqual([])
+    const many = { ...prev, events: [ev('a', 'exec_blocked'), ev('b', 'download_threat'), ev('c', 'ransomware_suspended'), ev('d', 'write_blocked', false)] }
+    expect(securityNotices(prev, many).map((n) => n.kind)).toEqual(['process_suspended', 'blocked'])
+    expect(securityNotices(prev, many)[1].body).toBe('2 actions were blocked. Open WorkSuite Security to review.')
+    expect(securityNotices(prev, { ...prev, issues: ['realtime_off'] }).map((n) => n.body)).toEqual(['Real-time protection is not running.'])
+  })
+  it('refuses malformed quarantine and process actions before reaching the bus', async () => {
+    const { securityAction } = await import('./securityCenter')
+    expect(await securityAction('RestoreQuarantined', ['../../etc/passwd'])).toEqual({ ok: false, error: 'invalid_argument' })
+    expect(await securityAction('ResolveSuspendedProcess', ['0f0e0d0c-0b0a-4908-8706-050403020100', 'kill'])).toEqual({ ok: false, error: 'invalid_argument' })
+    expect(await securityAction('RunShell', [])).toEqual({ ok: false, error: 'invalid_argument' })
+  })
   it('reads the agent file; anything else is unavailable', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'ws-sec-'))
     try {

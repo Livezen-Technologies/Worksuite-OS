@@ -6,6 +6,7 @@
 // the policy adds its own table, inet worksuite_policy, so a packet must pass both. That table only ever narrows
 // what the default allows: blocked destinations, and isolation (everything except the management path).
 import type { Policy } from './state.ts';
+import { quarantineList, renderThreatSets, type ProtectionEvent, type ProtectionSettings } from './protection.ts';
 
 export const POLICY_TABLE = 'worksuite_policy';
 /** Loaded at boot by /etc/nftables.conf (include "/etc/worksuite/nftables.d/*.nft") and by the agent at once. */
@@ -78,8 +79,9 @@ export const isolationActive = (i: Isolation | undefined | null, now: number): i
  * Isolation keeps: loopback, replies to connections already allowed, DHCP, DNS and HTTPS to the management server
  * (the agent's check-in, so the release command still arrives).
  */
-export function renderPolicyFirewall(s: SecuritySettings, iso: Isolation | null): string | null {
-  if (!s.firewall_outbound_block.length && !iso) return null;
+export function renderPolicyFirewall(s: SecuritySettings, iso: Isolation | null, threat: { v4: string[]; v6: string[] } = { v4: [], v6: [] }): string | null {
+  const intel = threat.v4.length + threat.v6.length > 0;
+  if (!s.firewall_outbound_block.length && !iso && !intel) return null;
   const v4 = s.firewall_outbound_block.filter(isCidr4), v6 = s.firewall_outbound_block.filter(isCidr6);
   // Logging is rate-limited on its own rule: a limit on the drop rule itself would let packets over the rate through.
   const log = s.firewall_log_blocked ? `limit rate 6/minute burst 3 packets log prefix "${LOG_PREFIX}" flags skuid` : '';
@@ -88,6 +90,10 @@ export function renderPolicyFirewall(s: SecuritySettings, iso: Isolation | null)
   const out: string[] = [];
   if (v4.length) out.push(...drop(`ip daddr { ${v4.join(', ')} } `));
   if (v6.length) out.push(...drop(`ip6 daddr { ${v6.join(', ')} } `));
+  // Threat-intel feeds (#38): named sets, so tens of thousands of entries stay one rule each way.
+  if (threat.v4.length) out.push(...drop('ip daddr @threat_v4 '));
+  if (threat.v6.length) out.push(...drop('ip6 daddr @threat_v6 '));
+  const inDrops = [...(threat.v4.length ? ['    ip saddr @threat_v4 drop'] : []), ...(threat.v6.length ? ['    ip6 saddr @threat_v6 drop'] : [])];
   if (iso) {
     const m4 = iso.management.filter(isCidr4), m6 = iso.management.filter(isCidr6);
     out.push(
@@ -106,6 +112,7 @@ export function renderPolicyFirewall(s: SecuritySettings, iso: Isolation | null)
     `table inet ${POLICY_TABLE}`,
     `delete table inet ${POLICY_TABLE}`,
     `table inet ${POLICY_TABLE} {`,
+    ...(intel ? renderThreatSets(threat) : []),
     '  chain output {',
     '    type filter hook output priority filter + 10; policy accept;',
     ...out,
@@ -114,12 +121,14 @@ export function renderPolicyFirewall(s: SecuritySettings, iso: Isolation | null)
   if (iso) lines.push(
     '  chain input {',
     '    type filter hook input priority filter + 10; policy drop;',
+    ...inDrops,
     '    iifname "lo" accept',
     '    ct state { established, related } accept',
     '    udp sport 67 udp dport 68 accept',
     '    udp sport 547 udp dport 546 accept',
     '  }',
   );
+  else if (inDrops.length) lines.push('  chain input {', '    type filter hook input priority filter + 10; policy accept;', ...inDrops, '  }');
   lines.push('}');
   return lines.join('\n') + '\n';
 }
@@ -174,8 +183,12 @@ export interface SecurityState {
   firewall_alerts: { at: number; dst: string; dport: number | null; proto: string }[];
   firewall_log_cursor?: string;
   restarts: Record<string, number>;
+  /** Real-time, protected-folder, application-control and Downloads events (#38). */
+  events?: ProtectionEvent[];
+  /** Threat-intel feeds: last successful refresh and what it gave (the entries live in the rules file). */
+  feeds?: { at: number; firewall_entries: number; dns_entries: number; errors: string[] };
 }
-export const emptySecurity = (): SecurityState => ({ scans: [], threats: [], firewall_alerts: [], restarts: {} });
+export const emptySecurity = (): SecurityState => ({ scans: [], threats: [], firewall_alerts: [], restarts: {}, events: [] });
 
 /** Applies the retention period: older history is dropped (#20 §14 configurable security log retention). */
 export function pruneSecurity(st: SecurityState, retentionDays: number, now: number): SecurityState {
@@ -185,6 +198,8 @@ export function pruneSecurity(st: SecurityState, retentionDays: number, now: num
     scans: st.scans.filter((x) => x.finished >= cut).slice(-200),
     threats: st.threats.filter((x) => x.at >= cut || x.action === 'quarantined').slice(-500),
     firewall_alerts: st.firewall_alerts.filter((x) => x.at >= cut).slice(-500),
+    // A suspended process stays listed until someone decides; everything else follows the retention period.
+    events: (st.events ?? []).filter((x) => x.at >= cut || (x.kind === 'ransomware_suspended' && !x.resolved)).slice(-500),
   };
 }
 
@@ -199,17 +214,23 @@ export function scanDue(s: SecuritySettings, st: SecurityState, now: number, loa
   return null;
 }
 
+export type UnitState = 'active' | 'failed' | 'inactive' | 'missing';
 export interface EngineFacts {
   firewall_active: boolean;
   policy_table_active: boolean;
   clamav: ReturnType<typeof parseClamVersion>;
-  freshclam: 'active' | 'failed' | 'inactive' | 'missing';
+  freshclam: UnitState;
+  /** #38: clamonacc (worksuite-onaccess.service) and worksuite-guard.service; absent = not probed (older hosts). */
+  onaccess?: UnitState;
+  guard?: UnitState;
+  /** NetworkManager runs dnsmasq (the DNS blocklist needs it). */
+  dns_filter?: boolean;
 }
 
 export type Overall = 'protected' | 'attention' | 'at_risk' | 'unavailable';
 
 /** What Settings › Privacy & security › WorkSuite Security and the admin console show. No file contents, ever. */
-export function securityStatus(s: SecuritySettings, st: SecurityState, f: EngineFacts, now: number, managed: boolean, scanning = false) {
+export function securityStatus(s: SecuritySettings, st: SecurityState, f: EngineFacts, now: number, managed: boolean, scanning = false, p?: ProtectionSettings, guarded = false) {
   const sigAge = f.clamav?.signatures_at ? Math.floor((now - f.clamav.signatures_at) / DAY) : null;
   const isolated = isolationActive(st.isolation, now);
   const active = st.threats.filter((t) => t.action === 'detected');
@@ -220,8 +241,13 @@ export function securityStatus(s: SecuritySettings, st: SecurityState, f: Engine
   if (s.antivirus && sigAge !== null && sigAge > 3) issues.push('signatures_outdated');
   if (active.length) issues.push('threats_need_action');
   if (isolated) issues.push('isolated');
+  const events = st.events ?? [];
+  const suspended = events.filter((e) => e.kind === 'ransomware_suspended' && !e.resolved && e.enforced !== false);
+  if (p?.realtime && f.clamav && f.onaccess !== 'active') issues.push('realtime_off');
+  if (guarded && f.guard !== undefined && f.guard !== 'active') issues.push('guard_off');
+  if (suspended.length) issues.push('process_suspended');
   const overall: Overall = !f.firewall_active && !f.clamav ? 'unavailable'
-    : active.length || !f.firewall_active ? 'at_risk' : issues.length ? 'attention' : 'protected';
+    : active.length || suspended.length || !f.firewall_active ? 'at_risk' : issues.length ? 'attention' : 'protected';
   return {
     overall, issues, managed, scanning, updated: now,
     firewall: { active: f.firewall_active, policy_rules: s.firewall_outbound_block.length, policy_table: f.policy_table_active, log_blocked: s.firewall_log_blocked },
@@ -236,6 +262,16 @@ export function securityStatus(s: SecuritySettings, st: SecurityState, f: Engine
     history: st.threats.slice(-50).reverse().map(({ id, at, path, signature, action }) => ({ id, at, path, signature, action })),
     firewall_alerts: st.firewall_alerts.slice(-20).reverse(),
     retention_days: s.security_log_retention_days,
+    // #38: the protection layers, what they blocked, and what is in quarantine.
+    realtime: { enabled: !!p?.realtime, prevention: !!p?.realtime_prevention, state: p?.realtime ? f.onaccess ?? 'missing' : 'inactive', downloads: !!p?.download_scan },
+    protected_folders: { folders: p?.protected_folders ?? [], mode: p?.protected_folders_mode ?? 'block', state: guarded ? f.guard ?? 'missing' : 'inactive' },
+    app_control: { denied: (p?.app_denylist.paths.length ?? 0) + (p?.app_denylist.sha256.length ?? 0) },
+    web: { dns_blocked: p?.dns_blocklist.length ?? 0, dns_feeds: p?.dns_threat_feeds.length ?? 0, dns_filter: !!f.dns_filter, dns_feed_entries: st.feeds?.dns_entries ?? 0 },
+    threat_intel: { feeds: p?.firewall_threat_feeds.length ?? 0, entries: st.feeds?.firewall_entries ?? 0, updated: st.feeds?.at ?? null, errors: st.feeds?.errors ?? [] },
+    auto_patch: p?.security_auto_patch ?? 'window',
+    events: events.slice(-30).reverse().map(({ id, at, kind, path, exe, signature, enforced, resolved }) => ({ id, at, kind, path, exe: exe ?? null, signature: signature ?? null, enforced: enforced !== false, resolved: resolved ?? null })),
+    suspended: suspended.map(({ id, at, path, exe, pid }) => ({ id, at, path, exe: exe ?? null, pid: pid ?? null })),
+    quarantine: quarantineList(st.threats),
   };
 }
 export type SecurityStatus = ReturnType<typeof securityStatus>;

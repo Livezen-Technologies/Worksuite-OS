@@ -89,6 +89,9 @@ async function daemon() {
     enroll: (url, token) => serial(() => agent.enroll(url, token)),
     refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); },
     scan: (kind) => { void security.scan(kind, 'user').catch(() => {}); },
+    restore: (id) => security.restore(id, false, 'user'),
+    deleteQuarantined: (id) => security.deleteQuarantined(id, 'user'),
+    resolveSuspended: (id, action) => security.resolveSuspended(id, action, 'user'),
   }).catch((e) => host.audit('dbus_unavailable', { error: String(e?.message ?? e) }));
 
   const jitter = (ms: number) => ms + Math.floor(Math.random() * ms * 0.2);
@@ -117,7 +120,7 @@ async function daemon() {
   every(30 * 60_000, 'security', () => security.tick());
   every(INVENTORY_MS, 'inventory', async () => { if (state.state.enrolled) await httpApi(() => state.state).inventory(await host.inventory()); });
 
-  process.on('SIGTERM', () => { server.close(); consent.close(); void remoteSupport.end('user_ended').finally(() => process.exit(0)); });
+  process.on('SIGTERM', () => { security.close(); server.close(); consent.close(); void remoteSupport.end('user_ended').finally(() => process.exit(0)); });
   host.audit('started', { enrolled: state.state.enrolled });
 }
 

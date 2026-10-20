@@ -63,3 +63,22 @@ test('StartSecurityScan needs lk.worksuite.security.scan and a valid kind', asyn
   assert.deepEqual(kinds, ['full']);
   await assert.rejects(dispatch('StartSecurityScan', ['quick'], ':1', auth(0, true), ops()), (e) => e instanceof BusError && e.message === 'NOT_SUPPORTED');
 });
+
+test('quarantine and suspended processes (#38) need lk.worksuite.security.quarantine; agent error codes pass through', async () => {
+  const seen: string[] = [], calls: string[] = [];
+  const id = '0f0e0d0c-0b0a-4908-8706-050403020100';
+  const o = ops({
+    restore: async (q) => { calls.push(`restore ${q}`); throw new Error('STILL_DETECTED'); },
+    deleteQuarantined: async (q) => { calls.push(`delete ${q}`); },
+    resolveSuspended: async (e, a) => { calls.push(`${a} ${e}`); },
+  });
+  await assert.rejects(dispatch('DeleteQuarantined', [id], ':1', auth(1000, false, seen), o), (e) => e instanceof BusError && e.code === 'NotAuthorized');
+  assert.deepEqual(seen, ['lk.worksuite.security.quarantine']);
+  await assert.rejects(dispatch('DeleteQuarantined', ['../x'], ':1', auth(1000, true), o), (e) => e instanceof BusError && e.code === 'InvalidArgs');
+  await assert.rejects(dispatch('RestoreQuarantined', [id], ':1', auth(1000, true), o), (e) => e instanceof BusError && e.message === 'STILL_DETECTED');
+  assert.deepEqual(await dispatch('DeleteQuarantined', [id], ':1', auth(1000, true), o), ['', []]);
+  await assert.rejects(dispatch('ResolveSuspendedProcess', [id, 'stop'], ':1', auth(1000, true), o), (e) => e instanceof BusError && e.code === 'InvalidArgs');
+  assert.deepEqual(await dispatch('ResolveSuspendedProcess', [id, 'resume'], ':1', auth(1000, true), o), ['', []]);
+  assert.deepEqual(calls, [`restore ${id}`, `delete ${id}`, `resume ${id}`]);
+  await assert.rejects(dispatch('DeleteQuarantined', [id], ':1', auth(0, true), ops()), (e) => e instanceof BusError && e.message === 'NOT_SUPPORTED');
+});

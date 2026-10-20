@@ -24,7 +24,8 @@ import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSe
 const SESSION_TTL = 8 * 3_600_000;
 const COOKIE = 'ws_admin';
 const ROUTINE = new Set(['RefreshPolicy', 'RequestLock', 'RebootDuringWindow', 'ScheduleUpdate', 'InstallApprovedApplication', 'RemoveApplication', 'CollectApprovedDiagnostics',
-  'StartMalwareScan', 'ReleaseIsolation', 'IsolateEndpoint']);
+  'StartMalwareScan', 'ReleaseIsolation', 'IsolateEndpoint', 'RestoreQuarantined', 'DeleteQuarantined', 'ResolveSuspendedProcess']);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** CollectApprovedDiagnostics profiles: exactly what the device agent implements (services/device-agent/src/diagnostics.ts). */
 export const DIAG_PROFILES = new Set(['basic', 'session', 'network', 'update']);
 
@@ -218,7 +219,21 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
       reauth(ctx, a, b, d.hostname);
       args.hours = hours;
     }
-    const id = issueCommand(db, d.id, command, args, command === 'IsolateEndpoint' ? 12 : 24);
+    // #38 quarantine: ids from the device's own report. Restoring a file the device still detects (force) puts malware
+    // back on the device: password again and the device name typed, like isolation.
+    if (command === 'RestoreQuarantined' || command === 'DeleteQuarantined') {
+      const q = String((b.args as Record<string, unknown> | undefined)?.quarantine_id ?? '');
+      if (!UUID.test(q)) throw invalid('args.quarantine_id');
+      args.quarantine_id = q;
+      if (command === 'RestoreQuarantined' && (b.args as Record<string, unknown>).force === true) { reauth(ctx, a, b, d.hostname); args.force = true; }
+    }
+    if (command === 'ResolveSuspendedProcess') {
+      const x = (b.args as Record<string, unknown> | undefined) ?? {};
+      if (typeof x.event_id !== 'string' || !UUID.test(x.event_id)) throw invalid('args.event_id');
+      if (x.action !== 'resume' && x.action !== 'terminate') throw invalid('args.action', 'resume or terminate');
+      args.event_id = x.event_id; args.action = x.action;
+    }
+    const id = issueCommand(db, d.id, command, args, command === 'IsolateEndpoint' || command === 'ResolveSuspendedProcess' ? 12 : 24);
     log(a, 'command', { device_id: d.id, command, command_id: id });
     send(ctx, 201, { command_id: id });
   });

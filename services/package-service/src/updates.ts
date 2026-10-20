@@ -122,6 +122,11 @@ export interface DecideInput {
   deferrals: number;                    // deferrals already used for this release
   /** Verified licence; null on personal devices or when none could be fetched (WSOS-AUP-012). */
   licence?: Licence | null;
+  /**
+   * Policy security_auto_patch (#38): 'window' (default) installs security releases in the maintenance window or at
+   * idle; 'immediate' as soon as they are verified; 'off' treats them like any other release of the update mode.
+   */
+  securityPatch?: 'immediate' | 'window' | 'off';
 }
 
 export type Decision =
@@ -165,8 +170,10 @@ export function decide(i: DecideInput): Decision {
   // WSOS-AUP-008: metered connections wait unless the release is critical.
   if (i.metered && !m.critical) return { action: 'wait', reason: 'metered' };
 
-  // WSOS-AUP-005: security releases install in Automatic and Notify.
-  if (m.security) return inWindow(i.window, i.now) || i.idle ? { action: 'install', reason: 'security' } : { action: 'wait', reason: 'outside_window' };
+  // WSOS-AUP-005: security releases install in Automatic and Notify; policy may apply them at once or not specially.
+  const sp = i.securityPatch ?? 'window';
+  if (m.security && sp === 'immediate') return { action: 'install', reason: 'security' };
+  if (m.security && sp === 'window') return inWindow(i.window, i.now) || i.idle ? { action: 'install', reason: 'security' } : { action: 'wait', reason: 'outside_window' };
   if (mode === 'notify') return { action: 'wait', reason: 'waiting_for_user' };
   // Major upgrades are scheduled apart from routine updates: only in the maintenance window, else the person chooses.
   if (m.upgrade) return i.window && inWindow(i.window, i.now) ? { action: 'install', reason: 'automatic' } : { action: 'wait', reason: 'major_upgrade' };

@@ -173,6 +173,47 @@ function isolateDialog(id, hostname) {
     h('div', { class: 'row' }, h('button', { class: 'danger' }, 'Isolate'), h('button', { type: 'button', onclick: close }, 'Cancel')));
   back.append(f); document.body.append(back); pw.focus();
 }
+// Security Center › Protection column and the device page's protection section (#38).
+function protectionCell(s) {
+  if (!s || !s.realtime) return '—';
+  const parts = [s.realtime.enabled ? (s.realtime.state === 'active' ? 'Real-time on' + (s.realtime.prevention ? '' : ' (report only)') : 'Real-time ' + s.realtime.state) : 'Real-time off'];
+  if (s.protected_folders && s.protected_folders.count) parts.push(s.protected_folders.count + ' protected folder rule(s)' + (s.protected_folders.state !== 'active' ? ' — ' + s.protected_folders.state : ''));
+  if (s.threat_intel && s.threat_intel.feeds) parts.push(s.threat_intel.entries + ' threat-intel entries');
+  const bad = (s.realtime.enabled && s.realtime.state !== 'active') || (s.suspended && s.suspended.length);
+  return h('span', { class: bad ? 'bad' : '' }, parts.join(' · ') + (s.suspended && s.suspended.length ? ' · ' + s.suspended.length + ' program(s) suspended' : ''));
+}
+function restoreDialog(id, hostname, q) {
+  const pw = h('input', { type: 'password', autocomplete: 'current-password', 'aria-label': 'Your password' });
+  const name = h('input', { 'aria-label': 'Device name' });
+  const back = h('div', { class: 'modal-back' });
+  const close = () => back.remove();
+  const f = h('form', { class: 'card form', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Restore anyway', onsubmit: (e) => { e.preventDefault();
+    act(() => api('POST', 'devices/' + id + '/commands', { command: 'RestoreQuarantined', args: { quarantine_id: q.id, force: true }, password: pw.value, confirm_name: name.value }).then(close),
+      'Restore sent. The file goes back even if it is still detected.'); } },
+    h('h2', {}, 'Restore ' + q.path + ' even if it is still detected?'),
+    h('p', { class: 'muted' }, 'Only for a false positive (' + q.signature + '). The device normally re-scans and refuses to restore a file that is still detected.'),
+    h('label', {}, 'Your password', pw), h('label', {}, 'Type the device name to confirm', name),
+    h('div', { class: 'row' }, h('button', { class: 'danger' }, 'Restore anyway'), h('button', { type: 'button', onclick: close }, 'Cancel')));
+  back.append(f); document.body.append(back); pw.focus();
+}
+function deviceProtection(id, hostname, s, send) {
+  if (!s || !s.realtime) return null;
+  const kind = { onaccess_blocked: 'Blocked on access', onaccess_detected: 'Detected on access', write_blocked: 'Write to protected folder blocked', exec_blocked: 'Blocked program',
+    ransomware_suspended: 'Suspended (ransomware behaviour)', download_threat: 'Infected download quarantined' };
+  return [h('h2', {}, 'Protection'),
+    h('p', {}, protectionCell(s)),
+    s.suspended && s.suspended.length ? [h('h3', {}, 'Suspended programs'), table(['Program', 'Last file', 'When', ''], s.suspended.map((x) => h('tr', {},
+      h('td', {}, x.exe || '—'), h('td', {}, x.path), h('td', {}, ago(x.at)),
+      h('td', {}, h('button', { onclick: () => send('ResolveSuspendedProcess', { event_id: x.id, action: 'resume' }) }, 'Resume'),
+        h('button', { class: 'danger', onclick: () => send('ResolveSuspendedProcess', { event_id: x.id, action: 'terminate' }) }, 'End program')))))] : null,
+    h('h3', {}, 'Quarantine'), !s.quarantine || !s.quarantine.length ? h('p', { class: 'muted' }, 'Nothing in quarantine.')
+      : table(['File', 'Detection', 'When', ''], s.quarantine.map((q) => h('tr', {}, h('td', {}, q.path), h('td', {}, q.signature), h('td', {}, ago(q.at)),
+        h('td', {}, h('button', { onclick: () => send('RestoreQuarantined', { quarantine_id: q.id }) }, 'Restore (re-scanned first)'),
+          h('button', { onclick: () => restoreDialog(id, hostname, q) }, 'Restore anyway…'),
+          h('button', { class: 'danger', onclick: () => { if (confirm('Delete ' + q.path + ' permanently?')) send('DeleteQuarantined', { quarantine_id: q.id }); } }, 'Delete'))))),
+    s.events && s.events.length ? [h('h3', {}, 'Recent protection events'), table(['Event', 'File', 'Program', 'When'], s.events.map((e) => h('tr', {},
+      h('td', {}, (kind[e.kind] || e.kind) + (e.enforced ? '' : ' (audit)')), h('td', {}, e.path), h('td', {}, e.exe || e.signature || '—'), h('td', {}, ago(e.at)))))] : null];
+}
 async function wipeSubmit(fn, msg) {
   try { const r = await fn(); toast(msg(r)); route(); return true; } catch (e) { toast(e.message); return false; }
 }
@@ -223,6 +264,7 @@ const views = {
         h('button', { class: 'danger', onclick: () => isolateDialog(id, d.hostname) }, 'Isolate from network…'),
         h('button', { class: 'danger', onclick: () => { if (confirm('Revoke this device? It stops receiving policy and its credential stops working.')) act(() => api('POST', 'devices/' + id + '/revoke'), 'Device revoked.'); } }, 'Revoke')),
       kioskDevice(id, d.kiosk),
+      deviceProtection(id, d.hostname, hb.security, send),
       await deviceSoftwareSection(id, d),
       h('h2', {}, 'Erase'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
         h('button', { class: 'danger', onclick: () => wipeDialog({ request: true, hostname: d.hostname, label: 'Erase device', meta: 'Last seen ' + ago(d.last_seen) + ' · ' + (d.ownership === 'personal' ? 'personal' : 'corporate') + ' device.', note: 'Logged to the audit trail',
@@ -276,6 +318,10 @@ const views = {
     const f = h('form', { class: 'card form', onsubmit: (e) => { e.preventDefault();
       const num = (n) => f[n].value === '' ? null : Number(f[n].value);
       const list = (n) => f[n].value.split(/[\s,]+/).filter(Boolean);
+      const bool = (n) => f[n].value === '' ? null : f[n].value === 'true';
+      // One feed per line: "<https URL> sha256=<hex>" or "<https URL> key=<base64 Ed25519 public key>".
+      const feeds = (n) => { const r = f[n].value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const [url, ...rest] = l.split(/\s+/); const o = { url };
+        for (const x of rest) { const i = x.indexOf('='); if (i > 0) o[x.slice(0, i)] = x.slice(i + 1); } return o; }); return r.length ? r : null; };
       act(() => api('PUT', 'policy', { policy: { ...p, update_ring: f.update_ring.value || null, update_mode: f.update_mode.value || null, maintenance_window: f.maintenance_window.value || null,
         usb_storage: f.usb_storage.value || null, bluetooth: f.bluetooth.value === '' ? null : f.bluetooth.value === 'true', lock_timeout_max_s: num('lock_timeout_max_s'),
         offline_access_days: num('offline_access_days'), offline_wipe_days: num('offline_wipe_days'),
@@ -296,6 +342,14 @@ const views = {
         av_signature_checks_per_day: num('av_signature_checks_per_day'), av_cpu_quota_percent: num('av_cpu_quota_percent'),
         av_exclusions: list('av_exclusions').length ? list('av_exclusions') : null, firewall_outbound_block: list('firewall_outbound_block').length ? list('firewall_outbound_block') : null,
         firewall_log_blocked: f.firewall_log_blocked.value === '' ? null : f.firewall_log_blocked.value === 'true', security_log_retention_days: num('security_log_retention_days'),
+        realtime_protection: bool('realtime_protection'), realtime_prevention: bool('realtime_prevention'), download_scan: bool('download_scan'),
+        realtime_paths: list('realtime_paths').length ? list('realtime_paths') : null,
+        protected_folders: list('protected_folders').length ? list('protected_folders') : null, protected_folders_mode: f.protected_folders_mode.value || null,
+        protected_folders_allow: list('protected_folders_allow').length ? list('protected_folders_allow') : null,
+        ransomware_burst: num('burst_count') === null && num('burst_seconds') === null ? null : { count: num('burst_count') ?? 200, seconds: num('burst_seconds') ?? 10 },
+        app_denylist: list('app_denylist').length ? list('app_denylist') : null, dns_blocklist: list('dns_blocklist').length ? list('dns_blocklist') : null,
+        dns_threat_feeds: feeds('dns_threat_feeds'), firewall_threat_feeds: feeds('firewall_threat_feeds'), firewall_threat_max_entries: num('firewall_threat_max_entries'),
+        security_auto_patch: f.security_auto_patch.value || null,
         activity_monitoring: f.activity_monitoring.value === '' ? null : f.activity_monitoring.value === 'true', activity_retention_days: num('activity_retention_days'),
         activity_idle_threshold_s: num('activity_idle_threshold_s'), activity_web_domains: f.activity_web_domains.value === '' ? null : f.activity_web_domains.value === 'true',
         app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
@@ -334,7 +388,23 @@ const views = {
           h('label', {}, 'Security history kept (days)', h('input', { name: 'security_log_retention_days', type: 'number', min: 7, max: 3650, value: p.security_log_retention_days ?? '' }))),
         h('label', {}, 'Scan exclusions (absolute paths, one per line; each one weakens protection)', h('textarea', { name: 'av_exclusions' }, (p.av_exclusions || []).join('\n'))),
         h('div', { class: 'row' }, h('label', { class: 'grow' }, 'Blocked destinations (IP or CIDR, one per line)', h('textarea', { name: 'firewall_outbound_block' }, (p.firewall_outbound_block || []).join('\n'))),
-          h('label', {}, 'Report blocked connections', sel('firewall_log_blocked', [['true', 'On'], ['false', 'Off']])))),
+          h('label', {}, 'Report blocked connections', sel('firewall_log_blocked', [['true', 'On'], ['false', 'Off']]))),
+        // Protection layers (#38).
+        h('div', { class: 'row' }, h('label', {}, 'Real-time protection (needs about 1 GB of memory)', sel('realtime_protection', [['true', 'On'], ['false', 'Off']])),
+          h('label', {}, 'When real-time protection finds a threat', sel('realtime_prevention', [['true', 'Block access'], ['false', 'Report only']])),
+          h('label', {}, 'Scan new downloads', sel('download_scan', [['true', 'On'], ['false', 'Off']]))),
+        h('label', {}, 'Real-time protection folders (absolute or ~/folder; empty = /home; every Downloads folder is always included)', h('textarea', { name: 'realtime_paths' }, (p.realtime_paths || []).join('\n'))),
+        h('div', { class: 'row' }, h('label', { class: 'grow' }, 'Protected folders (ransomware protection; e.g. ~/Documents)', h('textarea', { name: 'protected_folders' }, (p.protected_folders || []).join('\n'))),
+          h('label', { class: 'grow' }, 'Programs also allowed to change them (absolute paths; a trailing / allows a folder)', h('textarea', { name: 'protected_folders_allow' }, (p.protected_folders_allow || []).join('\n')))),
+        h('div', { class: 'row' }, h('label', {}, 'Protected folders mode', sel('protected_folders_mode', [['block', 'Block'], ['audit', 'Audit only']])),
+          h('label', {}, 'Suspend a program after this many renames/deletions', h('input', { name: 'burst_count', type: 'number', min: 20, max: 10000, value: p.ransomware_burst ? p.ransomware_burst.count : '' })),
+          h('label', {}, 'within (seconds)', h('input', { name: 'burst_seconds', type: 'number', min: 1, max: 300, value: p.ransomware_burst ? p.ransomware_burst.seconds : '' }))),
+        h('label', {}, 'Blocked programs (absolute paths or SHA-256 hashes, one per line)', h('textarea', { name: 'app_denylist' }, (p.app_denylist || []).join('\n'))),
+        h('div', { class: 'row' }, h('label', { class: 'grow' }, 'Blocked domains (DNS; subdomains included)', h('textarea', { name: 'dns_blocklist' }, (p.dns_blocklist || []).join('\n'))),
+          h('label', { class: 'grow' }, 'Domain threat feeds (URL sha256=… or key=…, one per line)', h('textarea', { name: 'dns_threat_feeds' }, ((n) => (p[n] || []).map((x) => x.url + (x.sha256 ? ' sha256=' + x.sha256 : '') + (x.key ? ' key=' + x.key : '')).join('\n'))('dns_threat_feeds')))),
+        h('div', { class: 'row' }, h('label', { class: 'grow' }, 'Firewall threat-intel feeds: IP/CIDR lists (URL sha256=… or key=…, one per line)', h('textarea', { name: 'firewall_threat_feeds' }, ((n) => (p[n] || []).map((x) => x.url + (x.sha256 ? ' sha256=' + x.sha256 : '') + (x.key ? ' key=' + x.key : '')).join('\n'))('firewall_threat_feeds'))),
+          h('label', {}, 'Most feed entries', h('input', { name: 'firewall_threat_max_entries', type: 'number', min: 100, max: 200000, value: p.firewall_threat_max_entries ?? '' }))),
+        h('label', {}, 'Security updates', sel('security_auto_patch', [['window', 'Install in the maintenance window or when idle'], ['immediate', 'Install as soon as available'], ['off', 'Follow the update mode']]))),
       h('fieldset', {}, h('legend', {}, 'Employee monitoring'),
         h('p', { class: 'muted' }, 'Off unless turned on. Employees see a persistent indicator, are told on their first sign-in what is collected, and can see their own data. Collected: active, idle and locked time, time per application, sign-in/out and lock events, device startup and shutdown, and a once-a-minute current state (active/idle/locked and the app in use). Website domains only if turned on below. Never: keystrokes, screenshots, window titles, full web addresses, page titles or file contents.'),
         h('div', { class: 'row' }, h('label', {}, 'Activity monitoring', sel('activity_monitoring', [['true', 'On'], ['false', 'Off']])),
@@ -635,13 +705,14 @@ const views = {
     return [h('h1', {}, 'Security Center'), h('p', { class: 'muted' }, 'Firewall, antivirus and threats as each device last reported them at check-in. Scans, isolation and its release are on each device\'s page; settings are in Policy › WorkSuite Security.'),
       h('div', { class: 'grid' }, stat('Devices reporting', t.reporting + ' / ' + t.devices), stat('Protected', t.protected, 'ok'), stat('Need attention', t.attention, 'warn'),
         stat('At risk', t.at_risk, 'bad'), stat('Active threats', t.active_threats, 'bad'), stat('Isolated', t.isolated, 'warn'), stat('Firewall off', t.firewall_off, 'bad')),
-      h('h2', {}, 'Devices'), table(['Device', 'Status', 'Firewall', 'Antivirus', 'Threats', 'Last scan', 'Last seen'], r.devices.map((d) => { const s = d.security;
+      h('h2', {}, 'Devices'), table(['Device', 'Status', 'Firewall', 'Antivirus', 'Protection', 'Threats', 'Last scan', 'Last seen'], r.devices.map((d) => { const s = d.security;
         return h('tr', { class: 'click', tabindex: 0, onclick: () => { location.hash = 'device/' + d.id; }, onkeydown: (e) => { if (e.key === 'Enter') location.hash = 'device/' + d.id; } },
           h('td', {}, h('b', {}, d.hostname || d.id)),
           h('td', {}, !s ? h('span', { class: 'muted' }, 'Not reported') : h('span', { class: tone[s.overall] || '' }, (label[s.overall] || s.overall) + (s.isolation ? ' · isolated until ' + when(s.isolation.until) : ''))),
           h('td', {}, !s ? '—' : s.firewall && s.firewall.active ? h('span', { class: 'ok' }, 'On' + (s.firewall.policy_rules ? ' · ' + s.firewall.policy_rules + ' blocked' : '')) : h('span', { class: 'bad' }, 'Off')),
           h('td', {}, !s || !s.antivirus ? '—' : !s.antivirus.installed ? h('span', { class: 'bad' }, 'Not installed') : !s.antivirus.enabled ? 'Off by policy'
             : h('span', { class: (s.antivirus.signatures_age_days ?? 0) > 3 ? 'warn' : '' }, 'ClamAV ' + s.antivirus.engine + (s.antivirus.signatures_age_days !== null ? ' · signatures ' + s.antivirus.signatures_age_days + ' d old' : ''))),
+          h('td', {}, protectionCell(s)),
           h('td', {}, !s || !s.threats ? '—' : h('span', { class: s.threats.active ? 'bad' : '' }, s.threats.active + ' active, ' + s.threats.quarantined + ' quarantined')),
           h('td', {}, s && s.antivirus && s.antivirus.last_scan ? s.antivirus.last_scan.kind + ', ' + ago(s.antivirus.last_scan.finished) + (s.antivirus.last_scan.error ? ' (failed)' : '') : '—'),
           h('td', {}, ago(d.last_seen))); }))];

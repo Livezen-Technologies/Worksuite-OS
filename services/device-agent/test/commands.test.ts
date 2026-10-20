@@ -27,7 +27,7 @@ test('valid command accepted once; replay rejected', () => {
 
 test('allow-list is exactly the SRS set plus software and security incident response; no shell', () => {
   // RemoveApplication: Software Management remote uninstall (catalog ids only; the package service refuses system packages).
-  assert.deepEqual([...ALLOWED_COMMANDS].sort(), ['CollectApprovedDiagnostics', 'InstallApprovedApplication', 'IsolateEndpoint', 'RebootDuringWindow', 'RefreshPolicy', 'ReleaseIsolation', 'RemoteSupportElevate', 'RemoteSupportEnd', 'RemoteSupportRequest', 'RemoteWipe', 'RemoveApplication', 'RequestLock', 'ScheduleUpdate', 'StartMalwareScan']);
+  assert.deepEqual([...ALLOWED_COMMANDS].sort(), ['CollectApprovedDiagnostics', 'DeleteQuarantined', 'InstallApprovedApplication', 'IsolateEndpoint', 'RebootDuringWindow', 'RefreshPolicy', 'ReleaseIsolation', 'RemoteSupportElevate', 'RemoteSupportEnd', 'RemoteSupportRequest', 'RemoteWipe', 'RemoveApplication', 'RequestLock', 'ResolveSuspendedProcess', 'RestoreQuarantined', 'ScheduleUpdate', 'StartMalwareScan']);
   assert.equal((validateCommand(make({ command: 'RunShell' as any }), deps()) as any).reason, 'UNKNOWN_COMMAND');
 });
 
@@ -58,6 +58,18 @@ test('CollectApprovedDiagnostics: only the profiles the agent implements', () =>
   const r = (e: unknown) => validateCommand(e, deps());
   for (const p of ['basic', 'session', 'network', 'update']) assert.equal(r(make({ command: 'CollectApprovedDiagnostics', args: { bundle_profile: p } })).ok, true, p);
   assert.equal((r(make({ command: 'CollectApprovedDiagnostics', args: { bundle_profile: 'everything' } })) as any).reason, 'BAD_ARGS');
+});
+
+test('quarantine and suspended-process commands (#38): ids are UUIDs, force is a boolean, resume or terminate only', () => {
+  const r = (e: unknown) => validateCommand(e, deps());
+  const q = randomUUID();
+  assert.equal(r(make({ command: 'RestoreQuarantined', args: { quarantine_id: q } })).ok, true);
+  assert.equal(r(make({ command: 'RestoreQuarantined', args: { quarantine_id: q, force: true } })).ok, true);
+  assert.equal((r(make({ command: 'RestoreQuarantined', args: { quarantine_id: q, force: 'yes' } })) as any).reason, 'BAD_ARGS');
+  assert.equal((r(make({ command: 'DeleteQuarantined', args: { quarantine_id: '../../etc/passwd' } })) as any).reason, 'BAD_ARGS');
+  assert.equal(r(make({ command: 'DeleteQuarantined', args: { quarantine_id: q } })).ok, true);
+  assert.equal(r(make({ command: 'ResolveSuspendedProcess', args: { event_id: q, action: 'resume' } })).ok, true);
+  assert.equal((r(make({ command: 'ResolveSuspendedProcess', args: { event_id: q, action: 'kill -9 1' } })) as any).reason, 'BAD_ARGS');
 });
 
 test('expired ids are pruned from the replay store but still rejected as expired', () => {

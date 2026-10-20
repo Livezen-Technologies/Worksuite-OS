@@ -85,6 +85,8 @@ jobs:
       - run: sh tests/session/signin-pam-test.sh
       # pam_worksuite.so through real libpam with a stand-in helper (WSOS-DIR-009).
       - run: sudo apt-get install -y --no-install-recommends libpam0g-dev gcc make && sh native/pam-worksuite/test.sh
+      # worksuite-guard (#38): selftest, then live fanotify checks as root (protected folder, burst, deny list).
+      - run: sudo sh native/guard/test.sh
       # File-system layout (SRS §11.6-b): packaged paths, XDG base directories for user state.
       - run: sh tests/session/fs-layout-test.sh
       - uses: actions/setup-node@v4

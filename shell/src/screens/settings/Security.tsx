@@ -1,6 +1,7 @@
 // Settings › Privacy & security › WorkSuite Security (#20): overall state, firewall, virus & threat protection with
 // Scan now, protection history and organization policies. Data: the device agent's security.json; scans through
-// lk.worksuite.DeviceAgent1.StartSecurityScan.
+// lk.worksuite.DeviceAgent1.StartSecurityScan. #38 adds real-time protection, ransomware protection, web & app
+// protection, suspended programs and quarantine restore/delete (an administrator, through polkit).
 import { useEffect, useState } from 'react'
 import { C, Svg, btnGhost, card, chip, rowLine } from '../../components/Dk'
 import { os, type DeviceInfo, type SecurityStatus } from '../../lib/os'
@@ -9,6 +10,38 @@ import { formatNumber, t } from '../../i18n'
 
 const SHIELD = 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'
 const BUG = 'M8 9h8v8a4 4 0 0 1-8 0zM9 9V7a3 3 0 0 1 6 0v2M4 13h4M16 13h4M5 8l3 2M19 8l-3 2M5 19l3-2M19 19l-3-2'
+const BOLT = 'M13 2L4 14h7l-1 8 9-12h-7z'
+const FOLDER = 'M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM12 11v4M10 13h4'
+const GLOBE = 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18'
+
+const EVENT: Record<string, Parameters<typeof t>[0]> = {
+  onaccess_blocked: 'sec.ev.onaccess_blocked', onaccess_detected: 'sec.ev.onaccess_detected', write_blocked: 'sec.ev.write_blocked',
+  exec_blocked: 'sec.ev.exec_blocked', ransomware_suspended: 'sec.ev.ransomware_suspended', download_threat: 'sec.ev.download_threat',
+}
+const ACTION_ERROR: Record<string, Parameters<typeof t>[0]> = { still_detected: 'sec.stillDetected', path_exists: 'sec.pathExists', auth_cancelled: 'sec.authCancelled' }
+const baseName = (p: string) => p.split('/').pop() || p
+
+/** Settings rows for the #38 layers; null fields (older agents) leave them out. */
+export function protectionRows(s: SecurityStatus): { key: string; icon: string; tone: string; title: string; detail: string }[] {
+  const rows = []
+  if (s.realtime) {
+    const on = s.realtime.enabled, running = s.realtime.state === 'active'
+    rows.push({ key: 'rt', icon: BOLT, tone: !on ? C.muted : running ? C.green : '#FF8A7A', title: t('sec.realtime'),
+      detail: [!on ? t('sec.realtimeOff') : !running ? t('sec.realtimeStopped') : s.realtime.prevention ? t('sec.realtimeBlock') : t('sec.realtimeReport'), s.realtime.downloads ? t('sec.downloads') : null].filter(Boolean).join(' · ') })
+  }
+  if (s.protected_folders) {
+    const f = s.protected_folders, names = f.folders.map((x) => x.replace(/^~\//, '')).join(', ')
+    rows.push({ key: 'pf', icon: FOLDER, tone: !f.folders.length ? C.muted : f.state === 'active' ? C.green : C.amber, title: t('sec.folders'),
+      detail: !f.folders.length ? t('sec.foldersOff') : f.mode === 'audit' ? t('sec.foldersAudit', { folders: names }) : t('sec.foldersOn', { folders: names }) })
+  }
+  if (s.web) {
+    const parts = [s.web.dns_blocked + s.web.dns_feed_entries ? t('sec.webDomains', { count: formatNumber(s.web.dns_blocked + s.web.dns_feed_entries) }) : null,
+      s.threat_intel?.entries ? t('sec.webFeeds', { count: formatNumber(s.threat_intel.entries) }) : null,
+      s.app_control?.denied ? t('sec.appControl', { count: formatNumber(s.app_control.denied) }) : null].filter(Boolean)
+    rows.push({ key: 'web', icon: GLOBE, tone: parts.length ? C.green : C.muted, title: t('sec.web'), detail: parts.length ? parts.join(' · ') : t('sec.webNone') })
+  }
+  return rows
+}
 
 export function overallLabel(s: SecurityStatus | null): { text: string; tone: string } {
   if (!s || s.overall === 'unavailable') return { text: t('sec.unavailable'), tone: C.muted }
@@ -28,6 +61,13 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
     return os.onSecurityChanged(setS)
   }, [initial])
   const scan = (kind: 'quick' | 'full') => void os.securityScan(kind).then((r) => setMsg(r.ok ? t('sec.scanStarted') : t('sec.scanError')))
+  const [actMsg, setActMsg] = useState<string | null>(null)
+  const act = (method: 'RestoreQuarantined' | 'DeleteQuarantined' | 'ResolveSuspendedProcess', done: Parameters<typeof t>[0], ...args: string[]) =>
+    void os.securityAction(method, ...args).then(async (r) => {
+      setActMsg(r.ok ? t(done) : t(ACTION_ERROR[r.error] ?? 'sec.actionFailed'))
+      const next = await os.securityStatus().catch(() => null)
+      if (next) setS(next)
+    })
   const head = overallLabel(s)
   const av = s?.antivirus
   const last = av?.last_scan
@@ -57,8 +97,48 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
             </span>}
           </div>
           {msg && <p role="status" className="m-0 px-4 py-2 text-[11px] text-[#C9D6EE]">{msg}</p>}
+          {protectionRows(s).map((r) => (
+            <div key={r.key} className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
+              <Svg d={r.icon} size={18} stroke={r.tone} />
+              <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">{r.title}</span><span className="text-[11px] text-[#8FA3C8]">{r.detail}</span></span>
+            </div>
+          ))}
         </div>
       )}
+      {!!s?.suspended?.length && <div className={`${card} overflow-hidden border-[rgba(255,138,122,0.4)]`} role="region" aria-label={t('sec.suspended')}>
+        <div className="px-4 pt-3 text-[13px] font-medium text-[#FF8A7A]">{t('sec.suspended')}</div>
+        <p className="m-0 px-4 pb-2 text-[11px] text-[#8FA3C8]">{t('sec.suspendedHint')}</p>
+        {s.suspended.map((p) => (
+          <div key={p.id} className={`flex items-center gap-3 px-4 py-2 text-xs ${rowLine}`}>
+            <span className="flex min-w-0 flex-1 flex-col"><span className="truncate">{baseName(p.exe ?? '')}</span><span className="truncate text-[11px] text-[#8FA3C8]">{p.path}</span></span>
+            <button type="button" className={btnGhost} onClick={() => act('ResolveSuspendedProcess', 'sec.resolved', p.id, 'resume')}>{t('sec.resume')}</button>
+            <button type="button" className={btnGhost} onClick={() => act('ResolveSuspendedProcess', 'sec.resolved', p.id, 'terminate')}>{t('sec.terminate')}</button>
+          </div>
+        ))}
+      </div>}
+      {s?.quarantine && <div className={`${card} overflow-hidden`} role="table" aria-label={t('sec.quarantine')}>
+        <div role="row" className="px-4 py-[9px] text-[11px] text-[#8FA3C8]"><span role="columnheader">{t('sec.quarantine')}</span></div>
+        {!s.quarantine.length ? <div role="row" className={`px-4 py-2.5 text-xs text-[#8FA3C8] ${rowLine}`}><span role="cell">{t('sec.quarantineEmpty')}</span></div>
+          : s.quarantine.slice(0, 20).map((q) => (
+            <div role="row" key={q.id} className={`flex items-center gap-3 px-4 py-2 text-xs ${rowLine}`}>
+              <span role="cell" className="flex min-w-0 flex-1 flex-col"><span className="truncate">{baseName(q.path)}</span><span className="truncate text-[11px] text-[#8FA3C8]">{q.signature} · {q.path}</span></span>
+              <span role="cell" className="flex gap-2">
+                <button type="button" className={btnGhost} onClick={() => act('RestoreQuarantined', 'sec.restored', q.id)}>{t('sec.restore')}</button>
+                <button type="button" className={btnGhost} onClick={() => act('DeleteQuarantined', 'sec.deleted', q.id)}>{t('sec.delete')}</button>
+              </span>
+            </div>
+          ))}
+        {actMsg && <p role="status" className="m-0 px-4 py-2 text-[11px] text-[#C9D6EE]">{actMsg}</p>}
+      </div>}
+      {!!s?.events?.length && <div className={`${card} overflow-hidden`} role="table" aria-label={t('sec.events')}>
+        <div role="row" className="px-4 py-[9px] text-[11px] text-[#8FA3C8]"><span role="columnheader">{t('sec.events')}</span></div>
+        {s.events.slice(0, 8).map((e) => (
+          <div role="row" key={e.id} className={`flex items-center gap-3 px-4 py-2 text-xs ${rowLine}`}>
+            <span role="cell" className="flex min-w-0 flex-1 flex-col"><span className="truncate">{EVENT[e.kind] ? t(EVENT[e.kind]) : e.kind}</span><span className="truncate text-[11px] text-[#8FA3C8]">{e.path}</span></span>
+            <span role="cell" className="w-24 text-right text-[11px] text-[#8FA3C8]">{fmtWhen(e.at)}</span>
+          </div>
+        ))}
+      </div>}
       {s && <div className={`${card} overflow-hidden`} role="table" aria-label={t('sec.history')}>
         <div role="row" className="px-4 py-[9px] text-[11px] text-[#8FA3C8]"><span role="columnheader">{t('sec.history')}</span></div>
         {!s.history.length ? <div role="row" className={`px-4 py-2.5 text-xs text-[#8FA3C8] ${rowLine}`}><span role="cell">{t('sec.noHistory')}</span></div>
@@ -73,6 +153,7 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
       <div className={`${card} px-4 py-3 text-xs leading-relaxed text-[#C9D6EE]`}>
         <span className="font-semibold">{t('sec.policies')}. </span>
         {info?.managed ? t('sec.policiesManaged', { org: info.org_name ?? info.server ?? t('settings.about.yourOrg'), days: formatNumber(s?.retention_days ?? 90) }) : t('sec.policiesLocal')} {t('sec.note')}
+        {info?.managed && s?.auto_patch ? ` ${t(s.auto_patch === 'immediate' ? 'sec.patchImmediate' : s.auto_patch === 'off' ? 'sec.patchOff' : 'sec.patchWindow')}` : ''}
       </div>
     </section>
   )

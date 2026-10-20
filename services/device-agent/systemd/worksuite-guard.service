@@ -1,0 +1,40 @@
+[Unit]
+Description=WorkSuite Security protected folders, ransomware detection and application control (fanotify)
+Documentation=file:///usr/share/doc/worksuite-device-agent/README.md
+# The device agent writes the configuration from the signed policy (src/protection.ts renderGuardConf) and starts or
+# stops this unit; without a configuration there is nothing to guard.
+ConditionPathExists=/etc/worksuite/guard.conf
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/worksuite/worksuite-guard --config /etc/worksuite/guard.conf
+Restart=on-failure
+RestartSec=5s
+# Every decision is a JSON line in this unit's journal; the device agent follows it.
+StandardOutput=journal
+# fanotify permission events (SYS_ADMIN), file handles (DAC_READ_SEARCH), the opener's open flags from
+# /proc/<tid>/syscall and process_vm_readv (SYS_PTRACE), SIGSTOP to a process over the burst threshold (KILL).
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_READ_SEARCH CAP_SYS_PTRACE CAP_KILL
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=no
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+# An unanswered permission event blocks the opener: keep the guard scheduled and out of the OOM killer's way.
+OOMScoreAdjust=-900
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target
