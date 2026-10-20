@@ -131,7 +131,7 @@ export function QuickTray({ state, open, onToggle, onOpenSettings }: { state: Qu
   const items = trayIndicators(state)
   const summary = items.map((i) => i.label).join(', ')
   return (
-    <button type="button" aria-label={summary ? `${t('qs.title')}. ${t('tray.status', { list: summary })}` : t('qs.title')} aria-haspopup="dialog" aria-expanded={open} aria-controls="ws-quick" onClick={onToggle} title={batteryText(state.battery) ?? undefined}
+    <button type="button" aria-label={t('qs.title')} aria-describedby={summary ? 'ws-tray-status' : undefined} aria-haspopup="dialog" aria-expanded={open} aria-controls="ws-quick" onClick={onToggle} title={batteryText(state.battery) ?? undefined}
       aria-description={onOpenSettings ? t('tray.settingsHint') : undefined}
       onContextMenu={(e) => {
         if (!onOpenSettings) return
@@ -141,6 +141,7 @@ export function QuickTray({ state, open, onToggle, onOpenSettings }: { state: Qu
         e.preventDefault(); onOpenSettings(it.section)
       }}
       className={`flex h-[38px] cursor-pointer items-center gap-0.5 rounded-[10px] p-1 ${open ? 'bg-[rgba(31,107,255,0.4)]' : 'bg-[rgba(31,107,255,0.18)] hover:bg-[rgba(31,107,255,0.3)]'}`}>
+      {summary && <span id="ws-tray-status" className="sr-only">{t('tray.status', { list: summary })}</span>}
       {items.length ? items.map((i) => (
         <span key={i.id} data-indicator={i.id} title={i.label} className={`relative flex h-[30px] min-w-[30px] items-center justify-center gap-1 ${i.dim ? 'opacity-60' : ''} ${i.text ? 'px-1' : ''}`}>
           {i.id === 'net' && i.d === D.wifi ? <WifiIcon level={i.level ?? 3} /> : i.id === 'battery' && i.d === D.battery ? <BatteryIcon pct={i.level ?? 0} />
