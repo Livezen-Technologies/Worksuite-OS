@@ -284,7 +284,9 @@ test('recording: only when the policy allows it and the request asked; in-order 
   const dev0 = await enroll(orgA);
   assert.equal((await call('POST', 'remote-support/sessions', { cookie: tess, body: { device_id: dev0.device_id, mode: 'view', reason: 'record me', record: true } })).status, 409, 'policy must allow recording');
   assert.throws(() => validatePolicy({ remote_support: { recording_retention_days: 0 } }));
+  assert.equal((await call('GET', 'remote-support', { cookie: tess })).body.recording_allowed, false);
   admin.setPolicy(db, orgA, { remote_support: { recording: true, recording_retention_days: 7 } });
+  assert.equal((await call('GET', 'remote-support', { cookie: tess })).body.recording_allowed, true);
   const { dev, id } = await activeSession(tess, 'view', { record: true });
   const c = (await device(dev.credential).poll()).commands[0];
   assert.equal(c.args.record, true, 'the device is told, so the user sees it in the consent dialog');
@@ -314,4 +316,10 @@ test('recording: only when the policy allows it and the request asked; in-order 
   log = (await call('GET', 'log', { cookie: tess })).body.items.map((i: any) => i.action);
   assert.ok(log.includes('remote_support_recording_expired'));
   admin.setPolicy(db, orgA, {});
+});
+
+test('console viewer: script parses and wires the issue #37 controls', async () => {
+  const { APP_JS } = await import('../src/console-ui.ts');
+  assert.doesNotThrow(() => new Function(APP_JS), 'console script is valid JavaScript');
+  for (const s of ["t: 'f-offer'", "t: 'f-get'", "t: 'clip'", "t: 'q'", "t: 'mon-list'", "/elevate'", "/recording?seq='", 'MediaRecorder', "/events'", 'rsevents']) assert.ok(APP_JS.includes(s), s);
 });

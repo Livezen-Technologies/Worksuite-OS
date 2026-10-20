@@ -158,7 +158,10 @@ export function dashboard(db: DatabaseSync, orgId: number, now = Date.now()) {
   const n = (sql: string, ...p: (string | number)[]) => (db.prepare(sql).get(...p) as { n: number }).n;
   const technicians = (db.prepare("SELECT permissions FROM users WHERE org_id = ? AND role = 'admin' AND disabled = 0").all(orgId) as { permissions: string }[])
     .filter((u) => (JSON.parse(u.permissions) as string[]).includes(REMOTE_SUPPORT_PERMISSION)).length;
+  let recordingAllowed = false;
+  try { recordingAllowed = (JSON.parse((db.prepare('SELECT body FROM policies WHERE org_id = ?').get(orgId) as { body: string } | undefined)?.body ?? '{}').remote_support as RsPolicy | undefined)?.recording === true; } catch { /* no policy */ }
   return {
+    recording_allowed: recordingAllowed,
     cards: {
       online_devices: devices.filter((d) => d.status !== 'offline').length,
       offline_devices: devices.filter((d) => d.status === 'offline').length,
