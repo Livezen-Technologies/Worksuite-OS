@@ -57,6 +57,10 @@ export interface DriverReport {
   /** Secure Boot: a MOK enrolment is waiting for the next restart. The one-time password is never in the report
    *  (every local user can read it); administrators get it through GetMokPassword (polkit). */
   mok?: { pending: boolean };
+  /** Installed through Settings (newest first) with the version now on the system. */
+  installed?: { id: string; name: string; version: string | null; restart: boolean; at: number }[];
+  /** Something installed needs a restart to take effect. */
+  restart_required?: boolean;
 }
 
 // ---------- policy ----------
