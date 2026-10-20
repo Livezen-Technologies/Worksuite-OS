@@ -8,13 +8,21 @@ import { extractBundle, inspectBundle, type BundleManifest } from './bundle.ts';
 import { stageBundle, stageFile, stagedCopy } from './staging.ts';
 import { checkSources, isCritical, parseCatalogId, parseDiskChange, parseSimulation, parseUpgradable, ServiceError, type Plan } from './apt.ts';
 import { debFieldsUnprivileged, type Unprivileged } from './untrusted.ts';
+import type { HistoryKind, UpdateHistory } from './history.ts';
 
 export type Source = 'apt' | 'flatpak';
 export const APPIMAGE_NOT_INSTALLABLE = 'AppImages are not installed by the package service; import the AppImage file in the App Center (worksuite-appimage import)';
 export interface RunResult { code: number; stdout: string; stderr: string }
 export interface Runner { run(cmd: string, args: string[]): Promise<RunResult> }
 
-export interface DevicePolicy { app_allowlist?: string[]; approved_remotes?: string[]; /** WSOS-FLP-001: remotes an administrator may add, name → https .flatpakrepo URL. */ flatpak_remotes?: Record<string, string>; allow_local_debs?: boolean; appimages?: 'allow' | 'block' }
+export interface DevicePolicy {
+  /** Software Management: what people may install themselves ('approved' and 'request' = the allowlist; 'block' =
+   *  nothing; 'any' = any package from the approved sources), and whether they may uninstall or update apps. Root
+   *  callers (the device agent running the organization's signed commands) are not limited by these. */
+  software_install?: 'any' | 'approved' | 'request' | 'block'; software_uninstall?: boolean; software_update?: boolean;
+  /** Update Manager › Advanced options: download limit for updates in KiB/s (0/absent = none). */
+  update_bandwidth_kbps?: number;
+  app_allowlist?: string[]; approved_remotes?: string[]; /** WSOS-FLP-001: remotes an administrator may add, name → https .flatpakrepo URL. */ flatpak_remotes?: Record<string, string>; allow_local_debs?: boolean; appimages?: 'allow' | 'block' }
 
 export interface Env {
   runner: Runner;
@@ -38,10 +46,17 @@ export interface Env {
   unprivileged?: Unprivileged;
   /** Backoff between download attempts (tests make it instant). */
   sleep?(ms: number): Promise<void>;
+  /** Update Manager history (src/history.ts); absent in tests that don't look at it. */
+  history?: UpdateHistory;
+  now?(): number;
 }
 
 export interface Preview { source: Source; name: string; plan: Plan; disk_bytes: number | null; permissions: string[]; broad: string[] }
-export type JobKind = 'install' | 'remove' | 'update' | 'repair' | 'permissions' | 'prune' | 'remote' | 'drivers';
+export type JobKind = 'install' | 'remove' | 'update' | 'repair' | 'permissions' | 'prune' | 'remote' | 'drivers' | 'app-update';
+/** What a job is, for the Update Manager's history; jobs without one (installs, repairs) are not update history. */
+export interface JobSubject { kind: HistoryKind; title: string; version?: string | null }
+/** An available application update (Flatpak; Debian packages update with the OS release). */
+export interface AppUpdate { id: string; name: string; version: string | null; download_size: string | null }
 
 /** WSOS-APT-005: what the confirmation dialog shows for a local .deb. `token` must be passed back to install. */
 export interface LocalDebPreview {
@@ -50,7 +65,7 @@ export interface LocalDebPreview {
   publisher: string; publisher_verified: false; description: string;
   plan: Plan; disk_bytes: number | null; token: string;
 }
-export interface Job { id: number; kind: JobKind; caller: number; state: 'queued' | 'running' | 'success' | 'failed' | 'cancelled'; phase: string; error?: string }
+export interface Job { id: number; kind: JobKind; caller: number; state: 'queued' | 'running' | 'success' | 'failed' | 'cancelled'; phase: string; error?: string; subject?: JobSubject; started_at?: number }
 
 const APT_ENV_ARGS = ['-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold'];
 /** WSOS-FLP-002: permissions that must be highlighted. */
@@ -81,8 +96,8 @@ export class PackageService extends EventEmitter {
   }
 
   /** Read-only preview shown before confirmation (WSOS-APP-002). Same checks as the real operation. */
-  async preview(source: Source, catalogId: string, op: 'install' | 'remove'): Promise<Preview> {
-    const name = this.authorizeItem(source, catalogId, op);
+  async preview(source: Source, catalogId: string, op: 'install' | 'remove', caller = 0): Promise<Preview> {
+    const name = this.authorizeItem(source, catalogId, op, caller);
     if (source === 'apt') {
       this.checkSources();
       const verb = op === 'install' ? 'install' : 'remove';
@@ -102,10 +117,10 @@ export class PackageService extends EventEmitter {
   }
 
   install(caller: number, source: Source, catalogId: string): number {
-    const name = this.authorizeItem(source, catalogId, 'install');
+    const name = this.authorizeItem(source, catalogId, 'install', caller);
     return this.enqueue('install', caller, async (job) => {
       if (source === 'apt') {
-        await this.preview('apt', catalogId, 'install');   // re-check plan and sources inside the lock
+        await this.preview('apt', catalogId, 'install', caller);   // re-check plan and sources inside the lock
         job.phase = 'installing'; this.progress(job, 30);
         await this.mustRun('apt-get', ['-y', '-q', ...APT_ENV_ARGS, 'install', '--', name]);
       } else {
@@ -117,10 +132,10 @@ export class PackageService extends EventEmitter {
   }
 
   remove(caller: number, source: Source, catalogId: string): number {
-    const name = this.authorizeItem(source, catalogId, 'remove');
+    const name = this.authorizeItem(source, catalogId, 'remove', caller);
     return this.enqueue('remove', caller, async (job) => {
       if (source === 'apt') {
-        await this.preview('apt', catalogId, 'remove');
+        await this.preview('apt', catalogId, 'remove', caller);
         job.phase = 'removing'; this.progress(job, 30);
         await this.mustRun('apt-get', ['-y', '-q', 'remove', '--', name]);
       } else {
@@ -142,8 +157,9 @@ export class PackageService extends EventEmitter {
   }
 
   /** WSOS-UPD-001 coordinator steps that belong on the device. release_id "" = newest the device's ring allows. */
-  applyUpdate(caller: number, releaseId: string, opts: { allow_battery?: boolean } = {}): number {
+  applyUpdate(caller: number, releaseId: string, opts: { allow_battery?: boolean; version?: string } = {}): number {
     if (releaseId && !/^[A-Za-z0-9._+~-]{1,64}$/.test(releaseId)) throw new ServiceError('InvalidArgs', 'release id');
+    const subject: JobSubject = { kind: 'os', title: 'WorkSuite OS', version: opts.version ?? (releaseId || null) };
     return this.enqueue('update', caller, async (job) => {
       const p = this.env.power();
       if (!p.ac && (p.battery ?? 0) < 40 && !opts.allow_battery) throw new ServiceError('PreconditionFailed', 'connect power or charge to 40%');
@@ -168,7 +184,37 @@ export class PackageService extends EventEmitter {
       const reboot = await this.env.runner.run('test', ['-e', '/run/reboot-required']);
       this.rebootRequired = reboot.code === 0;
       this.env.audit('updated', { caller, release_id: releaseId || 'latest', upgraded: plan.upgrade.length, installed: plan.install.length, reboot_required: this.rebootRequired });
-    });
+    }, subject);
+  }
+
+  // ---- application updates (Update Manager › Application updates) ----
+
+  /** Flatpak apps with an update on their remote. Read-only. */
+  async appUpdates(): Promise<AppUpdate[]> {
+    const r = await this.env.runner.run('flatpak', ['remote-ls', '--system', '--updates', '--app', '--columns=application,name,version,download-size']);
+    if (r.code !== 0) return [];
+    return r.stdout.split('\n').map((l) => l.split('\t')).filter((c) => /^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}$/.test(c[0]?.trim() ?? ''))
+      .map(([app, name, version, size]) => ({ id: `flatpak:${app.trim()}`, name: name?.trim() || app.trim(), version: version?.trim() || null, download_size: size?.trim() || null }));
+  }
+
+  /** Update the given Flatpak apps (empty = every app with an update). People need software_update allowed. */
+  updateApps(caller: number, ids: string[]): number {
+    const policy = this.env.policy();
+    if (caller !== 0 && policy?.software_update === false) throw new ServiceError('NotAuthorized', 'your organization manages app updates');
+    const apps = ids.map((id) => parseCatalogId('flatpak', id));
+    const subject: JobSubject = { kind: 'app', title: apps.length === 1 ? apps[0] : apps.length ? `${apps.length} apps` : 'apps', version: null };
+    return this.enqueue('app-update', caller, async (job) => {
+      job.phase = 'updating'; this.progress(job, 20);
+      await this.mustRun('flatpak', ['update', '--system', '--noninteractive', '-y', ...apps]);
+      this.env.audit('apps_updated', { caller, apps: apps.length ? apps : 'all' });
+    }, subject);
+  }
+
+  /** Finished update jobs (newest first) plus the ones queued or running. */
+  updateHistory(limit = 50) {
+    const pending = [...this.jobs.values()].filter((j) => j.subject && (j.state === 'queued' || j.state === 'running'))
+      .map((j) => ({ id: `job-${j.id}`, kind: j.subject!.kind, title: j.subject!.title, version: j.subject!.version ?? null, result: 'pending' as const, phase: j.phase, started_at: j.started_at ?? null }));
+    return { pending, entries: this.env.history?.list(limit) ?? [] };
   }
 
   // ---- local .deb files (WSOS-APT-005) ----
@@ -308,6 +354,7 @@ export class PackageService extends EventEmitter {
       let manifest: BundleManifest, debs: string[];
       try { ({ manifest, debs } = extractBundle(real, dir, this.bundleOptions())); }
       catch (e) { this.env.audit('bundle_rejected', { caller, error: (e as Error).message }); throw e; }
+      job.subject = { kind: 'os', title: 'WorkSuite OS', version: manifest.version };
       try {
         // Offline: everything must come from the bundle (--no-download); apt still checks dependencies and conflicts.
         const sim = await this.env.runner.run('apt-get', ['-s', '-q', '--no-download', 'install', '--', ...debs]);
@@ -324,7 +371,7 @@ export class PackageService extends EventEmitter {
     try {
       return this.enqueue('update', caller, async (job) => {
         try { await installStaged(job); } finally { rmSync(real, { force: true }); }
-      });
+      }, { kind: 'os', title: 'WorkSuite OS', version: null });
     } catch (e) { rmSync(real, { force: true }); throw e; }
   }
 
@@ -334,13 +381,19 @@ export class PackageService extends EventEmitter {
   private async download(verb: string[]) {
     const attempts = 3;
     for (let i = 1; ; i++) {
-      const r = await this.env.runner.run('apt-get', ['-y', '-q', '-o', 'Acquire::Retries=3', '--download-only', ...verb]);
+      const r = await this.env.runner.run('apt-get', ['-y', '-q', '-o', 'Acquire::Retries=3', ...this.bandwidthArgs(), '--download-only', ...verb]);
       if (r.code === 0) return;
       if (/NO_PUBKEY|not signed|EXPKEYSIG|BADSIG|Hash Sum mismatch/.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
       this.env.audit('download_interrupted', { attempt: i, error: firstLine(r.stderr) });
       if (i >= attempts) throw new ServiceError('Failed', `download interrupted; it resumes from where it stopped next time (${firstLine(r.stderr) || `exit ${r.code}`})`);
       await (this.env.sleep ?? ((ms) => new Promise((res) => setTimeout(res, ms))))(i * 10_000);
     }
+  }
+
+  /** Update Manager › Advanced options: apt's per-download limit (KiB/s) from policy `update_bandwidth_kbps`. */
+  private bandwidthArgs(): string[] {
+    const k = this.env.policy()?.update_bandwidth_kbps;
+    return Number.isInteger(k) && (k as number) > 0 ? ['-o', `Acquire::http::Dl-Limit=${k}`, '-o', `Acquire::https::Dl-Limit=${k}`] : [];
   }
 
   /** WSOS-APT-006: fixed commands only. */
@@ -363,22 +416,23 @@ export class PackageService extends EventEmitter {
     if (caller !== 0 && caller !== job.caller) throw new ServiceError('NotAuthorized');
     if (job.state !== 'queued') throw new ServiceError('Busy', 'job already started');
     job.state = 'cancelled';
+    this.record(job);
     this.emit('finished', job);
   }
 
   job(id: number) { return this.jobs.get(id); }
 
   /** Driver installs (driverscan.ts) in the same queue; progress phase = the offer id. Sources are checked first. */
-  driverJob(caller: number, body: (progress: (phase: string, pct: number) => void) => Promise<void>): number {
+  driverJob(caller: number, body: (progress: (phase: string, pct: number) => void) => Promise<void>, subject?: JobSubject): number {
     return this.enqueue('drivers', caller, async (job) => {
       this.checkSources();
       await body((phase, pct) => { job.phase = phase; this.progress(job, pct); });
-    });
+    }, subject);
   }
 
-  private enqueue(kind: JobKind, caller: number, body: (job: Job) => Promise<void>): number {
+  private enqueue(kind: JobKind, caller: number, body: (job: Job) => Promise<void>, subject?: JobSubject): number {
     if (this.needsRepair && kind !== 'repair') throw new ServiceError('PreconditionFailed', 'repair packages first');
-    const job: Job = { id: this.nextId++, kind, caller, state: 'queued', phase: 'queued' };
+    const job: Job = { id: this.nextId++, kind, caller, state: 'queued', phase: 'queued', subject, started_at: this.now() };
     this.jobs.set(job.id, job);
     this.queue = this.queue.then(async () => {
       if (job.state === 'cancelled') return;
@@ -390,9 +444,20 @@ export class PackageService extends EventEmitter {
         job.state = 'failed'; job.error = e instanceof Error ? e.message : String(e);
         this.env.audit('job_failed', { job: job.id, kind, caller, error: job.error });
       }
+      this.record(job);
       this.emit('finished', job);
     });
     return job.id;
+  }
+
+  private now() { return (this.env.now ?? Date.now)(); }
+
+  /** Update Manager history: one entry per finished update job (OS, bundle, drivers/firmware, apps). */
+  private record(job: Job) {
+    if (!job.subject || !this.env.history) return;
+    const result = job.state === 'success' ? 'success' : job.state === 'cancelled' ? 'cancelled' : 'failed';
+    this.env.history.add({ id: `${job.started_at ?? 0}-${job.id}`, kind: job.subject.kind, title: job.subject.title, version: job.subject.version ?? null,
+      result, error: job.error ?? null, started_at: job.started_at ?? this.now(), finished_at: this.now(), reboot_required: result === 'success' && this.rebootRequired });
   }
 
   private progress(job: Job, percent: number) { this.emit('progress', job, percent); }
@@ -408,7 +473,7 @@ export class PackageService extends EventEmitter {
   }
 
   /** Policy allowlist on managed devices (WSOS-APP-003); flatpak only from approved remotes (WSOS-FLP-001). */
-  private authorizeItem(source: Source, catalogId: string, op: 'install' | 'remove'): string {
+  private authorizeItem(source: Source, catalogId: string, op: 'install' | 'remove', caller = 0): string {
     // Catalog appimage:<id> items are approved checksums, not packages: the user imports the file they were given
     // (worksuite-appimage import, the App Center's "Import file"), which is checked against the catalog sha256.
     if ((source as string) === 'appimage' || catalogId.startsWith('appimage:')) throw new ServiceError('InvalidArgs', APPIMAGE_NOT_INSTALLABLE);
@@ -417,7 +482,12 @@ export class PackageService extends EventEmitter {
     if (op === 'remove' && source === 'apt' && isCritical(name)) throw new ServiceError('Protected', `${name} is part of the system`);
     const policy = this.env.policy();
     const allow = policy?.app_allowlist;
-    if (op === 'install' && allow && allow.length && !allow.includes(`${source}:${name}`)) throw new ServiceError('NotInCatalog', 'not approved by your organization');
+    // Software Management permissions apply to people; the organization's own signed commands come from root.
+    const person = caller !== 0;
+    if (person && op === 'install' && policy?.software_install === 'block') throw new ServiceError('NotAuthorized', 'your organization installs software for you');
+    if (person && op === 'remove' && policy?.software_uninstall === false) throw new ServiceError('NotAuthorized', 'your organization manages removing apps');
+    const anySoftware = person ? policy?.software_install === 'any' : false;
+    if (op === 'install' && !anySoftware && allow && allow.length && !allow.includes(`${source}:${name}`)) throw new ServiceError('NotInCatalog', 'not approved by your organization');
     return name;
   }
 
