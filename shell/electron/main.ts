@@ -1,5 +1,5 @@
 import { findBundles } from './bundles'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, session, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, powerMonitor, session, shell, type IpcMainInvokeEvent } from 'electron'
 
 // Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
 const DRAG_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4nGNgoCaQz/7/nxiM1wBCYNSAUQNGigEUZSZyAAAnXe3wcJ4r8wAAAABJRU5ErkJggg=='
@@ -381,6 +381,8 @@ app.whenReady().then(() => {
   handle('ws:sysBattery', () => sys.battery())
   // The taskbar's Wi-Fi, Bluetooth and power indicators update when the services signal a change (#28).
   void startSysWatch(broadcast)
+  // After sleep the AC and Wi-Fi may have changed while no signal could arrive (#43): re-read everything on wake.
+  powerMonitor.on('resume', () => { for (const k of ['battery', 'network', 'bluetooth']) broadcast('ws:sysChanged', k) })
   handle('ws:sysPrinters', () => sys.printers())
   handle('ws:sysDisplays', () => sys.displays())
   handle('ws:sysDisks', () => sys.disks())
