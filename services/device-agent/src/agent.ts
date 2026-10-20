@@ -382,6 +382,8 @@ export class Agent {
         drivers_online_search: p.drivers_online_search ?? null, drivers_auto_install: p.drivers_auto_install ?? null,
         drivers_auto_install_gpu: p.drivers_auto_install_gpu ?? null,
         kiosk: this.s.enrolled && activeKiosk(p, this.s.device_id) !== null,
+        // Employee monitoring (#22): shown in the management notice so the employee knows.
+        activity_monitoring: p.activity_monitoring === true, antivirus: p.antivirus ?? null,
       } : null,
       // Settings › Managed › Kiosk mode (board KioskSettings): what this device's kiosk runs. Never the exit PIN or its verifier.
       kiosk: this.s.enrolled ? kioskSummary(activeKiosk(p, this.s.device_id)) : null,

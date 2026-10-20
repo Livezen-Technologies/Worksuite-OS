@@ -43,10 +43,10 @@ check "malformed user values are ignored" "$(sh "$BIN/worksuite-idle" --print-ti
 stub swayidle 'for a in "$@"; do printf "[%s]" "$a"; done'
 echo "LOCK_TIMEOUT_S=240" > "$WORKSUITE_LOCK_USER"
 check "swayidle locks on idle, on lock-session and before sleep (waiting for the locker)" \
-    "$(WORKSUITE_LOCK_CMD=/x/lock sh "$BIN/worksuite-idle")" "[-w][timeout][240][loginctl lock-session][lock][/x/lock][before-sleep][/x/lock]"
+    "$(WORKSUITE_LOCK_CMD=/x/lock sh "$BIN/worksuite-idle")" "[-w][idlehint][60][timeout][240][loginctl lock-session][lock][/x/lock][before-sleep][/x/lock]"
 echo "LOCK_TIMEOUT_S=0" > "$WORKSUITE_LOCK_USER"
 check "no idle timeout when never, still locks before sleep" \
-    "$(WORKSUITE_LOCK_CMD=/x/lock sh "$BIN/worksuite-idle")" "[-w][lock][/x/lock][before-sleep][/x/lock]"
+    "$(WORKSUITE_LOCK_CMD=/x/lock sh "$BIN/worksuite-idle")" "[-w][idlehint][60][lock][/x/lock][before-sleep][/x/lock]"
 
 # ---- locker: lock before returning, fail closed (WSOS-LOCK-002/004) ----
 # Stub gtklock: runs its -L command (it holds the lock), then exits with the next status from $T/gtklock-rc.
