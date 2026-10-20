@@ -63,6 +63,11 @@ profile worksuite-shell flags=(attach_disconnected, complain) {
   # Remote support input (issues #19, #37): wlroots virtual pointer/keyboard helper when the RemoteDesktop portal is not available.
   /usr/bin/wtype ix,
   /usr/lib/worksuite/worksuite-rs-input ix,
+  # Settings › Mouse & touchpad (#35, #44): device detection (libinput dispatches to /usr/libexec/libinput/*, udevadm
+  # reads the udev database) and the live Labwc reload.
+  /usr/bin/{libinput,udevadm,labwc} ix,
+  /usr/libexec/libinput/* ix,
+  /run/udev/data/* r,
   owner /{media,run/media}/*/** rwlk,
 
   deny /etc/shadow r,

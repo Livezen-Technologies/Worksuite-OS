@@ -1,13 +1,16 @@
 // Settings › Mouse & touchpad (#35): pointer speed and acceleration, scroll speed and direction, primary button,
 // and touchpad tap-to-click, tap-and-drag, drag lock, scroll method, click method, disable-while-typing and on/off.
 //   detection  `libinput list-devices` (pointer devices and what each supports: tap, natural scrolling, scroll and
-//              click methods, acceleration profiles), or udev's ID_INPUT_MOUSE / ID_INPUT_TOUCHPAD when libinput
-//              can't read the devices (no `input` group: then the usual touchpad features are assumed);
+//              click methods, acceleration profiles), joined with udev's ID_INPUT_MOUSE / ID_INPUT_TOUCHPAD for every
+//              node libinput could not open, and /proc/bus/input/devices when udevadm is missing too (#44). People
+//              are not in the `input` group, so on real hardware libinput usually opens nothing (or only the nodes
+//              logind gives the seat user) and exits 0: its output alone is never taken as "no mouse, no touchpad".
+//              Devices only udev or /proc know get the usual features of their kind;
 //   applying   a managed <libinput> block (categories "non-touch" and "touchpad") in the user's Labwc rc.xml
 //              (~/.config/worksuite/labwc/rc.xml), loaded with `labwc --reconfigure`: no restart or re-login;
 //   saving     per user in ~/.config/worksuite/pointer.json, and the rc.xml block itself survives logout and reboot.
 // Same rules as system.ts: stock CLIs with fixed argument arrays, never a shell.
-import { lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { realExec, type Avail, type Exec } from './system'
 import { xdgDirs } from './xdgDirs'
@@ -79,7 +82,8 @@ export interface PointerCaps {
   tap: boolean; naturalScroll: boolean; leftHanded: boolean; accel: boolean; flat: boolean
   edgeScroll: boolean; twoFingerScroll: boolean; clickfinger: boolean; buttonAreas: boolean; disableWhileTyping: boolean; dragLock: boolean
 }
-export interface PointerDev { name: string; kind: 'mouse' | 'touchpad'; caps: PointerCaps }
+/** node: the /dev/input/eventN behind it, when known (to join libinput's view with udev's). */
+export interface PointerDev { name: string; kind: 'mouse' | 'touchpad'; caps: PointerCaps; node?: string }
 const ALL_CAPS: PointerCaps = { tap: true, naturalScroll: true, leftHanded: true, accel: true, flat: true, edgeScroll: true, twoFingerScroll: true, clickfinger: true, buttonAreas: true, disableWhileTyping: true, dragLock: true }
 const MOUSE_CAPS: PointerCaps = { ...ALL_CAPS, tap: false, edgeScroll: false, twoFingerScroll: false, clickfinger: false, buttonAreas: false, disableWhileTyping: false, dragLock: false }
 
@@ -97,7 +101,7 @@ export function parsePointerDevices(text: string): PointerDev[] {
     if (!touchpad && !has('Accel profiles') && !has('Nat.scrolling')) continue
     const accel = list('Accel profiles')
     out.push({
-      name: kv.Device, kind: touchpad ? 'touchpad' : 'mouse',
+      name: kv.Device, kind: touchpad ? 'touchpad' : 'mouse', ...(kv.Kernel ? { node: kv.Kernel } : {}),
       caps: {
         tap: has('Tap-to-click'), naturalScroll: has('Nat.scrolling'), leftHanded: has('Left-handed'),
         accel: has('Accel profiles') && !accel.includes('none'), flat: accel.some((a) => a.startsWith('flat')),
@@ -115,9 +119,35 @@ export function parseUdevPointer(text: string): PointerDev | null {
   const p: Record<string, string> = {}
   for (const line of text.split('\n')) { const i = line.indexOf('='); if (i > 0) p[line.slice(0, i)] = line.slice(i + 1).trim() }
   const name = (p.NAME ?? p.ID_MODEL ?? '').replace(/^"|"$/g, '').replace(/\\x20/g, ' ') || 'Pointer'
-  if (p.ID_INPUT_TOUCHPAD === '1') return { name, kind: 'touchpad', caps: { ...ALL_CAPS } }
-  if (p.ID_INPUT_MOUSE === '1' && p.ID_INPUT_TOUCHSCREEN !== '1' && p.ID_INPUT_TABLET !== '1') return { name, kind: 'mouse', caps: { ...MOUSE_CAPS } }
+  const node = p.DEVNAME ? { node: p.DEVNAME } : {}
+  if (p.ID_INPUT_TOUCHPAD === '1') return { name, kind: 'touchpad', caps: { ...ALL_CAPS }, ...node }
+  // Trackpoints (ID_INPUT_POINTINGSTICK) are mice to libinput and Labwc ("non-touch").
+  if ((p.ID_INPUT_MOUSE === '1' || p.ID_INPUT_POINTINGSTICK === '1') && p.ID_INPUT_TOUCHSCREEN !== '1' && p.ID_INPUT_TABLET !== '1') return { name, kind: 'mouse', caps: { ...MOUSE_CAPS }, ...node }
   return null
+}
+
+/** /proc/bus/input/devices (readable by everyone) when udevadm is missing: a node with a mouseN handler is a pointer;
+ *  absolute axes plus INPUT_PROP_POINTER (or a touchpad-like name) make it a touchpad, INPUT_PROP_DIRECT a touchscreen. */
+export function parseProcInputDevices(text: string): PointerDev[] {
+  const out: PointerDev[] = []
+  for (const block of text.split(/\n\s*\n/)) {
+    const name = /^N: Name="(.*)"$/m.exec(block)?.[1] ?? ''
+    const handlers = /^H: Handlers=(.*)$/m.exec(block)?.[1]?.trim().split(/\s+/) ?? []
+    const bits = (k: string) => { const v = new RegExp(`^B: ${k}=([0-9a-f ]+)$`, 'm').exec(block)?.[1]?.trim().split(/\s+/).pop(); return v ? parseInt(v, 16) : 0 }
+    const ev = bits('EV'), prop = bits('PROP')
+    const event = handlers.find((h) => /^event\d+$/.test(h))
+    if (!event || !handlers.some((h) => /^mouse\d+$/.test(h)) || prop & 0x2) continue
+    const node = { node: `/dev/input/${event}` }
+    if (ev & 0x8 && (prop & 0x1 || /touchpad|trackpad|clickpad|glidepoint/i.test(name))) out.push({ name: name || 'Touchpad', kind: 'touchpad', caps: { ...ALL_CAPS }, ...node })
+    else if (ev & 0x4) out.push({ name: name || 'Mouse', kind: 'mouse', caps: { ...MOUSE_CAPS }, ...node })
+  }
+  return out
+}
+
+/** libinput's devices first (they carry real capabilities), then any other node udev or /proc found. */
+export function joinPointerDevices(primary: PointerDev[], extra: PointerDev[]): PointerDev[] {
+  const seen = new Set(primary.map((d) => d.node).filter(Boolean))
+  return [...primary, ...extra.filter((d) => !d.node || !seen.has(d.node))]
 }
 
 /** What Settings can offer: a control shows when any device of that kind supports it. */
@@ -200,21 +230,26 @@ export const pointerFiles = (home: string): PointerFiles => ({
   systemRc: '/etc/xdg/worksuite/labwc/rc.xml',
 })
 
-export function pointerBridge(files: PointerFiles, exec: Exec = realExec) {
+export interface PointerSys { listInput(): string[]; procDevices(): string }
+const realSys: PointerSys = {
+  listInput: () => { try { return readdirSync('/sys/class/input') } catch { return [] } },
+  procDevices: () => { try { return readFileSync('/proc/bus/input/devices', 'utf8') } catch { return '' } },
+}
+
+export function pointerBridge(files: PointerFiles, exec: Exec = realExec, sys: PointerSys = realSys) {
   let settings = loadPointer(files.settings)
   let version: string | null | undefined
 
   async function detect(): Promise<PointerDev[]> {
     const li = await exec('libinput', ['list-devices'])
-    if (li.code === 0 && li.stdout.includes('Device:')) return parsePointerDevices(li.stdout)
-    const ls = await exec('ls', ['/sys/class/input'])
-    const out: PointerDev[] = []
-    for (const ev of ls.stdout.split(/\s+/).filter((n) => /^event\d+$/.test(n))) {
-      const r = await exec('udevadm', ['info', '-q', 'property', '-n', `/dev/input/${ev}`])
-      const d = r.code === 0 ? parseUdevPointer(r.stdout) : null
-      if (d) out.push(d)
-    }
-    return out
+    const fromLibinput = li.code === 0 ? parsePointerDevices(li.stdout) : []
+    const events = sys.listInput().filter((n) => /^event\d+$/.test(n))
+    const udev = await Promise.all(events.map((ev) => exec('udevadm', ['info', '-q', 'property', '-n', `/dev/input/${ev}`])))
+    // No udevadm (or no sysfs): the kernel's own list.
+    const extra = !events.length || udev.every((r) => r.missing)
+      ? parseProcInputDevices(sys.procDevices())
+      : udev.flatMap((r, i) => { const d = r.code === 0 ? parseUdevPointer(r.stdout) : null; return d ? [{ ...d, node: d.node ?? `/dev/input/${events[i]}` }] : [] })
+    return joinPointerDevices(fromLibinput, extra)
   }
   async function labwcVersion(): Promise<string | null> {
     if (version !== undefined) return version
