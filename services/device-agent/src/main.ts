@@ -19,6 +19,7 @@ import { serveControl, serveSocket } from './control.ts';
 import { applyPendingEnrollment } from './pendingEnroll.ts';
 import { SecurityCenter } from './securityCenter.ts';
 import { linuxSecurityHost } from './securityHost.ts';
+import { recordPowerEvent } from './power.ts';
 
 const KEY_DIR = '/usr/share/worksuite/keys/device-commands';   // from worksuite-archive-keyring
 const SOCKET = join(DEFAULT_PATHS.runtimeDir, 'control.sock');
@@ -27,6 +28,7 @@ const REMOTE_SUPPORT_POLL_MS = 10_000;
 const CHECK_IN_MS = 15 * 60_000;
 const POLICY_MS = 60 * 60_000;
 const INVENTORY_MS = 24 * 60 * 60_000;
+const POWER_EVENTS = join(DEFAULT_PATHS.stateDir, 'power-events.json');   // src/power.ts
 const PACKAGE_AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';   // written by worksuite-package-service
 
 /** Server signing keys by id: <KEY_DIR>/<key_id>.pem. */
@@ -54,7 +56,7 @@ async function daemon() {
     state, host: linuxSecurityHost({ stateDir: DEFAULT_PATHS.stateDir, runtimeDir: DEFAULT_PATHS.runtimeDir, audit: (e, f) => host.audit(e, f) }),
     managed: () => ({ enrolled: state.state.enrolled, policy: state.state.policy ?? null, server: state.state.server_url ?? null }),
   });
-  const agent = new Agent({ state, host, api, keys: loadKeys(KEY_DIR), security, remoteSupport });
+  const agent = new Agent({ state, host, api, keys: loadKeys(KEY_DIR), security, remoteSupport, powerEventsFile: POWER_EVENTS });
 
   // /run is empty after boot: republish what user services and Settings read.
   host.publishCredential(state.state.enrolled ? state.state.credential ?? null : null);
@@ -87,6 +89,9 @@ async function daemon() {
     enroll: (url, token) => serial(() => agent.enroll(url, token)),
     refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); },
     scan: (kind) => { void security.scan(kind, 'user').catch(() => {}); },
+    restore: (id) => security.restore(id, false, 'user'),
+    deleteQuarantined: (id) => security.deleteQuarantined(id, 'user'),
+    resolveSuspended: (id, action) => security.resolveSuspended(id, action, 'user'),
   }).catch((e) => host.audit('dbus_unavailable', { error: String(e?.message ?? e) }));
 
   const jitter = (ms: number) => ms + Math.floor(Math.random() * ms * 0.2);
@@ -115,7 +120,7 @@ async function daemon() {
   every(30 * 60_000, 'security', () => security.tick());
   every(INVENTORY_MS, 'inventory', async () => { if (state.state.enrolled) await httpApi(() => state.state).inventory(await host.inventory()); });
 
-  process.on('SIGTERM', () => { server.close(); consent.close(); void remoteSupport.end('user_ended').finally(() => process.exit(0)); });
+  process.on('SIGTERM', () => { security.close(); server.close(); consent.close(); void remoteSupport.end('user_ended').finally(() => process.exit(0)); });
   host.audit('started', { enrolled: state.state.enrolled });
 }
 
@@ -140,6 +145,13 @@ async function main(argv: string[]) {
   if (!cmd) return daemon();
   if (cmd === 'status') return cli('Status');
   if (cmd === 'refresh') return cli('Refresh');
+  // worksuite-power-events.service (#39): no daemon or network needed, so it works at boot and during shutdown.
+  if (cmd === 'power-event') {
+    const type = rest[0];
+    if (type !== 'startup' && type !== 'shutdown') { process.stderr.write('usage: worksuite-device-agent power-event startup|shutdown\n'); process.exitCode = 2; return; }
+    recordPowerEvent(POWER_EVENTS, type, new StateFile(join(DEFAULT_PATHS.stateDir, 'state.json')).state);
+    return;
+  }
   if (cmd === 'enroll') {
     const i = rest.indexOf('--server');
     const server = i >= 0 ? rest[i + 1] : undefined;

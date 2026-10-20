@@ -16,6 +16,10 @@ export const ACTIONS: Record<string, string | null> = {
   RefreshNow: null,   // fetches what the server already decided; changes nothing the caller chooses
   // WorkSuite Security (#20): Settings › Privacy & security › WorkSuite Security "Scan now" (active local user).
   StartSecurityScan: 'lk.worksuite.security.scan',
+  // #38: quarantine restore/delete and suspended processes: an administrator (auth_admin_keep).
+  RestoreQuarantined: 'lk.worksuite.security.quarantine',
+  DeleteQuarantined: 'lk.worksuite.security.quarantine',
+  ResolveSuspendedProcess: 'lk.worksuite.security.quarantine',
 };
 
 export interface Authority {
@@ -30,7 +34,14 @@ export interface AgentOps {
   refresh(): Promise<void>;
   /** Starts a malware scan (quick | full); resolves when it has started. Absent = no security module. */
   scan?(kind: 'quick' | 'full'): void;
+  /** #38 quarantine and suspended processes; absent = no security module. */
+  restore?(id: string): Promise<void>;
+  deleteQuarantined?(id: string): Promise<void>;
+  resolveSuspended?(eventId: string, action: 'resume' | 'terminate'): Promise<void>;
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const failCode = (e: unknown) => new BusError('Failed', e instanceof Error && /^[A-Z_]{3,40}$/.test(e.message) ? e.message : 'FAILED');
 
 export class BusError extends Error {
   readonly code: 'NotAuthorized' | 'InvalidArgs' | 'Failed';
@@ -61,6 +72,23 @@ export async function dispatch(member: string, body: unknown[], sender: string, 
       if (kind !== 'quick' && kind !== 'full') throw new BusError('InvalidArgs');
       if (!ops.scan) throw new BusError('Failed', 'NOT_SUPPORTED');
       ops.scan(kind); return ['', []];
+    }
+    case 'RestoreQuarantined':
+    case 'DeleteQuarantined': {
+      const [id] = body;
+      if (typeof id !== 'string' || !UUID.test(id)) throw new BusError('InvalidArgs');
+      const fn = member === 'RestoreQuarantined' ? ops.restore : ops.deleteQuarantined;
+      if (!fn) throw new BusError('Failed', 'NOT_SUPPORTED');
+      // A file still detected is never restored from the device; only the administrator's signed command can force it.
+      try { await fn.call(ops, id); } catch (e) { throw failCode(e); }
+      return ['', []];
+    }
+    case 'ResolveSuspendedProcess': {
+      const [id, action] = body;
+      if (typeof id !== 'string' || !UUID.test(id) || (action !== 'resume' && action !== 'terminate')) throw new BusError('InvalidArgs');
+      if (!ops.resolveSuspended) throw new BusError('Failed', 'NOT_SUPPORTED');
+      try { await ops.resolveSuspended(id, action); } catch (e) { throw failCode(e); }
+      return ['', []];
     }
     case 'Enroll': {
       const [url, token] = body;

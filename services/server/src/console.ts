@@ -13,16 +13,19 @@ import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
 import { redactKiosk, type KioskPolicy } from './kiosk.ts';
 import { setValidatedPolicy, validatePolicy } from './policy.ts';
 import { qrMatrix } from './qr.ts';
-import { REMOTE_SUPPORT_PERMISSION, getSignals as rsGetSignals, postSignal as rsPostSignal, dashboard as rsDashboard, history as rsHistory, requestSession, terminateSession } from './remoteSupport.ts';
+import { REMOTE_SUPPORT_PERMISSION, getSignals as rsGetSignals, postSignal as rsPostSignal, dashboard as rsDashboard, history as rsHistory, requestSession, terminateSession,
+  appendRecording, elevateSession, readRecording, recordEvent, sessionEvents, sessionIceServers } from './remoteSupport.ts';
 import { Throttle } from './throttle.ts';
-import { monitoringOverview, securityOverview } from './monitoring.ts';
+import { liveOverview, logFilter, monitoringOverview, searchLog, securityOverview } from './monitoring.ts';
+import { attendance, attendanceCsv, deliverAttendance, getHrWebhook, setHrWebhook, type WebhookFetch } from './attendance.ts';
 import { decideRequest, deploy, deployments, deviceSoftware, inventorySummary, reconcileRequired, validateAssignment, validDepartment } from './software.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
 const SESSION_TTL = 8 * 3_600_000;
 const COOKIE = 'ws_admin';
 const ROUTINE = new Set(['RefreshPolicy', 'RequestLock', 'RebootDuringWindow', 'ScheduleUpdate', 'InstallApprovedApplication', 'RemoveApplication', 'CollectApprovedDiagnostics',
-  'StartMalwareScan', 'ReleaseIsolation', 'IsolateEndpoint']);
+  'StartMalwareScan', 'ReleaseIsolation', 'IsolateEndpoint', 'RestoreQuarantined', 'DeleteQuarantined', 'ResolveSuspendedProcess']);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** CollectApprovedDiagnostics profiles: exactly what the device agent implements (services/device-agent/src/diagnostics.ts). */
 export const DIAG_PROFILES = new Set(['basic', 'session', 'network', 'update']);
 
@@ -59,7 +62,7 @@ export function enrollmentLink(publicUrl: string, token: string): string {
   return `${new URL('enroll', publicUrl).toString()}#token=${encodeURIComponent(token)}`;
 }
 
-export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: boolean; publicUrl?: string }) {
+export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: boolean; publicUrl?: string; webhookFetch?: WebhookFetch }) {
   const log = (a: Admin, action: string, detail: Record<string, unknown> = {}) =>
     db.prepare('INSERT INTO admin_log (org_id, user_id, action, detail, at) VALUES (?, ?, ?, ?, ?)').run(a.org_id, a.id, action, JSON.stringify(detail), Date.now());
 
@@ -216,7 +219,21 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
       reauth(ctx, a, b, d.hostname);
       args.hours = hours;
     }
-    const id = issueCommand(db, d.id, command, args, command === 'IsolateEndpoint' ? 12 : 24);
+    // #38 quarantine: ids from the device's own report. Restoring a file the device still detects (force) puts malware
+    // back on the device: password again and the device name typed, like isolation.
+    if (command === 'RestoreQuarantined' || command === 'DeleteQuarantined') {
+      const q = String((b.args as Record<string, unknown> | undefined)?.quarantine_id ?? '');
+      if (!UUID.test(q)) throw invalid('args.quarantine_id');
+      args.quarantine_id = q;
+      if (command === 'RestoreQuarantined' && (b.args as Record<string, unknown>).force === true) { reauth(ctx, a, b, d.hostname); args.force = true; }
+    }
+    if (command === 'ResolveSuspendedProcess') {
+      const x = (b.args as Record<string, unknown> | undefined) ?? {};
+      if (typeof x.event_id !== 'string' || !UUID.test(x.event_id)) throw invalid('args.event_id');
+      if (x.action !== 'resume' && x.action !== 'terminate') throw invalid('args.action', 'resume or terminate');
+      args.event_id = x.event_id; args.action = x.action;
+    }
+    const id = issueCommand(db, d.id, command, args, command === 'IsolateEndpoint' || command === 'ResolveSuspendedProcess' ? 12 : 24);
     log(a, 'command', { device_id: d.id, command, command_id: id });
     send(ctx, 201, { command_id: id });
   });
@@ -236,8 +253,8 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const pol = db.prepare('SELECT body FROM policies WHERE org_id = ?').get(a.org_id) as { body: string } | undefined;
     const own = (db.prepare('SELECT ownership FROM devices WHERE id = ?').get(d.id) as { ownership: string }).ownership;
     const org = (db.prepare('SELECT name FROM orgs WHERE id = ?').get(a.org_id) as { name: string }).name;
-    const res = requestSession(db, a, { device_id: d.id, mode: b.mode, reason: b.reason, otp: b.otp, policy: json<Record<string, unknown>>(pol?.body ?? null) ?? {}, ownership: own, org_name: org });
-    log(a, 'remote_support_requested', { device_id: d.id, session_id: res.session_id, mode: b.mode, unattended: res.unattended });
+    const res = requestSession(db, a, { device_id: d.id, mode: b.mode, reason: b.reason, otp: b.otp, record: b.record, policy: json<Record<string, unknown>>(pol?.body ?? null) ?? {}, ownership: own, org_name: org });
+    log(a, 'remote_support_requested', { device_id: d.id, session_id: res.session_id, mode: b.mode, unattended: res.unattended, record: res.record });
     send(ctx, 201, res);
   });
   r.on('POST', '/admin/api/remote-support/sessions/{id}/terminate', (ctx) => {
@@ -254,6 +271,30 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const a = rsAdmin(ctx);
     rsPostSignal(db, 'admin', ctx.params.id, { org_id: a.org_id }, await body(ctx));
     send(ctx, 204);
+  });
+  // Issue #37: ICE servers (short-lived TURN credentials), step-up to control, chat/file audit, recordings.
+  r.on('GET', '/admin/api/remote-support/sessions/{id}/ice-servers', (ctx) => send(ctx, 200, sessionIceServers(db, ctx.params.id, { org_id: rsAdmin(ctx).org_id })));
+  r.on('POST', '/admin/api/remote-support/sessions/{id}/elevate', async (ctx) => {
+    const a = rsAdmin(ctx);
+    send(ctx, 202, elevateSession(db, a, ctx.params.id, (await body(ctx)).otp));
+  });
+  r.on('GET', '/admin/api/remote-support/sessions/{id}/events', (ctx) => send(ctx, 200, { items: sessionEvents(db, rsAdmin(ctx).org_id, ctx.params.id) }));
+  r.on('POST', '/admin/api/remote-support/sessions/{id}/events', async (ctx) => {
+    const a = rsAdmin(ctx);
+    recordEvent(db, 'admin', ctx.params.id, { org_id: a.org_id }, await body(ctx), a.id);
+    send(ctx, 204);
+  });
+  r.on('POST', '/admin/api/remote-support/sessions/{id}/recording', async (ctx) => {
+    const a = rsAdmin(ctx);
+    if (!String(ctx.header('content-type') ?? '').startsWith('video/webm')) throw invalid('content-type', 'video/webm');
+    send(ctx, 200, appendRecording(db, a, ctx.params.id, Number(ctx.url.searchParams.get('seq')), await ctx.raw()));
+  });
+  r.on('GET', '/admin/api/remote-support/sessions/{id}/recording', (ctx) => {
+    const a = rsAdmin(ctx);
+    const buf = readRecording(db, a, ctx.params.id);
+    ctx.res.writeHead(200, { 'x-request-id': ctx.requestId, 'cache-control': 'no-store', 'content-type': 'video/webm', 'content-length': String(buf.length),
+      'content-disposition': `attachment; filename="remote-session-${ctx.params.id}.webm"`, 'x-content-type-options': 'nosniff' });
+    ctx.res.end(buf);
   });
   r.on('PUT', '/admin/api/devices/{id}/assignee', async (ctx) => {
     const a = admin(ctx);
@@ -274,6 +315,49 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     if (!Number.isInteger(days) || days < 1 || days > 90) throw invalid('days', '1 to 90');
     log(a, 'monitoring_viewed', { days });   // who looked at employee activity is itself audited
     send(ctx, 200, monitoringOverview(db, a.org_id, days));
+  });
+  // #39: live status, the searchable log, attendance and the HR webhook. Every view and export is audited.
+  r.on('GET', '/admin/api/monitoring/live', (ctx) => {
+    const a = admin(ctx);
+    log(a, 'monitoring_live_viewed');
+    send(ctx, 200, liveOverview(db, a.org_id));
+  });
+  r.on('GET', '/admin/api/monitoring/log', (ctx) => {
+    const a = admin(ctx);
+    const f = logFilter(ctx.url.searchParams);
+    log(a, 'monitoring_log_viewed', { ...f });
+    const users = db.prepare("SELECT DISTINCT u.id, u.name FROM activity_log l JOIN users u ON u.id = l.user_id WHERE l.org_id = ? ORDER BY u.name").all(a.org_id);
+    const devices = db.prepare('SELECT DISTINCT d.id, d.hostname FROM activity_log l JOIN devices d ON d.id = l.device_id WHERE l.org_id = ? ORDER BY d.hostname').all(a.org_id);
+    send(ctx, 200, { ...searchLog(db, a.org_id, f), users, devices });
+  });
+  r.on('GET', '/admin/api/monitoring/attendance', (ctx) => {
+    const a = admin(ctx);
+    const q = ctx.url.searchParams;
+    const today = new Date().toISOString().slice(0, 10);
+    const from = q.get('from') ?? new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10), to = q.get('to') ?? today;
+    const rows = attendance(db, a.org_id, from, to);
+    if (q.get('format') === 'csv') {
+      log(a, 'attendance_exported', { from, to, rows: rows.length });
+      return send(ctx, 200, attendanceCsv(rows), { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="attendance-${from}-${to}.csv"` });
+    }
+    log(a, 'attendance_viewed', { from, to });
+    send(ctx, 200, { from, to, items: rows, webhook: getHrWebhook(db, a.org_id) });
+  });
+  r.on('PUT', '/admin/api/monitoring/hr-webhook', async (ctx) => {
+    const a = admin(ctx);
+    const b = await ctx.body() as Record<string, unknown>;
+    if (!b || typeof b !== 'object') throw invalid('body');
+    const res = setHrWebhook(db, a.org_id, b);
+    log(a, 'hr_webhook_changed', { url: b.url === null ? null : getHrWebhook(db, a.org_id).url ?? null, enabled: b.enabled !== false, secret_rotated: !!res.secret });
+    send(ctx, 200, { ...getHrWebhook(db, a.org_id), ...res });
+  });
+  r.on('POST', '/admin/api/monitoring/hr-webhook/send', async (ctx) => {
+    const a = admin(ctx);
+    const b = (await ctx.body() ?? {}) as Record<string, unknown>;
+    const day = typeof b.day === 'string' ? b.day : new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const r2 = await deliverAttendance(db, a.org_id, day, o.webhookFetch ?? ((url, init) => fetch(url, init)));
+    log(a, 'hr_webhook_sent', { day, status: r2.status, employees: r2.employees });
+    send(ctx, 200, r2);
   });
   r.on('POST', '/admin/api/devices/{id}/revoke', (ctx) => {
     const a = admin(ctx);

@@ -25,6 +25,8 @@ ProtectSystem=strict
 ReadWritePaths=/var/lib/worksuite-device-agent /run/worksuite-device-agent /var/log/worksuite /home
 # Managed WireGuard VPN keyfile (WSOS-INT-001); "-" = fine if NetworkManager isn't installed.
 ReadWritePaths=-/etc/NetworkManager/system-connections
+# WorkSuite Security DNS blocklist (#38, src/protection.ts): NetworkManager's dnsmasq drop-in and dns=dnsmasq.
+ReadWritePaths=-/etc/NetworkManager/dnsmasq.d -/etc/NetworkManager/conf.d
 # Policy enforcement (src/enforce.ts ENFORCED_PATHS): lock/faillock/offline files (and signin-policy.conf), USB storage modprobe and udev rules.
 # test/unit.test.ts checks every path the agent writes is covered here and in the AppArmor profile.
 ConfigurationDirectory=worksuite
@@ -46,7 +48,8 @@ RestrictNamespaces=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
-CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_CHOWN CAP_SYS_ADMIN CAP_SYS_BOOT CAP_NET_ADMIN
+# CAP_KILL: resume or end a process WorkSuite Security suspended (#38), at the user's or administrator's request.
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER CAP_CHOWN CAP_SYS_ADMIN CAP_SYS_BOOT CAP_NET_ADMIN CAP_KILL
 DeviceAllow=block-* rw
 DevicePolicy=closed
 UMask=0077

@@ -16,10 +16,16 @@ export const ALLOWED_COMMANDS = [
   // Remote support (issue #19): a request only asks; the user's consent on the device starts anything.
   'RemoteSupportRequest',
   'RemoteSupportEnd',
+  // Step-up to control mid-session (issue #37): asks the seat user again; nothing changes without their answer.
+  'RemoteSupportElevate',
   // WorkSuite Security remote incident response (#20 §12, src/securityCenter.ts).
   'StartMalwareScan',
   'IsolateEndpoint',
   'ReleaseIsolation',
+  // Quarantine management and suspended processes (#38): the agent re-scans before restoring.
+  'RestoreQuarantined',
+  'DeleteQuarantined',
+  'ResolveSuspendedProcess',
 ] as const;
 export type CommandName = (typeof ALLOWED_COMMANDS)[number];
 
@@ -37,9 +43,13 @@ const MAX_TTL: Record<CommandName, number> = {
   // Time-limited session token: the session ends at the envelope's expiry.
   RemoteSupportRequest: 4 * 3_600_000,
   RemoteSupportEnd: 4 * 3_600_000,
+  RemoteSupportElevate: 3_600_000,
   StartMalwareScan: 7 * DAY,
   IsolateEndpoint: 1 * DAY,
   ReleaseIsolation: 7 * DAY,
+  RestoreQuarantined: 7 * DAY,
+  DeleteQuarantined: 7 * DAY,
+  ResolveSuspendedProcess: 2 * DAY,
 };
 const CLOCK_SKEW_MS = 5 * 60_000;
 
@@ -94,8 +104,12 @@ const ARG_CHECKS: Partial<Record<CommandName, (a: Record<string, unknown>) => bo
   RemoteWipe: (a) => (a.scope === 'worksuite_data' || a.scope === 'full_device') && typeof a.approval_id === 'string',
   RemoteSupportRequest: (a) => parseRequest(a, 0) !== null,
   RemoteSupportEnd: (a) => typeof a.session_id === 'string' && UUID.test(a.session_id),
+  RemoteSupportElevate: (a) => typeof a.session_id === 'string' && UUID.test(a.session_id),
   StartMalwareScan: (a) => a.kind === 'quick' || a.kind === 'full',
   IsolateEndpoint: (a) => Number.isInteger(a.hours) && (a.hours as number) >= 1 && (a.hours as number) <= 72,
+  RestoreQuarantined: (a) => typeof a.quarantine_id === 'string' && UUID.test(a.quarantine_id) && (a.force === undefined || typeof a.force === 'boolean'),
+  DeleteQuarantined: (a) => typeof a.quarantine_id === 'string' && UUID.test(a.quarantine_id),
+  ResolveSuspendedProcess: (a) => typeof a.event_id === 'string' && UUID.test(a.event_id) && (a.action === 'resume' || a.action === 'terminate'),
   CollectApprovedDiagnostics: (a) => (DIAGNOSTIC_PROFILES as readonly unknown[]).includes(a.bundle_profile),
 };
 

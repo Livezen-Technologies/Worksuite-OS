@@ -15,6 +15,23 @@ import {
 import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
 import { xdgDirs } from './xdgDirs'
 import { APP_WINDOW } from './windowDefaults'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { activityPolicy, toDomain, webDomainFile } from './activity'
+
+/** #39 website tracking: only when the signed policy turns activity monitoring and website domains on, the host name
+ *  this window shows is left for the shell's activity tracker in $XDG_RUNTIME_DIR (0700). Never the URL or the title. */
+function shareDomain(appId: string, url: string | null) {
+  const rt = process.env.XDG_RUNTIME_DIR
+  if (!rt) return
+  const file = webDomainFile(rt, appId)
+  const p = activityPolicy((f) => { try { return readFileSync(f, 'utf8') } catch { return null } })
+  const d = url && p.enabled && p.web_domains ? toDomain(url) : null
+  try {
+    if (!d) { rmSync(file, { force: true }); return }
+    mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 })
+    writeFileSync(file, d, { mode: 0o600 })
+  } catch { /* best effort */ }
+}
 
 const fetchFn: Fetch = (url, init) => fetch(url, { headers: init?.headers, redirect: 'follow' })
 const broker = (m: string, p?: Record<string, unknown>) => brokerCall(m, p ?? {}, m === 'SignIn' ? 6 * 60_000 : 15_000)
@@ -168,6 +185,10 @@ ${action ? `<button id="b">${esc(action)}</button><script>document.getElementByI
     })
     guard(w, () => current ? allowedOrigins(current.app) : new Set())
     w.webContents.on('did-navigate-in-page', (_e, url) => { if (!current && url.endsWith('#signin')) void signIn() })
+    const appId = `worksuite-${req.id}`
+    w.webContents.on('did-navigate', (_e, url) => shareDomain(appId, current ? url : null))
+    w.webContents.on('did-navigate-in-page', (_e, url) => shareDomain(appId, current ? url : null))
+    w.on('closed', () => shareDomain(appId, null))
     w.on('page-title-updated', (e) => { if (!current) e.preventDefault() })
     return w
   }

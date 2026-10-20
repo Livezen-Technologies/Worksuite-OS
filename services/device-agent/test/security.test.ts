@@ -134,6 +134,10 @@ function center(policy: Policy | null = null) {
     async firewallAlerts() { return { alerts: [] }; },
     publish(s) { h.published = s; },
     audit(e) { log.push(e); },
+    // #38 layers: inert here (test/protection.test.ts covers them).
+    async homes() { return []; }, writeConfig() { return false; }, async unit() {}, follow() { return () => {}; },
+    async fetchFeed() { throw new Error('offline'); }, feedCache() { return null; }, async reloadDns() {}, watchFiles() { return () => {}; },
+    async scanFiles() { return []; }, async restoreQuarantined() { return { path: '' }; }, async deleteQuarantined() {}, async signal() { return 'gone' as const; },
   };
   let now = NOW;
   const c = new SecurityCenter({ state, host, now: () => now, managed: () => ({ enrolled: policy !== null, policy, server: 'https://work.example.com' }) });

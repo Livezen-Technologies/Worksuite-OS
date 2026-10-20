@@ -34,7 +34,7 @@ function rig(o: { seat?: { uid: number; user: string } | null; unattended?: bool
 
 const req = (over: Partial<RsRequest> = {}): RsRequest => ({
   session_id: randomUUID(), mode: 'control', reason: 'Printer driver fails', admin_name: 'Alice Admin', org_name: 'Org A',
-  unattended_eligible: false, expires_at: NOW + HOUR, ...over,
+  unattended_eligible: false, record: false, expires_at: NOW + HOUR, ...over,
 });
 
 test('attended: nothing starts until the seat user consents; nonce only for that user', async () => {
@@ -204,4 +204,77 @@ test('signed RemoteSupportRequest: TTL capped at 4 h; agent hands it to consent 
     await agent.pollRemoteSupport();
     assert.equal(r.rs.snapshot()?.end_reason, 'admin_ended');
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- issue #37: step-up, clipboard opt-in, recording disclosure ----
+async function activeView(r: ReturnType<typeof rig>, over: Partial<RsRequest> = {}) {
+  const q = req({ mode: 'view', ...over });
+  await r.rs.request(q);
+  await r.rs.decide(r.pub.consent!.nonce, 'view');
+  return q;
+}
+
+test('step-up: view → control needs a fresh answer from the seat user, with a new nonce', async () => {
+  const r = rig();
+  const q = await activeView(r);
+  const first = r.reports.length;
+  await r.rs.elevate(randomUUID());
+  assert.equal(r.rs.snapshot()?.elevation, null, 'another session id is ignored');
+  await r.rs.elevate(q.session_id);
+  const s = r.rs.snapshot()!;
+  assert.equal(s.elevation, 'pending');
+  assert.equal(s.granted_mode, 'view', 'nothing changes before the user answers');
+  const nonce = r.pub.consent!.nonce;
+  assert.equal(r.pub.consent?.uid, 1000);
+  await assert.rejects(r.rs.decideElevation('guess', true), /BAD_NONCE/);
+  await assert.rejects(r.rs.decide(nonce, 'control'), /NO_PENDING_REQUEST/, 'the first-consent path cannot be reused');
+  const after = await r.rs.decideElevation(nonce, true);
+  assert.equal(after.granted_mode, 'control');
+  assert.equal(after.elevation, null);
+  assert.equal(r.pub.consent, null, 'nonce removed once answered');
+  assert.deepEqual(r.reports.slice(first).map(([, x]) => [x.granted_mode, x.elevation]), [['control', 'granted']]);
+  assert.ok(r.audit.includes('remote_support_elevation_requested') && r.audit.includes('remote_support_elevation_granted'));
+  await assert.rejects(r.rs.decideElevation(nonce, true), /NO_PENDING_REQUEST/, 'one answer per request');
+});
+
+test('step-up: denied, timed out, or nobody at the seat keeps view only', async () => {
+  const r = rig();
+  const q = await activeView(r);
+  await r.rs.elevate(q.session_id);
+  await r.rs.decideElevation(r.pub.consent!.nonce, false);
+  assert.equal(r.rs.snapshot()?.granted_mode, 'view');
+  assert.equal(r.reports.at(-1)![1].elevation, 'denied');
+  await r.rs.elevate(q.session_id);
+  NOW += 121_000;
+  await r.rs.tick();
+  assert.equal(r.rs.snapshot()?.elevation, null);
+  assert.equal(r.rs.snapshot()?.granted_mode, 'view');
+  assert.equal(r.reports.at(-1)![1].elevation, 'denied');
+
+  const u = rig({ unattended: true });
+  const uq = req({ mode: 'view', unattended_eligible: true });
+  await u.rs.request(uq);
+  assert.equal(u.rs.snapshot()?.consent, 'unattended_policy');
+  const v = rig({ seat: null, unattended: true });
+  await v.rs.request({ ...uq, session_id: randomUUID() });
+  await v.rs.elevate(v.rs.snapshot()!.session_id);
+  assert.equal(v.rs.snapshot()?.granted_mode, 'view', 'unattended policy never covers a step-up');
+  assert.equal(v.reports.at(-1)![1].elevation, 'denied');
+});
+
+test('clipboard sync: off by default, the seat user turns it on and off; recording flag is published', async () => {
+  const r = rig();
+  const q = await activeView(r, { record: true });
+  assert.equal(r.pub.session?.clipboard, false);
+  assert.equal(r.pub.session?.record, true, 'the dialog and indicator can say the session may be recorded');
+  const res = await consentDispatch(r.rs, JSON.stringify({ method: 'SetClipboard', params: { enabled: true } }));
+  assert.equal((res.result as RsSession).clipboard, true);
+  assert.equal(r.reports.at(-1)![1].clipboard, true);
+  assert.deepEqual(await consentDispatch(r.rs, JSON.stringify({ method: 'SetClipboard', params: { enabled: 'yes' } })), { error: 'BAD_ARGUMENT' });
+  await r.rs.end('user_ended', q.session_id);
+  assert.equal(r.rs.snapshot()?.clipboard, false, 'ending the session turns it off');
+  assert.deepEqual(await consentDispatch(r.rs, JSON.stringify({ method: 'SetClipboard', params: { enabled: true } })), { error: 'NO_ACTIVE_SESSION' });
+  assert.ok(r.audit.includes('remote_support_clipboard_on'));
+  assert.equal(parseRequest({ session_id: randomUUID(), mode: 'view', reason: 'x y z', admin_name: 'A', record: true }, 1)?.record, true);
+  assert.equal(parseRequest({ session_id: randomUUID(), mode: 'view', reason: 'x y z', admin_name: 'A', record: 'yes' }, 1)?.record, false);
 });

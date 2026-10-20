@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   enrollDevice: (serverUrl: string, code: string) => ipcRenderer.invoke('ws:enrollDevice', String(serverUrl), String(code)),
   securityStatus: () => ipcRenderer.invoke('ws:securityStatus'),
   securityScan: (kind: string) => ipcRenderer.invoke('ws:securityScan', kind === 'full' ? 'full' : 'quick'),
+  securityAction: (method: string, ...args: string[]) => ipcRenderer.invoke('ws:securityAction', String(method), ...args.map(String)),
   onSecurityChanged: (cb: (s: unknown) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on('ws:securityChanged', listener)
@@ -332,6 +333,13 @@ contextBridge.exposeInMainWorld('worksuiteRemoteSupport', {
   end: () => ipcRenderer.invoke('ws:remoteSupportEnd'),
   chat: () => ipcRenderer.invoke('ws:remoteSupportChat'),
   sendChat: (text: string) => ipcRenderer.invoke('ws:remoteSupportSendChat', String(text)),
+  // Issue #37: step-up answer, clipboard opt-in, file transfer.
+  decideElevation: (allow: boolean) => ipcRenderer.invoke('ws:remoteSupportDecideElevation', String(allow === true)),
+  setClipboard: (on: boolean) => ipcRenderer.invoke('ws:remoteSupportSetClipboard', String(on === true)),
+  files: () => ipcRenderer.invoke('ws:remoteSupportFiles'),
+  acceptFile: (id: string) => ipcRenderer.invoke('ws:remoteSupportAcceptFile', String(id)),
+  rejectFile: (id: string) => ipcRenderer.invoke('ws:remoteSupportRejectFile', String(id)),
+  offerFile: () => ipcRenderer.invoke('ws:remoteSupportOfferFile'),
 })
 
 contextBridge.exposeInMainWorld('worksuitePolkit', {

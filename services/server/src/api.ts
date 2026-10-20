@@ -1,6 +1,6 @@
 // desktop/v1 and desktop/v1/os (api-contracts/openapi.yaml). Tenant scoping comes from the authenticated user or
 // device, never from the request. Idempotency-Key replays within 24 h return the stored response.
-import { pendingCommands as rsPendingCommands, deviceReport as rsDeviceReport, getSignals as rsGetSignals, postSignal as rsPostSignal } from './remoteSupport.ts';
+import { pendingCommands as rsPendingCommands, deviceReport as rsDeviceReport, getSignals as rsGetSignals, postSignal as rsPostSignal, recordEvent as rsRecordEvent, sessionIceServers as rsIceServers } from './remoteSupport.ts';
 import { createPublicKey, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { DEFAULT_WEB_APPS, nextSeq, secret, sha256, tx } from './db.ts';
@@ -12,7 +12,7 @@ import { issueLoginCode, setNewPassword, verifyDirectoryUser, type DirUserRow } 
 import { Throttle } from './throttle.ts';
 import { assignedTo, createRequest, reconcileRequired, type CatalogItem } from './software.ts';
 import { deviceVpnConfig, isWgKey, registerPeer, removePeer } from './vpn.ts';
-import { ownActivity, storeActivity, validateActivityReport } from './monitoring.ts';
+import { ownActivity, ownLiveAndDevices, storeActivity, storeLive, storePowerEvents, validateActivityReport, validateLive, validatePowerEvents } from './monitoring.ts';
 
 export interface ApiOptions { publicUrl: string; issuer: string; updateHost: string; webUrl: string }
 
@@ -361,6 +361,8 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     const d = deviceFromHeader(db, ctx, true);
     const b = obj(await ctx.body());
     for (const k of ['os_version', 'shell_version', 'kernel_version', 'policy_version']) str(b, k);
+    // #39: device startup/shutdown recorded by the agent; stored only while monitoring is on, never kept in the heartbeat.
+    if (b.power_events !== undefined) { storePowerEvents(db, d.org_id, d.id, validatePowerEvents(b.power_events)); delete b.power_events; }
     db.prepare('UPDATE devices SET heartbeat = ? WHERE id = ?').run(JSON.stringify(b).slice(0, 64 * 1024), d.id);
     const cmds = db.prepare("SELECT envelope FROM commands WHERE device_id = ? AND state IN ('pending', 'received') AND expires > ? ORDER BY rowid")
       .all(d.id, Date.now()) as { envelope: string }[];
@@ -424,6 +426,16 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
   r.on('POST', '/desktop/v1/os/remote-support/sessions/{id}/signal', async (ctx) => {
     const d = deviceFromHeader(db, ctx, true);
     rsPostSignal(db, 'device', ctx.params.id, { device_id: d.id }, obj(await ctx.body()));
+    send(ctx, 204);
+  });
+  // Issue #37: ICE servers (short-lived TURN credentials) and the chat/file-transfer audit from the device's side.
+  r.on('GET', '/desktop/v1/os/remote-support/sessions/{id}/ice-servers', (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    send(ctx, 200, rsIceServers(db, ctx.params.id, { device_id: d.id }));
+  });
+  r.on('POST', '/desktop/v1/os/remote-support/sessions/{id}/events', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    rsRecordEvent(db, 'device', ctx.params.id, { device_id: d.id }, obj(await ctx.body()), null);
     send(ctx, 204);
   });
 
@@ -608,7 +620,14 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
   // Transparency: what the organization holds about the signed-in user.
   r.on('GET', '/desktop/v1/activity', (ctx) => {
     const { user } = userCtx(db, ctx);
-    send(ctx, 200, { items: ownActivity(db, user.id) });
+    send(ctx, 200, { items: ownActivity(db, user.id), ...ownLiveAndDevices(db, user.id) });
+  });
+  // #39 live view: { state: active|idle|locked, app_id } every 60 s while monitoring is on. Nothing else is accepted.
+  r.on('POST', '/desktop/v1/activity/live', async (ctx) => {
+    const { user, device } = userCtx(db, ctx);
+    if (!device) throw new HttpError(403, 'DEVICE_REQUIRED', 'live activity comes from enrolled devices only');
+    storeLive(db, user.org_id, user.id, device.id, validateLive(await ctx.body()));
+    send(ctx, 204);
   });
 
   // WSOS-SEC-008: privileged package changes on the device (package-service audit log, forwarded by the device agent).

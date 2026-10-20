@@ -48,13 +48,16 @@ export interface WorkSuiteApi {
   securityStatus(): Promise<SecurityStatus | null>
   /** Scan now through the device agent (polkit lk.worksuite.security.scan). */
   securityScan(kind: 'quick' | 'full'): Promise<CloudResult<unknown>>
+  /** #38 quarantine and suspended programs (polkit lk.worksuite.security.quarantine, an administrator):
+   *  RestoreQuarantined(id) (re-scanned first) | DeleteQuarantined(id) | ResolveSuspendedProcess(eventId, resume|terminate). */
+  securityAction(method: 'RestoreQuarantined' | 'DeleteQuarantined' | 'ResolveSuspendedProcess', ...args: string[]): Promise<CloudResult<unknown>>
   onSecurityChanged(cb: (s: SecurityStatus) => void): () => void
   /** Employee monitoring (#22): policy, disclosure state and this user's own recorded days. */
   activityStatus(): Promise<ActivityStatus>
   /** The user has read the monitoring disclosure. */
   activityAck(): Promise<ActivityStatus>
   /** What the organization's server holds about this user. */
-  activityRemote(): Promise<CloudResult<ActivityDay[]>>
+  activityRemote(): Promise<CloudResult<ActivityRemote>>
   onActivityChanged(cb: (s: ActivityStatus) => void): () => void
   /** Enterprise enrollment through the device agent; asks for an administrator password (polkit). */
   enrollDevice(serverUrl: string, code: string): Promise<CloudResult<{ device_id: string; org_name: string | null }>>
@@ -453,11 +456,28 @@ export interface SecurityStatus {
   history: { id: string; at: number; path: string; signature: string; action: string }[]
   firewall_alerts: { at: number; dst: string; dport: number | null; proto: string }[]
   retention_days: number
+  /** #38 protection layers; absent from older agents. */
+  realtime?: { enabled: boolean; prevention: boolean; state: string; downloads: boolean }
+  protected_folders?: { folders: string[]; mode: 'block' | 'audit'; state: string }
+  app_control?: { denied: number }
+  web?: { dns_blocked: number; dns_feeds: number; dns_filter: boolean; dns_feed_entries: number }
+  threat_intel?: { feeds: number; entries: number; updated: number | null; errors: string[] }
+  auto_patch?: 'immediate' | 'window' | 'off'
+  events?: { id: string; at: number; kind: string; path: string; exe: string | null; signature: string | null; enforced: boolean; resolved: string | null }[]
+  suspended?: { id: string; at: number; path: string; exe: string | null; pid: number | null }[]
+  quarantine?: { id: string; at: number; path: string; signature: string }[]
 }
 /** One day of activity (electron/activity.ts DayReport): aggregates only. */
 export interface ActivityDay { day: string; active_s: number; idle_s: number; locked_s: number; first_active: number | null; last_active: number | null
-  apps: { app_id: string; name: string; active_s: number; switches: number }[]; events: { at: number; type: string }[] }
-export interface ActivityStatus { enabled: boolean; org_name: string | null; retention_days: number; idle_threshold_s: number; disclosure_needed: boolean; last_sent: number | null; days: ActivityDay[] }
+  apps: { app_id: string; name: string; active_s: number; switches: number }[]; events: { at: number; type: string }[]
+  /** #39: only when the organization's policy turns website domains on. */
+  domains?: { domain: string; active_s: number }[] }
+/** #39: the current state the shell last sent for the organization's live view. */
+export interface ActivityLive { state: 'active' | 'idle' | 'locked'; app_id: string | null; at: number }
+export interface ActivityStatus { enabled: boolean; org_name: string | null; retention_days: number; idle_threshold_s: number; disclosure_needed: boolean; last_sent: number | null; days: ActivityDay[]
+  web_domains?: boolean; live?: ActivityLive | null }
+/** What the organization's server holds about the user (desktop/v1/activity). */
+export interface ActivityRemote { items: (ActivityDay & { device_id: string })[]; device_events: { device_id: string; at: number; type: 'startup' | 'shutdown' }[]; live: { device_id: string; state: string; app_id: string | null; at: number }[] }
 
 /** Taskbar chip text: null when the device isn't managed (WSOS-MDM-007). */
 export function managedLabel(info: DeviceInfo | null): string | null {
@@ -575,13 +595,24 @@ const stub: WorkSuiteApi = {
       history: [...(risk ? [{ id: 't2', at: Date.now() - 7_200_000, path: '/home/nimal/Downloads/invoice.pdf.exe', signature: 'Win.Trojan.Agent-1', action: 'detected' }] : []),
         { id: 't1', at: Date.now() - 9 * 86_400_000, path: '/home/nimal/Downloads/eicar.com', signature: 'Win.Test.EICAR_HDB-1', action: 'quarantined' }],
       firewall_alerts: [], retention_days: 90,
+      realtime: { enabled: stubManaged, prevention: true, state: stubManaged ? 'active' : 'inactive', downloads: true },
+      protected_folders: { folders: stubManaged ? ['~/Documents', '~/Pictures'] : [], mode: 'block', state: stubManaged ? 'active' : 'inactive' },
+      app_control: { denied: stubManaged ? 2 : 0 }, web: { dns_blocked: stubManaged ? 12 : 0, dns_feeds: 0, dns_filter: stubManaged, dns_feed_entries: 0 },
+      threat_intel: { feeds: stubManaged ? 1 : 0, entries: stubManaged ? 4210 : 0, updated: Date.now() - 3_600_000, errors: [] }, auto_patch: 'window',
+      events: risk ? [{ id: 'e1', at: Date.now() - 600_000, kind: 'write_blocked', path: '/home/nimal/Documents/budget.ods', exe: '/home/nimal/.cache/x/run', signature: null, enforced: true, resolved: null }] : [],
+      suspended: stubSuspended, quarantine: stubQuarantine,
     }
   },
   async securityScan() { return { ok: true, value: true } },
+  async securityAction(method, ...args) {
+    if (method === 'RestoreQuarantined' && PV.get('security') === 'threat') return { ok: false, error: 'still_detected' }
+    stubQuarantine = stubQuarantine.filter((q) => q.id !== args[0]); stubSuspended = []
+    return { ok: true, value: true }
+  },
   onSecurityChanged() { return () => {} },
   async activityStatus() { return stubActivity() },
   async activityAck() { stubActivityAck = true; return stubActivity() },
-  async activityRemote() { return { ok: true, value: stubActivity().days } },
+  async activityRemote() { return { ok: true, value: { items: stubActivity().days.map((d) => ({ ...d, device_id: 'preview' })), device_events: [{ device_id: 'preview', at: Date.now() - 7 * 3_600_000, type: 'startup' as const }], live: [] } } },
   onActivityChanged() { return () => {} },
   async enrollDevice(_url, code) {
     if (code === 'BAD-CODE') return { ok: false, error: 'enrollment_rejected' }
@@ -1000,10 +1031,17 @@ let stubActivityAck = false
 function stubActivity(): ActivityStatus {
   const on = PV.get('monitoring') === '1'
   const day = new Date().toISOString().slice(0, 10)
+  const web = on && PV.get('web') === '1'
   return { enabled: on, org_name: on ? 'Livezen Technologies' : null, retention_days: 90, idle_threshold_s: 300, disclosure_needed: on && !stubActivityAck, last_sent: on ? Date.now() - 600_000 : null,
+    web_domains: web, live: on ? { state: 'active', app_id: 'org.worksuite.Office', at: Date.now() - 30_000 } : null,
     days: on ? [{ day, active_s: 13_320, idle_s: 1_800, locked_s: 2_700, first_active: Date.now() - 6 * 3_600_000, last_active: Date.now(), events: [{ at: Date.now() - 6 * 3_600_000, type: 'login' }],
-      apps: [{ app_id: 'org.worksuite.Office', name: 'WorkSuite Office', active_s: 7_900, switches: 31 }, { app_id: 'org.mozilla.firefox', name: 'Firefox', active_s: 3_600, switches: 24 }, { app_id: 'foot', name: 'Terminal', active_s: 1_820, switches: 9 }] }] : [] }
+      apps: [{ app_id: 'org.worksuite.Office', name: 'WorkSuite Office', active_s: 7_900, switches: 31 }, { app_id: 'org.mozilla.firefox', name: 'Firefox', active_s: 3_600, switches: 24 }, { app_id: 'foot', name: 'Terminal', active_s: 1_820, switches: 9 }],
+      ...(web ? { domains: [{ domain: 'mail.worksuite.lk', active_s: 2_400 }, { domain: 'drive.worksuite.lk', active_s: 900 }] } : {}) }] : [] }
 }
+// Preview (#38): one quarantined file and, with ?security=threat, one suspended program.
+let stubQuarantine = [{ id: '0f0e0d0c-0b0a-4908-8706-050403020100', at: Date.now() - 9 * 86_400_000, path: '/home/nimal/Downloads/eicar.com', signature: 'Win.Test.EICAR_HDB-1' }]
+let stubSuspended = typeof location !== 'undefined' && new URLSearchParams(location.search).get('security') === 'threat'
+  ? [{ id: '1f0e0d0c-0b0a-4908-8706-050403020100', at: Date.now() - 300_000, path: '/home/nimal/Documents/report.odt.locked', exe: '/usr/bin/python3', pid: 4242 }] : []
 let stubManaged = typeof location !== 'undefined' && new URLSearchParams(location.search).get('managed') === '1'
 
 /** Broker error codes → text for the user. */

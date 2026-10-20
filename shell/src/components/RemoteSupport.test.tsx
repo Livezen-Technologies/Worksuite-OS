@@ -79,3 +79,77 @@ describe('RemoteSupportBadge', () => {
     expect(host!.textContent).toBe('')
   })
 })
+
+// Issue #37: recording disclosure, step-up dialog, clipboard switch, files panel.
+describe('remote support follow-ups (issue #37)', () => {
+  const ACTIVE: RsSession = { ...BASE, state: 'active', mode: 'view', granted_mode: 'view', consent: 'user', started_at: 2 }
+  async function mountFull(s: RsSession, ui: 'prompt' | 'badge', files: Awaited<ReturnType<NonNullable<RemoteSupportApi['files']>>> = []) {
+    let cur: RsSession = s
+    const api: RemoteSupportApi = {
+      state: vi.fn(async () => cur),
+      decide: vi.fn(async () => ({ ok: true as const, value: cur })),
+      revokeControl: vi.fn(async () => ({ ok: true as const, value: cur })),
+      end: vi.fn(async () => ({ ok: true as const, value: null })),
+      chat: vi.fn(async () => []),
+      decideElevation: vi.fn(async (allow: boolean) => { cur = { ...cur, elevation: null, granted_mode: allow ? 'control' : 'view' }; return { ok: true as const, value: cur } }),
+      setClipboard: vi.fn(async (on: boolean) => { cur = { ...cur, clipboard: on }; return { ok: true as const, value: cur } }),
+      files: vi.fn(async () => files),
+      acceptFile: vi.fn(async () => true),
+      rejectFile: vi.fn(async () => true),
+      offerFile: vi.fn(async () => ({ ok: false as const, error: 'cancelled' })),
+    }
+    window.worksuiteRemoteSupport = api
+    host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await act(async () => root!.render(ui === 'prompt' ? <RemoteSupportPrompt pollMs={10_000} /> : <RemoteSupportBadge pollMs={10_000} />))
+    await act(async () => {})
+    return api
+  }
+
+  it('the consent dialog says when the session may be recorded; the indicator keeps saying it', async () => {
+    await mountFull({ ...BASE, record: true }, 'prompt')
+    expect(host!.querySelector('[role="alertdialog"]')!.textContent).toContain('may record this session')
+    act(() => root?.unmount()); host?.remove()
+    await mountFull({ ...ACTIVE, record: true }, 'badge')
+    expect(host!.textContent).toContain('May be recorded')
+    act(() => root?.unmount()); host?.remove()
+    await mountFull(ACTIVE, 'badge')
+    expect(host!.textContent).not.toContain('May be recorded')
+  })
+
+  it('step-up: a fresh dialog asks the user; Escape keeps view only', async () => {
+    const api = await mountFull({ ...ACTIVE, elevation: 'pending' }, 'prompt')
+    const dlg = host!.querySelector('[role="alertdialog"]')!
+    expect(dlg.textContent).toContain('Allow remote control?')
+    expect(dlg.textContent).toContain('Alice Admin')
+    await act(async () => { dlg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    expect(api.decideElevation).toHaveBeenCalledWith(false)
+    act(() => root?.unmount()); host?.remove()
+    const api2 = await mountFull({ ...ACTIVE, elevation: 'pending' }, 'prompt')
+    await act(async () => button('Allow remote control')!.click())
+    expect(api2.decideElevation).toHaveBeenCalledWith(true)
+    expect(api2.decide).not.toHaveBeenCalled()
+  })
+
+  it('clipboard is an off-by-default switch in the indicator', async () => {
+    const api = await mountFull(ACTIVE, 'badge')
+    const sw = host!.querySelector('[role="switch"]')!
+    expect(sw.getAttribute('aria-checked')).toBe('false')
+    await act(async () => (sw as HTMLButtonElement).click())
+    expect(api.setClipboard).toHaveBeenCalledWith(true)
+    expect(host!.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('files panel: an incoming file waits for Save to Downloads or Decline', async () => {
+    const api = await mountFull(ACTIVE, 'badge', [{ id: 'f1abcd', name: 'driver.zip', size: 3 * 1048576, direction: 'to_device', state: 'offered', done: 0 }])
+    await act(async () => button('Files')!.click())
+    await act(async () => {})
+    const panel = host!.querySelector('[role="dialog"]')!
+    expect(panel.textContent).toContain('Alice Admin wants to send you driver.zip (3.0 MB)')
+    await act(async () => button('Save to Downloads')!.click())
+    expect(api.acceptFile).toHaveBeenCalledWith('f1abcd')
+    await act(async () => button('Decline')!.click())
+    expect(api.rejectFile).toHaveBeenCalledWith('f1abcd')
+    await act(async () => button('Send a file…')!.click())
+    expect(api.offerFile).toHaveBeenCalled()
+  })
+})

@@ -88,3 +88,12 @@ test('maintenance windows can wrap midnight', () => {
   assert.equal(inWindow('22:00-02:00', at(12)), false);
   assert.equal(inWindow(undefined, at(12)), true);
 });
+
+test('policy security_auto_patch (#38): immediate ignores the window, off follows the update mode', () => {
+  const outside = { now: at(12), idle: false };
+  assert.deepEqual(decide(input({ mode: 'notify', ...outside }, { security: true })), { action: 'wait', reason: 'outside_window' });
+  assert.deepEqual(decide(input({ mode: 'notify', ...outside, securityPatch: 'immediate' }, { security: true })), { action: 'install', reason: 'security' });
+  assert.deepEqual(decide(input({ mode: 'notify', securityPatch: 'off' }, { security: true })), { action: 'wait', reason: 'waiting_for_user' });
+  // Still never on a metered link unless critical.
+  assert.deepEqual(decide(input({ mode: 'automatic', metered: true, securityPatch: 'immediate' }, { security: true })), { action: 'wait', reason: 'metered' });
+});

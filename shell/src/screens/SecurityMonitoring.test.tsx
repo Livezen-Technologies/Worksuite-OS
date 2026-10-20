@@ -42,6 +42,30 @@ describe('WorkSuite Security section', () => {
     expect(el.textContent).toContain('managed by Livezen')
     expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Quick scan', 'Full scan'])
   })
+  it('#38: real-time, ransomware and web protection rows, suspended programs, quarantine and recent blocks', async () => {
+    const full: SecurityStatus = {
+      ...sec,
+      realtime: { enabled: true, prevention: true, state: 'active', downloads: true },
+      protected_folders: { folders: ['~/Documents'], mode: 'block', state: 'active' },
+      app_control: { denied: 2 }, web: { dns_blocked: 10, dns_feeds: 1, dns_filter: true, dns_feed_entries: 5 },
+      threat_intel: { feeds: 1, entries: 300, updated: null, errors: [] }, auto_patch: 'immediate',
+      events: [{ id: 'e1', at: Date.now(), kind: 'write_blocked', path: '/home/u/Documents/a.odt', exe: '/tmp/x', signature: null, enforced: true, resolved: null }],
+      suspended: [{ id: 's1', at: Date.now(), path: '/home/u/Documents/b.locked', exe: '/usr/bin/python3', pid: 9 }],
+      quarantine: [{ id: 'q1', at: Date.now(), path: '/home/u/Downloads/eicar.com', signature: 'Eicar' }],
+    }
+    const el = await render(<SecuritySection info={info} initial={full} />)
+    expect(el.textContent).toContain('files with threats are blocked when opened')
+    expect(el.textContent).toContain('New downloads are scanned')
+    expect(el.textContent).toContain('Protecting Documents')
+    expect(el.textContent).toContain('15 dangerous sites blocked')
+    expect(el.textContent).toContain('300 known-bad addresses blocked')
+    expect(el.textContent).toContain('2 programs blocked by your organization')
+    expect(el.textContent).toContain('Change to a protected folder blocked')
+    expect(el.textContent).toContain('python3')
+    expect(el.textContent).toContain('eicar.com')
+    expect(el.textContent).toContain('install as soon as they are available')
+    expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Quick scan', 'Full scan', 'Resume', 'End program', 'Restore', 'Delete'])
+  })
   it('says when status is unavailable', async () => {
     const el = await render(<SecuritySection info={null} initial={null} />)
     expect(el.textContent).toContain('Security status unavailable')
@@ -61,6 +85,27 @@ describe('Employee monitoring', () => {
     expect(el.textContent).toContain('Kept for 30 days')
     expect(el.textContent).toContain('WorkSuite Office')
     expect(el.textContent).toContain('2026-10-20')
+  })
+  it('Settings (#39): live state, startup/shutdown, attendance and, only when the policy allows, website domains', async () => {
+    const day0 = act0.days[0]
+    const base = { ...act0, live: { state: 'idle' as const, app_id: day0.apps[0]?.app_id ?? null, at: Date.now() - 30_000 },
+      days: [{ ...day0, domains: [{ domain: 'mail.worksuite.lk', active_s: 600 }] }] }
+    const el = await render(<MonitoringSection initial={{ ...base, web_domains: false }} />)
+    expect(el.textContent).toContain('Your current state once a minute')
+    expect(el.textContent).toContain('When this computer starts up and shuts down')
+    expect(el.textContent).toContain('daily attendance summary')
+    expect(el.querySelector('[data-testid="mon-live"]')?.textContent).toContain('Idle')
+    expect(el.textContent).toContain('First active')
+    expect(el.textContent).not.toContain('mail.worksuite.lk')
+    expect(el.textContent).not.toContain('Which websites you use')
+    act(() => root?.unmount()); host?.remove()
+    const el2 = await render(<MonitoringSection initial={{ ...base, web_domains: true }} />)
+    expect(el2.textContent).toContain('Which websites you use in WorkSuite web apps')
+    expect(el2.textContent).toContain('mail.worksuite.lk')
+  })
+  it('disclosure lists website domains only when the policy turns them on', async () => {
+    await render(<MonitoringIndicator onOpen={() => {}} initial={{ ...act0, web_domains: true }} />)
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('the domain name only')
   })
   it('Settings: off says so', async () => {
     const el = await render(<MonitoringSection initial={{ ...act0, enabled: false, days: [] }} />)

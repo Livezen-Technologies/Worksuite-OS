@@ -14,7 +14,7 @@ vt = 1
 command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-session"
 user = "_greetd"
 CONF
-systemctl enable greetd.service worksuite-device-agent.service worksuite-package-service.service worksuite-boot-marker.service
+systemctl enable greetd.service worksuite-device-agent.service worksuite-power-events.service worksuite-package-service.service worksuite-boot-marker.service
 # Default-deny inbound firewall (/etc/nftables.conf, docs/security/hardening.md).
 systemctl enable nftables.service
 grep -q "table inet worksuite_filter" /etc/nftables.conf || { echo "WorkSuite nftables.conf missing" >&2; exit 1; }

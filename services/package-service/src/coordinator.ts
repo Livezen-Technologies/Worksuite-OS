@@ -49,7 +49,7 @@ export interface UpdateStatus {
 export interface CoordinatorEnv {
   fetchJson(url: string): Promise<unknown>;
   keys(id: string): KeyObject | undefined;
-  policy(): { update_ring?: Ring; update_mode?: Mode; maintenance_window?: string; update_mirror?: string } | null;
+  policy(): { update_ring?: Ring; update_mode?: Mode; maintenance_window?: string; update_mirror?: string; security_auto_patch?: string } | null;
   arch: 'amd64' | 'arm64';
   installedVersion(): string;
   deviceKey(): string;
@@ -176,6 +176,7 @@ export class Coordinator extends EventEmitter {
       manifest: raw, installed: this.env.installedVersion(), managed: !!policy, mode: this.mode(),
       window: policy?.maintenance_window, deviceKey: this.env.deviceKey(), now: new Date(this.env.now()),
       idle: await this.env.idle(), metered: await this.env.metered(), deferrals: used,
+      securityPatch: policy?.security_auto_patch === 'immediate' || policy?.security_auto_patch === 'off' ? policy.security_auto_patch : 'window',
     });
     const offer = { notes: typeof raw.notes === 'string' ? raw.notes.slice(0, 8000) : null,
       notes_url: typeof raw.notes_url === 'string' && /^https:\/\//.test(raw.notes_url) ? raw.notes_url : null,

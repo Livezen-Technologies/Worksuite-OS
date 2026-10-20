@@ -6,6 +6,21 @@ import { invalid } from './http.ts';
 import { validRsPolicy } from './remoteSupport.ts';
 import { normalizeKiosk, type KioskPolicy } from './kiosk.ts';
 
+const absPath = (x: unknown) => typeof x === 'string' && /^\/[^\0\n]{0,4095}$/.test(x) && !x.split('/').includes('..');
+const folders = (v: unknown, max: number) => Array.isArray(v) && v.length <= max
+  && v.every((x) => absPath(x) || typeof x === 'string' && /^~\/[^\0\n]{1,4000}$/.test(x) && !x.split('/').includes('..'));
+const DOMAIN = /^(?=.{1,253}$)(?!-)([a-z0-9-]{1,63}(?<!-)\.)+[a-z][a-z0-9-]{0,62}(?<!-)$/;
+/** A threat feed: https, and pinned (sha256) or signed (key) — an unverifiable feed would steer every device. */
+const feed = (f: unknown) => {
+  if (!f || typeof f !== 'object' || Array.isArray(f)) return false;
+  const o = f as Record<string, unknown>;
+  if (Object.keys(o).some((k) => k !== 'url' && k !== 'sha256' && k !== 'key')) return false;
+  if (typeof o.url !== 'string' || !/^https:\/\/[^\s]{1,2000}$/.test(o.url)) return false;
+  if (o.sha256 !== undefined && !(typeof o.sha256 === 'string' && /^[0-9a-fA-F]{64}$/.test(o.sha256))) return false;
+  if (o.key !== undefined && !(typeof o.key === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(o.key))) return false;
+  return o.sha256 !== undefined || o.key !== undefined;
+};
+
 const APP_PERMISSION_RESOURCES = new Set(['camera', 'microphone', 'location', 'notifications', 'screenshot', 'background']);
 
 const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
@@ -79,11 +94,35 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   av_signature_checks_per_day: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 24,
   av_cpu_quota_percent: (v) => Number.isInteger(v) && (v as number) >= 10 && (v as number) <= 100,
   security_log_retention_days: (v) => Number.isInteger(v) && (v as number) >= 7 && (v as number) <= 3650,
+  // Protection layers (#38, services/device-agent/src/protection.ts). Real-time scanning (clamonacc) is off unless
+  // true; prevention (refusing the open of an infected file) is on unless false. Folders are absolute or "~/<path>" for
+  // every user's home. Protected folders: only system/app executables (and protected_folders_allow) may write there;
+  // a process over ransomware_burst renames/deletions is suspended. app_denylist: absolute paths or SHA-256 hashes.
+  // Feeds are https URLs pinned by sha256 or signed (key: base64 Ed25519 public key; signature at "<url>.sig").
+  realtime_protection: (v) => typeof v === 'boolean',
+  realtime_prevention: (v) => typeof v === 'boolean',
+  realtime_paths: (v) => folders(v, 32) && (v as unknown[]).length >= 1,
+  download_scan: (v) => typeof v === 'boolean',
+  protected_folders: (v) => folders(v, 32),
+  protected_folders_mode: (v) => v === 'block' || v === 'audit',
+  protected_folders_allow: (v) => Array.isArray(v) && v.length <= 200 && v.every(absPath),
+  ransomware_burst: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).every((k) => k === 'count' || k === 'seconds')
+    && Number.isInteger((v as Record<string, unknown>).count) && ((v as { count: number }).count >= 20 && (v as { count: number }).count <= 10_000)
+    && Number.isInteger((v as Record<string, unknown>).seconds) && ((v as { seconds: number }).seconds >= 1 && (v as { seconds: number }).seconds <= 300),
+  app_denylist: (v) => Array.isArray(v) && v.length <= 5000 && v.every((x) => absPath(x) || typeof x === 'string' && /^[0-9a-fA-F]{64}$/.test(x)),
+  dns_blocklist: (v) => Array.isArray(v) && v.length <= 5000 && v.every((x) => typeof x === 'string' && DOMAIN.test(x.toLowerCase())),
+  dns_threat_feeds: (v) => Array.isArray(v) && v.length <= 10 && v.every(feed),
+  firewall_threat_feeds: (v) => Array.isArray(v) && v.length <= 10 && v.every(feed),
+  firewall_threat_max_entries: (v) => Number.isInteger(v) && (v as number) >= 100 && (v as number) <= 200_000,
+  security_auto_patch: (v) => v === 'immediate' || v === 'window' || v === 'off',
   // Employee activity monitoring (#22, shell/electron/activity.ts): off unless true; aggregate time per application,
   // active/idle/locked time and session events only. Retention on the server and on the device; idle after N seconds.
   activity_monitoring: (v) => typeof v === 'boolean',
   activity_retention_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 730,
   activity_idle_threshold_s: (v) => Number.isInteger(v) && (v as number) >= 60 && (v as number) <= 3600,
+  // #39 website tracking: off unless true, and only with activity_monitoring. Domain names from WorkSuite web-app
+  // windows only (never full URLs or page titles); disclosed to the employee when on.
+  activity_web_domains: (v) => typeof v === 'boolean',
   // Software Management (Admin Center): what users may do with software on their own. 'any' = any package from the
   // approved sources, 'approved' = only the allowlist, 'request' = the allowlist plus asking an administrator for other
   // catalog apps, 'block' = nothing (administrators still deploy remotely). Uninstall/update false = only the organization.

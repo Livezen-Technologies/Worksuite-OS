@@ -1,4 +1,6 @@
 // Device agent core (SRS §9.3, §14.3). All effects on the machine go through Host so the logic is testable.
+import { rmSync } from 'node:fs';
+import { dropSent, monitoringOn, readPowerEvents } from './power.ts';
 import { verify, type KeyObject } from 'node:crypto';
 import { ApiError, type DeviceApi } from './api.ts';
 import { canonical, validateCommand, type CommandEnvelope, type CommandName } from './commands.ts';
@@ -64,6 +66,8 @@ export interface AgentOptions {
   remoteSupport?: RemoteSupport;
   /** WorkSuite Security (#20); absent = the device has no security module (tests, rescue). */
   security?: SecurityCenter;
+  /** Device startup/shutdown file for activity monitoring (#39, src/power.ts); absent = not reported. */
+  powerEventsFile?: string;
 }
 
 const DAY = 86_400_000;
@@ -229,6 +233,10 @@ export class Agent {
     try {
       await this.flushAcks();
       const f = await this.o.host.facts();
+      // #39: startup/shutdown only while the signed policy has activity monitoring on; otherwise none are kept.
+      const pf = this.o.powerEventsFile;
+      const power = pf && monitoringOn(this.s) ? readPowerEvents(pf) : [];
+      if (pf && !monitoringOn(this.s)) rmSync(pf, { force: true });
       const res = await this.o.api.heartbeat({
         os_version: f.os_version, shell_version: f.shell_version, kernel_version: f.kernel_version,
         policy_version: this.s.policy?.version ?? '', update_status: f.update_status,
@@ -236,7 +244,9 @@ export class Agent {
         observed: { policy_version: this.s.policy?.version ?? null, encrypted: await this.o.host.isFullyEncrypted().catch(() => false) },
         // Admin Center › Security Center: firewall, antivirus, threats, isolation (no file contents).
         ...(this.o.security ? { security: await this.o.security.summary().catch(() => null) } : {}),
+        ...(power.length ? { power_events: power } : {}),
       });
+      if (pf && power.length) dropSent(pf, power);
       await this.refreshFacts();
       this.o.state.update((s) => { s.last_check_in = this.o.now(); });
       if (this.s.offline_access_expired) this.setOfflineBlock(false);
@@ -316,6 +326,11 @@ export class Agent {
         await this.o.remoteSupport.end('admin_ended', String(c.args.session_id));
         return true;
       }
+      case 'RemoteSupportElevate': {
+        if (!this.o.remoteSupport) throw new Error('NOT_SUPPORTED');
+        await this.o.remoteSupport.elevate(String(c.args.session_id).toLowerCase());
+        return true;
+      }
       case 'StartMalwareScan': {
         if (!this.o.security) throw new Error('NOT_SUPPORTED');
         // Acked when it has started; the result reaches the server with the next check-in's security summary.
@@ -324,6 +339,10 @@ export class Agent {
       }
       case 'IsolateEndpoint': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.isolate(c.args.hours); return true;
       case 'ReleaseIsolation': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.release(); return true;
+      // #38: the administrator decides from Admin Center › Security Center; force restores a file still detected.
+      case 'RestoreQuarantined': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.restore(String(c.args.quarantine_id), c.args.force === true, 'remote'); return true;
+      case 'DeleteQuarantined': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.deleteQuarantined(String(c.args.quarantine_id), 'remote'); return true;
+      case 'ResolveSuspendedProcess': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.resolveSuspended(String(c.args.event_id), c.args.action === 'resume' ? 'resume' : 'terminate', 'remote'); return true;
     }
   }
 

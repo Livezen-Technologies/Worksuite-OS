@@ -73,6 +73,24 @@ test('policy: security and monitoring fields are validated', () => {
     assert.throws(() => validatePolicy(bad), JSON.stringify(bad));
 });
 
+test('policy: protection layers (#38) are validated; feeds must be https and pinned or signed', () => {
+  const sha = 'a'.repeat(64), key = 'A'.repeat(43) + '=';
+  const good = {
+    realtime_protection: true, realtime_prevention: false, realtime_paths: ['/home', '~/Desktop'], download_scan: true,
+    protected_folders: ['~/Documents', '/srv/finance'], protected_folders_mode: 'audit', protected_folders_allow: ['/opt/backup/'],
+    ransomware_burst: { count: 150, seconds: 10 }, app_denylist: ['/usr/local/bin/miner', sha], dns_blocklist: ['bad.example', 'Phish.Example'],
+    dns_threat_feeds: [{ url: 'https://feeds.example/dns.txt', key }], firewall_threat_feeds: [{ url: 'https://feeds.example/ips.txt', sha256: sha }],
+    firewall_threat_max_entries: 50_000, security_auto_patch: 'immediate',
+  };
+  assert.deepEqual(validatePolicy(good), good);
+  for (const bad of [
+    { realtime_paths: [] }, { protected_folders: ['relative'] }, { protected_folders: ['~/../etc'] }, { protected_folders_mode: 'off' },
+    { ransomware_burst: { count: 5, seconds: 10 } }, { ransomware_burst: { count: 100, seconds: 10, extra: 1 } }, { app_denylist: ['abc'] },
+    { dns_blocklist: ['not a domain'] }, { firewall_threat_feeds: [{ url: 'https://x.example/f' }] }, { firewall_threat_feeds: [{ url: 'http://x.example/f', sha256: sha }] },
+    { dns_threat_feeds: [{ url: 'https://x.example/f', sha256: sha, script: 'x' }] }, { firewall_threat_max_entries: 10 }, { security_auto_patch: 'sometimes' },
+  ]) assert.throws(() => validatePolicy(bad), JSON.stringify(bad));
+});
+
 test('activity report schema is closed: no titles, URLs, keystrokes or screenshots', () => {
   assert.equal(validateActivityReport(report(), NOW).apps.length, 2);
   for (const extra of [{ window_titles: ['x'] }, { screenshots: [] }, { keystrokes: 1 }, { urls: [] }])
@@ -138,10 +156,24 @@ test('Security Center: heartbeat summaries, scan and release are routine, isolat
   assert.equal(iso.status, 201);
   assert.equal((await cmd({ command: 'ReleaseIsolation' })).status, 201);
 
+  // #38 quarantine and suspended processes: ids checked; a forced restore needs the password and device name.
+  const q = '0f0e0d0c-0b0a-4908-8706-050403020100';
+  assert.equal((await cmd({ command: 'RestoreQuarantined', args: { quarantine_id: q } })).status, 201);
+  assert.equal((await cmd({ command: 'RestoreQuarantined', args: { quarantine_id: '../x' } })).status, 400);
+  assert.equal((await cmd({ command: 'RestoreQuarantined', args: { quarantine_id: q, force: true } })).status, 401);
+  const forced = await cmd({ command: 'RestoreQuarantined', args: { quarantine_id: q, force: true }, password: 'alice-password', confirm_name: 'sec-host' });
+  assert.equal(forced.status, 201);
+  assert.equal((await cmd({ command: 'DeleteQuarantined', args: { quarantine_id: q } })).status, 201);
+  assert.equal((await cmd({ command: 'ResolveSuspendedProcess', args: { event_id: q, action: 'resume' } })).status, 201);
+  assert.equal((await cmd({ command: 'ResolveSuspendedProcess', args: { event_id: q, action: 'stop' } })).status, 400);
+
   // The device agent accepts the signed envelope.
   const keysDir = join(dir, 'keys');
   admin.exportKeys(db, keysDir);
   const env = JSON.parse((db.prepare('SELECT envelope FROM commands WHERE id = ?').get(iso.body.command_id) as { envelope: string }).envelope);
   const v = validateCommand(env, { deviceId: dev.device_id, keys: loadKeys(keysDir), replay: new MemoryReplayStore() });
   assert.equal(v.ok, true); assert.deepEqual(env.args, { hours: 4 });
+  const fenv = JSON.parse((db.prepare('SELECT envelope FROM commands WHERE id = ?').get(forced.body.command_id) as { envelope: string }).envelope);
+  assert.equal(validateCommand(fenv, { deviceId: dev.device_id, keys: loadKeys(keysDir), replay: new MemoryReplayStore() }).ok, true);
+  assert.deepEqual(fenv.args, { quarantine_id: q, force: true });
 });
