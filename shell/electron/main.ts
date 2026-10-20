@@ -49,6 +49,7 @@ import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
 import { startTouchHost } from './touch'
+import { startPointerHost } from './pointer'
 import { startNotifications, windowForNotification } from './notifications'
 import { isOfficeDoc, launchAndWait, openWithLock } from './officeLock'
 import { startPolkitBridge } from './polkit'
@@ -671,6 +672,8 @@ app.whenReady().then(() => {
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
   startTouchHost(handle, broadcast, app.getPath('home'))
+  // Settings › Mouse & touchpad (#35): Labwc libinput block, applied live with labwc --reconfigure.
+  startPointerHost(handle, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
   // Clicking one (its "default" action) also raises the sender's window through the bridge, whatever the app does.
   const notices = startNotifications(handle, broadcast, (n) => {

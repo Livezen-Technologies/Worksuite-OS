@@ -331,6 +331,12 @@ contextBridge.exposeInMainWorld('worksuiteTouch', {
   onPen: on('ws:penEvent'),
 })
 
+// Mouse and touchpad settings — see electron/pointer.ts.
+contextBridge.exposeInMainWorld('worksuitePointer', {
+  state: () => ipcRenderer.invoke('ws:pointerState'),
+  set: (patch: unknown) => ipcRenderer.invoke('ws:pointerSet', JSON.stringify(patch ?? {})),
+})
+
 // Screenshots, the snipping overlay and editor, Windows-style Open targets, shortcuts — see electron/capture.ts,
 // electron/shortcutsHost.ts. Images travel as data: URLs; files are written only where the person saves them.
 contextBridge.exposeInMainWorld('worksuiteCapture', {
