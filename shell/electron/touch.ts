@@ -287,6 +287,12 @@ const realSpawn: Spawn = (cmd, args) => {
   } catch { return null }
 }
 
+/** worksuite-osk's stdout state line ("visible 1" / "visible 0", services/session/osk control.state_line) → shown. */
+export function parseOskState(line: string): boolean | null {
+  const m = /^visible ([01])$/.exec(line.trim())
+  return m ? m[1] === '1' : null
+}
+
 /** One line to worksuite-osk's control socket (0600, in the user's runtime dir). */
 type Connect = (sock: string) => { on(ev: 'error', fn: () => void): unknown; on(ev: 'connect', fn: () => void): unknown; end(line: string): unknown }
 
@@ -423,6 +429,12 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
     oskStarted = Date.now()
     const ours = oskIsOurs
     const self = osk
+    // worksuite-osk reports each show/hide, also its own hide key: the shell's state follows the keyboard.
+    osk?.onLine((l) => {
+      const v = parseOskState(l)
+      if (v === null || osk !== self || v === st.osk.visible) return
+      st.osk.visible = v; emit()
+    })
     osk?.onExit(() => {
       if (osk !== self) return   // stopOsk() or a newer keyboard
       osk = null; st.osk = { available: false, visible: false }
