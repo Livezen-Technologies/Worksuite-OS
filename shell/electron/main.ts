@@ -374,6 +374,10 @@ app.whenReady().then(() => {
   handle('ws:pkgRepair', () => pkg.repair())
   handle('ws:pkgState', () => pkg.serviceState())
   handle('ws:pkgCatalog', () => pkg.catalog())
+  handle('ws:pkgRequestApp', (catalogId, reason) => pkg.requestApp(String(catalogId), String(reason ?? '')))
+  handle('ws:updateHistory', () => pkg.updateHistory())
+  handle('ws:appUpdates', () => pkg.appUpdates())
+  handle('ws:updateApps', (...ids) => pkg.updateApps(ids.map(String)))
   // Files for local installs come only from the user's own choice in a file dialog: the renderer gets an opaque
   // handle, never the ability to name a path (WSOS-APT-005, WSOS-AIM-001, WSOS-AUP-010).
   const picked = new Map<string, string>()

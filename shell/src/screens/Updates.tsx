@@ -1,10 +1,10 @@
 // OS update screens (boards U1–U7, UpdSettings) on the package service's update coordinator (WSOS-AUP-011).
-// Everything shown comes from the coordinator status and the update job's progress events; the manifest
-// carries no release notes, download size or update history, so those places say so instead.
+// Everything shown comes from the coordinator status, the update job's progress events and the package service's
+// update history; release notes and sizes appear when the signed manifest carries them, and say so when it doesn't.
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { formatBytes, os, packageErrorText, type BundleInfo, type DeviceInfo } from '../lib/os'
+import { formatBytes, os, packageErrorText, type AppUpdate, type BundleInfo, type DeviceInfo, type OsUpdateStatus, type UpdateHistory, type UpdateHistoryEntry } from '../lib/os'
 import { useOsUpdate, updates } from '../lib/useOsUpdate'
 import { REMIND_KEY, SEEN_KEY, UPDATE_PHASES, fmtWhen, heroView, needsAttention, canDefer, restartOptions, whatsNew, type Action, type RestartChoice, type Tone } from '../lib/updates'
 import { C, Dialog, OptionCard, Progress, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, heroCard, linkBtn, rowLine } from '../components/Dk'
@@ -83,6 +83,7 @@ export function UpdatesPanel() {
     [t('upd.installs'), t('upd.installsHint'), policy?.maintenance_window ? t('upd.inWindow', { window: policy.maintenance_window }) : t('upd.whenIdle')],
     [t('upd.metered'), t('upd.meteredHint'), t('upd.meteredWait')],
     [t('upd.ringLabel'), policy ? t('upd.setByOrg') : t('upd.onThisComputer'), RING[policy?.update_ring ?? 'stable']],
+    [t('swu.bandwidth'), t('swu.bandwidthHint'), policy?.update_bandwidth_kbps ? t('swu.bandwidthValue', { rate: formatBytes(policy.update_bandwidth_kbps * 1024) }) : t('swu.bandwidthNone')],
   ]
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
@@ -110,24 +111,10 @@ export function UpdatesPanel() {
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-3">
-        <section aria-labelledby="upd-hist" className="flex flex-col gap-2">
-          <h2 id="upd-hist" className="m-0 text-sm font-semibold">{t('upd.history')}</h2>
-          <div className={`${card} overflow-hidden`}>
-            {offered && (
-              <div className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
-                <span className="h-2 w-2 rounded-full" style={{ background: C.cyan }} />
-                <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">WorkSuite OS {offered}</span><span className="text-[11px] text-[#8FA3C8]">{t('upd.notesMissing')}</span></span>
-                <span className="text-[11px]" style={{ color: C.cyan }}>{t('upd.hist.offered')}</span>
-              </div>
-            )}
-            <div className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
-              <span className="h-2 w-2 rounded-full" style={{ background: C.green }} />
-              <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">WorkSuite OS {st.installed}</span><span className="text-[11px] text-[#8FA3C8]">{t('upd.lastChecked', { when: st.last_check ? fmtWhen(st.last_check) : t('settings.about.notYet') })}{updateSource(st.update_host)}</span></span>
-              <span className="text-[11px]" style={{ color: C.green }}>{t('upd.hist.installed')}</span>
-            </div>
-            <div className={`px-4 py-[11px] text-[11px] text-[#8FA3C8] ${rowLine}`}>{t('upd.hist.none')}</div>
-          </div>
-        </section>
+        <div className="flex min-h-0 flex-col gap-3">
+          <HistorySection st={st} offered={offered} />
+          <AppUpdatesSection reserved={policy?.software_update === false} />
+        </div>
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between"><h2 id="upd-opts" className="m-0 text-sm font-semibold">{t('upd.options')}</h2>{policy && <span className={chip}>{t('settings.lock.policy')}</span>}</div>
           <div className={`${card} overflow-hidden`} aria-labelledby="upd-opts" role="group">
@@ -143,6 +130,102 @@ export function UpdatesPanel() {
       </div>
       {schedule && <RestartDialog onClose={() => setSchedule(false)} />}
     </div>
+  )
+}
+
+const HIST_KIND: Record<UpdateHistoryEntry['kind'], string> = messages({ os: 'swu.hist.kind.os', driver: 'swu.hist.kind.driver', firmware: 'swu.hist.kind.firmware', app: 'swu.hist.kind.app' })
+const HIST_RESULT: Record<UpdateHistoryEntry['result'], string> = messages({ success: 'swu.hist.success', failed: 'swu.hist.failed', cancelled: 'swu.hist.cancelled', pending: 'swu.hist.pending' })
+const HIST_COLOR: Record<UpdateHistoryEntry['result'], string> = { success: C.green, failed: '#FF8A7A', cancelled: '#8FA3C8', pending: C.cyan }
+
+/** Update history (package service GetUpdateHistory): the offered release with its notes, then pending, installed and
+ *  failed updates of every kind. Failures are worded here; the service's error text is for administrators. */
+export function HistorySection({ st, offered }: { st: OsUpdateStatus; offered: string | null }) {
+  const [hist, setHist] = useState<UpdateHistory | null>(null)
+  useEffect(() => {
+    const load = () => void os.updateHistory().then((r) => setHist(r.ok ? r.value : null)).catch(() => setHist(null))
+    load()
+    const off = os.onPkgJob((e) => { if (e.kind === 'finished') load() })
+    return off
+  }, [st.state, st.installed])
+  const rows = hist ? [...hist.pending, ...hist.entries].slice(0, 30) : []
+  const sizes = [st.download_bytes ? t('swu.offer.size', { size: formatBytes(st.download_bytes) }) : null, st.upgrade ? t('swu.offer.upgrade') : null, st.security ? t('swu.offer.security') : null].filter(Boolean).join(' · ')
+  return (
+    <section aria-labelledby="upd-hist" className="flex min-h-0 flex-col gap-2">
+      <h2 id="upd-hist" className="m-0 text-sm font-semibold">{t('upd.history')}</h2>
+      <div className={`${card} max-h-[340px] overflow-auto`}>
+        {offered && (
+          <div className={`flex items-start gap-3 px-4 py-[11px] ${rowLine}`}>
+            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: C.cyan }} />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="text-[13px] font-medium">WorkSuite OS {offered}</span>
+              {sizes && <span className="text-[11px] text-[#C9D6EE]">{sizes}</span>}
+              {st.notes ? <details className="text-[11px] text-[#8FA3C8]"><summary className="cursor-pointer text-[#7FB2FF]">{t('swu.offer.notes')}</summary><p className="m-0 mt-1 whitespace-pre-line">{st.notes}</p></details>
+                : <span className="text-[11px] text-[#8FA3C8]">{t('upd.notesMissing')}</span>}
+            </span>
+            <span className="text-[11px]" style={{ color: C.cyan }}>{t('upd.hist.offered')}</span>
+          </div>
+        )}
+        <div className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
+          <span className="h-2 w-2 rounded-full" style={{ background: C.green }} />
+          <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">WorkSuite OS {st.installed}</span><span className="text-[11px] text-[#8FA3C8]">{t('upd.lastChecked', { when: st.last_check ? fmtWhen(st.last_check) : t('settings.about.notYet') })}{updateSource(st.update_host)}</span></span>
+          <span className="text-[11px]" style={{ color: C.green }}>{t('upd.hist.installed')}</span>
+        </div>
+        {rows.map((e) => (
+          <div key={e.id} className={`flex items-start gap-3 px-4 py-[11px] ${rowLine}`}>
+            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: HIST_COLOR[e.result] }} />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate text-[13px] font-medium">{e.title}{e.version ? ` ${e.version}` : ''}</span>
+              <span className="text-[11px] text-[#8FA3C8]">{HIST_KIND[e.kind]} · {fmtWhen(e.finished_at ?? e.started_at)}{e.reboot_required ? ` · ${t('swu.hist.restart')}` : ''}</span>
+              {e.result === 'failed' && <span className="text-[11px] text-[#FFB4A8]">{t('swu.hist.failedHint')}</span>}
+            </span>
+            <span className="text-[11px]" style={{ color: HIST_COLOR[e.result] }}>{HIST_RESULT[e.result]}</span>
+          </div>
+        ))}
+        {hist && !rows.length && <div className={`px-4 py-[11px] text-[11px] text-[#8FA3C8] ${rowLine}`}>{t('swu.hist.empty')}</div>}
+        {!hist && <div className={`px-4 py-[11px] text-[11px] text-[#8FA3C8] ${rowLine}`}>{t('upd.hist.none')}</div>}
+      </div>
+    </section>
+  )
+}
+
+/** Application updates (Flatpak) with one "Update all"; reserved for the organization when policy says so. */
+export function AppUpdatesSection({ reserved }: { reserved: boolean }) {
+  const [list, setList] = useState<AppUpdate[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [job, setJob] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null)
+  const load = () => void os.appUpdates().then((r) => { if (r.ok) { setList(r.value); setError(null) } else { setList(null); setError(t('swu.apps.unavailable')) } })
+  useEffect(load, [])
+  useEffect(() => os.onPkgJob((e) => {
+    if (e.kind !== 'finished' || e.job !== job) return
+    setJob(null)
+    setMsg(e.result === 'success' ? { text: t('swu.apps.done') } : { text: packageErrorText(e.error ?? 'failed'), error: true })
+    load()
+  }), [job])
+  const updateAll = async () => {
+    setMsg(null)
+    const r = await os.updateApps([])
+    if (r.ok) setJob(r.value); else setMsg({ text: packageErrorText(r.error), error: true })
+  }
+  return (
+    <section aria-labelledby="upd-apps" className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <h2 id="upd-apps" className="m-0 text-sm font-semibold">{t('swu.apps.title')}</h2>
+        {!!list?.length && !reserved && <button type="button" disabled={!!job} onClick={() => void updateAll()} className={btnGhost}>{job ? t('swu.apps.updating') : t('swu.apps.updateAll')}</button>}
+      </div>
+      <div className={`${card} overflow-hidden`}>
+        {error && <div className="px-4 py-[11px] text-[11px] text-[#8FA3C8]">{error}</div>}
+        {list && !list.length && <div className="px-4 py-[11px] text-[11px] text-[#8FA3C8]">{t('swu.apps.none')}</div>}
+        {list?.map((a) => (
+          <div key={a.id} className={`flex items-center gap-3 px-4 py-[9px] ${rowLine}`}>
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="truncate text-[13px]">{a.name}</span>
+              <span className="text-[11px] text-[#8FA3C8]">{[a.version, a.download_size].filter(Boolean).join(' · ')}</span></span>
+          </div>
+        ))}
+        {reserved && !!list?.length && <div className="px-4 py-[11px] text-[11px] text-[#8FA3C8]">{t('swu.apps.reserved')}</div>}
+        {msg && <div role={msg.error ? 'alert' : 'status'} className={`px-4 py-[11px] text-[12px] ${msg.error ? 'text-[#FF8A7A]' : 'text-[#C9D6EE]'}`}>{msg.text}</div>}
+      </div>
+    </section>
   )
 }
 

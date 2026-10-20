@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildApps, catalogNotice, categories, filterApps, SOURCES } from './appcatalog'
+import { buildApps, catalogNotice, categories, filterApps, requestStatus, SOURCES } from './appcatalog'
 import type { AppCatalog, AppImageRecord } from './os'
 
 const catalog: AppCatalog = { state: 'ok', arch: 'arm64', fetched_at: 1, items: [
@@ -62,5 +62,19 @@ describe('App Center catalog', () => {
     expect(catalogNotice(null, 'The package service isn’t running.')?.retry).toBe(true)
     expect(catalogNotice({ ...catalog, items: [] }, null)?.text).toMatch(/hasn’t approved any apps/)
     expect(catalogNotice(catalog, null)).toBeNull()
+  })
+
+  it('Software Management: requestable apps can be asked for; pending, approved and declined requests are shown', () => {
+    const blocked = 'Not on your organization’s approved list'
+    expect(requestStatus({ blocked: null, requestable: true, request: null })).toBeNull()
+    expect(requestStatus({ blocked, requestable: false, request: null })).toBeNull()
+    expect(requestStatus({ blocked, requestable: true, request: null })).toEqual({ label: 'Request', hint: null, canRequest: true })
+    expect(requestStatus({ blocked, requestable: true, request: { id: 'r', state: 'pending', note: null, at: 1 } })).toMatchObject({ label: 'Requested', canRequest: false })
+    expect(requestStatus({ blocked, requestable: true, request: { id: 'r', state: 'approved', note: null, at: 1 } })).toMatchObject({ label: 'Approved', canRequest: false })
+    expect(requestStatus({ blocked, requestable: true, request: { id: 'r', state: 'rejected', note: 'Use the web app', at: 1 } }))
+      .toEqual({ label: 'Request', hint: 'Your organization declined this request: Use the web app', canRequest: true })
+    const apps = buildApps({ ...catalog, items: catalog.items.map((i) => (i.id === 'apt:inkscape' ? { ...i, requestable: true, request: null } : i)) } as AppCatalog, [])
+    expect(apps.find((a) => a.name === 'Inkscape')).toMatchObject({ requestable: true, request: null })
+    expect(apps.find((a) => a.name === 'GIMP')!.requestable).toBe(false)
   })
 })

@@ -4,6 +4,7 @@ import { aiTa } from './ai'
 import { widgetsTa } from './widgets'
 import { captureTa } from './capture'
 import { driversTa } from './drivers'
+import { softwareTa } from './software'
 import { whatsappTa } from './whatsapp'
 import { desktopsTa } from './desktops'
 import { bootuiTa } from './bootui'
@@ -16,6 +17,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   ...widgetsTa,
   ...captureTa,
   ...driversTa,
+  ...softwareTa,
   ...whatsappTa,
   ...desktopsTa,
   ...bootuiTa,
