@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseBtDevices, parseBtShow, parseLpstat, parseNmDevices, parseUdisksStatus, parseUpowerBattery, parseWifiList,
-  parseWlrRandr, parseWpStatus, parseWpVolume, splitTerse, systemBridge, type Exec,
+  parseWlrRandr, parseWpStatus, parseWpVolume, splitTerse, systemBridge, wifiConnectError, type Exec,
 } from './system'
 
 describe('nmcli', () => {
@@ -137,6 +137,41 @@ describe('bridge', () => {
     expect(calls[0].args).toContain('--ask')
     expect(calls[0].input).toBe('s3cret\n')
     expect(await b.wifiConnect('bad\nssid', 'x')).toEqual({ ok: false, error: 'invalid_argument' })
+  })
+  it('Wi-Fi: unblocks the radio before turning it on, rescans, disconnects the network in use (#31)', async () => {
+    const seen: string[][] = []
+    const b = systemBridge(async (cmd, args) => {
+      seen.push([cmd, ...args])
+      if (args.includes('DEVICE,TYPE,STATE,CONNECTION')) return { code: 0, stdout: 'wlan0:wifi:connected:Office\neth0:ethernet:unavailable:--\n', stderr: '' }
+      if (args[1] === 'wifi' && args[2] === 'rescan') return { code: 1, stdout: '', stderr: 'Error: Scanning not allowed immediately following previous scan.' }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    expect(await b.setWifi(true)).toEqual({ available: true, value: true })
+    expect(seen.slice(0, 2)).toEqual([['rfkill', 'unblock', 'wlan'], ['nmcli', 'radio', 'wifi', 'on']])
+    seen.length = 0
+    await b.setWifi(false)
+    expect(seen).toEqual([['nmcli', 'radio', 'wifi', 'off']])
+    expect(await b.wifiRescan()).toEqual({ available: true, value: true })
+    seen.length = 0
+    expect(await b.wifiDisconnect()).toEqual({ available: true, value: true })
+    expect(seen[1]).toEqual(['nmcli', 'device', 'disconnect', 'wlan0'])
+    const idle = systemBridge(async () => ({ code: 0, stdout: 'wlan0:wifi:disconnected:--\n', stderr: '' }))
+    expect(await idle.wifiDisconnect()).toEqual({ available: false, reason: 'not_connected' })
+  })
+  it('Wi-Fi connect errors say what went wrong', () => {
+    expect(wifiConnectError('Error: Connection activation failed: Secrets were required, but not provided.')).toBe('bad_password')
+    expect(wifiConnectError('Error: No network with SSID \'Cafe\' found.')).toBe('not_found')
+    expect(wifiConnectError('Error: No Wi-Fi device found.')).toBe('no_adapter')
+    expect(wifiConnectError('Error: Timeout expired (45 seconds)')).toBe('timeout')
+    expect(wifiConnectError('Error: something else')).toBe('connect_failed')
+  })
+  it('Bluetooth: a stopped bluetoothd is reported, not waited for; a blocked controller is unblocked or reported (#31)', async () => {
+    const stopped = systemBridge(async (cmd) => (cmd === 'systemctl' ? { code: 1, stdout: 'inactive\n', stderr: '' } : { code: 0, stdout: '', stderr: '' }))
+    expect(await stopped.bluetooth()).toEqual({ available: false, reason: 'service_stopped' })
+    const seen: string[][] = []
+    const blocked = systemBridge(async (cmd, args) => { seen.push([cmd, ...args]); return cmd === 'bluetoothctl' ? { code: 0, stdout: 'Failed to set power on: org.bluez.Error.Blocked\n', stderr: '' } : { code: 0, stdout: '', stderr: '' } })
+    expect(await blocked.setBluetooth(true)).toEqual({ available: false, reason: 'blocked' })
+    expect(seen).toEqual([['rfkill', 'unblock', 'bluetooth'], ['bluetoothctl', 'power', 'on']])
   })
   it('clamps volume and treats no printers as empty', async () => {
     const seen: string[][] = []
