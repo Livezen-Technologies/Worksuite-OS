@@ -316,6 +316,8 @@ app.whenReady().then(() => {
     const r = await brokerCall('SignIn', { server_url: serverUrl, mode }, 6 * 60_000)
     return r.ok ? { ok: true, value: publicAccounts([r.value])[0] } : r
   })
+  // "Cancel" or "Try again" while the browser is open: the broker ends the waiting sign-in (sign_in_cancelled).
+  handle('ws:cloudSignInCancel', () => brokerCall('CancelSignIn'))
   // WSOS-SYN-008: the renderer asks how many changes are unsent, the user chooses, then sign-out runs.
   handle('ws:cloudSignOut', async (accountId, choice) => {
     if (!['none', 'export', 'discard'].includes(choice)) return { ok: false, error: 'invalid_argument' }

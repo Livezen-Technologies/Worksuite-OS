@@ -35,6 +35,8 @@ export interface WorkSuiteApi {
   launchWorkSuite(module: DesktopModule): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
+  /** Stop a sign-in that is waiting for the browser; its cloudSignIn then fails with sign_in_cancelled. */
+  cloudSignInCancel(): Promise<CloudResult<boolean>>
   /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
   cloudSignOut(accountId: string, choice: SignOutChoice): Promise<CloudResult<{ exported: string | null }>>
   syncUnsent(accountId: string): Promise<CloudResult<number>>
@@ -571,6 +573,7 @@ const stub: WorkSuiteApi = {
     stubAccounts = [{ id: 'preview:u-1', name: 'Preview User', server_url: serverUrl, state: 'signed_in' }]
     return { ok: true, value: stubAccounts[0] }
   },
+  async cloudSignInCancel() { return { ok: true, value: false } },
   async cloudSignOut(id, choice) {
     stubAccounts = stubAccounts.filter((a) => a.id !== id)
     stubUnsent = 0
@@ -1056,12 +1059,28 @@ export function cloudErrorText(code: string): string {
     case 'bootstrap_failed':
     case 'bootstrap_invalid': return t('cloud.err.bootstrap')
     case 'auth_cancelled': return t('cloud.err.authCancelled')
+    case 'sign_in_cancelled': return t('cloud.err.signInCancelled')
+    case 'locked': return t('cloud.err.locked')
+    case 'browser_failed': return t('cloud.err.browser')
     case 'enrollment_rejected': return t('cloud.err.rejected')
     case 'invalid_code': return t('cloud.err.code')
     case 'agent_unavailable': return t('cloud.err.agent')
     case 'export_failed': return t('cloud.err.export')
     default: return t('cloud.err.default')
   }
+}
+
+/**
+ * Where "Sign in" goes without asking: the organization this device is enrolled with or provisioned for, else the
+ * server of an earlier sign-in, else WorkSuite Cloud (same order as signInTarget() in electron/webapps.ts).
+ */
+export function defaultSignInTarget(info: Pick<DeviceInfo, 'server' | 'provisioning'> | null, accounts: Pick<CloudAccount, 'server_url'>[]): { mode: 'personal' | 'enterprise'; server: string } {
+  const https = (u: string | null | undefined): u is string => { try { return !!u && new URL(u).protocol === 'https:' } catch { return false } }
+  const org = [info?.server, info?.provisioning?.server].find(https)
+  if (org) return { mode: 'enterprise', server: org }
+  const prev = accounts.find((a) => https(a.server_url))
+  if (prev && !new URL(prev.server_url).hostname.endsWith('worksuitecloud.com')) return { mode: 'enterprise', server: prev.server_url }
+  return { mode: 'personal', server: '' }
 }
 
 /** "work.example.com" → "https://work.example.com"; personal mode uses WorkSuite Cloud. */

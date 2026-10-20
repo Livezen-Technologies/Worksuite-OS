@@ -26,7 +26,8 @@ import { MultitaskingPanel } from './settings/Multitasking'
 import { ClipboardPanel } from './settings/Clipboard'
 import { SecuritySection } from './settings/Security'
 import { MonitoringSection } from './settings/Monitoring'
-import { onSettingsSection, takeSettingsSection } from '../lib/settingsNav'
+import { onSettingsSection, takeCloudSignIn, takeSettingsSection } from '../lib/settingsNav'
+import { CloudSignIn } from './settings/CloudSignIn'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
 import { UpdatesPanel } from './Updates'
@@ -753,13 +754,19 @@ function EnrollCard({ onEnrolled }: { onEnrolled: () => void }) {
   )
 }
 
-/** WorkSuite cloud sign-ins held by the credentials broker. Sign-out drops the keyring entry and revokes it. */
-function CloudAccounts() {
+/**
+ * WorkSuite cloud sign-ins held by the credentials broker (#46): status of each account, sign in (browser OIDC + PKCE),
+ * sign in again when the refresh token was refused, and sign-out, which drops the keyring entry and revokes it.
+ */
+export function CloudAccounts() {
   const [accounts, setAccounts] = useState<CloudAccount[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [prompt, setPrompt] = useState<{ account: CloudAccount; unsent: number } | null>(null)
-  const load = () => os.cloudAccounts().then((r) => (r.ok ? setAccounts(r.value) : setError(cloudErrorText(r.error))))
+  const [adding, setAdding] = useState(false)
+  const [again, setAgain] = useState<CloudAccount | null>(null)
+  const [autoStart] = useState(takeCloudSignIn)
+  const load = () => os.cloudAccounts().then((r) => { if (r.ok) { setAccounts(r.value); setError(null) } else setError(cloudErrorText(r.error)) })
   useEffect(() => { void load() }, [])
   const finish = async (a: CloudAccount, choice: SignOutChoice) => {
     const r = await os.cloudSignOut(a.id, choice)
@@ -776,17 +783,30 @@ function CloudAccounts() {
     if (r.value === 0) return finish(a, 'none')
     setPrompt({ account: a, unsent: r.value })
   }
+  const signedIn = (a: CloudAccount) => { setAdding(false); setAgain(null); setError(null); setNotice(t('settings.acct.connected', { name: a.name ?? a.server_url })); void load() }
   const row = (k: ReactNode, d: ReactNode, v: ReactNode, key?: string) => (
-    <div key={key} className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}><span className="flex flex-1 flex-col gap-0.5"><span className="text-sm">{k}</span>{d && <span className="text-xs text-[#8FA3C8]">{d}</span>}</span>{v}</div>
+    <div key={key} className={`flex items-center gap-4 px-[18px] py-3.5 ${rowLine}`}><span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="text-sm">{k}</span>{d && <span className="truncate text-xs text-[#8FA3C8]">{d}</span>}</span>{v}</div>
   )
-  if (error && !accounts) return row(t('settings.acct.title'), error, <span className="text-[13px] text-[#8FA3C8]">{t('common.unavailable')}</span>)
+  if (error && !accounts) return <>
+    {row(t('settings.acct.title'), error, <button type="button" onClick={() => void load()} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{t('settings.acct.retry')}</button>)}
+  </>
   if (!accounts) return row(t('settings.acct.title'), null, <span className="text-[13px] text-[#8FA3C8]">{t('common.loading')}</span>)
+  const status = (a: CloudAccount) => a.state === 'refresh_failed' ? <span className="rounded-full bg-[rgba(255,184,77,0.16)] px-2 py-0.5 text-[11px] font-medium text-[#FFB84D]">{t('settings.acct.needsSignIn')}</span>
+    : a.state === 'locked' ? <span className={chip}>{t('settings.acct.locked')}</span>
+      : <span className="rounded-full bg-[rgba(95,211,154,0.16)] px-2 py-0.5 text-[11px] font-medium text-[#5FD39A]">{t('settings.acct.connectedChip')}</span>
+  const showForm = accounts.length === 0 || adding || !!again
   return <>
     {(error || notice) && <p role="status" className={`m-0 px-[18px] py-3 text-[13px] ${rowLine}`} style={{ color: error ? C.red : C.green }}>{error ?? notice}</p>}
-    {accounts.length === 0
-      ? row(t('settings.acct.notSignedIn'), t('settings.acct.signInHint'), <span className="text-[13px] text-[#8FA3C8]">{t('settings.acct.signedOut')}</span>)
-      : accounts.map((a) => row(a.name ?? t('settings.acct.title'), `${a.server_url}${a.state === 'refresh_failed' ? ` · ${t('settings.acct.signInAgain')}` : ''}`,
-        <button type="button" onClick={() => void signOut(a)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{t('power.signOut')}</button>, a.id))}
+    {accounts.length === 0 && row(t('settings.acct.notSignedIn'), t('settings.acct.signInHint'), <span className="text-[13px] text-[#8FA3C8]">{t('settings.acct.signedOut')}</span>)}
+    {accounts.map((a) => row(<span className="flex items-center gap-2">{a.name ?? t('settings.acct.title')}{status(a)}</span>,
+      `${a.server_url}${a.state === 'refresh_failed' ? ` · ${t('settings.acct.signInAgain')}` : ''}`,
+      <span className="flex shrink-0 gap-2">
+        {a.state === 'refresh_failed' && again?.id !== a.id && <button type="button" onClick={() => { setNotice(null); setAgain(a) }} className={`${btnPrimary} px-3.5 py-2 text-[13px]`}>{t('settings.acct.signInAgainBtn')}</button>}
+        <button type="button" onClick={() => void signOut(a)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{t('power.signOut')}</button>
+      </span>, a.id))}
+    {showForm
+      ? <div className={rowLine}><CloudSignIn key={again?.id ?? 'new'} accounts={accounts} again={again} autoStart={autoStart && accounts.length === 0} onSignedIn={signedIn} /></div>
+      : <div className={`px-[18px] py-3 ${rowLine}`}><button type="button" className={linkBtn} onClick={() => { setNotice(null); setAdding(true) }}>{t('settings.acct.addAnother')}</button></div>}
     {prompt && <UnsentDialog {...prompt} onCancel={() => setPrompt(null)} onChoose={(c) => finish(prompt.account, c)} />}
   </>
 }

@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   openSearchResult: (link: string, where?: string) => ipcRenderer.invoke('ws:openSearchResult', String(link), where === 'location' ? 'location' : 'open'),
   openLink: (url: string) =>ipcRenderer.invoke('ws:openLink', String(url)),
   cloudSignIn: (serverUrl: string, mode: string) => ipcRenderer.invoke('ws:cloudSignIn', String(serverUrl), String(mode)),
+  cloudSignInCancel: () => ipcRenderer.invoke('ws:cloudSignInCancel'),
   cloudSignOut: (accountId: string, choice: string) => ipcRenderer.invoke('ws:cloudSignOut', String(accountId), String(choice)),
   syncUnsent: (accountId: string) => ipcRenderer.invoke('ws:syncUnsent', String(accountId)),
   syncNow: () => ipcRenderer.invoke('ws:syncNow'),
