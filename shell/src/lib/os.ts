@@ -73,6 +73,12 @@ export interface WorkSuiteApi {
   /** File-name search below root/rel; kind 'any' | 'documents' | 'spreadsheets'; days 0 = any time. */
   filesSearch(root: string, rel: string, q: string, kind: string, days: number): Promise<CloudResult<{ hits: FileHit[]; ms: number; truncated: boolean }>>
   filesMkdir(root: string, rel: string, name: string): Promise<CloudResult<string>>
+  /** The XDG Desktop folder relative to home (created if missing). */
+  desktopDir?(): Promise<CloudResult<string>>
+  /** File names in ~/Templates, offered under the desktop menu's "New". */
+  filesTemplates?(): Promise<string[]>
+  /** A new empty file (template null) or a copy of a template; never overwrites. */
+  filesNewFile?(root: string, rel: string, name: string, template: string | null): Promise<CloudResult<string>>
   filesRename(root: string, rel: string, name: string): Promise<CloudResult<string>>
   /** Move to the freedesktop.org Trash. */
   filesTrash(root: string, rels: string[]): Promise<CloudResult<{ count: number; ids: string[] }>>

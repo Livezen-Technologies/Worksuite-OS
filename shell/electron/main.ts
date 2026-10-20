@@ -31,7 +31,7 @@ import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNa
 import { archiveJobs, listIn, locate } from './archives'
 import { startAIHost } from './ai'
 import { defaultEnv, driveDir, dropPlan, freeBytes, list, resolveIn, roots } from './files'
-import { eject, jobs as fileJobs, mkdirIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, trash, trashDelete, trashList, trashRestore } from './fileops'
+import { eject, jobs as fileJobs, desktopDir, mkdirIn, newFileIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, templates, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel, type PanelHooks } from './panelHost'
 import { captureHost, imageData, runBytes, screenshotFileName, screenshotsDir, wlCopyImage, type CaptureKind, type SnipMode } from './capture'
 import { clipboardAllowed } from './clipboard'
@@ -528,6 +528,10 @@ app.whenReady().then(() => {
   handle('ws:filesRecent', () => recent(files))
   handle('ws:filesSearch', (root, rel, q, kind, days) => search(files, root, rel, q, kind, Number(days) || 0))
   handle('ws:filesMkdir', (root, rel, name) => mkdirIn(files, root, rel, name))
+  // Desktop right-click menu (#27): the XDG Desktop folder, "New" from ~/Templates, new empty files.
+  handle('ws:desktopDir', () => desktopDir(files))
+  handle('ws:filesTemplates', () => templates(files))
+  handle('ws:filesNewFile', (root, rel, name, template) => newFileIn(files, root, rel, name, template ? template : null))
   handle('ws:filesRename', (root, rel, name) => renameIn(files, root, rel, name))
   handle('ws:filesTrash', (root, rels) => trash(files, root, strs(rels)))
   handle('ws:filesDelete', (root, rels) => removeIn(files, root, strs(rels)))

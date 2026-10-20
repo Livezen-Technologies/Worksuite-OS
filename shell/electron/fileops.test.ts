@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { deviceInfo, errCode, freeName, jobs, mkdirIn, removeIn, recent, renameIn, search, setStar, starredHits, trash, trashDelete, trashList, trashRestore, type JobEvent } from './fileops'
+import { desktopDir, newFileIn, templates, userDirRel, deviceInfo, errCode, freeName, jobs, mkdirIn, removeIn, recent, renameIn, search, setStar, starredHits, trash, trashDelete, trashList, trashRestore, type JobEvent } from './fileops'
 
 describe('fileops', () => {
   let home: string
@@ -23,6 +23,38 @@ describe('fileops', () => {
     expect(r.ok && r.value.hits.map((h) => [h.name, h.where]).sort()).toEqual([['Budget 2027.xlsx', '~/Backup'], ['Budget 2027.xlsx', '~/Documents'], ['Marketing budget.xlsx', '~/Documents/Projects']])
     const d = await search(env(), 'home', 'Documents', 'budget', 'documents', 0)
     expect(d.ok && d.value.hits).toEqual([])
+  })
+
+  it('finds the XDG Desktop folder (user-dirs.dirs), creating it, and falls back to ~/Desktop', () => {
+    expect(desktopDir(env())).toEqual({ ok: true, value: 'Desktop' })
+    expect(existsSync(path.join(home, 'Desktop'))).toBe(true)
+    const read = (body: string) => () => body
+    expect(userDirRel(home, 'DESKTOP', 'Desktop', read('XDG_DESKTOP_DIR="$HOME/Työpöytä"\n'))).toBe('Työpöytä')
+    expect(userDirRel(home, 'DESKTOP', 'Desktop', read(`XDG_DESKTOP_DIR="${home}/Stuff/Desk"`))).toBe('Stuff/Desk')
+    expect(userDirRel(home, 'DESKTOP', 'Desktop', read('XDG_DESKTOP_DIR="$HOME/"'))).toBe('Desktop')
+    expect(userDirRel(home, 'DESKTOP', 'Desktop', read('XDG_DESKTOP_DIR="/etc"'))).toBe('Desktop')
+    expect(userDirRel(home, 'DESKTOP', 'Desktop', read('XDG_DESKTOP_DIR="$HOME/../x"'))).toBe('Desktop')
+    mkdirSync(path.join(home, '.config'), { recursive: true })
+    writeFileSync(path.join(home, '.config', 'user-dirs.dirs'), 'XDG_DESKTOP_DIR="$HOME/Bureau"\n')
+    expect(desktopDir(env())).toEqual({ ok: true, value: 'Bureau' })
+    expect(existsSync(path.join(home, 'Bureau'))).toBe(true)
+  })
+
+  it('creates new files, empty or from ~/Templates, never overwriting or leaving the root', () => {
+    mkdirSync(path.join(home, 'Desktop'))
+    mkdirSync(path.join(home, 'Templates'))
+    writeFileSync(path.join(home, 'Templates', 'Letter.odt'), 'ODF')
+    writeFileSync(path.join(home, 'Templates', '.hidden'), 'x')
+    mkdirSync(path.join(home, 'Templates', 'folder'))
+    expect(templates(env())).toEqual(['Letter.odt'])
+    expect(newFileIn(env(), 'home', 'Desktop', 'New text document.txt', null)).toEqual({ ok: true, value: 'Desktop/New text document.txt' })
+    expect(readFileSync(path.join(home, 'Desktop', 'New text document.txt'), 'utf8')).toBe('')
+    expect(newFileIn(env(), 'home', 'Desktop', 'New text document.txt', null)).toEqual({ ok: false, error: 'exists' })
+    expect(newFileIn(env(), 'home', 'Desktop', 'Letter.odt', 'Letter.odt')).toEqual({ ok: true, value: 'Desktop/Letter.odt' })
+    expect(readFileSync(path.join(home, 'Desktop', 'Letter.odt'), 'utf8')).toBe('ODF')
+    expect(newFileIn(env(), 'home', 'Desktop', 'x', '../../etc/passwd').ok).toBe(false)
+    expect(newFileIn(env(), 'home', 'Desktop', '../x.txt', null).ok).toBe(false)
+    expect(newFileIn(env(), 'home', '../..', 'x.txt', null).ok).toBe(false)
   })
 
   it('creates and renames inside the root only', async () => {

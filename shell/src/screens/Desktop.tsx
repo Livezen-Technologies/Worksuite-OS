@@ -32,6 +32,8 @@ import { AppGlyph } from '../components/AppGlyph'
 import { alphaGroups, appForWindow, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
 import SearchFlyout from '../components/SearchFlyout'
+import { DesktopIcons, DesktopMenu, createOnDesktop, useDesktopFolder } from '../components/DesktopIcons'
+import { loadDeskView, saveDeskView, type DeskView } from '../lib/desktopIcons'
 import Assistant, { AI_ICON } from '../components/Assistant'
 import { onAssistantRequest, type AssistantRequest } from '../lib/assistantNav'
 import ShellRestartNotice from '../components/ShellRestartNotice'
@@ -252,6 +254,28 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const [widgetEdit, setWidgetEdit] = useState(false)
   const [widgetPicker, setWidgetPicker] = useState(false)
   const [wallMenu, setWallMenu] = useState<{ x: number; y: number } | null>(null)
+  // The Desktop folder on the wallpaper and the right-click menu's view, sort and "New" (#27); not on a kiosk.
+  const deskFolder = useDesktopFolder(device?.policies?.kiosk !== true)
+  const [deskView, setDeskViewState] = useState<DeskView>(() => loadDeskView())
+  const setDeskView = (v: DeskView) => { setDeskViewState(v); saveDeskView(v) }
+  const [deskSel, setDeskSel] = useState<string | null>(null)
+  const [templates, setTemplates] = useState<string[]>([])
+  const openWallMenu = (x: number, y: number) => {
+    setWallMenu({ x, y })
+    void (os.filesTemplates?.() ?? Promise.resolve([])).then(setTemplates).catch(() => setTemplates([]))
+  }
+  const deskError = (title: string, error: string) => setToast({ id: `desk-${Date.now()}`, title, body: error === 'exists' ? t('desk.exists') : error === 'unavailable' ? t('desk.unavailable') : t('desk.createFailedBody'), tone: 'error' })
+  const deskCreate = async (kind: { folder: true } | { template: string | null }) => {
+    const r = await createOnDesktop(deskFolder, kind, { folder: t('desk.defaultFolder'), text: t('desk.defaultText') })
+    if (!r.ok) { deskError(t('desk.createFailed', { name: r.name }), r.error); return }
+    if (!deskView.show) setDeskView({ ...deskView, show: true })
+    await deskFolder.reload()
+    setDeskSel(r.name)
+  }
+  const deskOpen = (name: string) => {
+    if (deskFolder.rel === null) return
+    void os.filesOpen('home', deskFolder.rel ? `${deskFolder.rel}/${name}` : name).then((r) => { if (!r.ok) setToast({ id: `desk-${Date.now()}`, title: t('desk.openFailed', { name }), body: r.error === 'windows_program' ? t('desk.unavailable') : r.error, tone: 'error' }) }).catch(() => undefined)
+  }
   const widgetLayout: WidgetLayout = prefs.widgets ?? loadLocalLayout(user) ?? DEFAULT_LAYOUT
   const setWidgetLayout = (l: WidgetLayout) => {
     const next = { ...prefs, widgets: l }
@@ -321,7 +345,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const openWin = (screen: Parameters<typeof onOpen>[0]) => { setBehind(false); setLiftSeq((n) => n + 1); onOpen(screen) }
   useEffect(() => panel.onShellBehind?.(() => {
     setLauncher(false); setA11yOpen(false); setAssistant(false); setQsOpen(false); setPowerOpen(false); setTrayOpen(false)
-    setFlyout(false); setWidgetPicker(false); setSearch(null); setBehind(true)
+    setFlyout(false); setWidgetPicker(false); setSearch(null); setWallMenu(null); setBehind(true)
   }), [])
   const closeTray = useCallback(() => setTrayOpen(false), [])
   const hasWindow = Children.toArray(children).length > 0
@@ -417,8 +441,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
   return (
     <div className="relative h-full w-full overflow-hidden font-sans text-[#0f172a]" style={{ background: seeThrough ? 'transparent' : monitorWallpaper }}
-      onContextMenu={(e) => { if (e.target !== e.currentTarget || !widgetsOn) return; e.preventDefault(); setWallMenu({ x: e.clientX, y: e.clientY }) }}
-      onMouseDown={(e) => { if (wallMenu && !(e.target as HTMLElement).closest?.('#ws-wall-menu')) setWallMenu(null) }}>
+      onContextMenu={(e) => {
+        // Right-click on the empty wallpaper (or between the desktop icons) opens the desktop menu (#27).
+        if (seeThrough || (e.target !== e.currentTarget && !(e.target as HTMLElement).hasAttribute?.('data-desktop-bg'))) return
+        e.preventDefault(); openWallMenu(e.clientX, e.clientY)
+      }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) setDeskSel(null) }}>
       {/* This desktop's wallpaper, sliding in on a switch (reduced motion: no slide). */}
       {desktopsOn && !seeThrough && <div key={desk.ws.current} aria-hidden="true" className={`pointer-events-none absolute inset-0 ${slide}`} style={{ background: wallpaperOf(desk.ws.current) }} />}
       {/* On the wallpaper: keeps its light text in the light theme (ws-dark-zone). */}
@@ -432,14 +460,16 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           editing={widgetEdit} onEditing={(v) => { setWidgetEdit(v); if (!v) setWidgetPicker(false) }} picker={widgetPicker} onPicker={setWidgetPicker}
           onRefresh={widgetData.refresh} onSignIn={() => openSettingsAt('Users')} now={now} />
       )}
+      {!seeThrough && deskFolder.rel !== null && (
+        <DesktopIcons folder={deskFolder} view={deskView} selected={deskSel} onSelect={setDeskSel} onOpen={(e) => deskOpen(e.name)} />
+      )}
       {wallMenu && (
-        <div id="ws-wall-menu" role="menu" aria-label={t('widgets.menu')} className="absolute z-50 flex min-w-[180px] flex-col rounded-xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] p-1 text-[13px] text-[#E8EEFA] shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
-          style={{ left: Math.min(wallMenu.x, window.innerWidth - 200), top: Math.min(wallMenu.y, window.innerHeight - 140) }}
-          onKeyDown={(e) => { if (e.key === 'Escape') setWallMenu(null) }}>
-          <button type="button" role="menuitem" autoFocus onClick={() => { setWallMenu(null); setWidgetEdit(true) }} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10">{t('widgets.edit')}</button>
-          <button type="button" role="menuitem" onClick={() => { setWallMenu(null); setWidgetEdit(true); setWidgetPicker(true) }} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10">{t('widgets.add')}</button>
-          <button type="button" role="menuitem" onClick={() => { setWallMenu(null); openSettingsAt('Appearance') }} className="cursor-pointer rounded-lg px-3 py-2 text-left hover:bg-white/10 focus-visible:bg-white/10">{t('settings.nav.Appearance')}</button>
-        </div>
+        <DesktopMenu x={wallMenu.x} y={wallMenu.y} view={deskView} onView={setDeskView} templates={templates} canCreate={deskFolder.rel !== null}
+          onRefresh={() => { void deskFolder.reload(); if (widgetsOn) widgetData.refresh() }}
+          onNewFolder={() => void deskCreate({ folder: true })} onNewFile={(tpl) => void deskCreate({ template: tpl })}
+          onWallpaper={() => openSettingsAt('Display')} onDisplay={() => openSettingsAt('Display')} onPersonalize={() => openSettingsAt('Appearance')}
+          extra={widgetsOn ? [{ label: t('widgets.edit'), run: () => setWidgetEdit(true) }, { label: t('widgets.add'), run: () => { setWidgetEdit(true); setWidgetPicker(true) } }] : undefined}
+          onClose={() => setWallMenu(null)} />
       )}
 
       {/* Work area for open windows, above the taskbar */}
