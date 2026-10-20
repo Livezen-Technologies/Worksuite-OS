@@ -60,8 +60,9 @@ profile worksuite-shell flags=(attach_disconnected, complain) {
   # Archives in Files (shell/electron/archives.ts): the tools run under this profile; tar starts the compressors.
   /usr/bin/{tar,7z,7zz,bsdtar,zip,gzip,xz,bzip2,zstd} ix,
   /usr/lib/7zip/** mrix,
-  # Remote support input (issue #19): wlroots virtual pointer/keyboard when the RemoteDesktop portal is not available.
-  /usr/bin/{wlrctl,wtype} ix,
+  # Remote support input (issues #19, #37): wlroots virtual pointer/keyboard helper when the RemoteDesktop portal is not available.
+  /usr/bin/wtype ix,
+  /usr/lib/worksuite/worksuite-rs-input ix,
   owner /{media,run/media}/*/** rwlk,
 
   deny /etc/shadow r,

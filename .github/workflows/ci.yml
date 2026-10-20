@@ -109,6 +109,8 @@ jobs:
       - run: sudo apt-get install -y --no-install-recommends dbus-daemon libwayland-dev labwc foot grim wtype python3-pip && pip install --break-system-packages pywayland dbus-next pyyaml
       - run: cd shell && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --no-audit --no-fund
       - run: make -C native/wayland-bridge test
+      # Remote support input helper against headless labwc (issue #37).
+      - run: sh native/rs-input/test.sh
       - run: python3 -m unittest discover -s installer/tests
       - run: python3 -m unittest discover -s tests/hw
       - run: cd services/session/greeter && python3 -m unittest discover -s tests -t .
