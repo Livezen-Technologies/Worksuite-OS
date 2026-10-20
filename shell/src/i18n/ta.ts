@@ -7,6 +7,7 @@ import { driversTa } from './drivers'
 import { whatsappTa } from './whatsapp'
 import { desktopsTa } from './desktops'
 import { bootuiTa } from './bootui'
+import { hardwareTa } from './hardware'
 
 /** Machine-drafted: not yet reviewed by a native Tamil speaker. See docs/i18n/README.md before changing. */
 export const review: LocaleReview = { reviewed: false, reviewer: null, reviewedKeys: {} }
@@ -19,6 +20,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   ...whatsappTa,
   ...desktopsTa,
   ...bootuiTa,
+  ...hardwareTa,
   'panel.taskbar': 'பணிப்பட்டி',
   'panel.openLauncher': 'தொடக்கியைத் திற',
   'panel.running': '{name}, இயங்குகிறது',
@@ -328,7 +330,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'common.on': 'இயக்கு',
   'settings.bt.myDevices': 'என் சாதனங்கள்',
   'settings.bt.noPaired': 'இணைக்கப்பட்ட சாதனங்கள் இல்லை',
-  'settings.bt.note': 'புதிய சாதனங்களை இணைப்பதும் அருகிலுள்ள சாதனங்களைத் தேடுவதும் இன்னும் அமைப்புகளில் இல்லை.',
+  'settings.bt.note': 'இணைக்கும் சாதனத்தை அருகில், இணைத்தல் பயன்முறையில் வைத்திருங்கள். குறியீட்டைக் காட்டும் சாதனங்கள் அந்தச் சாதனத்திலேயே உறுதிப்படுத்தப்படும்.',
   'settings.nav.Display': 'திரை',
   'settings.disp.reading': 'திரைகளைப் படிக்கிறது…',
   'settings.disp.connected': 'இணைக்கப்பட்ட திரைகள்',

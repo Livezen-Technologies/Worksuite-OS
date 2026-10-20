@@ -48,6 +48,13 @@ dialog
 udisks2
 # Settings bridge CLIs (shell/electron/system.ts): nmcli, bluetoothctl, wpctl, upower, lpstat, wlr-randr, udisksctl
 network-manager
+# Wi-Fi (#31): NetworkManager drives every Wi-Fi card through wpa_supplicant, which network-manager only recommends
+# (and the build installs no recommends): without it each Wi-Fi device stayed "unavailable" and no network was ever
+# listed. rfkill unblocks radios switched off by a key or a previous session (the console user may, through
+# logind's uaccess on /dev/rfkill); iw for diagnostics.
+wpasupplicant
+rfkill
+iw
 # WireGuard VPN (WSOS-INT-001): NetworkManager's built-in wireguard type (kernel module is in-tree); wg(8) for
 # diagnostics; nft for the managed VPN kill switch (services/device-agent/src/vpn.ts)
 wireguard-tools
@@ -157,6 +164,9 @@ mesa-va-drivers
 mesa-vdpau-drivers
 va-driver-all
 vdpau-driver-all
+# Settings › Graphics (#16): what the GPU decodes in hardware (vainfo) and the Vulkan devices (vulkaninfo).
+vainfo
+vulkan-tools
 firmware-amd-graphics
 firmware-intel-graphics
 firmware-nvidia-graphics

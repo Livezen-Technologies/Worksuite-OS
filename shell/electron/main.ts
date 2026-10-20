@@ -27,6 +27,8 @@ import { createSearch, localRecentHits, parseXbel } from './search'
 import { createWidgets } from './widgets'
 import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge } from './system'
+import { applyFix, diagnose, diagnosisText, type RadioFix, type RadioKind } from './radios'
+import { accelerationPlan, graphicsState, noteGpuCrash, readCrashLog, readRendererChoice, resetGpuFallback, setRenderer } from './graphics'
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { archiveJobs, listIn, locate } from './archives'
 import { startAIHost } from './ai'
@@ -144,6 +146,14 @@ function createWindow() {
 
 // WSOS-INT-011: Sinhala/Tamil typing in the shell and app windows through fcitx5 (Wayland text-input-v3).
 app.commandLine.appendSwitch('enable-wayland-ime')
+// #16: GPU compositing, rasterization and VA-API video in the shell and every WorkSuite app window, or software
+// rendering when the session has no usable GPU or the GPU process kept crashing (graphics.ts).
+const accel = accelerationPlan(process.env, readCrashLog(), readRendererChoice())
+if (accel.disable) app.disableHardwareAcceleration()
+for (const [k, v] of accel.switches) app.commandLine.appendSwitch(k, v)
+app.on('child-process-gone', (_e, d) => {
+  if (d.type === 'GPU' && d.reason !== 'clean-exit' && d.reason !== 'killed') noteGpuCrash()
+})
 // `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
 const appRequest = parseAppArgs(process.argv)
 if (appRequest?.id === WHATSAPP_ID) {
@@ -337,6 +347,25 @@ app.whenReady().then(() => {
   handle('ws:sysBluetooth', () => sys.bluetooth())
   handle('ws:sysSetBluetooth', (on) => sys.setBluetooth(on === 'on'))
   handle('ws:sysBtConnect', (address, on) => sys.btConnect(address, on === 'on'))
+  handle('ws:sysWifiRescan', () => sys.wifiRescan())
+  handle('ws:sysWifiDisconnect', () => sys.wifiDisconnect())
+  // #31: why Wi-Fi or Bluetooth doesn't work, and the fixes a person can apply (radios.ts).
+  const radioKind = (k: string): RadioKind | null => (k === 'wifi' || k === 'bluetooth' ? k : null)
+  handle('ws:radioDiagnose', async (kind) => {
+    const k = radioKind(kind)
+    if (!k) return { ok: false, error: 'invalid_argument' }
+    const d = await diagnose(k, { exec: realExec })
+    return { ok: true, value: { ...d, text: diagnosisText(d) } }
+  })
+  handle('ws:radioFix', (kind, fix) => {
+    const k = radioKind(kind)
+    if (!k || (fix !== 'unblock' && fix !== 'restart_service')) return { ok: false, error: 'invalid_argument' }
+    return applyFix(k, fix as RadioFix, realExec)
+  })
+  // #16: Settings › Graphics.
+  handle('ws:graphics', async () => ({ ok: true, value: await graphicsState({ exec: realExec, plan: accel, featureStatus: () => app.getGPUFeatureStatus() as unknown as Record<string, string>, gpuInfo: () => app.getGPUInfo('complete') }) }))
+  handle('ws:graphicsSetRenderer', (choice) => setRenderer(choice))
+  handle('ws:graphicsReset', () => resetGpuFallback())
   handle('ws:sysSound', () => sys.sound())
   handle('ws:sysSetVolume', (p) => sys.setVolume(Number(p)))
   handle('ws:sysSetMute', (on) => sys.setMute(on === 'on'))
