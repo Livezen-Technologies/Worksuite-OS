@@ -316,6 +316,11 @@ export class Agent {
         await this.o.remoteSupport.end('admin_ended', String(c.args.session_id));
         return true;
       }
+      case 'RemoteSupportElevate': {
+        if (!this.o.remoteSupport) throw new Error('NOT_SUPPORTED');
+        await this.o.remoteSupport.elevate(String(c.args.session_id).toLowerCase());
+        return true;
+      }
       case 'StartMalwareScan': {
         if (!this.o.security) throw new Error('NOT_SUPPORTED');
         // Acked when it has started; the result reaches the server with the next check-in's security summary.

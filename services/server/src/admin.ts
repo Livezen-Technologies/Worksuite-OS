@@ -12,7 +12,7 @@ import { removePeer } from './vpn.ts';
 
 const COMMANDS = ['RefreshPolicy', 'InstallApprovedApplication', 'ScheduleUpdate', 'RequestLock', 'RebootDuringWindow', 'CollectApprovedDiagnostics', 'RemoteWipe', 'RemoveApplication',
   // WorkSuite Security remote incident response (services/device-agent/src/securityCenter.ts).
-  'StartMalwareScan', 'IsolateEndpoint', 'ReleaseIsolation', 'RemoteSupportRequest', 'RemoteSupportEnd'];
+  'StartMalwareScan', 'IsolateEndpoint', 'ReleaseIsolation', 'RemoteSupportRequest', 'RemoteSupportEnd', 'RemoteSupportElevate'];
 
 export function createOrg(db: DatabaseSync, name: string, o: { requireDevice?: boolean } = {}): number {
   const r = db.prepare('INSERT INTO orgs (name, require_device, modules) VALUES (?, ?, ?)').run(name, o.requireDevice ? 1 : 0, JSON.stringify(DEFAULT_MODULES));

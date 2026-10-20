@@ -13,7 +13,8 @@ import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
 import { redactKiosk, type KioskPolicy } from './kiosk.ts';
 import { setValidatedPolicy, validatePolicy } from './policy.ts';
 import { qrMatrix } from './qr.ts';
-import { REMOTE_SUPPORT_PERMISSION, getSignals as rsGetSignals, postSignal as rsPostSignal, dashboard as rsDashboard, history as rsHistory, requestSession, terminateSession } from './remoteSupport.ts';
+import { REMOTE_SUPPORT_PERMISSION, getSignals as rsGetSignals, postSignal as rsPostSignal, dashboard as rsDashboard, history as rsHistory, requestSession, terminateSession,
+  appendRecording, elevateSession, readRecording, recordEvent, sessionEvents, sessionIceServers } from './remoteSupport.ts';
 import { Throttle } from './throttle.ts';
 import { monitoringOverview, securityOverview } from './monitoring.ts';
 import { decideRequest, deploy, deployments, deviceSoftware, inventorySummary, reconcileRequired, validateAssignment, validDepartment } from './software.ts';
@@ -236,8 +237,8 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const pol = db.prepare('SELECT body FROM policies WHERE org_id = ?').get(a.org_id) as { body: string } | undefined;
     const own = (db.prepare('SELECT ownership FROM devices WHERE id = ?').get(d.id) as { ownership: string }).ownership;
     const org = (db.prepare('SELECT name FROM orgs WHERE id = ?').get(a.org_id) as { name: string }).name;
-    const res = requestSession(db, a, { device_id: d.id, mode: b.mode, reason: b.reason, otp: b.otp, policy: json<Record<string, unknown>>(pol?.body ?? null) ?? {}, ownership: own, org_name: org });
-    log(a, 'remote_support_requested', { device_id: d.id, session_id: res.session_id, mode: b.mode, unattended: res.unattended });
+    const res = requestSession(db, a, { device_id: d.id, mode: b.mode, reason: b.reason, otp: b.otp, record: b.record, policy: json<Record<string, unknown>>(pol?.body ?? null) ?? {}, ownership: own, org_name: org });
+    log(a, 'remote_support_requested', { device_id: d.id, session_id: res.session_id, mode: b.mode, unattended: res.unattended, record: res.record });
     send(ctx, 201, res);
   });
   r.on('POST', '/admin/api/remote-support/sessions/{id}/terminate', (ctx) => {
@@ -254,6 +255,30 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const a = rsAdmin(ctx);
     rsPostSignal(db, 'admin', ctx.params.id, { org_id: a.org_id }, await body(ctx));
     send(ctx, 204);
+  });
+  // Issue #37: ICE servers (short-lived TURN credentials), step-up to control, chat/file audit, recordings.
+  r.on('GET', '/admin/api/remote-support/sessions/{id}/ice-servers', (ctx) => send(ctx, 200, sessionIceServers(db, ctx.params.id, { org_id: rsAdmin(ctx).org_id })));
+  r.on('POST', '/admin/api/remote-support/sessions/{id}/elevate', async (ctx) => {
+    const a = rsAdmin(ctx);
+    send(ctx, 202, elevateSession(db, a, ctx.params.id, (await body(ctx)).otp));
+  });
+  r.on('GET', '/admin/api/remote-support/sessions/{id}/events', (ctx) => send(ctx, 200, { items: sessionEvents(db, rsAdmin(ctx).org_id, ctx.params.id) }));
+  r.on('POST', '/admin/api/remote-support/sessions/{id}/events', async (ctx) => {
+    const a = rsAdmin(ctx);
+    recordEvent(db, 'admin', ctx.params.id, { org_id: a.org_id }, await body(ctx), a.id);
+    send(ctx, 204);
+  });
+  r.on('POST', '/admin/api/remote-support/sessions/{id}/recording', async (ctx) => {
+    const a = rsAdmin(ctx);
+    if (!String(ctx.header('content-type') ?? '').startsWith('video/webm')) throw invalid('content-type', 'video/webm');
+    send(ctx, 200, appendRecording(db, a, ctx.params.id, Number(ctx.url.searchParams.get('seq')), await ctx.raw()));
+  });
+  r.on('GET', '/admin/api/remote-support/sessions/{id}/recording', (ctx) => {
+    const a = rsAdmin(ctx);
+    const buf = readRecording(db, a, ctx.params.id);
+    ctx.res.writeHead(200, { 'x-request-id': ctx.requestId, 'cache-control': 'no-store', 'content-type': 'video/webm', 'content-length': String(buf.length),
+      'content-disposition': `attachment; filename="remote-session-${ctx.params.id}.webm"`, 'x-content-type-options': 'nosniff' });
+    ctx.res.end(buf);
   });
   r.on('PUT', '/admin/api/devices/{id}/assignee', async (ctx) => {
     const a = admin(ctx);

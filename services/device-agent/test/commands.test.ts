@@ -27,7 +27,7 @@ test('valid command accepted once; replay rejected', () => {
 
 test('allow-list is exactly the SRS set plus software and security incident response; no shell', () => {
   // RemoveApplication: Software Management remote uninstall (catalog ids only; the package service refuses system packages).
-  assert.deepEqual([...ALLOWED_COMMANDS].sort(), ['CollectApprovedDiagnostics', 'InstallApprovedApplication', 'IsolateEndpoint', 'RebootDuringWindow', 'RefreshPolicy', 'ReleaseIsolation', 'RemoteSupportEnd', 'RemoteSupportRequest', 'RemoteWipe', 'RemoveApplication', 'RequestLock', 'ScheduleUpdate', 'StartMalwareScan']);
+  assert.deepEqual([...ALLOWED_COMMANDS].sort(), ['CollectApprovedDiagnostics', 'InstallApprovedApplication', 'IsolateEndpoint', 'RebootDuringWindow', 'RefreshPolicy', 'ReleaseIsolation', 'RemoteSupportElevate', 'RemoteSupportEnd', 'RemoteSupportRequest', 'RemoteWipe', 'RemoveApplication', 'RequestLock', 'ScheduleUpdate', 'StartMalwareScan']);
   assert.equal((validateCommand(make({ command: 'RunShell' as any }), deps()) as any).reason, 'UNKNOWN_COMMAND');
 });
 

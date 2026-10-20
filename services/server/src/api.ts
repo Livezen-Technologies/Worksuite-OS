@@ -1,6 +1,6 @@
 // desktop/v1 and desktop/v1/os (api-contracts/openapi.yaml). Tenant scoping comes from the authenticated user or
 // device, never from the request. Idempotency-Key replays within 24 h return the stored response.
-import { pendingCommands as rsPendingCommands, deviceReport as rsDeviceReport, getSignals as rsGetSignals, postSignal as rsPostSignal } from './remoteSupport.ts';
+import { pendingCommands as rsPendingCommands, deviceReport as rsDeviceReport, getSignals as rsGetSignals, postSignal as rsPostSignal, recordEvent as rsRecordEvent, sessionIceServers as rsIceServers } from './remoteSupport.ts';
 import { createPublicKey, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { DEFAULT_WEB_APPS, nextSeq, secret, sha256, tx } from './db.ts';
@@ -424,6 +424,16 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
   r.on('POST', '/desktop/v1/os/remote-support/sessions/{id}/signal', async (ctx) => {
     const d = deviceFromHeader(db, ctx, true);
     rsPostSignal(db, 'device', ctx.params.id, { device_id: d.id }, obj(await ctx.body()));
+    send(ctx, 204);
+  });
+  // Issue #37: ICE servers (short-lived TURN credentials) and the chat/file-transfer audit from the device's side.
+  r.on('GET', '/desktop/v1/os/remote-support/sessions/{id}/ice-servers', (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    send(ctx, 200, rsIceServers(db, ctx.params.id, { device_id: d.id }));
+  });
+  r.on('POST', '/desktop/v1/os/remote-support/sessions/{id}/events', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    rsRecordEvent(db, 'device', ctx.params.id, { device_id: d.id }, obj(await ctx.body()), null);
     send(ctx, 204);
   });
 

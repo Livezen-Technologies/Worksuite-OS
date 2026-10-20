@@ -184,3 +184,134 @@ test('signalling relay: only for a consented, active session; device offers, adm
   assert.equal((await dsig('GET')).status, 409, 'relay stops at the end');
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM remote_signals WHERE session_id = ?').get(id) as { n: number }).n, 0, 'signals dropped');
 });
+
+// ---- issue #37 ----
+import { iceServers, purgeRecordings } from '../src/remoteSupport.ts';
+import { createHmac } from 'node:crypto';
+
+async function activeSession(cookie: string, mode: 'view' | 'control' = 'view', extra: Record<string, unknown> = {}) {
+  const dev = await enroll(orgA);
+  const r = await call('POST', 'remote-support/sessions', { cookie, body: { device_id: dev.device_id, mode, reason: 'help with files', ...extra } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(await device(dev.credential).report(r.body.session_id, { state: 'active', granted_mode: 'view', consent: 'user' }), 204);
+  return { dev, id: r.body.session_id as string };
+}
+
+test('ICE servers: STUN, coturn REST credentials (short-lived, per session), static extras', () => {
+  const now = Date.parse('2026-10-20T10:00:00Z');
+  const env = { WORKSUITE_STUN_URLS: 'stun:turn.example.com:3478, bogus', WORKSUITE_TURN_URLS: 'turn:turn.example.com:3478?transport=udp,turns:turn.example.com:5349', WORKSUITE_TURN_SECRET: 's3cret', WORKSUITE_TURN_TTL: '600',
+    WORKSUITE_ICE_SERVERS: '[{"urls":"stun:extra.example.com"},{"nope":1}]' };
+  const l = iceServers('sess-1', now, env);
+  assert.deepEqual(l[0], { urls: ['stun:turn.example.com:3478'] });
+  const user = `${now / 1000 + 600}:sess-1`;
+  assert.deepEqual(l[1], { urls: ['turn:turn.example.com:3478?transport=udp', 'turns:turn.example.com:5349'], username: user, credential: createHmac('sha1', 's3cret').update(user).digest('base64') });
+  assert.deepEqual(l[2], { urls: 'stun:extra.example.com' });
+  assert.equal(l.length, 3);
+  assert.equal(iceServers('x', now, { WORKSUITE_TURN_URLS: 'turn:t' }).length, 0, 'no TURN without the shared secret');
+  assert.equal(Number(iceServers('x', now, { ...env, WORKSUITE_TURN_TTL: '99999999' })[1].username!.split(':')[0]), now / 1000 + 86400, 'TTL capped at a day');
+});
+
+test('ICE servers endpoint for both peers, only for an active session', async () => {
+  const tess = await login('tess@a.test', 'tess-password');
+  const { dev, id } = await activeSession(tess);
+  process.env.WORKSUITE_TURN_URLS = 'turn:t.example:3478'; process.env.WORKSUITE_TURN_SECRET = 'k';
+  try {
+    const a = await call('GET', `remote-support/sessions/${id}/ice-servers`, { cookie: tess });
+    assert.equal(a.body.ice_servers[0].urls[0], 'turn:t.example:3478');
+    assert.match(a.body.ice_servers[0].username, new RegExp(`^\\d+:${id}$`));
+    const d = await fetch(`${base}/desktop/v1/os/remote-support/sessions/${id}/ice-servers`, { headers: { 'x-ws-device': dev.credential } });
+    assert.equal(d.status, 200);
+  } finally { delete process.env.WORKSUITE_TURN_URLS; delete process.env.WORKSUITE_TURN_SECRET; }
+  await call('POST', `remote-support/sessions/${id}/terminate`, { cookie: tess });
+  assert.equal((await call('GET', `remote-support/sessions/${id}/ice-servers`, { cookie: tess })).status, 409);
+});
+
+test('step-up: view → control needs TOTP, sends a signed RemoteSupportElevate, grant changes only on the device report', async () => {
+  const tess = await login('tess@a.test', 'tess-password');
+  const { dev, id } = await activeSession(tess);
+  await device(dev.credential).poll();
+  assert.equal((await call('POST', `remote-support/sessions/${id}/elevate`, { cookie: tess, body: {} })).status, 401);
+  assert.equal((await call('POST', `remote-support/sessions/${id}/elevate`, { cookie: tess, body: { otp: '123456' } })).status, 401);
+  const zed = await login('zed@b.test', 'zed-password');
+  assert.equal((await call('POST', `remote-support/sessions/${id}/elevate`, { cookie: zed, body: { otp: '123456' } })).status, 404);
+  const ok = await call('POST', `remote-support/sessions/${id}/elevate`, { cookie: tess, body: { otp: totp(totpSecret, Date.now() + 30_000) } });
+  assert.equal(ok.status, 202, JSON.stringify(ok.body));
+  assert.equal((await call('POST', `remote-support/sessions/${id}/elevate`, { cookie: tess, body: { otp: totp(totpSecret, Date.now() + 30_000) } })).status, 409, 'already asking');
+  let h = (await call('GET', 'remote-support/sessions', { cookie: tess })).body.items.find((s: any) => s.id === id);
+  assert.equal(h.granted_mode, 'view', 'still view until the user answers');
+  assert.equal(h.elevation, 'requested');
+  const cmds = (await device(dev.credential).poll()).commands;
+  assert.deepEqual(cmds.map((c) => c.command), ['RemoteSupportRequest', 'RemoteSupportElevate'], 'delivered on the fast poll');
+  admin.exportKeys(db, join(dir, 'keys2'));
+  assert.ok(validateCommand(cmds[1], { deviceId: dev.device_id, keys: loadKeys(join(dir, 'keys2')), replay: new MemoryReplayStore() }).ok);
+  assert.equal(await device(dev.credential).report(id, { state: 'active', granted_mode: 'control', consent: 'user', elevation: 'granted' }), 204);
+  h = (await call('GET', 'remote-support/sessions', { cookie: tess })).body.items.find((s: any) => s.id === id);
+  assert.equal(h.granted_mode, 'control');
+  assert.equal(h.elevation, 'granted');
+  assert.equal((await call('POST', `remote-support/sessions/${id}/elevate`, { cookie: tess, body: {} })).status, 409);
+  const log = (await call('GET', 'log', { cookie: tess })).body.items.map((i: any) => i.action);
+  assert.ok(log.includes('remote_support_elevation_requested') && log.includes('remote_support_elevation_granted'));
+  await call('POST', `remote-support/sessions/${id}/terminate`, { cookie: tess });
+});
+
+test('chat and file-transfer audit: metadata only, validated, both sides, active sessions only', async () => {
+  const tess = await login('tess@a.test', 'tess-password');
+  const { dev, id } = await activeSession(tess);
+  const ev = (body: unknown, cred = dev.credential) => fetch(`${base}/desktop/v1/os/remote-support/sessions/${id}/events`, { method: 'POST', headers: { 'x-ws-device': cred, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal((await ev({ kind: 'chat', direction: 'to_admin', length: 12 })).status, 204);
+  assert.equal((await ev({ kind: 'chat', direction: 'to_admin', length: 12, text: 'secret' })).status, 204, 'extra fields are dropped, not stored');
+  assert.equal((await ev({ kind: 'chat', direction: 'sideways', length: 1 })).status, 400);
+  const sha = 'a'.repeat(64);
+  assert.equal((await ev({ kind: 'file', direction: 'to_device', action: 'accepted', name: 'driver.zip', size: 2048 })).status, 204);
+  assert.equal((await ev({ kind: 'file', direction: 'to_device', action: 'completed', name: 'driver.zip', size: 2048, sha256: sha })).status, 204);
+  assert.equal((await ev({ kind: 'file', direction: 'to_device', action: 'deleted', name: 'x', size: 1 })).status, 400);
+  assert.equal((await call('POST', `remote-support/sessions/${id}/events`, { cookie: tess, body: { kind: 'file', direction: 'to_admin', action: 'completed', name: 'log.txt', size: 10 } })).status, 204);
+  const other = await enroll(orgA);
+  assert.equal((await ev({ kind: 'chat', direction: 'to_admin', length: 1 }, other.credential)).status, 404);
+  const items = (await call('GET', `remote-support/sessions/${id}/events`, { cookie: tess })).body.items;
+  assert.deepEqual(items.map((e: any) => [e.side, e.kind, e.action ?? e.length]), [['device', 'chat', 12], ['device', 'chat', 12], ['device', 'file', 'accepted'], ['device', 'file', 'completed'], ['admin', 'file', 'completed']]);
+  assert.ok(!JSON.stringify(items).includes('secret'), 'chat text is never stored');
+  assert.equal(items[3].sha256, sha);
+  const log = (await call('GET', 'log', { cookie: tess })).body.items.map((i: any) => i.action);
+  assert.ok(log.includes('remote_support_chat') && log.includes('remote_support_file_completed'));
+  await call('POST', `remote-support/sessions/${id}/terminate`, { cookie: tess });
+  assert.equal((await ev({ kind: 'chat', direction: 'to_admin', length: 1 })).status, 409);
+});
+
+test('recording: only when the policy allows it and the request asked; in-order chunks; audited download; retention', async () => {
+  const tess = await login('tess@a.test', 'tess-password');
+  admin.setPolicy(db, orgA, {});
+  const dev0 = await enroll(orgA);
+  assert.equal((await call('POST', 'remote-support/sessions', { cookie: tess, body: { device_id: dev0.device_id, mode: 'view', reason: 'record me', record: true } })).status, 409, 'policy must allow recording');
+  assert.throws(() => validatePolicy({ remote_support: { recording_retention_days: 0 } }));
+  admin.setPolicy(db, orgA, { remote_support: { recording: true, recording_retention_days: 7 } });
+  const { dev, id } = await activeSession(tess, 'view', { record: true });
+  const c = (await device(dev.credential).poll()).commands[0];
+  assert.equal(c.args.record, true, 'the device is told, so the user sees it in the consent dialog');
+  const up = (seq: number, data: Buffer, ct = 'video/webm') => fetch(`${base}/admin/api/remote-support/sessions/${id}/recording?seq=${seq}`, { method: 'POST', headers: { 'x-ws-admin': '1', cookie: tess, 'content-type': ct }, body: new Uint8Array(data) });
+  assert.equal((await up(0, Buffer.from('abc'), 'text/plain')).status, 400);
+  assert.equal((await up(1, Buffer.from('late'))).status, 409, 'out of order');
+  assert.equal((await up(0, Buffer.from('WEBM'))).status, 200);
+  assert.equal((await up(0, Buffer.from('WEBM'))).status, 200, 'a retried chunk is accepted once');
+  assert.equal((await up(1, Buffer.from('-two'))).status, 200);
+  const dl = await fetch(`${base}/admin/api/remote-support/sessions/${id}/recording`, { headers: { 'x-ws-admin': '1', cookie: tess } });
+  assert.equal(dl.headers.get('content-type'), 'video/webm');
+  assert.equal(Buffer.from(await dl.arrayBuffer()).toString(), 'WEBM-two');
+  const zed = await login('zed@b.test', 'zed-password');
+  assert.equal((await fetch(`${base}/admin/api/remote-support/sessions/${id}/recording`, { headers: { 'x-ws-admin': '1', cookie: zed } })).status, 404);
+  let log = (await call('GET', 'log', { cookie: tess })).body.items.map((i: any) => i.action);
+  assert.ok(log.includes('remote_support_recording_started') && log.includes('remote_support_recording_downloaded'));
+
+  // A session without recording can't upload.
+  const plain = await activeSession(tess);
+  assert.equal((await fetch(`${base}/admin/api/remote-support/sessions/${plain.id}/recording?seq=0`, { method: 'POST', headers: { 'x-ws-admin': '1', cookie: tess, 'content-type': 'video/webm' }, body: 'x' })).status, 409);
+
+  await call('POST', `remote-support/sessions/${id}/terminate`, { cookie: tess });
+  purgeRecordings(db, Date.now() + 6 * 86_400_000);
+  assert.equal((await fetch(`${base}/admin/api/remote-support/sessions/${id}/recording`, { headers: { 'x-ws-admin': '1', cookie: tess } })).status, 200, 'kept within retention');
+  purgeRecordings(db, Date.now() + 8 * 86_400_000);
+  assert.equal((await fetch(`${base}/admin/api/remote-support/sessions/${id}/recording`, { headers: { 'x-ws-admin': '1', cookie: tess } })).status, 404, 'deleted after retention');
+  log = (await call('GET', 'log', { cookie: tess })).body.items.map((i: any) => i.action);
+  assert.ok(log.includes('remote_support_recording_expired'));
+  admin.setPolicy(db, orgA, {});
+});
