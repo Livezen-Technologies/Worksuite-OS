@@ -346,9 +346,13 @@ def _put_shortcuts(rc: str, block: str) -> str:
     return rc[:line] + block + rc[line:]
 
 
+# Settings › Appearance (shell/electron/windowTheme.ts): the title bar theme, WorkSuite or WorkSuite-Light.
+_THEME_NAME = re.compile(r"(<theme>(?:(?!</theme>)[\s\S])*?<name>)([^<]*)(</name>)")
+
+
 def refresh_rc(user: str, system: str) -> str:
     """The user's rc.xml rebuilt from the system file, keeping only what belongs to the user: the desktops (count and
-    names), Alt+Tab's scope, the touchscreen block of Settings › Touchscreen & pen (shell/electron/touch.ts) and the
+    names), Alt+Tab's scope, the title bar theme (light or dark), the touchscreen block of Settings › Touchscreen & pen (shell/electron/touch.ts) and the
     key bindings of Settings › Keyboard › Shortcuts (shell/src/lib/shortcuts.ts). So a
     copy written by an older version picks up the current window rules and key bindings (the shell's always-on-bottom
     rule, the Task View binding) instead of keeping stale ones."""
@@ -363,6 +367,9 @@ def refresh_rc(user: str, system: str) -> str:
     sw = re.search(r'<windowSwitcher\b[^>]*?allWorkspaces="(yes|no)"', user)
     if sw:
         out = _set_switcher(out, sw.group(1) == "yes")
+    theme = _THEME_NAME.search(user)
+    if theme and _THEME_NAME.search(out):
+        out = _THEME_NAME.sub(lambda m: m.group(1) + theme.group(2) + m.group(3), out, count=1)
     touch = _TOUCH.search(user)
     if touch:
         out = _TOUCH.sub("", out)

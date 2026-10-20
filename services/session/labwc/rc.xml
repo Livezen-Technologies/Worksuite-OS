@@ -5,15 +5,40 @@
     <decoration>server</decoration>
     <gap>0</gap>
   </core>
+  <!-- One Windows 11-style title bar for every app (issues #15, #33): the WorkSuite theme (services/session/themes,
+       WorkSuite-Light when Settings › Appearance is light: shell/electron/windowTheme.ts writes <name> in the user's
+       copy), the window icon at the left, the title, then Minimize, Maximize/Restore and Close at the top right;
+       8 px rounded corners and a shadow. Labwc's default mouse bindings (no <mouse> section here) give: drag the title bar
+       to move, double-click it to maximize or restore, drag an edge or corner to resize, click to focus and raise,
+       the taskbar to restore a minimized window. Dialogs and fixed-size windows (minimum = maximum size) keep their
+       size: Labwc never resizes them, and their title bars show only the buttons that apply. -->
   <theme>
     <name>WorkSuite</name>
+    <titlebar>
+      <layout>icon:iconify,max,close</layout>
+      <showTitle>yes</showTitle>
+    </titlebar>
     <cornerRadius>8</cornerRadius>
-    <font place="ActiveWindow"><name>sans</name><size>10</size></font>
+    <keepBorder>yes</keepBorder>
+    <dropShadows>yes</dropShadows>
+    <font place="ActiveWindow"><name>sans</name><size>9</size></font>
+    <font place="InactiveWindow"><name>sans</name><size>9</size></font>
   </theme>
   <focus>
     <followMouse>no</followMouse>
     <raiseOnFocus>no</raiseOnFocus>
   </focus>
+  <!-- Windows 11 snap: drag a window to the top edge to maximize it, to a side to fill that half. -->
+  <snapping>
+    <range>10</range>
+    <topMaximize>yes</topMaximize>
+  </snapping>
+  <!-- Resizing: 8 px corners grab both edges; no size popup. -->
+  <resize>
+    <popupShow>Never</popupShow>
+    <drawContents>yes</drawContents>
+    <cornerRange>8</cornerRange>
+  </resize>
   <!-- One desktop to start with, like Windows 11; Task View adds more (the bridge rewrites this in the user's copy). -->
   <desktops number="1"><popupTime>0</popupTime><names><name>Desktop 1</name></names></desktops>
   <!-- Alt+Tab: windows from the desktop in use (Settings › Multitasking can choose all desktops). -->
@@ -32,6 +57,12 @@
       <action name="Execute" command="loginctl lock-session"/>
     </keybind>
     <keybind key="A-F4"><action name="Close"/></keybind>
+    <!-- Like Windows 11: Super+Up maximizes, Super+Down restores a maximized window and minimizes any other,
+         Super+Left/Right snap to that half of the screen. -->
+    <keybind key="W-Up"><action name="Maximize"/></keybind>
+    <keybind key="W-Down"><action name="If"><query maximized="both"/><then><action name="UnMaximize"/></then><else><action name="Iconify"/></else></action></keybind>
+    <keybind key="W-Left"><action name="SnapToEdge" direction="left"/></keybind>
+    <keybind key="W-Right"><action name="SnapToEdge" direction="right"/></keybind>
     <!-- Desktops (WSOS-DSK-003/011), like Windows 11: Super+Tab Task View, Ctrl+Super+D new desktop, Ctrl+Super+F4 close
          it, Ctrl+Super+Left/Right switch (Ctrl+Alt+Left/Right too), Super+1…9 go, Super+Shift+1…9 move the window.
          Each tells the Wayland bridge (worksuite-workspace-event) so the shell follows. Ctrl+Alt+Super+F1…F16 (go),

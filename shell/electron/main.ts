@@ -36,6 +36,8 @@ import { startPanel, type PanelHooks } from './panelHost'
 import { captureHost, imageData, runBytes, screenshotFileName, screenshotsDir, wlCopyImage, type CaptureKind, type SnipMode } from './capture'
 import { clipboardAllowed } from './clipboard'
 import { applyShortcuts } from './shortcutsHost'
+import { applyWindowTheme } from './windowTheme'
+import { APP_WINDOW } from './windowDefaults'
 import { ACTIVATED_FLAG, FULLSCREEN_FLAG } from './panel'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import type { Layout } from './displays'
@@ -188,7 +190,7 @@ app.whenReady().then(() => {
   // WorkSuite web apps: one window and one persistent session partition per app (WSOS-SEC-004).
   const apps = appWindows({
     session: (p) => session.fromPartition(p),
-    window: ({ partition, title }) => new BrowserWindow({ title, backgroundColor: '#0f172a', webPreferences: appWebPreferences(partition) }),
+    window: ({ partition, title }) => new BrowserWindow({ ...APP_WINDOW, title, backgroundColor: '#0f172a', webPreferences: appWebPreferences(partition) }),
     openExternal: (u) => { if (externalAllowed(u)) void shell.openExternal(u) },
     permission: (perm, url) => permissionAllowed(webGrants, url, perm),
   })
@@ -649,6 +651,8 @@ app.whenReady().then(() => {
   // preferences, so shortcuts follow the person to another computer.
   const shortcutFiles = { userRc: path.join(xdgDirs(home).config, 'worksuite', 'labwc', 'rc.xml'), systemRc: '/etc/xdg/worksuite/labwc/rc.xml' }
   handle('ws:shortcutsApply', (json) => applyShortcuts(parseJson(json), shortcutFiles, realExec))
+  // Settings › Appearance: the Labwc title bar theme (light or dark) in the same file.
+  handle('ws:windowTheme', (dark) => applyWindowTheme(dark === 'dark', shortcutFiles, realExec))
   setTimeout(() => void syncCall('GetPreference', { object_id: 'shell' }).then((r) => {
     const sc = r.ok ? (r.value as { shortcuts?: unknown } | null)?.shortcuts : undefined
     if (sc) void applyShortcuts(sc, shortcutFiles, realExec)
@@ -752,7 +756,7 @@ function startPortalWatch(sys: ReturnType<typeof systemBridge>) {
     ses.setPermissionCheckHandler(() => false)
     ses.on('will-download', (e) => e.preventDefault())
     const w = new BrowserWindow({
-      title: 'Sign in to network', width: 900, height: 700, backgroundColor: '#ffffff', autoHideMenuBar: true,
+      ...APP_WINDOW, title: 'Sign in to network', width: 900, height: 700, backgroundColor: '#ffffff',
       webPreferences: { partition, sandbox: true, contextIsolation: true, nodeIntegration: false, nodeIntegrationInSubFrames: false, webviewTag: false, webSecurity: true, spellcheck: false },
     })
     const guard = (e: { preventDefault(): void }, url: string) => { if (!portalNavAllowed(url)) e.preventDefault() }
