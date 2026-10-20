@@ -17,7 +17,7 @@ import { QuickPanel, QuickTray, useQuickState } from '../components/QuickSetting
 import { OskButton } from '../components/TouchItems'
 import { useTouchMode } from '../lib/touch'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
-import { panel, showDesktopTargets, type PanelWindow, type ShellAction, type TaskViewOpen } from '../lib/panel'
+import { ACTIVATED, panel, showDesktopTargets, type PanelWindow, type ShellAction, type TaskViewOpen } from '../lib/panel'
 import A11yPanel from '../components/A11yPanel'
 import NotifDock, { MOON } from '../components/NotifDock'
 import { CaptureBadge } from '../components/CaptureBadge'
@@ -31,7 +31,7 @@ import { applyShellPrefs, shellPrefsFrom, TASKBAR_ALIGN_EVENT, taskbarAlign, tas
 import { AppGlyph } from '../components/AppGlyph'
 import { alphaGroups, appForWindow, buildLauncherApps, filterApps, startPins, taskbarApps, tileColor, type LauncherApp } from '../lib/launcher'
 import type { MessageKey } from '../i18n'
-import GlobalSearch from '../components/GlobalSearch'
+import SearchFlyout from '../components/SearchFlyout'
 import Assistant, { AI_ICON } from '../components/Assistant'
 import { onAssistantRequest, type AssistantRequest } from '../lib/assistantNav'
 import ShellRestartNotice from '../components/ShellRestartNotice'
@@ -120,6 +120,9 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const [qsOpen, setQsOpen] = useState(false)
   const [quick, refreshQuick] = useQuickState()
   const [query, setQuery] = useState('')
+  // The taskbar's search panel (#29): its query, where it sits, and the app that had the focus when it opened (it gets
+  // the focus back when the panel is closed without opening anything, #30).
+  const [search, setSearch] = useState<{ query: string; left: number; previous: string } | null>(null)
   const [powerOpen, setPowerOpen] = useState(false)
   const [confirmShutdown, setConfirmShutdown] = useState(false)
   // Shutdown / restart / sign-out overlay (components/SessionEnd.tsx), on every display.
@@ -163,6 +166,22 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const desk = useDesktops(device?.policies?.kiosk !== true)
   const desktopsOn = desktopsAllowed(desk.ws, device?.policies ?? null)
   const panelWindows = usePanelWindows()
+  const panelWindowsRef = useRef(panelWindows)
+  panelWindowsRef.current = panelWindows
+  function openSearch(query: string) {
+    const previous = panelWindowsRef.current.find((w) => w.flags & ACTIVATED && !SHELL_APP_IDS.has(w.appId.toLowerCase()))?.handle ?? ''
+    const left = searchControl.current?.getBoundingClientRect().left ?? 12
+    setLauncher(false)
+    setSearch((s) => ({ query, left, previous: s?.previous ?? previous }))
+  }
+  /** restore: closed without opening anything (Escape, outside click, the control again), so focus goes back. */
+  function closeSearch(restore: boolean) {
+    const prev = search?.previous ?? ''
+    setSearch(null)
+    if (!restore) return
+    if (prev) void panel.activate(prev)
+    else searchControl.current?.focus()
+  }
   const [flyout, setFlyout] = useState(false)
   const flyoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hoverTaskView = (on: boolean) => {
@@ -176,7 +195,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false); setQsOpen(false) }
+      if (e.key === 'Escape') { setPowerOpen(false); setLauncher(false); setTrayOpen(false); setQsOpen(false); setSearch(null) }
       // Super+A inside the shell's own window (the compositor binding covers everywhere else).
       else if (e.metaKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setLauncher(false); setAssistant((v) => !v) }
       // Super+Tab with the shell focused (Labwc's binding covers everywhere else).
@@ -249,9 +268,15 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   }, [])
   const align = alignOverride ?? taskbarAlign(prefs)
   const centered = align === 'center'
+  // Taskbar search (#29): a compact control (an icon on narrow screens) that opens a floating panel above it. Typing
+  // with the control focused goes straight into the panel's field.
+  const searchControl = useRef<HTMLButtonElement>(null)
   const searchButton = (
-    <button type="button" onClick={() => setLauncher(true)} className={`box-border hidden h-9 shrink-0 ${centered ? 'w-[160px]' : 'w-[200px]'} cursor-text items-center gap-2 rounded-[9px] bg-white/[0.06] px-3 text-[13px] text-[#8FA3C8] hover:bg-white/10 md:flex`}>
-      <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={14} width={2.2} />{t('launcher.search')}
+    <button ref={searchControl} type="button" data-search-toggle aria-label={t('launcher.search')} aria-haspopup="dialog" aria-expanded={!!search} aria-controls="ws-search"
+      onClick={() => (search ? closeSearch(false) : openSearch(''))}
+      onKeyDown={(e) => { if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== ' ') { e.preventDefault(); openSearch(e.key) } }}
+      className={`box-border flex h-9 shrink-0 cursor-text items-center gap-2 rounded-[9px] px-2.5 text-[13px] text-[#8FA3C8] md:w-[132px] ${search ? 'bg-white/[0.14]' : 'bg-white/[0.06] hover:bg-white/10'}`}>
+      <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={14} width={2.2} /><span aria-hidden="true" className="hidden truncate md:inline">{t('launcher.search')}</span>
     </button>
   )
   const appsLoaded = useRef(false)
@@ -296,13 +321,13 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const openWin = (screen: Parameters<typeof onOpen>[0]) => { setBehind(false); setLiftSeq((n) => n + 1); onOpen(screen) }
   useEffect(() => panel.onShellBehind?.(() => {
     setLauncher(false); setA11yOpen(false); setAssistant(false); setQsOpen(false); setPowerOpen(false); setTrayOpen(false)
-    setFlyout(false); setWidgetPicker(false); setBehind(true)
+    setFlyout(false); setWidgetPicker(false); setSearch(null); setBehind(true)
   }), [])
   const closeTray = useCallback(() => setTrayOpen(false), [])
   const hasWindow = Children.toArray(children).length > 0
   useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
-    || flyout || widgetPicker || authOpen || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
+    || flyout || widgetPicker || authOpen || !!search || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
   // Once the shell is over the apps it has the keyboard (the bridge activates it): give it to the launcher's search
   // again, which was focused while an app still had the keyboard (Start opened with the mouse).
   const focusSearch = useRef(() => undefined as void)
@@ -324,11 +349,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     void os.recentFiles().then((r) => { if (live) setRecent([...r.local, ...r.cloud.hits].slice(0, RECENT_MAX)) }).catch(() => { if (live) setRecent([]) })
     return () => { live = false }
   }, [launcher])
-  const q = query.trim().toLowerCase()
-  const apps = useMemo(() => filterApps(allApps, 'all', q), [allApps, q])
   const pins = useMemo(() => startPins(allApps, 12, [SETTINGS_TILE]), [allApps])
   const groups = useMemo(() => alphaGroups(allApps), [allApps])
-  const settingsHits = useMemo(() => (q ? SETTINGS_PAGES.map(([k, section]) => ({ label: t(k), section })).filter((s) => s.label.toLowerCase().includes(q)) : []), [q, t])
+  // The search panel: matching apps and Settings pages; with nothing typed yet, the pinned apps as suggestions.
+  const sq = (search?.query ?? '').trim().toLowerCase()
+  const searchApps = useMemo(() => (sq ? filterApps(allApps, 'all', sq) : startPins(allApps, 6, [])), [allApps, sq])
+  const searchSettings = useMemo(() => (sq ? SETTINGS_PAGES.map(([k, section]) => ({ label: t(k), section })).filter((x) => x.label.toLowerCase().includes(sq)) : []), [sq, t])
 
   const launch = (id: string) => {
     setLauncher(false)
@@ -445,21 +471,14 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
 
       {trayOpen && <NotifDock onClose={closeTray} now={now} time={time} notices={notices} setNotices={setNotices} dnd={dnd} setDnd={(v) => { setDnd(v); if (v) setToast(null) }} />}
 
-      {launcher && q && (
-        <div className="absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-start justify-center bg-[rgba(2,6,16,0.45)] px-4 pt-[90px] backdrop-blur-[6px]" onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
-          <GlobalSearch query={query} onQuery={setQuery} apps={apps} settings={settingsHits} onLaunchApp={launch}
-            onOpenSettings={(s) => { setLauncher(false); openSettingsAt(s) }} onClose={() => setLauncher(false)}
-            onAskAI={(text) => { setLauncher(false); setAssistantReq({ kind: 'ask', text }); setAssistant(true) }} />
-        </div>
-      )}
-      {launcher && !q && (
+      {launcher && (
         <div className={`absolute inset-x-0 top-0 bottom-[52px] z-30 flex items-end p-3 ${centered ? 'justify-center' : 'justify-start'}`} onMouseDown={(e) => { if (e.target === e.currentTarget) setLauncher(false) }}>
           <div id="ws-launcher" role="dialog" aria-modal="true" aria-label={t('launcher.title')} className="ws-rise flex h-[660px] max-h-full w-[660px] max-w-full flex-col overflow-hidden rounded-[22px] border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] text-[#E8EEFA] shadow-[0_40px_90px_rgba(0,0,0,0.6)] backdrop-blur-[24px]">
             <div className="flex min-h-0 flex-1 flex-col gap-[18px] px-[26px] pt-[22px]">
               <label className="box-border flex h-11 shrink-0 items-center gap-2.5 rounded-[22px] border border-[rgba(127,178,255,0.18)] bg-[rgba(4,10,26,0.6)] px-4 text-[#8FA3C8] focus-within:border-[#1F6BFF]">
                 <Icon d={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} size={16} width={2.2} />
                 <span className="sr-only">{t('launcher.search')}</span>
-                <input ref={searchRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('launcher.searchPlaceholder')} className="grow border-0 bg-transparent text-sm focus-visible:shadow-none focus-visible:outline-none text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8]" />
+                <input ref={searchRef} type="text" value={query} onChange={(e) => { if (e.target.value.trim()) { setLauncher(false); openSearch(e.target.value) } else setQuery(e.target.value) }} placeholder={t('launcher.searchPlaceholder')} className="grow border-0 bg-transparent text-sm focus-visible:shadow-none focus-visible:outline-none text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8]" />
                 <span aria-hidden="true" className="rounded border border-[#3D5280] px-1.5 py-0.5 font-mono text-[10px]">Super</span>
               </label>
               <div className="flex items-center justify-between">
@@ -532,6 +551,12 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
         </div>
       )}
 
+      {search && (
+        <SearchFlyout anchorLeft={search.left} toggleSelector="[data-search-toggle]" query={search.query} onQuery={(v) => setSearch((x) => (x ? { ...x, query: v } : x))}
+          apps={searchApps} settings={searchSettings} onLaunchApp={(id) => { setSearch(null); launch(id) }}
+          onOpenSettings={(sec) => { setSearch(null); openSettingsAt(sec) }} onClose={() => closeSearch(true)}
+          onAskAI={(text) => { setSearch(null); setAssistantReq({ kind: 'ask', text }); setAssistant(true) }} />
+      )}
       {assistant && <Assistant onClose={() => setAssistant(false)} onOpenSettings={() => { setAssistant(false); openSettingsAt('AI') }} request={assistantReq} onRequestHandled={() => setAssistantReq(null)} />}
 
       {qsOpen && (
