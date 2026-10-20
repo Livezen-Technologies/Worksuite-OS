@@ -15,6 +15,8 @@ import { serveBus } from './dbus.ts';
 import { forwardPackageAudit } from './auditForward.ts';
 import { serveControl } from './control.ts';
 import { applyPendingEnrollment } from './pendingEnroll.ts';
+import { SecurityCenter } from './securityCenter.ts';
+import { linuxSecurityHost } from './securityHost.ts';
 
 const KEY_DIR = '/usr/share/worksuite/keys/device-commands';   // from worksuite-archive-keyring
 const SOCKET = join(DEFAULT_PATHS.runtimeDir, 'control.sock');
@@ -35,7 +37,11 @@ export function loadKeys(dir: string): (id: string) => KeyObject | undefined {
 async function daemon() {
   const state = new StateFile(join(DEFAULT_PATHS.stateDir, 'state.json'));
   const host = linuxHost();
-  const agent = new Agent({ state, host, api: httpApi(() => state.state), keys: loadKeys(KEY_DIR) });
+  const security = new SecurityCenter({
+    state, host: linuxSecurityHost({ stateDir: DEFAULT_PATHS.stateDir, runtimeDir: DEFAULT_PATHS.runtimeDir, audit: (e, f) => host.audit(e, f) }),
+    managed: () => ({ enrolled: state.state.enrolled, policy: state.state.policy ?? null, server: state.state.server_url ?? null }),
+  });
+  const agent = new Agent({ state, host, api: httpApi(() => state.state), keys: loadKeys(KEY_DIR), security });
 
   // /run is empty after boot: republish what user services and Settings read.
   host.publishCredential(state.state.enrolled ? state.state.credential ?? null : null);
@@ -63,6 +69,7 @@ async function daemon() {
     effectivePolicy: () => (state.state.enrolled && state.state.policy ? publicPolicy(state.state.policy) : null),
     enroll: (url, token) => serial(() => agent.enroll(url, token)),
     refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); },
+    scan: (kind) => { void security.scan(kind, 'user').catch(() => {}); },
   }).catch((e) => host.audit('dbus_unavailable', { error: String(e?.message ?? e) }));
 
   const jitter = (ms: number) => ms + Math.floor(Math.random() * ms * 0.2);
@@ -84,6 +91,8 @@ async function daemon() {
     const api = httpApi(() => state.state);
     await forwardPackageAudit({ path: PACKAGE_AUDIT_LOG, cursor: state.state.package_audit ?? { offset: 0 }, send: (ev) => api.audit(ev), save: (c) => state.update((s) => { s.package_audit = c; }) });
   });
+  // WorkSuite Security: retention, firewall alerts, engine health, scheduled scans when idle (#20 §11, §13).
+  every(30 * 60_000, 'security', () => security.tick());
   every(INVENTORY_MS, 'inventory', async () => { if (state.state.enrolled) await httpApi(() => state.state).inventory(await host.inventory()); });
 
   process.on('SIGTERM', () => { server.close(); process.exit(0); });

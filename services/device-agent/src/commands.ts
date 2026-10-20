@@ -11,6 +11,10 @@ export const ALLOWED_COMMANDS = [
   'RebootDuringWindow',
   'CollectApprovedDiagnostics',
   'RemoteWipe',
+  // WorkSuite Security remote incident response (#20 §12, src/securityCenter.ts).
+  'StartMalwareScan',
+  'IsolateEndpoint',
+  'ReleaseIsolation',
 ] as const;
 export type CommandName = (typeof ALLOWED_COMMANDS)[number];
 
@@ -24,6 +28,9 @@ const MAX_TTL: Record<CommandName, number> = {
   RebootDuringWindow: 30 * DAY,
   CollectApprovedDiagnostics: 7 * DAY,
   RemoteWipe: 30 * DAY,
+  StartMalwareScan: 7 * DAY,
+  IsolateEndpoint: 1 * DAY,
+  ReleaseIsolation: 7 * DAY,
 };
 const CLOCK_SKEW_MS = 5 * 60_000;
 
@@ -73,6 +80,8 @@ export function signingBytes(env: Omit<CommandEnvelope, 'signature'> & { signatu
 const ARG_CHECKS: Partial<Record<CommandName, (a: Record<string, unknown>) => boolean>> = {
   InstallApprovedApplication: (a) => typeof a.catalog_id === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(a.catalog_id),
   RemoteWipe: (a) => (a.scope === 'worksuite_data' || a.scope === 'full_device') && typeof a.approval_id === 'string',
+  StartMalwareScan: (a) => a.kind === 'quick' || a.kind === 'full',
+  IsolateEndpoint: (a) => Number.isInteger(a.hours) && (a.hours as number) >= 1 && (a.hours as number) <= 72,
   CollectApprovedDiagnostics: (a) => (DIAGNOSTIC_PROFILES as readonly unknown[]).includes(a.bundle_profile),
 };
 

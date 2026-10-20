@@ -36,6 +36,7 @@ An unsigned or tampered policy is rejected and the previous one stays in force.
 
 `RefreshPolicy`, `InstallApprovedApplication {catalog_id}`, `ScheduleUpdate`, `RequestLock`,
 `RebootDuringWindow`, `CollectApprovedDiagnostics {bundle_profile}`, `RemoteWipe {scope: worksuite_data|full_device, approval_id}`.
+`StartMalwareScan {kind: quick|full}`, `IsolateEndpoint {hours: 1–72}`, `ReleaseIsolation` (WorkSuite Security, below).
 There is no shell, exec or file-read command (WSOS-MDM-006). Anything else is rejected `UNKNOWN_COMMAND`.
 
 ## Envelope validation — `src/commands.ts`
@@ -59,6 +60,30 @@ reason. Acks that cannot be sent are queued in state and delivered first on the 
   - `update`: `basic` plus the package service's update status (state, ring, offered/installed version, last check,
     reason), `/etc/worksuite/updates.json` (host, ring, mode), the WorkSuite APT source and 24 h of
     `worksuite-package-service` logs.
+
+## WorkSuite Security (issue #20) — `src/security.ts`, `src/securityCenter.ts`, `src/securityHost.ts`
+
+- **Firewall**: the packaged `/etc/nftables.conf` (table `inet worksuite_filter`, inbound default-deny) is unchanged.
+  The policy's `firewall_outbound_block` (IPv4/IPv6 addresses or CIDRs) becomes the agent's own table
+  `inet worksuite_policy` in `/etc/worksuite/nftables.d/50-policy.nft`, loaded at once and at boot (glob include in
+  `nftables.conf`). It only narrows what the default allows. `firewall_log_blocked` adds a rate-limited log rule; the
+  agent reads those kernel log lines into firewall alerts (destination, port, protocol; no payload).
+- **Isolation** (`IsolateEndpoint`): everything is dropped except loopback, established replies, DHCP, DNS and HTTPS to
+  the management server's addresses, so check-ins and `ReleaseIsolation` still arrive. Refused (`NO_MANAGEMENT_PATH`)
+  if the server name does not resolve; ends on its own after at most 72 hours (lockout safeguard). The console asks for
+  the administrator's password and the device name.
+- **Antivirus** (ClamAV, `clamav`/`clamav-freshclam` recommended): signature checks per day from policy via
+  `/etc/worksuite/freshclam.env` (read by the packaged `clamav-freshclam.service.d/worksuite.conf`); a failed updater
+  is restarted at most hourly. Scheduled scans (`av_scan_schedule`, `av_scan_hour`) start only when every graphical
+  session is idle, load is low and the device is on mains power. Quick scans are incremental (files changed since
+  the last scan); the first scan is full. Scans run as a transient unit (`systemd-run`, `Nice=19`, idle I/O,
+  `CPUQuota=av_cpu_quota_percent`), one at a time. Exclusions come only from policy.
+- **Quarantine**: detections are moved to `/var/lib/worksuite-device-agent/quarantine/` (0700, file mode 000) with a
+  root-only metadata record; nothing is uploaded. A file that cannot be moved stays listed as needing action.
+- **Status**: `/run/worksuite-device-agent/security.json` (0644) for Settings › Privacy & security › WorkSuite Security,
+  and the same summary in each heartbeat for Admin Center › Security Center. History older than
+  `security_log_retention_days` is dropped. Every action is in the agent's audit log.
+- **Scan now**: `lk.worksuite.DeviceAgent1.StartSecurityScan(kind)` behind polkit `lk.worksuite.security.scan`.
 
 ## Remote wipe (§14.3)
 

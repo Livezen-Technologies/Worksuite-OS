@@ -69,6 +69,8 @@ export interface AgentState {
   vpn_key_created_at?: number;
   /** WSOS-SEC-008: how far the package-service audit log has been forwarded to the server. */
   package_audit?: { offset: number; head?: string };
+  /** WorkSuite Security (src/securityCenter.ts): isolation, scan and threat history, firewall alerts. */
+  security?: import('./security.ts').SecurityState;
 }
 
 export const emptyState = (): AgentState => ({ enrolled: false, seen_commands: {}, pending_acks: [] });

@@ -91,6 +91,13 @@ profile worksuite-device-agent flags=(attach_disconnected) {
   /etc/NetworkManager/system-connections/worksuite-vpn.nmconnection{,.tmp} rw,
   /usr/bin/nmcli rix,
   /usr/{s,}bin/nft rix,
+  # WorkSuite Security (src/security.ts): policy firewall table (loaded at boot by /etc/nftables.conf), freshclam
+  # schedule, ClamAV version probe. Scans themselves run as a transient unit (systemd-run), not in this profile.
+  /etc/worksuite/nftables.d/ rw,
+  /etc/worksuite/nftables.d/50-policy.nft{,.tmp} rw,
+  /etc/worksuite/freshclam.env{,.tmp} rw,
+  /usr/bin/clamscan rix,
+  /var/lib/clamav/** r,
 
   deny /root/** rwx,
   deny @{PROC}/sys/kernel/** w,

@@ -9,6 +9,7 @@ function kioskSummary(k: ReturnType<typeof activeKiosk>) {
   return k ? { user: k.user, app: k.app, allowed_urls: k.allowed_urls, idle_reset_minutes: k.idle_reset_minutes, show_on_screen_keyboard: k.show_on_screen_keyboard, exit_pin: k.verifier !== null, orientation: k.orientation, screen_off: k.screen_off } : null;
 }
 import type { AgentState, Policy, StateFile } from './state.ts';
+import type { SecurityCenter } from './securityCenter.ts';
 import { rotationDue, userVpnsToRemove, vpnPlan, type NmConnection, type VpnConfig, type VpnPlan } from './vpn.ts';
 
 export interface Host {
@@ -56,6 +57,8 @@ export interface AgentOptions {
   /** Server signing keys for commands and policy, by key id (shipped in worksuite-archive-keyring). */
   keys: (keyId: string) => KeyObject | undefined;
   now?: () => number;
+  /** WorkSuite Security (#20); absent = the device has no security module (tests, rescue). */
+  security?: SecurityCenter;
 }
 
 const DAY = 86_400_000;
@@ -121,6 +124,7 @@ export class Agent {
       this.o.host.audit('policy_enforce_failed', { version: p?.version ?? null, error: e instanceof Error ? e.message : String(e) });
     }
     await this.enforceVpn(p);
+    await this.o.security?.enforce().catch(() => {});
     if (!this.s.enrolled && this.s.offline_access_expired) this.setOfflineBlock(false);
   }
 
@@ -217,6 +221,8 @@ export class Agent {
         policy_version: this.s.policy?.version ?? '', update_status: f.update_status,
         // Unknown encryption (e.g. an overlay root on the live ISO) reports false; it must never block the check-in.
         observed: { policy_version: this.s.policy?.version ?? null, encrypted: await this.o.host.isFullyEncrypted().catch(() => false) },
+        // Admin Center › Security Center: firewall, antivirus, threats, isolation (no file contents).
+        ...(this.o.security ? { security: await this.o.security.summary().catch(() => null) } : {}),
       });
       await this.refreshFacts();
       this.o.state.update((s) => { s.last_check_in = this.o.now(); });
@@ -275,6 +281,14 @@ export class Agent {
         return true;
       }
       case 'RemoteWipe': await this.wipe(c); return false;
+      case 'StartMalwareScan': {
+        if (!this.o.security) throw new Error('NOT_SUPPORTED');
+        // Acked when it has started; the result reaches the server with the next check-in's security summary.
+        void this.o.security.scan(c.args.kind === 'full' ? 'full' : 'quick', 'remote').catch(() => {});
+        return true;
+      }
+      case 'IsolateEndpoint': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.isolate(c.args.hours); return true;
+      case 'ReleaseIsolation': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.release(); return true;
     }
   }
 
