@@ -27,6 +27,8 @@ export interface Host {
   /** Notice text → local sign-in refused with it (pam_nologin); null → allowed again. */
   setOfflineAccessBlock(notice: string | null): void;
   installApproved(catalogId: string): Promise<void>;
+  /** Software Management remote uninstall; the package service refuses system packages (critical set). */
+  removeApplication(catalogId: string): Promise<void>;
   scheduleUpdate(): Promise<void>;
   scheduleReboot(window: string | undefined): Promise<void>;
   /** Approved profiles only; unknown profile → throws. No file contents beyond the profile's fixed list. */
@@ -271,7 +273,14 @@ export class Agent {
         const id = String(c.args.catalog_id);
         // Server-side approval is not enough: the device's own signed allowlist must contain it too.
         if (!(this.s.policy?.app_allowlist ?? []).includes(id)) throw new Error('NOT_IN_ALLOWLIST');
-        await h.installApproved(id); return true;
+        await h.installApproved(id);
+        await this.reportInventory();
+        return true;
+      }
+      case 'RemoveApplication': {
+        await h.removeApplication(String(c.args.catalog_id));
+        await this.reportInventory();
+        return true;
       }
       case 'ScheduleUpdate': await h.scheduleUpdate(); return true;
       case 'RebootDuringWindow': await h.scheduleReboot(this.s.policy?.maintenance_window); return true;
@@ -290,6 +299,11 @@ export class Agent {
       case 'IsolateEndpoint': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.isolate(c.args.hours); return true;
       case 'ReleaseIsolation': if (!this.o.security) throw new Error('NOT_SUPPORTED'); await this.o.security.release(); return true;
     }
+  }
+
+  /** After a remote install or removal, so Software Management shows the new state without waiting for the daily inventory. */
+  private async reportInventory() {
+    try { await this.o.api.inventory(await this.o.host.inventory()); } catch { /* the periodic inventory catches up */ }
   }
 
   /** §14.3. Ack "started" reaches the server before anything is destroyed (WSOS-WIPE-005). */
@@ -381,6 +395,8 @@ export class Agent {
         screen_capture: p.screen_capture ?? null, clipboard_history: p.clipboard_history ?? null,
         drivers_online_search: p.drivers_online_search ?? null, drivers_auto_install: p.drivers_auto_install ?? null,
         drivers_auto_install_gpu: p.drivers_auto_install_gpu ?? null,
+        software_install: p.software_install ?? null, software_uninstall: p.software_uninstall ?? null, software_update: p.software_update ?? null,
+        update_bandwidth_kbps: p.update_bandwidth_kbps ?? null,
         kiosk: this.s.enrolled && activeKiosk(p, this.s.device_id) !== null,
         // Employee monitoring (#22): shown in the management notice so the employee knows.
         activity_monitoring: p.activity_monitoring === true, antivirus: p.antivirus ?? null,

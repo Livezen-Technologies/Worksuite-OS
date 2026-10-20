@@ -16,6 +16,8 @@ export interface LocalUpdateConfig { update_host?: string; update_ring?: Ring; u
 export const FIRST_CHECK_MS = 15 * 60_000;
 export const CHECK_EVERY_MS = 6 * 60 * 60_000;
 export const WARNING_MS = 15 * 60_000;
+/** On (re)connecting to the internet: check again only if the last check is older than this, unless one failed. */
+export const RECHECK_ON_CONNECT_MS = 60 * 60_000;
 
 export type UpdateState = 'up_to_date' | 'checking' | 'available' | 'waiting' | 'installing' | 'ready_to_restart' | 'restart_pending' | 'failed';
 
@@ -35,6 +37,13 @@ export interface UpdateStatus {
   /** Where manifests come from (Update Center or the organisation's mirror). */
   update_host?: string;
   ring?: Ring;                  // this install picks up a download that was interrupted (apt resumes partials)
+  /** From the signed manifest, for the Update Manager: release notes, link, sizes, and whether it is a version upgrade. */
+  notes?: string | null;
+  notes_url?: string | null;
+  download_bytes?: number | null;
+  installed_bytes?: number | null;
+  upgrade?: boolean;
+  security?: boolean;
 }
 
 export interface CoordinatorEnv {
@@ -104,6 +113,23 @@ export class Coordinator extends EventEmitter {
   }
   stop() { for (const t of this.timers) clearTimeout(t); }
 
+  /**
+   * NetworkManager reached full connectivity (Wi-Fi or Ethernet came up; the dispatcher calls this as root). Checks
+   * right away when the last check is stale or failed for lack of network, and resumes an interrupted download;
+   * otherwise does nothing, so flapping connections don't cause repeated checks. Returns whether it checked.
+   */
+  async connectivityChanged(): Promise<boolean> {
+    const st = this.status;
+    if (st.state === 'checking' || st.state === 'installing' || st.state === 'restart_pending') return false;
+    const offline = st.state === 'failed' && st.reason === `can't reach the update server`;
+    const interrupted = st.state === 'waiting' && (st.reason === 'download_interrupted' || st.reason === 'metered');
+    const stale = !st.last_check || this.env.now() - st.last_check >= RECHECK_ON_CONNECT_MS;
+    if (!offline && !interrupted && !stale) return false;
+    this.env.audit('update_check_on_connect', { reason: offline ? 'was_offline' : interrupted ? st.reason : 'stale' });
+    await this.check();
+    return true;
+  }
+
   private set(patch: Partial<UpdateStatus>) {
     this.status = { ...this.status, ...patch };
     this.emit('status', this.status);
@@ -151,7 +177,11 @@ export class Coordinator extends EventEmitter {
       window: policy?.maintenance_window, deviceKey: this.env.deviceKey(), now: new Date(this.env.now()),
       idle: await this.env.idle(), metered: await this.env.metered(), deferrals: used,
     });
-    const offer = { version: raw.version, release_id: raw.release_id, mandatory: !!(raw.mandatory || raw.critical), critical: !!raw.critical, deadline: raw.deadline ?? null,
+    const offer = { notes: typeof raw.notes === 'string' ? raw.notes.slice(0, 8000) : null,
+      notes_url: typeof raw.notes_url === 'string' && /^https:\/\//.test(raw.notes_url) ? raw.notes_url : null,
+      download_bytes: Number.isFinite(raw.download_bytes) ? raw.download_bytes! : null, installed_bytes: Number.isFinite(raw.installed_bytes) ? raw.installed_bytes! : null,
+      upgrade: raw.upgrade === true, security: raw.security === true,
+      version: raw.version, release_id: raw.release_id, mandatory: !!(raw.mandatory || raw.critical), critical: !!raw.critical, deadline: raw.deadline ?? null,
       deferrals_left: raw.mandatory || raw.critical ? Math.max(0, 3 - used) : null, last_check: this.env.now() };
     switch (d.action) {
       case 'none': this.set({ ...offer, state: d.reason === 'up_to_date' ? 'up_to_date' : 'available', reason: d.reason === 'up_to_date' ? null : d.reason }); break;
@@ -208,7 +238,7 @@ export class Coordinator extends EventEmitter {
     this.set({ state: 'installing', reason: null, resumed: this.interrupted === m.release_id });
     return new Promise((resolve) => {
       let id: number;
-      try { id = this.svc.applyUpdate(0, m.release_id, { allow_battery: !!m.critical }); }
+      try { id = this.svc.applyUpdate(0, m.release_id, { allow_battery: !!m.critical, version: m.version }); }
       catch (e) { void this.finish(m, { state: 'failed', error: (e as Error).message } as Job, rebootAfter).then(resolve); return; }
       const onDone = (job: Job) => {
         if (job.id !== id) return;

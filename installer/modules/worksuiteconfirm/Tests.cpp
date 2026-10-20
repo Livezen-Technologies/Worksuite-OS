@@ -54,6 +54,45 @@ private slots:
         QCOMPARE( S::diskTitle( "nvme0n1", model, size ), QStringLiteral( "Samsung SSD 980 · 931.5G (nvme0n1)" ) );
         QCOMPARE( S::diskTitle( "sda", "", "" ), QStringLiteral( "sda" ) );
     }
+    void existingSystems()
+    {
+        using S = WorksuiteConfirmViewStep;
+        QCOMPARE( S::systemOf( "ntfs", "", "Basic data partition" ), QStringLiteral( "Windows" ) );
+        QCOMPARE( S::systemOf( "BitLocker", "", "" ), QStringLiteral( "Windows" ) );
+        QCOMPARE( S::systemOf( "", "", "Microsoft reserved partition" ), QString() );   // unformatted: nothing to lose
+        QCOMPARE( S::systemOf( "ext4", "", "" ), QStringLiteral( "Linux" ) );
+        QCOMPARE( S::systemOf( "crypto_LUKS", "", "" ), QStringLiteral( "Linux" ) );
+        QCOMPARE( S::systemOf( "apfs", "", "" ), QStringLiteral( "macOS" ) );
+        QCOMPARE( S::systemOf( "vfat", "SYSTEM", "EFI system partition" ), QString() );
+        QCOMPARE( S::systemOf( "swap", "", "" ), QString() );
+        QCOMPARE( S::systemOf( "zfs_member", "", "" ), QStringLiteral( "Linux" ) );
+        QCOMPARE( S::systemOf( "ufs", "", "" ), QStringLiteral( "Another system" ) );
+
+        // A Windows dual-boot laptop as lsblk -nPo NAME,TYPE,MODEL,SIZE,FSTYPE,LABEL,PARTLABEL prints it.
+        const QString out = QStringLiteral(
+            "NAME=\"nvme0n1\" TYPE=\"disk\" MODEL=\"WD SN740\" SIZE=\"476.9G\" FSTYPE=\"\" LABEL=\"\" PARTLABEL=\"\"\n"
+            "NAME=\"nvme0n1p1\" TYPE=\"part\" MODEL=\"\" SIZE=\"260M\" FSTYPE=\"vfat\" LABEL=\"SYSTEM\" PARTLABEL=\"EFI system partition\"\n"
+            "NAME=\"nvme0n1p2\" TYPE=\"part\" MODEL=\"\" SIZE=\"16M\" FSTYPE=\"\" LABEL=\"\" PARTLABEL=\"Microsoft reserved partition\"\n"
+            "NAME=\"nvme0n1p3\" TYPE=\"part\" MODEL=\"\" SIZE=\"300G\" FSTYPE=\"ntfs\" LABEL=\"Windows\" PARTLABEL=\"Basic data partition\"\n"
+            "NAME=\"nvme0n1p4\" TYPE=\"part\" MODEL=\"\" SIZE=\"100G\" FSTYPE=\"ext4\" LABEL=\"\" PARTLABEL=\"\"\n" );
+        QCOMPARE( S::existingSystems( out ),
+                  QStringList( { QStringLiteral( "Windows · nvme0n1p3 · 300G (“Windows”, ntfs)" ),
+                                 QStringLiteral( "Linux · nvme0n1p4 · 100G (ext4)" ) } ) );
+        QVERIFY( S::existingSystems( "NAME=\"vda\" TYPE=\"disk\" MODEL=\"\" SIZE=\"40G\" FSTYPE=\"\" LABEL=\"\" PARTLABEL=\"\"\n" ).isEmpty() );
+        QVERIFY( S::existingSystems( QString() ).isEmpty() );
+    }
+    void eraseNeedsExplicitConfirmation()
+    {
+        using S = WorksuiteConfirmViewStep;
+        QVERIFY( !S::eraseBlocker( "sda", "", false, false, false ).isEmpty() );        // no disk
+        QVERIFY( !S::eraseBlocker( "sda", "sda", true, false, false ).isEmpty() );      // still reading the disk
+        QVERIFY( !S::eraseBlocker( "", "sda", false, false, false ).isEmpty() );
+        QVERIFY( S::eraseBlocker( "sdb", "sda", false, false, false ).contains( "sda" ) );
+        QVERIFY( S::eraseBlocker( "sda", "sda", false, false, false ).isEmpty() );
+        // Another system on the disk: typing the name is not enough; it must be acknowledged as well.
+        QVERIFY( !S::eraseBlocker( "sda", "sda", false, true, false ).isEmpty() );
+        QVERIFY( S::eraseBlocker( "/dev/sda", "sda", false, true, true ).isEmpty() );
+    }
     void opTags()
     {
         using S = WorksuiteConfirmViewStep;

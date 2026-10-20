@@ -10,6 +10,7 @@ import path from 'node:path'
 import { deviceInfo } from './device'
 import { pickLocale, translate, type MessageKey } from '../src/i18n/core'
 import { xdgDirs } from './xdgDirs'
+import { APP_WINDOW } from './windowDefaults'
 import {
   chromeUserAgent, downloadPath, mediaKind, unreadFromTitle, whatsappAllowed, whatsappHost, whatsappNav, whatsappPermission, whatsappPopup,
   WHATSAPP_APP_ID, WHATSAPP_FOCUS_CHANNEL, WHATSAPP_NAMES, WHATSAPP_ID, WHATSAPP_PARTITION, WHATSAPP_URL,
@@ -85,7 +86,7 @@ export function runWhatsApp() {
 
   function makeWindow() {
     const w = new BrowserWindow({
-      width: 1200, height: 820, minWidth: 480, minHeight: 360, autoHideMenuBar: true, backgroundColor: '#f0f2f5', title: 'WhatsApp',
+      ...APP_WINDOW, width: 1200, height: 820, backgroundColor: '#f0f2f5', title: 'WhatsApp',
       icon: existsSync(ICON) ? ICON : undefined,
       webPreferences: {
         preload: path.join(__dirname, 'whatsappPreload.cjs'),

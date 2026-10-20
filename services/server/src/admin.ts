@@ -10,7 +10,7 @@ import { hashPassword } from './oauth.ts';
 import { activeKey, createKey, signEnvelope, signFlat } from './signing.ts';
 import { removePeer } from './vpn.ts';
 
-const COMMANDS = ['RefreshPolicy', 'InstallApprovedApplication', 'ScheduleUpdate', 'RequestLock', 'RebootDuringWindow', 'CollectApprovedDiagnostics', 'RemoteWipe',
+const COMMANDS = ['RefreshPolicy', 'InstallApprovedApplication', 'ScheduleUpdate', 'RequestLock', 'RebootDuringWindow', 'CollectApprovedDiagnostics', 'RemoteWipe', 'RemoveApplication',
   // WorkSuite Security remote incident response (services/device-agent/src/securityCenter.ts).
   'StartMalwareScan', 'IsolateEndpoint', 'ReleaseIsolation'];
 

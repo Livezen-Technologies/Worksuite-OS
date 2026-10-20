@@ -29,6 +29,8 @@ export interface CaptureApi {
   snipSave(dataUrl: string): Promise<Result<string>>
   snipReveal(file: string): Promise<{ root: string; rel: string; name: string } | null>
   shortcutsApply(p: ShortcutPrefs | undefined): Promise<{ available: true; value: true } | { available: false; reason: string }>
+  /** The Labwc title bar theme for every app's window (electron/windowTheme.ts). */
+  windowTheme?(dark: boolean): Promise<{ available: true; value: true } | { available: false; reason: string }>
   edit(cmd: 'cut' | 'copy' | 'paste' | 'selectAll' | 'undo' | 'redo'): Promise<boolean>
   onSnipOpen(cb: (o: SnipOpen) => void): () => void
   onSnipClose(cb: (o: { id: number }) => void): () => void

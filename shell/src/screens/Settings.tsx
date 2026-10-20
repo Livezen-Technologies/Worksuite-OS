@@ -2,7 +2,7 @@
 // UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
 // can't tell, the section says so instead of showing sample values.
 import { AnimatedProgress } from '../components/AnimatedProgress'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { localTaskbarAlign, saveTaskbarAlign, shellPrefsFrom, type TaskbarAlign } from '../lib/shellPrefs'
 import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SecurityStatus, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
@@ -17,6 +17,8 @@ import { BigSwitch } from './settings/ui'
 import { SignInOptions } from './settings/SignIn'
 import { ReportProblem } from './settings/ReportProblem'
 import { Diagnostics } from './settings/Diagnostics'
+import { RadioProblems, useRadio } from './settings/Radio'
+import { GraphicsPanel } from './settings/Graphics'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
 import { KioskPanel } from './settings/Kiosk'
 import { AIPanel } from './settings/AI'
@@ -36,7 +38,9 @@ const NAV = [
   { id: 'VPN', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4' },
   { id: 'Bluetooth', tint: '#1F6BFF', icon: 'M7 7l10 10-5 5V2l5 5L7 17' },
   { id: 'Display', tint: '#0E8FA8', icon: 'M3 4h18v12H3zM8 20h8M12 16v4', sep: true },
+  { id: 'Graphics', tint: '#0E8FA8', icon: 'M6 6h12v12H6zM9 9h6v6H9zM9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4' },
   { id: 'Touchscreen & pen', tint: '#0E8FA8', icon: 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15' },
+  { id: 'Mouse & touchpad', tint: '#0E8FA8', icon: 'M12 3a6 6 0 0 0-6 6v6a6 6 0 0 0 12 0V9a6 6 0 0 0-6-6zM12 3v7M6 10h12' },
   { id: 'Multitasking', tint: '#0E8FA8', icon: 'M3 5h8v6H3zM13 5h8v6h-8zM3 15h18v4H3z' },
   { id: 'Keyboard', tint: '#7A4FE0', icon: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10' },
   { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
@@ -60,7 +64,7 @@ export type Section = (typeof NAV)[number]['id']
 const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
 const navLabel = (id: Section) => t(`settings.nav.${id}` as MessageKey)
 // Older names (launcher search, earlier builds) still land somewhere sensible.
-const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard' }
+const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Mouse: 'Mouse & touchpad', Touchpad: 'Mouse & touchpad', Pointer: 'Mouse & touchpad', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard', GPU: 'Graphics', 'Hardware acceleration': 'Graphics' }
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
 /** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
@@ -97,11 +101,18 @@ const Note = ({ children }: { children: ReactNode }) => <p className="m-0 text-x
 const WIFI_BARS = (s: number) => (s >= 67 ? 'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' : s >= 34 ? 'M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' : 'M9 16a5 5 0 0 1 6 0')
 const LOCK = 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z'
 
+const WIFI_ERROR: Record<string, MessageKey> = { bad_password: 'settings.net.badPassword', not_found: 'radio.err.notFound', no_adapter: 'radio.err.noAdapter', timeout: 'radio.err.timeout' }
+
 function NetworkPanel() {
-  const { r, reload } = useAvail(os.sysNetwork, 15_000)
+  const { r, reload: reloadNet } = useAvail(os.sysNetwork, 15_000)
+  const radio = useRadio('wifi')
+  const reload = async () => { await Promise.all([reloadNet(), radio.reload()]) }
   const [join, setJoin] = useState<{ ssid: string; secure: boolean; password: string; error: string | null; busy: boolean } | null>(null)
-  if (r.state !== 'ok') return <><H1>{t('settings.nav.Network')}</H1>{r.state === 'loading' ? <Empty title={t('settings.net.reading')} /> : <Unavail what={t('settings.net.info')} reason={r.reason} />}</>
+  const [scanning, setScanning] = useState(false)
+  const problems = <RadioProblems kind="wifi" d={radio.d} onFixed={() => void reload()} always />
+  if (r.state !== 'ok') return <><H1>{t('settings.nav.Network')}</H1>{r.state === 'loading' ? <Empty title={t('settings.net.reading')} /> : <><Unavail what={t('settings.net.info')} reason={r.reason} />{problems}</>}</>
   const n = r.value
+  const rescan = async () => { setScanning(true); await os.sysWifiRescan(); setTimeout(() => { setScanning(false); void reload() }, 4000) }
   const wifi = n.devices.find((d) => d.type === 'wifi')
   const eth = n.devices.filter((d) => d.type === 'ethernet')
   const active = n.networks.find((w) => w.in_use)
@@ -109,7 +120,7 @@ function NetworkPanel() {
     if (!join) return
     setJoin({ ...join, busy: true, error: null })
     const res = await os.sysWifiConnect(join.ssid, join.password)
-    if (res.ok) { setJoin(null); void reload() } else setJoin({ ...join, busy: false, password: '', error: res.error === 'bad_password' ? t('settings.net.badPassword') : t('settings.net.connectFailed') })
+    if (res.ok) { setJoin(null); void reload() } else setJoin({ ...join, busy: false, password: '', error: t(WIFI_ERROR[res.error] ?? 'settings.net.connectFailed') })
   }
   return <>
     <H1>{t('settings.nav.Network')}</H1>
@@ -121,11 +132,15 @@ function NetworkPanel() {
           {!wifi ? t('settings.net.noWifi') : !n.wifi_enabled ? t('common.off') : active || wifi.connection ? t('settings.net.connectedTo', { name: active?.ssid ?? wifi.connection ?? '' }) : t('common.notConnected')}
         </span>
       </span>
-      {wifi && <Switch label={t('settings.net.wifi')} checked={n.wifi_enabled} onChange={(v) => void os.sysSetWifi(v).then(reload)} />}
+      {wifi && <Switch label={t('settings.net.wifi')} checked={n.wifi_enabled} onChange={(v) => os.sysSetWifi(v).then((r) => { reload(); return r })} />}
     </div>
-    {n.wifi_enabled && (
+    {problems}
+    {n.wifi_enabled && wifi && (
       <section aria-label={t('settings.net.available')} className="flex flex-col gap-2">
-        <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('settings.net.available')}</h2>
+        <div className="flex items-center justify-between">
+          <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('settings.net.available')}</h2>
+          <button type="button" disabled={scanning} onClick={() => void rescan()} className={linkBtn}>{scanning ? t('radio.scanning') : t('radio.scan')}</button>
+        </div>
         {n.networks.length === 0 ? <Empty title={t('settings.net.none')} /> : (
           <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
             {n.networks.map((w) => (
@@ -136,6 +151,7 @@ function NetworkPanel() {
                   <span className="text-xs text-[#8FA3C8]">{w.in_use ? t('common.connected') : w.security ? '' : t('settings.net.open')}</span>
                   {w.security && <Svg d={LOCK} size={14} stroke={C.muted} />}
                   <span className="sr-only">{t('settings.net.signal', { security: w.security || t('settings.net.open'), signal: w.signal })}</span>
+                  {w.in_use && <button type="button" onClick={() => void os.sysWifiDisconnect().then(reload)} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{t('common.disconnect')}</button>}
                   {!w.in_use && join?.ssid !== w.ssid && <button type="button" onClick={() => setJoin({ ssid: w.ssid, secure: !!w.security, password: '', error: null, busy: false })} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{t('settings.net.connectEllipsis')}</button>}
                 </div>
                 {join?.ssid === w.ssid && (
@@ -162,9 +178,19 @@ function NetworkPanel() {
 }
 
 function BluetoothPanel() {
-  const { r, reload } = useAvail(os.sysBluetooth, 15_000)
-  if (r.state !== 'ok') return <><H1>{t('settings.nav.Bluetooth')}</H1>{r.state === 'loading' ? <Empty title={t('settings.bt.reading')} /> : <Unavail what={t('settings.nav.Bluetooth')} reason={r.reason} />}</>
+  const { r, reload: reloadBt } = useAvail(os.sysBluetooth, 15_000)
+  const radio = useRadio('bluetooth')
+  const reload = async () => { await Promise.all([reloadBt(), radio.reload()]) }
+  const [err, setErr] = useState<string | null>(null)
+  const problems = <RadioProblems kind="bluetooth" d={radio.d} onFixed={() => void reload()} always />
+  if (r.state !== 'ok') return <><H1>{t('settings.nav.Bluetooth')}</H1>{r.state === 'loading' ? <Empty title={t('settings.bt.reading')} /> : <><Unavail what={t('settings.nav.Bluetooth')} reason={r.reason} />{problems}</>}</>
   const b = r.value
+  const power = async (v: boolean) => {
+    setErr(null)
+    const res = await os.sysSetBluetooth(v)
+    if (!res.available) setErr(res.reason === 'blocked' ? t('radio.err.btBlocked') : t('radio.err.btPower'))
+    void reload()
+  }
   return <>
     <H1>{t('settings.nav.Bluetooth')}</H1>
     <div className={`${heroCard} flex items-center gap-4 px-5 py-[18px]`}>
@@ -172,8 +198,10 @@ function BluetoothPanel() {
         <span className="text-base font-semibold">{t('settings.nav.Bluetooth')}</span>
         <span className="text-[13px] text-[#8FA3C8]">{!b.powered ? t('common.off') : b.discoverable && b.name ? t('settings.bt.visibleAs', { name: b.name }) : b.name ? t('settings.bt.onAs', { name: b.name }) : t('common.on')}</span>
       </span>
-      <Switch label={t('settings.nav.Bluetooth')} checked={b.powered} onChange={(v) => void os.sysSetBluetooth(v).then(reload)} />
+      <Switch label={t('settings.nav.Bluetooth')} checked={b.powered} onChange={(v) => power(v)} />
     </div>
+    {err && <span role="alert" className="text-[13px] text-[#FF8A7A]">{err}</span>}
+    {problems}
     <section aria-label={t('settings.bt.myDevices')} className="flex flex-col gap-2">
       <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('settings.bt.myDevices')}</h2>
       {b.paired.length === 0 ? <Empty title={t('settings.bt.noPaired')} /> : (
@@ -195,6 +223,7 @@ function BluetoothPanel() {
 
 // Settings › Display lives in DisplaySettings.tsx (WSOS-DSK-005/006).
 import { DisplayPanel } from './DisplaySettings'
+import { PointerPanel } from './settings/Pointer'
 // Settings › Default apps and clipboard history live in DesktopSettings.tsx (WSOS-DSK-008/009).
 import { ClipboardSection, DefaultAppsPanel } from './DesktopSettings'
 // Pairing, drives, power, printers, input methods, rejected sync changes (WSOS-INT-003…006, 011, SYN-004).
@@ -853,7 +882,9 @@ function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (
   )
 }
 
-export default function Settings({ onClose }: WindowProps) {
+export default function Settings({ onClose, active }: WindowProps) {
+  const activeRef = useRef(active)
+  activeRef.current = active
   const first = useMemo(() => takeSettingsSection(), [])
   const [section, setSection] = useState<Section>(() => (isSection(first) ? first : (first && ALIAS[first]) || 'Network'))
   // Settings › Keyboard opens on Shortcuts, or on the on-screen keyboard when that was asked for.
@@ -870,25 +901,24 @@ export default function Settings({ onClose }: WindowProps) {
       const me = r.value.users.find((u) => u.login === r.value.current)
       setUser({ name: me?.name ?? r.value.current, role: me ? (me.admin ? t('settings.users.admin') : t('settings.users.standard')) : t('settings.signedIn') })
     }).catch(() => {})
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[aria-modal="true"]')) onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeRef.current !== false && !document.querySelector('[aria-modal="true"]')) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
   const badges = useMemo(() => ({ ...(driverCount ? { Drivers: String(driverCount) } : {}), ...(needsAttention(status) ? { Updates: '1' } : {}) }), [driverCount, status])
 
   return (
-    <div role="dialog" aria-modal="false" aria-label={t('launcher.settings')} className="fixed inset-0 z-50 flex bg-[#0A1A3D] font-sans text-[#E8EEFA]">
+    <div role="dialog" aria-modal="false" aria-label={t('launcher.settings')} className="relative flex h-full w-full bg-[#0A1A3D] font-sans text-[#E8EEFA]">
       <SetNav section={section} onPick={setSection} badges={badges} user={user} />
       {/* Page frame from the Set* boards: 26/36 px padding, 14 px gap; Privacy & security has its own green tint. */}
       <main className="relative flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-9 pt-[26px] pb-[82px] [&>*]:shrink-0" style={{ background: `radial-gradient(ellipse 80% 50% at 80% 0%, ${section === 'Privacy & security' ? 'var(--ws-g-glow-green)' : 'var(--ws-g-glow)'} 0%, var(--ws-g-page) 60%)` }}>
-        <button type="button" aria-label={t('settings.close')} onClick={onClose} className="absolute top-4 right-4 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#8FA3C8] hover:bg-white/10 hover:text-white">
-          <Svg d="M6 6l12 12M18 6L6 18" size={16} />
-        </button>
         {section === 'Network' && <NetworkPanel />}
         {section === 'VPN' && <VpnPanel />}
         {section === 'Bluetooth' && <BluetoothPanel />}
         {section === 'Display' && <DisplayPanel />}
+        {section === 'Graphics' && <GraphicsPanel onOpen={setSection} />}
         {section === 'Touchscreen & pen' && <TouchPanel />}
+        {section === 'Mouse & touchpad' && <PointerPanel />}
         {section === 'Keyboard' && <KeyboardPanel tab={kbTab} />}
         {section === 'Clipboard' && <ClipboardPanel />}
         {section === 'Appearance' && <AppearancePanel />}

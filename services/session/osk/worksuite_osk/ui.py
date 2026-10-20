@@ -181,7 +181,9 @@ def run(kb: Keyboard, size: str, kiosk: bool, control_path: str) -> int:  # prag
     import os
     import socket
 
-    from .control import parse
+    import sys
+
+    from .control import parse, state_line
 
     app = Gtk.Application(application_id="lk.worksuite.Osk")
     state: dict = {}
@@ -190,6 +192,15 @@ def run(kb: Keyboard, size: str, kiosk: bool, control_path: str) -> int:  # prag
         out = Output(on_hide=lambda: state["w"].set_visible(False))
         w = OskWindow(a, kb, out, size, kiosk)
         state["w"] = w
+
+        def report(*_a):
+            # The shell follows the keyboard's real state (also after its own hide key).
+            try:
+                sys.stdout.write(state_line(w.get_visible()))
+                sys.stdout.flush()
+            except OSError:
+                pass
+        w.connect("notify::visible", report)
         w.set_visible(kiosk)
         try:
             os.unlink(control_path)

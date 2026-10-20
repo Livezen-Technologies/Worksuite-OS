@@ -121,6 +121,28 @@
          Boot ("" when none is pending or the key is enrolled). Never in GetDrivers or DriversChanged; dropped after the
          next boot. -->
     <method name="GetMokPassword"><arg name="password" type="s" direction="out"/></method>
+    <!-- Update Manager (no authorization: read-only). History JSON {pending: [{id, kind, title, version, result:"pending",
+         phase, started_at}], entries: [{id, kind: os|driver|firmware|app, title, version, result: success|failed|cancelled,
+         error, started_at, finished_at, reboot_required}]}; error is for administrators' diagnostics. -->
+    <method name="GetUpdateHistory"><arg name="history_json" type="s" direction="out"/></method>
+    <!-- Flatpak apps with an update: JSON [{id: "flatpak:<app>", name, version, download_size}]. -->
+    <method name="GetAppUpdates"><arg name="updates_json" type="s" direction="out"/></method>
+    <!-- polkit: lk.worksuite.package.install. Flatpak catalog ids; empty = every app with an update. Refused
+         NotAuthorized for people when the device policy sets software_update = false. -->
+    <method name="UpdateApps">
+      <arg name="catalog_ids" type="as" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+    <!-- NetworkManager dispatcher (root only; ignored for other callers). state "full": the update coordinator checks
+         now if its last check is older than an hour or failed offline, and resumes an interrupted download. -->
+    <method name="ConnectivityChanged"><arg name="state" type="s" direction="in"/></method>
+    <!-- Software Management: ask the organization to approve a catalog app (policy software_install = request). The
+         requester is the caller's account name from the bus credentials. Returns the request JSON {id, state, ...}. -->
+    <method name="RequestApp">
+      <arg name="catalog_id" type="s" direction="in"/>
+      <arg name="reason" type="s" direction="in"/>
+      <arg name="request_json" type="s" direction="out"/>
+    </method>
     <signal name="DriversChanged"><arg name="report_json" type="s"/></signal>
     <signal name="UpdateStatusChanged"><arg name="status_json" type="s"/></signal>
     <property name="State" type="s" access="read"/>           <!-- idle | busy | interrupted -->

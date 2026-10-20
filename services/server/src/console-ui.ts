@@ -14,7 +14,7 @@ export const APP_HTML = `<!doctype html><html lang="en"><head><meta charset="utf
 <div id="app" class="shell" hidden>
 <nav class="side" aria-label="Sections"><div class="brand">${LOGO}<span>WorkSuite</span></div>
 <a href="#overview">Overview</a><a href="#devices">Devices</a><a href="#wipes">Wipe requests</a><a href="#users">Users</a>
-<a href="#enroll">Enrollment</a><a href="#policy">Policy</a><a href="#apps">App catalog</a><a href="#releases">Releases</a><a href="#problems">Problem reports</a><a href="#security">Security Center</a><a href="#monitoring">Employee monitoring</a><a href="#audit">Package audit</a><a href="#activity">Activity</a>
+<a href="#enroll">Enrollment</a><a href="#policy">Policy</a><a href="#apps">App catalog</a><a href="#software">Software Management</a><a href="#releases">Releases</a><a href="#problems">Problem reports</a><a href="#security">Security Center</a><a href="#monitoring">Employee monitoring</a><a href="#audit">Package audit</a><a href="#activity">Activity</a>
 <div class="me"><span id="me-name"></span><span id="me-org" class="muted"></span><button id="logout" class="link">Sign out</button></div></nav>
 <main id="main" tabindex="-1"></main></div>
 <div id="toast" class="toast" role="status" hidden></div>
@@ -216,6 +216,7 @@ const views = {
         h('button', { class: 'danger', onclick: () => isolateDialog(id, d.hostname) }, 'Isolate from network…'),
         h('button', { class: 'danger', onclick: () => { if (confirm('Revoke this device? It stops receiving policy and its credential stops working.')) act(() => api('POST', 'devices/' + id + '/revoke'), 'Device revoked.'); } }, 'Revoke')),
       kioskDevice(id, d.kiosk),
+      await deviceSoftwareSection(id, d),
       h('h2', {}, 'Erase'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
         h('button', { class: 'danger', onclick: () => wipeDialog({ request: true, hostname: d.hostname, label: 'Erase device', meta: 'Last seen ' + ago(d.last_seen) + ' · ' + (d.ownership === 'personal' ? 'personal' : 'corporate') + ' device.', note: 'Logged to the audit trail',
           submit: (c, x) => wipeSubmit(() => api('POST', 'wipes', { device_id: id, ...x, ...c }), (r) => r.waived_second_approver ? 'Erase sent. It runs the next time the device connects.' : 'Erase requested. Another administrator must approve it.') }) }, 'Erase device…'))],
@@ -279,6 +280,10 @@ const views = {
         drivers_online_search: f.drivers_online_search.value === '' ? null : f.drivers_online_search.value === 'true',
         drivers_auto_install: f.drivers_auto_install.value === '' ? null : f.drivers_auto_install.value === 'true',
         drivers_auto_install_gpu: f.drivers_auto_install_gpu.value === '' ? null : f.drivers_auto_install_gpu.value === 'true',
+        software_install: f.software_install.value || null,
+        software_uninstall: f.software_uninstall.value === '' ? null : f.software_uninstall.value === 'true',
+        software_update: f.software_update.value === '' ? null : f.software_update.value === 'true',
+        update_bandwidth_kbps: num('update_bandwidth_kbps'),
         screen_capture: f.screen_capture.value || null, clipboard_history: f.clipboard_history.value || null,
         antivirus: f.antivirus.value === '' ? null : f.antivirus.value === 'true', av_scan_schedule: f.av_scan_schedule.value || null, av_scan_hour: num('av_scan_hour'),
         av_signature_checks_per_day: num('av_signature_checks_per_day'), av_cpu_quota_percent: num('av_cpu_quota_percent'),
@@ -309,6 +314,10 @@ const views = {
       h('div', { class: 'row' }, h('label', {}, 'Look for drivers online after connecting', sel('drivers_online_search', [['true', 'On'], ['false', 'Off']])),
         h('label', {}, 'Install firmware automatically', sel('drivers_auto_install', [['true', 'On'], ['false', 'Off']])),
         h('label', {}, 'Install the NVIDIA driver automatically', sel('drivers_auto_install_gpu', [['true', 'On'], ['false', 'Off']]))),
+      h('div', { class: 'row' }, h('label', {}, 'Users may install', sel('software_install', [['any', 'Any software'], ['approved', 'Approved software'], ['request', 'Approved software, and request others'], ['block', 'Nothing (remote installation only)']])),
+        h('label', {}, 'Users may uninstall apps', sel('software_uninstall', [['true', 'Allowed'], ['false', 'Organization only']])),
+        h('label', {}, 'Users may update apps', sel('software_update', [['true', 'Allowed'], ['false', 'Organization only']]))),
+      h('label', {}, 'Update download limit (KiB/s, 0 = none)', h('input', { name: 'update_bandwidth_kbps', type: 'number', min: 0, value: p.update_bandwidth_kbps ?? '' })),
       h('fieldset', {}, h('legend', {}, 'WorkSuite Security'),
         h('div', { class: 'row' }, h('label', {}, 'Antivirus (ClamAV)', sel('antivirus', [['true', 'On'], ['false', 'Off']])),
           h('label', {}, 'Scheduled scans', sel('av_scan_schedule', [['daily', 'Daily quick, weekly full'], ['weekly', 'Weekly quick, monthly full'], ['off', 'Off']])),
@@ -334,20 +343,27 @@ const views = {
     if (p.desktop_widgets !== undefined) f.desktop_widgets.value = String(p.desktop_widgets);
     if (p.whatsapp !== undefined && p.whatsapp !== null) f.whatsapp.value = String(p.whatsapp);
     for (const k of ['antivirus', 'firewall_log_blocked', 'activity_monitoring']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
-    for (const k of ['drivers_online_search', 'drivers_auto_install', 'drivers_auto_install_gpu']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
+    for (const k of ['drivers_online_search', 'drivers_auto_install', 'drivers_auto_install_gpu', 'software_uninstall', 'software_update']) if (p[k] !== undefined && p[k] !== null) f[k].value = String(p[k]);
     return [h('h1', {}, 'Policy'), h('p', { class: 'muted' }, 'Current version ' + version + '. Devices verify the signature before applying it.'), f, kioskForm(p)];
   },
   async apps() {
     const { items } = await api('GET', 'catalog');
     const f = h('form', { class: 'card form', onsubmit: (e) => { e.preventDefault();
       const arches = [f.amd64.checked && 'amd64', f.arm64.checked && 'arm64'].filter(Boolean);
-      act(() => api('PUT', 'catalog/' + encodeURIComponent(f.source.value + ':' + f.pkg.value), { source: f.source.value, name: f.name.value, arches, required: f.required.checked, sha256: f.sha256.value || undefined }), 'Catalog updated.'); } },
+      act(() => api('PUT', 'catalog/' + encodeURIComponent(f.source.value + ':' + f.pkg.value), { source: f.source.value, name: f.name.value, arches, required: f.required.checked, blocked: f.blocked.checked, sha256: f.sha256.value || undefined,
+        assign: { devices: lines(f.a_devices), users: lines(f.a_users), departments: f.a_departments.value.split('\n').map((x) => x.trim()).filter(Boolean) } }),
+        'Catalog updated. Required apps are sent to their devices now.'); } },
       h('div', { class: 'row' }, h('label', {}, 'Source', h('select', { name: 'source' }, h('option', { value: 'flatpak' }, 'Flatpak'), h('option', { value: 'apt' }, 'APT'), h('option', { value: 'appimage' }, 'AppImage'))),
         h('label', {}, 'Package / app ID', h('input', { name: 'pkg', required: true, placeholder: 'org.gimp.GIMP' })), h('label', {}, 'Display name', h('input', { name: 'name', required: true }))),
       h('div', { class: 'row' }, h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'amd64', checked: true }), ' amd64')), h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'arm64', checked: true }), ' arm64')),
-        h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'required' }), ' Required on every device'))),
+        h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'required' }), ' Required (deployed automatically)')),
+        h('label', {}, h('span', {}, h('input', { type: 'checkbox', name: 'blocked' }), ' Blocked'))),
+      h('p', { class: 'muted' }, 'Assign to (leave all empty for everyone):'),
+      h('div', { class: 'row' }, h('label', {}, 'Devices (IDs)', h('textarea', { name: 'a_devices' })), h('label', {}, 'Users (emails)', h('textarea', { name: 'a_users' })),
+        h('label', {}, 'Departments (one per line)', h('textarea', { name: 'a_departments' }))),
       h('label', {}, 'SHA-256 (AppImages only)', h('input', { name: 'sha256' })), h('div', {}, h('button', { class: 'primary' }, 'Add or update')));
-    return [h('h1', {}, 'App catalog'), table(['App', 'ID', 'Arch', ''], items.map((i) => h('tr', {}, h('td', {}, i.name, i.required ? h('span', { class: 'chip' }, ' required') : null), h('td', {}, i.id), h('td', {}, i.arches.join(', ')),
+    return [h('h1', {}, 'App catalog'), table(['App', 'ID', 'Arch', ''], items.map((i) => h('tr', {}, h('td', {}, i.name, i.required ? h('span', { class: 'chip' }, ' required') : null, i.blocked ? h('span', { class: 'chip bad' }, ' blocked') : null,
+      i.assign ? h('div', { class: 'muted' }, assignText(i.assign)) : null), h('td', {}, i.id), h('td', {}, i.arches.join(', ')),
       h('td', {}, h('button', { class: 'danger', onclick: () => act(() => api('DELETE', 'catalog/' + encodeURIComponent(i.id)), 'Removed from the catalog.') }, 'Remove'))))),
       h('h2', {}, 'Add an app'), f];
   },
@@ -503,6 +519,54 @@ function kioskDevice(id, on) {
     on ? h('button', { onclick: () => toggle(false) }, 'Turn off kiosk mode') : h('button', { onclick: () => toggle(true) }, 'Turn on kiosk mode'),
     h('a', { href: '#policy' }, 'Kiosk settings'))];
 }
+
+const lines = (el) => el.value.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+const assignText = (a) => [a.devices && a.devices.length + ' device(s)', a.users && a.users.join(', '), a.departments && 'departments: ' + a.departments.join(', ')].filter(Boolean).join(' · ');
+const STATE_CLASS = { completed: 'ok', failed: 'bad', rejected: 'bad', expired: 'bad' };
+
+/** Device page: department, installed software from the last inventory, remote install and uninstall. */
+async function deviceSoftwareSection(id, d) {
+  const [sw, cat] = await Promise.all([api('GET', 'devices/' + encodeURIComponent(id) + '/software'), api('GET', 'catalog')]);
+  const dept = h('input', { 'aria-label': 'Department', value: d.department || '', placeholder: 'e.g. Finance' });
+  const pick = h('select', { 'aria-label': 'Catalog app' }, cat.items.filter((i) => i.source !== 'appimage').map((i) => h('option', { value: i.id }, i.name + ' (' + i.id + ')')));
+  const go = (action) => act(() => api('POST', 'software/deploy', { catalog_id: pick.value, action, devices: [id] }), (action === 'install' ? 'Installation' : 'Removal') + ' sent. It runs at the next check-in.');
+  return [h('h2', {}, 'Software'),
+    h('div', { class: 'card row' }, h('label', {}, 'Department', dept), h('button', { onclick: () => act(() => api('PUT', 'devices/' + id + '/department', { department: dept.value }), 'Department saved.') }, 'Save'),
+      d.revoked ? null : [pick, h('button', { onclick: () => go('install') }, 'Install'), h('button', { class: 'danger', onclick: () => go('uninstall') }, 'Uninstall')]),
+    h('p', { class: 'muted' }, sw.reported_at ? sw.items.length + ' installed packages and apps, reported ' + ago(sw.reported_at) + '. Catalog apps first.' : 'The device has not reported its inventory yet.'),
+    table(['App', 'ID', 'Version'], sw.items.slice().sort((a, b) => (b.catalog_name ? 1 : 0) - (a.catalog_name ? 1 : 0)).slice(0, 300).map((x) =>
+      h('tr', {}, h('td', {}, x.catalog_name || '—'), h('td', { class: 'mono' }, x.id), h('td', {}, x.version || '—'))))];
+}
+
+views.software = async () => {
+  const [reqs, inv, dep] = await Promise.all([api('GET', 'software/requests'), api('GET', 'software/inventory'), api('GET', 'software/deployments')]);
+  const host = new Map(inv.devices.map((d) => [d.id, d.hostname || d.id]));
+  const decide = (r, ok) => { const note = ok ? '' : (prompt('Reason shown to the user (optional)') || ''); act(() => api('POST', 'software/requests/' + r.id + '/' + (ok ? 'approve' : 'reject'), { note }), ok ? 'Approved. The app installs at the device\'s next check-in.' : 'Request rejected.'); };
+  const bulk = (app, action) => {
+    const ids = action === 'uninstall' ? app.installed_on : inv.devices.map((d) => d.id).filter((x) => !app.installed_on.includes(x));
+    if (!ids.length) { toast('No devices to change.'); return; }
+    if (confirm((action === 'install' ? 'Install ' : 'Uninstall ') + app.name + ' on ' + ids.length + ' device(s)?')) act(() => api('POST', 'software/deploy', { catalog_id: app.id, action, devices: ids }), 'Sent to ' + ids.length + ' device(s).');
+  };
+  return [h('h1', {}, 'Software Management'),
+    h('p', { class: 'muted' }, 'Who may install what is set on the Policy page (Users may install / uninstall / update). Assign apps and mark them required in the App catalog.'),
+    h('h2', {}, 'Installation requests'),
+    table(['App', 'Requested by', 'Device', 'Reason', 'When', 'Decision'], reqs.items.map((r) => h('tr', {},
+      h('td', { class: 'mono' }, r.catalog_id), h('td', {}, r.username), h('td', {}, r.hostname || r.device_id), h('td', {}, r.reason || '—'), h('td', {}, when(r.at)),
+      h('td', {}, r.state === 'pending' ? h('div', { class: 'row' }, h('button', { class: 'primary', onclick: () => decide(r, true) }, 'Approve'), h('button', { onclick: () => decide(r, false) }, 'Reject'))
+        : h('span', { class: r.state === 'approved' ? 'ok' : 'bad' }, r.state + (r.install_state ? ' · install ' + r.install_state : '') + (r.note ? ' (' + r.note + ')' : '')))))),
+    h('h2', {}, 'Inventory'),
+    table(['App', 'Assigned', 'Installed', 'Missing (required)', ''], inv.apps.map((a) => h('tr', {},
+      h('td', {}, h('b', {}, a.name), a.required ? h('span', { class: 'chip' }, ' required') : null, a.blocked ? h('span', { class: 'chip bad' }, ' blocked') : null, h('div', { class: 'muted mono' }, a.id)),
+      h('td', {}, a.assign ? assignText(a.assign) : 'Everyone', h('div', { class: 'muted' }, a.assigned_devices + ' device(s)')),
+      h('td', {}, String(a.installed_on.length)), h('td', { class: a.missing_on.length ? 'warn' : '' }, a.missing_on.map((x) => host.get(x)).join(', ') || '—'),
+      h('td', {}, a.id.startsWith('appimage:') ? null : h('div', { class: 'row' }, a.blocked ? null : h('button', { onclick: () => bulk(a, 'install') }, 'Install everywhere'), h('button', { class: 'danger', onclick: () => bulk(a, 'uninstall') }, 'Uninstall everywhere')))))),
+    h('h2', {}, 'Devices'),
+    table(['Device', 'Department', 'Apps', 'Catalog apps'], inv.devices.map((d) => h('tr', { class: 'click', tabindex: 0, onclick: () => { location.hash = 'device/' + d.id; } },
+      h('td', {}, d.hostname || d.id), h('td', {}, d.department || '—'), h('td', {}, d.reported ? String(d.app_count) : 'not reported'), h('td', {}, d.catalog_apps.join(', ') || '—')))),
+    h('h2', {}, 'Deployments'),
+    table(['App', 'Action', 'Device', 'Sent', 'Status'], dep.items.map((x) => h('tr', {}, h('td', { class: 'mono' }, x.catalog_id), h('td', {}, x.action), h('td', {}, x.hostname || x.device_id), h('td', {}, when(Date.parse(x.issued_at))),
+      h('td', {}, h('span', { class: STATE_CLASS[x.state] || 'warn' }, x.state + (x.reason ? ' (' + x.reason + ')' : ''))))))];
+};
 
 async function route() {
   const [view, arg] = (location.hash.slice(1) || 'overview').split('/');

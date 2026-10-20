@@ -58,6 +58,32 @@ interrupted download leaves the coordinator `waiting` (`download_interrupted`), 
 an `entitlement` (AUP-012): they install only with a signed, device-bound licence from `desktop/v1/os/licence` that is
 active and holds it; security releases continue during grace.
 
+## Update Manager additions (`src/history.ts`, `src/coordinator.ts`, `src/service.ts`)
+
+- **Checks on connecting**: the NetworkManager dispatcher (`networkmanager/90-worksuite-drivers`) also calls
+  `ConnectivityChanged("full")` (root only). The coordinator checks right away when its last check is older than an hour,
+  failed because the server was unreachable, or left a download interrupted (apt resumes the partial files), and does
+  nothing otherwise, so a flapping connection doesn't cause repeated checks.
+- **Release details**: signed manifests may carry `notes`, `notes_url` (https), `download_bytes`, `installed_bytes` and
+  `upgrade`; the status passes them to Settings › Updates. `upgrade: true` (a version upgrade, not a patch release) is
+  scheduled separately: in Automatic mode it installs only in the maintenance window, otherwise it waits for the person
+  (`major_upgrade`); security releases and deadlines are unchanged.
+- **History**: every OS update (online or `.wsupdate`), driver/firmware install and app update is recorded in
+  `/var/lib/worksuite-package-service/history.json` (newest first, 200 entries) with its outcome. `GetUpdateHistory`
+  returns those plus queued/running ones as pending. The `error` field is for administrators; the shell words failures.
+- **Application updates**: `GetAppUpdates` lists Flatpak apps with an update (Debian packages update with OS releases);
+  `UpdateApps(ids)` (polkit `lk.worksuite.package.install`, empty = all) runs in the job queue.
+- **Bandwidth**: policy `update_bandwidth_kbps` sets apt's `Dl-Limit` for update downloads.
+
+## Software Management permissions (policy from WorkSuite Server)
+
+People (non-root callers) are limited by `software_install`: `approved` (default; the allowlist), `request` (the
+allowlist, and `RequestApp(catalog_id, reason)` asks an administrator, recorded with the caller's account name),
+`block` (nothing; the organization deploys) or `any` (any package from the approved sources). `software_uninstall: false`
+and `software_update: false` reserve removals and app updates for the organization. The device agent (root) runs the
+organization's signed `InstallApprovedApplication`/`RemoveApplication` commands, still against the allowlist and the
+critical set. `GetCatalog` adds `requestable` and the caller's latest `request` to each app.
+
 ## Catalog, local packages, Flatpak, offline bundles
 
 - `GetCatalog` (read-only): the organization's catalog from the enrolled server's `desktop/v1/os/catalog` with the

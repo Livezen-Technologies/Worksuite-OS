@@ -34,7 +34,7 @@ An unsigned or tampered policy is rejected and the previous one stays in force.
 
 ## Remote commands (WSOS-MDM-003) — the complete list
 
-`RefreshPolicy`, `InstallApprovedApplication {catalog_id}`, `ScheduleUpdate`, `RequestLock`,
+`RefreshPolicy`, `InstallApprovedApplication {catalog_id}`, `RemoveApplication {catalog_id}`, `ScheduleUpdate`, `RequestLock`,
 `RebootDuringWindow`, `CollectApprovedDiagnostics {bundle_profile}`, `RemoteWipe {scope: worksuite_data|full_device, approval_id}`.
 `StartMalwareScan {kind: quick|full}`, `IsolateEndpoint {hours: 1–72}`, `ReleaseIsolation` (WorkSuite Security, below).
 There is no shell, exec or file-read command (WSOS-MDM-006). Anything else is rejected `UNKNOWN_COMMAND`.
@@ -49,6 +49,10 @@ reason. Acks that cannot be sent are queued in state and delivered first on the 
 
 - `InstallApprovedApplication` runs only if the id (`apt:…`, `flatpak:…`, `worksuite:…`) is also in the device's
   signed `app_allowlist`; installs go through `lk.worksuite.PackageService1`.
+- `RemoveApplication` (Software Management remote uninstall) takes an `apt:` or `flatpak:` id; the package service
+  still refuses the critical set. Both wait for the package job's `JobFinished` (`src/packageJob.ts`), so the ack is
+  `completed` only when the change really happened (else `failed` with the service's reason), then send a fresh
+  inventory so the console's Software Management view is current.
 - `RebootDuringWindow` needs a policy `maintenance_window` (`HH:MM-HH:MM`) and schedules `shutdown -r` at its start.
 - `CollectApprovedDiagnostics` accepts the fixed profiles in `src/diagnostics.ts`, which the admin console offers
   (any other name is rejected `BAD_ARGS`). No user files and no secrets (no NetworkManager connection files; user and

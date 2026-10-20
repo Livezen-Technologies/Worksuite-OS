@@ -99,6 +99,61 @@ export function contentHintFor(el: Element | null): { purpose: number; hints: nu
   return { purpose: 0, hints: COMPLETION | (ac === 'off' ? 0 : AUTOCAP) }
 }
 
+/** How long after a tap or click the focus it causes still counts as "the person picked this field". */
+export const OSK_TAP_MS = 800
+
+/** Whether focus landing on `el` should bring up the keyboard: only a text field the person just tapped or clicked
+ *  (or its label). Focus moved by the shell itself (a panel's search field focused as it opens, the window getting the
+ *  focus back after an app) does not, so a keyboard the person closed does not come back on its own. */
+export function oskShowOnFocus(el: Element | null, tap: { target: EventTarget | null; at: number } | null, now: number): boolean {
+  if (!el || !isTextField(el) || !tap || now - tap.at > OSK_TAP_MS) return false
+  const t = tap.target as Node | null
+  if (!t) return false
+  if (el === t || el.contains(t)) return true
+  const label = (t instanceof Element ? t : t.parentElement)?.closest('label')
+  return !!label && label.contains(el)
+}
+
+/**
+ * The on-screen keyboard follows the shell's text fields: shown when the person taps a field (again after closing it,
+ * by tapping the field once more), hidden when the focus leaves for something that is not a text field, when the
+ * focused field goes away (a panel closed with its search field still focused fires no focusout), or when the shell's
+ * window loses the focus to an app. Returns the remover.
+ */
+export function installOskFocus(doc: Document, api: Pick<TouchApi, 'osk'>, now: () => number = Date.now): () => void {
+  let tap: { target: EventTarget | null; at: number } | null = null
+  let shownFor: Element | null = null
+  const show = (el: Element) => { shownFor = el; const h = contentHintFor(el); void api.osk(true, h.purpose, h.hints) }
+  const hide = () => { if (!shownFor) return; shownFor = null; void api.osk(false) }
+  const down = (e: Event) => { tap = { target: e.target, at: now() } }
+  const up = (e: Event) => {
+    // A tap on the field that already has the focus (no focusin): bring the keyboard back after it was closed.
+    const el = doc.activeElement
+    if (el && el === e.target && isTextField(el) && oskShowOnFocus(el, tap, now())) show(el)
+  }
+  const focus = (e: FocusEvent) => {
+    const el = e.target as Element
+    if (oskShowOnFocus(el, tap, now())) { tap = null; show(el) }
+    else if (!isTextField(el)) hide()
+  }
+  const blur = (e: FocusEvent) => { if (isTextField(e.target as Element) && !isTextField(e.relatedTarget as Element | null)) hide() }
+  const win = doc.defaultView
+  const winBlur = () => hide()
+  const obs = typeof MutationObserver !== 'undefined' ? new MutationObserver(() => { if (shownFor && !shownFor.isConnected) hide() }) : null
+  obs?.observe(doc.documentElement, { childList: true, subtree: true })
+  doc.addEventListener('pointerdown', down, true)
+  doc.addEventListener('pointerup', up, true)
+  doc.addEventListener('focusin', focus)
+  doc.addEventListener('focusout', blur)
+  win?.addEventListener('blur', winBlur)
+  return () => {
+    obs?.disconnect()
+    doc.removeEventListener('pointerdown', down, true); doc.removeEventListener('pointerup', up, true)
+    doc.removeEventListener('focusin', focus); doc.removeEventListener('focusout', blur)
+    win?.removeEventListener('blur', winBlur)
+  }
+}
+
 export const oskWanted = (s: TouchSettings, touchMode: boolean) => s.osk === 'always' || (s.osk === 'touch' && touchMode)
 
 // ---------- preview stub (?touch=1) ----------
@@ -164,11 +219,7 @@ export function useTouchMode(): TouchState | null {
   useEffect(() => {
     if (!state || !oskWanted(state.settings, state.touchMode)) return
     const api = touchApi()
-    const focus = (e: FocusEvent) => { const el = e.target as Element; if (isTextField(el)) { const h = contentHintFor(el); void api?.osk(true, h.purpose, h.hints) } }
-    const blur = (e: FocusEvent) => { if (isTextField(e.target as Element) && !isTextField(e.relatedTarget as Element | null)) void api?.osk(false) }
-    document.addEventListener('focusin', focus)
-    document.addEventListener('focusout', blur)
-    return () => { document.removeEventListener('focusin', focus); document.removeEventListener('focusout', blur) }
+    return api ? installOskFocus(document, api) : undefined
   }, [state?.settings.osk, state?.touchMode]) // eslint-disable-line react-hooks/exhaustive-deps
   const hold = state?.settings.longPressMs ?? 600
   const touchOn = !!state && state.devices.some((d) => d.kinds.includes('touchscreen')) && state.settings.touchEnabled

@@ -1,5 +1,6 @@
 // Dark navy pieces shared by Settings, update and device screens (boot-install boards: Set*, Upd*, Hw*, U*, H*).
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { t } from '../i18n'
 import { createPortal } from 'react-dom'
 import { AnimatedProgress, type ProgressTone } from './AnimatedProgress'
 
@@ -30,15 +31,78 @@ export function Spinner({ size = 14, stroke = C.cyan }: { size?: number; stroke?
   return <svg className="ws-spin" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9" /></svg>
 }
 
-/** Board switch: 46×28 track, 22px knob. Real button with role="switch". */
-export function Switch({ label, checked, onChange, disabled, small }: { label: string; checked: boolean; onChange?: (v: boolean) => void; disabled?: boolean; small?: boolean }) {
-  const w = small ? 44 : 46, h = small ? 26 : 28, k = small ? 20 : 22
+/** What a switch's change handler may answer: a failed bridge reply (`ok: false` / `available: false`) or a thrown
+ *  error shows the switch's error line; anything else counts as applied. */
+export type SwitchResult = void | boolean | { ok?: boolean; available?: boolean; error?: string; reason?: string } | null | undefined
+export function switchFailed(r: unknown): boolean {
+  return r === false || (!!r && typeof r === 'object' && ((r as { ok?: unknown }).ok === false || (r as { available?: unknown }).available === false))
+}
+
+export interface SwitchProps {
+  label: string
+  checked: boolean
+  /** May return a promise: the switch shows "Applying…" until it settles, and an error line if it fails. */
+  onChange?: (v: boolean) => SwitchResult | Promise<SwitchResult>
+  disabled?: boolean
+  /** Waiting for the system (the caller's own busy state); the switch also shows this while its onChange runs. */
+  loading?: boolean
+  /** Why the setting can't be used here (no hardware, managed, service missing): shown under the switch, which
+   *  stays focusable but can't be changed. */
+  unavailable?: string
+  /** An error the caller already knows about (shown like a failed change). */
+  error?: string | null
+  small?: boolean
+  large?: boolean
+  color?: string
+  /** Show the On/Off word next to the track (default). */
+  stateText?: boolean
+}
+
+/** The one Settings switch (#34): role="switch" button with a visible On/Off word, a check mark in the knob when on,
+ *  a spinner while applying, a dashed track when unavailable, a 44px hit area, a focus ring (index.css), and an error
+ *  line when the change could not be applied. Off uses a bordered track so both states keep 3:1 contrast. */
+export function Switch({ label, checked, onChange, disabled, loading, unavailable, error, small, large, color = C.blue, stateText = true }: SwitchProps) {
+  const [pending, setPending] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
+  const live = useRef(true)
+  useEffect(() => { live.current = true; return () => { live.current = false } }, [])
+  const id = useId()
+  const w = large ? 50 : small ? 44 : 46, h = large ? 30 : small ? 26 : 28, k = large ? 24 : small ? 20 : 22
+  const busy = !!loading || pending
+  const blocked = !!unavailable
+  const off = disabled || !onChange
+  const msg = error ?? failed
+  const click = () => {
+    if (busy || blocked || off) return
+    setFailed(null)
+    let r: SwitchResult | Promise<SwitchResult>
+    try { r = onChange!(!checked) } catch { setFailed(t('switch.failed')); return }
+    if (r && typeof (r as Promise<SwitchResult>).then === 'function') {
+      setPending(true)
+      ;(r as Promise<SwitchResult>).then((v) => { if (live.current && switchFailed(v)) setFailed(t('switch.failed')) }, () => { if (live.current) setFailed(t('switch.failed')) })
+        .finally(() => { if (live.current) setPending(false) })
+    } else if (switchFailed(r)) setFailed(t('switch.failed'))
+  }
+  const word = busy ? t('switch.applying') : blocked ? t('switch.unavailable') : checked ? t('switch.on') : t('switch.off')
+  const describe = [blocked ? `${id}-why` : '', msg ? `${id}-err` : ''].filter(Boolean).join(' ') || undefined
   return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled || !onChange} onClick={() => onChange?.(!checked)}
-      className="relative shrink-0 cursor-pointer rounded-full transition-colors disabled:cursor-default disabled:opacity-60"
-      style={{ width: w, height: h, background: checked ? C.blue : 'rgba(127,178,255,0.25)' }}>
-      <span className="absolute top-[3px] rounded-full bg-white transition-all" style={{ width: k, height: k, left: checked ? w - k - 3 : 3 }} />
-    </button>
+    <span className="inline-flex shrink-0 flex-col items-end gap-1">
+      <span className="inline-flex items-center gap-2.5">
+        {stateText && <span aria-hidden="true" className={`min-w-[2.5em] text-right text-xs font-medium ${checked && !blocked ? 'text-[#C9D6EE]' : 'text-[#8FA3C8]'}`}>{word}</span>}
+        <button type="button" role="switch" aria-checked={checked} aria-label={label} aria-busy={busy || undefined} aria-describedby={describe}
+          aria-disabled={blocked || busy || undefined} disabled={off && !blocked} onClick={click} data-state={blocked ? 'unavailable' : busy ? 'loading' : checked ? 'on' : 'off'}
+          className={`relative shrink-0 cursor-pointer rounded-full border-2 transition-colors after:absolute after:-inset-[9px] after:content-[''] disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed ${blocked ? 'border-dashed border-[#5E739C]' : checked ? 'border-transparent' : 'border-[#8FA3C8]'}`}
+          style={{ width: w, height: h, background: blocked ? 'transparent' : checked ? color : 'rgba(4,10,26,0.55)' }}>
+          <span className={`absolute top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full transition-all ${blocked ? 'bg-[#5E739C]' : checked ? 'bg-white' : 'bg-[#C9D6EE]'}`}
+            style={{ width: k - 4, height: k - 4, left: checked ? w - k - 2 : 1 }}>
+            {busy ? <Spinner size={k - 10} stroke={checked ? color : '#1B2A4A'} />
+              : checked && !blocked ? <svg width={k - 10} height={k - 10} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg> : null}
+          </span>
+        </button>
+      </span>
+      {blocked && <span id={`${id}-why`} className="max-w-[260px] text-right text-[11px] leading-[1.4] text-[#8FA3C8]">{unavailable}</span>}
+      {msg && <span id={`${id}-err`} role="alert" className="max-w-[260px] text-right text-[11px] leading-[1.4] text-[#FF9C8A]">{msg}</span>}
+    </span>
   )
 }
 

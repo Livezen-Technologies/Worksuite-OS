@@ -355,6 +355,32 @@ paths:
                     properties: { items: { type: array, items: { $ref: '#/components/schemas/CatalogItem' } } }
         default: { $ref: '#/components/responses/Error' }
 
+  /desktop/v1/os/software-requests:
+    post:
+      tags: [os]
+      summary: A user asks the organization to approve installing a catalog app (Software Management)
+      description: Device credential. Repeating a pending request returns it. Blocked or unknown apps are refused.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [catalog_id, username]
+              properties:
+                catalog_id: { type: string }
+                username: { type: string, description: Local account name of the person asking }
+                reason: { type: string, maxLength: 500 }
+      responses:
+        '201': { description: The request (state pending, approved or rejected) }
+        default: { $ref: '#/components/responses/Error' }
+    get:
+      tags: [os]
+      summary: This device's pending requests and those decided in the last 30 days
+      responses:
+        '200': { description: '{items: [{id, catalog_id, username, state, note, at, decided_at}]}' }
+        default: { $ref: '#/components/responses/Error' }
+
   /desktop/v1/os/licence:
     get:
       tags: [os]
@@ -951,7 +977,7 @@ components:
       required: [id, command, device_id, issued_at, expires_at, args, signature]
       properties:
         id: { type: string, format: uuid }
-        command: { type: string, enum: [RefreshPolicy, InstallApprovedApplication, ScheduleUpdate, RequestLock, RebootDuringWindow, CollectApprovedDiagnostics, RemoteWipe, StartMalwareScan, IsolateEndpoint, ReleaseIsolation] }
+        command: { type: string, enum: [RefreshPolicy, InstallApprovedApplication, RemoveApplication, ScheduleUpdate, RequestLock, RebootDuringWindow, CollectApprovedDiagnostics, RemoteWipe, StartMalwareScan, IsolateEndpoint, ReleaseIsolation] }
         device_id: { type: string }
         issued_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }

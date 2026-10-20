@@ -85,6 +85,12 @@ export interface WorkSuiteApi {
   /** File-name search below root/rel; kind 'any' | 'documents' | 'spreadsheets'; days 0 = any time. */
   filesSearch(root: string, rel: string, q: string, kind: string, days: number): Promise<CloudResult<{ hits: FileHit[]; ms: number; truncated: boolean }>>
   filesMkdir(root: string, rel: string, name: string): Promise<CloudResult<string>>
+  /** The XDG Desktop folder relative to home (created if missing). */
+  desktopDir?(): Promise<CloudResult<string>>
+  /** File names in ~/Templates, offered under the desktop menu's "New". */
+  filesTemplates?(): Promise<string[]>
+  /** A new empty file (template null) or a copy of a template; never overwrites. */
+  filesNewFile?(root: string, rel: string, name: string, template: string | null): Promise<CloudResult<string>>
   filesRename(root: string, rel: string, name: string): Promise<CloudResult<string>>
   /** Move to the freedesktop.org Trash. */
   filesTrash(root: string, rels: string[]): Promise<CloudResult<{ count: number; ids: string[] }>>
@@ -133,6 +139,8 @@ export interface WorkSuiteApi {
   /** A notice in the notification centre; clicking it opens Settings › Drivers (onOpenSettings). */
   driversNotify(summary: string, body: string): Promise<unknown>
   onOpenSettings(cb: (section: string) => void): () => void
+  /** NetworkManager, BlueZ or UPower signalled a change ('network' | 'bluetooth' | 'battery'; electron/sysWatch.ts). */
+  onSysChanged?(cb: (kind: string) => void): () => void
   /** Settings › Users: accounts on this computer (electron/users.ts). */
   sysUsers(): Promise<Avail<{ current: string; users: LocalUser[] }>>
   /** Settings › Users › Sign-in options: this device's PIN and security keys (electron/signin.ts). Changes go
@@ -153,6 +161,13 @@ export interface WorkSuiteApi {
   reportSend(id: string, keep: string[], description: string): Promise<CloudResult<string>>
   /** Organization app catalog from the server via the package service (WSOS-APP-001). Never sample data. */
   pkgCatalog(): Promise<CloudResult<AppCatalog>>
+  /** Software Management: ask the organization to approve installing a catalog app (policy software_install = request). */
+  pkgRequestApp(catalogId: string, reason: string): Promise<CloudResult<AppRequest>>
+  /** Update Manager: installed, failed and pending updates (OS, drivers, firmware, apps). */
+  updateHistory(): Promise<CloudResult<UpdateHistory>>
+  /** Flatpak apps with an update, and updating them (empty list = all); a job like pkgInstall. */
+  appUpdates(): Promise<CloudResult<AppUpdate[]>>
+  updateApps(ids: string[]): Promise<CloudResult<string>>
   /** Native file dialog; returns an opaque handle the other calls accept (the renderer never names paths). */
   pickFile(kind: 'deb' | 'appimage' | 'wsupdate' | 'wgconf' | 'ovpn'): Promise<CloudResult<{ handle: string; name: string }>>
   localDebPreview(handle: string): Promise<CloudResult<LocalDebPreview>>
@@ -202,6 +217,20 @@ export interface WorkSuiteApi {
   sysBluetooth(): Promise<Avail<BluetoothState>>
   sysSetBluetooth(on: boolean): Promise<Avail<true>>
   sysBtConnect(address: string, on: boolean): Promise<Avail<true>>
+  /** Starts a Wi-Fi scan; results come with the next sysNetwork(). */
+  sysWifiRescan(): Promise<Avail<true>>
+  /** Disconnects from the Wi-Fi network in use ('not_connected' when there is none). */
+  sysWifiDisconnect(): Promise<Avail<true>>
+  /** #31: adapters, drivers, radio switches and services behind Wi-Fi or Bluetooth, with the problems found. */
+  radioDiagnose(kind: RadioKind): Promise<CloudResult<RadioDiagnosis & { text: string }>>
+  /** Unblocks the radio (rfkill) or restarts its service (an administrator confirms). */
+  radioFix(kind: RadioKind, fix: Exclude<RadioFix, 'find_driver'>): Promise<CloudResult<true>>
+  /** #16: GPU, drivers, graphics APIs and what renders the desktop and the apps. */
+  graphics(): Promise<CloudResult<GraphicsState>>
+  /** Renderer for the desktop from the next sign-in. */
+  graphicsSetRenderer(choice: RendererChoice): Promise<CloudResult<true>>
+  /** Forgets an automatic fallback to software rendering, so the next sign-in tries the GPU again. */
+  graphicsReset(): Promise<CloudResult<true>>
   sysSound(): Promise<Avail<SoundState>>
   sysSetVolume(percent: number): Promise<Avail<true>>
   sysSetMute(muted: boolean): Promise<Avail<true>>
@@ -248,6 +277,8 @@ export interface RecoveryInfo {
 import { withAppCenterPreview } from './appcenterPreview'
 import type { DesktopModule } from './launcher'
 import type { HwDevice, HwKind } from '../../electron/hardware'
+import type { RadioDiagnosis, RadioFix, RadioKind } from '../../electron/radios'
+import type { GraphicsState, RendererChoice } from '../../electron/graphics'
 import type { LocalUser } from '../../electron/users'
 import type { SecurityKey, SignInMethod, SignInMethods, SigninResult } from '../../electron/signin'
 import type { SearchHit, SearchResponse, SourceState } from '../../electron/search'
@@ -283,11 +314,24 @@ export interface OsUpdateStatus {
   critical?: boolean; resumed?: boolean
   /** Update Center (or the organisation's mirror) the coordinator checked, and the device's ring. */
   update_host?: string; ring?: 'development' | 'pilot' | 'stable'
+  /** From the signed manifest: release notes (plain text), sizes, a version upgrade, a security release. */
+  notes?: string | null; notes_url?: string | null; download_bytes?: number | null; installed_bytes?: number | null; upgrade?: boolean; security?: boolean
 }
+export interface AppRequest { id: string; state: 'pending' | 'approved' | 'rejected'; note: string | null; at: number }
+export interface UpdateHistoryEntry {
+  id: string; kind: 'os' | 'driver' | 'firmware' | 'app'; title: string; version: string | null
+  result: 'success' | 'failed' | 'cancelled' | 'pending'; finished_at?: number; started_at: number | null; reboot_required?: boolean
+  /** For administrators (diagnostics); people see a worded result. */
+  error?: string | null
+}
+export interface UpdateHistory { pending: UpdateHistoryEntry[]; entries: UpdateHistoryEntry[] }
+export interface AppUpdate { id: string; name: string; version: string | null; download_size: string | null }
 export interface CatalogEntry {
   id: string; source: 'apt' | 'flatpak' | 'appimage'; name: string; arches: string[]
   required?: boolean; blocked?: boolean; sha256?: string; category?: string; summary?: string; publisher?: string
   installed: boolean; available: boolean; blocked_reason: string | null
+  /** Software Management (older services omit both): the person may ask for approval; their latest request. */
+  requestable?: boolean; request?: AppRequest | null
 }
 export type AppCatalog =
   | { state: 'ok'; arch: string; items: CatalogEntry[]; fetched_at: number }
@@ -369,6 +413,9 @@ export interface DevicePolicies {
   whatsapp?: boolean | null
   /** Screenshots and the snipping tool; clipboard history (Super+V). 'disabled' = off; kiosks: always off. */
   screen_capture?: 'allowed' | 'disabled' | null; clipboard_history?: 'allowed' | 'disabled' | null
+  /** Software Management and the Update Manager's download limit (KiB/s, 0 = none). */
+  software_install?: 'any' | 'approved' | 'request' | 'block' | null; software_uninstall?: boolean | null; software_update?: boolean | null
+  update_bandwidth_kbps?: number | null
 }
 export type KioskApp = { type: 'url'; url: string } | { type: 'module'; id: string } | { type: 'desktop'; id: string }
 export interface KioskSummary { user: string; app: KioskApp; allowed_urls: string[]; idle_reset_minutes: number; show_on_screen_keyboard: boolean; exit_pin: boolean
@@ -721,6 +768,10 @@ const stub: WorkSuiteApi = {
   async reportSend() { return { ok: false, error: 'service_unavailable' } },
   // Browser preview: there is no package service or server here, so these answer honestly instead of inventing apps.
   async pkgCatalog() { return { ok: true, value: { state: 'not_enrolled', arch: 'amd64', items: [], error: 'Preview mode: no package service, so there is no app catalog.' } } },
+  async pkgRequestApp() { return { ok: false, error: 'service_unavailable' } },
+  async updateHistory() { return { ok: false, error: 'service_unavailable' } },
+  async appUpdates() { return { ok: false, error: 'service_unavailable' } },
+  async updateApps() { return { ok: false, error: 'service_unavailable' } },
   async pickFile() { return { ok: false, error: 'service_unavailable' } },
   async localDebPreview() { return { ok: false, error: 'service_unavailable' } },
   async localDebInstall() { return { ok: false, error: 'service_unavailable' } },
@@ -791,6 +842,28 @@ const stub: WorkSuiteApi = {
   async sysBluetooth() { return stubAvail(stubSys.bt) },
   async sysSetBluetooth(on) { stubSys.bt.powered = on; return stubAvail(true as const) },
   async sysBtConnect(address, on) { stubSys.bt.paired = stubSys.bt.paired.map((d) => d.address === address ? { ...d, connected: on } : d); return stubAvail(true as const) },
+  async sysWifiRescan() { return stubAvail(true as const) },
+  async sysWifiDisconnect() { stubSys.net.networks = stubSys.net.networks.map((n) => ({ ...n, in_use: false })); return stubAvail(true as const) },
+  async radioDiagnose(kind) {
+    if (stubSim === 'none') return { ok: false, error: 'unavailable' }
+    const d: RadioDiagnosis = kind === 'wifi'
+      ? { kind, status: 'ok', service: 'active', problems: [], hardware: [{ name: 'Wi-Fi 6E AX211 160MHz', driver: 'iwlwifi', ids: '8086:51f0' }], adapters: [{ name: 'wlan0', device: 'Wi-Fi 6E AX211 160MHz', driver: 'iwlwifi', soft_blocked: false, hard_blocked: false }] }
+      : { kind, status: stubSys.bt.powered ? 'ok' : 'off', service: 'active', problems: [], hardware: [], adapters: [{ name: 'hci0', device: null, driver: 'btusb', soft_blocked: false, hard_blocked: false }] }
+    return { ok: true, value: { ...d, text: `${kind}: ${d.status}` } }
+  },
+  async radioFix() { return { ok: true, value: true } },
+  async graphics() {
+    if (stubSim === 'none') return { ok: false, error: 'unavailable' }
+    return { ok: true, value: {
+      gpus: [{ name: 'Alder Lake-P GT2 [Iris Xe Graphics]', vendor: 'Intel Corporation', ids: '8086:46a6', driver: 'i915', driver_version: null, proprietary: false, virtual: false }],
+      compositor: { renderer: 'gpu', reason: null, choice: 'auto', fell_back: false },
+      apps: { accelerated: true, disabled_reason: null, features: { gpu_compositing: 'enabled', rasterization: 'enabled', video_decode: 'enabled', webgl: 'enabled', webgpu: 'disabled_off' }, gl_renderer: 'Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2)', gl_version: 'OpenGL ES 3.2 Mesa 25.0.7', driver_vendor: 'Mesa', driver_version: '25.0.7' },
+      vaapi: { available: true, driver: 'Intel iHD driver for Intel(R) Gen Graphics - 25.2.3', decode: ['H264Main', 'HEVCMain', 'VP9Profile0', 'AV1Profile0'], encode: ['H264Main', 'HEVCMain'] },
+      vulkan: { available: true, api_version: '1.4.305', devices: [{ name: 'Intel(R) Iris(R) Xe Graphics (ADL GT2)', type: 'integrated_gpu', driver: 'Intel open-source Mesa driver Mesa 25.0.7' }] },
+    } }
+  },
+  async graphicsSetRenderer() { return { ok: true, value: true } },
+  async graphicsReset() { return { ok: true, value: true } },
   async sysSound() { return stubAvail(stubSys.sound) },
   async sysSetVolume(p) { stubSys.sound.volume = Math.max(0, Math.min(100, Math.round(p))); return stubAvail(true as const) },
   async sysSetMute(m) { stubSys.sound.muted = m; return stubAvail(true as const) },

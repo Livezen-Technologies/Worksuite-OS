@@ -6,6 +6,7 @@ import { DIAGNOSTIC_PROFILES } from './diagnostics.ts';
 export const ALLOWED_COMMANDS = [
   'RefreshPolicy',
   'InstallApprovedApplication',
+  'RemoveApplication',
   'ScheduleUpdate',
   'RequestLock',
   'RebootDuringWindow',
@@ -23,6 +24,7 @@ const DAY = 86_400_000;
 const MAX_TTL: Record<CommandName, number> = {
   RefreshPolicy: 7 * DAY,
   InstallApprovedApplication: 7 * DAY,
+  RemoveApplication: 7 * DAY,
   ScheduleUpdate: 30 * DAY,
   RequestLock: 7 * DAY,
   RebootDuringWindow: 30 * DAY,
@@ -79,6 +81,7 @@ export function signingBytes(env: Omit<CommandEnvelope, 'signature'> & { signatu
 
 const ARG_CHECKS: Partial<Record<CommandName, (a: Record<string, unknown>) => boolean>> = {
   InstallApprovedApplication: (a) => typeof a.catalog_id === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(a.catalog_id),
+  RemoveApplication: (a) => typeof a.catalog_id === 'string' && /^(apt|flatpak):[A-Za-z0-9._+-]{1,200}$/.test(a.catalog_id),
   RemoteWipe: (a) => (a.scope === 'worksuite_data' || a.scope === 'full_device') && typeof a.approval_id === 'string',
   StartMalwareScan: (a) => a.kind === 'quick' || a.kind === 'full',
   IsolateEndpoint: (a) => Number.isInteger(a.hours) && (a.hours as number) >= 1 && (a.hours as number) <= 72,

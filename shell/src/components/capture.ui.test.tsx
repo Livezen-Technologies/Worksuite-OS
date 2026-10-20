@@ -229,7 +229,10 @@ describe('Settings › Clipboard', () => {
   it('is locked when the organization turned it off', async () => {
     await render(<ClipPanel initial={{ enabled: false, entries: [], blocked: true }} />)
     expect(document.body.textContent).toContain('Your organization turned off clipboard history')
-    expect((document.querySelector('[role="switch"]') as HTMLButtonElement).disabled).toBe(true)
+    const sw = document.querySelector('[role="switch"]') as HTMLButtonElement
+    expect(sw.getAttribute('aria-disabled')).toBe('true')
+    await act(async () => { sw.click() })
+    expect(sw.getAttribute('aria-checked')).toBe('false')
   })
 })
 

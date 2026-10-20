@@ -74,7 +74,7 @@ export function AIPanel() {
         <span className="text-base font-semibold">{t('ai.title')}</span>
         <span className="text-[13px]" style={{ color: on ? C.green : C.muted }}>{managedOff ? t('ai.set.offByOrg') : on ? t('ai.set.onHint') : t('common.off')}</span>
       </span>
-      <BigSwitch label={t('ai.title')} checked={on} disabled={managedOff || busy === 'enabled'} onChange={(v) => run('enabled', ai().setSettings({ enabled: v }))} />
+      <BigSwitch label={t('ai.title')} checked={on} unavailable={managedOff ? t('ai.set.offByOrg') : undefined} loading={busy === 'enabled'} onChange={(v) => run('enabled', ai().setSettings({ enabled: v }))} />
     </div>
     <p className="m-0 flex items-center gap-2 text-xs text-[#9FE3BF]"><Svg d={SHIELD} size={14} stroke="#5FD39A" />{t('ai.privacy')}</p>
 

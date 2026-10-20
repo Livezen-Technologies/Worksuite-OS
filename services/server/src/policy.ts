@@ -68,6 +68,14 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   activity_monitoring: (v) => typeof v === 'boolean',
   activity_retention_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 730,
   activity_idle_threshold_s: (v) => Number.isInteger(v) && (v as number) >= 60 && (v as number) <= 3600,
+  // Software Management (Admin Center): what users may do with software on their own. 'any' = any package from the
+  // approved sources, 'approved' = only the allowlist, 'request' = the allowlist plus asking an administrator for other
+  // catalog apps, 'block' = nothing (administrators still deploy remotely). Uninstall/update false = only the organization.
+  software_install: (v) => v === 'any' || v === 'approved' || v === 'request' || v === 'block',
+  software_uninstall: (v) => typeof v === 'boolean',
+  software_update: (v) => typeof v === 'boolean',
+  // Update Manager › Advanced options: download bandwidth cap for OS and application updates (KiB/s, 0 = none).
+  update_bandwidth_kbps: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 1_000_000,
   ai_models: (v) => Array.isArray(v) && v.length <= 100 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9._-]{1,63}$/.test(x)),
 };
 

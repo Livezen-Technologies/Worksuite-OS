@@ -2,7 +2,7 @@
 // search, new folder, rename, freedesktop.org Trash, copy/move jobs with conflict prompts, and eject.
 // The renderer only names roots and relative paths; everything is resolved through resolveIn and stays inside a root.
 import { execFile } from 'node:child_process'
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statfsSync, writeFileSync } from 'node:fs'
+import { constants as fsc, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statfsSync, writeFileSync } from 'node:fs'
 import { copyFile, lstat, mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { resolveIn, roots, type FileEnv } from './files'
@@ -158,6 +158,54 @@ export function mkdirIn(env: Env, root: string, rel: string, name: string): Repl
   const target = path.join(p.full, name)
   if (existsSync(target)) return { ok: false, error: 'exists' }
   try { mkdirSync(target) } catch { return { ok: false, error: 'write_failed' } }
+  return { ok: true, value: join(rel, name) }
+}
+
+// ---- Desktop folder and new files (desktop right-click menu, #27) ----
+/** An XDG user directory ($XDG_CONFIG_HOME/user-dirs.dirs, e.g. XDG_DESKTOP_DIR="$HOME/Desktop") as a path relative to
+ *  home; the fallback when it is unset, outside home or the file is missing. */
+export function userDirRel(home: string, key: 'DESKTOP' | 'TEMPLATES', fallback: string, read: (f: string) => string = (f) => readFileSync(f, 'utf8')): string {
+  let text = ''
+  try { text = read(path.join(xdgDirs(home).config, 'user-dirs.dirs')) } catch { return fallback }
+  const m = new RegExp(`^XDG_${key}_DIR="([^"\n]*)"`, 'm').exec(text)
+  if (!m) return fallback
+  const v = m[1].replace(/^\$HOME(?=\/|$)/, home)
+  if (!path.isAbsolute(v)) return fallback
+  const rel = path.relative(home, path.normalize(v))
+  // "$HOME" itself means "no such folder" in xdg-user-dirs; anything outside home is not used.
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return fallback
+  return rel.split(path.sep).join('/')
+}
+
+/** The Desktop folder (relative to home), created when it is not there yet. */
+export function desktopDir(env: Env): Reply<string> {
+  const rel = userDirRel(env.home, 'DESKTOP', 'Desktop')
+  try { mkdirSync(path.join(env.home, ...rel.split('/')), { recursive: true }) } catch { return { ok: false, error: 'write_failed' } }
+  return { ok: true, value: rel }
+}
+
+/** Files in ~/Templates (XDG_TEMPLATES_DIR) offered under "New", like other desktops do. */
+export function templates(env: Env): string[] {
+  const dir = path.join(env.home, ...userDirRel(env.home, 'TEMPLATES', 'Templates').split('/'))
+  try {
+    return readdirSync(dir).filter((n) => !n.startsWith('.') && okName(n) && lstatSync(path.join(dir, n)).isFile()).sort((a, b) => a.localeCompare(b)).slice(0, 50)
+  } catch { return [] }
+}
+
+/** A new empty file, or a copy of a template, inside a root; never overwrites. */
+export function newFileIn(env: Env, root: string, rel: string, name: string, template: string | null): Reply<string> {
+  const p = resolveIn(env, root, rel)
+  if (!p || !okName(name) || (template !== null && !okName(template))) return { ok: false, error: 'invalid' }
+  const target = path.join(p.full, name)
+  if (existsSync(target)) return { ok: false, error: 'exists' }
+  try {
+    if (template === null) writeFileSync(target, '', { flag: 'wx' })
+    else {
+      const src = path.join(env.home, ...userDirRel(env.home, 'TEMPLATES', 'Templates').split('/'), template)
+      if (!lstatSync(src).isFile()) return { ok: false, error: 'invalid' }
+      copyFileSync(src, target, fsc.COPYFILE_EXCL)
+    }
+  } catch { return { ok: false, error: 'write_failed' } }
   return { ok: true, value: join(rel, name) }
 }
 

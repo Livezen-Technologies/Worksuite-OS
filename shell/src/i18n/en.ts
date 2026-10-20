@@ -5,9 +5,13 @@ import { widgetsEn } from './widgets'
 import { securityEn } from './security'
 import { captureEn } from './capture'
 import { driversEn } from './drivers'
+import { softwareEn } from './software'
 import { whatsappEn } from './whatsapp'
 import { desktopsEn } from './desktops'
+import { controlsEn } from './controls'
+import { desktopShellEn } from './desktopShell'
 import { bootuiEn } from './bootui'
+import { hardwareEn } from './hardware'
 
 const en = {
   // On-device AI assistant (services/ai): src/i18n/ai.ts
@@ -16,9 +20,13 @@ const en = {
   ...securityEn,
   ...captureEn,
   ...driversEn,
+  ...softwareEn,
   ...whatsappEn,
   ...desktopsEn,
+  ...controlsEn,
+  ...desktopShellEn,
   ...bootuiEn,
+  ...hardwareEn,
   // Panel / taskbar
   'panel.taskbar': 'Taskbar',
   'panel.openLauncher': 'Open launcher',
@@ -240,7 +248,7 @@ const en = {
   'settings.bat.toFull': '{eta} to full',
   'settings.bt.myDevices': 'My devices',
   'settings.bt.noPaired': 'No paired devices',
-  'settings.bt.note': 'Pairing new devices and scanning for nearby devices aren\'t available from Settings yet.',
+  'settings.bt.note': 'Keep the device you’re pairing close by and in pairing mode. Devices that show a code are confirmed on the device itself.',
   'settings.bt.onAs': 'On · this computer is "{name}"',
   'settings.bt.reading': 'Reading Bluetooth status…',
   'settings.bt.visibleAs': 'Visible to nearby devices as "{name}"',
@@ -1177,6 +1185,23 @@ const en = {
   'lock.switchUser': 'Switch user',
   'lock.unlock': 'Unlock',
   'lock.unlockToRead': 'Unlock to read',
+  'lock.status': 'Status',
+  'lock.wifiOn': 'Wi-Fi connected to {ssid}',
+  'lock.wifiConnected': 'Wi-Fi connected',
+  'lock.wired': 'Wired network connected',
+  'lock.wifiOff': 'Wi-Fi is off',
+  'lock.offline': 'Not connected',
+  'lock.netUnknown': 'Network status unavailable',
+  'lock.battery': 'Battery {pct}',
+  'lock.batteryCharging': 'Battery {pct}, charging',
+  'lock.batteryFull': 'Battery fully charged',
+  'lock.unread': 'Unread while locked',
+  'lock.messages': '{n} unread messages',
+  'lock.messagesOne': '1 unread message',
+  'lock.notifications': '{n} notifications',
+  'lock.notificationsOne': '1 notification',
+  'lock.checking': 'Checking…',
+  'lock.back': 'Back',
   'lock.user': 'User',
   'lock.verifyFailed': 'Unable to verify password. Try again.',
   // Recovery
@@ -1405,6 +1430,7 @@ const en = {
   // Window chrome
   'window.maximize': 'Maximize',
   'window.minimize': 'Minimize',
+  'window.restore': 'Restore',
   // Power
   'power.confirmTitle': 'Shut down now?',
   'power.countdown': 'Shutting down automatically in {secs} seconds.',
