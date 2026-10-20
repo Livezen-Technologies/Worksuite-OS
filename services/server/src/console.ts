@@ -13,7 +13,7 @@ import { APP_CSS, APP_HTML, APP_JS } from './console-ui.ts';
 import { redactKiosk, type KioskPolicy } from './kiosk.ts';
 import { setValidatedPolicy, validatePolicy } from './policy.ts';
 import { qrMatrix } from './qr.ts';
-import { REMOTE_SUPPORT_PERMISSION, dashboard as rsDashboard, history as rsHistory, requestSession, terminateSession } from './remoteSupport.ts';
+import { REMOTE_SUPPORT_PERMISSION, getSignals as rsGetSignals, postSignal as rsPostSignal, dashboard as rsDashboard, history as rsHistory, requestSession, terminateSession } from './remoteSupport.ts';
 import { Throttle } from './throttle.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
@@ -225,6 +225,15 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const res = terminateSession(db, a, ctx.params.id);
     log(a, 'remote_support_terminated', { session_id: ctx.params.id });
     send(ctx, 200, res);
+  });
+  r.on('GET', '/admin/api/remote-support/sessions/{id}/signal', (ctx) => {
+    const a = rsAdmin(ctx);
+    send(ctx, 200, rsGetSignals(db, 'admin', ctx.params.id, { org_id: a.org_id }, Number(ctx.url.searchParams.get('after')) || 0));
+  });
+  r.on('POST', '/admin/api/remote-support/sessions/{id}/signal', async (ctx) => {
+    const a = rsAdmin(ctx);
+    rsPostSignal(db, 'admin', ctx.params.id, { org_id: a.org_id }, await body(ctx));
+    send(ctx, 204);
   });
   r.on('PUT', '/admin/api/devices/{id}/assignee', async (ctx) => {
     const a = admin(ctx);

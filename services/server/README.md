@@ -38,7 +38,14 @@ policy, app catalog, releases (read-only) and an activity log.
   default 60, at most 240); the device's user approves or denies it, and the session is shown active only once the
   device reports the user's choice. `remote_support.unattended` skips the prompt on corporate-owned devices only, is
   shown to their users, and the indicator stays visible. Unanswered requests expire after 3 minutes. Every
-  transition is in the activity log. Desktop streaming, chat, file transfer and clipboard are not served yet (below).
+  transition is in the activity log.
+- **Remote desktop viewer** (`#viewer/<session>`): WebRTC video of the device's screen (captured by the shell through the
+  ScreenCast portal, after consent), mouse/keyboard over the data channel (applied on the device only while its user
+  grants control: RemoteDesktop portal when the backend has it, else labwc's virtual pointer/keyboard via wlrctl/wtype),
+  chat, full screen, view only, reconnect, disconnect, and live stats (resolution, fps, bitrate, loss, RTT) from
+  getStats. Signalling is relayed by `…/sessions/{id}/signal` (device: X-WS-Device; admin: console session) only while
+  the session is active; media is DTLS-SRTP, peer to peer. STUN/TURN: `WORKSUITE_ICE_SERVERS` (JSON RTCIceServer[]);
+  without it only devices reachable on the same network connect.
 
 ## Security model
 
@@ -87,9 +94,8 @@ node src/main.ts devices --db ws.db ; node src/main.ts device-revoke --db ws.db 
 
 - Federation to an external OneAuth or AD/LDAP. Users are local.
 - Resumable binary diagnostic bundles. JSON summaries are accepted.
-- Remote support media: the screen/input stream (WebRTC over the device's ScreenCast/RemoteDesktop portals), chat,
-  file transfer, clipboard sync, monitor/quality selection and session recording. Consent, sessions, policy and audit
-  are in place; the viewer page is not.
+- Remote support: file transfer, clipboard sync, in-session monitor switching (the portal chooser picks the screen at
+  start), quality presets, session recording, and a bundled TURN server.
 - Push (`sync/events` is accepted but not acted on), and multi-node deployment (SQLite, one process).
 
 ## Tests

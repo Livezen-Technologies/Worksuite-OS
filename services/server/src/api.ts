@@ -1,6 +1,6 @@
 // desktop/v1 and desktop/v1/os (api-contracts/openapi.yaml). Tenant scoping comes from the authenticated user or
 // device, never from the request. Idempotency-Key replays within 24 h return the stored response.
-import { pendingCommands as rsPendingCommands, deviceReport as rsDeviceReport } from './remoteSupport.ts';
+import { pendingCommands as rsPendingCommands, deviceReport as rsDeviceReport, getSignals as rsGetSignals, postSignal as rsPostSignal } from './remoteSupport.ts';
 import { createPublicKey, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { DEFAULT_WEB_APPS, nextSeq, secret, sha256, tx } from './db.ts';
@@ -412,6 +412,17 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
       rsDeviceReport(db, d.id, ctx.params.id, obj(await ctx.body()));
       return { status: 204 };
     });
+  });
+
+  // WebRTC signalling for a consented session (the shell's capture window, with the device credential).
+  r.on('GET', '/desktop/v1/os/remote-support/sessions/{id}/signal', (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    send(ctx, 200, rsGetSignals(db, 'device', ctx.params.id, { device_id: d.id }, Number(ctx.url.searchParams.get('after')) || 0));
+  });
+  r.on('POST', '/desktop/v1/os/remote-support/sessions/{id}/signal', async (ctx) => {
+    const d = deviceFromHeader(db, ctx, true);
+    rsPostSignal(db, 'device', ctx.params.id, { device_id: d.id }, obj(await ctx.body()));
+    send(ctx, 204);
   });
 
   r.on('GET', '/desktop/v1/policies', (ctx) => {

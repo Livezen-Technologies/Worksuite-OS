@@ -20,7 +20,11 @@ export const APP_HTML = `<!doctype html><html lang="en"><head><meta charset="utf
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="/admin/app.js"></script></body></html>`;
 
-export const APP_CSS = `
+export const APP_CSS = `.rs-view{display:grid;grid-template-columns:1fr 280px;gap:14px}.rs-screen{position:relative;background:#000;border-radius:10px;overflow:hidden;min-height:300px}
+.rs-screen video{width:100%;height:auto;display:block;outline:none;cursor:crosshair}.rs-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.rs-chat{display:flex;flex-direction:column;gap:8px}.rs-log{height:260px;overflow:auto;border:1px solid #8884;border-radius:8px;padding:8px;font-size:13px}
+.rs-stats{font-size:12px;line-height:1.6}@media (max-width:900px){.rs-view{grid-template-columns:1fr}}
+
 :root{--bg:#f5f7fb;--panel:#fff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--accent:#0A6CFF;--accent-text:#fff;--side:#001842;--side-text:#cbd5e1;
 --ok:#15803d;--warn:#b45309;--bad:#b91c1c;--chip:#eef2ff;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--bg:#0b1120;--panel:#111a2e;--text:#e2e8f0;--muted:#94a3b8;--line:#1e293b;--side:#050b18;--side-text:#94a3b8;
@@ -378,7 +382,78 @@ const views = {
         h('td', {}, x.administrator), h('td', {}, x.device), h('td', {}, x.user || '—'), h('td', {}, x.started_at ? when(x.started_at) : '—'), h('td', {}, x.ended_at ? when(x.ended_at) : '—'),
         h('td', {}, dur(x.duration_s)), h('td', {}, (x.granted_mode || x.mode) === 'control' ? 'Full control' : 'View only', x.unattended ? h('div', { class: 'muted' }, 'Unattended policy') : null),
         h('td', {}, x.state === 'ended' ? (END[x.end_reason] || 'Ended') : x.state === 'active' ? h('span', { class: 'ok' }, 'Active') : 'Waiting for user'),
-        h('td', {}, x.state !== 'ended' ? h('button', { type: 'button', onclick: () => end(x.id) }, 'Disconnect') : null))))];
+        h('td', {}, x.state === 'active' ? h('a', { href: '#viewer/' + encodeURIComponent(x.id) }, 'Open ') : null, x.state !== 'ended' ? h('button', { type: 'button', onclick: () => end(x.id) }, 'Disconnect') : null))))];
+  },
+  // Remote desktop viewer (issue #19): WebRTC from the device's portal screen capture, encrypted by DTLS-SRTP; mouse,
+  // keyboard and chat go over the data channel. The device applies input only while its user has granted control.
+  async viewer(id) {
+    if (rsViewer.stop) rsViewer.stop();
+    const base = 'remote-support/sessions/' + encodeURIComponent(id) + '/signal';
+    const video = h('video', { autoplay: true, playsinline: true, muted: true, tabindex: 0, 'aria-label': 'Remote screen' });
+    const status = h('span', { class: 'muted', role: 'status' }, 'Connecting…');
+    const stats = h('div', { class: 'rs-stats muted' }, '—');
+    const log = h('div', { class: 'rs-log', 'aria-live': 'polite' });
+    const say = (who, text) => { log.append(h('div', {}, h('b', {}, who + ': '), text)); log.scrollTop = log.scrollHeight; };
+    let pc = null, dc = null, after = 0, live = true, granted = null, viewOnly = false, lastBytes = 0, lastAt = 0;
+    const send = (m) => { if (dc && dc.readyState === 'open') dc.send(JSON.stringify(m)); };
+    const mode = h('button', { type: 'button', onclick: () => { viewOnly = !viewOnly; mode.textContent = viewOnly ? 'Remote control' : 'View only'; } }, 'View only');
+    const stop = async (sayBye) => {
+      live = false; rsViewer.stop = null;
+      if (sayBye) await api('POST', base, { type: 'bye' }).catch(() => {});
+      if (pc) pc.close();
+    };
+    rsViewer.stop = () => stop(true);
+    const end = () => act(async () => { await stop(true); await api('POST', 'remote-support/sessions/' + encodeURIComponent(id) + '/terminate'); location.hash = 'support'; }, 'Session ended.');
+    const pos = (e) => { const r = video.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }; };
+    const input = (m) => { if (!viewOnly && granted === 'control') send(m); };
+    video.addEventListener('mousemove', (e) => input({ t: 'pm', ...pos(e) }));
+    video.addEventListener('mousedown', (e) => { video.focus(); input({ t: 'pb', b: e.button, down: true, ...pos(e) }); e.preventDefault(); });
+    video.addEventListener('mouseup', (e) => input({ t: 'pb', b: e.button, down: false, ...pos(e) }));
+    video.addEventListener('contextmenu', (e) => e.preventDefault());
+    video.addEventListener('wheel', (e) => { input({ t: 'ax', dx: Math.sign(e.deltaX), dy: Math.sign(e.deltaY) }); e.preventDefault(); }, { passive: false });
+    video.addEventListener('keydown', (e) => { input({ t: 'k', key: e.key, code: e.code, down: true }); e.preventDefault(); });
+    video.addEventListener('keyup', (e) => { input({ t: 'k', key: e.key, code: e.code, down: false }); e.preventDefault(); });
+    const chatIn = h('input', { type: 'text', 'aria-label': 'Message', maxlength: 500 });
+    const chatForm = h('form', { class: 'row', onsubmit: (e) => { e.preventDefault(); const t = chatIn.value.trim(); if (!t) return; send({ t: 'chat', text: t }); say('You', t); chatIn.value = ''; } }, chatIn, h('button', { type: 'submit' }, 'Send'));
+    const poll = async () => {
+      while (live) {
+        try {
+          const r = await api('GET', base + '?after=' + after);
+          granted = r.granted_mode;
+          status.textContent = (pc && pc.connectionState === 'connected' ? 'Connected' : 'Waiting for the device') + ' · ' + (granted === 'control' ? 'user allowed remote control' : 'user allowed view only');
+          if (!pc) {
+            pc = new RTCPeerConnection({ iceServers: r.ice_servers || [] });
+            pc.ontrack = (e) => { video.srcObject = e.streams[0] || new MediaStream([e.track]); };
+            pc.onicecandidate = (e) => { if (e.candidate) api('POST', base, { type: 'ice', candidate: e.candidate.toJSON() }).catch(() => {}); };
+            pc.ondatachannel = (e) => { dc = e.channel; dc.onmessage = (m) => { try { const x = JSON.parse(m.data); if (x.t === 'chat') say('User', String(x.text).slice(0, 500)); } catch {} }; };
+          }
+          for (const m of r.messages) {
+            after = Math.max(after, m.id);
+            if (m.type === 'offer') { await pc.setRemoteDescription({ type: 'offer', sdp: m.sdp }); await pc.setLocalDescription(await pc.createAnswer()); await api('POST', base, { type: 'answer', sdp: pc.localDescription.sdp }); }
+            else if (m.type === 'ice' && m.candidate) await pc.addIceCandidate(m.candidate).catch(() => {});
+            else if (m.type === 'bye') { status.textContent = 'The user stopped sharing.'; await stop(false); return; }
+          }
+          if (pc) {
+            const rep = await pc.getStats(); let s = '';
+            rep.forEach((x) => {
+              if (x.type === 'inbound-rtp' && x.kind === 'video') {
+                const now = x.timestamp, kbps = lastAt ? Math.round(((x.bytesReceived - lastBytes) * 8) / (now - lastAt)) : 0; lastBytes = x.bytesReceived; lastAt = now;
+                s += (x.frameWidth || 0) + '×' + (x.frameHeight || 0) + ' · ' + Math.round(x.framesPerSecond || 0) + ' fps · ' + kbps + ' kbit/s · lost ' + (x.packetsLost || 0) + ' packets · ';
+              }
+              if (x.type === 'candidate-pair' && x.state === 'succeeded' && x.nominated) s += 'RTT ' + Math.round((x.currentRoundTripTime || 0) * 1000) + ' ms · ';
+            });
+            stats.textContent = s || '—';
+          }
+        } catch (e) { status.textContent = e.message; if (/ended|waiting/.test(e.message)) { await stop(false); return; } }
+        await new Promise((res) => setTimeout(res, 1000));
+      }
+    };
+    poll();
+    return [h('p', {}, h('a', { href: '#support' }, '← Remote Support')), h('h1', {}, 'Remote session'),
+      h('div', { class: 'rs-bar' }, h('button', { type: 'button', onclick: () => video.requestFullscreen && video.requestFullscreen() }, 'Full screen'), mode,
+        h('button', { type: 'button', onclick: () => { stop(true); setTimeout(() => route(), 300); } }, 'Reconnect'), h('button', { type: 'button', class: 'danger', onclick: end }, 'Disconnect'), status),
+      h('div', { class: 'rs-view' }, h('div', { class: 'rs-screen' }, video),
+        h('div', { class: 'rs-chat' }, h('h2', {}, 'Chat'), log, chatForm, h('h2', {}, 'Session information'), stats))];
   },
   async activity() {
     const { items } = await api('GET', 'log');
@@ -461,10 +536,12 @@ function kioskDevice(id, on) {
     h('a', { href: '#policy' }, 'Kiosk settings'))];
 }
 
+const rsViewer = { stop: null };
 async function route() {
+  if (rsViewer.stop && !location.hash.startsWith('#viewer/')) rsViewer.stop();
   const [view, arg] = (location.hash.slice(1) || 'overview').split('/');
   const fn = views[view] || views.overview;
-  for (const a of document.querySelectorAll('.side a')) a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + (view === 'device' ? 'devices' : view === 'problem' ? 'problems' : view));
+  for (const a of document.querySelectorAll('.side a')) a.toggleAttribute('aria-current', a.getAttribute('href') === '#' + (view === 'device' ? 'devices' : view === 'problem' ? 'problems' : view === 'viewer' ? 'support' : view));
   for (const a of document.querySelectorAll('.side a[aria-current]')) a.setAttribute('aria-current', 'page');
   const main = $('#main');
   try { main.replaceChildren(...[await fn(arg ? decodeURIComponent(arg) : undefined)].flat(Infinity).filter((x) => x != null)); main.focus(); }

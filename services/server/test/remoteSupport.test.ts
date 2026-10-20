@@ -149,3 +149,38 @@ test('unattended only with policy AND a corporate device; disabled policy refuse
   assert.equal((await call('POST', 'remote-support/sessions', { cookie: tess, body: { device_id: dev.device_id, mode: 'view', reason: 'blocked' } })).status, 409);
   admin.setPolicy(db, orgA, {});
 });
+
+test('signalling relay: only for a consented, active session; device offers, admin answers; stops at end', async () => {
+  const dev = await enroll(orgA);
+  const other = await enroll(orgA);
+  const tess = await login('tess@a.test', 'tess-password');
+  const zed = await login('zed@b.test', 'zed-password');
+  const id = (await call('POST', 'remote-support/sessions', { cookie: tess, body: { device_id: dev.device_id, mode: 'view', reason: 'screen flickers' } })).body.session_id;
+  const dsig = (method: string, body?: unknown, cred = dev.credential, q = '') => fetch(`${base}/desktop/v1/os/remote-support/sessions/${id}/signal${q}`, { method, headers: { 'x-ws-device': cred, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+
+  // Before consent nothing is relayed.
+  assert.equal((await dsig('POST', { type: 'offer', sdp: 'v=0' })).status, 409);
+  assert.equal((await call('GET', `remote-support/sessions/${id}/signal`, { cookie: tess })).status, 409);
+  assert.equal(await device(dev.credential).report(id, { state: 'active', granted_mode: 'view', consent: 'user' }), 204);
+
+  assert.equal((await dsig('POST', { type: 'answer', sdp: 'x' })).status, 400, 'device may not answer');
+  assert.equal((await dsig('POST', { type: 'offer', sdp: 'v=0 offer' })).status, 204);
+  assert.equal((await dsig('POST', { type: 'offer', sdp: 'x' }, other.credential)).status, 404, 'another device cannot inject');
+  assert.equal((await call('GET', `remote-support/sessions/${id}/signal`, { cookie: zed })).status, 404, 'another org cannot read');
+  const got = (await call('GET', `remote-support/sessions/${id}/signal`, { cookie: tess })).body;
+  assert.equal(got.granted_mode, 'view');
+  assert.deepEqual(got.messages.map((m: any) => [m.type, m.sdp]), [['offer', 'v=0 offer']]);
+  assert.equal((await call('POST', `remote-support/sessions/${id}/signal`, { cookie: tess, body: { type: 'offer', sdp: 'x' } })).status, 400);
+  assert.equal((await call('POST', `remote-support/sessions/${id}/signal`, { cookie: tess, body: { type: 'answer', sdp: 'v=0 answer' } })).status, 204);
+  assert.equal((await call('POST', `remote-support/sessions/${id}/signal`, { cookie: tess, body: { type: 'ice', candidate: { candidate: 'candidate:1', sdpMid: '0' } } })).status, 204);
+  const toDev = await (await dsig('GET')).json() as any;
+  assert.deepEqual(toDev.messages.map((m: any) => m.type), ['answer', 'ice']);
+  const after = toDev.messages.at(-1).id;
+  assert.deepEqual((await (await dsig('GET', undefined, dev.credential, `?after=${after}`)).json() as any).messages, []);
+  const log = (await call('GET', 'log', { cookie: tess })).body.items.map((i: any) => i.action);
+  assert.ok(log.includes('remote_support_stream_offered') && log.includes('remote_support_stream_answered'));
+
+  await call('POST', `remote-support/sessions/${id}/terminate`, { cookie: tess });
+  assert.equal((await dsig('GET')).status, 409, 'relay stops at the end');
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM remote_signals WHERE session_id = ?').get(id) as { n: number }).n, 0, 'signals dropped');
+});

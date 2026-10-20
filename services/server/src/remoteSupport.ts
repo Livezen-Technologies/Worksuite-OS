@@ -19,7 +19,11 @@ export const SCHEMA = `CREATE TABLE IF NOT EXISTS remote_sessions (
   unattended INTEGER NOT NULL DEFAULT 0, command_id TEXT, requested_at INTEGER NOT NULL, started_at INTEGER,
   ended_at INTEGER, expires_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS remote_sessions_org ON remote_sessions(org_id, requested_at);`;
+CREATE INDEX IF NOT EXISTS remote_sessions_org ON remote_sessions(org_id, requested_at);
+CREATE TABLE IF NOT EXISTS remote_signals (
+  id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, to_side TEXT NOT NULL, body TEXT NOT NULL, at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS remote_signals_session ON remote_signals(session_id, to_side, id);`;
 
 const PENDING_MS = 3 * 60_000;
 /** A device polls every 10 s: seen within this window counts as online. */
@@ -147,4 +151,58 @@ export function history(db: DatabaseSync, orgId: number, now = Date.now(), limit
     FROM remote_sessions s JOIN users u ON u.id = s.admin_id JOIN devices d ON d.id = s.device_id
     WHERE s.org_id = ? ORDER BY s.requested_at DESC LIMIT ?`).all(orgId, limit) as Record<string, unknown>[])
     .map((s) => ({ ...s, unattended: !!s.unattended, duration_s: s.started_at ? Math.round((((s.ended_at as number | null) ?? now) - (s.started_at as number)) / 1000) : 0 }));
+}
+
+// ---- WebRTC signalling relay (issue #19 media path) ----
+// SDP offers/answers and ICE candidates pass through here between the device (X-WS-Device) and the administrator's
+// viewer (admin session cookie). The media itself goes peer to peer (or via the configured TURN server) and is
+// encrypted end to end by DTLS-SRTP; the server never sees it. Nothing is relayed unless the device has reported the
+// user's consent (session active), and the relay stops the moment the session ends.
+export type Side = 'device' | 'admin';
+const SIGNAL_TYPES = new Set(['offer', 'answer', 'ice', 'bye']);
+const MAX_SIGNAL = 64 * 1024;
+
+/** STUN/TURN servers for both peers, from WORKSUITE_ICE_SERVERS (JSON RTCIceServer[]); none = same-network only. */
+export function iceServers(env: string | undefined = process.env.WORKSUITE_ICE_SERVERS): unknown[] {
+  try {
+    const v = JSON.parse(env ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => x && typeof x === 'object' && (typeof x.urls === 'string' || Array.isArray(x.urls))) : [];
+  } catch { return []; }
+}
+
+function activeSession(db: DatabaseSync, id: string, where: { device_id?: string; org_id?: number }, now: number) {
+  sweep(db, now);
+  const s = (where.device_id
+    ? db.prepare('SELECT id, org_id, admin_id, state, granted_mode FROM remote_sessions WHERE id = ? AND device_id = ?').get(id, where.device_id)
+    : db.prepare('SELECT id, org_id, admin_id, state, granted_mode FROM remote_sessions WHERE id = ? AND org_id = ?').get(id, where.org_id!)) as
+    { id: string; org_id: number; admin_id: number; state: string; granted_mode: string | null } | undefined;
+  if (!s) throw new HttpError(404, 'NOT_FOUND', 'no such session');
+  if (s.state !== 'active') {
+    db.prepare('DELETE FROM remote_signals WHERE session_id = ?').run(id);
+    throw new HttpError(409, 'CONSENT_REQUIRED', s.state === 'requested' ? 'waiting for the user to allow the session' : 'the session has ended');
+  }
+  return s;
+}
+
+export function postSignal(db: DatabaseSync, from: Side, id: string, where: { device_id?: string; org_id?: number }, b: Record<string, unknown>, now = Date.now()) {
+  const s = activeSession(db, id, where, now);
+  if (typeof b.type !== 'string' || !SIGNAL_TYPES.has(b.type)) throw invalid('type', 'offer, answer, ice or bye');
+  if (from === 'device' && b.type === 'answer') throw invalid('type', 'the device makes the offer');
+  if (from === 'admin' && b.type === 'offer') throw invalid('type', 'the device makes the offer');
+  const body = JSON.stringify({ type: b.type, sdp: typeof b.sdp === 'string' ? b.sdp : undefined, candidate: b.candidate && typeof b.candidate === 'object' ? b.candidate : undefined });
+  if (body.length > MAX_SIGNAL) throw invalid('body', 'too large');
+  // A new offer (first connect or reconnect) starts negotiation afresh: older messages would only confuse the peers.
+  if (b.type === 'offer') db.prepare('DELETE FROM remote_signals WHERE session_id = ?').run(id);
+  db.prepare('INSERT INTO remote_signals (session_id, to_side, body, at) VALUES (?, ?, ?, ?)').run(id, from === 'device' ? 'admin' : 'device', body, now);
+  if (b.type === 'offer' || b.type === 'answer')
+    db.prepare('INSERT INTO admin_log (org_id, user_id, action, detail, at) VALUES (?, ?, ?, ?, ?)')
+      .run(s.org_id, s.admin_id, `remote_support_${b.type === 'offer' ? 'stream_offered' : 'stream_answered'}`, JSON.stringify({ session_id: id, by: from }), now);
+}
+
+/** Messages for one side after cursor `after`, with the session's current grant (the viewer shows view-only). */
+export function getSignals(db: DatabaseSync, to: Side, id: string, where: { device_id?: string; org_id?: number }, after: number, now = Date.now()) {
+  const s = activeSession(db, id, where, now);
+  const rows = db.prepare('SELECT id, body FROM remote_signals WHERE session_id = ? AND to_side = ? AND id > ? ORDER BY id LIMIT 200').all(id, to, after) as { id: number; body: string }[];
+  db.prepare('DELETE FROM remote_signals WHERE session_id = ? AND at < ?').run(id, now - 10 * 60_000);
+  return { granted_mode: s.granted_mode, ice_servers: iceServers(), messages: rows.map((r) => ({ id: r.id, ...JSON.parse(r.body) })) };
 }
