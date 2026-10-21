@@ -135,6 +135,12 @@ class KeysTest(unittest.TestCase):
         self.assertEqual(ran, [FIT_KEY, FIT_KEY])
         self.assertIn(f'<keybind key="C-A-W-{FIT_KEY}"><action name="FitToOutput"/></keybind>', rc_bindings())
 
+    def test_lift_and_lower_leave_the_taskbar_windows_alone(self):
+        # #53: the taskbar windows are worksuite-shell too, but undecorated; the shell's own windows are decorated.
+        for line in rc_bindings().splitlines():
+            if "worksuite-shell" in line:
+                self.assertEqual(line.count("<query "), line.count('decoration="full"'), line)
+
     def test_panel_height_is_the_taskbars(self):
         from worksuite_bridge.__main__ import panel_height
         self.assertEqual(panel_height({}), 52)                       # #53: 52, not 56 (shell/src/screens/Desktop.tsx)

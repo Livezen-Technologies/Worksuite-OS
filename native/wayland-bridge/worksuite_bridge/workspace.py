@@ -228,7 +228,10 @@ OMNI_KEY = "F24"
 LIFT_KEY = "F23"
 LOWER_KEY = "F22"
 RAISE_KEY = "F21"
-SHELL_QUERY = 'identifier="worksuite-shell"'
+# decoration="full": the shell's own full-screen windows (server-side decorations on, hidden while full screen), not its
+# taskbar windows (#53: "WorkSuite taskbar <output>", undecorated and always on top by rc.xml's rule), which must stay
+# above the apps when the shell goes back below them.
+SHELL_QUERY = 'identifier="worksuite-shell" decoration="full"'
 # #53: a window restored from maximized (or full screen) goes back to the size it had before. Labwc 0.8 keeps only its
 # top-left corner in the usable area there, so a window as tall as the screen (an app that started maximized, or asked
 # for the whole screen) came back over the taskbar. FitToOutput shrinks the focused window to the usable area (the
@@ -387,6 +390,8 @@ def _put_shortcuts(rc: str, block: str) -> str:
     return rc[:line] + block + rc[line:]
 
 
+_TASKBAR = re.compile(r"<!-- worksuite-taskbar:begin[\s\S]*?<!-- worksuite-taskbar:end -->\n?")
+
 # Settings › Appearance (shell/electron/windowTheme.ts): the title bar theme, WorkSuite or WorkSuite-Light.
 _THEME_NAME = re.compile(r"(<theme>(?:(?!</theme>)[\s\S])*?<name>)([^<]*)(</name>)")
 
@@ -420,6 +425,13 @@ def refresh_rc(user: str, system: str) -> str:
     keys = _SHORTCUTS.search(user)
     if keys:
         out = _put_shortcuts(out, keys.group(0))
+    bar = _TASKBAR.search(user)
+    if bar:
+        # The shell's per-output taskbar placement (shell/electron/taskbar.ts, #53).
+        out = _TASKBAR.sub("", out)
+        close = out.rfind("</labwc_config>")
+        block = bar.group(0).rstrip("\n") + "\n"
+        out = out[:close] + block + out[close:] if close >= 0 else out.rstrip("\n") + "\n" + block
     return out
 
 

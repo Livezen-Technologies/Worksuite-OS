@@ -1,5 +1,5 @@
 import { findBundles } from './bundles'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, powerMonitor, session, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, screen, dialog, ipcMain, nativeImage, Notification, powerMonitor, session, shell, type IpcMainInvokeEvent } from 'electron'
 
 // Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
 const DRAG_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4nGNgoCaQz/7/nxiM1wBCYNSAUQNGigEUZSZyAAAnXe3wcJ4r8wAAAABJRU5ErkJggg=='
@@ -67,6 +67,7 @@ import { fileHead, isWindowsProgram } from './winexe'
 import { externalAllowed, loadGrants, permissionAllowed, shellWebPreferences } from './webSecurity'
 import { xdgDirs } from './xdgDirs'
 import { IconCache } from './icons'
+import { taskbarHost, taskbarTitle, writeTaskbarRules, type TaskbarRect } from './taskbar'
 
 // Runs as the logged-in user; never a general root command runner (WSOS-ARC-001).
 // URL scheme allow-list, renderer prefs and per-origin permission grants: ./webSecurity (WSOS-SEC-001/003/006).
@@ -630,10 +631,75 @@ app.whenReady().then(() => {
     exec: realExec,
     storeFile: path.join(xdgDirs(app.getPath('home')).config, 'worksuite', 'displays.json'),
     spawn: (cmd, args) => { const p = spawn(cmd, args, { stdio: 'ignore' }); p.on('error', () => undefined); return { kill: () => p.kill() } },
-    onChange: (st: DisplayState) => { layout = st.layout; broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)) },
+    onChange: (st: DisplayState) => { layout = st.layout; broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)); taskbarOutputs() },
   })
   let layout: Layout | null = null
-  void displays.state().then((r) => { if (r.ok && !layout) layout = r.value.layout })
+  void displays.state().then((r) => { if (r.ok && !layout) { layout = r.value.layout; taskbarOutputs() } })
+
+  // #53: the taskbar's own always-on-top window per output (electron/taskbar.ts). Each mirrors the taskbar of the shell
+  // window on that output (its "owner": the main window for the primary output, ''), which keeps every state.
+  const userRc = path.join(xdgDirs(app.getPath('home')).config, 'worksuite', 'labwc', 'rc.xml')
+  const taskbarWins = new Map<string, BrowserWindow>()         // output → taskbar window
+  const taskbarOwners = new Map<string, Electron.WebContents>() // output ('' = primary) → shell window it mirrors
+  let primaryOutput = ''
+  const taskbars = taskbarHost({
+    writeRules: async (block) => {
+      try { writeTaskbarRules(userRc, '/etc/xdg/worksuite/labwc/rc.xml', block) } catch { return false }
+      return new Promise<boolean>((resolve) => execFile('labwc', ['--reconfigure'], (err) => resolve(!err)))
+    },
+    settle: () => new Promise((r) => setTimeout(r, 150)),
+    make: (r, b) => {
+      const w = new BrowserWindow({ ...b, frame: false, transparent: true, backgroundColor: '#00000000', resizable: false, movable: false, minimizable: false,
+        maximizable: false, fullscreenable: false, skipTaskbar: true, title: taskbarTitle(r.name), webPreferences: shellPrefs() })
+      const wc = w.webContents
+      shellContents.add(wc)
+      taskbarWins.set(r.name, w)
+      w.on('page-title-updated', (e) => e.preventDefault())   // Labwc's rules match this title
+      w.on('closed', () => { shellContents.delete(wc); if (taskbarWins.get(r.name) === w) taskbarWins.delete(r.name) })
+      wc.on('will-navigate', (e) => e.preventDefault())
+      wc.setWindowOpenHandler(() => ({ action: 'deny' }))
+      void w.loadFile(path.join(__dirname, '../dist/index.html'), { query: { mode: 'taskbar', output: r.name } })
+      return w
+    },
+    refocus: (h) => { setTimeout(() => void panelClient?.activate(h), 150) },
+  })
+  function taskbarOutputs() {
+    let rects: TaskbarRect[] = layout ? outputRects(layout) : []
+    if (layout) primaryOutput = layout.primary
+    if (!rects.length) {
+      // No layout from wlr-randr yet: the primary display as Electron sees it.
+      const d = screen.getPrimaryDisplay().bounds
+      rects = [{ name: primaryOutput || 'primary', x: d.x, y: d.y, width: d.width, height: d.height }]
+      primaryOutput = rects[0].name
+    }
+    void taskbars.setOutputs(rects)
+  }
+  const ownerOf = (output: string) => taskbarOwners.get(output === primaryOutput ? '' : output) ?? (output === primaryOutput ? win?.webContents : undefined)
+  // The owner's taskbar markup and root attributes (touch mode, theme) for the taskbar window of its output.
+  handle('ws:taskbarPublish', (output, html, attrs) => {
+    if (!ipcSender || html.length > 2_000_000) return false
+    taskbarOwners.set(output, ipcSender)
+    const tw = taskbarWins.get(output || primaryOutput)
+    if (tw && !tw.isDestroyed()) tw.webContents.send('ws:taskbarHtml', { html, attrs: parseJson(attrs) })
+    return true
+  })
+  // A taskbar window loaded (or reloaded): its owner sends its taskbar again.
+  handle('ws:taskbarHello', () => {
+    const name = [...taskbarWins].find(([, w]) => w.webContents === ipcSender)?.[0]
+    if (name) ownerOf(name)?.send('ws:taskbarRepublish', null)
+    return !!name
+  })
+  // A click (or right-click, wheel) in a taskbar window: the owner performs it on its own taskbar.
+  handle('ws:taskbarEvent', (json) => {
+    const name = [...taskbarWins].find(([, w]) => w.webContents === ipcSender)?.[0]
+    const ev = parseJson(json)
+    if (!name || !ev || typeof ev !== 'object') return false
+    ownerOf(name)?.send('ws:taskbarEvent', ev)
+    return true
+  })
+  // The desktop is showing (signed in, not ending the session): the taskbar windows exist only then.
+  handle('ws:taskbarWanted', (on) => { void taskbars.setWanted(on === '1'); return true })
+  app.on('before-quit', () => taskbars.stop())
   // A thrown error would reach the renderer as a bare IPC rejection ("Unexpected error", #60): answer with a code.
   const safe = <T>(p: Promise<T>) => p.catch((e: unknown) => { console.error('display:', e); return { ok: false, error: 'internal' } })
   handle('ws:displayState', () => safe(displays.state()))
@@ -749,7 +815,7 @@ app.whenReady().then(() => {
     stateDir: path.join(app.getPath('home'), '.local/state/worksuite/permissions'),
   }))
   // #53: the bridge reserves the taskbar's height (52 px, touch mode 64 px) at the bottom of every output.
-  startTouchHost(handle, broadcast, app.getPath('home'), undefined, (h) => panelClient?.setPanelHeight(h))
+  startTouchHost(handle, broadcast, app.getPath('home'), undefined, (h) => { void taskbars.setHeight(h); return panelClient?.setPanelHeight(h) })
   // Settings › Mouse & touchpad (#35): Labwc libinput block, applied live with labwc --reconfigure.
   startPointerHost(handle, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).
@@ -799,7 +865,7 @@ app.whenReady().then(() => {
     session: async () => { const s = await loadSession(brokerFn, (url, init) => fetch(url, { headers: init?.headers }), () => deviceCredential()); return s.ok ? s.value : null },
     fetch: (url, init) => fetch(url, init as RequestInit),
   })
-  hooks.windows = (w) => activity.windows(w, ACTIVATED_FLAG)
+  hooks.windows = (w) => { activity.windows(w, ACTIVATED_FLAG); void taskbars.setWindows(w) }
   app.on('before-quit', () => activity.stop())
   // Administrator prompts from the WorkSuite polkit agent (G05, WSOS-INT-010).
   startPolkitBridge(handle, broadcast)

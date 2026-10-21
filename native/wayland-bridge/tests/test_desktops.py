@@ -262,6 +262,8 @@ class RcTest(unittest.TestCase):
         system = (Path(__file__).resolve().parents[3] / "services/session/labwc/rc.xml").read_text()
         stale = system.replace('<action name="ToggleAlwaysOnBottom"/>\n    </windowRule>', '<action name="ToggleOmnipresent"/>\n    </windowRule>')
         stale = rewrite_rc(stale, ["Mail", "Code", "Play"], True)
+        bar = "<!-- worksuite-taskbar:begin (written by the shell) -->\n  <windowRules>\n    <windowRule identifier=\"worksuite-shell\" title=\"WorkSuite taskbar eDP-1\"><action name=\"MoveTo\" x=\"0\" y=\"748\"/></windowRule>\n  </windowRules>\n<!-- worksuite-taskbar:end -->\n"
+        stale = stale.replace("</labwc_config>", bar + "</labwc_config>")
         stale = stale.replace("</labwc_config>", "<!-- worksuite-touch:begin (x) -->\n  <touch deviceName=\"t\" mapToOutput=\"HDMI-A-1\" />\n<!-- worksuite-touch:end -->\n</labwc_config>")
         out = refresh_rc(stale, system)
         rule = out[out.index('<windowRule identifier="worksuite-shell"'):]
@@ -274,6 +276,9 @@ class RcTest(unittest.TestCase):
         self.assertIn('<field content="desktop_entry_name"', out)    # the app is named instead
         self.assertNotRegex(out, r"<margin\b[^>]*bottom=\"")            # #53: the bridge alone reserves the taskbar
         self.assertEqual(out.count("worksuite-touch:begin"), 1)
+        self.assertEqual(out.count("worksuite-taskbar:begin"), 1)             # #53: the taskbar windows' placement
+        self.assertIn('title="WorkSuite taskbar eDP-1"', out)
+        self.assertIn('title="WorkSuite taskbar *"', out)                     # and the system rule (always on top)
         self.assertLess(out.index('<touch deviceName="t"'), out.index("</labwc_config>"))
         self.assertEqual(refresh_rc(out, system), out)          # stable
         self.assertEqual(refresh_rc("", system), system)

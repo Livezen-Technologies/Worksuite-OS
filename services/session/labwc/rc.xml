@@ -177,9 +177,9 @@
     <keybind key="C-A-S-W-F14"><action name="SendToDesktop" to="14" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 14"/></keybind>
     <keybind key="C-A-S-W-F15"><action name="SendToDesktop" to="15" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 15"/></keybind>
     <keybind key="C-A-S-W-F16"><action name="SendToDesktop" to="16" follow="no"/><action name="Execute" command="/usr/lib/worksuite/worksuite-workspace-event move 16"/></keybind>
-    <keybind key="C-A-W-F23"><action name="ForEach"><query identifier="worksuite-shell" omnipresent="no"/><then><action name="ToggleAlwaysOnBottom"/><action name="ToggleOmnipresent"/></then></action><action name="ForEach"><query identifier="worksuite-shell"/><then><action name="Raise"/></then></action></keybind>
-    <keybind key="C-A-W-F22"><action name="ForEach"><query identifier="worksuite-shell" omnipresent="yes"/><then><action name="ToggleOmnipresent"/><action name="ToggleAlwaysOnBottom"/></then></action></keybind>
-    <keybind key="C-A-W-F21"><action name="ForEach"><query identifier="worksuite-shell"/><then><action name="Raise"/></then></action></keybind>
+    <keybind key="C-A-W-F23"><action name="ForEach"><query identifier="worksuite-shell" decoration="full" omnipresent="no"/><then><action name="ToggleAlwaysOnBottom"/><action name="ToggleOmnipresent"/></then></action><action name="ForEach"><query identifier="worksuite-shell" decoration="full"/><then><action name="Raise"/></then></action></keybind>
+    <keybind key="C-A-W-F22"><action name="ForEach"><query identifier="worksuite-shell" decoration="full" omnipresent="yes"/><then><action name="ToggleOmnipresent"/><action name="ToggleAlwaysOnBottom"/></then></action></keybind>
+    <keybind key="C-A-W-F21"><action name="ForEach"><query identifier="worksuite-shell" decoration="full"/><then><action name="Raise"/></then></action></keybind>
     <keybind key="C-A-W-F24"><action name="ToggleOmnipresent"/></keybind>
     <keybind key="C-A-W-F20"><action name="FitToOutput"/></keybind>
     <!-- Screenshots (shell/electron/capture.ts through worksuite-screenshot; xdg-desktop-portal when the shell is not running):
@@ -220,6 +220,16 @@
          Actions in a rule run when the window maps. -->
     <windowRule identifier="worksuite-shell" serverDecoration="yes">
       <action name="ToggleAlwaysOnBottom"/>
+    </windowRule>
+    <!-- #53: the taskbar's own windows (shell/electron/taskbar.ts, one per output, titled "WorkSuite taskbar <output>"):
+         undecorated, ALWAYS ON TOP (above every app window, on every desktop), not on the taskbar or in Alt+Tab, and at
+         a fixed position Labwc never moves them from. This rule comes after the shell's, whose always-on-bottom it
+         undoes (ToggleAlwaysOnTop puts the window in the always-on-top tree from any other). The shell writes one more
+         rule per output into the user's copy (the worksuite-taskbar block) that moves each to its output's bottom
+         edge, inside the strip the Wayland bridge reserves. The lift/lower bindings above only act on the shell's
+         decorated (full-screen) windows, so lowering the shell never takes a taskbar window down with it. -->
+    <windowRule identifier="worksuite-shell" title="WorkSuite taskbar *" serverDecoration="no" skipTaskbar="yes" skipWindowSwitcher="yes" fixedPosition="yes">
+      <action name="ToggleAlwaysOnTop"/>
     </windowRule>
   </windowRules>
 </labwc_config>

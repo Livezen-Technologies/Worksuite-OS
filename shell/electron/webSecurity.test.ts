@@ -16,7 +16,7 @@ describe('WSOS-SEC-001 shell renderer', () => {
     expect(main).not.toMatch(/sandbox:\s*false/)
     expect(main).toMatch(/shellWebPreferences\(/)
     // Shell windows never navigate away from the local bundle and never open new windows.
-    expect(main.match(/wc\.on\('will-navigate', \(e\) => e\.preventDefault\(\)\)|win\.webContents\.on\('will-navigate', \(e\) => e\.preventDefault\(\)\)/g)?.length).toBe(2)
+    expect(main.match(/wc\.on\('will-navigate', \(e\) => e\.preventDefault\(\)\)|win\.webContents\.on\('will-navigate', \(e\) => e\.preventDefault\(\)\)/g)?.length).toBe(3)   // main, per-output desktops, taskbar windows (#53)
     expect(main).not.toMatch(/action: 'allow'/)
   })
 })

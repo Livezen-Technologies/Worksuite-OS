@@ -17,6 +17,7 @@ import { createConnection } from 'node:net'
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { realExec, type Avail, type Exec } from './system'
+import { extractTaskbarBlock, mergeTaskbarBlock } from './taskbar'
 import { xdgDirs } from './xdgDirs'
 import { extractShortcutsBlock, mergeShortcutsBlock } from '../src/lib/shortcuts'
 import { rcWithTheme } from './windowTheme'
@@ -241,7 +242,10 @@ export function carryDesktops(previous: string, next: string): string {
   if (keys) out = mergeShortcutsBlock(out, keys)
   // Settings › Mouse & touchpad keeps its <libinput> block here too (electron/pointer.ts).
   const pointer = extractPointerBlock(previous)
-  return pointer ? mergePointerBlock(out, pointer) : out
+  if (pointer) out = mergePointerBlock(out, pointer)
+  // Where each output's taskbar window goes (electron/taskbar.ts, #53).
+  const bar = extractTaskbarBlock(previous)
+  return bar ? mergeTaskbarBlock(out, bar) : out
 }
 
 // ---------- on-screen keyboard ----------
