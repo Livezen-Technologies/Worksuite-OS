@@ -1,5 +1,5 @@
 import { findBundles } from './bundles'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, powerMonitor, session, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, powerMonitor, screen, session, shell, type IpcMainInvokeEvent } from 'electron'
 
 // Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
 const DRAG_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVR4nGNgoCaQz/7/nxiM1wBCYNSAUQNGigEUZSZyAAAnXe3wcJ4r8wAAAABJRU5ErkJggg=='
@@ -45,7 +45,7 @@ import { APP_WINDOW } from './windowDefaults'
 import { ACTIVATED_FLAG, FULLSCREEN_FLAG } from './panel'
 import { arrange, displayManager, outputRects, type DisplayState } from './displays'
 import type { Layout } from './displays'
-import { outputWindows } from './outputWindows'
+import { outputWindows, screensMatch, type Rect } from './outputWindows'
 import { realExec } from './system'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
@@ -96,6 +96,25 @@ const monitors = outputWindows((r) => {
   return w
 }, () => win)
 
+/** After a scale or mode change: waits (bounded) for Electron to see the new output geometry, re-places every shell
+ *  window on it, then for each renderer to have laid out and drawn a frame at its new size. Only then does Settings ›
+ *  Display start the keep/revert countdown, so its buttons are where they are drawn (#60). */
+async function settleShell(rects: Rect[], timeoutMs = 4000) {
+  const until = Date.now() + timeoutMs
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  while (!screensMatch(rects, screen.getAllDisplays()) && Date.now() < until) await pause(100)
+  // Toggling fullscreen can take the keyboard focus away: the window with Settings gets it back for Enter/Escape.
+  const focused = BrowserWindow.getFocusedWindow() ?? win
+  monitors.refit()
+  await Promise.all(monitors.placed().map(({ win: w, rect }) => {
+    if (w.isDestroyed()) return null
+    const js = `new Promise((done) => { let n = 0; const ok = () => Math.abs(innerWidth - ${rect.width}) <= 2 && Math.abs(innerHeight - ${rect.height}) <= 2;
+      const step = () => (ok() || n++ > 60 ? requestAnimationFrame(() => requestAnimationFrame(() => done(ok()))) : setTimeout(step, 50)); step() })`
+    return Promise.race([w.webContents.executeJavaScript(js).catch(() => false), pause(Math.max(500, until - Date.now()))])
+  }))
+  if (focused && !focused.isDestroyed()) focused.focus()
+}
+
 const appIcons = new IconCache()
 const parseJson = (s: string): unknown => { try { return JSON.parse(s) } catch { return null } }
 
@@ -124,6 +143,8 @@ function markSessionVeil() {
 function createWindow() {
   win = new BrowserWindow({
     fullscreen: true,
+    // Frameless: re-asserting fullscreen after a scale or mode change must never leave a decorated window (#60).
+    frame: false,
     // See-through, so Start, the notification centre, quick settings and the shell's windows float over the app below
     // while the shell is lifted (src/screens/Desktop.tsx draws the wallpaper only when it is the desktop). The page
     // itself starts in the greeter veil's colour (index.css), so signing in still fades through dark.
@@ -631,7 +652,15 @@ app.whenReady().then(() => {
     storeFile: path.join(xdgDirs(app.getPath('home')).config, 'worksuite', 'displays.json'),
     spawn: (cmd, args) => { const p = spawn(cmd, args, { stdio: 'ignore' }); p.on('error', () => undefined); return { kill: () => p.kill() } },
     onChange: (st: DisplayState) => { layout = st.layout; broadcast('ws:displaysChanged', st); monitors.sync(outputRects(st.layout)) },
+    settle: (l) => settleShell(outputRects(l)),
   })
+  // Chromium learns of a new scale or mode from wl_output on its own and may keep the old window size or drop
+  // fullscreen: every metrics change re-places all shell windows, the main one included (#60).
+  let refitTimer: ReturnType<typeof setTimeout> | null = null
+  const refitSoon = () => { if (refitTimer) clearTimeout(refitTimer); refitTimer = setTimeout(() => { refitTimer = null; monitors.refit() }, 150) }
+  screen.on('display-metrics-changed', refitSoon)
+  screen.on('display-added', refitSoon)
+  screen.on('display-removed', refitSoon)
   let layout: Layout | null = null
   void displays.state().then((r) => { if (r.ok && !layout) layout = r.value.layout })
   // A thrown error would reach the renderer as a bare IPC rejection ("Unexpected error", #60): answer with a code.

@@ -2,7 +2,7 @@
 // primary, wallpaper, and mirror/extend. Applying starts a 15-second "Keep these settings?" countdown; without an
 // answer the previous layout comes back (electron/displays.ts). Kept layouts are saved per monitor set and
 // re-applied at login and when monitors are plugged in.
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   REVERT_SECONDS, SCALES, WALLPAPERS, displays, modeLabel, refreshRates, resolutions, secondsLeft, useDisplayState,
   type Arrangement, type DisplayLayout, type DisplayResult, type DisplayOutputConfig, type DisplayState, type Side,
@@ -165,18 +165,41 @@ function Row({ k, d, children }: { k: string; d: string; children: ReactNode }) 
   )
 }
 
-/** "Keep these settings?" with a live countdown; Escape or no answer reverts. */
+/** "Keep these settings?" with a live countdown; Escape or no answer reverts, Enter keeps. The dialog only appears
+ *  once the shell has been redrawn at the new scale (electron/displays.ts settle), and it holds on to the keyboard
+ *  focus through the window being re-sized, so the keys work even when a click would miss (#60). */
 export function KeepDialog({ state, now = Date.now, onError }: { state: DisplayState; now?: () => number; onError?: (code: string) => void }) {
   const deadline = state.pending?.deadline ?? 0
   const [left, setLeft] = useState(() => secondsLeft(deadline, now()))
+  const keepRef = useRef<HTMLButtonElement>(null)
+  const answered = useRef(false)
   useEffect(() => {
     const i = setInterval(() => setLeft(secondsLeft(deadline, now())), 250)
     return () => clearInterval(i)
   }, [deadline, now])
   const answer = async (keep: boolean) => {
+    if (answered.current) return
+    answered.current = true
     const r = await call<true>(() => (keep ? displays.displayKeep() : displays.displayRevert()))
-    if (!r.ok) onError?.(r.error)
+    if (!r.ok) { answered.current = false; onError?.(r.error) }
   }
+  const answerRef = useRef(answer)
+  answerRef.current = answer
+  useEffect(() => {
+    const dialog = () => keepRef.current?.closest('[role="alertdialog"]') ?? null
+    const refocus = () => { if (!dialog()?.contains(document.activeElement)) keepRef.current?.focus() }
+    // Enter keeps unless a dialog button has the focus (then that button's own click answers).
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.isComposing) return
+      if (document.activeElement instanceof HTMLButtonElement && dialog()?.contains(document.activeElement)) return
+      e.preventDefault(); e.stopPropagation(); void answerRef.current(true)
+    }
+    refocus()
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('resize', refocus)
+    window.addEventListener('focus', refocus)
+    return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('resize', refocus); window.removeEventListener('focus', refocus) }
+  }, [])
   const text = left === 1 ? t('disp.revertOne') : t('disp.revertMany', { secs: left })
   return (
     <Dialog alert width={420} onClose={() => void answer(false)}>
@@ -187,7 +210,7 @@ export function KeepDialog({ state, now = Date.now, onError }: { state: DisplayS
         </div>
         <div className={dialogFooter}>
           <button type="button" className={btnGhost} onClick={() => void answer(false)}>{t('disp.revert')}</button>
-          <button type="button" className={btnPrimary} data-autofocus onClick={() => void answer(true)}>{t('disp.keep')}</button>
+          <button ref={keepRef} type="button" className={btnPrimary} data-autofocus onClick={() => void answer(true)}>{t('disp.keep')}</button>
         </div>
       </>}
     </Dialog>

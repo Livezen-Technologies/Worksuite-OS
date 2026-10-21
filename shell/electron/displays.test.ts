@@ -221,6 +221,35 @@ describe('display manager', () => {
     expect(readStore(path.join(dir, 'displays.json')).profiles).toEqual({})
   })
 
+  it('starts the countdown only after the shell has settled, and settles again on revert (#60)', async () => {
+    const r = fakeRandr()
+    const { clock, advance } = fakeClock()
+    const events: string[] = []
+    let release: () => void = () => undefined
+    let settles = 0
+    const settle = (l: Layout) => {
+      events.push(`settle ${l.outputs[1].scale}`)
+      return ++settles === 1 ? new Promise<void>((res) => { release = res }) : Promise.resolve()
+    }
+    const dm = displayManager({ exec: r.exec, storeFile: path.join(dir, 'displays.json'), clock, settle, onChange: (s) => events.push(`change ${s.pending ? 'pending' : 'idle'}`) })
+    const l = currentLayout(r.get())
+    const next = arrange({ ...l, outputs: l.outputs.map((o) => (o.name === 'HDMI-A-1' ? { ...o, scale: 1.25 } : o)) })
+    const res = dm.apply(next)
+    await vi.waitFor(() => expect(events).toContain('settle 1.25'))
+    expect(dm.timer.pending).toBe(false)
+    expect(await dm.applySaved()).toEqual({ ok: true, value: false })   // OutputsChanged meanwhile changes nothing
+    advance(1000)
+    release()
+    // The full 15 seconds count from when the shell was redrawn, not from wlr-randr's return.
+    expect(await res).toEqual({ ok: true, value: { deadline: 17000 } })
+    expect(dm.timer.pending).toBe(true)
+    await vi.waitFor(() => expect(events.at(-1)).toBe('change pending'))
+    advance(15000)
+    await vi.waitFor(() => expect(events).toContain('settle 2'))
+    expect(r.get()[1]).toMatchObject({ scale: 2 })
+    await vi.waitFor(() => expect(events.at(-1)).toBe('change idle'))
+  })
+
   it('goes straight back when the compositor substitutes another mode (#32)', async () => {
     const r = fakeRandr()
     const { clock } = fakeClock()
