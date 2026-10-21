@@ -68,3 +68,7 @@ services/session/polkit/rules/50-worksuite-network.rules usr/share/polkit-1/rule
 services/session/themes/WorkSuite usr/share/themes/
 services/session/themes/WorkSuite-Light usr/share/themes/
 services/session/fontconfig/60-worksuite-sinhala-tamil.conf etc/fonts/conf.d/
+services/session/gsettings/90_worksuite-session.gschema.override usr/share/glib-2.0/schemas/
+services/session/gtk/gtk-3.0 etc/xdg/worksuite/
+services/session/gtk/gtk-4.0 etc/xdg/worksuite/
+services/session/firefox/worksuite.js etc/firefox-esr/
