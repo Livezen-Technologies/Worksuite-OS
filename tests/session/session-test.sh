@@ -270,6 +270,7 @@ grep -qx 'org.freedesktop.impl.portal.ScreenCast=wlr' "$P" && grep -qx 'org.free
 export WORKSUITE_PAM_COMMON_AUTH="$T/common-auth"
 printf 'auth\t[success=1 default=ignore]\tpam_unix.so nullok\n' > "$WORKSUITE_PAM_COMMON_AUTH"
 PATH="$T/nopy:$PATH" sh "$BIN/worksuite-signin" pam-pin-used; check "pam-pin-used answers no without a PIN profile" "$?" 1
+PATH="$T/nopy:$PATH" sh "$BIN/worksuite-signin" pam-password-used; check "pam-password-used answers 0 without a PIN profile (no pam_exec error)" "$?" 0
 printf 'auth\t[success=end default=ignore]\tpam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-pin\n' >> "$WORKSUITE_PAM_COMMON_AUTH"
 grep -Eqs 'worksuite-signin pam-pin([[:space:]]|$)' "$WORKSUITE_PAM_COMMON_AUTH" && ok "pam-pin-used asks the daemon with a PIN profile on" || bad "pam-pin-used asks the daemon with a PIN profile on"
 unset WORKSUITE_PAM_COMMON_AUTH

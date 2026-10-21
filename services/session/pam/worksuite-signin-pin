@@ -3,6 +3,8 @@ Default: no
 Priority: 320
 Auth-Type: Primary
 Auth:
+	[success=1 default=ignore]	pam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-not-pin
 	[success=end default=ignore]	pam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-pin
 Auth-Initial:
+	[success=1 default=ignore]	pam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-not-pin
 	[success=end default=ignore]	pam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-pin
