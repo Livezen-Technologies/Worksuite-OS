@@ -555,5 +555,11 @@ stub busctl 'echo "busctl $*" >> "$LOG"'
 : > "$LOG"; CONNECTIVITY_STATE=LIMITED sh "$D" wlan0 connectivity-change; CONNECTIVITY_STATE=FULL sh "$D" wlan0 up; CONNECTIVITY_STATE=FULL sh "$D" '' connectivity-change
 check "dispatcher asks for a driver check only when connectivity becomes full" "$(grep -c 'CheckDrivers s connectivity' "$LOG")" 1
 
+# ---- #55: Node services trust the system CA store (private-CA WorkSuite servers) ----
+grep -qx 'Environment=NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt' "$ROOT/services/session/systemd/user/worksuite-credentials.service" \
+  && ok "credentials service trusts the system CA store" || bad "credentials service trusts the system CA store"
+grep -q 'export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt' "$ROOT/shell/bin/worksuite-node" && grep -q 'if \[ -z "${NODE_EXTRA_CA_CERTS:-}" \]' "$ROOT/shell/bin/worksuite-node" \
+  && ok "worksuite-node adds the system CA store unless one is set" || bad "worksuite-node adds the system CA store unless one is set"
+
 echo "1..$n"
 exit $fail
