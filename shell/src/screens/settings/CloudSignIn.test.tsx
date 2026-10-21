@@ -46,6 +46,11 @@ describe('default sign-in target', () => {
     expect(signInUrl('enterprise', 'http://work.example.com')).toHaveProperty('error')
     expect(signInUrl('enterprise', 'work.example.com')).toEqual({ url: 'https://work.example.com' })
     expect(signInUrl('personal', '')).toEqual({ url: 'https://worksuitecloud.com' })
+    // #55: no spaces, no credentials, a real host name
+    expect(signInUrl('enterprise', 'work example.com')).toHaveProperty('error')
+    expect(signInUrl('enterprise', 'https://me:pw@work.example.com')).toHaveProperty('error')
+    expect(signInUrl('enterprise', 'https://-bad-.example.com')).toHaveProperty('error')
+    expect(signInUrl('enterprise', 'https://work.example.com/')).toEqual({ url: 'https://work.example.com' })
   })
 })
 
@@ -77,6 +82,34 @@ describe('WorkSuite account', () => {
     expect(signIn).toHaveBeenCalledTimes(2)
   })
 
+  it('#55: checks the server first and says why it failed, without opening the browser', async () => {
+    setup([])
+    const check = vi.spyOn(os, 'cloudCheckServer').mockResolvedValueOnce({ ok: false, error: 'dns_failed' })
+      .mockResolvedValueOnce({ ok: false, error: 'tls_failed' }).mockResolvedValueOnce({ ok: true, value: { server_url: 'https://work.example.com', issuer: 'id.example.com' } })
+    const signIn = vi.spyOn(os, 'cloudSignIn').mockResolvedValue({ ok: true, value: acct })
+    await render(<CloudAccounts />)
+    await click(button('Enterprise'))
+    const input = document.querySelector('input') as HTMLInputElement
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'work.example.com'); input.dispatchEvent(new Event('input', { bubbles: true })) })
+    await click(button('Sign in'))
+    expect(check).toHaveBeenCalledWith('https://work.example.com')
+    expect(signIn).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t find that server')
+    await click(button('Try again'))
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('certificate isn’t trusted')
+    await click(button('Try again'))
+    expect(signIn).toHaveBeenCalledWith('https://work.example.com', 'enterprise')
+  })
+  it('#55: shows the checking step while the server is checked', async () => {
+    setup([])
+    let done: (v: { ok: false; error: string }) => void = () => {}
+    vi.spyOn(os, 'cloudCheckServer').mockImplementation(() => new Promise((r) => { done = r }))
+    await render(<CloudAccounts />)
+    await click(button('Sign in'))
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('Checking worksuitecloud.com')
+    await act(async () => { done({ ok: false, error: 'unreachable' }) }); await flush()
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('can’t be reached')
+  })
   it('Cancel while the browser is open stops the broker sign-in quietly', async () => {
     setup([])
     let finish: (v: { ok: false; error: string }) => void = () => {}

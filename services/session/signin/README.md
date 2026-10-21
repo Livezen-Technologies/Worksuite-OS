@@ -37,6 +37,13 @@ a PIN and FIDO2 security keys to their account on this device. The password alwa
   `pam-auth-update --enable` when someone sets up a PIN or adds a key, and `--disable` when the last one is removed.
   The profiles are system-wide, but a user without a PIN gets `no_pin` (ignored) and pam_u2f runs with `nouserok`, so
   only people who set a method up are affected.
+- **One PIN length.** A new PIN is exactly `pin_min_length` digits (default 6) unless the policy also sets a longer
+  `pin_max_length`; the Settings field stops at that length and the helper refuses anything else (`too_long`).
+- **Security keys are detected** before `pamu2fcfg` runs: a hidraw device whose report descriptor has the FIDO usage
+  page (0xF1D0). Settings reads the same sysfs files (world-readable) to say "plug in your key"; `pamu2fcfg` failures
+  map to `key_not_found`, `key_timeout`, `key_pin_required`, `key_exists`, `key_unavailable` or `key_failed`.
+- **D-Bus.** The service answers `Introspect` itself (it uses a raw message handler, so dbus-next has nothing exported
+  to describe); the shell calls the methods by name with a fixed signature, not through an introspected proxy.
 - **Policy.** `allow_pin` and `pin_min_length` (4–12) come from the signed device policy (schema
   `api-contracts/openapi.yaml`, validated in `services/server/src/console.ts`) and are written by the device agent to
   `/etc/worksuite/signin-policy.conf`. With `allow_pin=false` the helper refuses new PINs and every PIN check returns

@@ -188,7 +188,8 @@ app.whenReady().then(() => {
   handle('ws:authenticate', async (user, secret, method) => {
     if (method === 'pin') {
       const r = await ask({ op: 'verify', user: os.userInfo().username, pin: secret })
-      return r.ok ? { ok: true } : { ok: false }
+      // #56: after too many wrong PINs the daemon answers "locked"; say so instead of "incorrect PIN" forever.
+      return r.ok ? { ok: true } : { ok: false, reason: r.error === 'locked' ? 'pin_locked' : r.error === 'unavailable' ? 'unavailable' : 'wrong' }
     }
     if (method === 'key') return { ok: false, message: 'Use your password.' }
     return checkOwnPassword(user, secret)
@@ -315,6 +316,13 @@ app.whenReady().then(() => {
     if (!https) return { ok: false, error: 'insecure_url' }
     const r = await brokerCall('SignIn', { server_url: serverUrl, mode }, 6 * 60_000)
     return r.ok ? { ok: true, value: publicAccounts([r.value])[0] } : r
+  })
+  // #55: before the browser opens, check the address answers as a WorkSuite server over trusted https.
+  handle('ws:cloudCheckServer', async (serverUrl) => {
+    let https = false
+    try { https = new URL(serverUrl).protocol === 'https:' } catch { return { ok: false, error: 'invalid_url' } }
+    if (!https) return { ok: false, error: 'insecure_url' }
+    return brokerCall('CheckServer', { server_url: serverUrl }, 40_000)
   })
   // "Cancel" or "Try again" while the browser is open: the broker ends the waiting sign-in (sign_in_cancelled).
   handle('ws:cloudSignInCancel', () => brokerCall('CancelSignIn'))

@@ -11,14 +11,46 @@ export interface OidcOptions { fetch?: typeof fetch; allowInsecureLoopback?: boo
 
 /** Only https, except loopback http when explicitly allowed (tests, local development). */
 export function checkUrl(raw: string, o: OidcOptions = {}): URL {
-  const u = new URL(raw);
+  let u: URL;
+  try { u = new URL(raw); } catch { throw new OidcError('invalid_url'); }
+  if (u.username || u.password) throw new OidcError('invalid_url', 'credentials in URL');
   const loopback = u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]';
   if (u.protocol === 'https:' || (o.allowInsecureLoopback && loopback && u.protocol === 'http:')) return u;
   throw new OidcError('insecure_url', `refusing non-https URL ${u.origin}`);
 }
 
+/**
+ * A failed fetch (undici puts the system error in `cause`) → a code the person can act on (#55: these all used to
+ * surface as "internal_error" and one generic message, whatever went wrong).
+ */
+export function networkError(e: unknown): OidcError {
+  if (e instanceof OidcError) return e;
+  const err = e as { name?: string; code?: string; cause?: { code?: string; name?: string; message?: string } } | null;
+  if (err?.name === 'TimeoutError' || err?.name === 'AbortError' || err?.cause?.name === 'TimeoutError' || err?.cause?.name === 'ConnectTimeoutError') return new OidcError('network_timeout');
+  const code = String(err?.cause?.code ?? err?.code ?? '');
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN' || code === 'EAI_NONAME') return new OidcError('dns_failed');
+  if (/^(ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ENETDOWN|EPIPE|UND_ERR_SOCKET)$/.test(code)) return new OidcError('unreachable');
+  if (code === 'ETIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'UND_ERR_HEADERS_TIMEOUT') return new OidcError('network_timeout');
+  if (/CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ERR_TLS|ERR_SSL|EPROTO|HOSTNAME_MISMATCH|ALTNAME/i.test(code + ' ' + (err?.cause?.message ?? ''))) return new OidcError('tls_failed');
+  return new OidcError('unreachable');
+}
+
+/** At most this many redirects, each to https (or the allowed loopback) again; never with a body. */
+const MAX_REDIRECTS = 3;
+
 async function getJson(url: URL, o: OidcOptions, init?: RequestInit) {
-  const res = await (o.fetch ?? fetch)(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+  let res: Response;
+  // #55: redirect "error" made every redirect (say example.com → www.example.com, a trailing slash) a failed sign-in.
+  // Redirects are followed by hand so each hop is checked again: https only, and only for GETs.
+  for (let hop = 0; ; hop++) {
+    try {
+      res = await (o.fetch ?? fetch)(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(15_000) });
+    } catch (e) { throw networkError(e); }
+    const loc = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+    if (!loc) break;
+    if ((init?.method ?? 'GET') !== 'GET' || hop >= MAX_REDIRECTS) throw new OidcError('discovery_failed', 'too many or unexpected redirects');
+    url = checkUrl(new URL(loc, url).toString(), o);
+  }
   const body = await res.json().catch(() => ({}));
   return { status: res.status, body: body as Record<string, any> };
 }

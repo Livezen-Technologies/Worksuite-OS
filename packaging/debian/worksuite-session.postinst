@@ -12,7 +12,10 @@ if [ "$1" = configure ]; then
   install -d -m 0755 /var/lib/worksuite /var/lib/worksuite/signin
   install -d -m 0700 /var/lib/worksuite/signin/pin
   pam-auth-update --package
-  if [ -d /run/systemd/system ]; then systemctl enable --now worksuite-signin.socket >/dev/null 2>&1 || true; fi
+  # Enable always: the image is built in a chroot without a running systemd, and a socket left disabled there meant no
+  # PIN could ever be checked (greeter, lock screen) and the default-method switch failed (#56). Start only when booted.
+  systemctl enable worksuite-signin.socket >/dev/null 2>&1 || true
+  if [ -d /run/systemd/system ]; then systemctl start worksuite-signin.socket >/dev/null 2>&1 || true; fi
   if command -v systemd-tmpfiles >/dev/null 2>&1; then systemd-tmpfiles --create /usr/lib/tmpfiles.d/worksuite-session.conf || true; fi
 fi
 #DEBHELPER#
