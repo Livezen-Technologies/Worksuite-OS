@@ -14,7 +14,11 @@ export interface SecurityStatus {
   firewall: { active: boolean; policy_rules: number; log_blocked: boolean }
   isolation: { since: number; until: number } | null
   antivirus: { enabled: boolean; installed: boolean; engine: string | null; signatures: number | null; signatures_at: number | null; signatures_age_days: number | null; updates: string; schedule: string; exclusions: number
-    last_scan: { id: string; kind: string; trigger: string; started: number; finished: number; files: number; detections: number; error?: string } | null; last_full_scan: number | null }
+    last_scan: ScanRecord | null; last_full_scan: number | null
+    /** #64 (absent from older agents): a scan can run now; the running scan's progress; the recent scans, newest first. */
+    ready?: boolean
+    progress?: { id: string; kind: string; trigger: string; started: number; files: number; detections: number; errors: number; current: string | null; elapsed_ms: number } | null
+    scans?: ScanRecord[] }
   threats: { active: number; quarantined: number }
   history: { id: string; at: number; path: string; signature: string; action: string }[]
   firewall_alerts: { at: number; dst: string; dport: number | null; proto: string }[]
@@ -30,6 +34,7 @@ export interface SecurityStatus {
   suspended?: { id: string; at: number; path: string; exe: string | null; pid: number | null }[]
   quarantine?: { id: string; at: number; path: string; signature: string }[]
 }
+export interface ScanRecord { id: string; kind: string; trigger: string; started: number; finished: number; files: number; detections: number; errors?: number; error?: string }
 export interface ProtectionEvent { id: string; at: number; kind: 'onaccess_blocked' | 'onaccess_detected' | 'write_blocked' | 'exec_blocked' | 'ransomware_suspended' | 'download_threat'; path: string; exe: string | null; signature: string | null; enforced: boolean; resolved: string | null }
 
 export function readSecurity(path = SECURITY_STATUS): SecurityStatus | null {
@@ -83,6 +88,19 @@ export function securityNotices(prev: SecurityStatus | null, next: SecurityStatu
   return out
 }
 
+/** A D-Bus failure from the device agent → what Settings says (#64: the reason a scan cannot start is shown). */
+export function agentError(e: unknown): string {
+  const err = e as { type?: string; text?: string }
+  if (err?.type === 'lk.worksuite.Error.NotAuthorized') return 'auth_cancelled'
+  const codes: Record<string, string> = {
+    NO_SIGNATURES: 'no_signatures', ANTIVIRUS_MISSING: 'missing', ANTIVIRUS_DISABLED: 'unavailable', NOT_SUPPORTED: 'unavailable',
+    NOT_SCANNING: 'not_scanning', UPDATE_FAILED: 'update_failed', STILL_DETECTED: 'still_detected', PATH_EXISTS: 'path_exists',
+  }
+  if (err?.text && codes[err.text]) return codes[err.text]
+  // Anything else from the agent itself failed; no reply at all (not running, not on the bus) is "agent unavailable".
+  return err?.type?.startsWith('lk.worksuite.Error.') ? 'failed' : 'agent_unavailable'
+}
+
 /** Starts a scan through the device agent; polkit decides (active local users are allowed). */
 export async function startScan(kind: string): Promise<{ ok: true } | { ok: false; error: string }> {
   if (kind !== 'quick' && kind !== 'full') return { ok: false, error: 'invalid_argument' }
@@ -92,10 +110,7 @@ export async function startScan(kind: string): Promise<{ ok: true } | { ok: fals
     await obj.getInterface('lk.worksuite.DeviceAgent1').StartSecurityScan(kind)
     return { ok: true }
   } catch (e) {
-    const err = e as { type?: string; text?: string }
-    if (err.type === 'lk.worksuite.Error.NotAuthorized') return { ok: false, error: 'auth_cancelled' }
-    if (err.text === 'ANTIVIRUS_DISABLED' || err.text === 'NOT_SUPPORTED') return { ok: false, error: 'unavailable' }
-    return { ok: false, error: 'agent_unavailable' }
+    return { ok: false, error: agentError(e) }
   } finally { bus.disconnect() }
 }
 
@@ -104,10 +119,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /**
  * Quarantine restore/delete and suspended programs (#38) through the device agent; polkit
  * lk.worksuite.security.quarantine asks for an administrator. Restore re-scans first and refuses a file still detected.
+ * #64: cancel the running scan and update virus definitions (lk.worksuite.security.scan).
  */
 export async function securityAction(method: string, args: string[]): Promise<{ ok: true } | { ok: false; error: string }> {
   const ok = (method === 'RestoreQuarantined' || method === 'DeleteQuarantined') && args.length === 1 && UUID.test(args[0])
     || method === 'ResolveSuspendedProcess' && args.length === 2 && UUID.test(args[0]) && (args[1] === 'resume' || args[1] === 'terminate')
+    || (method === 'CancelSecurityScan' || method === 'UpdateSecurityDefinitions') && args.length === 0
   if (!ok) return { ok: false, error: 'invalid_argument' }
   const bus = dbus.systemBus()
   try {
@@ -115,32 +132,39 @@ export async function securityAction(method: string, args: string[]): Promise<{ 
     await obj.getInterface('lk.worksuite.DeviceAgent1')[method](...args)
     return { ok: true }
   } catch (e) {
-    const err = e as { type?: string; text?: string }
-    if (err.type === 'lk.worksuite.Error.NotAuthorized') return { ok: false, error: 'auth_cancelled' }
-    if (err.text === 'STILL_DETECTED') return { ok: false, error: 'still_detected' }
-    if (err.text === 'PATH_EXISTS') return { ok: false, error: 'path_exists' }
-    if (err.text === 'NOT_SUPPORTED') return { ok: false, error: 'unavailable' }
-    return { ok: false, error: err.type?.startsWith('lk.worksuite.Error.') ? 'failed' : 'agent_unavailable' }
+    return { ok: false, error: agentError(e) }
   } finally { bus.disconnect() }
 }
+
+/** How often the status file is re-read: every 2 s while a scan runs (progress), else every 30 s. */
+export const pollInterval = (s: SecurityStatus | null) => (s?.scanning ? 2_000 : 30_000)
 
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 
 export function startSecurity(handle: Handle, notify: (n: Notice) => void, broadcast: (channel: string, payload: unknown) => void, path = SECURITY_STATUS) {
   let last = readSecurity(path)
   handle('ws:securityStatus', () => (last = readSecurity(path) ?? last))
-  handle('ws:securityScan', (kind) => startScan(String(kind)))
-  handle('ws:securityAction', async (method, ...args) => {
-    const r = await securityAction(String(method), args.map(String))
-    const next = readSecurity(path)
-    if (next) { last = next; broadcast('ws:securityChanged', next) }
-    return r
-  })
-  const t = setInterval(() => {
+  const refresh = () => { const next = readSecurity(path); if (next) { last = next; broadcast('ws:securityChanged', next) } }
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const poll = () => {
     const next = readSecurity(path)
     for (const n of securityNotices(last, next)) notify(n)
     if (next && JSON.stringify(next) !== JSON.stringify(last)) broadcast('ws:securityChanged', next)
     if (next) last = next
-  }, 30_000)
-  t.unref?.()
+    schedule()
+  }
+  const schedule = (ms = pollInterval(last)) => { if (timer) clearTimeout(timer); timer = setTimeout(poll, ms); timer.unref?.() }
+  handle('ws:securityScan', async (kind) => {
+    const r = await startScan(String(kind))
+    // The agent publishes "scanning" as it starts: show it now and follow the progress closely.
+    if (r.ok) { refresh(); schedule(1_000) }
+    return r
+  })
+  handle('ws:securityAction', async (method, ...args) => {
+    const r = await securityAction(String(method), args.map(String))
+    refresh()
+    if (r.ok) schedule(1_000)
+    return r
+  })
+  schedule()
 }

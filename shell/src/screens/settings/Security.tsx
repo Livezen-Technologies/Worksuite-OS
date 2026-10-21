@@ -19,6 +19,26 @@ const EVENT: Record<string, Parameters<typeof t>[0]> = {
   exec_blocked: 'sec.ev.exec_blocked', ransomware_suspended: 'sec.ev.ransomware_suspended', download_threat: 'sec.ev.download_threat',
 }
 const ACTION_ERROR: Record<string, Parameters<typeof t>[0]> = { still_detected: 'sec.stillDetected', path_exists: 'sec.pathExists', auth_cancelled: 'sec.authCancelled' }
+/** #64: why a scan (or cancel, or a definitions update) did not start, in words. */
+const SCAN_ERROR: Record<string, Parameters<typeof t>[0]> = {
+  no_signatures: 'sec.err.no_signatures', missing: 'sec.err.missing', unavailable: 'sec.err.unavailable', agent_unavailable: 'sec.err.agent_unavailable',
+  not_scanning: 'sec.err.not_scanning', update_failed: 'sec.err.update_failed', auth_cancelled: 'sec.authCancelled',
+}
+/** 0:42, 12:05, 1:02:09 */
+export function fmtElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60
+  const two = (n: number) => String(n).padStart(2, '0')
+  return h ? `${h}:${two(m)}:${two(x)}` : `${m}:${two(x)}`
+}
+type Scan = NonNullable<SecurityStatus['antivirus']['last_scan']>
+/** The last scan in one line: what it covered and found, or why it did not finish. */
+export function lastScanText(last: Scan | null): string {
+  if (!last) return t('sec.never')
+  if (last.error === 'CANCELLED') return t('sec.scanCancelled')
+  if (last.error === 'NO_SIGNATURES') return t('sec.scanNoSignatures')
+  if (last.error) return t('sec.scanFailed')
+  return t('sec.scanSummary', { kind: last.kind === 'full' ? t('sec.full') : t('sec.quick'), files: formatNumber(last.files), found: formatNumber(last.detections), when: fmtWhen(last.finished) })
+}
 const baseName = (p: string) => p.split('/').pop() || p
 
 /** Settings rows for the #38 layers; null fields (older agents) leave them out. */
@@ -60,7 +80,14 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
     void os.securityStatus().then(setS).catch(() => {})
     return os.onSecurityChanged(setS)
   }, [initial])
-  const scan = (kind: 'quick' | 'full') => void os.securityScan(kind).then((r) => setMsg(r.ok ? t('sec.scanStarted') : t('sec.scanError')))
+  const [cancelling, setCancelling] = useState(false)
+  const reload = async () => { const next = await os.securityStatus().catch(() => null); if (next) setS(next) }
+  const scan = (kind: 'quick' | 'full') => void os.securityScan(kind).then(async (r) => {
+    setMsg(r.ok ? t('sec.scanStarted') : t(SCAN_ERROR[r.error] ?? 'sec.scanError'))
+    await reload()
+  })
+  const cancel = () => { setCancelling(true); void os.securityAction('CancelSecurityScan').then(async (r) => { setCancelling(false); if (!r.ok) setMsg(t(SCAN_ERROR[r.error] ?? 'sec.actionFailed')); else setMsg(null); await reload() }) }
+  const updateDefs = () => void os.securityAction('UpdateSecurityDefinitions').then((r) => setMsg(r.ok ? t('sec.updateStarted') : t(SCAN_ERROR[r.error] ?? 'sec.actionFailed')))
   const [actMsg, setActMsg] = useState<string | null>(null)
   const act = (method: 'RestoreQuarantined' | 'DeleteQuarantined' | 'ResolveSuspendedProcess', done: Parameters<typeof t>[0], ...args: string[]) =>
     void os.securityAction(method, ...args).then(async (r) => {
@@ -71,6 +98,10 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
   const head = overallLabel(s)
   const av = s?.antivirus
   const last = av?.last_scan
+  const prog = av?.progress
+  // #64: installed but no signatures yet (older agents: no "ready", signatures null means the same).
+  const noDefs = !!av?.enabled && !!av.installed && (av.ready === false || (av.ready === undefined && av.signatures === null))
+  const scans = av?.scans ?? []
   return (
     <section aria-labelledby="sec-title" className="flex flex-col gap-2">
       <h2 id="sec-title" className="m-0 flex items-center gap-2 text-sm font-semibold"><Svg d={SHIELD} size={16} stroke={head.tone} />{t('sec.title')}<span className={chip} style={{ color: head.tone }}>{head.text}</span></h2>
@@ -88,12 +119,18 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
               <span className="text-[11px] text-[#8FA3C8]">{!av?.enabled ? t('sec.virusOff') : !av.installed ? t('sec.virusMissing')
                 : [av.engine && t('sec.engine', { version: av.engine }), `${t('sec.definitions')}: ${av.signatures_age_days === null ? t('common.unknown') : av.signatures_age_days <= 1 ? t('sec.definitionsToday') : t('sec.definitionsAge', { days: formatNumber(av.signatures_age_days) })}`,
                   av.updates !== 'active' ? t('sec.updatesStopped') : null].filter(Boolean).join(' · ')}</span>
-              <span className="text-[11px] text-[#8FA3C8]">{t('sec.lastScan')}: {s.scanning ? t('sec.scanning') : !last ? t('sec.never') : last.error ? t('sec.scanFailed')
-                : t('sec.scanSummary', { kind: last.kind === 'full' ? t('sec.full') : t('sec.quick'), files: formatNumber(last.files), found: formatNumber(last.detections), when: fmtWhen(last.finished) })}</span>
+              {s.scanning && prog ? <>
+                <span className="text-[11px] text-[#C9D6EE]" role="status" aria-live="polite">{t('sec.scanProgress', { kind: prog.kind === 'full' ? t('sec.full') : t('sec.quick'), files: formatNumber(prog.files), found: formatNumber(prog.detections), elapsed: fmtElapsed(Math.max(prog.elapsed_ms, Date.now() - prog.started)) })}</span>
+                {prog.current && <span className="max-w-[420px] truncate text-[11px] text-[#8FA3C8]" title={prog.current}>{t('sec.scanCurrent', { path: prog.current })}</span>}
+              </> : <span className="text-[11px] text-[#8FA3C8]">{t('sec.lastScan')}: {s.scanning ? t('sec.scanning') : lastScanText(last ?? null)}</span>}
+              {noDefs && <span className="text-[11px] text-[#FFD2A8]">{t('sec.noSignatures')}</span>}
               <span className="text-[11px]" style={{ color: s.threats.active ? '#FF8A7A' : '#8FA3C8' }}>{t('sec.threats')}: {t('sec.threatCounts', { active: formatNumber(s.threats.active), quarantined: formatNumber(s.threats.quarantined) })}</span></span>
-            {av?.enabled && av.installed && <span className="flex gap-2">
-              <button type="button" className={btnGhost} disabled={!!s.scanning} onClick={() => scan('quick')}>{t('sec.quickScan')}</button>
-              <button type="button" className={btnGhost} disabled={!!s.scanning} onClick={() => scan('full')}>{t('sec.fullScan')}</button>
+            {av?.enabled && av.installed && <span className="flex flex-wrap justify-end gap-2">
+              {s.scanning ? <button type="button" className={btnGhost} disabled={cancelling} onClick={cancel}>{cancelling ? t('sec.scanCancelling') : t('sec.cancelScan')}</button> : <>
+                {noDefs && <button type="button" className={btnGhost} onClick={updateDefs}>{t('sec.updateDefinitions')}</button>}
+                <button type="button" className={btnGhost} disabled={noDefs} onClick={() => scan('quick')}>{t('sec.quickScan')}</button>
+                <button type="button" className={btnGhost} disabled={noDefs} onClick={() => scan('full')}>{t('sec.fullScan')}</button>
+              </>}
             </span>}
           </div>
           {msg && <p role="status" className="m-0 px-4 py-2 text-[11px] text-[#C9D6EE]">{msg}</p>}
@@ -136,6 +173,16 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
           <div role="row" key={e.id} className={`flex items-center gap-3 px-4 py-2 text-xs ${rowLine}`}>
             <span role="cell" className="flex min-w-0 flex-1 flex-col"><span className="truncate">{EVENT[e.kind] ? t(EVENT[e.kind]) : e.kind}</span><span className="truncate text-[11px] text-[#8FA3C8]">{e.path}</span></span>
             <span role="cell" className="w-24 text-right text-[11px] text-[#8FA3C8]">{fmtWhen(e.at)}</span>
+          </div>
+        ))}
+      </div>}
+      {!!scans.length && <div className={`${card} overflow-hidden`} role="table" aria-label={t('sec.scans')}>
+        <div role="row" className="px-4 py-[9px] text-[11px] text-[#8FA3C8]"><span role="columnheader">{t('sec.scans')}</span></div>
+        {scans.slice(0, 5).map((r) => (
+          <div role="row" key={r.id ?? r.started} className={`flex items-center gap-3 px-4 py-2 text-xs ${rowLine}`}>
+            <span role="cell" className="flex-1">{t('sec.scanRow', { kind: r.kind === 'full' ? t('sec.full') : t('sec.quick'), files: formatNumber(r.files), found: formatNumber(r.detections) })}</span>
+            <span role="cell" className="text-[11px]" style={{ color: r.error && r.error !== 'CANCELLED' ? '#FF8A7A' : '#C9D6EE' }}>{!r.error ? t('sec.scanOk') : r.error === 'CANCELLED' ? t('sec.scanCancelledShort') : r.error === 'NO_SIGNATURES' ? t('sec.scanNoSignatures') : t('sec.scanErr')}</span>
+            <span role="cell" className="w-24 text-right text-[11px] text-[#8FA3C8]">{fmtWhen(r.finished)}</span>
           </div>
         ))}
       </div>}

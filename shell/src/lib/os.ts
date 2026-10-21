@@ -55,7 +55,7 @@ export interface WorkSuiteApi {
   securityScan(kind: 'quick' | 'full'): Promise<CloudResult<unknown>>
   /** #38 quarantine and suspended programs (polkit lk.worksuite.security.quarantine, an administrator):
    *  RestoreQuarantined(id) (re-scanned first) | DeleteQuarantined(id) | ResolveSuspendedProcess(eventId, resume|terminate). */
-  securityAction(method: 'RestoreQuarantined' | 'DeleteQuarantined' | 'ResolveSuspendedProcess', ...args: string[]): Promise<CloudResult<unknown>>
+  securityAction(method: SecurityMethod, ...args: string[]): Promise<CloudResult<unknown>>
   onSecurityChanged(cb: (s: SecurityStatus) => void): () => void
   /** Employee monitoring (#22): policy, disclosure state and this user's own recorded days. */
   activityStatus(): Promise<ActivityStatus>
@@ -453,6 +453,7 @@ export interface DeviceInfo {
   specs?: { cpu_model: string | null; cpu_cores: number | null; memory_bytes: number | null }
 }
 
+export interface SecurityScanRecord { id?: string; kind: string; trigger: string; started: number; finished: number; files: number; detections: number; errors?: number; error?: string }
 /** /run/worksuite-device-agent/security.json (services/device-agent/src/security.ts securityStatus). */
 export interface SecurityStatus {
   overall: 'protected' | 'attention' | 'at_risk' | 'unavailable'
@@ -462,7 +463,11 @@ export interface SecurityStatus {
   firewall: { active: boolean; policy_rules: number; log_blocked: boolean }
   isolation: { since: number; until: number } | null
   antivirus: { enabled: boolean; installed: boolean; engine: string | null; signatures: number | null; signatures_at: number | null; signatures_age_days: number | null; updates: string; schedule: string; exclusions: number
-    last_scan: { kind: string; trigger: string; started: number; finished: number; files: number; detections: number; error?: string } | null; last_full_scan: number | null }
+    last_scan: SecurityScanRecord | null; last_full_scan: number | null
+    /** #64 (absent from older agents): a scan can run now; the running scan's progress; recent scans, newest first. */
+    ready?: boolean
+    progress?: { kind: string; started: number; files: number; detections: number; errors: number; current: string | null; elapsed_ms: number } | null
+    scans?: SecurityScanRecord[] }
   threats: { active: number; quarantined: number }
   history: { id: string; at: number; path: string; signature: string; action: string }[]
   firewall_alerts: { at: number; dst: string; dport: number | null; proto: string }[]
@@ -530,6 +535,8 @@ export interface InstalledApp { id: string; name: string; generic_name: string |
 export type SignOutChoice = 'none' | 'export' | 'discard'
 
 export interface CloudAccount { id: string; name: string | null; server_url: string; state?: string }
+/** Device agent methods Settings › WorkSuite Security calls (electron/securityCenter.ts securityAction). */
+export type SecurityMethod = 'RestoreQuarantined' | 'DeleteQuarantined' | 'ResolveSuspendedProcess' | 'CancelSecurityScan' | 'UpdateSecurityDefinitions'
 export type CloudResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 declare global {
@@ -600,10 +607,14 @@ const stub: WorkSuiteApi = {
     if (PV.get('security') === 'none') return null
     const risk = PV.get('security') === 'threat'
     return {
-      overall: risk ? 'at_risk' : 'protected', issues: risk ? ['threats_need_action'] : [], managed: stubManaged, scanning: false,
+      overall: risk ? 'at_risk' : PV.get('security') === 'nodefs' ? 'attention' : 'protected', issues: risk ? ['threats_need_action'] : PV.get('security') === 'nodefs' ? ['no_signatures'] : [], managed: stubManaged, scanning: PV.get('security') === 'scanning',
       firewall: { active: true, policy_rules: stubManaged ? 3 : 0, log_blocked: stubManaged }, isolation: null,
       antivirus: { enabled: true, installed: true, engine: '1.0.7', signatures: 27431, signatures_at: Date.now() - 86_400_000, signatures_age_days: 1, updates: 'active', schedule: 'weekly', exclusions: 0,
-        last_scan: { kind: 'quick', trigger: 'schedule', started: Date.now() - 7_300_000, finished: Date.now() - 7_200_000, files: 18_402, detections: risk ? 1 : 0 }, last_full_scan: Date.now() - 5 * 86_400_000 },
+        last_scan: { kind: 'quick', trigger: 'schedule', started: Date.now() - 7_300_000, finished: Date.now() - 7_200_000, files: 18_402, detections: risk ? 1 : 0 }, last_full_scan: Date.now() - 5 * 86_400_000,
+        // #64 previews: ?security=nodefs (no virus definitions yet) and ?security=scanning (progress).
+        ...(PV.get('security') === 'nodefs' ? { signatures: null, signatures_at: null, signatures_age_days: null, ready: false } : { ready: true }),
+        progress: PV.get('security') === 'scanning' ? { kind: 'full', started: Date.now() - 95_000, files: 5_210, detections: 0, errors: 0, current: '/home/nimal/Documents/report.odt', elapsed_ms: 95_000 } : null,
+        scans: [{ id: 's1', kind: 'quick', trigger: 'schedule', started: Date.now() - 7_300_000, finished: Date.now() - 7_200_000, files: 18_402, detections: risk ? 1 : 0 }] },
       threats: { active: risk ? 1 : 0, quarantined: 1 },
       history: [...(risk ? [{ id: 't2', at: Date.now() - 7_200_000, path: '/home/nimal/Downloads/invoice.pdf.exe', signature: 'Win.Trojan.Agent-1', action: 'detected' }] : []),
         { id: 't1', at: Date.now() - 9 * 86_400_000, path: '/home/nimal/Downloads/eicar.com', signature: 'Win.Test.EICAR_HDB-1', action: 'quarantined' }],
