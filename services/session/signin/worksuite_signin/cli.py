@@ -2,8 +2,11 @@
 
   PAM (pam_exec, see services/session/pam/worksuite-signin-*), run as root by greetd/polkit or as the user by gtklock:
     pam-pin        expose_authtok: the typed secret on stdin; asks the daemon; exit 0 = right PIN
-    pam-pin-used   exit 0 when this sign-in used the PIN (the keyring profile then skips pam_gnome_keyring)
+    pam-not-pin    expose_authtok: exit 0 when the typed secret cannot be a PIN (a password), so the stack skips pam-pin
+    pam-password-used  exit 0 when this sign-in did not use the PIN (the keyring profile then runs pam_gnome_keyring)
+    pam-pin-used   the opposite answer (kept for profiles written before pam-password-used)
     pam-reset      after a successful root-context sign-in: wrong-PIN count back to 0 (ignored from non-root callers)
+  pam_exec logs every non-zero exit at error level, so the answer for the common case (a password) is always 0.
   Daemon (worksuite-signin.socket, Accept=yes, root):
     serve          one JSON request on stdin (the connection); the caller is identified by SO_PEERCRED
   Settings (pkexec, polkit action lk.worksuite.signin.manage = auth_self; the user is PKEXEC_UID, never an argument):
@@ -11,6 +14,8 @@
     pin-remove
     key-add --name NAME      runs pamu2fcfg, touch the key (refused with key_not_found when no FIDO device is attached)
     key-remove --id ID
+  Lock screen (worksuite-lock, as the user):
+    has-pin        exit 0 when the calling user has a device PIN (gtklock's field then says "PIN or password")
   Shell (socket, no prompt):
     {"op":"set_default","method":"password|pin|key"} for the calling user.
 """
@@ -61,7 +66,7 @@ def handle(req, peer_uid, getpwnam=pwd.getpwnam, state=None, run=None, pol=None)
         core.reset_failures(uid, state)
         return {"ok": True}
     if op == "status":
-        return {"ok": True, "tries_left": core.tries_left(uid, pol, state), "policy": pol}
+        return {"ok": True, "tries_left": core.tries_left(uid, pol, state), "policy": pol, "has_pin": core.read_pin(uid, state) is not None}
     if op == "set_default":
         try:
             core.set_default(user, req.get("method"), state)
@@ -122,12 +127,45 @@ def read_secret(stream):
     return data.split("\0", 1)[0].rstrip("\r\n")
 
 
+def is_pin_shaped(secret):
+    return bool(secret) and secret.isascii() and secret.isdigit()
+
+
+def pam_not_pin(env, stdin):
+    """0 for a password (the PIN check is skipped, nothing is sent or counted); 1 when pam-pin should look at it."""
+    secret = read_secret(stdin)
+    try:
+        return 1 if env.get("PAM_USER") and is_pin_shaped(secret) else 0
+    finally:
+        secret = None  # noqa: F841
+
+
+def pam_password_used(env, sock=None):
+    """0 unless the daemon says this sign-in used the PIN; an unreachable daemon keeps the keyring step (as before)."""
+    user = env.get("PAM_USER")
+    if not user:
+        return 0
+    try:
+        return 1 if ask({"op": "pin_used", "user": user}, sock).get("ok") is True else 0
+    except (OSError, ValueError):
+        return 0
+
+
+def has_pin(env, sock=None):
+    """For the lock screen's label: 0 when the calling user (never another) has a PIN set; 1 otherwise or on error."""
+    try:
+        user = pwd.getpwuid(os.getuid()).pw_name
+        return 0 if ask({"op": "status", "user": user}, sock).get("has_pin") is True else 1
+    except (OSError, ValueError, KeyError):
+        return 1
+
+
 def pam_pin(env, stdin, sock=None):
     user = env.get("PAM_USER")
     if not user:
         return 1
     pin = read_secret(stdin)
-    if not pin.isdigit() or not pin.isascii():
+    if not is_pin_shaped(pin):
         return 1  # a password typed in the same field: not a PIN, nothing sent, nothing counted
     try:
         r = ask({"op": "verify", "user": user, "pin": pin}, sock)
@@ -219,15 +257,22 @@ def main(argv=None, env=None, stdin=None):
     env = os.environ if env is None else env
     stdin = sys.stdin.buffer if stdin is None else stdin
     if not argv:
-        print("usage: worksuite-signin pam-pin|pam-pin-used|pam-reset|serve|dbus|pin-set|pin-remove|key-add|key-remove", file=sys.stderr)
+        print("usage: worksuite-signin pam-pin|pam-not-pin|pam-password-used|pam-pin-used|pam-reset|serve|dbus|pin-set|pin-remove|key-add|key-remove", file=sys.stderr)
         return 2
     cmd = argv[0]
     if cmd == "pam-pin":
         return pam_pin(env, stdin)
+    if cmd == "has-pin":
+        return has_pin(env)
+    if cmd == "pam-not-pin":
+        return pam_not_pin(env, stdin)
+    if cmd == "pam-password-used":
+        return pam_password_used(env)
     if cmd == "pam-pin-used":
         return pam_simple("pin_used", env)
     if cmd == "pam-reset":
-        return pam_simple("reset", env)
+        pam_simple("reset", env)
+        return 0  # optional and best effort: a non-root caller or a stopped daemon is not an error worth logging
     if cmd == "dbus":
         if env.get("PKEXEC_UID") or os.geteuid() != 0:
             return 1

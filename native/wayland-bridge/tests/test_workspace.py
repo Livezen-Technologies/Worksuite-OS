@@ -110,6 +110,43 @@ class KeysTest(unittest.TestCase):
         self.assertEqual([r[r.index("-k") + 1] for r in ran], ["F1", "F4"])
         self.assertFalse(LabwcKeys(which=lambda _n: None).available())
 
+    def test_restored_window_is_fitted_above_the_taskbar(self):
+        # #53: maximized → restored, focused app window: FitToOutput (C-A-W-F20); not for the shell, minimize or others.
+        from worksuite_bridge.model import FULLSCREEN, MAXIMIZED, MINIMIZED
+        from worksuite_bridge.workspace import FIT_KEY, RestoreFit
+        ran = []
+        keys = LabwcKeys(run=lambda a: ran.append(a[a.index("-k") + 1]) or 0, which=lambda _n: "/usr/bin/wtype", settle_s=0)
+        reg = WindowRegistry()
+        RestoreFit(reg, keys, schedule=lambda fn: fn())
+        reg.add("ff", "firefox", "Firefox", flags=MAXIMIZED | ACTIVATED)
+        self.assertEqual(ran, [])                                    # a new window: Labwc placed it in the usable area
+        reg.update("ff", flags=ACTIVATED)
+        self.assertEqual(ran, [FIT_KEY])
+        reg.update("ff", flags=MAXIMIZED | ACTIVATED)
+        reg.update("ff", flags=MAXIMIZED | MINIMIZED)
+        reg.update("ff", flags=MINIMIZED)                            # unmaximized while minimized: nothing to fit
+        reg.update("ff", flags=FULLSCREEN | ACTIVATED)
+        reg.update("ff", flags=ACTIVATED)                            # out of full screen
+        self.assertEqual(ran, [FIT_KEY, FIT_KEY])
+        reg.add("sh", "worksuite-shell", "WorkSuite", flags=MAXIMIZED | ACTIVATED)
+        reg.update("sh", flags=ACTIVATED)
+        reg.update("ff", flags=MAXIMIZED)
+        reg.update("ff", flags=0)                                    # not focused: FitToOutput acts on the focused one
+        self.assertEqual(ran, [FIT_KEY, FIT_KEY])
+        self.assertIn(f'<keybind key="C-A-W-{FIT_KEY}"><action name="FitToOutput"/></keybind>', rc_bindings())
+
+    def test_lift_and_lower_leave_the_taskbar_windows_alone(self):
+        # #53: the taskbar windows are worksuite-shell too, but undecorated; the shell's own windows are decorated.
+        for line in rc_bindings().splitlines():
+            if "worksuite-shell" in line:
+                self.assertEqual(line.count("<query "), line.count('decoration="full"'), line)
+
+    def test_panel_height_is_the_taskbars(self):
+        from worksuite_bridge.__main__ import panel_height
+        self.assertEqual(panel_height({}), 52)                       # #53: 52, not 56 (shell/src/screens/Desktop.tsx)
+        self.assertEqual(panel_height({"WORKSUITE_PANEL_HEIGHT": "64"}), 64)
+        self.assertEqual(panel_height({"WORKSUITE_PANEL_HEIGHT": "x"}), 52)
+
     def test_rc_xml_has_the_generated_bindings(self):
         rc = (REPO / "services/session/labwc/rc.xml").read_text()
         for line in rc_bindings().splitlines():

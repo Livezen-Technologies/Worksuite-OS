@@ -56,16 +56,20 @@ grep -qx 'gsettings-desktop-schemas' "$ROOT/live-build/config/package-lists/work
 grep -q 'maximizable: true' "$ROOT/shell/electron/windowDefaults.ts" && grep -q 'resizable: true' "$ROOT/shell/electron/windowDefaults.ts" \
   && ok "Electron app windows maximizable" || bad "Electron app windows maximizable"
 
-# #53: the taskbar's height is kept free (work area), no sticky edges; #54: the visual Alt+Tab switcher.
-python3 -I - "$RC" "$ROOT/shell/src/screens/Desktop.tsx" <<'PY' && ok "rc.xml: work area, edge resistance, visual Alt+Tab" || bad "rc.xml: work area, edge resistance, visual Alt+Tab"
+# #53: the taskbar's height is kept free once, by the bridge's layer-shell reservation (no <margin> here, which added to
+# it), no sticky edges; #54: the visual Alt+Tab switcher with only fields Labwc 0.8.3 knows (no "icon").
+python3 -I - "$RC" "$ROOT/shell/src/screens/Desktop.tsx" "$ROOT/native/wayland-bridge/worksuite_bridge/__main__.py" <<'PY' && ok "rc.xml: work area, edge resistance, visual Alt+Tab" || bad "rc.xml: work area, edge resistance, visual Alt+Tab"
 import re, sys, xml.etree.ElementTree as E
 r = E.parse(sys.argv[1]).getroot()
 bar = re.search(r'ws-taskbar [^"]*\bh-\[(\d+)px\]', open(sys.argv[2], encoding='utf-8').read())
-assert bar and r.find('margin').get('bottom') == bar.group(1), 'margin = taskbar height'
+assert bar and r.find('margin') is None, 'no <margin>: the bridge reserves the taskbar'
+assert re.search(r'^PANEL_HEIGHT = ' + bar.group(1) + r'$', open(sys.argv[3], encoding='utf-8').read(), re.M), 'bridge = taskbar height'
 assert r.findtext('resistance/screenEdgeStrength') == '0' and r.findtext('resistance/windowEdgeStrength') == '0'
 sw = r.find('windowSwitcher')
 assert sw.get('show') == 'yes' and sw.get('preview') == 'yes' and sw.get('outlines') == 'yes'
-assert [f.get('content') for f in sw.iter('field')][:2] == ['icon', 'title']
+fields = [f.get('content') for f in sw.iter('field')]
+known = {'type', 'type_short', 'identifier', 'trimmed_identifier', 'desktop_entry_name', 'title', 'workspace', 'state', 'output', 'custom'}
+assert set(fields) <= known and 'title' in fields and 'desktop_entry_name' in fields, fields  # Labwc 0.8.3 osd-field.c
 keys = {k.get('key'): k.find('action').get('name') for k in r.iter('keybind')}
 assert keys['A-Tab'] == 'NextWindow' and keys['A-S-Tab'] == 'PreviousWindow'
 PY

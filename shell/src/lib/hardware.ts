@@ -97,15 +97,18 @@ export function driverGroups(devs: HwDevice[], report: DriverReport | null): { g
   const rows = devs.map((dev) => {
     const r = report?.devices.find((x) => x.id === dev.id)
     const status: DriverStatus = r?.status ?? (dev.driver ? 'working' : 'no_driver')
-    return { dev, group: groupOf(dev, r), status, driverLabel: driverLabel(dev.driver, dev.driver_version) }
+    const group = groupOf(dev, r)
+    return { dev, group, status, driverLabel: driverLabel(dev.driver, dev.driver_version, group === 'display') }
   })
   return order.map((g) => ({ group: g, name: GROUP_TEXT[g], items: rows.filter((x) => x.group === g && (g !== 'other' || x.status !== 'working')).map(({ dev, status, driverLabel }) => ({ dev, status, driverLabel })) }))
     .filter((g) => g.items.length)
 }
 
-/** The display driver in words people know: Mesa (amdgpu), Mesa (i915), Mesa (nouveau), NVIDIA 550. */
-export function driverLabel(driver: string | null, version: string | null): string | null {
+/** The display driver in words people know: Mesa (amdgpu), Mesa (i915), Mesa (nouveau), NVIDIA 550. Only graphics
+ *  devices are "Mesa": a virtio network card's driver is also virtio-pci (#59). */
+export function driverLabel(driver: string | null, version: string | null, display = true): string | null {
   if (!driver) return null
+  if (!display) return driver
   if (driver === 'nvidia') return version ? `NVIDIA ${version.split('.')[0]}` : 'NVIDIA'
   if (['amdgpu', 'radeon', 'i915', 'xe', 'nouveau', 'virtio-pci', 'virtio_gpu', 'panfrost', 'panthor', 'msm', 'v3d'].includes(driver)) return `Mesa (${driver})`
   return driver

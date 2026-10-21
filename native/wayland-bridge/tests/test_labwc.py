@@ -142,6 +142,12 @@ class TwoOutputLabwcTest(LabwcTest):
             for w, h in backend.reserver.reserved().values():
                 self.assertEqual(h, 48)
                 self.assertGreater(w, 0)
+            # #53: touch mode's taller taskbar moves the usable area's bottom edge on every output, and back.
+            self.assertEqual(backend.set_panel_height(64), 64)
+            self.pump(backend, lambda: sorted(h for _w, h in backend.reserver.reserved().values()) == [64, 64])
+            self.assertEqual(_probe_usable(self.display), sorted((o.width, o.height - 64) for o in outs.values()))
+            backend.set_panel_height(48)
+            self.pump(backend, lambda: sorted(h for _w, h in backend.reserver.reserved().values()) == [48, 48])
             if not shutil.which("wlr-randr"):
                 return
             env = dict(self.env, WAYLAND_DISPLAY=self.display)

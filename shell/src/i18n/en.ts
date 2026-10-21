@@ -1749,6 +1749,8 @@ const en = {
   'prn.noDrivers': 'No driver found for this printer. Check the model, or install its driver package.',
   'prn.driver': 'Driver',
   'prn.recommended': '{name} (recommended)',
+  'prn.cupsSaid': 'Printing system: {detail}',
+  'prn.driverPending': 'Enter the printer address first.',
   'prn.pickDriver': 'Choose a driver first.',
   'prn.pref.paper': 'Paper size',
   'prn.pref.color': 'Colour',

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, parseOskState, oskControlLine, oskSocketSender, worksuiteOskArgs, labwcTouchBlock, carryDesktops, rcWithTaskbarMargin, TASKBAR_HEIGHT, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
+  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, parseOskState, oskControlLine, oskSocketSender, worksuiteOskArgs, labwcTouchBlock, carryDesktops, rcWithoutTaskbarMargin, TASKBAR_HEIGHT, taskbarHeight, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
   parseOrientation, parsePenLine, parseSwitchLine, parseUdevProps, saveTouch, touchBridge, touchModeOn, type Spawn,
 } from './touch'
 import type { Exec } from './system'
@@ -104,19 +104,20 @@ describe('Labwc config writer', () => {
     expect(out).toContain('worksuite-touch:begin')
     expect(carryDesktops('', sys)).toBe(sys)
   })
-  it('keeps the taskbar free in touch mode: margin 64, back to 52 when off (#53)', () => {
+  it('reserves the taskbar once, through the bridge: no <margin bottom> in rc.xml (#53)', () => {
     const sys = readFileSync(new URL('../../services/session/labwc/rc.xml', import.meta.url), 'utf8')
     const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
     const bar = readFileSync(new URL('../src/screens/Desktop.tsx', import.meta.url), 'utf8')
     expect(css).toContain(`:root[data-touch] .ws-taskbar { height: ${TASKBAR_HEIGHT.touch}px;`)
     expect(bar).toMatch(new RegExp(`ws-taskbar [^"]*h-\\[${TASKBAR_HEIGHT.normal}px\\]`))
-    expect(sys).toContain(`<margin bottom="${TASKBAR_HEIGHT.normal}"/>`)
-    const on = rcWithTaskbarMargin(sys, true)
-    expect(on).toContain('<margin bottom="64"/>')
-    expect(on.match(/<margin\b/g)).toHaveLength(1)
-    expect(rcWithTaskbarMargin(on, false)).toBe(sys)
-    expect(rcWithTaskbarMargin('<labwc_config><margin top="0" bottom="52" output="eDP-1"/></labwc_config>', true)).toBe('<labwc_config><margin top="0" bottom="64" output="eDP-1"/></labwc_config>')
-    expect(rcWithTaskbarMargin('<labwc_config></labwc_config>', true)).toBe('<labwc_config>  <margin bottom="64"/>\n</labwc_config>')
+    // The bridge's layer-shell exclusive zone is the only reservation; a margin too kept 108 px free instead of 52.
+    expect(sys).not.toMatch(/<margin\b[^>]*bottom=/)
+    expect(rcWithoutTaskbarMargin(sys)).toBe(sys)
+    const old = sys.replace('</labwc_config>', '  <margin bottom="52"/>\n</labwc_config>')
+    expect(rcWithoutTaskbarMargin(old)).toBe(sys)
+    expect(rcWithoutTaskbarMargin('<labwc_config><margin top="0" bottom="64" output="eDP-1"/></labwc_config>')).toBe('<labwc_config></labwc_config>')
+    expect(taskbarHeight(false)).toBe(52)
+    expect(taskbarHeight(true)).toBe(64)
   })
   it('carries only Alt+Tab scope into the switcher element with fields (#54: an old bare tag broke the file)', () => {
     const sys = '<labwc_config><windowSwitcher show="yes" preview="yes" allWorkspaces="no">\n<fields><field content="icon" width="6%"/></fields>\n</windowSwitcher></labwc_config>'
@@ -150,7 +151,10 @@ describe('Labwc config writer', () => {
     const spawned: string[] = []
     const sp: Spawn = (cmd, args) => { spawned.push([cmd, ...args].join(' ')); return { kill: (sig) => { spawned.push(`kill ${cmd} ${sig ?? ''}`) }, onLine: (cb) => { lines[cmd] = cb }, onExit: () => {} } }
     const b = touchBridge(home, exec, sp, sys)
+    const heights: number[] = []
+    b.onTaskbarHeight((h) => heights.push(h))
     await b.start()
+    expect(heights).toEqual([52])   // #53: the bridge's reservation, once at start
     expect(lstatSync(path.join(ldir, 'rc.xml')).isSymbolicLink()).toBe(false)
     expect(readFileSync(path.join(sys, 'rc.xml'), 'utf8')).toBe(RC)
     const r = await b.set(JSON.stringify({ touchEnabled: false }))
@@ -165,6 +169,7 @@ describe('Labwc config writer', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect((await b.state()).available && (await b.state() as { value: { touchMode: boolean } }).value.touchMode).toBe(true)
     expect(calls).toContain('wlr-randr --output eDP-1 --transform 90')
+    expect(heights).toEqual([52, 64])   // the touch-mode taskbar is 64 px: the reservation follows
     expect(b.osk(true)).toEqual({ available: true, value: true })
     await new Promise((r) => setTimeout(r, 450))   // wvkbd gets the signal once its handlers are set up
     expect(spawned).toContain('kill wvkbd-mobintl SIGUSR2')
@@ -196,7 +201,7 @@ describe('WorkSuite keyboard (worksuite-osk)', () => {
     const exec: Exec = async () => ({ code: 1, stdout: '', stderr: '' })
     const b = touchBridge(home, exec, sp, home, () => true, (_s, l) => lines.push(l))
     await b.start()
-    expect(spawned[spawned.length - 1]).toBe('/usr/lib/worksuite/worksuite-osk --size medium --mode full --langs en,si,ta')
+    expect(spawned[spawned.length - 1]).toBe('/usr/lib/worksuite/worksuite-osk --size medium --mode full --langs en,si,ta --panel 52')
     expect(b.osk(true, 6, 8)).toEqual({ available: true, value: true })
     expect(b.osk(false)).toEqual({ available: true, value: false })
     expect(lines.slice(-2)).toEqual(['show 6 8\n', 'hide\n'])
@@ -275,6 +280,6 @@ describe('WorkSuite keyboard (worksuite-osk)', () => {
   it('control lines are bounded numbers only', () => {
     expect(oskControlLine(true, 99, -1)).toBe('show 0 0\n')
     expect(oskControlLine(true, 9, 0xffff)).toBe('show 9 1023\n')
-    expect(worksuiteOskArgs({ ...DEFAULT_TOUCH, oskLayout: 'split', oskSuggestions: false }, [])).toEqual(['--size', 'medium', '--mode', 'split', '--langs', 'en,si,ta', '--no-suggestions'])
+    expect(worksuiteOskArgs({ ...DEFAULT_TOUCH, oskLayout: 'split', oskSuggestions: false }, [])).toEqual(['--size', 'medium', '--mode', 'split', '--langs', 'en,si,ta', '--no-suggestions', '--panel', '52'])
   })
 })

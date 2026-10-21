@@ -130,6 +130,43 @@ describe('Keep changes errors (#60)', () => {
   })
 })
 
+describe('Keep dialog keyboard and focus (#60)', () => {
+  const key = (k: string) => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })) })
+  async function pending(scale: string) {
+    await render(<DisplayPanel />)
+    await choose(byLabel('Scale'), scale)
+    await act(async () => { button('Apply').click() })
+    await act(async () => { await Promise.resolve() })
+    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull()
+  }
+  it('takes the focus, and Enter keeps even after the focus moved away', async () => {
+    await pending('1.5')
+    expect(document.activeElement?.textContent).toBe('Keep changes')
+    ;(document.activeElement as HTMLElement).blur()
+    await act(async () => { window.dispatchEvent(new Event('resize')) })
+    expect(document.activeElement?.textContent).toBe('Keep changes')
+    ;(document.activeElement as HTMLElement).blur()
+    const keep = vi.spyOn(displays, 'displayKeep')
+    await key('Enter')
+    await key('Enter')
+    await act(async () => { await Promise.resolve() })
+    expect(keep).toHaveBeenCalledTimes(1)
+    keep.mockRestore()
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+    const s = await displays.displayState()
+    expect(s.ok && s.value.outputs[0].scale).toBe(1.5)
+    expect(s.ok && s.value.pending).toBeNull()
+  })
+  it('Escape reverts', async () => {
+    await pending('1.75')
+    await key('Escape')
+    await act(async () => { await Promise.resolve() })
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+    const s = await displays.displayState()
+    expect(s.ok && s.value.outputs[0].scale).toBe(1.5)
+  })
+})
+
 describe('Settings › Display modes (#32)', () => {
   const one = (o: Partial<DisplayState['outputs'][number]>): DisplayState => {
     const out = { name: 'Virtual-1', description: 'Virtual', make: '', model: '', serial: '', enabled: true, x: 0, y: 0, scale: 1, transform: 'normal', modes: [{ width: 1280, height: 800, refresh: 60, preferred: true, current: true }], ...o }

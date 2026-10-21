@@ -28,8 +28,11 @@ architecture-independent, so the same package serves amd64 and arm64 (WSOS-ARM-0
   environment) adds binaries, e.g. a future native panel.
 - WSOS-DSK-005/007: for every output the bridge maps a transparent, input-less `zwlr_layer_surface_v1` on the
   bottom layer, anchored to the bottom edge with an exclusive zone of `WORKSUITE_PANEL_HEIGHT` logical pixels
-  (default 56, the taskbar's height; 0 disables). Labwc then keeps maximised windows above the taskbar on each
-  monitor, at any scale. Hot-plugged outputs get a reservation, unplugged ones drop theirs; Labwc moves windows
+  (default 52, the taskbar's height; 0 disables). `SetPanelHeight(u)` changes it at run time (the shell sends 64 in
+  touch mode and 52 again after). Labwc then keeps maximised, snapped and new windows above the taskbar on each
+  monitor, at any scale. It is the only reservation of that edge (#53): rc.xml has no `<margin bottom>`, which added
+  to it. A window restored from maximized or full screen that is taller than the usable area is shrunk to it
+  (`RestoreFit`: Ctrl+Alt+Super+F20, Labwc's `FitToOutput` on the focused window). Hot-plugged outputs get a reservation, unplugged ones drop theirs; Labwc moves windows
   off a removed output and the bridge relists them on their new output, then emits `OutputsChanged`. Chosen
   over rc.xml `<margin>`, which is static and cannot follow hotplug. The headless Labwc test runs two outputs
   (`WLR_HEADLESS_OUTPUTS=2`), checks each usable area with a probe layer surface, rescales and unplugs one with

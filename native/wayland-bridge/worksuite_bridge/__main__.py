@@ -13,7 +13,19 @@ from .access import AccessPolicy
 from .model import WindowRegistry
 from .service import Bridge
 from .capture import OutputCapture
-from .workspace import MAX_WORKSPACES, LabwcConfig, LabwcKeys, WorkspaceTracker
+from .workspace import MAX_WORKSPACES, LabwcConfig, LabwcKeys, RestoreFit, WorkspaceTracker
+
+
+# The taskbar's height (shell/src/screens/Desktop.tsx .ws-taskbar, 52 px; touch mode 64 px, which the shell sets with
+# SetPanelHeight). The bridge's layer-shell reservation is the only one: rc.xml has no <margin bottom> (#53).
+PANEL_HEIGHT = 52
+
+
+def panel_height(env: dict[str, str] | os._Environ[str]) -> int:
+    try:
+        return max(0, int(env.get("WORKSUITE_PANEL_HEIGHT", str(PANEL_HEIGHT))))
+    except ValueError:
+        return PANEL_HEIGHT
 
 
 async def main() -> None:
@@ -24,7 +36,7 @@ async def main() -> None:
     bus = await MessageBus().connect()
     holder: dict[str, Bridge] = {}
     backend = WaylandBackend(registry, on_outputs_changed=lambda: holder["b"].outputs_changed() if "b" in holder else None,
-                             panel_height=int(os.environ.get("WORKSUITE_PANEL_HEIGHT", "56")))  # DSK-005
+                             panel_height=panel_height(os.environ))  # DSK-005, #53
     backend.connect()
     # Labwc desktops (WSOS-DSK-003): count and names from the rc.xml Labwc runs with (the user's copy, else the system
     # one); WORKSUITE_WORKSPACES only when neither can be read.
@@ -34,7 +46,9 @@ async def main() -> None:
     names = ["" if re.fullmatch(rf"(Desktop|Workspace) {i + 1}", x) else x for i, x in enumerate(names)]
     workspaces = WorkspaceTracker(registry, count=count, names=names)
     workspaces.switcher_all = 'allWorkspaces="yes"' in config.read()
-    bridge = Bridge(bus, backend, registry, AccessPolicy(), workspaces=workspaces, keys=LabwcKeys(), config=config, capture=OutputCapture())
+    keys = LabwcKeys()
+    RestoreFit(registry, keys)  # #53: restored windows are no taller than the space above the taskbar
+    bridge = Bridge(bus, backend, registry, AccessPolicy(), workspaces=workspaces, keys=keys, config=config, capture=OutputCapture())
     holder["b"] = bridge
     loop = asyncio.get_running_loop()
     backend.attach(loop)

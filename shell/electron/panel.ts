@@ -169,6 +169,8 @@ export class PanelClient {
 
   async reconnect(): Promise<void> {
     await this.call(BRIDGE_PATH, BRIDGE, 'SubscribeWindowEvents').catch(() => null)
+    // A restarted bridge starts with its default reservation: the taskbar's height again (touch mode's 64, #53).
+    if (this.panelHeight !== null) await this.setPanelHeight(this.panelHeight)
     await Promise.all([this.refreshWindows(), this.refreshTray(), this.refreshWorkspaces()])
   }
 
@@ -284,6 +286,13 @@ export class PanelClient {
   setSwitcherAllWorkspaces(on: boolean) { return this.op('SetSwitcherAllWorkspaces', 'b', [on]) }
   /** Task View: the shell's window over the apps (it is always on bottom otherwise, rc.xml), and back. */
   setShellRaised(handle: string, raised: boolean) { return this.op('SetShellRaised', 'sb', [handle, raised]) }
+
+  /** #53: the taskbar's height, reserved by the bridge at the bottom of every output (layer-shell exclusive zone). */
+  setPanelHeight(height: number) {
+    this.panelHeight = Math.max(0, Math.min(256, Math.round(height)))
+    return this.op('SetPanelHeight', 'u', [this.panelHeight])
+  }
+  private panelHeight: number | null = null
 
   /** A small JPEG of an output for Task View, as a data: URL held in memory only; null when the bridge can't. */
   async captureOutput(output: string, maxWidth: number): Promise<string | null> {

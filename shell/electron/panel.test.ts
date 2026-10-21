@@ -183,6 +183,17 @@ describe('panel workspaces (WSOS-DSK-003)', () => {
     expect(m?.body).toEqual(['w1', true])
   })
 
+  it('sends the taskbar height again to a restarted bridge (#53)', async () => {
+    const f = fakeBus({ SetPanelHeight: (m) => [m.body[0]] })
+    const c = new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn() })
+    await c.reconnect()
+    expect(f.calls.filter((m) => m.member === 'SetPanelHeight')).toHaveLength(0)   // nothing chosen yet: its default
+    await c.setPanelHeight(64)
+    f.calls.length = 0
+    await c.reconnect()
+    expect(f.calls.filter((m) => m.member === 'SetPanelHeight').map((m) => m.body)).toEqual([[64]])
+  })
+
   it('reports NotFound from the bridge as not_found', async () => {
     const f = fakeBus({ ActivateWorkspace: () => dbusError('lk.worksuite.WaylandBridge1.Error.NotFound') })
     const c = new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn() })

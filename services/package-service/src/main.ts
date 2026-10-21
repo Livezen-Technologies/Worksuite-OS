@@ -13,6 +13,7 @@ import { loadCatalog, requestApp, type CatalogEnv } from './catalog.ts';
 import { UpdateHistory } from './history.ts';
 import { gunzipSync } from 'node:zlib';
 import { DriverManager, firmwarePresent, parseModulesAlias, scanSysfs, type DriverEnv } from './driverscan.ts';
+import { parseInstalled } from './drivers.ts';
 
 const POLICY = '/run/worksuite-device-agent/policy.json';
 const AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';
@@ -113,7 +114,7 @@ function loadKeys(dir: string): (id: string) => KeyObject | undefined {
   return (id) => m.get(id);
 }
 const busctlGet = (args: string[]) => new Promise<string>((resolve) => execFile('busctl', ['--system', 'get-property', ...args], { timeout: 5000 }, (_e, out) => resolve(String(out ?? '').trim())));
-const pkgVersion = (name: string) => { try { return execFileSync('dpkg-query', ['-W', '-f=${Version}', name], { encoding: 'utf8' }).trim() || 'unknown'; } catch { return 'unknown'; } };
+const pkgVersion = (name: string) => { try { return execFileSync('dpkg-query', ['-W', '-f=${Version}', name], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || 'unknown'; } catch { return 'unknown'; } };
 
 const UPDATE_STATUS_DIR = '/run/worksuite-package-service';
 
@@ -212,11 +213,17 @@ const SECURE_BOOT_VAR = '/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2
 
 export function driverEnv(svc: PackageService): DriverEnv {
   let aliases: ReturnType<typeof parseModulesAlias> | null = null;
-  const installed = (p: string) => { try { return execFileSync('dpkg-query', ['-W', '-f=${db:Status-Abbrev}', p], { encoding: 'utf8' }).startsWith('ii'); } catch { return false; } };
+  // #59: one quiet dpkg-query per check for every package, not one per name (each unknown name printed "no packages
+  // found matching nvidia-driver" into the journal, dozens of times a check).
+  let pkgs: Set<string> | null = null;
+  const readInstalled = () => {
+    try { return parseInstalled(execFileSync('dpkg-query', ['-W', '-f=${Package}\t${db:Status-Abbrev}\n'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 << 20 })); } catch { return new Set<string>(); }
+  };
+  const installed = (p: string) => (pkgs ??= readInstalled()).has(p);
   return {
     run: linuxEnv.runner.run,
     runLines,
-    version: (p) => { try { return execFileSync('dpkg-query', ['-W', '-f=${Version}', p], { encoding: 'utf8' }).trim() || null; } catch { return null; } },
+    version: (p) => { try { return execFileSync('dpkg-query', ['-W', '-f=${Version}', p], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; } },
     devices: () => {
       aliases ??= parseModulesAlias(readOr(`/lib/modules/${release()}/modules.alias`));
       return scanSysfs('/', aliases);
@@ -234,6 +241,11 @@ export function driverEnv(svc: PackageService): DriverEnv {
       return parts.join('\n');
     },
     installed,
+    refreshInstalled: () => { pkgs = null; },
+    // The archive the firmware lookup and driver installs use; any HTTP answer (even an error) means it is reachable.
+    archiveReachable: async () => {
+      try { await fetch('https://deb.debian.org/debian/dists/trixie/InRelease', { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(15_000) }); return true; } catch { return false; }
+    },
     // The published policy carries the kiosk block for the devices it names; this device's id is in the agent's status.
     policy: () => {
       const p = linuxEnv.policy() as (ReturnType<DriverEnv['policy']> & { kiosk?: { enabled?: boolean; devices?: unknown } }) | null;

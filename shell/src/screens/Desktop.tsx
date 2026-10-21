@@ -50,6 +50,8 @@ import SnipOverlay from '../components/SnipOverlay'
 import ClipboardFlyout, { type FlyoutTab } from '../components/ClipboardFlyout'
 import ShortcutHelp from '../components/ShortcutHelp'
 import { MonitoringIndicator } from '../components/MonitoringNotice'
+import { closePopups, useAnyPopupOpen } from '../lib/popupLift'
+import { taskbarApi, useTaskbarMirror } from '../lib/taskbarMirror'
 import { captureApi, SHELL_OPEN_EVENT, SNIP_EDIT_EVENT, snipState, type Captured, type ShellOpen, type SnipOpen } from '../lib/captureApi'
 
 /** How long a pop-up toast stays (services/session/toasts TIMEOUT_MS is the same). */
@@ -351,7 +353,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const openWin = (screen: Parameters<typeof onOpen>[0]) => { setBehind(false); setLiftSeq((n) => n + 1); onOpen(screen) }
   useEffect(() => panel.onShellBehind?.(() => {
     setLauncher(false); setA11yOpen(false); setAssistant(false); setQsOpen(false); setPowerOpen(false); setTrayOpen(false)
-    setFlyout(false); setWidgetPicker(false); setSearch(null); setWallMenu(null); setBehind(true)
+    setFlyout(false); setWidgetPicker(false); setSearch(null); setWallMenu(null); setBehind(true); closePopups()
   }), [])
   const closeTray = useCallback(() => setTrayOpen(false), [])
   // A shell window showing (minimized ones stay mounted, on the taskbar only, and let the shell go below the apps).
@@ -361,8 +363,19 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     setBehind(false); setLiftSeq((n) => n + 1); onShellWindow?.(app, how)
   }
   useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
+  const popupOpen = useAnyPopupOpen()
+  // #53: the taskbar's own window above the apps mirrors this taskbar and hands its clicks back (lib/taskbarMirror.ts);
+  // it exists while the desktop shows, not over the session-end screen.
+  const taskbarNav = useRef<HTMLElement>(null)
+  useTaskbarMirror(taskbarNav, '')
+  useEffect(() => {
+    const api = taskbarApi()
+    void api?.wanted(!ending).catch(() => undefined)
+    return () => { void api?.wanted(false).catch(() => undefined) }
+  }, [ending])
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
     || flyout || widgetPicker || authOpen || rsOpen || !!search || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
+    || popupOpen   // the taskbar controls' own popups (language switcher, VPN, move-to-desktop menu: lib/popupLift.ts, #62)
   // Once the shell is over the apps it has the keyboard (the bridge activates it): give it to the launcher's search
   // again, which was focused while an app still had the keyboard (Start opened with the mouse).
   const focusSearch = useRef(() => undefined as void)
@@ -609,7 +622,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
       {/* Taskbar (canvas G01/G02, "Centered" is the default style in Taskbar · styles): 52 px, edge-attached glass bar.
           Centre: [space][Start, Search, apps][space · tray]; Left: [Start, Search | apps][tray]. Flex, not a grid, so on a
           narrow screen the app list shrinks and scrolls instead of running under the tray. */}
-      <nav aria-label={t('panel.taskbar')} data-align={align} className="ws-taskbar absolute inset-x-0 bottom-0 z-40 box-border flex h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px]">
+      <nav ref={taskbarNav} aria-label={t('panel.taskbar')} data-align={align} className="ws-taskbar absolute inset-x-0 bottom-0 z-40 box-border flex h-[52px] items-center gap-1.5 border-t border-[rgba(127,178,255,0.12)] bg-[rgba(6,14,34,0.88)] px-2.5 text-[#E8EEFA] backdrop-blur-[20px]">
         {centered && <span aria-hidden="true" data-testid="taskbar-lead" className="min-w-0 flex-[1_1_0]" />}
         {/* Start and the app icons: one group. Start comes first in tab order. */}
         <div data-testid="taskbar-main" className="flex min-w-0 flex-[0_1_auto] items-center gap-1.5">

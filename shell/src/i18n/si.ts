@@ -1721,6 +1721,8 @@ const si: Partial<Record<MessageKey, string>> = {
   'prn.noDrivers': 'මෙම මුද්‍රකයට ධාවකයක් හමු නොවීය. මාදිලිය පරීක්ෂා කරන්න, නැතහොත් එහි ධාවක පැකේජය ස්ථාපනය කරන්න.',
   'prn.driver': 'ධාවකය',
   'prn.recommended': '{name} (නිර්දේශිත)',
+  'prn.cupsSaid': 'මුද්‍රණ පද්ධතිය: {detail}',
+  'prn.driverPending': 'මුලින්ම මුද්‍රක ලිපිනය ඇතුළු කරන්න.',
   'prn.pickDriver': 'පළමුව ධාවකයක් තෝරන්න.',
   'prn.pref.paper': 'කඩදාසි ප්‍රමාණය',
   'prn.pref.color': 'වර්ණ',

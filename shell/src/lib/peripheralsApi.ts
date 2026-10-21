@@ -1,6 +1,7 @@
 // Renderer side of electron/peripherals.ts (WSOS-INT-003…006, INT-011) and the sync error list (WSOS-SYN-004).
 // Outside Electron there is no bridge and the sections say so instead of showing sample data.
-export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
+/** detail: the tool's own error text, shown under the reason when it says more (e.g. lpadmin / CUPS, #51). */
+export type Avail<T> = { available: true; value: T } | { available: false; reason: string; detail?: string }
 export interface BtFound { address: string; name: string }
 export interface Volume { device: string; disk: string; label: string; size: string; fstype: string; mountpoint: string | null; encrypted: boolean; unlocked: string | null }
 export interface PowerProfiles { active: string; profiles: string[]; degraded: string | null }

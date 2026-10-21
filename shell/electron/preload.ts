@@ -252,6 +252,19 @@ contextBridge.exposeInMainWorld('worksuitePanel', {
   onShellBehind: on('ws:shellBehind'),
 })
 
+// The taskbar's own window per output (#53, electron/taskbar.ts, src/lib/taskbarMirror.ts): the shell window mirrors its
+// taskbar there and performs the clicks made on it.
+contextBridge.exposeInMainWorld('worksuiteTaskbar', {
+  publish: (output: string, html: string, attrs: unknown) => ipcRenderer.invoke('ws:taskbarPublish', String(output), String(html), JSON.stringify(attrs ?? {})),
+  wanted: (on: boolean) => ipcRenderer.invoke('ws:taskbarWanted', on ? '1' : '0'),
+  onEvent: on('ws:taskbarEvent'),
+  onRepublish: on('ws:taskbarRepublish'),
+  // In the taskbar window:
+  hello: () => ipcRenderer.invoke('ws:taskbarHello'),
+  event: (ev: unknown) => ipcRenderer.invoke('ws:taskbarEvent', JSON.stringify(ev ?? null)),
+  onHtml: on('ws:taskbarHtml'),
+})
+
 // On-device AI assistant — see electron/ai.ts and services/ai. Answers stream back as onEvent.
 contextBridge.exposeInMainWorld('worksuiteAI', {
   status: () => ipcRenderer.invoke('ws:aiStatus'),

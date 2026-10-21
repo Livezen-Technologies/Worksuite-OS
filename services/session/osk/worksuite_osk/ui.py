@@ -31,7 +31,7 @@ window.wsosk { background: rgba(7,19,48,0.97); color: #E8EEFA; font-family: "IBM
 
 
 class OskWindow(Gtk.ApplicationWindow):
-    def __init__(self, app: Gtk.Application, kb: Keyboard, out: Output, size: str = "medium", kiosk: bool = False):
+    def __init__(self, app: Gtk.Application, kb: Keyboard, out: Output, size: str = "medium", kiosk: bool = False, panel: int | None = None):
         super().__init__(application=app)
         self.kb, self.out, self.size, self.kiosk = kb, out, size, kiosk
         self.add_css_class("wsosk")
@@ -45,7 +45,7 @@ class OskWindow(Gtk.ApplicationWindow):
         self.set_child(self.box)
         self.drag = Gtk.GestureDrag()
         self.drag.connect("drag-update", self._dragged)
-        self.panel = panel_height(kiosk)
+        self.panel = panel_height(kiosk, panel=panel)
         self.float_pos = [0, self.panel]
         self.zone = 0
         self.connect("map", self._mapped)
@@ -177,7 +177,7 @@ class OskWindow(Gtk.ApplicationWindow):
         hid[0] = clock.connect("after-paint", painted)
 
 
-def run(kb: Keyboard, size: str, kiosk: bool, control_path: str) -> int:  # pragma: no cover - needs a compositor
+def run(kb: Keyboard, size: str, kiosk: bool, control_path: str, panel: int | None = None) -> int:  # pragma: no cover - needs a compositor
     import os
     import socket
 
@@ -190,7 +190,7 @@ def run(kb: Keyboard, size: str, kiosk: bool, control_path: str) -> int:  # prag
 
     def activate(a):
         out = Output(on_hide=lambda: state["w"].set_visible(False))
-        w = OskWindow(a, kb, out, size, kiosk)
+        w = OskWindow(a, kb, out, size, kiosk, panel)
         state["w"] = w
 
         def report(*_a):

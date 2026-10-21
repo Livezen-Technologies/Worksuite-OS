@@ -120,10 +120,11 @@ describe('printers bridge', () => {
     expect(calls).toEqual(['lpinfo --timeout 10 -l -v'])
   })
   it('falls back to pkexec worksuite-printer-admin when cupsd says Forbidden (issue #51)', async () => {
-    const { exec, calls } = fakeExec({ 'lpadmin': { code: 1, stderr: 'lpadmin: Forbidden\n' }, 'pkexec': { code: 0 } })
+    const { exec, calls } = fakeExec({ 'lpadmin': { code: 1, stderr: 'lpadmin: Forbidden\n' }, 'pkexec': { code: 0 }, 'lpstat -p': { code: 1 } })
     const b = printersBridge(exec)
     expect(await b.addPrinter('usb://Brother/HL?serial=1', 'Brother HL', 'drv:///brlaser.drv/br2350.ppd')).toEqual({ available: true, value: 'Brother_HL' })
     expect(calls).toEqual([
+      'lpstat -p Brother_HL',
       'lpadmin -p Brother_HL -E -v usb://Brother/HL?serial=1 -m drv:///brlaser.drv/br2350.ppd -D Brother HL',
       `pkexec ${PRINTER_ADMIN} add Brother_HL usb://Brother/HL?serial=1 drv:///brlaser.drv/br2350.ppd Brother HL`,
     ])
@@ -135,12 +136,37 @@ describe('printers bridge', () => {
     expect(await printersBridge(refused.exec).pausePrinter('Office', true)).toEqual({ available: false, reason: 'not_authorized' })
   })
   it('needs a driver for JetDirect/LPD/USB; IPP printers are driverless', async () => {
-    const { exec, calls } = fakeExec({})
+    const { exec, calls } = fakeExec({ 'lpstat -p': { code: 1 } })
     const b = printersBridge(exec)
     expect(await b.addPrinter('socket://10.0.0.7:9100', 'Old', 'everywhere')).toEqual({ available: false, reason: 'printer_no_driver' })
     expect(await b.addPrinter('ipp://10.0.0.5/ipp/print', 'Office printer')).toEqual({ available: true, value: 'Office_printer' })
     expect(await b.addPrinter('ipp://10.0.0.5/ipp/print', 'x', '-h')).toEqual({ available: false, reason: 'invalid_argument' })
-    expect(calls).toEqual(['lpadmin -p Office_printer -E -v ipp://10.0.0.5/ipp/print -m everywhere -D Office printer'])
+    expect(calls).toEqual(['lpstat -p Office_printer', 'lpadmin -p Office_printer -E -v ipp://10.0.0.5/ipp/print -m everywhere -D Office printer', 'lpoptions -p Office_printer'])
+  })
+  it('#51: a failed IPP Everywhere add removes the half-made queue and returns what lpadmin said', async () => {
+    const { exec, calls } = fakeExec({
+      'lpstat -p': [{ code: 1 }, { code: 0 }],
+      'lpadmin -p': { code: 1, stderr: 'lpadmin: Unable to get printer attributes: client-error-bad-request\n' },
+      'lpadmin -x': { code: 0 },
+    })
+    expect(await printersBridge(exec).addPrinter('ipp://10.0.2.2:8631/ipp/print', 'Host')).toEqual({
+      available: false, reason: 'printer_unreachable', detail: 'lpadmin: Unable to get printer attributes: client-error-bad-request',
+    })
+    expect(calls).toEqual(['lpstat -p Host', 'lpadmin -p Host -E -v ipp://10.0.2.2:8631/ipp/print -m everywhere -D Host', 'lpstat -p Host', 'lpadmin -x Host'])
+  })
+  it('#51: an IPP Everywhere add that only made a "Local Raw Printer" queue is rolled back', async () => {
+    const { exec, calls } = fakeExec({
+      'lpstat -p': [{ code: 1 }, { code: 0 }],
+      'lpoptions -p': { stdout: "device-uri=ipp://h/ipp/print printer-make-and-model='Local Raw Printer' printer-is-shared=false" },
+    })
+    expect(await printersBridge(exec).addPrinter('ipp://h/ipp/print', 'H')).toEqual({ available: false, reason: 'printer_not_driverless' })
+    expect(calls.at(-1)).toBe('lpadmin -x H')
+  })
+  it('#51: never removes a queue of the same name that was already there', async () => {
+    const { exec, calls } = fakeExec({ 'lpadmin -p': { code: 1, stderr: 'lpadmin: Bad device-uri scheme "x".' } })
+    const r = await printersBridge(exec).addPrinter('ipp://h/ipp/print', 'Office')
+    expect(r).toMatchObject({ available: false, reason: 'printer_bad_address' })
+    expect(calls.some((c) => c.startsWith('lpadmin -x'))).toBe(false)
   })
   it('looks up drivers by device id; no match still offers IPP Everywhere', async () => {
     const { exec, calls } = fakeExec({ 'lpinfo': { code: 1, stderr: 'lpinfo: No drivers found.' } })

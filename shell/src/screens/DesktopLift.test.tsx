@@ -8,6 +8,8 @@ import Desktop from './Desktop'
 import { panel } from '../lib/panel'
 import { useNotices } from '../lib/useNotices'
 import { os } from '../lib/os'
+import { usePopupLift } from '../lib/popupLift'
+import { useState } from 'react'
 
 beforeAll(() => {
   ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -45,6 +47,35 @@ it('lifts the shell while the launcher or a shell window is open, and puts it ba
   await act(async () => { root!.render(<Host open={false} />) })
   await settle()
   expect(onTop).toHaveBeenLastCalledWith(false)
+})
+
+function PopupProbe() {
+  const [open, setOpen] = useState(false)
+  usePopupLift(open, () => setOpen(false))
+  return <button type="button" data-testid="probe" aria-expanded={open} onClick={() => setOpen((v) => !v)}>lang</button>
+}
+
+it('lifts the shell while a taskbar control\'s popup is open, and closes it when an app takes the focus (#62)', async () => {
+  const onTop = vi.spyOn(panel, 'shellOnTop')
+  let behind: () => void = () => undefined
+  panel.onShellBehind = (cb) => { behind = cb; return () => { behind = () => undefined } }
+  try {
+    host = document.createElement('div'); document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => { root!.render(<><Host open={false} /><PopupProbe /></>) })
+    await settle()
+    expect(onTop).toHaveBeenLastCalledWith(false)
+    const probe = host.querySelector<HTMLButtonElement>('[data-testid="probe"]')!
+    await act(async () => { probe.click() })   // e.g. the language switcher's menu
+    await settle()
+    expect(onTop).toHaveBeenLastCalledWith(true)
+    await act(async () => { behind() })
+    await settle()
+    expect(probe.getAttribute('aria-expanded')).toBe('false')
+    expect(onTop).toHaveBeenLastCalledWith(false)
+  } finally {
+    delete panel.onShellBehind
+  }
 })
 
 it('hands a toast to worksuite-toasts (over the apps) and does not draw it in its own window', async () => {

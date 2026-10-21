@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   aliasMatches, autoInstallable, contentsLookup, DAY, deviceKind, deviceStatuses, displayDriverLabel, dkmsFor, driverPolicy, gpuOffer,
-  needsGpuFallback, nvidiaPick, parseFirmwareFailures, parseFwupd, parseIsenkram, shouldCheck, type DriverOffer, type ScannedDevice,
+  needsGpuFallback, nvidiaPick, parseFirmwareFailures, parseInstalled, parseFwupd, parseIsenkram, shouldCheck, type DriverOffer, type ScannedDevice,
 } from '../src/drivers.ts';
 import { aptError, DriverManager, mokPassword, parseAptStatus, parseModulesAlias, scanSysfs, type DriverEnv } from '../src/driverscan.ts';
 import { checkSources, tidyLegacySources } from '../src/apt.ts';
@@ -422,4 +422,20 @@ test('unit: network and DNS stay reachable for apt; no device allow-list that wo
   assert.deepEqual(set('ProtectClock'), []); assert.deepEqual(set('DeviceAllow'), []); assert.deepEqual(set('PrivateDevices'), []);
   assert.match(set('CapabilityBoundingSet').join(' '), /^~CAP_SYS_TIME CAP_WAKE_ALARM$/);
   assert.ok(!/^ProtectSystem=strict/m.test(unit) && /^ReadWritePaths=.*\/etc\b/m.test(unit), 'dpkg can write /etc and /usr');
+});
+
+test('#59: unreachable package servers → state offline (never "up to date"); installed() read once per check', async () => {
+  let refreshed = 0, asked = 0;
+  const m = managerEnv({ archiveReachable: async () => false, refreshInstalled: () => { refreshed++; }, installed: (p) => { if (p === 'nvidia-driver') asked++; return false; } });
+  const r = await new DriverManager(m.env).check('manual');
+  assert.equal(r.state, 'offline');
+  assert.equal(refreshed, 1);
+  assert.equal(asked, 1, 'nvidia-driver is looked up once per check, not once per device');
+  const ok = managerEnv({ archiveReachable: async () => true });
+  assert.equal((await new DriverManager(ok.env).check('manual')).state, 'idle');
+});
+
+test('#59: parseInstalled keeps only installed ("ii") packages, without the architecture', () => {
+  const s = parseInstalled('nvidia-driver\tun \nfirmware-iwlwifi\tii \nlibc6:amd64\tii \nfoo\trc \n');
+  assert.deepEqual([...s].sort(), ['firmware-iwlwifi', 'libc6']);
 });
