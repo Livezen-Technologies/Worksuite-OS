@@ -104,6 +104,13 @@ describe('Labwc config writer', () => {
     expect(out).toContain('worksuite-touch:begin')
     expect(carryDesktops('', sys)).toBe(sys)
   })
+  it('carries only Alt+Tab scope into the switcher element with fields (#54: an old bare tag broke the file)', () => {
+    const sys = '<labwc_config><windowSwitcher show="yes" preview="yes" allWorkspaces="no">\n<fields><field content="icon" width="6%"/></fields>\n</windowSwitcher></labwc_config>'
+    const out = carryDesktops('<labwc_config><windowSwitcher allWorkspaces="yes"/></labwc_config>', sys)
+    expect(out).toBe(sys.replace('allWorkspaces="no"', 'allWorkspaces="yes"'))
+    expect(carryDesktops('<labwc_config><windowSwitcher allWorkspaces="no"/></labwc_config>', '<labwc_config><windowSwitcher show="yes"/></labwc_config>'))
+      .toBe('<labwc_config><windowSwitcher show="yes" allWorkspaces="no"/></labwc_config>')
+  })
   it('writes a calibration matrix and drops unusable ones', () => {
     const m = [1.02, 0, -0.01, 0, 0.98, 0.015]
     expect(normalizeTouch({ calibration: { 'ELAN Touch': m, bad: [1, 2, 3], huge: [9, 0, 0, 0, 1, 0], 'x"<': m } }).calibration).toEqual({ 'ELAN Touch': m })

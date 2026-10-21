@@ -38,4 +38,39 @@ assert r.find('mouse') is None  # Labwc's default bindings: drag to move, edges 
 keys = {k.get('key') for k in r.iter('keybind')}
 assert {'W-Up', 'W-Down', 'W-Left', 'W-Right', 'A-F4'} <= keys
 PY
+# #49, #50: apps drawing their own title bar (Firefox, Electron's WhatsApp and sign-in windows, GTK header bars) take
+# GTK's button layout, which defaulted to Close only.
+G=$ROOT/services/session
+grep -q "^button-layout='[^']*:minimize,maximize,close'$" "$G/gsettings/90_worksuite-session.gschema.override" \
+  && grep -q '^\[org.gnome.desktop.wm.preferences\]$' "$G/gsettings/90_worksuite-session.gschema.override" \
+  && ok "GSettings button layout: minimize, maximize, close" || bad "GSettings button layout: minimize, maximize, close"
+for v in 3 4; do
+  grep -q '^gtk-decoration-layout=[^:]*:minimize,maximize,close$' "$G/gtk/gtk-$v.0/settings.ini" && ok "GTK $v settings.ini layout" || bad "GTK $v settings.ini layout"
+done
+grep -q '^pref("browser.tabs.inTitlebar", 0);$' "$G/firefox/worksuite.js" && ok "Firefox uses the system (Labwc) title bar" || bad "Firefox uses the system (Labwc) title bar"
+I=$ROOT/packaging/debian/worksuite-session.install
+grep -q '^services/session/gsettings/90_worksuite-session.gschema.override usr/share/glib-2.0/schemas/$' "$I" \
+  && grep -q '^services/session/gtk/gtk-3.0 etc/xdg/worksuite/$' "$I" && grep -q '^services/session/gtk/gtk-4.0 etc/xdg/worksuite/$' "$I" \
+  && grep -q '^services/session/firefox/worksuite.js etc/firefox-esr/$' "$I" && ok "decoration defaults installed" || bad "decoration defaults installed"
+grep -qx 'gsettings-desktop-schemas' "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && ok "image has the GSettings schemas" || bad "image has the GSettings schemas"
+grep -q 'maximizable: true' "$ROOT/shell/electron/windowDefaults.ts" && grep -q 'resizable: true' "$ROOT/shell/electron/windowDefaults.ts" \
+  && ok "Electron app windows maximizable" || bad "Electron app windows maximizable"
+
+# #53: the taskbar's height is kept free (work area), no sticky edges; #54: the visual Alt+Tab switcher.
+python3 -I - "$RC" "$ROOT/shell/src/screens/Desktop.tsx" <<'PY' && ok "rc.xml: work area, edge resistance, visual Alt+Tab" || bad "rc.xml: work area, edge resistance, visual Alt+Tab"
+import re, sys, xml.etree.ElementTree as E
+r = E.parse(sys.argv[1]).getroot()
+bar = re.search(r'ws-taskbar [^"]*\bh-\[(\d+)px\]', open(sys.argv[2], encoding='utf-8').read())
+assert bar and r.find('margin').get('bottom') == bar.group(1), 'margin = taskbar height'
+assert r.findtext('resistance/screenEdgeStrength') == '0' and r.findtext('resistance/windowEdgeStrength') == '0'
+sw = r.find('windowSwitcher')
+assert sw.get('show') == 'yes' and sw.get('preview') == 'yes' and sw.get('outlines') == 'yes'
+assert [f.get('content') for f in sw.iter('field')][:2] == ['icon', 'title']
+keys = {k.get('key'): k.find('action').get('name') for k in r.iter('keybind')}
+assert keys['A-Tab'] == 'NextWindow' and keys['A-S-Tab'] == 'PreviousWindow'
+PY
+for th in WorkSuite WorkSuite-Light; do
+  grep -q '^osd.window-switcher.item.active.border.width: [1-9]' "$T/$th/labwc/themerc" && grep -q '^osd.window-switcher.preview.border.color: #' "$T/$th/labwc/themerc" \
+    && ok "$th: Alt+Tab highlight" || bad "$th: Alt+Tab highlight"
+done
 exit $fail

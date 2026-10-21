@@ -47,3 +47,12 @@ menu.title.text.color: #E8EEFA
 osd.bg.color: #0C1E46
 osd.border.color: #304C82
 osd.label.text.color: #E8EEFA
+osd.border.width: 1
+# Alt+Tab (#54): a roomy list, the selected window ringed in the accent colour and outlined on screen.
+osd.window-switcher.width: 640
+osd.window-switcher.padding: 8
+osd.window-switcher.item.padding.x: 12
+osd.window-switcher.item.padding.y: 8
+osd.window-switcher.item.active.border.width: 2
+osd.window-switcher.preview.border.width: 2
+osd.window-switcher.preview.border.color: #18D4F0

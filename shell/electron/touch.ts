@@ -218,10 +218,12 @@ const SWITCHER = /<windowSwitcher\b[^>]*?\/?>/
  *  carries them over. */
 export function carryDesktops(previous: string, next: string): string {
   let out = next
-  for (const re of [DESKTOPS, SWITCHER]) {
-    const old = previous.match(re)?.[0]
-    if (old && re.test(out)) out = out.replace(re, () => old)
-  }
+  const desktops = previous.match(DESKTOPS)?.[0]
+  if (desktops && DESKTOPS.test(out)) out = out.replace(DESKTOPS, () => desktops)
+  // Only Alt+Tab's scope: the system file's switcher is an element with fields (#54), an older copy's a bare tag, and
+  // putting the old self-closing tag in front of the new fields broke the file.
+  const scope = /allWorkspaces="(yes|no)"/.exec(previous.match(SWITCHER)?.[0] ?? '')?.[1]
+  if (scope) out = out.replace(SWITCHER, (tag) => /allWorkspaces="/.test(tag) ? tag.replace(/allWorkspaces="[^"]*"/, `allWorkspaces="${scope}"`) : tag.replace(/\s*(\/?)>$/, ` allWorkspaces="${scope}"$1>`))
   // The title bar theme Settings › Appearance chose (electron/windowTheme.ts).
   const theme = /<theme>(?:(?!<\/theme>)[\s\S])*?<name>([^<]*)<\/name>/.exec(previous)?.[1]
   if (theme) out = rcWithTheme(out, theme.trim()) ?? out
