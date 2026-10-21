@@ -116,7 +116,7 @@ class KeysTest(unittest.TestCase):
             self.assertIn(line.strip(), rc)
         self.assertEqual(parse_desktops(rc), (1, ["Desktop 1"]))
         self.assertIn("ToggleTaskView", rc)
-        self.assertIn('<windowSwitcher allWorkspaces="no"/>', rc)
+        self.assertIn('<windowSwitcher show="yes" preview="yes" outlines="yes" allWorkspaces="no">', rc)
 
     def test_event_helper_validates_and_never_blocks(self):
         helper = REPO / "services/session/bin/worksuite-workspace-event"

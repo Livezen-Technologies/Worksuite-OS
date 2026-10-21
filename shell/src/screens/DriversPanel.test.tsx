@@ -199,3 +199,57 @@ describe('driver helpers', () => {
     expect(open).toHaveBeenCalled()
   })
 })
+
+describe('Settings › Drivers: per-driver results on an installed system (#59)', () => {
+  const RT: DriverOffer = { ...FW, id: 'fw:firmware-realtek', device_id: null, name: 'firmware-realtek', summary: 'firmware_suggested', category: 'optional', size_bytes: null }
+  const NOT_FOUND = "apt-get: E: Package 'firmware-iwlwifi' has no installation candidate"
+
+  it('one driver failing shows its own reason and details; the others still install', async () => {
+    mockOs(report({ offers: [FW, RT, NV] }))
+    let emit: (e: PackageJobEvent) => void = () => {}
+    vi.spyOn(os, 'onPkgJob').mockImplementation((cb) => { emit = cb; return () => {} })
+    vi.spyOn(os, 'hwInstallDrivers').mockResolvedValue({ ok: true, value: '/job/9' })
+    const el = await mount(<DriversPanel onOpenUpdates={() => {}} />)
+    await act(async () => { [...el.querySelectorAll('button')].find((b) => b.textContent === 'Install selected')!.click() })
+    await flush()
+    vi.spyOn(os, 'hwDriverReport').mockResolvedValue({ ok: true, value: report({ offers: [FW, NV],
+      failed: [{ id: FW.id, name: FW.name, step: 'downloading', error: NOT_FOUND, at: 3 }], installed: [{ id: RT.id, name: RT.name, version: '20250410-2', restart: false, at: 3 }] }) })
+    await act(async () => {
+      emit({ job: '/job/9', kind: 'progress', percent: 100, phase: `${FW.id}|failed` })
+      emit({ job: '/job/9', kind: 'progress', percent: 100, phase: `${RT.id}|done` })
+      emit({ job: '/job/9', kind: 'finished', result: 'failed', error: NOT_FOUND })
+    })
+    await flush()
+    const row = document.body.querySelector(`[data-testid="drv-failed-${FW.id}"]`)!
+    expect(row.textContent).toContain('isn’t available from the software sources')
+    expect(document.body.textContent).toContain('Installed · 20250410-2')
+    expect(document.body.querySelector('[role=alert]')!.textContent).toContain('1 of 2 weren’t installed')
+    // Try again only retries the one that failed.
+    const install = vi.spyOn(os, 'hwInstallDrivers').mockResolvedValue({ ok: true, value: '/job/10' })
+    await act(async () => { [...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Try again')!.click() })
+    await flush()
+    expect(install).toHaveBeenLastCalledWith([FW.id])
+  })
+
+  it('an unsigned APT source (the job is refused before any driver starts) is named, not "the app couldn’t be changed"', async () => {
+    mockOs(report())
+    const listeners: ((e: PackageJobEvent) => void)[] = []
+    vi.spyOn(os, 'onPkgJob').mockImplementation((cb) => { listeners.push(cb); return () => {} })
+    vi.spyOn(os, 'hwInstallDrivers').mockImplementation(async () => {
+      listeners.forEach((l) => l({ job: '/job/1', kind: 'finished', result: 'failed', error: '/etc/apt/sources.list: missing Signed-By' }))
+      return { ok: true, value: '/job/1' }
+    })
+    const el = await mount(<DriversPanel onOpenUpdates={() => {}} />)
+    await act(async () => { [...el.querySelectorAll('button')].find((b) => b.textContent === 'Install selected')!.click() })
+    await flush()
+    const alert = document.body.querySelector('[role=alert]')!.textContent!
+    expect(alert).toContain('software source on this computer isn’t signed')
+    expect(alert).not.toContain('The app')
+  })
+
+  it('the list keeps the last failure next to the driver until it installs', async () => {
+    mockOs(report({ failed: [{ id: FW.id, name: FW.name, step: 'downloading', error: "apt-get update: E: Failed to fetch https://deb.debian.org/debian/dists/trixie/InRelease  Temporary failure resolving 'deb.debian.org'", at: 3 }] }))
+    const el = await mount(<DriversPanel onOpenUpdates={() => {}} />)
+    expect(el.querySelector(`[data-testid="drv-lastfail-${FW.id}"]`)!.textContent).toContain('The last install didn’t work: The download server couldn’t be reached')
+  })
+})

@@ -210,6 +210,17 @@ export function mergeRcXml(rc: string, block: string): string {
   return `${base.slice(0, close)}${block}\n${base.slice(close)}`
 }
 
+/** The taskbar's height (src/screens/Desktop.tsx h-[52px]; index.css :root[data-touch] .ws-taskbar 64 px) kept free
+ *  by Labwc's <margin bottom> (#53), so maximized and snapped windows stop above the taskbar in touch mode too. */
+export const TASKBAR_HEIGHT = { normal: 52, touch: 64 } as const
+export function rcWithTaskbarMargin(rc: string, touchMode: boolean): string {
+  const h = touchMode ? TASKBAR_HEIGHT.touch : TASKBAR_HEIGHT.normal
+  const re = /<margin\b([^>]*?)\bbottom="\d+"([^>]*?)\/>/
+  if (re.test(rc)) return rc.replace(re, (_m, a: string, b: string) => `<margin${a}bottom="${h}"${b}/>`)
+  const close = rc.lastIndexOf('</labwc_config>')
+  return close < 0 ? rc : `${rc.slice(0, close)}  <margin bottom="${h}"/>\n${rc.slice(close)}`
+}
+
 const DESKTOPS = /<desktops\b[^>]*\/>|<desktops\b[^>]*>[\s\S]*?<\/desktops>/
 const SWITCHER = /<windowSwitcher\b[^>]*?\/?>/
 /** The Wayland bridge keeps the desktops (count, names) and Alt+Tab's scope in the user's rc.xml
@@ -218,10 +229,12 @@ const SWITCHER = /<windowSwitcher\b[^>]*?\/?>/
  *  carries them over. */
 export function carryDesktops(previous: string, next: string): string {
   let out = next
-  for (const re of [DESKTOPS, SWITCHER]) {
-    const old = previous.match(re)?.[0]
-    if (old && re.test(out)) out = out.replace(re, () => old)
-  }
+  const desktops = previous.match(DESKTOPS)?.[0]
+  if (desktops && DESKTOPS.test(out)) out = out.replace(DESKTOPS, () => desktops)
+  // Only Alt+Tab's scope: the system file's switcher is an element with fields (#54), an older copy's a bare tag, and
+  // putting the old self-closing tag in front of the new fields broke the file.
+  const scope = /allWorkspaces="(yes|no)"/.exec(previous.match(SWITCHER)?.[0] ?? '')?.[1]
+  if (scope) out = out.replace(SWITCHER, (tag) => /allWorkspaces="/.test(tag) ? tag.replace(/allWorkspaces="[^"]*"/, `allWorkspaces="${scope}"`) : tag.replace(/\s*(\/?)>$/, ` allWorkspaces="${scope}"$1>`))
   // The title bar theme Settings › Appearance chose (electron/windowTheme.ts).
   const theme = /<theme>(?:(?!<\/theme>)[\s\S])*?<name>([^<]*)<\/name>/.exec(previous)?.[1]
   if (theme) out = rcWithTheme(out, theme.trim()) ?? out
@@ -402,7 +415,7 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
       let previous = ''
       try { previous = readFileSync(userRc, 'utf8') } catch { /* absent */ }
       try { if (lstatSync(userRc).isSymbolicLink()) unlinkSync(userRc) } catch { /* absent */ }
-      writeFileSync(`${userRc}.tmp`, carryDesktops(previous, mergeRcXml(base, labwcTouchBlock(st.settings, screens))))
+      writeFileSync(`${userRc}.tmp`, rcWithTaskbarMargin(carryDesktops(previous, mergeRcXml(base, labwcTouchBlock(st.settings, screens))), st.touchMode))
       renameSync(`${userRc}.tmp`, userRc)
     } catch { return { available: false, reason: 'labwc_config' } }
     const r = await exec('labwc', ['--reconfigure'])
@@ -467,6 +480,8 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
     // Off → on re-reads the sensor; on → off puts the panel back upright.
     if (was && !st.touchMode) { const internal = st.outputs.find((n) => /^(eDP|LVDS|DSI)/.test(n)); if (internal) await exec('wlr-randr', ['--output', internal, '--transform', 'normal']) }
     if (!was && st.touchMode && st.orientation) await rotate(st.orientation)
+    // The taskbar grows to 64 px in touch mode and back to 52 px: Labwc's work area follows (#53).
+    if (was !== st.touchMode) await writeLabwc()
     if (st.settings.osk === 'off') stopOsk(); else startOsk()
     if (!oskWanted(st.settings, st.touchMode)) setOskVisible(false)
     emit()

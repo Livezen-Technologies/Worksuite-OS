@@ -38,12 +38,14 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
     // Enrollment is lk.worksuite.DeviceAgent1.Enroll (polkit lk.worksuite.device.enroll, WSOS-ARC-002), not pkexec.
     expect(all.find(([f]) => f === 'device.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.DeviceAgent1'\)\.Enroll\(/)
     // Sign-in methods are lk.worksuite.SignIn1 methods (polkit lk.worksuite.signin.manage).
-    expect(all.find(([f]) => f === 'signin.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.SignIn1'\)/)
+    expect(all.find(([f]) => f === 'signin.ts')?.[1]).toMatch(/interface: 'lk\.worksuite\.SignIn1'/)
     // sessionHost.ts: Settings › About › Diagnostics, the system journal and the boot-details entry, through the fixed
     // helper behind polkit lk.worksuite.diagnostics (auth_admin_keep); its arguments are checked there and here.
     // "Restart anyway": always the fixed helper behind lk.worksuite.power-force, which
     // accepts only reboot|poweroff (tests/session/session-test.sh).
-    expect(elevations.sort()).toEqual(['kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics', 'sessionHost.ts:/usr/lib/worksuite/worksuite-power-force'])
+    // printers.ts: Settings › Printers when cupsd refuses the person, the fixed helper behind lk.worksuite.printers;
+    // it re-checks every argument (tests/session/printer-admin.test.sh).
+    expect(elevations.sort()).toEqual(['kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit', 'printers.ts:/usr/lib/worksuite/worksuite-printer-admin', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics', 'sessionHost.ts:/usr/lib/worksuite/worksuite-power-force'])
   })
 
   it('every IPC handler goes through the sender check', () => {

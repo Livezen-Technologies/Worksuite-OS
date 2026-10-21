@@ -99,7 +99,9 @@ export class ServiceError extends Error {
  *  has the same archives, signed, in sources.list.d/debian.sources. Those unsigned lines made every install fail the
  *  sources check (#45), and apt warned "configured multiple times". Lines a signed, enabled deb822 stanza already
  *  covers (same URI, suite, and its components) are commented out; anything else is left for checkSources to judge.
- *  Returns the new text, or null when nothing changes. */
+ *  live-build writes a deb-src line after every deb line (functions/sourcelist.sh); those were left in and still failed
+ *  every driver install with "missing Signed-By" (#59). Source indices are never used here, so a deb-src line for an
+ *  archive and suite a signed stanza covers is commented out too. Returns the new text, or null when nothing changes. */
 export function tidyLegacySources(list: string, deb822: string[]): string | null {
   const norm = (u: string) => u.replace(/\/+$/, '');
   const stanzas = deb822.flatMap((t) => t.split(/\n\s*\n/)).map((st) => Object.fromEntries(st.split('\n').map((l) => /^([A-Za-z-]+):\s*(.*)$/.exec(l)).filter(Boolean).map((m) => [m![1].toLowerCase(), m![2].trim()])))
@@ -107,11 +109,11 @@ export function tidyLegacySources(list: string, deb822: string[]): string | null
   let changed = false;
   const out = list.split('\n').map((raw) => {
     const line = raw.replace(/#.*/, '').trim();
-    const m = /^deb\s+(?:\[[^\]]*\]\s+)?(\S+)\s+(\S+)\s*(.*)$/.exec(line);
+    const m = /^(deb|deb-src)\s+(?:\[[^\]]*\]\s+)?(\S+)\s+(\S+)\s*(.*)$/.exec(line);
     if (!m) return raw;
-    const [, uri, suite, comps] = m;
+    const [, type, uri, suite, comps] = m;
     const covered = stanzas.some((f) => f.uris.split(/\s+/).map(norm).includes(norm(uri)) && (f.suites ?? '').split(/\s+/).includes(suite)
-      && comps.split(/\s+/).filter(Boolean).every((c) => (f.components ?? '').split(/\s+/).includes(c)));
+      && (type === 'deb-src' || comps.split(/\s+/).filter(Boolean).every((c) => (f.components ?? '').split(/\s+/).includes(c))));
     if (!covered) return raw;
     changed = true;
     return `# ${raw.trim()}   # in sources.list.d (signed); disabled by worksuite-package-service`;

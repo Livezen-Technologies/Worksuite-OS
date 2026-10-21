@@ -1,0 +1,60 @@
+#!/bin/sh
+# Settings › Printers administration (shell/electron/printers.ts) for people cupsd does not trust itself. cupsd only
+# lets its SystemGroup (lpadmin) list devices and add, remove, pause or resume printers; the live user and directory
+# accounts are not members, so the shell runs this helper as root through pkexec, polkit action lk.worksuite.printers
+# (members of lpadmin or sudo without a password, anyone else after an administrator's password).
+#   worksuite-printer-admin devices
+#   worksuite-printer-admin drivers id|mm VALUE
+#   worksuite-printer-admin add NAME URI DRIVER DESCRIPTION
+#   worksuite-printer-admin remove|pause|resume NAME
+# Every value is checked here again: the caller is an ordinary user.
+set -eu
+LPINFO=${WORKSUITE_LPINFO:-lpinfo}
+LPADMIN=${WORKSUITE_LPADMIN:-lpadmin}
+CUPSENABLE=${WORKSUITE_CUPSENABLE:-cupsenable}
+CUPSDISABLE=${WORKSUITE_CUPSDISABLE:-cupsdisable}
+CUPSACCEPT=${WORKSUITE_CUPSACCEPT:-cupsaccept}
+
+usage() { echo "usage: worksuite-printer-admin devices | drivers id|mm VALUE | add NAME URI DRIVER DESCRIPTION | remove|pause|resume NAME" >&2; exit 2; }
+# A value without control characters, at most $2 bytes long.
+plain() { [ -n "$1" ] && [ "${#1}" -le "$2" ] && [ "$(printf '%s' "$1" | LC_ALL=C tr -d '[:cntrl:]')" = "$1" ]; }
+name() { case "$1" in ''|-*|*[!A-Za-z0-9_-]*) usage ;; esac; [ "${#1}" -le 127 ] || usage; }
+uri() {
+    case "$1" in ipp://?*|ipps://?*|dnssd://?*|socket://?*|lpd://?*|usb://?*) ;; *) usage ;; esac
+    case "$1" in *[[:space:]]*|*://*@*) usage ;; esac
+    plain "$1" 512 || usage
+}
+driver() {
+    [ "$1" = everywhere ] && return 0
+    case "$1" in ''|-*|*..*|*[!A-Za-z0-9_.:/+@,=-]*) usage ;; esac
+    [ "${#1}" -le 255 ] || usage
+}
+
+case "${1:-}" in
+    devices)
+        [ $# -eq 1 ] || usage
+        exec "$LPINFO" --timeout 10 -l -v ;;
+    drivers)
+        [ $# -eq 3 ] || usage
+        plain "$3" 1024 || usage
+        case "$2" in
+            id) exec "$LPINFO" --device-id "$3" -m ;;
+            mm) exec "$LPINFO" --make-and-model "$3" -m ;;
+            *) usage ;;
+        esac ;;
+    add)
+        [ $# -eq 5 ] || usage
+        name "$2"; uri "$3"; driver "$4"; plain "$5" 127 || usage
+        exec "$LPADMIN" -p "$2" -E -v "$3" -m "$4" -D "$5" ;;
+    remove)
+        [ $# -eq 2 ] || usage; name "$2"
+        exec "$LPADMIN" -x "$2" ;;
+    pause)
+        [ $# -eq 2 ] || usage; name "$2"
+        exec "$CUPSDISABLE" "$2" ;;
+    resume)
+        [ $# -eq 2 ] || usage; name "$2"
+        "$CUPSENABLE" "$2"
+        exec "$CUPSACCEPT" "$2" ;;
+    *) usage ;;
+esac

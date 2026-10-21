@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 import { realExec, realWithStdin, type Avail, type Exec, type WithStdin } from './system'
 import { parseBtDevices } from './system'
 import { xdgDirs } from './xdgDirs'
+import { printerExec, printersBridge } from './printers'
 
 // ---------- Bluetooth ----------
 export interface BtFound { address: string; name: string }
@@ -99,67 +100,8 @@ export function parseInhibitors(json: string): Inhibitor[] {
 }
 
 // ---------- printing ----------
-export interface FoundPrinter { uri: string; name: string }
-export interface PrintJob { id: string; printer: string; user: string; size: string }
-export interface PrinterIssue { name: string; reason: string }
-
-/** `lpinfo --include-schemes dnssd,ipp,ipps -v` → driverless candidates ("network dnssd://Name%20X._ipp._tcp.local/…"). */
-export function parseLpinfo(text: string): FoundPrinter[] {
-  const out: FoundPrinter[] = []
-  for (const line of text.split('\n')) {
-    const m = /^\s*network\s+((?:dnssd|ipps?):\/\/\S+)\s*$/.exec(line)
-    if (!m) continue
-    let name = m[1]
-    try {
-      const u = new URL(m[1])
-      name = decodeURIComponent(u.hostname.split('._')[0] || u.hostname) || m[1]
-    } catch { /* keep the uri */ }
-    if (!out.some((p) => p.uri === m[1])) out.push({ uri: m[1], name })
-  }
-  return out
-}
-
-/** Queue name from a display name: letters, digits, '_' and '-' only (CUPS rejects '/', '#', spaces). */
-export function queueName(display: string): string {
-  return display.normalize('NFKD').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || 'Printer'
-}
-
-/** A printer address the user typed or picked: driverless IPP only (ipp, ipps, dnssd). */
-export function printerUri(uri: string): string | null {
-  if (uri.length > 512 || /\s/.test(uri)) return null
-  try {
-    const u = new URL(uri)
-    return ['ipp:', 'ipps:', 'dnssd:'].includes(u.protocol) && u.hostname && !u.username && !u.password ? uri : null
-  } catch { return null }
-}
-
-/** `lpstat -o` → jobs ("HP-1 alice 1024 Tue …"). */
-export function parseJobs(text: string): PrintJob[] {
-  return text.split('\n').map((l) => /^(\S+)-(\d+)\s+(\S+)\s+(\d+)\s/.exec(l)).filter((m): m is RegExpExecArray => !!m)
-    .map((m) => ({ id: `${m[1]}-${m[2]}`, printer: m[1], user: m[3], size: m[4] }))
-}
-
-/** `lpstat -l -p` → the printer's own explanation ("Alerts:"/indented reason lines) when it is stopped or failing. */
-export function parsePrinterIssues(text: string): PrinterIssue[] {
-  const out: PrinterIssue[] = []
-  let cur: string | null = null; let disabled = false
-  for (const line of text.split('\n')) {
-    const p = /^printer (\S+) (.*)$/.exec(line)
-    if (p) { cur = p[1]; disabled = /disabled/.test(p[2]); continue }
-    if (!cur) continue
-    const alert = /^\s+Alerts:\s*(.+)$/.exec(line)
-    const reason = alert ? alert[1].trim() : disabled && /^\s+\S/.test(line) && !/:/.test(line) ? line.trim() : null
-    if (reason && reason !== 'none' && !out.some((i) => i.name === cur)) out.push({ name: cur, reason })
-  }
-  return out
-}
-
-export function cupsError(text: string): string {
-  if (/Forbidden|not authorized|Unauthorized|requires authentication/i.test(text)) return 'not_authorized'
-  if (/Unable to connect|No route|timed out|Unable to get printer attributes|Unable to query printer/i.test(text)) return 'printer_unreachable'
-  if (/everywhere|IPP Everywhere|driverless/i.test(text)) return 'printer_not_driverless'
-  return 'printer_failed'
-}
+// Printing lives in printers.ts; the parsers are re-exported here for the callers that import them from this module.
+export { cupsError, parseJobs, parseLpinfo, parsePrinterIssues, printerUri, queueName, type FoundPrinter, type PrintJob, type PrinterIssue } from './printers'
 
 // ---------- input methods (fcitx5) ----------
 /** Input methods Settings offers. Ids are fcitx5 names (fcitx5-m17n for Sinhala and Tamil). */
@@ -193,6 +135,12 @@ export function renderFcitxProfile(methods: string[], layout = 'us'): string {
 }
 
 export interface InputState { enabled: string[]; available: InputMethodId[] }
+/** The taskbar switcher (#58): running = fcitx5 answers; current = its active method (null when not running). */
+export interface ImStatus { running: boolean; current: string | null; enabled: string[] }
+/** The session's fcitx5 (services/session/systemd/user/worksuite-input-method.service). */
+export const IM_SERVICE = 'worksuite-input-method.service'
+const IM_NAME = /^[A-Za-z0-9_-]{1,64}$/
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // ---------- screen capture indicator (WSOS-INT-013) ----------
 /** `pw-dump` → running screen-capture streams from xdg-desktop-portal-wlr (node.name xdpw_stream…). */
@@ -217,8 +165,20 @@ const realFs: FsDeps = {
   async write(p, s) { await mkdir(dirname(p), { recursive: true }); await writeFile(p, s, { mode: 0o644 }) },
 }
 
-export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin: WithStdin = realWithStdin, fs: FsDeps = realFs) {
+export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin: WithStdin = realWithStdin, fs: FsDeps = realFs, wait: (ms: number) => Promise<unknown> = pause) {
   const userProfile = join(xdgDirs(home).config, 'fcitx5', 'profile')
+  // pkexec's exit status matters for printing, which realExec flattens to 1.
+  const printers = printersBridge(exec === realExec ? printerExec : exec)
+  const enabledIms = async () => {
+    const text = (await fs.read(userProfile)) ?? (await fs.read('/etc/xdg/fcitx5/profile'))
+    return text ? parseFcitxProfile(text) : ['keyboard-us']
+  }
+  /** `fcitx5-remote -n`: the active method's name; exit 1 and no output while fcitx5 is not running. */
+  const currentIm = async () => {
+    const r = await exec('fcitx5-remote', ['-n'])
+    const name = r.stdout.trim()
+    return { missing: !!r.missing, name: r.code === 0 && IM_NAME.test(name) ? name : null }
+  }
   return {
     // Bluetooth (WSOS-INT-003)
     async btScan(): Promise<Avail<BtFound[]>> {
@@ -300,34 +260,12 @@ export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin
       return r.code === 0 ? ok(parseInhibitors(r.stdout)) : tool(r, 'busctl', 'service_unavailable')
     },
 
-    // Printing (WSOS-INT-006)
-    async findPrinters(): Promise<Avail<FoundPrinter[]>> {
-      const r = await exec('lpinfo', ['--include-schemes', 'dnssd,ipp,ipps', '-v'])
-      return r.code === 0 ? ok(parseLpinfo(r.stdout)) : tool(r, 'lpinfo', cupsError(r.stderr))
-    },
-    /** Driverless (IPP Everywhere) queue; CUPS checks the printer answers before creating it. */
-    async addPrinter(uri: string, display: string): Promise<Avail<string>> {
-      const u = printerUri(uri)
-      if (!u) return fail('invalid_argument')
-      const name = queueName(display)
-      const r = await exec('lpadmin', ['-p', name, '-E', '-v', u, '-m', 'everywhere', '-D', display.slice(0, 127)])
-      return r.code === 0 ? ok(name) : tool(r, 'lpadmin', cupsError(r.stderr + r.stdout))
-    },
-    async removePrinter(name: string): Promise<Avail<true>> {
-      if (!/^[A-Za-z0-9_-]{1,127}$/.test(name)) return fail('invalid_argument')
-      const r = await exec('lpadmin', ['-x', name])
-      return r.code === 0 ? ok(true) : tool(r, 'lpadmin', cupsError(r.stderr))
-    },
-    async printQueue(): Promise<Avail<{ jobs: PrintJob[]; issues: PrinterIssue[] }>> {
-      const [o, l] = await Promise.all([exec('lpstat', ['-o']), exec('lpstat', ['-l', '-p'])])
-      if (o.missing) return fail('lpstat_missing')
-      return ok({ jobs: parseJobs(o.stdout), issues: parsePrinterIssues(l.stdout) })
-    },
-    async cancelJob(id: string): Promise<Avail<true>> {
-      if (!/^[A-Za-z0-9_-]{1,127}-\d{1,9}$/.test(id)) return fail('invalid_argument')
-      const r = await exec('cancel', [id])
-      return r.code === 0 ? ok(true) : tool(r, 'cancel', cupsError(r.stderr))
-    },
+    // Printing (WSOS-INT-006): see printers.ts.
+    findPrinters: () => printers.findPrinters(),
+    addPrinter: (uri: string, display: string, driver?: string) => printers.addPrinter(uri, display, driver),
+    removePrinter: (name: string) => printers.removePrinter(name),
+    printQueue: () => printers.printQueue(),
+    cancelJob: (id: string) => printers.cancelJob(id),
 
     async screenCapture(): Promise<Avail<number>> {
       const r = await exec('pw-dump', [])
@@ -343,8 +281,38 @@ export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin
 
     // Input methods (WSOS-INT-011)
     async inputMethods(): Promise<Avail<InputState>> {
-      const text = (await fs.read(userProfile)) ?? (await fs.read('/etc/xdg/fcitx5/profile'))
-      return ok({ enabled: text ? parseFcitxProfile(text) : ['keyboard-us'], available: [...INPUT_METHODS] })
+      return ok({ enabled: await enabledIms(), available: [...INPUT_METHODS] })
+    },
+    /** Taskbar indicator (#58): the enabled methods and the one fcitx5 has active. */
+    async imStatus(): Promise<Avail<ImStatus>> {
+      const [enabled, cur] = await Promise.all([enabledIms(), currentIm()])
+      if (cur.missing) return fail('fcitx5_missing')
+      return ok({ running: cur.name !== null, current: cur.name, enabled })
+    },
+    /**
+     * Taskbar switcher (#58): make `id` the active method now, no restart. fcitx5 not running (the tester's laptop: the
+     * click did nothing) → start the session's fcitx5 service and try again. The switch is global because
+     * /etc/xdg/fcitx5/config shares the input state between windows (ShareInputState=All); otherwise the method chosen
+     * from the taskbar applied only to the taskbar and the app went back to English. The answer is what fcitx5 reports
+     * afterwards, not what was asked.
+     */
+    async setCurrentIm(id: string): Promise<Avail<string>> {
+      if (!isIm(id)) return fail('invalid_argument')
+      if (!(await enabledIms()).includes(id)) return fail('im_not_enabled')
+      let cur = await currentIm()
+      if (cur.missing) return fail('fcitx5_missing')
+      if (cur.name === null) {
+        const st = await exec('systemctl', ['--user', 'start', IM_SERVICE])
+        if (st.code !== 0) return fail('im_not_running')
+        for (let i = 0; i < 10 && cur.name === null; i++) { await wait(300); cur = await currentIm() }
+        if (cur.name === null) return fail('im_not_running')
+      }
+      if (cur.name === id) return ok(id)
+      // `-s` activates the method; Ctrl+Space keeps toggling between the keyboard and it.
+      const s = await exec('fcitx5-remote', ['-s', id])
+      if (s.code !== 0) return fail('im_failed')
+      const after = await currentIm()
+      return after.name === id ? ok(id) : fail('im_not_applied')
     },
     async setInputMethods(ids: string[]): Promise<Avail<true>> {
       if (!ids.every(isIm)) return fail('invalid_argument')
@@ -371,7 +339,7 @@ export function startPeripheralsHost(handle: Handle, home: string, b: Peripheral
   handle('ws:setPowerProfile', (n) => b.setPowerProfile(n))
   handle('ws:powerInhibitors', () => b.inhibitors())   // 'ws:inhibitors' is the session-end overlay's (sessionHost.ts)
   handle('ws:findPrinters', () => b.findPrinters())
-  handle('ws:addPrinter', (u, n) => b.addPrinter(u, n))
+  handle('ws:addPrinter', (u, n, d) => b.addPrinter(u, n, d || 'everywhere'))
   handle('ws:removePrinter', (n) => b.removePrinter(n))
   handle('ws:printQueue', () => b.printQueue())
   handle('ws:cancelJob', (id) => b.cancelJob(id))
@@ -379,4 +347,6 @@ export function startPeripheralsHost(handle: Handle, home: string, b: Peripheral
   handle('ws:stopScreenCapture', () => b.stopScreenCapture())
   handle('ws:inputMethods', () => b.inputMethods())
   handle('ws:setInputMethods', (...ids) => b.setInputMethods(ids))
+  handle('ws:imStatus', () => b.imStatus())
+  handle('ws:setCurrentIm', (id) => b.setCurrentIm(id))
 }

@@ -1,0 +1,6 @@
+# Window buttons for apps that draw their own title bar (#49, #50): Firefox, GTK header bars, Electron apps such as
+# WhatsApp and the sign-in windows (Chromium takes GTK's button layout). On Wayland GTK reads this key, not settings.ini;
+# Debian's default ("appmenu:close") gave those windows Close only. Minimize, Maximize/Restore and Close, like Labwc's
+# WorkSuite title bar (services/session/labwc/rc.xml).
+[org.gnome.desktop.wm.preferences]
+button-layout='icon:minimize,maximize,close'

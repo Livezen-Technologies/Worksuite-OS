@@ -86,13 +86,27 @@ class VerifierTests(Tmp):
         pol = os.path.join(self.tmp.name, "signin-policy.conf")
         fl = os.path.join(self.tmp.name, "faillock.conf")
         Path(fl).write_text("deny = 5\n")
-        self.assertEqual(core.policy(pol, fl), {"allow_pin": True, "pin_min_length": 6, "attempt_limit": 3})
+        self.assertEqual(core.policy(pol, fl), {"allow_pin": True, "pin_min_length": 6, "pin_max_length": 6, "attempt_limit": 3})
         Path(pol).write_text("ALLOW_PIN=0\nPIN_MIN_LENGTH=8\n")
         Path(fl).write_text("deny = 3\n")
-        self.assertEqual(core.policy(pol, fl), {"allow_pin": False, "pin_min_length": 8, "attempt_limit": 1})
+        self.assertEqual(core.policy(pol, fl), {"allow_pin": False, "pin_min_length": 8, "pin_max_length": 8, "attempt_limit": 1})
         Path(pol).write_text("PIN_MIN_LENGTH=2\n")
         Path(fl).write_text("deny = 20\n")
-        self.assertEqual(core.policy(pol, fl), {"allow_pin": True, "pin_min_length": 4, "attempt_limit": 5})
+        self.assertEqual(core.policy(pol, fl), {"allow_pin": True, "pin_min_length": 4, "pin_max_length": 4, "attempt_limit": 5})
+        Path(pol).write_text("PIN_MIN_LENGTH=6\nPIN_MAX_LENGTH=99\n")
+        self.assertEqual(core.policy(pol, fl)["pin_max_length"], 12)
+
+    def test_new_pin_is_exactly_the_policy_length(self):
+        # #56: the field took a 7th digit and the helper then accepted 6-12; now one length, enforced by the helper.
+        pol = {**POL, "pin_max_length": 6}
+        with self.assertRaises(core.SigninError) as e:
+            core.set_pin(1000, "5829471", pol, self.state)
+        self.assertEqual(e.exception.code, "too_long")
+        core.set_pin(1000, PIN, pol, self.state)
+        rec = core.read_pin(1000, self.state)
+        self.assertNotIn(PIN.encode(), all_text(self.state))
+        self.assertEqual(rec["kdf"], "scrypt")
+        self.assertEqual(core.verify_pin(1000, PIN, {**pol, "attempt_limit": 3}, self.state, self.run_dir), "ok")
 
 
 class LockoutTests(Tmp):
@@ -270,7 +284,8 @@ class ManageTests(Tmp):
         return subprocess.CompletedProcess(argv, 0, out, "")
 
     def m(self, argv, stdin=b"", run=None):
-        return cli.manage(argv, self.env, io.BytesIO(stdin), 0, run or self.run_, self.state, lambda uid: {1000: USERS["alex"], 0: Pw("root", 0)}[uid])
+        return cli.manage(argv, self.env, io.BytesIO(stdin), 0, run or self.run_, self.state, lambda uid: {1000: USERS["alex"], 0: Pw("root", 0)}[uid],
+                          devices=lambda: ["hidraw3"])
 
     def test_only_pkexec_root_and_only_the_caller(self):
         with self.assertRaises(core.SigninError) as e:
@@ -327,6 +342,51 @@ class ManageTests(Tmp):
         self.m(["key-remove", "--id", r["id"]])
         self.assertNotIn(self.me, Path(self.maps).read_text())
         self.assertEqual(self.calls[-1][1:], ["--disable", "worksuite-signin-u2f"])
+
+    def test_key_add_explains_what_went_wrong(self):
+        # #57: a missing key, a timeout, a key PIN and a missing pamu2fcfg each get their own message.
+        with self.assertRaises(core.SigninError) as e:
+            cli.manage(["key-add", "--name", "k"], self.env, io.BytesIO(), 0, self.run_, self.state,
+                       lambda uid: USERS["alex"], devices=lambda: [])
+        self.assertEqual(e.exception.code, "key_not_found")
+        self.assertFalse(any(c[0].endswith("pamu2fcfg") for c in self.calls))
+        for err, code in (("No device found. Aborting.", "key_not_found"),
+                          ("error: fido_dev_make_cred (-8) FIDO_ERR_ACTION_TIMEOUT", "key_timeout"),
+                          ("error: fido_dev_make_cred (54) FIDO_ERR_PIN_REQUIRED", "key_pin_required"),
+                          ("error: fido_dev_make_cred (25) FIDO_ERR_CREDENTIAL_EXCLUDED", "key_exists"),
+                          ("something else", "key_failed")):
+            fail = lambda argv, err=err, **kw: subprocess.CompletedProcess(argv, 1, "", err)  # noqa: E731
+            with self.assertRaises(core.SigninError) as e:
+                self.m(["key-add", "--name", "k"], run=fail)
+            self.assertEqual(e.exception.code, code, err)
+
+        def slow(argv, **kw):
+            raise subprocess.TimeoutExpired(argv, 90)
+
+        def missing(argv, **kw):
+            raise FileNotFoundError(argv[0])
+        for r, code in ((slow, "key_timeout"), (missing, "key_unavailable")):
+            with self.assertRaises(core.SigninError) as e:
+                self.m(["key-add", "--name", "k"], run=r)
+            self.assertEqual(e.exception.code, code)
+
+    def test_removing_an_unknown_key_is_refused(self):
+        with self.assertRaises(core.SigninError) as e:
+            self.m(["key-remove", "--id", "0123456789abcdef"])
+        self.assertEqual(e.exception.code, "key_unknown")
+        with self.assertRaises(core.SigninError) as e:
+            self.m(["key-remove", "--id", "ABC"])
+        self.assertEqual(e.exception.code, "bad_request")
+
+    def test_fido_devices_are_found_by_usage_page(self):
+        root = os.path.join(self.tmp.name, "sys")
+        for n, desc in (("hidraw0", b"\x05\x01\x09\x06"), ("hidraw1", b"\x06\xd0\xf1\x09\x01\xa1\x01")):
+            d = os.path.join(root, "class", "hidraw", n, "device")
+            os.makedirs(d)
+            Path(d, "report_descriptor").write_bytes(desc)
+        os.makedirs(os.path.join(root, "class", "hidraw", "hidraw2"))  # no descriptor: skipped
+        self.assertEqual(core.fido_devices(root), ["hidraw1"])
+        self.assertEqual(core.fido_devices(os.path.join(self.tmp.name, "nosys")), [])
 
     def test_bad_pamu2fcfg_output_is_refused(self):
         for out in ("", "user:a,b,es256,+presence", "garbage", ":a,b,es256,+presence:c,d,es256,"):
@@ -391,3 +451,17 @@ class BusTests(ManageTests):
         xml = Path(__file__).resolve().parents[2].joinpath("dbus", "lk.worksuite.SignIn1.xml").read_text()
         import re
         self.assertEqual(sorted(re.findall(r'<method name="(\w+)"', xml)), sorted(bus.METHODS))
+
+    def test_the_service_introspects_its_interface(self):
+        # #56/#57 regression: the shell's dbus-next proxy needs lk.worksuite.SignIn1 in Introspect's reply.
+        import re
+        import xml.etree.ElementTree as ET
+        node = ET.fromstring(bus.introspect(bus.PATH).split("\n", 2)[2])
+        ifaces = {i.get("name"): sorted(m.get("name") for m in i.findall("method")) for i in node.findall("interface")}
+        self.assertEqual(ifaces["lk.worksuite.SignIn1"], sorted(bus.METHODS))
+        shipped = Path(__file__).resolve().parents[2].joinpath("dbus", "lk.worksuite.SignIn1.xml").read_text()
+        squash = lambda x: re.sub(r"\s+", " ", re.search(r'<interface name="lk.worksuite.SignIn1">.*?</interface>', x, re.S).group(0))  # noqa: E731
+        self.assertEqual(squash(bus.INTROSPECTION), squash(shipped))
+        self.assertIn('<node name="lk"/>', bus.introspect("/"))
+        self.assertIn('<node name="SignIn1"/>', bus.introspect("/lk/worksuite"))
+        self.assertIsNone(bus.introspect("/other"))

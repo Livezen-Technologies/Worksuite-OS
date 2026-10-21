@@ -1,7 +1,7 @@
 // One token broker for the shell, WorkSuite apps, Office and sync (WSOS-IDN-008).
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { authorizationUrl, discover, OidcError, OS_LOGIN_CODE, TOKEN_EXCHANGE, tokenRequest, userinfo, type Endpoints, type OidcOptions, type TokenSet } from './oidc.ts';
+import { authorizationUrl, checkUrl, discover, OidcError, OS_LOGIN_CODE, TOKEN_EXCHANGE, tokenRequest, userinfo, type Endpoints, type OidcOptions, type TokenSet } from './oidc.ts';
 import { pkcePair, randomState } from './pkce.ts';
 import type { SecretStore } from './keyring.ts';
 
@@ -53,6 +53,15 @@ export class Broker {
     this.pendingSignIn = null;
     stop?.(new OidcError('sign_in_cancelled'));
     return stop !== null;
+  }
+
+  /**
+   * #55: "is this a WorkSuite server, reachable over trusted https?" before the browser opens, so a typo, an offline
+   * network or a bad certificate is reported straight away. Discovery only; nothing is stored.
+   */
+  async checkServer(serverUrl: string): Promise<{ server_url: string; issuer: string }> {
+    const ep = await discover(serverUrl, this.o);
+    return { server_url: checkUrl(serverUrl, this.o).origin, issuer: new URL(ep.issuer).host };
   }
 
   list() { return [...this.accounts.values()].map((a) => ({ ...a, state: this.state(a.id) })); }

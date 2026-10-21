@@ -22,6 +22,11 @@ systemctl set-default graphical.target
 # Wi-Fi and Bluetooth (#31): NetworkManager (wpa_supplicant is D-Bus activated by it) and bluetoothd start at boot, and
 # systemd-rfkill restores each radio's last state. A missing piece meant no Wi-Fi networks or no Bluetooth at all.
 systemctl enable NetworkManager.service bluetooth.service
+# Printing and its network discovery (issue #51).
+systemctl enable cups.service cups-browsed.service avahi-daemon.service
+for b in cupsd lpadmin lpinfo lpoptions cupsenable avahi-daemon; do
+  PATH=/usr/sbin:/usr/bin:/sbin:/bin command -v "$b" >/dev/null || { echo "$b missing: Settings › Printers would not work" >&2; exit 1; }
+done
 for b in wpa_supplicant rfkill bluetoothctl nmcli; do
   PATH=/usr/sbin:/usr/bin:/sbin:/bin command -v "$b" >/dev/null || { echo "$b missing: Wi-Fi/Bluetooth would not work" >&2; exit 1; }
 done

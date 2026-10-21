@@ -21,7 +21,11 @@ PrivateTmp=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=no
 ProtectControlGroups=yes
-ProtectClock=yes
+# Not ProtectClock= (#59): it implies DeviceAllow=char-rtc, which turns on the device allow-list and leaves only
+# /dev/null, zero, random, tty and ptmx. Driver installs run update-initramfs (firmware, DKMS and GPU packages trigger
+# it); its cryptsetup and LVM hooks need /dev/mapper/control and the block devices, or an encrypted disk's initramfs
+# cannot unlock it. Setting the clock stays blocked by dropping the capabilities instead.
+CapabilityBoundingSet=~CAP_SYS_TIME CAP_WAKE_ALARM
 ProtectHostname=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=no

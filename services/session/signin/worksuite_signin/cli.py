@@ -9,7 +9,7 @@
   Settings (pkexec, polkit action lk.worksuite.signin.manage = auth_self; the user is PKEXEC_UID, never an argument):
     pin-set        new PIN on stdin
     pin-remove
-    key-add --name NAME      runs pamu2fcfg, touch the key
+    key-add --name NAME      runs pamu2fcfg, touch the key (refused with key_not_found when no FIDO device is attached)
     key-remove --id ID
   Shell (socket, no prompt):
     {"op":"set_default","method":"password|pin|key"} for the calling user.
@@ -17,6 +17,7 @@
 import json
 import os
 import pwd
+import re
 import socket
 import struct
 import subprocess
@@ -168,7 +169,7 @@ def pam_profile(names, on, run=subprocess.run):
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
-def manage(argv, env, stdin, euid, run=subprocess.run, state=None, getpwuid=pwd.getpwuid):
+def manage(argv, env, stdin, euid, run=subprocess.run, state=None, getpwuid=pwd.getpwuid, devices=core.fido_devices):
     cmd = argv[0]
     user, uid = caller(env, euid, getpwuid)
     if cmd == "pin-set":
@@ -186,16 +187,24 @@ def manage(argv, env, stdin, euid, run=subprocess.run, state=None, getpwuid=pwd.
             pam_profile(PROFILE_PIN, False, run)
     elif cmd == "key-add":
         name = argv[argv.index("--name") + 1] if "--name" in argv[:-1] else ""
-        r = run([PAMU2FCFG, "-n", "-u", user, "-o", ORIGIN, "-i", ORIGIN], stdin=subprocess.DEVNULL,
-                capture_output=True, text=True, timeout=90, check=False)
+        # #57: say "plug in your key" instead of a generic failure when no FIDO device is attached at all.
+        if not devices():
+            raise core.SigninError("key_not_found")
+        try:
+            r = run([PAMU2FCFG, "-n", "-u", user, "-o", ORIGIN, "-i", ORIGIN], stdin=subprocess.DEVNULL,
+                    capture_output=True, text=True, timeout=90, check=False)
+        except subprocess.TimeoutExpired:
+            raise core.SigninError("key_timeout") from None
+        except FileNotFoundError:
+            raise core.SigninError("key_unavailable") from None  # pamu2fcfg (package pamu2fcfg) is not installed
         if r.returncode != 0:
-            raise core.SigninError("key_timeout" if "timeout" in (r.stderr or "").lower() else "key_failed")
+            raise core.SigninError(core.pamu2fcfg_error(r.returncode, r.stderr))
         kid = core.add_key(user, core.parse_pamu2fcfg(r.stdout), name, state)
         pam_profile(PROFILE_KEY, True, run)
         return {"ok": True, "id": kid}
     elif cmd == "key-remove":
         kid = argv[argv.index("--id") + 1] if "--id" in argv[:-1] else ""
-        if not kid.isalnum():
+        if not re.fullmatch(r"[0-9a-f]{16}", kid):
             raise core.SigninError("bad_request")
         core.remove_key(user, kid, state)
         if not core.any_key(state):

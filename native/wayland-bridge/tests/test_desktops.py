@@ -269,7 +269,9 @@ class RcTest(unittest.TestCase):
         self.assertIn("ToggleAlwaysOnBottom", rule)
         self.assertNotIn("ToggleOmnipresent", rule)
         self.assertEqual(parse_desktops(out), (3, ["Mail", "Code", "Play"]))
-        self.assertIn('<windowSwitcher allWorkspaces="yes"/>', out)
+        self.assertIn('<windowSwitcher show="yes" preview="yes" outlines="yes" allWorkspaces="yes">', out)
+        self.assertIn('<field content="icon"', out)                  # #54: the visual switcher reaches older copies
+        self.assertIn('<margin bottom="52"/>', out)                    # #53: and the taskbar's work area
         self.assertEqual(out.count("worksuite-touch:begin"), 1)
         self.assertLess(out.index('<touch deviceName="t"'), out.index("</labwc_config>"))
         self.assertEqual(refresh_rc(out, system), out)          # stable

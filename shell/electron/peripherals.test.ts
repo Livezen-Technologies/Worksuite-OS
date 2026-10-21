@@ -108,7 +108,7 @@ describe('power (WSOS-INT-005)', () => {
 describe('printing (WSOS-INT-006)', () => {
   it('finds driverless printers and builds safe queue names', () => {
     expect(parseLpinfo('network dnssd://HP%20LaserJet%20M110._ipp._tcp.local/?uuid=1\nnetwork socket\nnetwork ipps://10.0.0.5/ipp/print\nfile cups-pdf:/'))
-      .toEqual([{ uri: 'dnssd://HP%20LaserJet%20M110._ipp._tcp.local/?uuid=1', name: 'HP LaserJet M110' }, { uri: 'ipps://10.0.0.5/ipp/print', name: '10.0.0.5' }])
+      .toEqual([{ uri: 'dnssd://HP%20LaserJet%20M110._ipp._tcp.local/?uuid=1', name: 'HP LaserJet M110', kind: 'network' }, { uri: 'ipps://10.0.0.5/ipp/print', name: '10.0.0.5', kind: 'network' }])
     expect(queueName('HP LaserJet M110 / 2nd floor')).toBe('HP_LaserJet_M110_2nd_floor')
     expect(printerUri('ipp://printer.local/ipp/print')).toBe('ipp://printer.local/ipp/print')
     expect(printerUri('file:///etc/shadow')).toBeNull()
@@ -160,5 +160,56 @@ describe('screen capture indicator (WSOS-INT-013)', () => {
     expect(f.calls).toEqual([[SCREENCAST_STOP]])
     const gone = fakeExec({ [SCREENCAST_STOP]: { code: 1, missing: true } })
     expect(await peripheralsBridge('/h', gone.exec, withStdin, memFs()).stopScreenCapture()).toEqual({ available: false, reason: 'worksuite-screencast-stop_missing' })
+  })
+})
+
+describe('taskbar input-method switcher (#58)', () => {
+  const sinhala = () => memFs({ '/etc/xdg/fcitx5/profile': renderFcitxProfile(['m17n_si_wijesekera', 'm17n_ta_tamil99']) })
+  it('reports the enabled methods and the active one; a stopped fcitx5 is "not running", not an error', async () => {
+    let f = fakeExec({ 'fcitx5-remote -n': { stdout: 'm17n_si_wijesekera\n' } })
+    expect(await peripheralsBridge('/h', f.exec, withStdin, sinhala()).imStatus())
+      .toEqual({ available: true, value: { running: true, current: 'm17n_si_wijesekera', enabled: ['keyboard-us', 'm17n_si_wijesekera', 'm17n_ta_tamil99'] } })
+    // What fcitx5-remote does on the tester's laptop when fcitx5 is not running: exit 1, nothing on stdout.
+    f = fakeExec({ 'fcitx5-remote -n': { code: 1 } })
+    expect(await peripheralsBridge('/h', f.exec, withStdin, sinhala()).imStatus()).toMatchObject({ available: true, value: { running: false, current: null } })
+    f = fakeExec({ 'fcitx5-remote': { code: 1, missing: true } })
+    expect(await peripheralsBridge('/h', f.exec, withStdin, sinhala()).imStatus()).toEqual({ available: false, reason: 'fcitx5_missing' })
+  })
+  it('switches to Sinhala with fcitx5-remote -s and answers with what fcitx5 reports afterwards', async () => {
+    let now = 'keyboard-us'
+    const calls: string[][] = []
+    const exec: Exec = async (cmd, args) => {
+      calls.push([cmd, ...args])
+      if (args[0] === '-s') now = args[1]
+      return { code: 0, stdout: args[0] === '-n' ? `${now}\n` : '', stderr: '' }
+    }
+    const b = peripheralsBridge('/h', exec, withStdin, sinhala(), async () => undefined)
+    expect(await b.setCurrentIm('m17n_si_wijesekera')).toEqual({ available: true, value: 'm17n_si_wijesekera' })
+    expect(calls).toContainEqual(['fcitx5-remote', '-s', 'm17n_si_wijesekera'])
+    // Not enabled in Settings, or not a known method: refused before fcitx5 is asked.
+    calls.length = 0
+    expect(await b.setCurrentIm('m17n_ta_phonetic')).toEqual({ available: false, reason: 'im_not_enabled' })
+    expect(await b.setCurrentIm('x; rm -rf ~')).toEqual({ available: false, reason: 'invalid_argument' })
+    expect(calls).toEqual([])
+  })
+  it('starts the session fcitx5 when it is not running, then switches', async () => {
+    let running = false; let now = 'keyboard-us'
+    const calls: string[][] = []
+    const exec: Exec = async (cmd, args) => {
+      calls.push([cmd, ...args])
+      if (cmd === 'systemctl') { running = true; return { code: 0, stdout: '', stderr: '' } }
+      if (!running) return { code: 1, stdout: '', stderr: '' }
+      if (args[0] === '-s') now = args[1]
+      return { code: 0, stdout: args[0] === '-n' ? `${now}\n` : '', stderr: '' }
+    }
+    const b = peripheralsBridge('/h', exec, withStdin, sinhala(), async () => undefined)
+    expect(await b.setCurrentIm('m17n_ta_tamil99')).toEqual({ available: true, value: 'm17n_ta_tamil99' })
+    expect(calls).toContainEqual(['systemctl', '--user', 'start', 'worksuite-input-method.service'])
+  })
+  it('says so when fcitx5 does not start or ignores the switch', async () => {
+    const dead = fakeExec({ 'fcitx5-remote': { code: 1 } })
+    expect(await peripheralsBridge('/h', dead.exec, withStdin, sinhala(), async () => undefined).setCurrentIm('m17n_si_wijesekera')).toEqual({ available: false, reason: 'im_not_running' })
+    const stuck = fakeExec({ 'fcitx5-remote -n': { stdout: 'keyboard-us\n' } })
+    expect(await peripheralsBridge('/h', stuck.exec, withStdin, sinhala(), async () => undefined).setCurrentIm('m17n_si_wijesekera')).toEqual({ available: false, reason: 'im_not_applied' })
   })
 })

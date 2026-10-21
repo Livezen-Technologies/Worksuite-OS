@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>WorkSuite</vendor>
+  <vendor_url>https://download.worksuitecloud.com</vendor_url>
+  <!-- Settings › Printers (shell/electron/printers.ts): finding, adding, removing, pausing and resuming printers
+       through worksuite-printer-admin when cupsd refuses the person ("Forbidden": not in its lpadmin group).
+       50-worksuite-printers.rules lets members of lpadmin and sudo do this without a password. -->
+  <action id="lk.worksuite.printers">
+    <description>Add, remove and manage printers</description>
+    <message>Authentication is required to manage printers</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/worksuite/worksuite-printer-admin</annotate>
+  </action>
+</policyconfig>

@@ -34,5 +34,13 @@ describe('driver job phases (#45)', () => {
     expect(driverJobPhase('fwupd:0123|downloading')).toEqual({ offer: 'fwupd:0123', step: 'downloading' })
     expect(driverJobPhase('fw:firmware-iwlwifi|done')).toEqual({ offer: 'fw:firmware-iwlwifi', step: 'done' })
     expect(driverJobPhase('gpu:nvidia-driver')).toEqual({ offer: 'gpu:nvidia-driver', step: 'installing' })
+    expect(driverJobPhase('fw:firmware-realtek|failed')).toEqual({ offer: 'fw:firmware-realtek', step: 'failed' })
+  })
+  it('names why a driver did not install, from the service\'s real errors (#59)', async () => {
+    const { driverFailureText } = await import('./hardware')
+    expect(driverFailureText('/etc/apt/sources.list: missing Signed-By')).toMatch(/software source/)
+    expect(driverFailureText("apt-get update: E: Failed to fetch https://deb.debian.org/debian/dists/trixie/InRelease  Temporary failure resolving 'deb.debian.org'")).toMatch(/couldn’t be reached/)
+    expect(driverFailureText("apt-get: E: Package 'firmware-x' has no installation candidate")).toMatch(/isn’t available/)
+    expect(driverFailureText('apt-get: dpkg: error processing package firmware-x (--configure):')).toBe('It couldn’t be installed.')
   })
 })

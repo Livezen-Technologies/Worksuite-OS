@@ -94,6 +94,22 @@
   --color-ws-subtle: #0f172a;
 }
 
+/* Dropdowns (#61): Chromium draws a native <select>'s option list itself, with a white background unless told
+   otherwise, while the options inherit the select's light text: near-white on white. Every select gets the theme's
+   colour scheme and its options the theme's surface and ink (WCAG AA: #E8EEFA on #0F2350 is 13.9:1, #0F172A on
+   #FFFFFF 17.9:1). Unlayered, so it wins over per-option Tailwind backgrounds. */
+select { color-scheme: dark; }
+select option, select optgroup { background-color: #0F2350; color: #E8EEFA; }
+select option:disabled { color: #8FA3C8; }
+select option:checked { background-color: #1F4FB0; color: #FFFFFF; }
+:root[data-theme="light"] select:not(.ws-dark-zone *) { color-scheme: light; }
+:root[data-theme="light"] select:not(.ws-dark-zone *) :is(option, optgroup) { background-color: #FFFFFF; color: #0F172A; }
+:root[data-theme="light"] select:not(.ws-dark-zone *) option:disabled { color: #3F5175; }
+:root[data-theme="light"] select:not(.ws-dark-zone *) option:checked { background-color: #DCE6FB; color: #0F172A; }
+[data-high-contrast] select { color-scheme: dark; }
+[data-high-contrast] select :is(option, optgroup) { background-color: #000000 !important; color: #FFFFFF !important; }
+[data-high-contrast] select option:checked { background-color: #FFD400 !important; color: #000000 !important; }
+
 /* Window frames (components/ShellWindow.tsx), Windows 11 style, in step with the Labwc theme every other app's title
    bar is drawn with (services/session/themes: WorkSuite and WorkSuite-Light): 32 px title bar, 46 x 32 px Minimize, Maximize /
    Restore and Close at the top right, an 8 px rounded window, red Close on hover, a dimmer title bar when inactive. */

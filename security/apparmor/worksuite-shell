@@ -68,6 +68,14 @@ profile worksuite-shell flags=(attach_disconnected, complain) {
   /usr/bin/{libinput,udevadm,labwc} ix,
   /usr/libexec/libinput/* ix,
   /run/udev/data/* r,
+  # Settings › Printers (issue #51): CUPS clients over cupsd's socket, and the polkit-gated administration helper
+  # (pkexec is setuid; worksuite-printer-admin runs as root outside this profile).
+  /usr/bin/{lp,lpstat,lpoptions,cancel} ix,
+  /usr/{bin,sbin}/{lpadmin,lpinfo,cupsenable,cupsdisable,cupsaccept} ix,
+  /run/cups/cups.sock rw,
+  /usr/bin/pkexec Ux,
+  # Settings › Display (#60): wlr-randr applies resolution/scale/position; wl-mirror fills mirrored outputs.
+  /usr/bin/{wlr-randr,wl-mirror} ix,
   owner /{media,run/media}/*/** rwlk,
 
   deny /etc/shadow r,

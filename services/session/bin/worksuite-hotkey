@@ -1,0 +1,82 @@
+#!/bin/sh
+# worksuite-hotkey volume-up | volume-down | mute | mic-mute | brightness-up | brightness-down |
+#                  play-pause | next | previous
+# Laptop Fn keys (#62). Labwc runs this from the XF86* key bindings in services/session/labwc/rc.xml: the keys reach
+# Labwc through libinput (keyboard and "Video Bus" / "Asus WMI hotkeys"-style input devices), but nothing acted on them.
+# It changes the level itself, so the keys work even while the shell is restarting, then tells the shell
+# (lk.worksuite.Shell1.Osd) to show the level. Installed as /usr/lib/worksuite/worksuite-hotkey.
+#   Volume, mute, microphone: wpctl (WirePlumber) on the default sink / source; volume stops at 100%.
+#   Brightness: brightnessctl (logind's SetBrightness, no root needed), else logind directly; never below 1%.
+#   Media keys: playerctl (MPRIS), when installed.
+set -u
+STEP=${WORKSUITE_HOTKEY_STEP:-5}
+BACKLIGHT=${WORKSUITE_BACKLIGHT_DIR:-/sys/class/backlight}
+
+osd() {   # kind percent muted(true|false); fire and forget, a missing shell must not slow the key down
+    busctl --user --timeout=1 call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Osd sub "$1" "$2" "$3" >/dev/null 2>&1 || true
+}
+
+# `wpctl get-volume` → "Volume: 0.45" or "Volume: 0.45 [MUTED]"; prints "45 false".
+level() {
+    out=$(wpctl get-volume "$1" 2>/dev/null) || return 1
+    pct=$(printf '%s\n' "$out" | awk '/^Volume:/ { printf "%d", $2 * 100 + 0.5; found = 1 } END { if (!found) exit 1 }') || return 1
+    case $out in *MUTED*) echo "$pct true" ;; *) echo "$pct false" ;; esac
+}
+
+audio() {   # kind target
+    # shellcheck disable=SC2046
+    set -- "$1" $(level "$2") && [ $# -eq 3 ] && osd "$1" "$2" "$3"
+}
+
+# The backlight logind and brightnessctl would pick: firmware, then platform, then raw interfaces.
+backlight() {
+    for want in firmware platform raw; do
+        for d in "$BACKLIGHT"/*; do
+            [ -r "$d/max_brightness" ] || continue
+            [ "$(cat "$d/type" 2>/dev/null)" = "$want" ] && { basename "$d"; return 0; }
+        done
+    done
+    return 1
+}
+
+brightness() {   # + or -
+    dev=$(backlight) || exit 0   # no backlight (a desktop monitor): nothing to do
+    if command -v brightnessctl >/dev/null 2>&1 && out=$(brightnessctl -m -n1 -d "$dev" set "$STEP%$1" 2>/dev/null); then
+        # device,class,current,percent%,max
+        pct=$(printf '%s\n' "$out" | tail -n 1 | cut -d, -f4 | tr -d '%')
+    else
+        max=$(cat "$BACKLIGHT/$dev/max_brightness") cur=$(cat "$BACKLIGHT/$dev/brightness") || exit 1
+        new=$(awk -v c="$cur" -v m="$max" -v s="$STEP" -v d="$1" 'BEGIN {
+            v = c + (d == "+" ? 1 : -1) * m * s / 100; if (v > m) v = m; lo = m / 100; if (lo < 1) lo = 1; if (v < lo) v = lo
+            printf "%d", v + 0.5 }')
+        busctl call org.freedesktop.login1 /org/freedesktop/login1/session/auto org.freedesktop.login1.Session \
+            SetBrightness ssu backlight "$dev" "$new" >/dev/null 2>&1 || exit 1
+        pct=$(awk -v n="$new" -v m="$max" 'BEGIN { printf "%d", n * 100 / m + 0.5 }')
+    fi
+    case $pct in ''|*[!0-9]*) exit 0 ;; esac
+    osd brightness "$pct" false
+}
+
+case "${1:-}" in
+    volume-up)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 2>/dev/null
+        wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ "$STEP%+" 2>/dev/null
+        audio volume @DEFAULT_AUDIO_SINK@ ;;
+    volume-down)
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ "$STEP%-" 2>/dev/null
+        audio volume @DEFAULT_AUDIO_SINK@ ;;
+    mute)
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle 2>/dev/null
+        audio volume @DEFAULT_AUDIO_SINK@ ;;
+    mic-mute)
+        wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle 2>/dev/null
+        audio mic @DEFAULT_AUDIO_SOURCE@ ;;
+    brightness-up) brightness + ;;
+    brightness-down) brightness - ;;
+    play-pause|next|previous)
+        command -v playerctl >/dev/null 2>&1 && exec playerctl "$1" >/dev/null 2>&1 ;;
+    *)
+        echo "usage: worksuite-hotkey volume-up|volume-down|mute|mic-mute|brightness-up|brightness-down|play-pause|next|previous" >&2
+        exit 2 ;;
+esac
+exit 0

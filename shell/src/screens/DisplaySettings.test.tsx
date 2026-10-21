@@ -111,6 +111,25 @@ describe('Settings › Display', () => {
   })
 })
 
+describe('Keep changes errors (#60)', () => {
+  it('shows a meaningful message when keeping fails or the IPC call rejects', async () => {
+    await render(<DisplayPanel />)
+    await choose(byLabel('Scale'), '1.25')
+    await act(async () => { button('Apply').click() })
+    await act(async () => { await Promise.resolve() })
+    const keep = vi.spyOn(displays, 'displayKeep').mockRejectedValueOnce(new Error("Error invoking remote method 'ws:displayKeep'"))
+    await act(async () => { button('Keep changes').click() })
+    await act(async () => { await Promise.resolve() })
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('Something went wrong while changing the display. Your previous layout is kept; try again.')
+    keep.mockResolvedValueOnce({ ok: false, error: 'save_failed' })
+    await act(async () => { button('Keep changes').click() })
+    await act(async () => { await Promise.resolve() })
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('couldn’t be saved')
+    keep.mockRestore()
+    await act(async () => { button('Keep changes').click() })
+  })
+})
+
 describe('Settings › Display modes (#32)', () => {
   const one = (o: Partial<DisplayState['outputs'][number]>): DisplayState => {
     const out = { name: 'Virtual-1', description: 'Virtual', make: '', model: '', serial: '', enabled: true, x: 0, y: 0, scale: 1, transform: 'normal', modes: [{ width: 1280, height: 800, refresh: 60, preferred: true, current: true }], ...o }

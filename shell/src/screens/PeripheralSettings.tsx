@@ -5,15 +5,16 @@
 import { ErrorDetails } from '../components/ErrorDetails'
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Dialog, Switch, btnGhost, btnPrimary, card, dialogFooter, field, rowLine, sectionLabel } from '../components/Dk'
-import { failureKind, knownReason, peripheralsApi, type Avail, type FailedChange, type FoundPrinter, type Inhibitor, type InputState, type PeripheralsApi, type PowerProfiles, type PrintJob, type PrinterIssue, type Volume, type BtFound } from '../lib/peripheralsApi'
+import { failureKind, knownReason, peripheralsApi, type Avail, type FailedChange, type Inhibitor, type InputState, type PeripheralsApi, type PowerProfiles, type Volume, type BtFound } from '../lib/peripheralsApi'
 import { os } from '../lib/os'
+import { IM_KEYS } from '../lib/inputMethods'
 import { t, type MessageKey } from '../i18n'
 
-/** Settings › Devices additions: power, removable drives (with the organisation's USB policy), printers, input methods. */
+/** Settings › Devices additions: power, removable drives (with the organisation's USB policy), input methods. Printers have their own page (settings/Printers.tsx). */
 export function DeviceExtras() {
   const [usb, setUsb] = useState<string | null>(null)
   useEffect(() => { void os.deviceInfo().then((d) => setUsb(d.policies?.usb_storage ?? null)).catch(() => setUsb(null)) }, [])
-  return <><PowerSection /><StorageSection usbPolicy={usb} /><PrintersSection /><InputMethodsSection /></>
+  return <><PowerSection /><StorageSection usbPolicy={usb} /><InputMethodsSection /></>
 }
 
 export function reasonText(reason: string): string {
@@ -214,90 +215,8 @@ export function PowerSection() {
   )
 }
 
-// ---------- printers ----------
-const queueCall = (a: PeripheralsApi) => a.printQueue()
-export function PrintersSection() {
-  const q = useLoad<{ jobs: PrintJob[]; issues: PrinterIssue[] }>(queueCall)
-  const [adding, setAdding] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
-  const api = peripheralsApi()
-  const cancel = async (id: string) => {
-    const r = await api?.cancelJob(id)
-    if (r && !r.available) setErr(reasonText(r.reason))
-    q.reload()
-  }
-  return (
-    <Section title={t('per.print.title')} action={api && <button type="button" onClick={() => setAdding(true)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{t('per.print.add')}</button>}>
-      <Err text={err} />
-      {msg && <p role="status" className="m-0 text-[13px] text-[#7FD8A6]">{msg}</p>}
-      {q.r?.available && q.r.value.issues.map((i) => <p key={i.name} role="alert" className="m-0 text-[13px] text-[#FFB98A]">{t('per.print.problem', { name: i.name, reason: i.reason })}</p>)}
-      {q.r === null ? <Muted>{t('common.loading')}</Muted> : !q.r.available ? <Muted>{reasonText(q.r.reason)}</Muted> : q.r.value.jobs.length === 0 ? <Muted>{t('per.print.noJobs')}</Muted> : (
-        <div className={card}>
-          {q.r.value.jobs.map((j) => (
-            <Line key={j.id}>
-              <span className="flex-1 text-[13px]">{t('per.print.job', { id: j.id, printer: j.printer, user: j.user })}</span>
-              <button type="button" onClick={() => void cancel(j.id)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{t('common.cancel')}</button>
-            </Line>
-          ))}
-        </div>
-      )}
-      {adding && api && <AddPrinterDialog api={api} onClose={() => setAdding(false)} onAdded={(n) => { setAdding(false); setMsg(t('per.print.added', { name: n })); q.reload() }} />}
-    </Section>
-  )
-}
-
-function AddPrinterDialog({ api, onClose, onAdded }: { api: PeripheralsApi; onClose: () => void; onAdded: (name: string) => void }) {
-  const [found, setFound] = useState<FoundPrinter[] | null>(null)
-  const [uri, setUri] = useState('')
-  const [name, setName] = useState('')
-  const [err, setErr] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  useEffect(() => { void api.findPrinters().then((r) => (r.available ? setFound(r.value) : (setFound([]), setErr(reasonText(r.reason))))) }, [api])
-  const submit = async (e: FormEvent) => {
-    e.preventDefault(); setBusy(true); setErr(null)
-    const r = await api.addPrinter(uri.trim(), name.trim() || uri.trim())
-    setBusy(false)
-    if (r.available) onAdded(r.value); else setErr(reasonText(r.reason))
-  }
-  return (
-    <Dialog onClose={onClose} width={520}>
-      {(tid) => <form onSubmit={(e) => void submit(e)}>
-        <div className="flex flex-col gap-3 px-5 py-4">
-          <h2 id={tid} className="m-0 text-base font-semibold">{t('per.print.add')}</h2>
-          <p className="m-0 text-[13px] text-[#8FA3C8]">{t('per.print.driverless')}</p>
-          {found === null ? <span className="text-[13px]">{t('per.print.searching')}</span> : found.length === 0 ? <span className="text-[13px] text-[#8FA3C8]">{t('per.print.noneFound')}</span> : (
-            <div className={card}>
-              {found.map((p) => (
-                <label key={p.uri} className={`flex cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-sm ${rowLine}`}>
-                  <input type="radio" name="found-printer" checked={uri === p.uri} onChange={() => { setUri(p.uri); setName(p.name) }} />{p.name}
-                </label>
-              ))}
-            </div>
-          )}
-          <label className="flex flex-col gap-1.5 text-[13px]">{t('per.print.address')}
-            <input value={uri} onChange={(e) => setUri(e.target.value)} placeholder={t('per.print.addressExample')} className={field} />
-          </label>
-          <label className="flex flex-col gap-1.5 text-[13px]">{t('per.print.name')}
-            <input value={name} onChange={(e) => setName(e.target.value)} className={field} />
-          </label>
-          <Err text={err} />
-        </div>
-        <div className={dialogFooter}>
-          <button type="button" onClick={onClose} className={`${btnGhost} px-4 py-2 text-[13px]`}>{t('common.cancel')}</button>
-          <button type="submit" disabled={!uri.trim() || busy} className={`${btnPrimary} px-4 py-2 text-[13px]`}>{busy ? t('per.print.adding') : t('per.print.add')}</button>
-        </div>
-      </form>}
-    </Dialog>
-  )
-}
-
 // ---------- input methods ----------
 const imCall = (a: PeripheralsApi) => a.inputMethods()
-const IM_KEYS: Record<string, MessageKey> = {
-  'keyboard-us': 'per.im.us', m17n_si_wijesekera: 'per.im.siWijesekara', m17n_si_singlish: 'per.im.siPhonetic',
-  m17n_ta_tamil99: 'per.im.taTamil99', m17n_ta_phonetic: 'per.im.taPhonetic',
-}
 export function InputMethodsSection() {
   const { r, reload } = useLoad<InputState>(imCall)
   const [err, setErr] = useState<string | null>(null)

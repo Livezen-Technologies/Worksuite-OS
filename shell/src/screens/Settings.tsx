@@ -13,7 +13,8 @@ import { needsAttention, fmtWhen } from '../lib/updates'
 import { updates, useOsUpdate } from '../lib/useOsUpdate'
 import { useDnd } from '../lib/dnd'
 import { VpnPanel } from './settings/Vpn'
-import { PowerPanel, PrintersPanel } from './settings/Devices'
+import { PowerPanel } from './settings/Devices'
+import { PrintersPanel } from './settings/Printers'
 import { BigSwitch } from './settings/ui'
 import { SignInOptions } from './settings/SignIn'
 import { ReportProblem } from './settings/ReportProblem'
@@ -334,7 +335,7 @@ function SoundPanel() {
     <section aria-label={t('settings.snd.output')} className={`${card} flex flex-col gap-2.5 px-5 py-[18px]`}>
       <div className="flex items-center justify-between gap-3"><h2 className="m-0 text-[15px] font-semibold">{t('settings.snd.output')}</h2>
         {s.outputs.length > 1
-          ? <select aria-label={t('settings.snd.outputDevice')} value={out?.id ?? ''} onChange={(e) => void os.sysSetDefaultAudio(+e.target.value).then(reload)} className={select}>{s.outputs.map((o) => <option key={o.id} value={o.id} className="bg-[#0F2350]">{o.name}</option>)}</select>
+          ? <select aria-label={t('settings.snd.outputDevice')} value={out?.id ?? ''} onChange={(e) => void os.sysSetDefaultAudio(+e.target.value).then(reload)} className={select}>{s.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
           : <Value min={260}>{out?.name ?? null}</Value>}
       </div>
       <div className="flex items-center gap-3.5">
@@ -352,6 +353,19 @@ function SoundPanel() {
   </>
 }
 
+// Notification sources table (#52): header and rows share the table's columns through subgrid.
+const notifTable = 'grid grid-cols-[minmax(0,1fr)_repeat(3,minmax(4.5rem,max-content))_max-content] overflow-hidden @max-[520px]:block'
+const notifRow = 'col-span-full grid grid-cols-subgrid gap-x-4 px-4 @max-[520px]:grid-cols-[minmax(0,1fr)_auto] @max-[520px]:gap-y-1.5'
+
+/** One setting of a source; in the narrow (card) layout it carries its own label, as the header row is hidden. */
+function NotifCell({ label, soft, children }: { label: string; soft?: boolean; children: ReactNode }) {
+  return (
+    <span role="cell" className={`min-w-0 break-words @max-[520px]:col-span-2 @max-[520px]:pl-[38px] ${soft ? 'text-[#C9D6EE]' : ''}`}>
+      <span className="hidden text-[11px] text-[#8FA3C8] @max-[520px]:inline" aria-hidden="true">{label}: </span>{children}
+    </span>
+  )
+}
+
 /** SetNotifications board. The shell's notification sources are its own system services; there are no per-app
  *  notifications yet, so each source shows how it really behaves and can't be switched off. */
 function NotificationsPanel() {
@@ -366,7 +380,6 @@ function NotificationsPanel() {
     { n: t('settings.nav.Updates'), d: t('settings.notif.updatesHint'), i: 'U', c: '#1F6BFF', b: t('settings.notif.cards'), l: t('settings.notif.hidden') },
     { n: t('settings.notif.devices'), d: t('settings.notif.devicesHint'), i: 'H', c: '#5E739C', b: t('settings.notif.cards'), l: t('settings.notif.hidden') },
   ]
-  const cols = 'grid grid-cols-[minmax(0,1fr)_90px_90px_90px_60px] gap-2.5'
   return <>
     <H1>{t('settings.nav.Notifications')}</H1>
     <div className="flex items-center gap-4 rounded-2xl border px-5 py-4" style={{ background: dnd ? 'rgba(122,79,224,0.18)' : 'rgba(14,32,72,0.7)', borderColor: dnd ? 'rgba(185,160,255,0.5)' : 'rgba(127,178,255,0.14)' }}>
@@ -378,17 +391,24 @@ function NotificationsPanel() {
       {general.map(([k, v]) => <div key={k} className={`${card} flex flex-col gap-1.5 px-3.5 py-[13px]`}><span className="text-xs text-[#8FA3C8]">{k}</span><span className="text-sm font-medium">{v}</span></div>)}
     </div>
     <div className="flex items-baseline justify-between"><h2 className="m-0 text-sm font-semibold">{t('settings.notif.sources')}</h2><span className="text-[11px] text-[#8FA3C8]">{t('settings.notif.sourcesHint')}</span></div>
-    <div className={`${card} overflow-hidden`} role="table" aria-label={t('settings.notif.sources')}>
-      <div role="row" className={`${cols} border-b border-[rgba(127,178,255,0.1)] px-4 py-[9px] text-[11px] text-[#8FA3C8]`}>
-        <span role="columnheader">{t('settings.notif.source')}</span><span role="columnheader">{t('settings.notif.banners')}</span><span role="columnheader">{t('settings.notif.lockScreen')}</span><span role="columnheader">{t('settings.notif.sound')}</span><span role="columnheader"><span className="sr-only">{t('settings.notif.allowed')}</span></span>
-      </div>
-      {sources.map((a) => (
-        <div role="row" key={a.n} className={`${cols} items-center px-4 py-2.5 text-[13px] ${rowLine}`}>
-          <span role="cell" className="flex items-center gap-2.5"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-xs font-bold" style={{ background: a.c }} aria-hidden="true">{a.i}</span><span className="flex flex-col"><span>{a.n}</span><span className="text-[11px] text-[#8FA3C8]">{a.d}</span></span></span>
-          <span role="cell">{a.b}</span><span role="cell" className="text-[#C9D6EE]">{a.l}</span><span role="cell" className="text-[#C9D6EE]">{t('common.off')}</span>
-          <span role="cell"><Switch small label={t('settings.notif.allowName', { name: a.n })} checked disabled /></span>
+    {/* One grid for header and rows (subgrid), so columns size to their content in every language and at every
+        scale instead of fixed 90/60 px tracks the switch and longer labels overflowed (#52). Below 520 px of panel
+        width each source becomes a card: name and switch on top, the three settings labelled underneath. */}
+    <div className="@container">
+      <div className={`${card} ${notifTable}`} role="table" aria-label={t('settings.notif.sources')}>
+        <div role="row" className={`${notifRow} border-b border-[rgba(127,178,255,0.1)] py-[9px] text-[11px] text-[#8FA3C8] @max-[520px]:sr-only`}>
+          <span role="columnheader">{t('settings.notif.source')}</span><span role="columnheader">{t('settings.notif.banners')}</span><span role="columnheader">{t('settings.notif.lockScreen')}</span><span role="columnheader">{t('settings.notif.sound')}</span><span role="columnheader"><span className="sr-only">{t('settings.notif.allowed')}</span></span>
         </div>
-      ))}
+        {sources.map((a) => (
+          <div role="row" key={a.n} className={`${notifRow} items-center py-2.5 text-[13px] ${rowLine}`}>
+            <span role="cell" className="flex min-w-0 items-center gap-2.5 @max-[520px]:col-start-1 @max-[520px]:row-start-1"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-xs font-bold" style={{ background: a.c }} aria-hidden="true">{a.i}</span><span className="flex min-w-0 flex-col"><span className="break-words">{a.n}</span><span className="text-[11px] break-words text-[#8FA3C8]">{a.d}</span></span></span>
+            <NotifCell label={t('settings.notif.banners')}>{a.b}</NotifCell>
+            <NotifCell label={t('settings.notif.lockScreen')} soft>{a.l}</NotifCell>
+            <NotifCell label={t('settings.notif.sound')} soft>{t('common.off')}</NotifCell>
+            <span role="cell" className="justify-self-end @max-[520px]:col-start-2 @max-[520px]:row-start-1"><Switch small label={t('settings.notif.allowName', { name: a.n })} checked disabled /></span>
+          </div>
+        ))}
+      </div>
     </div>
     <Note>{t('settings.notif.note')}</Note>
   </>

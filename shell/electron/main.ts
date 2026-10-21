@@ -54,6 +54,7 @@ import { bannerAllowed, toastHost, type ToastMsg } from './toastHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
+import { startPrintersHost } from './printers'
 import { startRemoteSupportHost } from './remoteSupport'
 import { appPermissionsBridge, startAppPermissionsHost } from './appPermissions'
 import { startTouchHost } from './touch'
@@ -154,6 +155,9 @@ function createWindow() {
 
 // WSOS-INT-011: Sinhala/Tamil typing in the shell and app windows through fcitx5 (Wayland text-input-v3).
 app.commandLine.appendSwitch('enable-wayland-ime')
+// #58: Chromium speaks text-input-v1 unless told otherwise, and Labwc only offers v3: without this the shell's own text
+// fields never reached fcitx5 (no Sinhala in search or Settings), and fcitx5 had no input context to switch.
+app.commandLine.appendSwitch('wayland-text-input-version', '3')
 // #16: GPU compositing, rasterization and VA-API video in the shell and every WorkSuite app window, or software
 // rendering when the session has no usable GPU or the GPU process kept crashing (graphics.ts).
 const accel = accelerationPlan(process.env, readCrashLog(), readRendererChoice())
@@ -188,7 +192,8 @@ app.whenReady().then(() => {
   handle('ws:authenticate', async (user, secret, method) => {
     if (method === 'pin') {
       const r = await ask({ op: 'verify', user: os.userInfo().username, pin: secret })
-      return r.ok ? { ok: true } : { ok: false }
+      // #56: after too many wrong PINs the daemon answers "locked"; say so instead of "incorrect PIN" forever.
+      return r.ok ? { ok: true } : { ok: false, reason: r.error === 'locked' ? 'pin_locked' : r.error === 'unavailable' ? 'unavailable' : 'wrong' }
     }
     if (method === 'key') return { ok: false, message: 'Use your password.' }
     return checkOwnPassword(user, secret)
@@ -315,6 +320,13 @@ app.whenReady().then(() => {
     if (!https) return { ok: false, error: 'insecure_url' }
     const r = await brokerCall('SignIn', { server_url: serverUrl, mode }, 6 * 60_000)
     return r.ok ? { ok: true, value: publicAccounts([r.value])[0] } : r
+  })
+  // #55: before the browser opens, check the address answers as a WorkSuite server over trusted https.
+  handle('ws:cloudCheckServer', async (serverUrl) => {
+    let https = false
+    try { https = new URL(serverUrl).protocol === 'https:' } catch { return { ok: false, error: 'invalid_url' } }
+    if (!https) return { ok: false, error: 'insecure_url' }
+    return brokerCall('CheckServer', { server_url: serverUrl }, 40_000)
   })
   // "Cancel" or "Try again" while the browser is open: the broker ends the waiting sign-in (sign_in_cancelled).
   handle('ws:cloudSignInCancel', () => brokerCall('CancelSignIn'))
@@ -622,12 +634,14 @@ app.whenReady().then(() => {
   })
   let layout: Layout | null = null
   void displays.state().then((r) => { if (r.ok && !layout) layout = r.value.layout })
-  handle('ws:displayState', () => displays.state())
+  // A thrown error would reach the renderer as a bare IPC rejection ("Unexpected error", #60): answer with a code.
+  const safe = <T>(p: Promise<T>) => p.catch((e: unknown) => { console.error('display:', e); return { ok: false, error: 'internal' } })
+  handle('ws:displayState', () => safe(displays.state()))
   handle('ws:displayApply', (json) => {
-    try { const p = JSON.parse(json); return displays.apply(arrange(p.layout, p.sides ?? {})) } catch { return { ok: false, error: 'bad_layout' } }
+    try { const p = JSON.parse(json); return safe(displays.apply(arrange(p.layout, p.sides ?? {}))) } catch { return { ok: false, error: 'bad_layout' } }
   })
-  handle('ws:displayKeep', () => displays.confirm())
-  handle('ws:displayRevert', () => displays.revert())
+  handle('ws:displayKeep', () => safe(displays.confirm()))
+  handle('ws:displayRevert', () => safe(displays.revert()))
   handle('ws:displayWallpaper', (output, id) => displays.setWallpaper(output, id))
   void displays.applySaved()
   // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
@@ -723,6 +737,8 @@ app.whenReady().then(() => {
   startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
+  // Settings › Printers: state, default, preferences, pause, test page, held jobs (issue #51).
+  startPrintersHost(handle)
   startRemoteSupportHost(handle, undefined, {
     exec: realExec, credential: () => deviceCredential(),
     serverBase: () => { try { const h = JSON.parse(readFileSync(STATUS_PATH, 'utf8'))?.server; return typeof h === 'string' && /^[A-Za-z0-9.:[\]-]+$/.test(h) ? `https://${h}/` : null } catch { return null } },
@@ -750,6 +766,8 @@ app.whenReady().then(() => {
     else broadcast('ws:toastClicked', key)
   })
   handle('ws:toastsAvailable', () => toasts.available())
+  // Fn keys (worksuite-hotkey, #62): the level indicator over the apps, or in the shell's window without the helper.
+  hooks.osd = (o) => { if (!toasts.osd(o)) broadcast('ws:osd', o) }
   handle('ws:toastShow', (json) => {
     try {
       const t = JSON.parse(json) as ToastMsg

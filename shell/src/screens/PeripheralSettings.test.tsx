@@ -34,10 +34,21 @@ const fake: PeripheralsApi = {
   async removePrinter() { return ok(true as const) },
   async printQueue() { return ok({ jobs: [{ id: 'Office-3', printer: 'Office', user: 'u', size: '10' }], issues: [{ name: 'Office', reason: 'Paper jam' }] }) },
   async cancelJob(id) { calls.push(`cancel ${id}`); return ok(true as const) },
+  // Settings › Printers has its own page and tests (settings/Printers.test.tsx).
+  async printers() { return ok([]) },
+  async printerDrivers() { return ok([]) },
+  async setDefaultPrinter() { return ok(true as const) },
+  async pausePrinter() { return ok(true as const) },
+  async printTestPage() { return ok('') },
+  async printerPrefs() { return ok({ options: [], orientation: '3', copies: 1 }) },
+  async setPrinterPrefs() { return ok(true as const) },
+  async holdJob() { return ok(true as const) },
   async screenCapture() { return ok(capturing) },
   async stopScreenCapture() { calls.push('stop capture'); const n = capturing; capturing = 0; return ok(n) },
   async inputMethods() { return ok({ enabled, available: ['keyboard-us', 'm17n_si_wijesekera', 'm17n_ta_tamil99'] }) },
   async setInputMethods(ids) { calls.push(`ims ${ids.join(',')}`); enabled = ids; return ok(true as const) },
+  async imStatus() { return ok({ running: true, current: 'keyboard-us', enabled }) },
+  async setCurrentIm(id) { return ok(id) },
   async syncFailed() { return { ok: true, value: [{ mutation_id: 'm-1', module: 'crm', object_id: 'lead-7', last_error: '403 forbidden' }] } },
   async syncRetry(id) { calls.push(`retry ${id}`); return { ok: true, value: true } },
 }
@@ -101,23 +112,13 @@ describe('removable drives (WSOS-INT-004)', () => {
   })
 })
 
-describe('power, printers, input methods (WSOS-INT-005, 006, 011)', () => {
+describe('power, input methods (WSOS-INT-005, 011)', () => {
   it('switches the power profile and lists programs blocking sleep', async () => {
     const h = await render(<Mod.PowerSection />)
     expect(h.textContent).toContain('Videos is blocking sleep')
     const perf = [...h.querySelectorAll('label')].find((l) => l.textContent === 'Performance')!.querySelector('input')!
     await click(perf)
     expect(calls).toEqual(['profile performance'])
-  })
-  it('shows the queue and printer problems, adds a discovered printer', async () => {
-    const h = await render(<Mod.PrintersSection />)
-    expect(h.textContent).toContain('Office: Paper jam')
-    await click(button('Cancel'))
-    await click(button('Add printer'))
-    await click([...document.querySelectorAll('label')].find((l) => l.textContent === 'Office')!.querySelector('input')!)
-    await click(document.querySelector('button[type=submit]')!)
-    expect(calls).toEqual(['cancel Office-3', 'add ipp://10.0.0.5/ipp/print Office'])
-    expect(h.textContent).toContain('Printer Office added.')
   })
   it('turns on Sinhala input', async () => {
     const h = await render(<Mod.InputMethodsSection />)
