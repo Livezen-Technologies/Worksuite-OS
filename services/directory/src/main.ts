@@ -164,10 +164,15 @@ export async function main(argv: string[], deps: Deps = { server: httpServer(), 
       if (process.env.PAM_TYPE && process.env.PAM_TYPE !== 'open_session') return 0;
       await session(deps, user);
       return 0;
+    // Boot units: an unenrolled or offline device is an expected state, not a failure. Log it and exit 0 so the
+    // units do not show as failed at every boot (the timers try again); the greeter keeps its cached settings and
+    // the break-glass account stays locked.
     case 'greeter-config':
-      return (await greeterConfig(deps)) ? 0 : 3;
+      if (!(await greeterConfig(deps))) deps.log('directory: server not reachable or device not enrolled; greeter keeps its saved domain settings');
+      return 0;
     case 'rotate':
-      return (await rotate(deps)) === 'rotated' ? 0 : 3;
+      if ((await rotate(deps)) !== 'rotated') deps.log('break-glass: not rotated (device not enrolled, server offline or no break-glass account); account stays locked');
+      return 0;
     default:
       process.stderr.write('usage: worksuite-pam-directory auth|session|rotate|greeter-config\n');
       return 2;

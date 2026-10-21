@@ -83,6 +83,19 @@ if WORKSUITE_GTKLOCK=gtklock-fail WORKSUITE_LOCK_WAIT_S=1 sh "$T/worksuite-lock"
 cat "$T/run/worksuite-lock.guard/pid" >> "$T/pids" 2>/dev/null
 kill "$(cat "$T/run/worksuite-lock.guard/pid")" 2>/dev/null; sleep 0.3; rm -rf "$T/run/worksuite-lock.guard"
 
+# Lock screen label: with a device PIN gtklock's field says "PIN or password:" (gettext catalogue <lang>@worksuitepin).
+stub gtklock-lang 'while [ $# -gt 0 ]; do [ "$1" = "-L" ] && lockcmd=$2; shift; done; echo "${LANGUAGE:-none}" > "$T/gtklock-lang"; sh -c "$lockcmd"; exit 0'
+stub signin-yes 'exit 0'; stub signin-no 'exit 1'
+lang_with() { rm -f "$T/gtklock-lang"; WORKSUITE_GTKLOCK=gtklock-lang WORKSUITE_SIGNIN="$T/stub/$1" LANG=$2 sh "$T/worksuite-lock"
+  i=0; while [ -d "$T/run/worksuite-lock.guard" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done; cat "$T/gtklock-lang"; }
+check "lock screen: PIN set → gtklock reads the PIN-or-password label" "$(lang_with signin-yes en_US.UTF-8)" "en@worksuitepin"
+check "lock screen: Sinhala session → Sinhala label" "$(lang_with signin-yes si_LK.UTF-8)" "si@worksuitepin"
+check "lock screen: no PIN → gtklock's own label" "$(lang_with signin-no en_US.UTF-8)" "none"
+L=$ROOT/services/session/lock-lang
+python3 -I "$L/build-mo.py" "$T/mo" && python3 -I -c 'import gettext,sys; t=gettext.translation("gtklock", sys.argv[1], languages=["en@worksuitepin"]); sys.exit(t.gettext("Password:") != "PIN or password:")' "$T/mo" \
+  && ok "lock-lang builds gtklock.mo with the PIN label" || bad "lock-lang builds gtklock.mo with the PIN label"
+grep -q 'services/session/lock-lang/build-mo.py' "$ROOT/packaging/debian/rules" && ok "rules builds and installs the lock-screen catalogues" || bad "rules builds and installs the lock-screen catalogues"
+
 # ---- logout cleanup (WSOS-SES-003) ----
 : > "$LOG"
 sleep 30 & labwc=$!; echo $labwc >> "$T/pids"
@@ -270,6 +283,7 @@ grep -qx 'org.freedesktop.impl.portal.ScreenCast=wlr' "$P" && grep -qx 'org.free
 export WORKSUITE_PAM_COMMON_AUTH="$T/common-auth"
 printf 'auth\t[success=1 default=ignore]\tpam_unix.so nullok\n' > "$WORKSUITE_PAM_COMMON_AUTH"
 PATH="$T/nopy:$PATH" sh "$BIN/worksuite-signin" pam-pin-used; check "pam-pin-used answers no without a PIN profile" "$?" 1
+PATH="$T/nopy:$PATH" sh "$BIN/worksuite-signin" pam-password-used; check "pam-password-used answers 0 without a PIN profile (no pam_exec error)" "$?" 0
 printf 'auth\t[success=end default=ignore]\tpam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-pin\n' >> "$WORKSUITE_PAM_COMMON_AUTH"
 grep -Eqs 'worksuite-signin pam-pin([[:space:]]|$)' "$WORKSUITE_PAM_COMMON_AUTH" && ok "pam-pin-used asks the daemon with a PIN profile on" || bad "pam-pin-used asks the daemon with a PIN profile on"
 unset WORKSUITE_PAM_COMMON_AUTH
@@ -553,6 +567,12 @@ D=$ROOT/services/package-service/networkmanager/90-worksuite-drivers
 stub busctl 'echo "busctl $*" >> "$LOG"'
 : > "$LOG"; CONNECTIVITY_STATE=LIMITED sh "$D" wlan0 connectivity-change; CONNECTIVITY_STATE=FULL sh "$D" wlan0 up; CONNECTIVITY_STATE=FULL sh "$D" '' connectivity-change
 check "dispatcher asks for a driver check only when connectivity becomes full" "$(grep -c 'CheckDrivers s connectivity' "$LOG")" 1
+
+# ---- #55: Node services trust the system CA store (private-CA WorkSuite servers) ----
+grep -qx 'Environment=NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt' "$ROOT/services/session/systemd/user/worksuite-credentials.service" \
+  && ok "credentials service trusts the system CA store" || bad "credentials service trusts the system CA store"
+grep -q 'export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt' "$ROOT/shell/bin/worksuite-node" && grep -q 'if \[ -z "${NODE_EXTRA_CA_CERTS:-}" \]' "$ROOT/shell/bin/worksuite-node" \
+  && ok "worksuite-node adds the system CA store unless one is set" || bad "worksuite-node adds the system CA store unless one is set"
 
 echo "1..$n"
 exit $fail

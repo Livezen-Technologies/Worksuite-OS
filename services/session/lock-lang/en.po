@@ -1,0 +1,7 @@
+# gtklock's field label while the signed-in person has a device PIN (worksuite-lock sets LANGUAGE=en@worksuitepin).
+# Only this message is overridden; gettext takes every other one from gtklock's own catalogue.
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Password:"
+msgstr "PIN or password:"

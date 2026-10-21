@@ -199,6 +199,13 @@ const ok = <T>(value: T): Avail<T> => ({ available: true, value })
 const fail = (reason: string): { available: false; reason: string } => ({ available: false, reason })
 type Run = Awaited<ReturnType<Exec>>
 const failRun = (r: Run, tool: string) => fail(r.missing ? `${tool}_missing` : cupsError(r.stderr + r.stdout))
+/** The first line CUPS or lpadmin printed, for the person to read (or quote to support) under the reason (#51). */
+export function cupsDetail(text: string): string | undefined {
+  const line = text.split('\n').map((l) => l.trim()).find((l) => l && !/^(auth_cancelled|Forbidden)$/.test(l))
+  return line ? line.replace(/[\0-\x1f]/g, ' ').slice(0, 300) : undefined
+}
+/** A queue IPP Everywhere could not set up properly: CUPS leaves a raw queue that prints unrendered data (#51). */
+export const isRawQueue = (lpoptions: string) => /printer-make-and-model='?Local Raw Printer/i.test(lpoptions)
 
 export function printersBridge(exec: Exec = printerExec) {
   /** An administrative CUPS call: directly (lpadmin group), then through the polkit-gated helper on "Forbidden". */
@@ -247,8 +254,25 @@ export function printersBridge(exec: Exec = printerExec) {
       if (m === 'everywhere' && !driverless(u)) return fail('printer_no_driver')
       const name = queueName(display)
       const desc = display.trim().slice(0, 127)
+      // #51: a failed add must not leave a half-made queue behind ("Local Raw Printer"); only a queue this call
+      // created is rolled back, never one of the same name that was already there.
+      const existed = (await exec('lpstat', ['-p', name])).code === 0
+      const rollback = async () => {
+        if (existed || (await exec('lpstat', ['-p', name])).code !== 0) return
+        await admin('lpadmin', ['-x', name], ['remove', name])
+      }
       const r = await admin('lpadmin', ['-p', name, '-E', '-v', u, '-m', m, '-D', desc], ['add', name, u, m, desc])
-      return r.code === 0 ? ok(name) : adminFail(r, 'lpadmin')
+      if (r.code !== 0) {
+        await rollback()
+        const f = adminFail(r, 'lpadmin')
+        const detail = f.reason === 'auth_cancelled' || r.missing ? undefined : cupsDetail(r.stderr + '\n' + r.stdout)
+        return detail ? { ...f, detail } : f
+      }
+      if (m === 'everywhere' && !existed && isRawQueue((await exec('lpoptions', ['-p', name])).stdout)) {
+        await rollback()
+        return fail('printer_not_driverless')
+      }
+      return ok(name)
     },
     async removePrinter(name: string): Promise<Avail<true>> {
       if (!NAME.test(name)) return fail('invalid_argument')

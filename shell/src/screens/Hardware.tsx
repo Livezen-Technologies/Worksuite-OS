@@ -193,7 +193,9 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
           })}
         </ul>
       </>}
-      {r && r.state !== 'off' && !busy && list.length === 0 && <Empty title={t('hw.upToDate')}>{r.checked_at ? t('drv.lastChecked', { time: formatDate(r.checked_at) }) : undefined}</Empty>}
+      {/* #59: "up to date" only after a check that reached the package servers; offline or failed checks say so. */}
+      {r && r.state === 'idle' && !busy && list.length === 0 && <Empty title={t('hw.upToDate')}>{r.checked_at ? t('drv.lastChecked', { time: formatDate(r.checked_at) }) : undefined}</Empty>}
+      {r && (r.state === 'offline' || r.state === 'error') && !busy && list.length === 0 && <Empty title={t(r.state === 'offline' ? 'drv.offline' : 'drv.unknown')}>{t('drv.offlineHint')}</Empty>}
       {!!r?.installed?.length && (
         <section aria-label={t('drv.installedTitle')} className="flex flex-col gap-1.5">
           <h2 className={`m-0 font-normal ${sectionLabel}`}>{t('drv.installedTitle')}</h2>

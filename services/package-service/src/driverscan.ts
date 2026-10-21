@@ -25,6 +25,10 @@ export interface DriverEnv {
   /** Debian non-free-firmware Contents (all + arch), uncompressed; throws when offline. */
   contents(): Promise<string>;
   installed(pkg: string): boolean;
+  /** Forget what installed() learned, so the next call reads the package database again (once per check, #59). */
+  refreshInstalled?(): void;
+  /** Whether the package servers answer; false: the check can't say drivers are up to date (#59). */
+  archiveReachable?(): Promise<boolean>;
   policy(): DriverPolicyFields | null;
   metered(): Promise<boolean>;
   secureBoot(): boolean;
@@ -86,6 +90,9 @@ export class DriverManager extends EventEmitter {
     const secureBoot = e.secureBoot();
     const offers: DriverOffer[] = [];
     let state: DriverReport['state'] = 'idle';
+    e.refreshInstalled?.();
+    // #59: no answer from the package servers means "unknown", never "up to date".
+    if (e.archiveReachable && !(await e.archiveReachable().catch(() => false))) state = 'offline';
     this.lastKernelLog = await e.kernelLog().catch(() => '');
     const fails = stillMissing(parseFirmwareFailures(this.lastKernelLog), (f) => e.firmwarePresent(f));
     // (a) firmware files the kernel asked for: Debian's Contents index names the package.
@@ -100,7 +107,7 @@ export class DriverManager extends EventEmitter {
           offers.push({ id: `fw:${pkg}`, device_id: dev?.id ?? null, kind: 'firmware', packages: [pkg], name: pkg, summary: 'firmware_missing', from_version: null, to_version: 'debian',
             license: 'proprietary', category: 'recommended', size_bytes: null, restart: false, reload: f.driver });
         }
-      } catch (err) { state = 'error'; e.audit('drivers_contents_failed', { error: String(err) }); }
+      } catch (err) { if (state !== 'offline') state = 'error'; e.audit('drivers_contents_failed', { error: String(err) }); }
     }
     // isenkram (modalias → package, from AppStream): firmware and drivers for this hardware not installed yet.
     const isk = await e.run('isenkram-lookup', []).catch(() => ({ code: 127, stdout: '', stderr: '' }));
@@ -111,13 +118,14 @@ export class DriverManager extends EventEmitter {
     }
     // (b) DKMS drivers for devices the kernel has no driver for; NVIDIA GPUs still on nouveau.
     const headers = e.arch === 'arm64' ? 'linux-headers-arm64' : 'linux-headers-amd64';
+    const nvidiaInstalled = e.installed('nvidia-driver') || e.installed('nvidia-tesla-535-driver');
     for (const d of devs) {
       const k = dkmsFor(d, e.arch);
       if (k && !e.installed(k.package) && !offers.some((o) => o.packages.includes(k.package))) {
         offers.push({ id: `dkms:${k.package}`, device_id: d.id, kind: 'dkms', packages: [k.package, headers], name: k.name, summary: secureBoot ? 'dkms_secure_boot' : 'dkms_optional',
           from_version: null, to_version: 'debian', license: k.license, category: 'optional', size_bytes: k.size, restart: k.restart });
       }
-      const g = gpuOffer(d, { secureBoot, mokEnrolled: false, nvidiaInstalled: e.installed('nvidia-driver') || e.installed('nvidia-tesla-535-driver') }, e.arch);
+      const g = gpuOffer(d, { secureBoot, mokEnrolled: false, nvidiaInstalled }, e.arch);
       if (g && !offers.some((o) => o.id === g.id)) offers.push(g);
     }
     // (c) fwupd/LVFS: refresh metadata (skipped on metered connections), then the updates it knows.
@@ -263,6 +271,7 @@ export class DriverManager extends EventEmitter {
   /** At boot (after the greeter's health check): an nvidia install whose first boot failed goes back to nouveau. */
   async gpuBootCheck(greeterOk: boolean, nvidiaLoaded: boolean): Promise<boolean> {
     const s = this.env.load();
+    this.env.refreshInstalled?.();
     const installed = this.env.installed('nvidia-driver') || this.env.installed('nvidia-tesla-535-driver');
     if (!needsGpuFallback({ nvidiaInstalled: installed, pendingBoot: s.gpu?.pending_boot === true, greeterOk, nvidiaLoaded })) {
       if (s.gpu?.pending_boot && greeterOk) this.env.save({ ...s, gpu: { pending_boot: false } });

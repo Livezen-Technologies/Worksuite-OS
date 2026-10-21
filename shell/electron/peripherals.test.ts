@@ -115,9 +115,9 @@ describe('printing (WSOS-INT-006)', () => {
     expect(printerUri('ipp://user:pw@host/')).toBeNull()
   })
   it('adds an IPP Everywhere queue with fixed argv and explains failures', async () => {
-    const { exec, calls } = fakeExec({})
+    const { exec, calls } = fakeExec({ 'lpstat -p': { code: 1 } })
     expect(await peripheralsBridge('/h', exec, withStdin, memFs()).addPrinter('ipp://10.0.0.5/ipp/print', 'Office printer')).toEqual({ available: true, value: 'Office_printer' })
-    expect(calls).toEqual([['lpadmin', '-p', 'Office_printer', '-E', '-v', 'ipp://10.0.0.5/ipp/print', '-m', 'everywhere', '-D', 'Office printer']])
+    expect(calls).toEqual([['lpstat', '-p', 'Office_printer'], ['lpadmin', '-p', 'Office_printer', '-E', '-v', 'ipp://10.0.0.5/ipp/print', '-m', 'everywhere', '-D', 'Office printer'], ['lpoptions', '-p', 'Office_printer']])
     expect(cupsError('lpadmin: Unable to connect to "10.0.0.5:631": No route to host')).toBe('printer_unreachable')
     expect(cupsError('lpadmin: Forbidden')).toBe('not_authorized')
   })

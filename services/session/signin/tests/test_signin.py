@@ -246,6 +246,28 @@ class PamTests(Tmp):
         # daemon down: fail closed
         self.assertEqual(cli.pam_pin({"PAM_USER": "alex"}, io.BytesIO(PIN.encode()), os.path.join(self.tmp.name, "none")), 1)
 
+    def test_password_and_not_applicable_answers_exit_zero(self):
+        # pam_exec logs every non-zero exit at error level: the common case (a password) must answer 0.
+        self.assertEqual(cli.pam_not_pin({"PAM_USER": "alex"}, io.BytesIO(b"hunter2 pass\0")), 0)
+        self.assertEqual(cli.pam_not_pin({"PAM_USER": "alex"}, io.BytesIO(b"\0")), 0)
+        self.assertEqual(cli.pam_not_pin({"PAM_USER": "alex"}, io.BytesIO(PIN.encode() + b"\0")), 1)
+        none = os.path.join(self.tmp.name, "none")
+        self.assertEqual(cli.pam_password_used({"PAM_USER": "alex"}, none), 0)  # daemon down: keyring still runs
+        sock = os.path.join(self.tmp.name, "s")
+        d = FakeDaemon(sock, {"ok": True})
+        self.assertEqual(cli.pam_password_used({"PAM_USER": "alex"}, sock), 1)  # PIN used: skip the keyring
+        d.t.join(2)
+        env = {"PAM_USER": "alex", "WORKSUITE_SIGNIN_SOCK": none}
+        self.assertEqual(cli.main(["pam-reset"], env, io.BytesIO(b"")), 0)
+
+    def test_has_pin_for_the_lock_screen_label(self):
+        sock = os.path.join(self.tmp.name, "s")
+        d = FakeDaemon(sock, {"ok": True, "has_pin": True})
+        self.assertEqual(cli.has_pin({}, sock), 0)
+        d.t.join(2)
+        self.assertEqual(d.got[0]["op"], "status")
+        self.assertEqual(cli.has_pin({}, os.path.join(self.tmp.name, "none")), 1)
+
     def test_helper_process_prints_nothing_and_keeps_the_pin_out_of_argv(self):
         env = {**os.environ, "PAM_USER": "alex", "PAM_TYPE": "auth", "WORKSUITE_SIGNIN_SOCK": os.path.join(self.tmp.name, "none"),
                "PYTHONPATH": str(HERE)}

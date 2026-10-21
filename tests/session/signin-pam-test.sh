@@ -31,8 +31,13 @@ check "PIN: no log= or debug (the token is never written)" '! grep -Eq "log=|deb
 check "PIN count reset only after a successful sign-in (Auth-Final, no token)" 'grep -q "^Auth-Final:" "$P/worksuite-signin-pin-final" && ! grep -q expose_authtok "$P/worksuite-signin-pin-final"'
 check "u2f: pam_u2f with the WorkSuite authfile and origin" 'grep -q "pam_u2f.so authfile=/etc/worksuite/u2f_mappings origin=pam://worksuite appid=pam://worksuite cue nouserok" "$P/worksuite-signin-u2f"'
 check "u2f: users without a key are skipped (nouserok)" 'grep -q nouserok "$P/worksuite-signin-u2f"'
-check "keyring: skipped when the sign-in used the PIN" 'awk "/pam-pin-used/{a=NR} /pam_gnome_keyring.so\$/{b=NR} END{exit !(a && b == a + 1)}" "$P/worksuite-keyring"'
-check "keyring: the skip jumps exactly one module" 'grep -q "^	\[success=1 default=ignore\]	pam_exec.so quiet /usr/lib/worksuite/worksuite-signin pam-pin-used$" "$P/worksuite-keyring"'
+check "keyring: skipped when the sign-in used the PIN" 'awk "/pam-password-used/{a=NR} /pam_gnome_keyring.so\$/{b=NR} END{exit !(a && b == a + 1)}" "$P/worksuite-keyring"'
+# pam_exec logs any non-zero exit as "failed: exit code N" at error level: the password case must exit 0.
+check "keyring: the PIN check answers 0 for a password and skips one module otherwise" 'grep -q "^	\[success=ignore default=1\]	pam_exec.so quiet /usr/lib/worksuite/worksuite-signin pam-password-used$" "$P/worksuite-keyring"'
+check "keyring: auth part only for greetd/login (no gkr-pam errors from sudo, polkit, gtklock)" 'grep -q "^	\[success=ignore default=2\]	pam_succeed_if.so quiet service in greetd:login$" "$P/worksuite-keyring"'
+check "keyring: session part skips system users such as the greeter" 'awk "/uid >= 1000/{a=NR} /pam_gnome_keyring.so auto_start\$/{b=NR} END{exit !(a && b == a + 1)}" "$P/worksuite-keyring"'
+check "PIN: a password skips the PIN check with exit 0 (no pam_exec error per password sign-in)" 'grep -c "^	\[success=1 default=ignore\]	pam_exec.so quiet expose_authtok /usr/lib/worksuite/worksuite-signin pam-not-pin$" "$P/worksuite-signin-pin" | grep -qx 2'
+check "PIN: the skip line comes right before each PIN check" '[ "$(grep -A1 pam-not-pin "$P/worksuite-signin-pin" | grep -c "pam-pin$")" -eq 2 ]'
 # pam_gnome_keyring's session part needs XDG_RUNTIME_DIR, which pam_systemd sets: it must come after it. pam-auth-update
 # sorts by Priority, then by profile name backwards, so at systemd's Priority 0 "worksuite-keyring" came first; the
 # module found no control socket, started a daemon of its own outside the user manager, and the session's daemon

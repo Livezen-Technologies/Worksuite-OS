@@ -84,6 +84,15 @@ describe('WSOS-DSK-004 quick settings', () => {
     expect(mute).toHaveBeenCalledWith(true)
   })
 
+  it('panel: no Wi-Fi adapter → the Wi-Fi tile is unavailable, not shown on', () => {
+    const wired: QuickState = { ...full, net: { wifi_enabled: true, devices: [{ device: 'enp0s3', type: 'ethernet', state: 'connected', connection: 'Wired' }], networks: [] } }
+    const el = render(<QuickPanel state={wired} refresh={() => {}} dnd={false} setDnd={() => {}} onSettings={() => {}} onLock={() => {}} onPower={() => {}} onClose={() => {}} />)
+    const tile = [...el.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].find((b) => b.textContent?.startsWith('Wi-Fi'))!
+    expect(tile.getAttribute('aria-pressed')).toBe('false')
+    expect(tile.disabled).toBe(true)
+    expect(tile.parentElement!.style.background).not.toContain('31, 107, 255')
+  })
+
   it('useQuickState reads every service from the bridge', async () => {
     vi.spyOn(os, 'sysNetwork').mockResolvedValue({ available: true, value: full.net! })
     vi.spyOn(os, 'sysBluetooth').mockResolvedValue({ available: false, reason: 'missing' })

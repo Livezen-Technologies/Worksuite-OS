@@ -11,7 +11,8 @@ import { certFileName, openvpnNeedsCredentials, ovpnConnectionName, parseOvpn, p
 import { parseConnectivity, type Connectivity } from './connectivity'
 import { xdgDirs } from './xdgDirs'
 
-export type Avail<T> = { available: true; value: T } | { available: false; reason: string }
+/** detail: the tool's own error text, shown under the reason when it says more (e.g. lpadmin / CUPS, #51). */
+export type Avail<T> = { available: true; value: T } | { available: false; reason: string; detail?: string }
 export type Exec = (cmd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string; missing?: boolean }>
 export type WithStdin = (cmd: string, args: string[], input: string) => Promise<{ code: number; stderr: string }>
 

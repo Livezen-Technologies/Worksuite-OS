@@ -182,7 +182,8 @@ export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, on
   const nextMode = (m: PowerProfiles) => m.profiles[(m.profiles.indexOf(m.active) + 1) % m.profiles.length]
 
   const tiles: { id: string; title: string; sub: string; d: string; on: boolean; disabled: boolean; click: () => void; section?: string }[] = [
-    { id: 'wifi', title: t('qs.wifi'), d: D.wifi, on: !!net?.wifi_enabled, disabled: !net || !wifi,
+    // NetworkManager reports WirelessEnabled even with no Wi-Fi adapter: without one the tile is unavailable, not on.
+    { id: 'wifi', title: t('qs.wifi'), d: wifi ? D.wifi : D.wifiOff, on: !!net?.wifi_enabled && !!wifi, disabled: !net || !wifi,
       sub: !net ? t('common.unavailable') : !wifi ? t('qs.noWifi') : !net.wifi_enabled ? t('common.off') : connected ?? t('common.notConnected'),
       click: () => act(os.sysSetWifi(!net!.wifi_enabled)), section: 'Network' },
     { id: 'bt', title: t('settings.nav.Bluetooth'), d: D.bt, on: btOn, disabled: !bt,

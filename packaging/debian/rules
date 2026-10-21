@@ -45,6 +45,8 @@ override_dh_auto_build:
 	$(MAKE) -C native/wayland-bridge protocols
 	# Installer translations: compiled into the Calamares branding's lang/ directory.
 	installer/lang/build.sh
+	# Lock screen: gtklock's "PIN or password:" label catalogues (services/session/lock-lang, used by worksuite-lock).
+	python3 -I services/session/lock-lang/build-mo.py build-lock-lang
 	# Branding PNGs from the SVG sources.
 	branding/render.sh build-branding
 	dh_auto_build
@@ -55,6 +57,7 @@ override_dh_auto_install:
 	install -D -m 0755 native/guard/worksuite-guard debian/worksuite-device-agent/usr/lib/worksuite/worksuite-guard
 	install -D -m 0644 native/pam-worksuite/pam_worksuite.so debian/worksuite-directory/usr/lib/$(DEB_HOST_MULTIARCH)/security/pam_worksuite.so
 	dh_auto_install
+	install -d debian/worksuite-session/usr/share/locale && cp -r build-lock-lang/. debian/worksuite-session/usr/share/locale/
 	# calamares-settings-worksuite: config, branding and the two WorkSuite modules next to the stock ones.
 	d=debian/calamares-settings-worksuite; m=$$d/usr/lib/$(DEB_HOST_MULTIARCH)/calamares/modules; \
 	install -D -m 0644 installer/settings.conf $$d/etc/calamares/settings.conf && \

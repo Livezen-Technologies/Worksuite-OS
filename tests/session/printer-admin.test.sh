@@ -12,17 +12,26 @@ ok() { echo "ok - $1"; }
 bad() { echo "not ok - $1"; fail=1; }
 check() { [ "$2" = "$3" ] && ok "$1" || { bad "$1"; echo "#   got:  $2"; echo "#   want: $3"; }; }
 
-for t in lpinfo lpadmin cupsenable cupsdisable cupsaccept; do
+for t in lpinfo cupsenable cupsdisable cupsaccept; do
   printf '#!/bin/sh\necho "%s $*" >> "%s"\n' "$t" "$LOG" > "$TMP/$t"; chmod +x "$TMP/$t"
 done
+# lpstat answers "no such printer" unless LPSTAT_RCS lists exit codes for successive calls; lpadmin -p fails with ADD_RC.
+printf '#!/bin/sh\necho "lpstat $*" >> "%s"\nset -- $(cat "%s/rcs" 2>/dev/null) 1\nrc=$1; shift; echo "$*" > "%s/rcs"\nexit $rc\n' "$LOG" "$TMP" "$TMP" > "$TMP/lpstat"; chmod +x "$TMP/lpstat"
+printf '#!/bin/sh\necho "lpadmin $*" >> "%s"\n[ "$1" = -p ] && exit ${ADD_RC:-0}\nexit 0\n' "$LOG" > "$TMP/lpadmin"; chmod +x "$TMP/lpadmin"
+export WORKSUITE_LPSTAT=$TMP/lpstat
 export WORKSUITE_LPINFO=$TMP/lpinfo WORKSUITE_LPADMIN=$TMP/lpadmin WORKSUITE_CUPSENABLE=$TMP/cupsenable \
   WORKSUITE_CUPSDISABLE=$TMP/cupsdisable WORKSUITE_CUPSACCEPT=$TMP/cupsaccept
 run() { : > "$LOG"; sh "$H" "$@" 2>/dev/null; echo "rc=$?" >> "$LOG"; tr '\n' ';' < "$LOG"; }
 
 check "devices" "$(run devices)" "lpinfo --timeout 10 -l -v;rc=0;"
 check "drivers by device id" "$(run drivers id 'MFG:HP;MDL:LaserJet M110w;')" "lpinfo --device-id MFG:HP;MDL:LaserJet M110w; -m;rc=0;"
-check "add" "$(run add Office ipp://10.0.0.5/ipp/print everywhere 'Office printer')" "lpadmin -p Office -E -v ipp://10.0.0.5/ipp/print -m everywhere -D Office printer;rc=0;"
-check "add USB with a PPD" "$(run add Lab 'usb://Brother/HL?serial=1' drv:///brlaser.drv/br2350.ppd Lab)" "lpadmin -p Lab -E -v usb://Brother/HL?serial=1 -m drv:///brlaser.drv/br2350.ppd -D Lab;rc=0;"
+check "add" "$(run add Office ipp://10.0.0.5/ipp/print everywhere 'Office printer')" "lpstat -p Office;lpadmin -p Office -E -v ipp://10.0.0.5/ipp/print -m everywhere -D Office printer;rc=0;"
+check "add USB with a PPD" "$(run add Lab 'usb://Brother/HL?serial=1' drv:///brlaser.drv/br2350.ppd Lab)" "lpstat -p Lab;lpadmin -p Lab -E -v usb://Brother/HL?serial=1 -m drv:///brlaser.drv/br2350.ppd -D Lab;rc=0;"
+echo "1 0" > "$TMP/rcs"
+check "#51: a failed add removes the queue it left behind" "$(ADD_RC=1 run add H ipp://h/ipp/print everywhere H)" "lpstat -p H;lpadmin -p H -E -v ipp://h/ipp/print -m everywhere -D H;lpstat -p H;lpadmin -x H;rc=1;"
+echo "0 0" > "$TMP/rcs"
+check "#51: a failed add keeps a queue of that name that was already there" "$(ADD_RC=1 run add H ipp://h/ipp/print everywhere H)" "lpstat -p H;lpadmin -p H -E -v ipp://h/ipp/print -m everywhere -D H;rc=1;"
+rm -f "$TMP/rcs"
 check "remove" "$(run remove Office)" "lpadmin -x Office;rc=0;"
 check "pause" "$(run pause Office)" "cupsdisable Office;rc=0;"
 check "resume enables and accepts" "$(run resume Office)" "cupsenable Office;cupsaccept Office;rc=0;"

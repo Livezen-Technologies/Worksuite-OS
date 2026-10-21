@@ -303,7 +303,7 @@ export interface DriverOffer {
 }
 export type DriverStatus = 'working' | 'missing_firmware' | 'update_available' | 'optional_driver' | 'no_driver'
 export interface DriverReport {
-  state: 'idle' | 'checking' | 'off' | 'error'; checked_at: number | null; online_search: boolean; metered: boolean; secure_boot: boolean
+  state: 'idle' | 'checking' | 'off' | 'error' | 'offline'; checked_at: number | null; online_search: boolean; metered: boolean; secure_boot: boolean
   devices: { id: string; kind: 'wifi' | 'ethernet' | 'display' | 'bluetooth' | 'other'; driver: string | null; status: DriverStatus; offers: string[] }[]
   offers: DriverOffer[]; auto_installed: string[]; gpu_fallback?: boolean; mok?: { pending: boolean }
   /** Installed through Settings, newest first, with the version now on the system (#45). */

@@ -14,15 +14,28 @@ GTKLOCK=${WORKSUITE_GTKLOCK:-gtklock}
 CONF=${WORKSUITE_GTKLOCK_CONFIG:-/etc/xdg/worksuite/gtklock/config.ini}
 STYLE=${WORKSUITE_GTKLOCK_STYLE:-/etc/xdg/worksuite/gtklock/style.css}
 WAIT_S=${WORKSUITE_LOCK_WAIT_S:-5}
+SIGNIN=${WORKSUITE_SIGNIN:-/usr/lib/worksuite/worksuite-signin}
 case "$0" in /*) SELF=$0 ;; *) SELF=$(command -v "$0" 2>/dev/null || echo "$PWD/$0") ;; esac
 
 log() { printf '%s\n' "worksuite-lock: $1" | systemd-cat -t worksuite-lock -p "${2:-info}" 2>/dev/null || true; }
+
+# gtklock's field label is its translated "Password:". With a device PIN set, a PIN works in that field too: point
+# gettext at WorkSuite's one-message catalogue (/usr/share/locale/<lang>@worksuitepin/LC_MESSAGES/gtklock.mo,
+# services/session/lock-lang) first, so it reads "PIN or password:"; every other message falls through as usual.
+pin_label() {
+    "$SIGNIN" has-pin </dev/null >/dev/null 2>&1 || return 0
+    l=${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}; l=${l%%[_.@]*}
+    case "$l" in si|ta) ;; *) l=en ;; esac
+    LANGUAGE="$l@worksuitepin${LANGUAGE:+:$LANGUAGE}"
+    export LANGUAGE
+}
 
 guard() {
     trap 'rm -rf "$GUARD"' EXIT
     trap '' HUP INT               # the caller going away must not end the lock
     echo $$ > "$GUARD/pid"
     delay=0
+    pin_label
     while :; do
         "$GTKLOCK" -c "$CONF" -s "$STYLE" -L "$SELF --locked"
         rc=$?

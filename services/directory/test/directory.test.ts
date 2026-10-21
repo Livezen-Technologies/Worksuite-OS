@@ -265,3 +265,14 @@ test('helper exit codes for pam_worksuite.so (WSOS-DIR-009)', async () => {
   assert.equal(authExit('not_directory'), 12);
   for (const r of ['denied', 'disabled', 'expired_cache', 'unavailable', 'uid_conflict'] as const) assert.equal(authExit(r), 1);
 });
+
+test('boot units: an offline or unenrolled device exits 0 with an info line instead of failing the unit', async () => {
+  const { main } = await import('../src/main.ts');
+  const f = fakes({ online: false });
+  assert.equal(await main(['greeter-config'], f.deps), 0);
+  assert.ok(f.logs.some((l) => l.includes('greeter keeps its saved domain settings')));
+  await f.deps.accounts.create(BREAK_GLASS_USER, 999, '');
+  assert.equal(await main(['rotate'], f.deps), 0);
+  assert.equal(f.accounts.get(BREAK_GLASS_USER)!.locked, true);
+  assert.ok(f.logs.some((l) => l.includes('account stays locked')));
+});

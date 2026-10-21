@@ -43,7 +43,8 @@ export interface DriverOffer {
 export interface DeviceReport { id: string; kind: DeviceKind; driver: string | null; status: DriverStatus; offers: string[] }
 
 export interface DriverReport {
-  state: 'idle' | 'checking' | 'off' | 'error';
+  /** offline (#59): the package servers could not be reached, so whether drivers are up to date is unknown. */
+  state: 'idle' | 'checking' | 'off' | 'error' | 'offline';
   checked_at: number | null;
   online_search: boolean;
   metered: boolean;
@@ -260,6 +261,16 @@ export function displayDriverLabel(driver: string | null, nvidiaVersion: string 
   if (driver === 'i915' || driver === 'xe') return `Mesa (${driver})`;
   if (driver === 'nouveau') return 'Mesa (nouveau)';
   return driver;
+}
+
+/** `dpkg-query -W -f='${Package}\t${db:Status-Abbrev}\n'` → the installed packages (status "ii"). */
+export function parseInstalled(out: string): Set<string> {
+  const s = new Set<string>();
+  for (const line of out.split('\n')) {
+    const [pkg, st] = line.split('\t');
+    if (pkg && st?.startsWith('ii')) s.add(pkg.replace(/:[a-z0-9]+$/, ''));
+  }
+  return s;
 }
 
 // ---------- report ----------
