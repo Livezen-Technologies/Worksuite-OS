@@ -2,11 +2,13 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { signinHost, signinMethods, signinPolicy, type Runner } from './signin'
+import { mkdirSync } from 'node:fs'
+import net from 'node:net'
+import { ask, busCall, busMessage, fidoKeyPresent, signinHost, signinMethods, signinPolicy, type Runner } from './signin'
 
 function paths(files: { methods?: string; policy?: string; faillock?: string }) {
   const d = mkdtempSync(path.join(tmpdir(), 'ws-signin-'))
-  const p = { methods: path.join(d, 'methods.json'), policy: path.join(d, 'policy.conf'), faillock: path.join(d, 'faillock.conf'), socket: path.join(d, 'sock') }
+  const p = { methods: path.join(d, 'methods.json'), policy: path.join(d, 'policy.conf'), faillock: path.join(d, 'faillock.conf'), socket: path.join(d, 'sock'), sys: path.join(d, 'sys') }
   if (files.methods) writeFileSync(p.methods, files.methods)
   if (files.policy) writeFileSync(p.policy, files.policy)
   if (files.faillock) writeFileSync(p.faillock, files.faillock)
@@ -16,12 +18,27 @@ function paths(files: { methods?: string; policy?: string; faillock?: string }) 
 describe('sign-in methods (electron/signin.ts)', () => {
   it('reads the public index and the policy, with password as the fallback default', () => {
     const p = paths({ methods: JSON.stringify({ users: { kim: { pin: true, keys: [{ id: 'abcdef0123456789', name: 'YubiKey', added: 5 }], default: 'key' } } }), policy: 'ALLOW_PIN=1\nPIN_MIN_LENGTH=8\n', faillock: 'deny = 4\n' })
-    expect(signinMethods('kim', p)).toEqual({ available: true, value: { pin: true, keys: [{ id: 'abcdef0123456789', name: 'YubiKey', added: 5 }], default: 'key', allow_pin: true, pin_min_length: 8, pin_max_length: 12, attempt_limit: 2 } })
+    expect(signinMethods('kim', p)).toEqual({ available: true, value: { pin: true, keys: [{ id: 'abcdef0123456789', name: 'YubiKey', added: 5 }], default: 'key', allow_pin: true, pin_min_length: 8, pin_max_length: 8, attempt_limit: 2, key_present: null } })
     expect(signinMethods('ann', p)).toMatchObject({ value: { pin: false, keys: [], default: 'password' } })
   })
   it('keeps the PIN limit below faillock and clamps the minimum length', () => {
-    expect(signinPolicy(paths({ policy: 'ALLOW_PIN=0\nPIN_MIN_LENGTH=2\n', faillock: 'deny=10' }))).toEqual({ allow_pin: false, pin_min_length: 4, pin_max_length: 12, attempt_limit: 5 })
+    expect(signinPolicy(paths({ policy: 'ALLOW_PIN=0\nPIN_MIN_LENGTH=2\n', faillock: 'deny=10' }))).toEqual({ allow_pin: false, pin_min_length: 4, pin_max_length: 4, attempt_limit: 5 })
     expect(signinPolicy(paths({ faillock: 'deny=3' })).attempt_limit).toBe(1)
+  })
+  it('#56: a new PIN has one length (the minimum) unless the policy allows longer ones', () => {
+    expect(signinPolicy(paths({}))).toMatchObject({ pin_min_length: 6, pin_max_length: 6 })
+    expect(signinPolicy(paths({ policy: 'PIN_MIN_LENGTH=6\nPIN_MAX_LENGTH=8\n' }))).toMatchObject({ pin_min_length: 6, pin_max_length: 8 })
+    expect(signinPolicy(paths({ policy: 'PIN_MIN_LENGTH=8\nPIN_MAX_LENGTH=4\n' }))).toMatchObject({ pin_min_length: 8, pin_max_length: 8 })
+  })
+  it('#57: finds a plugged-in FIDO key by its HID usage page', () => {
+    const sys = mkdtempSync(path.join(tmpdir(), 'ws-sys-'))
+    expect(fidoKeyPresent(sys)).toBeNull()
+    const dev = (n: string, d: number[]) => { mkdirSync(path.join(sys, 'class/hidraw', n, 'device'), { recursive: true }); writeFileSync(path.join(sys, 'class/hidraw', n, 'device/report_descriptor'), Buffer.from(d)) }
+    dev('hidraw0', [0x05, 0x01, 0x09, 0x06])
+    expect(fidoKeyPresent(sys)).toBe(false)
+    dev('hidraw1', [0x06, 0xd0, 0xf1, 0x09, 0x01, 0xa1, 0x01])
+    expect(fidoKeyPresent(sys)).toBe(true)
+    expect(signinMethods('kim', { ...paths({}), sys })).toMatchObject({ value: { key_present: true } })
   })
   it('does not trust a default the user has not set up', () => {
     const p = paths({ methods: JSON.stringify({ users: { kim: { pin: false, keys: [], default: 'pin' } } }) })
@@ -65,5 +82,20 @@ describe('lk.worksuite.SignIn1 calls (WSOS-ARC-002)', () => {
     expect(busCall(['key-add', '--name', 'YubiKey'], '')).toEqual({ member: 'AddKey', body: ['YubiKey'] })
     expect(busCall(['key-remove', '--id', '0123456789abcdef'], '')).toEqual({ member: 'RemoveKey', body: ['0123456789abcdef'] })
     expect(busCall(['serve'], '')).toBeNull()
+  })
+  it('#56/#57: calls the method directly with a fixed signature, without relying on introspection', () => {
+    const m = busMessage(busCall(['pin-set'], '482915\n')!)
+    expect({ d: m.destination, p: m.path, i: m.interface, m: m.member, s: m.signature, b: m.body }).toEqual(
+      { d: 'lk.worksuite.SignIn1', p: '/lk/worksuite/SignIn1', i: 'lk.worksuite.SignIn1', m: 'SetPin', s: 's', b: ['482915'] })
+    const r = busMessage(busCall(['pin-remove'], '')!)
+    expect([r.member, r.signature, r.body]).toEqual(['RemovePin', '', []])
+  })
+  it('#56: a locked PIN is reported as locked, not as a wrong PIN', async () => {
+    const d = mkdtempSync(path.join(tmpdir(), 'ws-sock-'))
+    const sock = path.join(d, 's')
+    const srv = net.createServer((c) => c.end('{"ok": false, "result": "locked"}\n'))
+    await new Promise<void>((r) => srv.listen(sock, r))
+    expect(await ask({ op: 'verify', user: 'kim', pin: '482915' }, sock)).toEqual({ ok: false, error: 'locked' })
+    srv.close()
   })
 })

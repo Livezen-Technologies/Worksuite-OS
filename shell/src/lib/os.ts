@@ -2,7 +2,8 @@
 // (WSOS-SEC-001, §10.3); in a plain browser (dev/design review) a local stub answers instead.
 export interface WorkSuiteApi {
   /** method 'pin' sends the PIN where the password goes; 'key' sends no secret (pam_u2f asks for a touch). */
-  authenticate(user: string, password: string, method?: SignInMethod): Promise<{ ok: boolean; message?: string }>
+  /** reason (PIN): 'pin_locked' after too many wrong PINs, 'unavailable' when the PIN service can't be reached. */
+  authenticate(user: string, password: string, method?: SignInMethod): Promise<{ ok: boolean; message?: string; reason?: string }>
   /** Locks through the system locker; true when it took the screen (the shell then shows no lock board of its own). */
   lock(): Promise<boolean>
   logout(): Promise<void>
@@ -35,6 +36,8 @@ export interface WorkSuiteApi {
   launchWorkSuite(module: DesktopModule): Promise<void>
   // WorkSuite cloud identity through the credentials broker (SRS §8.1). Tokens never reach the renderer.
   cloudSignIn(serverUrl: string, mode: 'personal' | 'enterprise'): Promise<CloudResult<CloudAccount>>
+  /** #55: is this a reachable WorkSuite server over trusted https? Discovery only (nothing stored, no browser). */
+  cloudCheckServer(serverUrl: string): Promise<CloudResult<{ server_url: string; issuer: string }>>
   /** Stop a sign-in that is waiting for the browser; its cloudSignIn then fails with sign_in_cancelled. */
   cloudSignInCancel(): Promise<CloudResult<boolean>>
   /** choice: 'none' when nothing is unsent; 'export' or 'discard' otherwise ("wait" = syncNow, then 'none'). */
@@ -534,7 +537,7 @@ declare global {
 // Preview only (no helper in a plain browser): a PIN set up and one security key, so every state can be reviewed.
 const previewSignin: SignInMethods = {
   pin: true, keys: [{ id: 'a1b2c3d4e5f60718', name: 'YubiKey 5 NFC', added: Date.UTC(2026, 8, 2) }], default: 'pin',
-  allow_pin: true, pin_min_length: 6, pin_max_length: 12, attempt_limit: 3,
+  allow_pin: true, pin_min_length: 6, pin_max_length: 6, attempt_limit: 3, key_present: true,
 }
 
 const stub: WorkSuiteApi = {
@@ -578,6 +581,7 @@ const stub: WorkSuiteApi = {
     return { ok: true, value: stubAccounts[0] }
   },
   async cloudSignInCancel() { return { ok: true, value: false } },
+  async cloudCheckServer(serverUrl) { return { ok: true, value: { server_url: new URL(serverUrl).origin, issuer: new URL(serverUrl).host } } },
   async cloudSignOut(id, choice) {
     stubAccounts = stubAccounts.filter((a) => a.id !== id)
     stubUnsent = 0
@@ -1056,6 +1060,12 @@ export function cloudErrorText(code: string): string {
   switch (code) {
     case 'discovery_failed': return t('cloud.err.discovery')
     case 'insecure_url': return t('cloud.err.insecure')
+    case 'invalid_url': return t('cloud.err.invalidUrl')
+    case 'credentials_in_url': return t('cloud.err.credentialsInUrl')
+    case 'dns_failed': return t('cloud.err.dns')
+    case 'unreachable': return t('cloud.err.unreachable')
+    case 'network_timeout': return t('cloud.err.netTimeout')
+    case 'tls_failed': return t('cloud.err.tls')
     case 'sign_in_timeout': return t('cloud.err.timeout')
     case 'access_denied': return t('cloud.err.denied')
     case 'broker_unavailable': return t('cloud.err.broker')
