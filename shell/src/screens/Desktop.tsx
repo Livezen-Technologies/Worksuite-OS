@@ -14,6 +14,8 @@ import TaskView, { DesktopToast, DesktopsFlyout, type AppLookup } from '../compo
 import { useDesktops } from '../components/useDesktops'
 import { desktopWallpaper, desktopsAllowed } from '../lib/desktops'
 import { QuickPanel, QuickTray, useQuickState } from '../components/QuickSettings'
+import { InputMethodSwitcher } from '../components/InputMethodSwitcher'
+import { LevelOsd } from '../components/LevelOsd'
 import { OskButton } from '../components/TouchItems'
 import { useTouchMode } from '../lib/touch'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
@@ -648,6 +650,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           <MediaInUseBadge />
           <VpnBadge onOpen={() => openSettingsAt('VPN')} />
           <UpdateBadge onOpen={() => openSettingsAt('Updates')} />
+          <InputMethodSwitcher onOpenSettings={() => openSettingsAt('Devices')} />
           <OskButton />
           <button type="button" aria-label={t('ai.open')} title={t('ai.openHint')} aria-expanded={assistant} aria-controls="ws-assistant" onClick={() => { setAssistant((v) => !v); setLauncher(false) }}
             className={`flex size-9 cursor-pointer items-center justify-center rounded-[10px] ${assistant ? 'bg-[rgba(31,107,255,0.4)]' : 'hover:bg-white/10'}`}><Icon d={[AI_ICON]} size={18} /></button>
@@ -671,6 +674,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           once, or on a timer, showed plain desktop through the overlay while it was still fading in. */}
       {confirmShutdown && <ShutdownConfirm onCancel={() => setConfirmShutdown(false)} onEnd={(a) => setEnding(a)} />}
       {ending && <SessionEnd action={ending} onCancel={() => setEnding(null)} onLogout={onLogout} nameOf={(id) => appLookup(id).name} onOpaque={() => setConfirmShutdown(false)} />}
+      <LevelOsd />
       <CrashDialog onReport={() => openSettingsAt('About')} />
       <SessionFadeIn />
       {a11yOpen && <A11yPanel className="right-4 bottom-[68px]" onClose={() => setA11yOpen(false)} />}

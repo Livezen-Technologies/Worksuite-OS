@@ -9,6 +9,8 @@ export interface FoundPrinter { uri: string; name: string }
 export interface PrintJob { id: string; printer: string; user: string; size: string }
 export interface PrinterIssue { name: string; reason: string }
 export interface InputState { enabled: string[]; available: string[] }
+/** Taskbar input-method switcher (#58): whether fcitx5 runs and which method it has active. */
+export interface ImStatus { running: boolean; current: string | null; enabled: string[] }
 export interface FailedChange { mutation_id: string; module: string; object_id: string; last_error: string }
 type Reply<T> = { ok: true; value: T } | { ok: false; error: string }
 
@@ -34,6 +36,9 @@ export interface PeripheralsApi {
   stopScreenCapture(): Promise<Avail<number>>
   inputMethods(): Promise<Avail<InputState>>
   setInputMethods(ids: string[]): Promise<Avail<true>>
+  imStatus(): Promise<Avail<ImStatus>>
+  /** Value: the method fcitx5 reports active afterwards. */
+  setCurrentIm(id: string): Promise<Avail<string>>
   syncFailed(): Promise<Reply<FailedChange[]>>
   syncRetry(mutationId: string): Promise<Reply<true>>
 }
@@ -46,7 +51,8 @@ export const peripheralsApi = (): PeripheralsApi | null => (typeof window !== 'u
 
 /** Error reasons the bridge returns that have their own message; anything else gets the generic one. */
 export const KNOWN_REASONS = ['bt_auth_failed', 'bt_unreachable', 'bt_already_paired', 'bt_off', 'storage_busy', 'not_authorized', 'bad_passphrase',
-  'storage_unreadable', 'storage_gone', 'printer_unreachable', 'printer_not_driverless', 'service_unavailable', 'invalid_argument'] as const
+  'storage_unreadable', 'storage_gone', 'printer_unreachable', 'printer_not_driverless', 'service_unavailable', 'invalid_argument',
+  'fcitx5_missing', 'im_not_running', 'im_not_applied', 'im_not_enabled', 'im_failed'] as const
 export type KnownReason = (typeof KNOWN_REASONS)[number]
 export const knownReason = (r: string): KnownReason | null =>
   (KNOWN_REASONS as readonly string[]).includes(r) ? (r as KnownReason) : r.endsWith('_missing') ? 'service_unavailable' : null

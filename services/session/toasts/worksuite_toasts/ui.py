@@ -18,7 +18,7 @@ gi.require_version("Gtk4LayerShell", "1.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell as LS  # noqa: E402
 
-from .model import TIMEOUT_MS, Stack, Toast, parse  # noqa: E402
+from .model import OSD_MS, TIMEOUT_MS, Osd, Stack, Toast, parse  # noqa: E402
 
 CSS = b"""
 window, window.background { background-color: transparent; box-shadow: none; }
@@ -29,6 +29,10 @@ window, window.background { background-color: transparent; box-shadow: none; }
 .body { color: #C9D6EE; font-size: 13px; }
 .mark { border-radius: 10px; min-width: 40px; min-height: 40px; color: white; font-weight: 700; }
 .ok { background: #1F6BFF; } .warn { background: #D98A1F; } .error { background: #D9452B; }
+.osd { background: rgba(10,24,56,0.96); border: 1px solid rgba(127,178,255,0.2); border-radius: 16px; padding: 12px 16px;
+       color: #E8EEFA; font-size: 13px; }
+.osd progressbar trough { min-height: 6px; border-radius: 3px; background: rgba(255,255,255,0.15); }
+.osd progressbar progress { min-height: 6px; border-radius: 3px; background: #1F6BFF; }
 .x { background: transparent; border: none; color: #8FA3C8; min-width: 24px; min-height: 24px; padding: 0; }
 """
 
@@ -161,6 +165,47 @@ class ToastWindow(Gtk.ApplicationWindow):
         return False
 
 
+OSD_LABELS = {"volume": "Volume", "mic": "Microphone", "brightness": "Brightness"}
+
+
+class OsdWindow(Gtk.ApplicationWindow):
+    """The level after a Fn key (#62): bottom centre on the active output, over every window, never focused."""
+
+    def __init__(self, app: Gtk.Application):
+        super().__init__(application=app, title="WorkSuite level")
+        LS.init_for_window(self)
+        LS.set_namespace(self, "worksuite-osd")
+        LS.set_layer(self, LS.Layer.OVERLAY)
+        LS.set_anchor(self, LS.Edge.BOTTOM, True)
+        LS.set_margin(self, LS.Edge.BOTTOM, 96)
+        LS.set_exclusive_zone(self, 0)
+        LS.set_keyboard_mode(self, LS.KeyboardMode.NONE)
+        row = Gtk.Box(spacing=12)
+        row.add_css_class("osd")
+        row.set_size_request(260, -1)
+        self.name = Gtk.Label(xalign=0, width_chars=11)
+        self.bar = Gtk.ProgressBar(hexpand=True, valign=Gtk.Align.CENTER)
+        self.text = Gtk.Label(xalign=1, width_chars=5)
+        for w in (self.name, self.bar, self.text):
+            row.append(w)
+        self.set_child(row)
+        self.timer = 0
+
+    def show_level(self, o: Osd) -> None:
+        self.name.set_label(OSD_LABELS.get(o.kind, o.kind))
+        self.bar.set_fraction(0 if o.muted else o.value / 100)
+        self.text.set_label("Muted" if o.muted else f"{o.value}%")
+        self.set_visible(True)
+        if self.timer:
+            GLib.source_remove(self.timer)
+        self.timer = GLib.timeout_add(OSD_MS, self._hide)
+
+    def _hide(self) -> bool:
+        self.timer = 0
+        self.set_visible(False)
+        return False
+
+
 def run() -> int:  # pragma: no cover - needs a compositor
     # NON_UNIQUE: each shell feeds its own helper through a pipe. A unique application would hand its "activate" to a
     # helper already on the bus (left by an earlier shell, or one per output) and exit 0 at once, and every toast the
@@ -174,6 +219,7 @@ def run() -> int:  # pragma: no cover - needs a compositor
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         w = ToastWindow(a)
         state["w"] = w
+        state["osd"] = None
         a.hold()
 
         def readable(fd, cond):
@@ -192,7 +238,11 @@ def run() -> int:  # pragma: no cover - needs a compositor
             state["buf"] = state["buf"][-65536:]
             for line in lines:
                 cmd = parse(line.decode("utf-8", "replace"))
-                if cmd is not None:
+                if cmd is not None and cmd[0] == "osd":
+                    if state["osd"] is None:
+                        state["osd"] = OsdWindow(a)
+                    state["osd"].show_level(cmd[1])
+                elif cmd is not None:
                     w.apply(cmd)
             return True
 

@@ -1,0 +1,9 @@
+# fcitx5 defaults for WorkSuite sessions (#58), installed as /etc/xdg/fcitx5/config. Users' own changes go to
+# ~/.config/fcitx5/config.
+[Behavior]
+# One input state for every window. The taskbar switcher (shell/src/components/InputMethodSwitcher.tsx) and Ctrl+Space
+# change the method for the whole session; with fcitx5's default (No, per window) a method chosen from the taskbar
+# applied only to the taskbar, and the app went on typing English.
+ShareInputState=All
+# Say which method is now active (a short popup) when it changes.
+ShowInputMethodInformation=True

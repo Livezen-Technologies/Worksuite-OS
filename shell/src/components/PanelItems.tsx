@@ -135,6 +135,10 @@ function MoveMenu({ ws, win, x, onPick, onClose }: { ws: Workspaces; win?: Panel
  *  "gc" tile. */
 const SYSTEM_ICONS: Record<string, string> = { 'gcr-prompter': 'dialog-password', 'org.gnome.keyring.systemprompter': 'dialog-password' }
 
+/** fcitx5's own tray item (SNI Id "Fcitx"): its click toggled fcitx5 for the text field that had just lost the focus to
+ *  the taskbar, so it seemed to do nothing, and its language menu is a D-Bus menu. InputMethodSwitcher replaces it (#58). */
+export const HIDDEN_TRAY_IDS = ['Fcitx']
+
 export function TrayItems() {
   const t = useT()
   const [items, setItems] = useState<TrayItem[]>([])
@@ -144,7 +148,7 @@ export function TrayItems() {
     const off = panel.onTray(setItems)
     return () => { live = false; off() }
   }, [])
-  const shown = items.filter((i) => i.status !== 'Passive')
+  const shown = items.filter((i) => i.status !== 'Passive' && !HIDDEN_TRAY_IDS.includes(i.id))
   if (!shown.length) return null
   return (
     <div role="toolbar" aria-label={t('panel.tray')} onKeyDown={rovingKeys} className="flex items-center gap-1">

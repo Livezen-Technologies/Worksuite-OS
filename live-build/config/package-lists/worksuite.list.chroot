@@ -78,6 +78,9 @@ dnsmasq-base
 network-manager-openvpn
 bluez
 wireplumber
+# Laptop Fn keys (#62, services/session/bin/worksuite-hotkey): backlight through logind, media keys over MPRIS
+brightnessctl
+playerctl
 upower
 cups-client
 wlr-randr

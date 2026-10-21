@@ -80,6 +80,21 @@
     <keybind key="W-a">
       <action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 ToggleAssistant"/>
     </keybind>
+    <!-- Laptop Fn keys (#62): volume, mute, microphone, screen brightness and media keys, also on the lock screen.
+         worksuite-hotkey changes the level (wpctl, brightnessctl / logind, playerctl) and the shell shows it. -->
+    <keybind key="XF86AudioRaiseVolume" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey volume-up"/></keybind>
+    <keybind key="XF86AudioLowerVolume" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey volume-down"/></keybind>
+    <keybind key="XF86AudioMute" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey mute"/></keybind>
+    <keybind key="XF86AudioMicMute" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey mic-mute"/></keybind>
+    <keybind key="XF86MonBrightnessUp" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey brightness-up"/></keybind>
+    <keybind key="XF86MonBrightnessDown" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey brightness-down"/></keybind>
+    <keybind key="XF86AudioPlay" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey play-pause"/></keybind>
+    <keybind key="XF86AudioPause" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey play-pause"/></keybind>
+    <keybind key="XF86AudioNext" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey next"/></keybind>
+    <keybind key="XF86AudioPrev" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-hotkey previous"/></keybind>
+    <keybind key="XF86Search"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 ShowLauncher"/></keybind>
+    <keybind key="XF86Explorer"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s files"/></keybind>
+    <keybind key="XF86Tools"><action name="Execute" command="busctl --user call lk.worksuite.Shell1 /lk/worksuite/Shell1 lk.worksuite.Shell1 Open s settings"/></keybind>
     <keybind key="A-Tab"><action name="NextWindow"/></keybind>
     <keybind key="A-S-Tab"><action name="PreviousWindow"/></keybind>
     <keybind key="W-l">

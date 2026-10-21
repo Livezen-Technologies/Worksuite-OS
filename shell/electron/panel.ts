@@ -36,6 +36,8 @@ export const SHELL_XML = `<node name="${SHELL_PATH}">
     <method name="Open"><arg name="what" type="s" direction="in"/></method>
     <!-- worksuite-screenshot (Print, Super+Print, Alt+Print, Super+Shift+S): print, save, window or snip (electron/capture.ts). -->
     <method name="Capture"><arg name="kind" type="s" direction="in"/></method>
+    <!-- worksuite-hotkey (laptop Fn keys, #62) after it changed the level: volume, mic or brightness, 0…100, muted. -->
+    <method name="Osd"><arg name="kind" type="s" direction="in"/><arg name="value" type="u" direction="in"/><arg name="muted" type="b" direction="in"/></method>
   </interface>
 </node>`
 
@@ -96,7 +98,12 @@ export interface PanelEvents {
   /** Open(what) and Capture(kind) from the Windows-style key bindings. */
   open?(what: string): void
   capture?(kind: string): void
+  /** Osd(kind, value, muted) from worksuite-hotkey: show the level indicator. */
+  osd?(o: OsdLevel): void
 }
+/** What the on-screen indicator shows after a Fn key (#62). */
+export const OSD_KINDS = ['volume', 'mic', 'brightness'] as const
+export interface OsdLevel { kind: (typeof OSD_KINDS)[number]; value: number; muted: boolean }
 /** What Open(what) accepts: shell surfaces, or app:<desktop id> for custom shortcuts. */
 export const OPEN_TARGETS = ['files', 'settings', 'monitor', 'a11y', 'clipboard', 'emoji', 'shortcuts', 'snip']
 export const validOpen = (w: string) => OPEN_TARGETS.includes(w) || /^app:[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/.test(w)
@@ -178,6 +185,15 @@ export class PanelClient {
       const ok = msg.member === 'Open' ? validOpen(arg) : CAPTURE_KINDS.includes(arg)
       if (!ok) { this.bus.send(Message.newError(msg as unknown as string, 'org.freedesktop.DBus.Error.InvalidArgs', `unknown ${msg.member === 'Open' ? 'target' : 'kind'}`)); return true }
       if (msg.member === 'Open') this.events.open?.(arg); else this.events.capture?.(arg)
+      this.bus.send(Message.newMethodReturn(msg, '', []))
+      return true
+    }
+    if (msg.interface === SHELL && msg.member === 'Osd' && msg.signature === 'sub') {
+      const [kind, value, muted] = msg.body ?? []
+      if (!(OSD_KINDS as readonly string[]).includes(String(kind)) || !Number.isInteger(value) || value < 0 || value > 1000) {
+        this.bus.send(Message.newError(msg as unknown as string, 'org.freedesktop.DBus.Error.InvalidArgs', 'bad level')); return true
+      }
+      this.events.osd?.({ kind: kind as OsdLevel['kind'], value: Math.min(100, value as number), muted: muted === true })
       this.bus.send(Message.newMethodReturn(msg, '', []))
       return true
     }
