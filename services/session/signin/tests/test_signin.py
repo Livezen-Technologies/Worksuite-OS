@@ -260,6 +260,14 @@ class PamTests(Tmp):
         env = {"PAM_USER": "alex", "WORKSUITE_SIGNIN_SOCK": none}
         self.assertEqual(cli.main(["pam-reset"], env, io.BytesIO(b"")), 0)
 
+    def test_has_pin_for_the_lock_screen_label(self):
+        sock = os.path.join(self.tmp.name, "s")
+        d = FakeDaemon(sock, {"ok": True, "has_pin": True})
+        self.assertEqual(cli.has_pin({}, sock), 0)
+        d.t.join(2)
+        self.assertEqual(d.got[0]["op"], "status")
+        self.assertEqual(cli.has_pin({}, os.path.join(self.tmp.name, "none")), 1)
+
     def test_helper_process_prints_nothing_and_keeps_the_pin_out_of_argv(self):
         env = {**os.environ, "PAM_USER": "alex", "PAM_TYPE": "auth", "WORKSUITE_SIGNIN_SOCK": os.path.join(self.tmp.name, "none"),
                "PYTHONPATH": str(HERE)}

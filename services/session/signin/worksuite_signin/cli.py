@@ -14,6 +14,8 @@
     pin-remove
     key-add --name NAME      runs pamu2fcfg, touch the key (refused with key_not_found when no FIDO device is attached)
     key-remove --id ID
+  Lock screen (worksuite-lock, as the user):
+    has-pin        exit 0 when the calling user has a device PIN (gtklock's field then says "PIN or password")
   Shell (socket, no prompt):
     {"op":"set_default","method":"password|pin|key"} for the calling user.
 """
@@ -64,7 +66,7 @@ def handle(req, peer_uid, getpwnam=pwd.getpwnam, state=None, run=None, pol=None)
         core.reset_failures(uid, state)
         return {"ok": True}
     if op == "status":
-        return {"ok": True, "tries_left": core.tries_left(uid, pol, state), "policy": pol}
+        return {"ok": True, "tries_left": core.tries_left(uid, pol, state), "policy": pol, "has_pin": core.read_pin(uid, state) is not None}
     if op == "set_default":
         try:
             core.set_default(user, req.get("method"), state)
@@ -147,6 +149,15 @@ def pam_password_used(env, sock=None):
         return 1 if ask({"op": "pin_used", "user": user}, sock).get("ok") is True else 0
     except (OSError, ValueError):
         return 0
+
+
+def has_pin(env, sock=None):
+    """For the lock screen's label: 0 when the calling user (never another) has a PIN set; 1 otherwise or on error."""
+    try:
+        user = pwd.getpwuid(os.getuid()).pw_name
+        return 0 if ask({"op": "status", "user": user}, sock).get("has_pin") is True else 1
+    except (OSError, ValueError, KeyError):
+        return 1
 
 
 def pam_pin(env, stdin, sock=None):
@@ -251,6 +262,8 @@ def main(argv=None, env=None, stdin=None):
     cmd = argv[0]
     if cmd == "pam-pin":
         return pam_pin(env, stdin)
+    if cmd == "has-pin":
+        return has_pin(env)
     if cmd == "pam-not-pin":
         return pam_not_pin(env, stdin)
     if cmd == "pam-password-used":

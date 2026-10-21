@@ -83,6 +83,19 @@ if WORKSUITE_GTKLOCK=gtklock-fail WORKSUITE_LOCK_WAIT_S=1 sh "$T/worksuite-lock"
 cat "$T/run/worksuite-lock.guard/pid" >> "$T/pids" 2>/dev/null
 kill "$(cat "$T/run/worksuite-lock.guard/pid")" 2>/dev/null; sleep 0.3; rm -rf "$T/run/worksuite-lock.guard"
 
+# Lock screen label: with a device PIN gtklock's field says "PIN or password:" (gettext catalogue <lang>@worksuitepin).
+stub gtklock-lang 'while [ $# -gt 0 ]; do [ "$1" = "-L" ] && lockcmd=$2; shift; done; echo "${LANGUAGE:-none}" > "$T/gtklock-lang"; sh -c "$lockcmd"; exit 0'
+stub signin-yes 'exit 0'; stub signin-no 'exit 1'
+lang_with() { rm -f "$T/gtklock-lang"; WORKSUITE_GTKLOCK=gtklock-lang WORKSUITE_SIGNIN="$T/stub/$1" LANG=$2 sh "$T/worksuite-lock"
+  i=0; while [ -d "$T/run/worksuite-lock.guard" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done; cat "$T/gtklock-lang"; }
+check "lock screen: PIN set → gtklock reads the PIN-or-password label" "$(lang_with signin-yes en_US.UTF-8)" "en@worksuitepin"
+check "lock screen: Sinhala session → Sinhala label" "$(lang_with signin-yes si_LK.UTF-8)" "si@worksuitepin"
+check "lock screen: no PIN → gtklock's own label" "$(lang_with signin-no en_US.UTF-8)" "none"
+L=$ROOT/services/session/lock-lang
+python3 -I "$L/build-mo.py" "$T/mo" && python3 -I -c 'import gettext,sys; t=gettext.translation("gtklock", sys.argv[1], languages=["en@worksuitepin"]); sys.exit(t.gettext("Password:") != "PIN or password:")' "$T/mo" \
+  && ok "lock-lang builds gtklock.mo with the PIN label" || bad "lock-lang builds gtklock.mo with the PIN label"
+grep -q 'services/session/lock-lang/build-mo.py' "$ROOT/packaging/debian/rules" && ok "rules builds and installs the lock-screen catalogues" || bad "rules builds and installs the lock-screen catalogues"
+
 # ---- logout cleanup (WSOS-SES-003) ----
 : > "$LOG"
 sleep 30 & labwc=$!; echo $labwc >> "$T/pids"
