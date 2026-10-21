@@ -169,7 +169,13 @@ OSD_LABELS = {"volume": "Volume", "mic": "Microphone", "brightness": "Brightness
 
 
 class OsdWindow(Gtk.ApplicationWindow):
-    """The level after a Fn key (#62): bottom centre on the active output, over every window, never focused."""
+    """The level after a Fn key (#62): bottom centre on the active output, over every window, never focused.
+
+    Created and mapped once, when the helper starts, and never unmapped: the level is shown and hidden by fading the
+    card, and the surface takes no input (empty input region), so it never covers a click. A surface first mapped (or
+    mapped again) only when a key was pressed showed over the desktop but not over the app windows in the VM run
+    (Labwc 0.8.3); one that stays on the overlay layer from the start is above every window, also full-screen ones.
+    """
 
     def __init__(self, app: Gtk.Application):
         super().__init__(application=app, title="WorkSuite level")
@@ -183,26 +189,41 @@ class OsdWindow(Gtk.ApplicationWindow):
         row = Gtk.Box(spacing=12)
         row.add_css_class("osd")
         row.set_size_request(260, -1)
+        row.set_can_target(False)
         self.name = Gtk.Label(xalign=0, width_chars=11)
         self.bar = Gtk.ProgressBar(hexpand=True, valign=Gtk.Align.CENTER)
         self.text = Gtk.Label(xalign=1, width_chars=5)
         for w in (self.name, self.bar, self.text):
             row.append(w)
+        self.row = row
+        row.set_opacity(0)
         self.set_child(row)
+        self.connect("realize", lambda *_a: self._no_input())
         self.timer = 0
+
+    def _no_input(self) -> None:
+        try:
+            import cairo
+            surface = self.get_surface()
+            if surface is not None:
+                surface.set_input_region(cairo.Region())   # clicks go to the window below
+        except Exception:  # no gi-cairo: the 260 px card area takes clicks while mapped
+            pass
 
     def show_level(self, o: Osd) -> None:
         self.name.set_label(OSD_LABELS.get(o.kind, o.kind))
         self.bar.set_fraction(0 if o.muted else o.value / 100)
         self.text.set_label("Muted" if o.muted else f"{o.value}%")
-        self.set_visible(True)
+        self.row.set_opacity(1)
+        if not self.get_visible():
+            self.present()
         if self.timer:
             GLib.source_remove(self.timer)
         self.timer = GLib.timeout_add(OSD_MS, self._hide)
 
     def _hide(self) -> bool:
         self.timer = 0
-        self.set_visible(False)
+        self.row.set_opacity(0)   # stays mapped (see the class comment)
         return False
 
 
@@ -219,7 +240,9 @@ def run() -> int:  # pragma: no cover - needs a compositor
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         w = ToastWindow(a)
         state["w"] = w
-        state["osd"] = None
+        # The level indicator's surface is mapped now, on the overlay layer, and stays (#62).
+        state["osd"] = OsdWindow(a)
+        state["osd"].present()
         a.hold()
 
         def readable(fd, cond):
@@ -239,8 +262,6 @@ def run() -> int:  # pragma: no cover - needs a compositor
             for line in lines:
                 cmd = parse(line.decode("utf-8", "replace"))
                 if cmd is not None and cmd[0] == "osd":
-                    if state["osd"] is None:
-                        state["osd"] = OsdWindow(a)
                     state["osd"].show_level(cmd[1])
                 elif cmd is not None:
                     w.apply(cmd)
