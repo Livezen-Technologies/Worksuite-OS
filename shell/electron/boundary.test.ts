@@ -38,7 +38,7 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
     // Enrollment is lk.worksuite.DeviceAgent1.Enroll (polkit lk.worksuite.device.enroll, WSOS-ARC-002), not pkexec.
     expect(all.find(([f]) => f === 'device.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.DeviceAgent1'\)\.Enroll\(/)
     // Sign-in methods are lk.worksuite.SignIn1 methods (polkit lk.worksuite.signin.manage).
-    expect(all.find(([f]) => f === 'signin.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.SignIn1'\)/)
+    expect(all.find(([f]) => f === 'signin.ts')?.[1]).toMatch(/interface: 'lk\.worksuite\.SignIn1'/)
     // sessionHost.ts: Settings › About › Diagnostics, the system journal and the boot-details entry, through the fixed
     // helper behind polkit lk.worksuite.diagnostics (auth_admin_keep); its arguments are checked there and here.
     // "Restart anyway": always the fixed helper behind lk.worksuite.power-force, which

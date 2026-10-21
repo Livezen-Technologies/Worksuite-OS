@@ -78,6 +78,9 @@ dnsmasq-base
 network-manager-openvpn
 bluez
 wireplumber
+# Laptop Fn keys (#62, services/session/bin/worksuite-hotkey): backlight through logind, media keys over MPRIS
+brightnessctl
+playerctl
 upower
 # Printing (Settings › Printers, shell/electron/printers.ts; issue #51). The build installs no recommends, so cups'
 # own (avahi-daemon, cups-browsed, drivers) were missing: network printers were never discovered and .local names
@@ -145,6 +148,10 @@ wtype
 # Web browser and media player (WorkSuite defaults: shell/apps/worksuite-mimeapps.list)
 firefox-esr
 celluloid
+# The GSettings key that gives client-drawn title bars Minimize, Maximize and Close (#49, #50:
+# services/session/gsettings, compiled by libglib2.0-bin's trigger).
+gsettings-desktop-schemas
+libglib2.0-bin
 # GTK 4 apps (Celluloid, Files' helpers) draw Adwaita's icons, most of them SVG: the theme and the SVG pixbuf loader.
 # Without the loader every SVG icon is GTK's missing-image icon (hook 0150 checks the loader is registered).
 adwaita-icon-theme

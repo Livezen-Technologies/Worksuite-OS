@@ -1,5 +1,5 @@
 import { execFile, spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -265,6 +265,64 @@ describe('display manager', () => {
     const calls = r.calls.length
     expect(await login.applySaved()).toEqual({ ok: true, value: false })
     expect(r.calls.slice(calls).some((a) => a.includes('--output'))).toBe(false)
+  })
+})
+
+describe('keep changes after a scale change (#60)', () => {
+  let dir: string
+  beforeEach(() => { dir = mkdtempSync(path.join(os.tmpdir(), 'ws-disp60-')) })
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  // Real wlr-randr: fractional scale and refresh as the compositor prints them; applying the scale makes labwc
+  // send OutputsChanged (the bridge then calls applySaved) before wlr-randr returns.
+  function laptop(onApply?: () => Promise<void>) {
+    let o: OutputInfo = { name: 'eDP-1', description: 'BOE 0x0BCA', make: 'BOE', model: '0x0BCA', serial: '', enabled: true, x: 0, y: 0, scale: 1.5, transform: 'normal',
+      modes: [{ width: 1920, height: 1080, refresh: 60.002, preferred: true, current: true }] }
+    const exec: Exec = async (_c, args) => {
+      if (args[0] === '--json') return { code: 0, stdout: JSON.stringify([{ ...o, position: { x: o.x, y: o.y } }]), stderr: '' }
+      const scale = Number(args[args.indexOf('--scale') + 1])
+      o = { ...o, scale }
+      await onApply?.()
+      return { code: 0, stdout: '', stderr: '' }
+    }
+    return { exec, get: () => o }
+  }
+
+  it('keeps 100 % and saves it although the compositor reconfigures mid-apply', async () => {
+    const file = path.join(dir, 'displays.json')
+    // An earlier session saved 150 %.
+    const pre = laptop()
+    const first = displayManager({ exec: pre.exec, storeFile: file, clock: fakeClock().clock })
+    await first.apply(currentLayout([pre.get()]))
+    expect(await first.confirm()).toEqual({ ok: true, value: true })
+    let dm: ReturnType<typeof displayManager> | null = null
+    const l = laptop(async () => { await dm!.applySaved() })
+    dm = displayManager({ exec: l.exec, storeFile: file, clock: fakeClock().clock })
+    const next = currentLayout([l.get()])
+    const r = await dm.apply({ ...next, outputs: next.outputs.map((o) => ({ ...o, scale: 1 })) })
+    expect(r.ok).toBe(true)
+    expect(l.get().scale).toBe(1)              // the hotplug handler did not put 150 % back
+    expect(await dm.confirm()).toEqual({ ok: true, value: true })
+    expect(readStore(file).profiles['BOE|0x0BCA|'].layout.outputs[0].scale).toBe(1)
+  })
+
+  it('reports a refused scale instead of counting down', async () => {
+    const l = laptop()
+    const exec: Exec = async (c, a) => (a.includes('--scale') ? { code: 0, stdout: '', stderr: '' } : l.exec(c, a))
+    const dm = displayManager({ exec, storeFile: path.join(dir, 'd.json'), clock: fakeClock().clock })
+    const cur = currentLayout([l.get()])
+    expect(await dm.apply({ ...cur, outputs: cur.outputs.map((o) => ({ ...o, scale: 1 })) })).toEqual({ ok: false, error: 'mode_not_applied' })
+  })
+
+  it('answers save_failed (not a thrown error) when the profile cannot be written', async () => {
+    const l = laptop()
+    writeFileSync(path.join(dir, 'blocker'), '')
+    const dm = displayManager({ exec: l.exec, storeFile: path.join(dir, 'blocker', 'displays.json'), clock: fakeClock().clock })
+    const cur = currentLayout([l.get()])
+    await dm.apply({ ...cur, outputs: cur.outputs.map((o) => ({ ...o, scale: 1 })) })
+    expect(await dm.confirm()).toEqual({ ok: false, error: 'save_failed' })
+    expect(l.get().scale).toBe(1)
+    expect(dm.timer.pending).toBe(false)
   })
 })
 

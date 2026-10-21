@@ -30,6 +30,9 @@ export interface Env {
   policy(): DevicePolicy | null;
   /** APT source files to validate before every operation: [path, contents]. */
   sources(): [string, string][];
+  /** Comment out unsigned sources.list lines a signed deb822 file already covers (tidyLegacySources) before the check:
+   *  sources.list can be rewritten after the service started (#59). */
+  tidySources?(): void;
   /** Hosts of the configured Update Center / organisation mirror, approved as https APT sources besides ALLOWED_HOSTS. */
   updateHosts?(): string[];
   /** AC power, battery percent (null if no battery) and free bytes on / for WSOS-UPD-001. */
@@ -499,6 +502,7 @@ export class PackageService extends EventEmitter {
   }
 
   private checkSources() {
+    try { this.env.tidySources?.(); } catch (e) { this.env.audit('sources_list_tidy_failed', { error: String(e) }); }
     const extra = this.env.updateHosts?.() ?? [];
     const issues = this.env.sources().flatMap(([f, t]) => checkSources(t, f, extra));
     if (issues.length) { this.env.audit('sources_rejected', { issues }); throw new ServiceError('SourcesInvalid', issues[0]); }

@@ -3,7 +3,7 @@
 // pam_u2f mappings for keys. Every change runs that helper through pkexec, so the person types their password; the PIN
 // goes to it on stdin. The renderer never stores the PIN: it lives in component state until the dialog closes.
 import { useEffect, useState } from 'react'
-import { os, type Avail, type SignInMethod, type SignInMethods, type SigninResult } from '../../lib/os'
+import { os, type Avail, type SecurityKey, type SignInMethod, type SignInMethods, type SigninResult } from '../../lib/os'
 import { Dialog, Spinner, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, field, rowLine } from '../../components/Dk'
 import { formatDate, t, type MessageKey } from '../../i18n'
 
@@ -20,7 +20,10 @@ export function weakPin(p: string): boolean {
 }
 
 export function errorText(code: string, m?: Pick<SignInMethods, 'pin_min_length' | 'pin_max_length'>): string {
-  const known = ['too_short', 'too_long', 'too_simple', 'mismatch', 'digits_only', 'pin_disabled', 'auth_cancelled', 'key_timeout', 'key_exists', 'key_failed']
+  const known = ['too_short', 'too_long', 'too_simple', 'mismatch', 'digits_only', 'pin_disabled', 'auth_cancelled', 'key_timeout', 'key_exists', 'key_failed',
+    'key_not_found', 'key_pin_required', 'key_unavailable', 'key_unsupported', 'key_unknown', 'unavailable']
+  // One allowed length (the default): "exactly 6 digits" for both too short and too long.
+  if ((code === 'too_short' || code === 'too_long') && m && m.pin_min_length === m.pin_max_length) return t('signin.err.exact', { min: m.pin_min_length })
   const key = (known.includes(code) ? `signin.err.${code}` : 'signin.err.failed') as MessageKey
   return t(key, { min: m?.pin_min_length ?? 6, max: m?.pin_max_length ?? 12 })
 }
@@ -45,6 +48,7 @@ function Row({ icon, on, name, desc, status, children }: { icon: string; on: boo
 export function SignInOptions() {
   const [m, setM] = useState<Avail<SignInMethods> | null>(null)
   const [dialog, setDialog] = useState<null | 'pin' | 'pinRemove' | 'key'>(null)
+  const [removeKey, setRemoveKey] = useState<SecurityKey | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const reload = () => os.signinMethods().then(setM, () => setM({ available: false, reason: 'service_unavailable' }))
   useEffect(() => { void reload() }, [])
@@ -59,7 +63,7 @@ export function SignInOptions() {
       <p className="m-0 text-xs text-[#8FA3C8]">{t('signin.intro')}</p>
       <div className={`${card} overflow-hidden`}>
         <Row icon={ICON.pin} on={v.pin} name={t('signin.pin')} status={v.pin ? t('signin.isSetUp') : t('signin.off')}
-          desc={v.allow_pin ? t('signin.pinDesc', { min: v.pin_min_length, max: v.pin_max_length }) : t('signin.pinOff')}>
+          desc={!v.allow_pin ? t('signin.pinOff') : v.pin_min_length === v.pin_max_length ? t('signin.pinDescExact', { n: v.pin_min_length }) : t('signin.pinDesc', { min: v.pin_min_length, max: v.pin_max_length })}>
           {v.pin && <button type="button" className={`${btnGhost} px-3 py-1.5 text-[13px]`} onClick={() => setDialog('pinRemove')}>{t('signin.remove')}</button>}
           {v.allow_pin && <button type="button" className={`${v.pin ? btnGhost : btnPrimary} px-3 py-1.5 text-[13px]`} onClick={() => setDialog('pin')}>{v.pin ? t('signin.change') : t('signin.setUp')}</button>}
         </Row>
@@ -73,7 +77,7 @@ export function SignInOptions() {
                 <span className="flex flex-1 flex-col"><span className="text-[13px]">{k.name || t('signin.key')}</span>
                   {k.added != null && <span className="text-[11px] text-[#8FA3C8]">{t('signin.added', { date: formatDate(new Date(k.added), { day: 'numeric', month: 'short', year: 'numeric' }) })}</span>}</span>
                 <button type="button" aria-label={t('signin.removeKey', { name: k.name || t('signin.key') })} className="cursor-pointer rounded text-[12px] text-[#FF8A7A] hover:text-[#FFB4A8]"
-                  onClick={() => void os.signinKeyRemove(k.id).then(after)}>{t('signin.remove')}</button>
+                  onClick={() => setRemoveKey(k)}>{t('signin.remove')}</button>
               </li>
             ))}
           </ul>
@@ -97,6 +101,16 @@ export function SignInOptions() {
       </div>
       {dialog === 'pin' && <PinDialog m={v} onClose={(r) => { setDialog(null); if (r) after(r) }} />}
       {dialog === 'key' && <KeyDialog onClose={(r) => { setDialog(null); if (r) after(r) }} m={v} />}
+      {removeKey && (
+        // #57: removing a key is confirmed here, then polkit asks for the account password (auth_self) before it goes.
+        <Dialog width={420} onClose={() => setRemoveKey(null)}>{(id) => <>
+          <div className="flex flex-col gap-2 px-6 py-5"><h2 id={id} className="m-0 text-lg font-bold">{t('signin.keyRemoveTitle', { name: removeKey.name || t('signin.key') })}</h2><p className="m-0 text-[13px] text-[#C9D6EE]">{t('signin.keyRemoveBody')}</p></div>
+          <div className={dialogFooter}>
+            <button type="button" className={btnGhost} onClick={() => setRemoveKey(null)}>{t('common.cancel')}</button>
+            <button type="button" className={`${btnPrimary} !bg-[#D9452B]`} onClick={() => { const k = removeKey; setRemoveKey(null); void os.signinKeyRemove(k.id).then(after) }}>{t('signin.remove')}</button>
+          </div>
+        </>}</Dialog>
+      )}
       {dialog === 'pinRemove' && (
         <Dialog width={420} onClose={() => setDialog(null)}>{(id) => <>
           <div className="flex flex-col gap-2 px-6 py-5"><h2 id={id} className="m-0 text-lg font-bold">{t('signin.pinRemoveTitle')}</h2><p className="m-0 text-[13px] text-[#C9D6EE]">{t('signin.pinRemoveBody')}</p></div>
@@ -117,7 +131,12 @@ export function PinDialog({ m, onClose }: { m: SignInMethods; onClose: (r?: Sign
   const [cur, setCur] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const typed = (v: string) => { setCur(v.replace(/\D/g, '').slice(0, m.pin_max_length)); setErr(null) }
+  // Digits only, never more than the allowed length (#56: a 7th digit used to be taken); say why a key was ignored.
+  const typed = (v: string) => {
+    const digits = v.replace(/\D/g, '')
+    setCur(digits.slice(0, m.pin_max_length))
+    setErr(digits.length !== v.length ? errorText('digits_only', m) : digits.length > m.pin_max_length ? errorText('too_long', m) : null)
+  }
   const next = async () => {
     if (busy) return
     if (stage === 0) {
@@ -140,10 +159,10 @@ export function PinDialog({ m, onClose }: { m: SignInMethods; onClose: (r?: Sign
         <div className="flex flex-col gap-1">
           <span className="font-mono text-[11px] tracking-[0.08em] text-[#18D4F0] uppercase">{stage === 0 ? t('signin.pinStep1') : t('signin.pinStep2')}</span>
           <h2 id={id} className="m-0 text-[22px] font-bold">{stage === 0 ? t('signin.pinCreate') : t('signin.pinConfirm')}</h2>
-          <p className="m-0 text-[13px] text-[#8FA3C8]">{stage === 0 ? t('signin.pinCreateSub', { min: m.pin_min_length }) : t('signin.pinConfirmSub')}</p>
+          <p className="m-0 text-[13px] text-[#8FA3C8]">{stage === 1 ? t('signin.pinConfirmSub') : m.pin_min_length === m.pin_max_length ? t('signin.pinCreateSubExact', { n: m.pin_min_length }) : t('signin.pinCreateSub', { min: m.pin_min_length })}</p>
         </div>
         <label className="sr-only" htmlFor="ws-pin-entry">{t('signin.pinField')}</label>
-        <input id="ws-pin-entry" data-autofocus type="password" inputMode="numeric" autoComplete="off" value={cur} onChange={(e) => typed(e.target.value)}
+        <input id="ws-pin-entry" data-autofocus type="password" inputMode="numeric" pattern="[0-9]*" maxLength={m.pin_max_length} autoComplete="off" value={cur} onChange={(e) => typed(e.target.value)}
           aria-invalid={!!err || undefined} aria-describedby="ws-pin-msg" className="sr-only" />
         <div aria-hidden="true" className="flex h-4 items-center gap-3" onClick={() => document.getElementById('ws-pin-entry')?.focus()}>
           {Array.from({ length: dots }, (_, i) => <span key={i} className={`h-3.5 w-3.5 rounded-full border-2 ${i < cur.length ? 'border-[#1F6BFF] bg-[#1F6BFF]' : err ? 'border-[#FF8A7A]' : 'border-[rgba(127,178,255,0.35)]'}`} />)}
@@ -151,8 +170,9 @@ export function PinDialog({ m, onClose }: { m: SignInMethods; onClose: (r?: Sign
         <div id="ws-pin-msg" role={err ? 'alert' : undefined} className={`min-h-[18px] text-[13px] ${err ? 'text-[#FF8A7A]' : 'text-[#8FA3C8]'}`}>{err ?? (stage === 1 ? t('signin.pinAuth') : '')}</div>
         <div className="grid grid-cols-[repeat(3,64px)] gap-2.5">
           {keys.map((k, i) => k ? (
-            <button key={i} type="button" aria-label={k === '⌫' ? t('signin.delete') : k} disabled={busy}
+            <button key={i} type="button" aria-label={k === '⌫' ? t('signin.delete') : k}
               className={`flex h-12 cursor-pointer items-center justify-center rounded-[12px] text-xl font-medium ${k === '⌫' ? '' : 'bg-[rgba(127,178,255,0.1)] hover:bg-[rgba(127,178,255,0.18)]'}`}
+              disabled={busy || (k !== '⌫' && cur.length >= m.pin_max_length)}
               onClick={() => { typed(k === '⌫' ? cur.slice(0, -1) : cur + k); document.getElementById('ws-pin-entry')?.focus() }}>{k}</button>
           ) : <span key={i} />)}
         </div>
@@ -174,6 +194,15 @@ export function KeyDialog({ m, onClose }: { m: SignInMethods; onClose: (r?: Sign
   const [name, setName] = useState(t('signin.keyNameDefault'))
   const [err, setErr] = useState<string | null>(null)
   const [result, setResult] = useState<SigninResult | undefined>()
+  // #57: watch for the key while the first step is open; null = this computer can't tell (then Continue still works).
+  const [present, setPresent] = useState<boolean | null>(m.key_present)
+  useEffect(() => {
+    if (step !== 0) return
+    let live = true
+    const tick = () => void os.signinMethods().then((r) => { if (live && r.available) setPresent(r.value.key_present) }, () => undefined)
+    const timer = setInterval(tick, 1500)
+    return () => { live = false; clearInterval(timer) }
+  }, [step])
   const go = async () => {
     setStep(1); setErr(null)
     const r = await os.signinKeyAdd(name)
@@ -191,6 +220,11 @@ export function KeyDialog({ m, onClose }: { m: SignInMethods; onClose: (r?: Sign
           <label className="flex flex-col gap-1.5 text-[13px] text-[#C9D6EE]">{t('signin.keyName')}
             <input data-autofocus className={field} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></label>
           <p className="m-0 text-[13px] text-[#8FA3C8]">{t('signin.keyInsert')}</p>
+          {present !== null && (
+            <p role="status" className={`m-0 flex items-center gap-2 text-[13px] ${present ? 'text-[#5FD39A]' : 'text-[#FFB84D]'}`}>
+              <span aria-hidden="true" className={`h-2 w-2 rounded-full ${present ? 'bg-[#5FD39A]' : 'bg-[#FFB84D]'}`} />{present ? t('signin.keyDetected') : t('signin.keyNotDetected')}
+            </p>
+          )}
         </>}
         {step === 1 && (
           <div className="flex items-center gap-5 py-2" role="status">
@@ -206,7 +240,7 @@ export function KeyDialog({ m, onClose }: { m: SignInMethods; onClose: (r?: Sign
       </div>
       <div className={dialogFooter}>
         {step !== 2 && <button type="button" className={btnGhost} disabled={step === 1} onClick={() => onClose()}>{t('common.cancel')}</button>}
-        {step === 0 && <button type="button" className={btnPrimary} onClick={() => void go()}>{t('signin.continue')}</button>}
+        {step === 0 && <button type="button" className={btnPrimary} disabled={present === false} onClick={() => void go()}>{t('signin.continue')}</button>}
         {step === 2 && <button type="button" className={btnPrimary} onClick={() => onClose(result)}>{t('signin.done')}</button>}
       </div>
     </>}</Dialog>

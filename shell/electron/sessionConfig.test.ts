@@ -82,6 +82,15 @@ describe('input methods (WSOS-INT-011)', () => {
     for (const l of ['XMODIFIERS=@im=fcitx', 'QT_IM_MODULE=fcitx', 'XKB_DEFAULT_OPTIONS=compose:ralt']) expect(env).toContain(l)
     expect(read('shell/electron/main.ts')).toContain("appendSwitch('enable-wayland-ime')")
   })
+  it('#58: the shell speaks text-input-v3 and fcitx5 shares one input state across windows', () => {
+    // Chromium defaults to text-input-v1, which Labwc does not offer: the shell's fields never reached fcitx5.
+    for (const f of ['shell/electron/main.ts', 'shell/electron/kioskMain.ts']) expect(read(f)).toContain("appendSwitch('wayland-text-input-version', '3')")
+    // fcitx5's default (per-window state) made a method chosen from the taskbar apply to the taskbar only.
+    expect(read('services/session/fcitx5/config')).toMatch(/^\[Behavior\][^[]*^ShareInputState=All$/m)
+    expect(read('packaging/debian/worksuite-session.install')).toContain('services/session/fcitx5/config etc/xdg/fcitx5/')
+    // The switcher's argv (fcitx5-remote) ships with fcitx5 itself.
+    expect(depends('worksuite-desktop')).toContain('fcitx5')
+  })
 })
 
 describe('keyring unlock on sign-in (WSOS-INT-009)', () => {

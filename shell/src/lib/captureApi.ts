@@ -37,7 +37,10 @@ export interface CaptureApi {
   onCaptured(cb: (c: Captured) => void): () => void
   onShellOpen(cb: (o: ShellOpen) => void): () => void
   onToastClicked(cb: (key: string) => void): () => void
+  /** Fn-key level (#62) when worksuite-toasts can't draw it over the apps. */
+  onOsd?(cb: (o: OsdLevel) => void): () => void
 }
+export interface OsdLevel { kind: 'volume' | 'mic' | 'brightness'; value: number; muted: boolean }
 
 declare global {
   interface Window { worksuiteCapture?: CaptureApi }

@@ -13,7 +13,7 @@ let root: Root | null = null
 let host: HTMLDivElement | null = null
 afterEach(() => { act(() => root?.unmount()); host?.remove(); document.body.innerHTML = ''; root = null; host = null; vi.restoreAllMocks() })
 
-const base: SignInMethods = { pin: false, keys: [], default: 'password', allow_pin: true, pin_min_length: 6, pin_max_length: 12, attempt_limit: 3 }
+const base: SignInMethods = { pin: false, keys: [], default: 'password', allow_pin: true, pin_min_length: 6, pin_max_length: 12, attempt_limit: 3, key_present: true }
 async function render(el: React.ReactElement) {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
   await act(async () => { root!.render(el) })
@@ -66,7 +66,37 @@ describe('Sign-in options', () => {
     const radios = Array.from(document.querySelectorAll('[role=radio]')).map((r) => r.textContent)
     expect(radios).toEqual(['Password', 'PIN', 'Security key'])
     await click(button('Remove YubiKey'))
+    expect(rm).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Remove YubiKey?')
+    await click(Array.from(document.querySelectorAll('[role=dialog] button')).find((b) => b.textContent === 'Remove') as HTMLElement)
     expect(rm).toHaveBeenCalledWith('0123456789abcdef')
+  })
+  it('#56: takes exactly the PIN length, digits only, and says so', async () => {
+    vi.spyOn(os, 'signinMethods').mockResolvedValue({ available: true, value: { ...base, pin_max_length: 6 } })
+    const set = vi.spyOn(os, 'signinPinSet').mockResolvedValue({ ok: true })
+    await render(<SignInOptions />)
+    await click(button('Set up'))
+    expect(document.body.textContent).toContain('Exactly 6 digits')
+    await digits('482915')
+    expect(button('7').disabled).toBe(true)
+    const input = document.getElementById('ws-pin-entry') as HTMLInputElement
+    expect(input.maxLength).toBe(6)
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '4829157'); input.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(input.value).toBe('482915')
+    expect(document.body.textContent).toContain('exactly 6 digits')
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '48a'); input.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(input.value).toBe('48')
+    expect(document.body.textContent).toContain('Use digits only')
+    expect(set).not.toHaveBeenCalled()
+  })
+  it('#57: waits for a security key to be plugged in, and explains a missing one', async () => {
+    vi.spyOn(os, 'signinMethods').mockResolvedValue({ available: true, value: { ...base, key_present: false } })
+    const add = vi.spyOn(os, 'signinKeyAdd').mockResolvedValue({ ok: false, error: 'key_not_found' })
+    await render(<SignInOptions />)
+    await click(Array.from(document.querySelectorAll('button')).filter((b) => b.textContent === 'Set up')[1])
+    expect(document.body.textContent).toContain('No security key detected')
+    expect(button('Continue').disabled).toBe(true)
+    expect(add).not.toHaveBeenCalled()
   })
   it('hides PIN set-up when the organization turned it off', async () => {
     vi.spyOn(os, 'signinMethods').mockResolvedValue({ available: true, value: { ...base, allow_pin: false } })
@@ -86,6 +116,17 @@ describe('Sign-in options', () => {
 })
 
 describe('lock screen switcher', () => {
+  it('#56: after too many wrong PINs it asks for the password', async () => {
+    vi.spyOn(os, 'signinMethods').mockResolvedValue({ available: true, value: { ...base, pin: true, default: 'pin' } })
+    vi.spyOn(os, 'authenticate').mockResolvedValue({ ok: false, reason: 'pin_locked' })
+    await render(<Lock user="kim" onUnlock={() => {}} />)
+    await click(document.querySelector('button')!)
+    const input = document.getElementById('ws-lock-pw') as HTMLInputElement
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '482915'); input.dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => { input.form!.requestSubmit() })
+    expect(document.body.textContent).toContain('Too many wrong PINs')
+    expect(Array.from(document.querySelectorAll('[role=radio]'))[0].getAttribute('aria-checked')).toBe('true')
+  })
   it('shows only Password without a PIN or key', async () => {
     vi.spyOn(os, 'signinMethods').mockResolvedValue({ available: true, value: base })
     await render(<Lock user="kim" onUnlock={() => {}} />)

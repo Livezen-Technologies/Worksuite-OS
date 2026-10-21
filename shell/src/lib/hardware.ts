@@ -1,6 +1,7 @@
 // Devices and drivers view logic over the bridge's sysfs device list (electron/hardware.ts).
 import type { DriverOffer, DriverReport, DriverStatus, HwDevice, HwKind } from './os'
 import { messages, t } from '../i18n'
+import { classifyError } from './errors'
 
 export const OK = '#5FD39A', WARN = '#FFB98A', OFF = '#8FA3C8'
 
@@ -124,13 +125,23 @@ export function offerText(o: DriverOffer): string {
   return Object.hasOwn(SUMMARY_TEXT, o.summary) ? SUMMARY_TEXT[o.summary as keyof typeof SUMMARY_TEXT] : o.summary
 }
 
-export type DriverStep = 'refreshing' | 'downloading' | 'installing' | 'done'
+export type DriverStep = 'refreshing' | 'downloading' | 'installing' | 'done' | 'failed'
 /** A driver job's phase: "<offer id>|<step>" from the package service (older services sent the offer id alone). */
 export function driverJobPhase(phase: string): { offer: string; step: DriverStep } {
   const i = phase.lastIndexOf('|')
   if (i < 0) return { offer: phase, step: 'installing' }
   const step = phase.slice(i + 1)
-  return { offer: phase.slice(0, i), step: step === 'refreshing' || step === 'downloading' || step === 'done' ? step : 'installing' }
+  return { offer: phase.slice(0, i), step: step === 'refreshing' || step === 'downloading' || step === 'done' || step === 'failed' ? step : 'installing' }
+}
+
+/** Why one driver didn't install, in words (the service's error stays for <ErrorDetails>, #59). A sources problem
+ *  (an unsigned or unapproved APT source, which blocks every install) is named as such. */
+export function driverFailureText(error: string): string {
+  if (/missing Signed-By|not an approved source|is not part of trixie|is not allowed \(testing|SourcesInvalid/.test(error)) return t('drv.fail.sources')
+  if (/has no installation candidate|Unable to locate package/.test(error) && !/^apt-get update: /.test(error)) return t('drv.fail.notFound')
+  const k = classifyError(error)
+  return k === 'offline' ? t('drv.fail.offline') : k === 'not_found' ? t('drv.fail.notFound') : k === 'no_space' ? t('err.kind.noSpace') : k === 'busy' ? t('err.kind.busy')
+    : k === 'integrity' ? t('err.kind.integrity') : k === 'dependencies' ? t('err.kind.dependencies') : k === 'not_authorized' ? t('err.kind.notAuthorized') : t('drv.fail.generic')
 }
 
 /** The notice after a background check: offers a person must choose (not the ones that installed themselves). */

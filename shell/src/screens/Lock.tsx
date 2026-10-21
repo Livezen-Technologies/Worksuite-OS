@@ -63,6 +63,8 @@ export default function Lock({ user, name: realName, onUnlock, notices = [], unr
     try {
       const res = await os.authenticate(user, method === 'key' ? '' : password, method)
       if (res.ok) onUnlock()
+      else if (method === 'pin' && res.reason === 'pin_locked') { setError(t('signin.pinLocked')); setPassword(''); setMethod('password'); ref.current?.focus() }
+      else if (method === 'pin' && res.reason === 'unavailable') { setError(t('signin.err.unavailable')); setPassword(''); ref.current?.focus() }
       else { setError(t(method === 'pin' ? 'signin.wrongPin' : method === 'key' ? 'signin.keyFailed' : 'greeter.wrongPassword')); setPassword(''); ref.current?.focus() }
     } catch {
       setError(t('lock.verifyFailed')); ref.current?.focus()

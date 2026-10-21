@@ -59,6 +59,8 @@ export interface DriverReport {
   mok?: { pending: boolean };
   /** Installed through Settings (newest first) with the version now on the system. */
   installed?: { id: string; name: string; version: string | null; restart: boolean; at: number }[];
+  /** Offers whose last install failed, with the step and the error (#59). Cleared when they install. */
+  failed?: { id: string; name: string; step: 'downloading' | 'installing'; error: string; at: number }[];
   /** Something installed needs a restart to take effect. */
   restart_required?: boolean;
 }

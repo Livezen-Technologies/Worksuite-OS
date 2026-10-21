@@ -18,10 +18,12 @@ services/session/pam/worksuite-keyring usr/share/pam-configs/
 services/session/pam/greetd etc/pam.d/
 services/session/pam/faillock.conf usr/share/worksuite/
 services/session/fcitx5/profile etc/xdg/fcitx5/
+services/session/fcitx5/config etc/xdg/fcitx5/
 services/session/foot/foot.ini etc/xdg/worksuite/foot/
 services/session/bin/worksuite-screencast-chooser usr/lib/worksuite/
 services/session/bin/worksuite-screencast-stop usr/lib/worksuite/
 services/session/bin/worksuite-workspace-event usr/lib/worksuite/
+services/session/bin/worksuite-hotkey usr/lib/worksuite/
 services/session/bin/worksuite-gestures usr/lib/worksuite/
 services/session/bin/worksuite-osk usr/lib/worksuite/
 services/session/osk/worksuite_osk usr/lib/worksuite/osk/
@@ -71,3 +73,7 @@ services/session/polkit/rules/50-worksuite-printers.rules usr/share/polkit-1/rul
 services/session/themes/WorkSuite usr/share/themes/
 services/session/themes/WorkSuite-Light usr/share/themes/
 services/session/fontconfig/60-worksuite-sinhala-tamil.conf etc/fonts/conf.d/
+services/session/gsettings/90_worksuite-session.gschema.override usr/share/glib-2.0/schemas/
+services/session/gtk/gtk-3.0 etc/xdg/worksuite/
+services/session/gtk/gtk-4.0 etc/xdg/worksuite/
+services/session/firefox/worksuite.js etc/firefox-esr/

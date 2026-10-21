@@ -47,6 +47,8 @@ const fake: PeripheralsApi = {
   async stopScreenCapture() { calls.push('stop capture'); const n = capturing; capturing = 0; return ok(n) },
   async inputMethods() { return ok({ enabled, available: ['keyboard-us', 'm17n_si_wijesekera', 'm17n_ta_tamil99'] }) },
   async setInputMethods(ids) { calls.push(`ims ${ids.join(',')}`); enabled = ids; return ok(true as const) },
+  async imStatus() { return ok({ running: true, current: 'keyboard-us', enabled }) },
+  async setCurrentIm(id) { return ok(id) },
   async syncFailed() { return { ok: true, value: [{ mutation_id: 'm-1', module: 'crm', object_id: 'lead-7', last_error: '403 forbidden' }] } },
   async syncRetry(id) { calls.push(`retry ${id}`); return { ok: true, value: true } },
 }

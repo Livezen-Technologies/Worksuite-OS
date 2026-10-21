@@ -305,3 +305,61 @@ test('a waiting browser sign-in can be cancelled, and a retry replaces it', asyn
   assert.deepEqual(broker.list(), []);
   s.server.close();
 });
+
+// #55: the account form checks the server first and says what went wrong instead of one generic message.
+test('CheckServer: discovery only, nothing stored; bad addresses are refused', async () => {
+  const s = await fakeOneAuth();
+  const { broker, saved } = makeBroker(s);
+  const r = await dispatch(broker, { method: 'CheckServer', params: { server_url: s.base } });
+  assert.deepEqual(r.result, { server_url: s.base, issuer: new URL(s.base).host });
+  assert.deepEqual(saved(), []);
+  assert.equal(s.tokenCalls, 0);
+  assert.equal((await dispatch(broker, { method: 'CheckServer', params: {} })).error, 'invalid_argument');
+  assert.equal((await dispatch(broker, { method: 'CheckServer', params: { server_url: 'http://work.example.com' } })).error, 'insecure_url');
+  assert.equal((await dispatch(broker, { method: 'CheckServer', params: { server_url: 'https://me:pw@work.example.com' } })).error, 'invalid_url');
+  assert.equal((await dispatch(broker, { method: 'CheckServer', params: { server_url: 'not a url' } })).error, 'invalid_url');
+  s.server.close();
+});
+
+const fakeFetch = (routes: Record<string, () => Response | Promise<Response>>) =>
+  (async (u: URL | string) => { const r = routes[String(u)]; if (!r) return new Response('', { status: 404 }); return r(); }) as typeof fetch;
+const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
+const oidcMeta = { issuer: 'https://id.example', authorization_endpoint: 'https://id.example/a', token_endpoint: 'https://id.example/t', userinfo_endpoint: 'https://id.example/u' };
+
+test('discovery follows https redirects (example.com → www) but never to http, and not forever', async () => {
+  const { discover } = await import('../src/oidc.ts');
+  const f = fakeFetch({
+    'https://example.com/.well-known/worksuite-desktop': () => new Response('', { status: 301, headers: { location: 'https://www.example.com/.well-known/worksuite-desktop' } }),
+    'https://www.example.com/.well-known/worksuite-desktop': () => json({ oneauth_issuer: 'https://id.example' }),
+    'https://id.example/.well-known/openid-configuration': () => json(oidcMeta),
+    'https://down.example/.well-known/worksuite-desktop': () => new Response('', { status: 302, headers: { location: 'http://down.example/x' } }),
+    'https://loop.example/.well-known/worksuite-desktop': () => new Response('', { status: 302, headers: { location: '/.well-known/worksuite-desktop' } }),
+  });
+  assert.equal((await discover('https://example.com', { fetch: f })).issuer, 'https://id.example');
+  await assert.rejects(discover('https://down.example', { fetch: f }), (e: OidcError) => e.code === 'insecure_url');
+  await assert.rejects(discover('https://loop.example', { fetch: f }), (e: OidcError) => e.code === 'discovery_failed');
+  await assert.rejects(discover('https://nothing.example', { fetch: f }), (e: OidcError) => e.code === 'discovery_failed');
+});
+
+test('network failures become codes the person can act on', async () => {
+  const { discover, networkError } = await import('../src/oidc.ts');
+  const failing = (cause: unknown) => (async () => { throw Object.assign(new TypeError('fetch failed'), { cause }); }) as unknown as typeof fetch;
+  for (const [cause, code] of [
+    [{ code: 'ENOTFOUND' }, 'dns_failed'], [{ code: 'EAI_AGAIN' }, 'dns_failed'], [{ code: 'ECONNREFUSED' }, 'unreachable'],
+    [{ code: 'ENETUNREACH' }, 'unreachable'], [{ code: 'CERT_HAS_EXPIRED' }, 'tls_failed'], [{ code: 'DEPTH_ZERO_SELF_SIGNED_CERT' }, 'tls_failed'],
+    [{ code: 'ERR_TLS_CERT_ALTNAME_INVALID' }, 'tls_failed'], [{ code: 'UND_ERR_CONNECT_TIMEOUT' }, 'network_timeout'],
+  ] as const) {
+    await assert.rejects(discover('https://work.example.com', { fetch: failing(cause) }), (e: OidcError) => e.code === code, cause.code);
+  }
+  assert.equal(networkError(new DOMException('t', 'TimeoutError')).code, 'network_timeout');
+});
+
+test('the browser opens in its own unit, falling back to a detached xdg-open', async () => {
+  const { openBrowser } = await import('../src/main.ts');
+  const tried: string[][] = [];
+  await openBrowser('https://id.example/a?x=1', async (c) => { tried.push(c); if (c[0] === 'systemd-run') throw new Error('ENOENT'); });
+  assert.equal(tried[0][0], 'systemd-run');
+  assert.deepEqual(tried[0].slice(-3), ['--', 'xdg-open', 'https://id.example/a?x=1']);
+  assert.deepEqual(tried[1], ['xdg-open', 'https://id.example/a?x=1']);
+  await assert.rejects(openBrowser('https://x', async () => { throw new Error('no'); }), (e: OidcError) => e.code === 'browser_failed');
+});

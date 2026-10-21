@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { Dialog, Switch, btnGhost, btnPrimary, card, dialogFooter, field, rowLine, sectionLabel } from '../components/Dk'
 import { failureKind, knownReason, peripheralsApi, type Avail, type FailedChange, type Inhibitor, type InputState, type PeripheralsApi, type PowerProfiles, type Volume, type BtFound } from '../lib/peripheralsApi'
 import { os } from '../lib/os'
+import { IM_KEYS } from '../lib/inputMethods'
 import { t, type MessageKey } from '../i18n'
 
 /** Settings › Devices additions: power, removable drives (with the organisation's USB policy), input methods. Printers have their own page (settings/Printers.tsx). */
@@ -216,10 +217,6 @@ export function PowerSection() {
 
 // ---------- input methods ----------
 const imCall = (a: PeripheralsApi) => a.inputMethods()
-const IM_KEYS: Record<string, MessageKey> = {
-  'keyboard-us': 'per.im.us', m17n_si_wijesekera: 'per.im.siWijesekara', m17n_si_singlish: 'per.im.siPhonetic',
-  m17n_ta_tamil99: 'per.im.taTamil99', m17n_ta_phonetic: 'per.im.taPhonetic',
-}
 export function InputMethodsSection() {
   const { r, reload } = useLoad<InputState>(imCall)
   const [err, setErr] = useState<string | null>(null)

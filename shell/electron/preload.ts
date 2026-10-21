@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   openLink: (url: string) =>ipcRenderer.invoke('ws:openLink', String(url)),
   cloudSignIn: (serverUrl: string, mode: string) => ipcRenderer.invoke('ws:cloudSignIn', String(serverUrl), String(mode)),
   cloudSignInCancel: () => ipcRenderer.invoke('ws:cloudSignInCancel'),
+  cloudCheckServer: (serverUrl: string) => ipcRenderer.invoke('ws:cloudCheckServer', String(serverUrl)),
   cloudSignOut: (accountId: string, choice: string) => ipcRenderer.invoke('ws:cloudSignOut', String(accountId), String(choice)),
   syncUnsent: (accountId: string) => ipcRenderer.invoke('ws:syncUnsent', String(accountId)),
   syncNow: () => ipcRenderer.invoke('ws:syncNow'),
@@ -379,6 +380,8 @@ contextBridge.exposeInMainWorld('worksuitePeripherals', {
   stopScreenCapture: () => ipcRenderer.invoke('ws:stopScreenCapture'),
   inputMethods: () => ipcRenderer.invoke('ws:inputMethods'),
   setInputMethods: (ids: string[]) => ipcRenderer.invoke('ws:setInputMethods', ...(Array.isArray(ids) ? ids.map(String) : [])),
+  imStatus: () => ipcRenderer.invoke('ws:imStatus'),
+  setCurrentIm: (id: string) => ipcRenderer.invoke('ws:setCurrentIm', String(id)),
   syncFailed: () => ipcRenderer.invoke('ws:syncFailed'),
   syncRetry: (mutationId: string) => ipcRenderer.invoke('ws:syncRetry', String(mutationId)),
 })
@@ -431,4 +434,5 @@ contextBridge.exposeInMainWorld('worksuiteCapture', {
   onCaptured: on('ws:captured'),
   onShellOpen: on('ws:shellOpen'),
   onToastClicked: on('ws:toastClicked'),
+  onOsd: on('ws:osd'),
 })

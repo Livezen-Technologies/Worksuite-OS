@@ -74,6 +74,8 @@ profile worksuite-shell flags=(attach_disconnected, complain) {
   /usr/{bin,sbin}/{lpadmin,lpinfo,cupsenable,cupsdisable,cupsaccept} ix,
   /run/cups/cups.sock rw,
   /usr/bin/pkexec Ux,
+  # Settings › Display (#60): wlr-randr applies resolution/scale/position; wl-mirror fills mirrored outputs.
+  /usr/bin/{wlr-randr,wl-mirror} ix,
   owner /{media,run/media}/*/** rwlk,
 
   deny /etc/shadow r,

@@ -75,6 +75,7 @@ export const linuxEnv: Env = {
   },
   // The Update Center the coordinator uses (policy update_mirror > /etc/worksuite/updates.json > default) is an approved
   // APT source too, so pointing worksuite.sources at it doesn't lock APT.
+  tidySources: () => tidySources(),
   updateHosts: () => {
     let local: { update_host?: string } = {};
     try { local = JSON.parse(readFileSync('/etc/worksuite/updates.json', 'utf8')); } catch { /* defaults */ }

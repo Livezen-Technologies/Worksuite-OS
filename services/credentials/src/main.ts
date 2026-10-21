@@ -1,5 +1,5 @@
 // worksuite-credentials: the session's token broker on a 0600 Unix socket (SRS §10.3), line-delimited JSON.
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { homedir } from 'node:os';
@@ -31,6 +31,11 @@ export async function dispatch(broker: Broker, req: Req) {
         const a = await broker.signIn(server, mode);
         return { id, result: { id: a.id, name: a.name ?? null, server_url: a.server_url } };
       }
+      case 'CheckServer': {
+        const server = str(p.server_url);
+        if (!server) return { id, error: 'invalid_argument' };
+        return { id, result: await broker.checkServer(server) };
+      }
       case 'CancelSignIn': return { id, result: broker.cancelSignIn() };
       case 'SignOut': {
         const account = str(p.account_id, 512);
@@ -46,6 +51,36 @@ export async function dispatch(broker: Broker, req: Req) {
   } catch (e) {
     return { id, error: e instanceof OidcError ? e.code : 'internal_error' };
   }
+}
+
+/**
+ * The browser runs in a unit of its own (#55): started straight from this service, xdg-open waits for a browser that
+ * wasn't running yet, and the browser lives in this service's cgroup (killed when the broker restarts). systemd-run
+ * returns at once; without it, a detached xdg-open. Resolves once the launcher started, rejects if neither could.
+ */
+export function browserCommands(url: string): string[][] {
+  return [
+    ['systemd-run', '--user', '--quiet', '--collect', '--unit', `worksuite-signin-browser-${process.pid}-${Date.now()}`, '--', 'xdg-open', url],
+    ['xdg-open', url],
+  ];
+}
+
+export async function openBrowser(url: string, start: (cmd: string[]) => Promise<void> = launch): Promise<void> {
+  let last: unknown = null;
+  for (const c of browserCommands(url)) {
+    try { await start(c); return; } catch (e) { last = e; }
+  }
+  throw last instanceof OidcError ? last : new OidcError('browser_failed');
+}
+
+function launch(cmd: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const p = spawn(cmd[0], cmd.slice(1), { detached: true, stdio: 'ignore' });
+    p.once('error', reject);
+    // systemd-run exits as soon as the unit is queued: wait for that answer. xdg-open may run as long as the browser.
+    if (cmd[0] === 'systemd-run') p.once('exit', (code) => (code === 0 ? resolve() : reject(new OidcError('browser_failed'))));
+    else p.once('spawn', () => { p.unref(); resolve(); });
+  });
 }
 
 export function serve(path: string, broker: Broker): Server {
@@ -129,7 +164,7 @@ async function main() {
       writeFileSync(accountsPath + '.tmp', JSON.stringify(a, null, 2), { mode: 0o600 });
       renameSync(accountsPath + '.tmp', accountsPath);
     },
-    openBrowser: (url) => new Promise((resolve, reject) => execFile('xdg-open', [url], (e) => (e ? reject(e) : resolve()))),
+    openBrowser: (url) => openBrowser(url),
     onState: (account, state) => log('state', { account, state }),
     // Sync config from bootstrap, then start sync (it exits quietly while unconfigured).
     onSignedIn: async (account, { apiBase, accessToken, mode }) => {

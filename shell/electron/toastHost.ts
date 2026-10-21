@@ -61,6 +61,12 @@ export function toastHost(onClick: (key: string) => void, spawnFn: ToastSpawn = 
       // false = not shown (no helper running now): the renderer draws the toast itself.
       return !unavailable && !!proc
     },
+    /** The level indicator after a Fn key (#62), bottom centre over the apps; false = no helper (the renderer draws it). */
+    osd(o: { kind: string; value: number; muted: boolean }): boolean {
+      if (!['volume', 'mic', 'brightness'].includes(o.kind)) return false
+      send({ op: 'osd', kind: o.kind, value: Math.max(0, Math.min(100, Math.round(o.value))), muted: !!o.muted })
+      return !unavailable && !!proc
+    },
     hide(key: string) { if (KEY.test(key) && proc) proc.write(`${JSON.stringify({ op: 'hide', key })}\n`) },
     stop() { unavailable = true; proc?.kill(); proc = null },
   }
