@@ -31,6 +31,7 @@ unit services/recovery-boot/systemd/worksuite-recovery-shell.service worksuite-s
 check "shell profile allows the Wayland bridge" 'grep -q "peer=(name=lk.worksuite.WaylandBridge1)" "$aa/worksuite-shell"'
 check "shell profile may own lk.worksuite.Shell1" 'grep -q "dbus (bind) bus=session name=lk.worksuite.Shell1" "$aa/worksuite-shell"'
 check "shell profile may run the pointer detection tools (#44)" 'grep -q "^  /usr/bin/{libinput,udevadm,labwc} ix," "$aa/worksuite-shell" && grep -q "^  /run/udev/data/\* r," "$aa/worksuite-shell"'
+check "shell profile may run wlr-randr and wl-mirror (#60)" 'grep -q "^  /usr/bin/{wlr-randr,wl-mirror} ix," "$aa/worksuite-shell"'
 for p in "$aa"/*; do
   n=$(basename "$p")
   check "$n installed to /etc/apparmor.d" 'cat "$here"/packaging/debian/*.install | grep -q "^security/apparmor/$n etc/apparmor.d/\$"'

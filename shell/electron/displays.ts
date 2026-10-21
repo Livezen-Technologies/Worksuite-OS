@@ -290,6 +290,8 @@ export function layoutMatches(layout: Layout, outputs: OutputInfo[]): boolean {
     if (!o) return false
     if (!c.enabled) return !o.enabled
     const m = o.modes.find((x) => x.current)
+    // wlroots may refuse a scale and keep the old one: compare it too (it reports fractions like 1.250000).
+    if (o.enabled && Math.abs(o.scale - c.scale) > 0.02) return false
     if (!m) return o.enabled   // no current mode reported (some custom modes): nothing to compare
     return o.enabled && m.width === c.width && m.height === c.height && (c.refresh <= 0 || m.refresh <= 0 || Math.abs(m.refresh - c.refresh) < 0.5)
   })
@@ -308,6 +310,12 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
   let previous: { layout: Layout; wallpapers: Record<string, string> } | null = null
   let primary: string | undefined
   let wallpapers: Record<string, string> = {}
+  // The layout the countdown is running for: "Keep" saves exactly this, not a re-read taken while the compositor
+  // may still be settling after a scale change (#60).
+  let applied: Layout | null = null
+  // Our own wlr-randr makes the compositor report OutputsChanged, which also calls applySaved(): while a change is
+  // being applied that must not put the old saved layout back (#60).
+  let applying = 0
 
   async function read(): Promise<Result<OutputInfo[]>> {
     const r = await exec('wlr-randr', ['--json'])
@@ -324,7 +332,7 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
   }
   async function run(layout: Layout, outputs: OutputInfo[] = []): Promise<Result<true>> {
     const r = await exec('wlr-randr', randrArgs(layout, outputs))
-    if (r.code !== 0) return { ok: false, error: 'apply_failed' }
+    if (r.code !== 0) return { ok: false, error: r.missing ? 'missing_wlr_randr' : 'apply_failed' }
     arrangement = layout.arrangement
     primary = layout.primary
     mirror(layout)
@@ -343,6 +351,10 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
     state,
     /** Applies a layout (and wallpapers) and starts the revert countdown. */
     async apply(layout: Layout, walls: Record<string, string> = wallpapers): Promise<Result<{ deadline: number }>> {
+      applying++
+      try { return await this.applyNow(layout, walls) } finally { applying-- }
+    },
+    async applyNow(layout: Layout, walls: Record<string, string>): Promise<Result<{ deadline: number }>> {
       const o = await read()
       if (!o.ok) return o
       const err = validateLayout(layout, o.value)
@@ -359,19 +371,31 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
       }
       primary = layout.primary
       wallpapers = walls
+      applied = layout
       const deadline = timer.start(() => { void this.revert() })
       void emit()
       return { ok: true, value: { deadline } }
     },
-    /** "Keep changes": stops the countdown and saves the layout for this monitor set. */
+    /** "Keep changes": stops the countdown and saves the layout for this monitor set. The layout stays applied even
+     *  when saving fails; the error says it will not come back at the next sign-in (#60). */
     async confirm(): Promise<Result<true>> {
       timer.cancel()
       previous = null
+      const keep = applied
+      applied = null
       const o = await read()
       if (!o.ok) return o
-      const store = readStore(storeFile)
-      store.profiles[monitorSetKey(o.value)] = { layout: currentLayout(o.value, primary, arrangement), wallpapers }
-      writeStore(storeFile, store)
+      try {
+        const store = readStore(storeFile)
+        const key = monitorSetKey(o.value)
+        // Only outputs still connected; the applied layout wins over a re-read taken mid-reconfigure.
+        const layout = keep && keep.outputs.every((c) => o.value.some((x) => x.name === c.name)) ? keep : currentLayout(o.value, primary, arrangement)
+        store.profiles[key] = { layout, wallpapers }
+        writeStore(storeFile, store)
+      } catch {
+        void emit()
+        return { ok: false, error: 'save_failed' }
+      }
       void emit()
       return { ok: true, value: true }
     },
@@ -379,6 +403,7 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
       timer.cancel()
       const p = previous
       previous = null
+      applied = null
       if (!p) return { ok: true, value: true }
       primary = p.layout.primary
       wallpapers = p.wallpapers
@@ -396,7 +421,7 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
           const store = readStore(storeFile)
           const key = monitorSetKey(o.value)
           store.profiles[key] = { layout: store.profiles[key]?.layout ?? currentLayout(o.value, primary, arrangement), wallpapers }
-          writeStore(storeFile, store)
+          try { writeStore(storeFile, store) } catch { void emit(); return { ok: false, error: 'save_failed' } }
         }
       }
       void emit()
@@ -404,7 +429,7 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
     },
     /** At login and on hotplug: re-applies what was saved for the connected monitor set (no countdown). */
     async applySaved(): Promise<Result<boolean>> {
-      if (timer.pending) return { ok: true, value: false }
+      if (timer.pending || applying) return { ok: true, value: false }
       const o = await read()
       if (!o.ok) return o
       const saved = readStore(storeFile).profiles[monitorSetKey(o.value)]

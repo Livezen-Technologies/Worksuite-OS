@@ -633,12 +633,14 @@ app.whenReady().then(() => {
   })
   let layout: Layout | null = null
   void displays.state().then((r) => { if (r.ok && !layout) layout = r.value.layout })
-  handle('ws:displayState', () => displays.state())
+  // A thrown error would reach the renderer as a bare IPC rejection ("Unexpected error", #60): answer with a code.
+  const safe = <T>(p: Promise<T>) => p.catch((e: unknown) => { console.error('display:', e); return { ok: false, error: 'internal' } })
+  handle('ws:displayState', () => safe(displays.state()))
   handle('ws:displayApply', (json) => {
-    try { const p = JSON.parse(json); return displays.apply(arrange(p.layout, p.sides ?? {})) } catch { return { ok: false, error: 'bad_layout' } }
+    try { const p = JSON.parse(json); return safe(displays.apply(arrange(p.layout, p.sides ?? {}))) } catch { return { ok: false, error: 'bad_layout' } }
   })
-  handle('ws:displayKeep', () => displays.confirm())
-  handle('ws:displayRevert', () => displays.revert())
+  handle('ws:displayKeep', () => safe(displays.confirm()))
+  handle('ws:displayRevert', () => safe(displays.revert()))
   handle('ws:displayWallpaper', (output, id) => displays.setWallpaper(output, id))
   void displays.applySaved()
   // Taskbar windows, tray and the Super key (lk.worksuite.Shell1) through the Wayland bridge.
