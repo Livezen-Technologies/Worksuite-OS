@@ -160,7 +160,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: worksuite-os-*
           path: dist
@@ -200,7 +200,7 @@ jobs:
       - if: env.HAS_TOKEN == 'true'
         uses: actions/checkout@v4
       - if: env.HAS_TOKEN == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: worksuite-os-*
           path: dist
