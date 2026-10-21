@@ -59,16 +59,18 @@
   <!-- One desktop to start with, like Windows 11; Task View adds more (the bridge rewrites this in the user's copy). -->
   <desktops number="1"><popupTime>0</popupTime><names><name>Desktop 1</name></names></desktops>
   <!-- Alt+Tab (#54): Labwc's own switcher (drawn by the compositor: no extra process, no CPU while closed). A list of the
-       windows, each with its app icon, its title (two windows of one app differ by title) and its app; the selected one
+       windows, each with its app's name and its title (two windows of one app differ by title); the selected one
        is highlighted (theme osd.window-switcher.*), shown live in place of the others (preview) with an outline, and
        activated when Alt is released. Alt+Shift+Tab goes backwards, Esc cancels. The preview is the window itself:
        no screenshot is taken or kept, and nothing is shown that the person's own windows do not. Windows from the desktop in use (Settings ›
        Multitasking can choose all desktops: the bridge and shell/electron/touch.ts change only allWorkspaces). -->
   <windowSwitcher show="yes" preview="yes" outlines="yes" allWorkspaces="no">
     <fields>
-      <field content="icon" width="6%"/>
-      <field content="title" width="70%"/>
-      <field content="trimmed_identifier" width="24%"/>
+      <!-- No "icon" field: Labwc 0.8.3 (trixie) has none and logs "bad windowSwitcher field 'icon'". The app is named
+           by desktop_entry_name (the .desktop file's Name, e.g. "Firefox"; the trimmed app_id when Labwc has no
+           desktop-entry lookup), and the preview shows the window itself. -->
+      <field content="desktop_entry_name" width="24%"/>
+      <field content="title" width="76%"/>
     </fields>
   </windowSwitcher>
   <keyboard>

@@ -270,7 +270,8 @@ class RcTest(unittest.TestCase):
         self.assertNotIn("ToggleOmnipresent", rule)
         self.assertEqual(parse_desktops(out), (3, ["Mail", "Code", "Play"]))
         self.assertIn('<windowSwitcher show="yes" preview="yes" outlines="yes" allWorkspaces="yes">', out)
-        self.assertIn('<field content="icon"', out)                  # #54: the visual switcher reaches older copies
+        self.assertNotIn('<field content="icon"', out)               # #54: Labwc 0.8.3 has no icon field
+        self.assertIn('<field content="desktop_entry_name"', out)    # the app is named instead
         self.assertIn('<margin bottom="52"/>', out)                    # #53: and the taskbar's work area
         self.assertEqual(out.count("worksuite-touch:begin"), 1)
         self.assertLess(out.index('<touch deviceName="t"'), out.index("</labwc_config>"))

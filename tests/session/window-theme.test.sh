@@ -65,7 +65,9 @@ assert bar and r.find('margin').get('bottom') == bar.group(1), 'margin = taskbar
 assert r.findtext('resistance/screenEdgeStrength') == '0' and r.findtext('resistance/windowEdgeStrength') == '0'
 sw = r.find('windowSwitcher')
 assert sw.get('show') == 'yes' and sw.get('preview') == 'yes' and sw.get('outlines') == 'yes'
-assert [f.get('content') for f in sw.iter('field')][:2] == ['icon', 'title']
+fields = [f.get('content') for f in sw.iter('field')]
+known = {'type', 'type_short', 'identifier', 'trimmed_identifier', 'desktop_entry_name', 'title', 'workspace', 'state', 'output', 'custom'}
+assert set(fields) <= known and 'title' in fields and 'desktop_entry_name' in fields, fields  # Labwc 0.8.3 osd-field.c
 keys = {k.get('key'): k.find('action').get('name') for k in r.iter('keybind')}
 assert keys['A-Tab'] == 'NextWindow' and keys['A-S-Tab'] == 'PreviousWindow'
 PY
