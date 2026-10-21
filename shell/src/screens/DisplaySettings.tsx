@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   REVERT_SECONDS, SCALES, WALLPAPERS, displays, modeLabel, refreshRates, resolutions, secondsLeft, useDisplayState,
-  type Arrangement, type DisplayLayout, type DisplayOutputConfig, type DisplayState, type Side,
+  type Arrangement, type DisplayLayout, type DisplayResult, type DisplayOutputConfig, type DisplayState, type Side,
 } from '../lib/displays'
 import { Dialog, Switch, btnGhost, btnPrimary, card, dialogFooter, rowLine } from '../components/Dk'
 import { formatNumber, messages, t } from '../i18n'
@@ -20,7 +20,16 @@ const ERRORS: Record<string, string> = messages({
   missing_wlr_randr: 'disp.err.randr',
   mode_not_applied: 'disp.err.notApplied',
   fixed_mode: 'disp.err.fixed',
+  save_failed: 'disp.err.save',
+  wlr_randr_failed: 'disp.err.read',
+  internal: 'disp.err.internal',
 })
+
+/** A display call that never rejects: IPC failures come back as an error code (#60). */
+export async function call<T>(p: () => Promise<DisplayResult<T>>): Promise<DisplayResult<T>> {
+  try { return await p() } catch { return { ok: false, error: 'internal' } }
+}
+export const errorText = (code: string) => ERRORS[code] ?? t('disp.err.other', { error: code })
 
 /** Where a secondary monitor sits relative to the primary, read back from positions. */
 export function sideOf(o: DisplayOutputConfig, p: DisplayOutputConfig): Side {
@@ -56,9 +65,9 @@ export function DisplayPanel() {
   const edit = (patch: Partial<DisplayOutputConfig>) => setDraft((d) => d && { ...d, outputs: d.outputs.map((o) => (o.name === out.name ? { ...o, ...patch } : o)) })
   const apply = async () => {
     setBusy(true); setError(null)
-    const r = await displays.displayApply(draft, sides)
+    const r = await call(() => displays.displayApply(draft, sides))
     setBusy(false)
-    if (!r.ok) setError(ERRORS[r.error] ?? t('disp.err.other', { error: r.error }))
+    if (!r.ok) setError(errorText(r.error))
   }
   const multi = live.outputs.length > 1
   const res = out ? resolutions(out) : []
@@ -143,7 +152,7 @@ export function DisplayPanel() {
       <button type="button" className={btnPrimary} disabled={!changed || busy || !!live.pending} onClick={() => void apply()}>{t('disp.apply')}</button>
     </div>
     <p className="m-0 text-xs leading-[1.5] text-[#8FA3C8]">{t('disp.note', { secs: REVERT_SECONDS })}</p>
-    {live.pending && <KeepDialog state={live} />}
+    {live.pending && <KeepDialog state={live} onError={(e) => setError(errorText(e))} />}
   </>
 }
 
@@ -157,24 +166,28 @@ function Row({ k, d, children }: { k: string; d: string; children: ReactNode }) 
 }
 
 /** "Keep these settings?" with a live countdown; Escape or no answer reverts. */
-export function KeepDialog({ state, now = Date.now }: { state: DisplayState; now?: () => number }) {
+export function KeepDialog({ state, now = Date.now, onError }: { state: DisplayState; now?: () => number; onError?: (code: string) => void }) {
   const deadline = state.pending?.deadline ?? 0
   const [left, setLeft] = useState(() => secondsLeft(deadline, now()))
   useEffect(() => {
     const i = setInterval(() => setLeft(secondsLeft(deadline, now())), 250)
     return () => clearInterval(i)
   }, [deadline, now])
+  const answer = async (keep: boolean) => {
+    const r = await call<true>(() => (keep ? displays.displayKeep() : displays.displayRevert()))
+    if (!r.ok) onError?.(r.error)
+  }
   const text = left === 1 ? t('disp.revertOne') : t('disp.revertMany', { secs: left })
   return (
-    <Dialog alert width={420} onClose={() => void displays.displayRevert()}>
+    <Dialog alert width={420} onClose={() => void answer(false)}>
       {(tid) => <>
         <div className="flex flex-col gap-3 px-6 pt-6 pb-4">
           <h2 id={tid} className="m-0 text-[19px] font-bold">{t('disp.keepTitle')}</h2>
           <p className="m-0 text-[13px] text-[#C9D6EE]" aria-live="polite">{text}</p>
         </div>
         <div className={dialogFooter}>
-          <button type="button" className={btnGhost} onClick={() => void displays.displayRevert()}>{t('disp.revert')}</button>
-          <button type="button" className={btnPrimary} data-autofocus onClick={() => void displays.displayKeep()}>{t('disp.keep')}</button>
+          <button type="button" className={btnGhost} onClick={() => void answer(false)}>{t('disp.revert')}</button>
+          <button type="button" className={btnPrimary} data-autofocus onClick={() => void answer(true)}>{t('disp.keep')}</button>
         </div>
       </>}
     </Dialog>
