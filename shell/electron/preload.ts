@@ -133,6 +133,15 @@ contextBridge.exposeInMainWorld('worksuite', {
   filesArchivePassword: (id: string, pw: string | null) => ipcRenderer.invoke('ws:filesArchivePassword', String(id), pw ?? '', pw === null ? '1' : '0'),
   filesArchiveList: (root: string, rel: string, password: string | null) => ipcRenderer.invoke('ws:filesArchiveList', String(root), String(rel), password ? String(password) : ''),
   filesEject: (id: string) => ipcRenderer.invoke('ws:filesEject', String(id)),
+  filesVolumes: () => ipcRenderer.invoke('ws:filesVolumes'),
+  filesVolMount: (device: string) => ipcRenderer.invoke('ws:filesVolMount', String(device)),
+  filesVolUnmount: (device: string) => ipcRenderer.invoke('ws:filesVolUnmount', String(device)),
+  filesVolEject: (device: string) => ipcRenderer.invoke('ws:filesVolEject', String(device)),
+  onFilesVolumes: (cb: () => void) => {
+    const listener = () => cb()
+    ipcRenderer.on('ws:filesVolumesChanged', listener)
+    return () => { ipcRenderer.removeListener('ws:filesVolumesChanged', listener) }
+  },
   onOpenArchive: (cb: (e: unknown) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on('ws:openArchive', listener)

@@ -132,6 +132,15 @@ export interface WorkSuiteApi {
   /** An archive opened with Files from elsewhere (default handler for archive types). */
   onOpenArchive(cb: (at: { root: string; rel: string }) => void): () => void
   filesEject(id: string): Promise<CloudResult<true>>
+  /** This Computer (#63): disk partitions and volumes (udisks2). Errors: unavailable, failed. */
+  filesVolumes(): Promise<CloudResult<DiskVolume[]>>
+  /** Mount a volume (polkit may ask for an administrator); value: the Files root that opens it. */
+  filesVolMount(device: string): Promise<CloudResult<string>>
+  filesVolUnmount(device: string): Promise<CloudResult<true>>
+  /** Safely remove the drive the volume lies on (unmount every volume on it, then power it off). */
+  filesVolEject(device: string): Promise<CloudResult<true>>
+  /** A drive was plugged in or removed, or a volume mounted or unmounted (udisks2). */
+  onFilesVolumes(cb: () => void): () => void
   onFilesJob(cb: (e: FileJob) => void): () => void
   // Settings › Devices: real devices from sysfs (electron/hardware.ts).
   hwDevices(): Promise<CloudResult<HwDevice[]>>
@@ -364,6 +373,12 @@ export interface AppImageRecord {
 }
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
 export interface FilePlaces { user: string; folders: string[]; media: { id: string; label: string }[]; disk: { device: string; label?: string; encrypted?: boolean; used: number; total: number } | null }
+export interface DiskVolume {
+  device: string; disk: string; label: string; model: string; fstype: string; kind: 'system' | 'internal' | 'removable' | 'optical'
+  size: number; mountpoint: string | null; total: number | null; free: number | null; encrypted: boolean; locked: boolean; readOnly: boolean
+  /** The Files root that opens it when mounted. */
+  root: string | null
+}
 export interface FileHit { root: string; rel: string; name: string; dir: boolean; size: number | null; modified: number | null; where: string }
 export interface TrashItem { id: string; name: string; dir: boolean; size: number; orig: string; where: string; deleted: number | null }
 export interface FileStamp { size: number; modified: number }
@@ -753,6 +768,11 @@ const stub: WorkSuiteApi = {
   },
   onOpenArchive() { return () => {} },
   async filesEject() { return { ok: false, error: 'unavailable' } },
+  async filesVolumes() { return { ok: true, value: stubVolumes.map((v) => ({ ...v })) } },
+  async filesVolMount(device) { const v = stubVolumes.find((x) => x.device === device); if (!v) return { ok: false, error: 'gone' }; v.mountpoint = `/media/alex/${v.label}`; v.root = `media:${v.label}`; v.total = v.size; v.free = v.size / 2; return { ok: true, value: v.root } },
+  async filesVolUnmount(device) { const v = stubVolumes.find((x) => x.device === device); if (!v) return { ok: false, error: 'gone' }; Object.assign(v, { mountpoint: null, root: null, total: null, free: null }); return { ok: true, value: true as const } },
+  async filesVolEject() { return { ok: false, error: 'unavailable' } },
+  onFilesVolumes() { return () => {} },
   onFilesJob(cb) { stubFileJobs.add(cb); return () => { stubFileJobs.delete(cb) } },
   async filesStatus(root) { return { free_bytes: 212e9, drive: root === 'drive' ? { states: { synced: 2, syncing: 1, pending: 1, conflict: 1, 'online-only': 1, error: 1 }, last_sync: Date.now() - 60_000, service_state: 'idle' } : null } },
   async deviceInfo() {
@@ -1019,6 +1039,11 @@ if (typeof window !== 'undefined') {
 const stubJobs = new Map<string, { job: FileJob; paused: boolean; step: number }>()
 let stubJobSeq = 0
 const stubEmit = (e: FileJob) => stubFileJobs.forEach((l) => l(e))
+const stubVolumes: DiskVolume[] = [
+  { device: '/dev/nvme0n1p2', disk: '/dev/nvme0n1', label: '', model: 'Samsung SSD 980', fstype: 'ext4', kind: 'system', size: 475e9, mountpoint: '/', total: 468e9, free: 301e9, encrypted: true, locked: false, readOnly: false, root: 'home' },
+  { device: '/dev/sda1', disk: '/dev/sda', label: 'Data', model: 'WDC WD10EZEX', fstype: 'ntfs', kind: 'internal', size: 1e12, mountpoint: null, total: null, free: null, encrypted: false, locked: false, readOnly: false, root: null },
+  { device: '/dev/sdb1', disk: '/dev/sdb', label: 'KINGSTON', model: 'DataTraveler 3.0', fstype: 'vfat', kind: 'removable', size: 31e9, mountpoint: '/media/alex/KINGSTON', total: 31e9, free: 18e9, encrypted: false, locked: false, readOnly: false, root: 'media:KINGSTON' },
+]
 const stubFileJobs = new Set<(e: FileJob) => void>()
 function STUB_DOCS(): FileEntry[] {
   const day = 86_400_000, now = Date.now()
