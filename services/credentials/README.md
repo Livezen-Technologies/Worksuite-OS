@@ -6,6 +6,12 @@ The session's single token broker (WSOS-IDN-008), shipped in `worksuite-user-ser
   authorization code + PKCE (S256) in the system browser with a one-shot `127.0.0.1` redirect listener (RFC 8252).
   Public client, no client secret (WSOS-IDN-001). https only. One browser sign-in waits at a time: a new `SignIn`
   or `CancelSignIn` ends the waiting one with `sign_in_cancelled`.
+- **Server check** (`CheckServer {server_url}`): the same discovery without a browser or storing anything, so Settings
+  can say "can't find that server" (`dns_failed`), `unreachable`, `network_timeout`, `tls_failed` (untrusted
+  certificate), `insecure_url`, `invalid_url` or `discovery_failed` before the browser opens. Redirects are followed
+  by hand (at most 3, https only, GET only).
+- **Browser**: opened with `systemd-run --user -- xdg-open` (its own unit, so it outlives a broker restart and the
+  call returns at once), falling back to a detached `xdg-open`.
 - **Refresh tokens** go to the Secret Service keyring through `secret-tool` (secret on stdin), never to files
   (WSOS-IDN-002). Rotated refresh tokens replace the stored one.
 - **Access tokens** stay in memory, capped at 15 min (WSOS-IDN-003), reused until 60 s before expiry, one refresh in
