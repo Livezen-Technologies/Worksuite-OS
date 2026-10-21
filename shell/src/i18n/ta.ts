@@ -1721,6 +1721,8 @@ const ta: Partial<Record<MessageKey, string>> = {
   'prn.noDrivers': 'இந்த அச்சுப்பொறிக்கு இயக்கி கிடைக்கவில்லை. மாதிரியைச் சரிபார்க்கவும், அல்லது அதன் இயக்கித் தொகுப்பை நிறுவவும்.',
   'prn.driver': 'இயக்கி',
   'prn.recommended': '{name} (பரிந்துரைக்கப்பட்டது)',
+  'prn.cupsSaid': 'அச்சு அமைப்பு: {detail}',
+  'prn.driverPending': 'முதலில் அச்சுப்பொறி முகவரியை உள்ளிடவும்.',
   'prn.pickDriver': 'முதலில் ஒரு இயக்கியைத் தேர்ந்தெடுக்கவும்.',
   'prn.pref.paper': 'காகித அளவு',
   'prn.pref.color': 'வண்ணம்',

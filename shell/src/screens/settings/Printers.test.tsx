@@ -27,7 +27,8 @@ const fake = {
     calls.push(`drivers ${u} ${mm} ${id}`)
     return ok([{ id: 'drv:///brlaser.drv/br2350.ppd', label: 'Brother HL-L2350DW, using brlaser', recommended: true }])
   },
-  async addPrinter(u: string, n: string, d?: string) { calls.push(`add ${u} ${n} ${d}`); return u.includes('10.9.9.9') ? { available: false as const, reason: 'printer_unreachable' } : ok(n) },
+  async addPrinter(u: string, n: string, d?: string) { calls.push(`add ${u} ${n} ${d}`); return u.includes('10.9.9.9') ? { available: false as const, reason: 'printer_unreachable' }
+    : u.includes('10.8.8.8') ? { available: false as const, reason: 'printer_failed', detail: 'lpadmin: Unable to copy PPD file.' } : ok(n) },
   async removePrinter(n: string) { calls.push(`remove ${n}`); printers = printers.filter((p) => p.name !== n); return ok(true as const) },
   async setDefaultPrinter(n: string) { calls.push(`default ${n}`); return ok(true as const) },
   async pausePrinter(n: string, p: boolean) { calls.push(`${p ? 'pause' : 'resume'} ${n}`); return ok(true as const) },
@@ -133,6 +134,20 @@ describe('Settings › Printers (issue #51)', () => {
     await click(document.querySelector('[role=dialog] button[type=submit]')!)
     expect(calls).toEqual(['add ipp://10.9.9.9/ipp/print 10.9.9.9 everywhere'])
     expect(document.body.textContent).toContain('The printer did not answer')
+  })
+  it('#51: shows what lpadmin said, and the Driver row does not appear mid-typing (no layout jump)', async () => {
+    await render()
+    await click(button('Add printer'))
+    await click(button('By address'))
+    const sel = () => document.querySelector('[data-testid=printer-driver]') as HTMLSelectElement | null
+    expect(sel()?.disabled).toBe(true)  // there before an address is typed
+    const host = [...document.querySelectorAll('[role=dialog] label')].find((l) => l.textContent?.startsWith('Host name'))!.querySelector('input')!
+    type(host, '10.8.8.8')
+    await tick()
+    expect(sel()?.disabled).toBe(false)
+    expect(sel()?.value).toBe('everywhere')
+    await click(document.querySelector('[role=dialog] button[type=submit]')!)
+    expect(document.body.textContent).toContain('That did not work. Try again. Printing system: lpadmin: Unable to copy PPD file.')
   })
 })
 

@@ -168,7 +168,8 @@ function AddPrinterDialog({ api, onClose, onAdded }: { api: PeripheralsApi; onCl
     const display = name.trim() || (mode === 'found' ? picked?.name ?? '' : host.trim())
     const r = await api.addPrinter(uri, display, driver)
     setBusy(null)
-    if (r.available) onAdded(display); else setErr(reasonText(r.reason))
+    // #51: the reason in the person's language, then what CUPS / lpadmin actually said.
+    if (r.available) onAdded(display); else setErr(r.detail ? `${reasonText(r.reason)} ${t('prn.cupsSaid', { detail: r.detail })}` : reasonText(r.reason))
   }
   const tab = (m: 'found' | 'address') => `${btnGhost} px-3.5 py-1.5 text-[13px] ${mode === m ? 'bg-white/[0.08]' : ''}`
 
@@ -216,14 +217,17 @@ function AddPrinterDialog({ api, onClose, onAdded }: { api: PeripheralsApi; onCl
               <button type="button" disabled={!model.trim() || busy === 'drivers'} onClick={() => void findDrivers(typed, model.trim(), '')} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{t('prn.findDrivers')}</button>
             </div>}
           </>}
-          {busy === 'drivers' && <span role="status" className="text-[13px]">{t('prn.lookingDrivers')}</span>}
-          {drivers && (drivers.length === 0 ? <p className="m-0 text-[13px] text-[#FFB98A]">{t('prn.noDrivers')}</p> : (
+          {/* #51: the Driver row is always there (disabled until there is something to pick), so the fields below
+              do not move while an address is typed. */}
+          {drivers && drivers.length === 0 ? <p className="m-0 text-[13px] text-[#FFB98A]">{t('prn.noDrivers')}</p> : (
             <label className="flex flex-col gap-1.5 text-[13px]">{t('prn.driver')}
-              <select value={driver} onChange={(e) => setDriver(e.target.value)} className={field}>
-                {drivers.map((d) => <option key={d.id} value={d.id}>{d.recommended ? t('prn.recommended', { name: d.label }) : d.label}</option>)}
+              <select value={driver} disabled={!drivers?.length} onChange={(e) => setDriver(e.target.value)} className={field} data-testid="printer-driver">
+                {drivers?.length ? drivers.map((d) => <option key={d.id} value={d.id}>{d.recommended ? t('prn.recommended', { name: d.label }) : d.label}</option>)
+                  : <option value="">{busy === 'drivers' ? t('prn.lookingDrivers') : mode === 'address' ? t('prn.driverPending') : ''}</option>}
               </select>
             </label>
-          ))}
+          )}
+          {busy === 'drivers' && <span role="status" className="sr-only">{t('prn.lookingDrivers')}</span>}
           <label className="flex flex-col gap-1.5 text-[13px]">{t('per.print.name')}
             <input value={name} maxLength={127} onChange={(e) => setName(e.target.value)} className={field} />
           </label>

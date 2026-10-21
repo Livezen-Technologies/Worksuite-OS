@@ -14,6 +14,7 @@ LPADMIN=${WORKSUITE_LPADMIN:-lpadmin}
 CUPSENABLE=${WORKSUITE_CUPSENABLE:-cupsenable}
 CUPSDISABLE=${WORKSUITE_CUPSDISABLE:-cupsdisable}
 CUPSACCEPT=${WORKSUITE_CUPSACCEPT:-cupsaccept}
+LPSTAT=${WORKSUITE_LPSTAT:-lpstat}
 
 usage() { echo "usage: worksuite-printer-admin devices | drivers id|mm VALUE | add NAME URI DRIVER DESCRIPTION | remove|pause|resume NAME" >&2; exit 2; }
 # A value without control characters, at most $2 bytes long.
@@ -45,7 +46,14 @@ case "${1:-}" in
     add)
         [ $# -eq 5 ] || usage
         name "$2"; uri "$3"; driver "$4"; plain "$5" 127 || usage
-        exec "$LPADMIN" -p "$2" -E -v "$3" -m "$4" -D "$5" ;;
+        # #51: a failed add (IPP Everywhere against a printer that does not answer properly) can leave a half-made
+        # queue; remove it, but only when this call created it.
+        existed=0; "$LPSTAT" -p "$2" >/dev/null 2>&1 && existed=1
+        rc=0; "$LPADMIN" -p "$2" -E -v "$3" -m "$4" -D "$5" || rc=$?
+        if [ "$rc" -ne 0 ] && [ "$existed" = 0 ] && "$LPSTAT" -p "$2" >/dev/null 2>&1; then
+            "$LPADMIN" -x "$2" >/dev/null 2>&1 || true
+        fi
+        exit "$rc" ;;
     remove)
         [ $# -eq 2 ] || usage; name "$2"
         exec "$LPADMIN" -x "$2" ;;
