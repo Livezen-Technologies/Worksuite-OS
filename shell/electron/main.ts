@@ -54,6 +54,7 @@ import { bannerAllowed, toastHost, type ToastMsg } from './toastHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
 import { startPeripheralsHost } from './peripherals'
+import { startPrintersHost } from './printers'
 import { startRemoteSupportHost } from './remoteSupport'
 import { appPermissionsBridge, startAppPermissionsHost } from './appPermissions'
 import { startTouchHost } from './touch'
@@ -723,6 +724,8 @@ app.whenReady().then(() => {
   startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
   startPeripheralsHost(handle, app.getPath('home'))
+  // Settings › Printers: state, default, preferences, pause, test page, held jobs (issue #51).
+  startPrintersHost(handle)
   startRemoteSupportHost(handle, undefined, {
     exec: realExec, credential: () => deviceCredential(),
     serverBase: () => { try { const h = JSON.parse(readFileSync(STATUS_PATH, 'utf8'))?.server; return typeof h === 'string' && /^[A-Za-z0-9.:[\]-]+$/.test(h) ? `https://${h}/` : null } catch { return null } },

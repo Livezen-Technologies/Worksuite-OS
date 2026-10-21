@@ -108,7 +108,7 @@ describe('power (WSOS-INT-005)', () => {
 describe('printing (WSOS-INT-006)', () => {
   it('finds driverless printers and builds safe queue names', () => {
     expect(parseLpinfo('network dnssd://HP%20LaserJet%20M110._ipp._tcp.local/?uuid=1\nnetwork socket\nnetwork ipps://10.0.0.5/ipp/print\nfile cups-pdf:/'))
-      .toEqual([{ uri: 'dnssd://HP%20LaserJet%20M110._ipp._tcp.local/?uuid=1', name: 'HP LaserJet M110' }, { uri: 'ipps://10.0.0.5/ipp/print', name: '10.0.0.5' }])
+      .toEqual([{ uri: 'dnssd://HP%20LaserJet%20M110._ipp._tcp.local/?uuid=1', name: 'HP LaserJet M110', kind: 'network' }, { uri: 'ipps://10.0.0.5/ipp/print', name: '10.0.0.5', kind: 'network' }])
     expect(queueName('HP LaserJet M110 / 2nd floor')).toBe('HP_LaserJet_M110_2nd_floor')
     expect(printerUri('ipp://printer.local/ipp/print')).toBe('ipp://printer.local/ipp/print')
     expect(printerUri('file:///etc/shadow')).toBeNull()

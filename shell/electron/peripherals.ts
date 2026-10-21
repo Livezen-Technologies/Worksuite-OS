@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 import { realExec, realWithStdin, type Avail, type Exec, type WithStdin } from './system'
 import { parseBtDevices } from './system'
 import { xdgDirs } from './xdgDirs'
+import { printerExec, printersBridge } from './printers'
 
 // ---------- Bluetooth ----------
 export interface BtFound { address: string; name: string }
@@ -99,67 +100,8 @@ export function parseInhibitors(json: string): Inhibitor[] {
 }
 
 // ---------- printing ----------
-export interface FoundPrinter { uri: string; name: string }
-export interface PrintJob { id: string; printer: string; user: string; size: string }
-export interface PrinterIssue { name: string; reason: string }
-
-/** `lpinfo --include-schemes dnssd,ipp,ipps -v` → driverless candidates ("network dnssd://Name%20X._ipp._tcp.local/…"). */
-export function parseLpinfo(text: string): FoundPrinter[] {
-  const out: FoundPrinter[] = []
-  for (const line of text.split('\n')) {
-    const m = /^\s*network\s+((?:dnssd|ipps?):\/\/\S+)\s*$/.exec(line)
-    if (!m) continue
-    let name = m[1]
-    try {
-      const u = new URL(m[1])
-      name = decodeURIComponent(u.hostname.split('._')[0] || u.hostname) || m[1]
-    } catch { /* keep the uri */ }
-    if (!out.some((p) => p.uri === m[1])) out.push({ uri: m[1], name })
-  }
-  return out
-}
-
-/** Queue name from a display name: letters, digits, '_' and '-' only (CUPS rejects '/', '#', spaces). */
-export function queueName(display: string): string {
-  return display.normalize('NFKD').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || 'Printer'
-}
-
-/** A printer address the user typed or picked: driverless IPP only (ipp, ipps, dnssd). */
-export function printerUri(uri: string): string | null {
-  if (uri.length > 512 || /\s/.test(uri)) return null
-  try {
-    const u = new URL(uri)
-    return ['ipp:', 'ipps:', 'dnssd:'].includes(u.protocol) && u.hostname && !u.username && !u.password ? uri : null
-  } catch { return null }
-}
-
-/** `lpstat -o` → jobs ("HP-1 alice 1024 Tue …"). */
-export function parseJobs(text: string): PrintJob[] {
-  return text.split('\n').map((l) => /^(\S+)-(\d+)\s+(\S+)\s+(\d+)\s/.exec(l)).filter((m): m is RegExpExecArray => !!m)
-    .map((m) => ({ id: `${m[1]}-${m[2]}`, printer: m[1], user: m[3], size: m[4] }))
-}
-
-/** `lpstat -l -p` → the printer's own explanation ("Alerts:"/indented reason lines) when it is stopped or failing. */
-export function parsePrinterIssues(text: string): PrinterIssue[] {
-  const out: PrinterIssue[] = []
-  let cur: string | null = null; let disabled = false
-  for (const line of text.split('\n')) {
-    const p = /^printer (\S+) (.*)$/.exec(line)
-    if (p) { cur = p[1]; disabled = /disabled/.test(p[2]); continue }
-    if (!cur) continue
-    const alert = /^\s+Alerts:\s*(.+)$/.exec(line)
-    const reason = alert ? alert[1].trim() : disabled && /^\s+\S/.test(line) && !/:/.test(line) ? line.trim() : null
-    if (reason && reason !== 'none' && !out.some((i) => i.name === cur)) out.push({ name: cur, reason })
-  }
-  return out
-}
-
-export function cupsError(text: string): string {
-  if (/Forbidden|not authorized|Unauthorized|requires authentication/i.test(text)) return 'not_authorized'
-  if (/Unable to connect|No route|timed out|Unable to get printer attributes|Unable to query printer/i.test(text)) return 'printer_unreachable'
-  if (/everywhere|IPP Everywhere|driverless/i.test(text)) return 'printer_not_driverless'
-  return 'printer_failed'
-}
+// Printing lives in printers.ts; the parsers are re-exported here for the callers that import them from this module.
+export { cupsError, parseJobs, parseLpinfo, parsePrinterIssues, printerUri, queueName, type FoundPrinter, type PrintJob, type PrinterIssue } from './printers'
 
 // ---------- input methods (fcitx5) ----------
 /** Input methods Settings offers. Ids are fcitx5 names (fcitx5-m17n for Sinhala and Tamil). */
@@ -219,6 +161,8 @@ const realFs: FsDeps = {
 
 export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin: WithStdin = realWithStdin, fs: FsDeps = realFs) {
   const userProfile = join(xdgDirs(home).config, 'fcitx5', 'profile')
+  // pkexec's exit status matters for printing, which realExec flattens to 1.
+  const printers = printersBridge(exec === realExec ? printerExec : exec)
   return {
     // Bluetooth (WSOS-INT-003)
     async btScan(): Promise<Avail<BtFound[]>> {
@@ -300,34 +244,12 @@ export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin
       return r.code === 0 ? ok(parseInhibitors(r.stdout)) : tool(r, 'busctl', 'service_unavailable')
     },
 
-    // Printing (WSOS-INT-006)
-    async findPrinters(): Promise<Avail<FoundPrinter[]>> {
-      const r = await exec('lpinfo', ['--include-schemes', 'dnssd,ipp,ipps', '-v'])
-      return r.code === 0 ? ok(parseLpinfo(r.stdout)) : tool(r, 'lpinfo', cupsError(r.stderr))
-    },
-    /** Driverless (IPP Everywhere) queue; CUPS checks the printer answers before creating it. */
-    async addPrinter(uri: string, display: string): Promise<Avail<string>> {
-      const u = printerUri(uri)
-      if (!u) return fail('invalid_argument')
-      const name = queueName(display)
-      const r = await exec('lpadmin', ['-p', name, '-E', '-v', u, '-m', 'everywhere', '-D', display.slice(0, 127)])
-      return r.code === 0 ? ok(name) : tool(r, 'lpadmin', cupsError(r.stderr + r.stdout))
-    },
-    async removePrinter(name: string): Promise<Avail<true>> {
-      if (!/^[A-Za-z0-9_-]{1,127}$/.test(name)) return fail('invalid_argument')
-      const r = await exec('lpadmin', ['-x', name])
-      return r.code === 0 ? ok(true) : tool(r, 'lpadmin', cupsError(r.stderr))
-    },
-    async printQueue(): Promise<Avail<{ jobs: PrintJob[]; issues: PrinterIssue[] }>> {
-      const [o, l] = await Promise.all([exec('lpstat', ['-o']), exec('lpstat', ['-l', '-p'])])
-      if (o.missing) return fail('lpstat_missing')
-      return ok({ jobs: parseJobs(o.stdout), issues: parsePrinterIssues(l.stdout) })
-    },
-    async cancelJob(id: string): Promise<Avail<true>> {
-      if (!/^[A-Za-z0-9_-]{1,127}-\d{1,9}$/.test(id)) return fail('invalid_argument')
-      const r = await exec('cancel', [id])
-      return r.code === 0 ? ok(true) : tool(r, 'cancel', cupsError(r.stderr))
-    },
+    // Printing (WSOS-INT-006): see printers.ts.
+    findPrinters: () => printers.findPrinters(),
+    addPrinter: (uri: string, display: string, driver?: string) => printers.addPrinter(uri, display, driver),
+    removePrinter: (name: string) => printers.removePrinter(name),
+    printQueue: () => printers.printQueue(),
+    cancelJob: (id: string) => printers.cancelJob(id),
 
     async screenCapture(): Promise<Avail<number>> {
       const r = await exec('pw-dump', [])
@@ -371,7 +293,7 @@ export function startPeripheralsHost(handle: Handle, home: string, b: Peripheral
   handle('ws:setPowerProfile', (n) => b.setPowerProfile(n))
   handle('ws:powerInhibitors', () => b.inhibitors())   // 'ws:inhibitors' is the session-end overlay's (sessionHost.ts)
   handle('ws:findPrinters', () => b.findPrinters())
-  handle('ws:addPrinter', (u, n) => b.addPrinter(u, n))
+  handle('ws:addPrinter', (u, n, d) => b.addPrinter(u, n, d || 'everywhere'))
   handle('ws:removePrinter', (n) => b.removePrinter(n))
   handle('ws:printQueue', () => b.printQueue())
   handle('ws:cancelJob', (id) => b.cancelJob(id))

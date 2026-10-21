@@ -1,14 +1,13 @@
-// Settings › Power (UPower via os.sysBattery) and Settings › Printers (CUPS lpstat via os.sysPrinters).
+// Settings › Power (UPower via os.sysBattery). Settings › Printers is Printers.tsx.
 import { AnimatedProgress, CountUp } from '../../components/AnimatedProgress'
-import { formatDuration, os, type BatteryState, type Printer } from '../../lib/os'
+import { formatDuration, os, type BatteryState } from '../../lib/os'
 import { useSystem } from '../../lib/useSystem'
-import { C, Svg, card, chip, rowLine } from '../../components/Dk'
+import { Svg, card } from '../../components/Dk'
 import { Empty } from '../Hardware'
-import { formatNumber, t, type MessageKey } from '../../i18n'
+import { t } from '../../i18n'
 import { H1, Note, Unavail } from './ui'
 
 const BOLT = 'M13 2L4 14h7l-1 8 9-12h-7z'
-const PRINTER = 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z'
 
 export function PowerPanel() {
   const { state } = useSystem(os.sysBattery, 30_000, 'battery')
@@ -35,31 +34,5 @@ export function PowerPanel() {
       </div>
     )}
     <Note>{t('settings.power.note')}</Note>
-  </>
-}
-
-const STATE_TONE: Record<Printer['state'], string> = { idle: C.green, printing: C.cyan, disabled: '#FFB98A', unknown: C.muted }
-
-export function PrintersPanel() {
-  const { state } = useSystem(os.sysPrinters, 30_000)
-  return <>
-    <H1>{t('settings.nav.Printers')}</H1>
-    {!state ? <Empty title={t('settings.printers.reading')} /> : !state.available ? <Unavail what={t('settings.nav.Printers')} reason={state.reason} /> : state.value.length === 0 ? (
-      <Empty title={t('settings.printers.none')}>{t('settings.printers.noneHint')}</Empty>
-    ) : (
-      <ul className={`${card} m-0 list-none overflow-hidden p-0`}>
-        {state.value.map((p) => (
-          <li key={p.name} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
-            <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(94,115,156,0.3)]"><Svg d={PRINTER} size={18} stroke="#C9D6EE" /></span>
-            <span className="flex flex-1 flex-col gap-0.5">
-              <span className="text-sm font-medium">{p.name.replace(/_/g, ' ')}</span>
-              <span className="text-xs" style={{ color: STATE_TONE[p.state] }}>{t(`settings.printers.state.${p.state}` as MessageKey)}</span>
-            </span>
-            {p.is_default && <span className={chip}>{t('settings.printers.default')}</span>}
-          </li>
-        ))}
-      </ul>
-    )}
-    <Note>{t('settings.printers.note')}</Note>
   </>
 }
