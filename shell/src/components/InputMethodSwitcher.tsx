@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { knownReason, peripheralsApi, type ImStatus, type PeripheralsApi } from '../lib/peripheralsApi'
 import { IM_KEYS, imShortKey } from '../lib/inputMethods'
 import { useT, type MessageKey } from '../i18n'
+import { usePopupLift } from '../lib/popupLift'
 
 /** Ctrl+Space switches too: the indicator follows by polling (fcitx5-remote -n is cheap). */
 export const IM_POLL_MS = 4000
@@ -38,6 +39,8 @@ export function InputMethodSwitcher({ onOpenSettings, api: given, pollMs = IM_PO
     document.addEventListener('keydown', key)
     return () => { document.removeEventListener('mousedown', down); document.removeEventListener('keydown', key) }
   }, [open])
+  // Over the apps while open: the menu is drawn in the shell's window, which is below them otherwise (#62).
+  usePopupLift(open, () => setOpen(false))
 
   // Nothing to switch between: only the US keyboard is on (or there is no bridge).
   if (!api || !st || st.enabled.length < 2) return null

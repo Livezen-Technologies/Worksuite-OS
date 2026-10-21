@@ -50,6 +50,7 @@ import SnipOverlay from '../components/SnipOverlay'
 import ClipboardFlyout, { type FlyoutTab } from '../components/ClipboardFlyout'
 import ShortcutHelp from '../components/ShortcutHelp'
 import { MonitoringIndicator } from '../components/MonitoringNotice'
+import { closePopups, useAnyPopupOpen } from '../lib/popupLift'
 import { captureApi, SHELL_OPEN_EVENT, SNIP_EDIT_EVENT, snipState, type Captured, type ShellOpen, type SnipOpen } from '../lib/captureApi'
 
 /** How long a pop-up toast stays (services/session/toasts TIMEOUT_MS is the same). */
@@ -351,7 +352,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
   const openWin = (screen: Parameters<typeof onOpen>[0]) => { setBehind(false); setLiftSeq((n) => n + 1); onOpen(screen) }
   useEffect(() => panel.onShellBehind?.(() => {
     setLauncher(false); setA11yOpen(false); setAssistant(false); setQsOpen(false); setPowerOpen(false); setTrayOpen(false)
-    setFlyout(false); setWidgetPicker(false); setSearch(null); setWallMenu(null); setBehind(true)
+    setFlyout(false); setWidgetPicker(false); setSearch(null); setWallMenu(null); setBehind(true); closePopups()
   }), [])
   const closeTray = useCallback(() => setTrayOpen(false), [])
   // A shell window showing (minimized ones stay mounted, on the taskbar only, and let the shell go below the apps).
@@ -361,8 +362,10 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     setBehind(false); setLiftSeq((n) => n + 1); onShellWindow?.(app, how)
   }
   useEffect(() => { if (!hasWindow) setBehind(false) }, [hasWindow])
+  const popupOpen = useAnyPopupOpen()
   const shellOnTop = launcher || a11yOpen || assistant || allView || qsOpen || powerOpen || confirmShutdown || !!ending || trayOpen
     || flyout || widgetPicker || authOpen || rsOpen || !!search || (hasWindow && !behind) || !!snip || !!clipPanel || !!help
+    || popupOpen   // the taskbar controls' own popups (language switcher, VPN, move-to-desktop menu: lib/popupLift.ts, #62)
   // Once the shell is over the apps it has the keyboard (the bridge activates it): give it to the launcher's search
   // again, which was focused while an app still had the keyboard (Start opened with the mouse).
   const focusSearch = useRef(() => undefined as void)

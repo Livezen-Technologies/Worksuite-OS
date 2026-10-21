@@ -5,6 +5,7 @@ import { clickAction, panel, taskbarEntries, taskbarUnread, updateBadge, type Pa
 import { os, type OsUpdateStatus, type VpnState } from '../lib/os'
 import { activeVpn, vpnErrorText } from '../lib/vpn'
 import { useT } from '../i18n'
+import { usePopupLift } from '../lib/popupLift'
 
 // Panel contents fed by the Wayland bridge (SRS §5.1): running windows, tray and update badge.
 
@@ -63,6 +64,7 @@ export function RunningApps({ pinned, info, onLaunch, only, scope = 'current' }:
   const all = usePanelWindows()
   const ws = useWorkspaces()
   const [menu, setMenu] = useState<{ handle: string; x: number } | null>(null)
+  usePopupLift(!!menu, () => setMenu(null))   // over the apps while open (#62)
   const windows = useMemo(() => taskbarWindows(only ? only(all) : all, ws, scope), [only, all, ws, scope])
   const entries = useMemo(() => taskbarEntries(pinned, windows), [pinned, windows])
   const click = (id: string) => {
@@ -177,6 +179,7 @@ export function VpnBadge({ onOpen }: { onOpen: () => void }) {
     return () => { live = false; clearInterval(id) }
   }, [])
   const [open, setOpen] = useState(false)
+  usePopupLift(open, () => setOpen(false))   // over the apps while open (#62)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const vpn = activeVpn(state)
