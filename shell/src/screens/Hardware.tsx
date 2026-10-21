@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { formatBytes, os, type Avail, type DriverOffer, type DriverReport, type HwDevice, type PackageJobEvent, type Printer } from '../lib/os'
 import { friendlyError, type FriendlyError } from '../lib/errors'
 import { ErrorDetails } from '../components/ErrorDetails'
-import { KIND_ICON, STATUS_COLOR, deviceStatus, driverJobPhase, type DriverStep, deviceSub, driverGroups, driverNotice, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerText, offerTitle, offerVersion, statusLabel } from '../lib/hardware'
+import { KIND_ICON, STATUS_COLOR, deviceStatus, driverFailureText, driverJobPhase, type DriverStep, deviceSub, driverGroups, driverNotice, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerText, offerTitle, offerVersion, statusLabel } from '../lib/hardware'
 import { C, Dialog, OptionCard, Progress, Spinner, Svg, Tag, btnGhost, btnPrimary, card, dialogFooter, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { ICON } from './Updates'
 import { formatDate, formatNumber, t } from '../i18n'
@@ -108,6 +108,8 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
   useEffect(() => { void load() }, [])
   useEffect(() => os.onDriversChanged((r) => setReport({ state: 'ok', value: r })), [])
   const r = report.state === 'ok' ? report.value : null
+  /** The last install of this offer failed (#59): the reason stays next to it until it installs. */
+  const fail = (id: string) => r?.failed?.find((f) => f.id === id) ?? null
   const busy = checking || r?.state === 'checking'
   const list = r?.offers ?? []
   const devList = devs.state === 'ok' ? devs.value : []
@@ -180,6 +182,12 @@ export function DriversPanel({ onOpenUpdates }: { onOpenUpdates: () => void }) {
                   </span>
                   {o.from_version && <span className="font-mono text-xs text-[#C9D6EE]">{offerVersion(o)}</span>}
                 </label>
+                {fail(o.id) && (
+                  <div className="flex flex-col gap-1.5 px-4 pb-3 pl-[50px] text-[12px] text-[#FFB0A6]" data-testid={`drv-lastfail-${o.id}`}>
+                    <span>{t('drv.lastFailed', { reason: driverFailureText(fail(o.id)!.error) })}</span>
+                    <ErrorDetails details={fail(o.id)!.error} />
+                  </div>
+                )}
               </li>
             )
           })}
@@ -273,25 +281,38 @@ export function MokSteps() {
 /** H5: driver install progress from the package service job events (phase "<offer id>|<step>"). Events can arrive
  *  before the install call returns the job's path (a job that fails at once, #45), so they wait until it is known.
  *  A failure says what went wrong, keeps the technical text for administrators and offers Try again for what didn't
- *  finish; a success shows the version now installed. */
+ *  finish; a success shows the version now installed. Each driver installs on its own (#59): one that fails shows its
+ *  own reason and details (the report's `failed`), and the others still finish. */
 export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, secureBoot = false }: { offers: DriverOffer[]; onClose: () => void; names?: (o: DriverOffer) => string; secureBoot?: boolean }) {
   const [pct, setPct] = useState<Record<string, number>>({})
   const [step, setStep] = useState<Record<string, DriverStep>>({})
   const [error, setError] = useState<FriendlyError | null>(null)
   const [attempt, setAttempt] = useState<DriverOffer[]>(offers)
   const [versions, setVersions] = useState<Record<string, string | null>>({})
+  const [failed, setFailed] = useState<Record<string, string>>({})
   useEffect(() => {
     let job: string | null = null
     const early: PackageJobEvent[] = []
     const handle = (e: PackageJobEvent) => {
       if (e.kind === 'progress' && e.phase) {
         const ph = driverJobPhase(e.phase)
-        setPct((p) => ({ ...p, [ph.offer]: Math.max(ph.step === 'done' ? 100 : 0, e.percent ?? 0) }))
+        // A failed offer keeps the progress it reached (it isn't done), so Try again picks it up.
+        if (ph.step === 'failed') setFailed((f) => ({ ...f, [ph.offer]: f[ph.offer] ?? '' }))
+        else setPct((p) => ({ ...p, [ph.offer]: Math.max(ph.step === 'done' ? 100 : 0, e.percent ?? 0) }))
         setStep((s) => ({ ...s, [ph.offer]: ph.step }))
       }
       if (e.kind === 'finished' && e.result !== 'success') {
-        const f = friendlyError(e.error ?? 'failed', 'package')
-        setError({ ...f, text: f.text || t('hw.installUnfinished') })
+        const raw = e.error ?? 'failed'
+        const f = friendlyError(raw, 'package')
+        setError({ ...f, text: f.kind === 'cancelled' ? t('hw.installUnfinished') : `${t('hw.installUnfinished')} ${driverFailureText(raw)}` })
+        // Per driver: the step and apt's error from the report.
+        void os.hwDriverReport(false).then((r) => {
+          if (!r.ok) return
+          const mine = (r.value.failed ?? []).filter((x) => attempt.some((o) => o.id === x.id))
+          if (mine.length) setFailed((cur) => ({ ...cur, ...Object.fromEntries(mine.map((x) => [x.id, x.error])) }))
+          setVersions(Object.fromEntries((r.value.installed ?? []).map((x) => [x.id, x.version])))
+          if (mine.length && mine.length < attempt.length) setError({ ...f, text: t('drv.someFailed', { failed: String(mine.length), total: String(attempt.length) }), details: null })
+        }, () => {})
       }
       if (e.kind === 'finished' && e.result === 'success') {
         setPct((p) => ({ ...p, ...Object.fromEntries(attempt.map((o) => [o.id, 100])) }))
@@ -305,7 +326,10 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
     }, (e) => setError(friendlyError(e, 'package')))
     return off
   }, [attempt]) // eslint-disable-line react-hooks/exhaustive-deps
-  const retry = () => { const rest = offers.filter((o) => (pct[o.id] ?? 0) < 100); setError(null); setAttempt(rest.length ? rest : offers) }
+  const retry = () => {
+    const rest = offers.filter((o) => (pct[o.id] ?? 0) < 100)
+    setError(null); setFailed((f) => Object.fromEntries(Object.entries(f).filter(([id]) => !rest.some((o) => o.id === id)))); setAttempt(rest.length ? rest : offers)
+  }
   const done = offers.every((o) => (pct[o.id] ?? 0) >= 100)
   const restart = offers.filter((o) => o.restart)
   const active = offers.find((o) => (pct[o.id] ?? 0) < 100 && pct[o.id] != null)
@@ -323,18 +347,26 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
         <ul className="m-0 flex list-none flex-col gap-1.5 px-4 pt-2 pb-4" aria-live="polite">
           {offers.map((o) => {
             const p = pct[o.id]
-            const st = p == null ? (error ? 'stopped' : 'wait') : p >= 100 ? 'done' : error ? 'stopped' : 'active'
+            const st = o.id in failed ? 'failed' : p == null ? (error ? 'stopped' : 'wait') : p >= 100 ? 'done' : error ? 'stopped' : 'active'
             const v = versions[o.id]
+            const why = failed[o.id]
             return (
               <li key={o.id} className="flex flex-col gap-2 rounded-xl px-3.5 py-3" style={{ background: st === 'active' ? 'rgba(24,212,240,0.08)' : 'transparent' }}>
                 <div className="flex items-center gap-3">
                   {st === 'done' && <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#5FD39A" /><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#0F2350" strokeWidth="2.4" strokeLinecap="round" /></svg>}
                   {st === 'active' && <Spinner size={20} />}
+                  {st === 'failed' && <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#FF8A7A" /><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" fill="none" stroke="#0F2350" strokeWidth="2.4" strokeLinecap="round" /></svg>}
                   {(st === 'wait' || st === 'stopped') && <span className="h-5 w-5 rounded-full border-2 border-[rgba(127,178,255,0.3)]" />}
                   <span className="flex-1 text-sm font-medium">{names(o)}</span>
-                  <span className="text-xs text-[#8FA3C8]">{st === 'done' ? (v ? t('drv.installedVersion', { version: v }) : t('common.installed')) : st === 'active' ? <CountUp value={p} render={(n) => stepText(o, n)} /> : st === 'stopped' ? t('drv.notInstalled') : `${t('hw.waiting')}${o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}`}</span>
+                  <span className="text-xs text-[#8FA3C8]">{st === 'done' ? (v ? t('drv.installedVersion', { version: v }) : t('common.installed')) : st === 'active' ? <CountUp value={p} render={(n) => stepText(o, n)} /> : st === 'stopped' || st === 'failed' ? t('drv.notInstalled') : `${t('hw.waiting')}${o.size_bytes ? ` · ${formatBytes(o.size_bytes)}` : ''}`}</span>
                 </div>
                 {st === 'active' && <div className="ml-8"><Progress value={p} label={t('hw.progressOf', { name: names(o) })} height={4} /></div>}
+                {st === 'failed' && why && (
+                  <div className="ml-8 flex flex-col gap-1.5 text-[12px] text-[#FFB0A6]" data-testid={`drv-failed-${o.id}`}>
+                    <span>{driverFailureText(why)}</span>
+                    <ErrorDetails details={why} />
+                  </div>
+                )}
               </li>
             )
           })}

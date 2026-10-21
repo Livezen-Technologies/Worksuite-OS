@@ -310,6 +310,8 @@ export interface DriverReport {
   installed?: { id: string; name: string; version: string | null; restart: boolean; at: number }[]
   /** Something installed needs a restart (cleared by the service after the next boot). */
   restart_required?: boolean
+  /** Offers whose last install failed: the step and the service's error (apt's E: line), per offer (#59). */
+  failed?: { id: string; name: string; step: 'downloading' | 'installing'; error: string; at: number }[]
 }
 
 export interface PackagePreview {

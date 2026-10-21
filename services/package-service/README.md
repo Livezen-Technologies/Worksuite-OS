@@ -137,6 +137,10 @@ image doesn't carry is found online:
 - **Install**: `InstallDrivers(offer ids)` (polkit `lk.worksuite.drivers.install`, the shell's own agent asks the
   administrator) runs in the job queue with source checks: `apt-get install` (firmware, DKMS + headers, NVIDIA) or
   `fwupdmgr update`. Firmware for a loaded driver reloads it (`modprobe -r` / `modprobe`), else a restart is asked for.
+  Each offer installs on its own: one that fails doesn't stop the rest, and the report's `failed` keeps its step and
+  error (apt's `E:` line; the `apt-get update` error when stale lists are the cause) until it installs. Before the
+  source check, live-build's unsigned `sources.list` lines (`deb` and `deb-src`) that a signed deb822 file covers are
+  commented out (#45, #59).
 - **Secure Boot**: DKMS modules are signed with DKMS's MOK; the service runs `mokutil --import /var/lib/dkms/mok.pub`
   with a one-time 8-digit password (`--hash-file`). The password is kept in the root-only state file, never in the report
   (`GetDrivers`/`DriversChanged` only say `mok.pending`); Settings › Drivers shows the MokManager steps and fetches the

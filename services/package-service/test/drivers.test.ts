@@ -324,3 +324,102 @@ test('sources: live-build\'s unsigned sources.list duplicates are disabled, anyt
   assert.equal(tidyLegacySources(other, [deb822]), null);
   assert.equal(tidyLegacySources('deb https://deb.debian.org/debian trixie main\n', []), null, 'no signed copy: kept');
 });
+
+// #59: what live-build 20250505 (trixie) really writes to the image's /etc/apt/sources.list (functions/sourcelist.sh,
+// binary pass with --parent-mirror-binary): a deb-src line after every deb line. Those stayed unsigned after #45's tidy
+// and failed every driver install with "/etc/apt/sources.list: missing Signed-By".
+const LB_SOURCES_LIST = ['https://deb.debian.org/debian/ trixie', 'https://security.debian.org/debian-security/ trixie-security', 'https://deb.debian.org/debian/ trixie-updates']
+  .flatMap((a) => [`deb ${a} main contrib non-free non-free-firmware`, `deb-src ${a} main contrib non-free non-free-firmware`]).join('\n') + '\n';
+
+test('sources: live-build\'s deb-src lines are disabled too, so the sources check passes on an installed system (#59)', () => {
+  const deb822 = readFileSync(new URL('../../../live-build/config/includes.chroot/etc/apt/sources.list.d/debian.sources', import.meta.url), 'utf8');
+  assert.equal(checkSources(LB_SOURCES_LIST, '/etc/apt/sources.list').length, 6, 'every line fails before');
+  const out = tidyLegacySources(LB_SOURCES_LIST, [deb822])!;
+  assert.deepEqual(checkSources(out, '/etc/apt/sources.list'), []);
+  assert.equal(out.split('\n').filter((l) => /^deb/.test(l)).length, 0);
+  assert.equal(tidyLegacySources(out, [deb822]), null, 'idempotent');
+  // A deb-src line for an archive no signed file covers is left for the check to refuse.
+  assert.equal(tidyLegacySources('deb-src https://deb.debian.org/debian trixie-backports main\n', [deb822]), null);
+});
+
+test('service: driver jobs tidy sources.list before checking it (it can change after the service started)', async () => {
+  const { PackageService } = await import('../src/service.ts');
+  const deb822 = readFileSync(new URL('../../../live-build/config/includes.chroot/etc/apt/sources.list.d/debian.sources', import.meta.url), 'utf8');
+  let list = LB_SOURCES_LIST;
+  const svc = new PackageService({
+    runner: { run: async () => ({ code: 0, stdout: '', stderr: '' }) }, policy: () => null, power: () => ({ ac: true, battery: null }), freeBytes: () => 50e9, audit() {},
+    sources: () => [['/etc/apt/sources.list', list], ['/etc/apt/sources.list.d/debian.sources', deb822]],
+    tidySources: () => { list = tidyLegacySources(list, [deb822]) ?? list; },
+  });
+  let ran = false;
+  const id = svc.driverJob(1000, async () => { ran = true; });
+  const job = await new Promise<{ state: string; error?: string }>((res) => svc.on('finished', (j) => { if (j.id === id) res(j); }));
+  assert.equal(job.state, 'success', job.error); assert.equal(ran, true);
+});
+
+test('install: each offer installs on its own; a failed one is reported per offer with its step and error (#59)', async () => {
+  const phases: string[] = [];
+  let failure: Error | null = null;
+  const m = managerEnv({
+    policy: () => ({ drivers_auto_install: false }),
+    run: async (cmd, args) => {
+      m.calls.push([cmd, ...args].join(' '));
+      return { code: cmd === 'isenkram-lookup' || cmd === 'fwupdmgr' ? 2 : 0, stdout: '', stderr: '' };
+    },
+    runLines: async (cmd, args) => {
+      m.calls.push([cmd, ...args].join(' '));
+      if (args.includes('firmware-iwlwifi') && args.includes('--download-only')) return { code: 100, stdout: '', stderr: 'E: Package \'firmware-iwlwifi\' has no installation candidate\n' };
+      return { code: 0, stdout: '', stderr: '' };
+    },
+  });
+  m.env.enqueue = (_c, body) => { body((ph) => phases.push(ph)).catch((e) => { failure = e; }); return 1; };
+  const d = new DriverManager(m.env);
+  await d.check('manual');
+  d.install(1000, ['fw:firmware-iwlwifi', 'fw:firmware-realtek']);
+  await new Promise((res) => setTimeout(res, 10));
+  assert.ok(phases.includes('fw:firmware-iwlwifi|failed') && phases.includes('fw:firmware-realtek|done'), 'the second offer still installs');
+  assert.ok(m.calls.some((c) => c.endsWith('--no-download install -- firmware-realtek')));
+  assert.equal(failure!.message, 'apt-get: E: Package \'firmware-iwlwifi\' has no installation candidate');
+  const r = d.status();
+  assert.deepEqual(r.failed?.map((f) => [f.id, f.step, f.error]), [['fw:firmware-iwlwifi', 'downloading', 'apt-get: E: Package \'firmware-iwlwifi\' has no installation candidate']]);
+  assert.deepEqual(r.offers.map((o) => o.id).filter((x) => x.startsWith('fw:')), ['fw:firmware-iwlwifi'], 'the failed one stays offered');
+  assert.deepEqual(r.installed?.map((x) => x.id), ['fw:firmware-realtek']);
+  // Trying again and succeeding clears its error.
+  m.env.runLines = async () => ({ code: 0, stdout: '', stderr: '' });
+  failure = null;
+  d.install(1000, ['fw:firmware-iwlwifi']);
+  await new Promise((res) => setTimeout(res, 10));
+  assert.equal(failure, null); assert.equal(d.status().failed, undefined);
+});
+
+test('install: when the package lists could not be refreshed, that error is the one shown (#59)', async () => {
+  let failure: Error | null = null;
+  const m = managerEnv({
+    policy: () => ({ drivers_auto_install: false }),
+    run: async (cmd, args) => {
+      m.calls.push([cmd, ...args].join(' '));
+      if (cmd === 'apt-get' && args.includes('update')) return { code: 100, stdout: '', stderr: 'W: Some index files failed to download. They have been ignored, or old ones used instead.\nE: Failed to fetch https://deb.debian.org/debian/dists/trixie/InRelease  Temporary failure resolving \'deb.debian.org\'\n' };
+      if (cmd === 'apt-get') return { code: 100, stdout: '', stderr: 'E: Unable to locate package firmware-realtek\n' };
+      return { code: cmd === 'isenkram-lookup' || cmd === 'fwupdmgr' ? 2 : 0, stdout: '', stderr: '' };
+    },
+  });
+  m.env.enqueue = (_c, body) => { body(() => {}).catch((e) => { failure = e; }); return 1; };
+  const d = new DriverManager(m.env);
+  await d.check('manual');
+  d.install(1000, ['fw:firmware-realtek']);
+  await new Promise((res) => setTimeout(res, 10));
+  assert.match(failure!.message, /^apt-get update: E: Failed to fetch .* Temporary failure resolving 'deb\.debian\.org'$/);
+  assert.equal(d.status().failed?.[0].id, 'fw:firmware-realtek');
+});
+
+test('unit: network and DNS stay reachable for apt; no device allow-list that would break update-initramfs (#59)', () => {
+  const unit = readFileSync(new URL('../systemd/worksuite-package-service.service', import.meta.url), 'utf8');
+  const set = (k: string) => unit.split('\n').filter((l) => l.startsWith(`${k}=`)).map((l) => l.slice(k.length + 1));
+  assert.deepEqual(set('PrivateNetwork'), []); assert.deepEqual(set('IPAddressDeny'), []);
+  const fams = set('RestrictAddressFamilies').join(' ').split(/\s+/);
+  for (const f of ['AF_UNIX', 'AF_INET', 'AF_INET6', 'AF_NETLINK']) assert.ok(fams.includes(f), f);
+  // ProtectClock= implies DeviceAllow=char-rtc, i.e. a closed device list: /dev/mapper/control and disks become unreachable.
+  assert.deepEqual(set('ProtectClock'), []); assert.deepEqual(set('DeviceAllow'), []); assert.deepEqual(set('PrivateDevices'), []);
+  assert.match(set('CapabilityBoundingSet').join(' '), /^~CAP_SYS_TIME CAP_WAKE_ALARM$/);
+  assert.ok(!/^ProtectSystem=strict/m.test(unit) && /^ReadWritePaths=.*\/etc\b/m.test(unit), 'dpkg can write /etc and /usr');
+});

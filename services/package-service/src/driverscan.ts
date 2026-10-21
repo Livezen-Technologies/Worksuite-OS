@@ -127,6 +127,9 @@ export class DriverManager extends EventEmitter {
 
     const report: DriverReport = { state, checked_at: e.now(), online_search: pol.online_search, metered, secure_boot: secureBoot, devices: deviceStatuses(devs, fails, offers), offers, auto_installed: [],
       ...(this.report.installed ? { installed: this.report.installed } : {}), ...(this.report.restart_required ? { restart_required: true } : {}) };
+    // Errors of offers that are still offered stay visible until they install or are tried again.
+    const stillFailed = (this.report.failed ?? []).filter((f) => offers.some((o) => o.id === f.id));
+    if (stillFailed.length) report.failed = stillFailed;
     const auto = offers.filter((o) => autoInstallable(o, pol, { metered, secureBoot }));
     e.audit('drivers_checked', { reason, devices: devs.length, missing_firmware: fails.map((f) => f.file), offers: offers.map((o) => o.id), auto: auto.map((o) => o.id), metered });
     const st = e.load();
@@ -155,41 +158,63 @@ export class DriverManager extends EventEmitter {
 
   /** Install offers (polkit lk.worksuite.drivers.install for people; root for automatic installs). Progress phases are
    *  "<offer id>|<step>": refreshing (apt-get update: a fresh install has no package lists, and the offer may be newer
-   *  than them), downloading (APT checks each file against the signed Release file), installing. An error names the
-   *  step and carries apt's own "E:" line, not the first warning. What finished stays installed when a later offer
-   *  fails; the rest stays offered, so trying again picks up where it stopped. */
+   *  than them), downloading (APT checks each file against the signed Release file), installing, then done or failed.
+   *  Each offer installs on its own (#59): one that fails (a package the archive no longer has, a dpkg error) doesn't stop
+   *  the others. Its error names the step and carries apt's own "E:" line, not the first warning; when the package
+   *  lists couldn't be refreshed and apt then can't find the package, the refresh's error is the real cause and is the
+   *  one shown. Failures go into the report (`failed`) per offer and fail the job; what finished stays installed, the rest
+   *  stays offered, so trying again picks up where it stopped. */
   install(caller: number, ids: string[], automatic = false): number {
     const chosen = ids.map((id) => this.report.offers.find((o) => o.id === id)).filter((o): o is DriverOffer => !!o);
     if (!chosen.length) throw Object.assign(new Error('nothing to install'), { code: 'InvalidArgs' });
     return this.env.enqueue(caller, async (progress) => {
       const done: InstalledOffer[] = [];
+      const failed: FailedOffer[] = [];
       try {
+        let refreshError: string | null = null;
         const debs = chosen.filter((o) => o.kind !== 'fwupd');
         if (debs.length) {
           progress(`${debs[0].id}|refreshing`, 2);
           const u = await this.env.run('apt-get', ['-q', 'update']);
-          if (u.code !== 0) this.env.audit('drivers_apt_update_failed', { error: aptError(u.stderr) });
+          if (u.code !== 0) { refreshError = aptError(u.stderr || u.stdout) || `exit ${u.code}`; this.env.audit('drivers_apt_update_failed', { error: refreshError }); }
         }
         for (const o of chosen) {
-          if (o.kind === 'fwupd') {
-            // fwupd downloads the cabinet, checks its signature and checksum against the LVFS metadata, then flashes.
-            progress(`${o.id}|installing`, 10);
-            await this.must('fwupdmgr', ['update', o.fwupd_device!, '--assume-yes', '--no-reboot-check']);
-          } else {
-            for (const p of o.packages) if (!/^[a-z0-9][a-z0-9+.-]{1,99}$/.test(p)) throw new Error('bad package name');
-            const base = ['-y', '-q', '-o', 'APT::Status-Fd=1', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold'];
-            progress(`${o.id}|downloading`, 5);
-            await this.apt([...base, '--download-only', 'install', '--', ...o.packages], (st) => { if (st.stage === 'download') progress(`${o.id}|downloading`, 5 + Math.round(st.pct * 0.55)); });
-            progress(`${o.id}|installing`, 60);
-            await this.apt([...base, '--no-download', 'install', '--', ...o.packages], (st) => { if (st.stage === 'install') progress(`${o.id}|installing`, 60 + Math.round(st.pct * 0.35)); });
-            // Firmware for a loaded driver: reload it so the device starts now; if it can't be unloaded, a restart finishes it.
-            if (o.kind === 'firmware' && o.reload && /^[\w-]{1,64}$/.test(o.reload)) {
-              const r = await this.env.run('modprobe', ['-r', o.reload]);
-              const ok = r.code === 0 && (await this.env.run('modprobe', [o.reload])).code === 0;
-              if (!ok) o.restart = true;
+          let step: FailedOffer['step'] = 'downloading';
+          try {
+            if (o.kind === 'fwupd') {
+              // fwupd downloads the cabinet, checks its signature and checksum against the LVFS metadata, then flashes.
+              step = 'installing';
+              progress(`${o.id}|installing`, 10);
+              await this.must('fwupdmgr', ['update', o.fwupd_device!, '--assume-yes', '--no-reboot-check']);
+            } else {
+              for (const p of o.packages) if (!/^[a-z0-9][a-z0-9+.-]{1,99}$/.test(p)) throw new Error('bad package name');
+              const base = ['-y', '-q', '-o', 'APT::Status-Fd=1', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold'];
+              progress(`${o.id}|downloading`, 5);
+              try {
+                await this.apt([...base, '--download-only', 'install', '--', ...o.packages], (st) => { if (st.stage === 'download') progress(`${o.id}|downloading`, 5 + Math.round(st.pct * 0.55)); });
+              } catch (e) {
+                // Stale or missing package lists: apt can't find the package because the refresh failed (DNS, proxy, a bad source).
+                if (refreshError && /Unable to locate package|has no installation candidate|Failed to fetch|Temporary failure resolving|Could not resolve/.test(String(e))) throw new Error(`apt-get update: ${refreshError}`);
+                throw e;
+              }
+              step = 'installing';
+              progress(`${o.id}|installing`, 60);
+              await this.apt([...base, '--no-download', 'install', '--', ...o.packages], (st) => { if (st.stage === 'install') progress(`${o.id}|installing`, 60 + Math.round(st.pct * 0.35)); });
+              // Firmware for a loaded driver: reload it so the device starts now; if it can't be unloaded, a restart finishes it.
+              if (o.kind === 'firmware' && o.reload && /^[\w-]{1,64}$/.test(o.reload)) {
+                const r = await this.env.run('modprobe', ['-r', o.reload]);
+                const ok = r.code === 0 && (await this.env.run('modprobe', [o.reload])).code === 0;
+                if (!ok) o.restart = true;
+              }
+              if (o.kind === 'gpu') { const s = this.env.load(); this.env.save({ ...s, gpu: { pending_boot: true } }); }
+              if ((o.kind === 'gpu' || o.kind === 'dkms') && this.env.secureBoot()) await this.enrollMok();
             }
-            if (o.kind === 'gpu') { const s = this.env.load(); this.env.save({ ...s, gpu: { pending_boot: true } }); }
-            if ((o.kind === 'gpu' || o.kind === 'dkms') && this.env.secureBoot()) await this.enrollMok();
+          } catch (e) {
+            const error = e instanceof Error ? e.message : String(e);
+            failed.push({ id: o.id, name: o.name, step, error, at: this.env.now() });
+            progress(`${o.id}|failed`, 100);
+            this.env.audit('driver_install_failed', { caller, offer: o.id, packages: o.packages, step, error, automatic });
+            continue;
           }
           progress(`${o.id}|done`, 100);
           const version = o.kind === 'fwupd' ? o.to_version : (this.env.version?.(o.packages[0]) ?? o.to_version);
@@ -197,16 +222,21 @@ export class DriverManager extends EventEmitter {
           this.env.audit('driver_installed', { caller, offer: o.id, packages: o.packages, version, automatic });
         }
       } finally {
-        if (done.length) this.afterInstall(done);
+        this.afterInstall(done, failed, chosen.map((o) => o.id));
       }
+      if (failed.length) throw new Error(failed.length === 1 ? failed[0].error : `${failed.length} of ${chosen.length} not installed. ${failed.map((f) => `${f.name}: ${f.error}`).join('; ')}`);
     }, { kind: chosen.every((o) => o.kind === 'fwupd' || o.kind === 'firmware') ? 'firmware' : 'driver', title: chosen.map((o) => o.name).join(', ').slice(0, 200),
       version: chosen.length === 1 ? chosen[0].to_version ?? null : null });
   }
 
   /** Installed offers leave the list; device statuses are worked out again (firmware now present, driver bound) and the
    *  installed versions and the restart notice go into the report. */
-  private afterInstall(done: InstalledOffer[]) {
+  private afterInstall(done: InstalledOffer[], failed: FailedOffer[] = [], attempted: string[] = []) {
     const ids = new Set(done.map((d) => d.id));
+    // The last error per offer: this attempt's failures replace older ones; an offer that installed (or was tried and
+    // didn't fail) drops its old error.
+    const tried = new Set(attempted);
+    const failedNow = [...failed, ...(this.report.failed ?? []).filter((f) => !tried.has(f.id) && !ids.has(f.id))].slice(0, 50);
     const offers = this.report.offers.filter((o) => !ids.has(o.id));
     let devices = this.report.devices.map((d) => ({ ...d, offers: d.offers.filter((id) => !ids.has(id)) }));
     try {
@@ -216,7 +246,8 @@ export class DriverManager extends EventEmitter {
     } catch { /* keep the old statuses, minus the installed offers */ }
     const installed = [...done, ...(this.report.installed ?? []).filter((x) => !ids.has(x.id))].slice(0, 20);
     const restart = this.report.restart_required === true || done.some((d) => d.restart);
-    const report = { ...this.report, offers, devices, installed, restart_required: restart };
+    const report: DriverReport = { ...this.report, offers, devices, installed, restart_required: restart, failed: failedNow };
+    if (!failedNow.length) delete report.failed;
     const st = this.env.load();
     this.env.save({ ...st, report, ...(restart ? { restart_boot: this.env.bootId() } : {}) });
     this.publish(report);
@@ -271,6 +302,8 @@ export class DriverManager extends EventEmitter {
   private publish(r: DriverReport) { this.report = r; this.emit('changed', r); }
 }
 
+/** An offer that didn't install: the step it stopped at and the error (apt's E: line, dpkg's, fwupd's). */
+export interface FailedOffer { id: string; name: string; step: 'downloading' | 'installing'; error: string; at: number }
 export interface InstalledOffer { id: string; name: string; version: string | null; restart: boolean; at: number }
 
 export interface AptStatus { stage: 'download' | 'install'; pct: number }

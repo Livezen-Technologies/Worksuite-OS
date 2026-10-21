@@ -32,7 +32,7 @@ const CODES: Record<string, ErrorKind> = {
 const PATTERNS: [RegExp, ErrorKind][] = [
   [/\b(ENOSPC|EDQUOT)\b|no space left|disk (is )?full|quota exceeded|not enough (free )?space/i, 'no_space'],
   [/\b(EACCES|EPERM)\b|permission denied|not authori[sz]ed|operation not permitted|authentication (is )?required|polkit|access denied/i, 'not_authorized'],
-  [/\b(ENOTFOUND|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|ECONNREFUSED|ECONNRESET)\b|could not resolve|temporary failure (in )?(name )?resolution|network is unreachable|no route to host|connection refused|failed to fetch|offline/i, 'offline'],
+  [/\b(ENOTFOUND|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|ECONNREFUSED|ECONNRESET)\b|could not resolve|temporary failure (in )?(name )?resolution|temporary failure resolving|network is unreachable|no route to host|connection refused|failed to fetch|offline/i, 'offline'],
   [/\b(ETIMEDOUT|ESOCKETTIMEDOUT)\b|timed? ?out/i, 'timeout'],
   [/hash sum mismatch|checksum|signature|NO_PUBKEY|GPG error|not signed|untrusted/i, 'integrity'],
   [/could not get lock|lock-frontend|dpkg was interrupted|\b(EBUSY)\b|device or resource busy|target is busy|already in use|is locked/i, 'busy'],
