@@ -25,12 +25,41 @@ METHODS = {
 }
 ACTIONS = {m: ACTION for m in METHODS}
 
+# Served for org.freedesktop.DBus.Introspectable.Introspect (same as dbus/lk.worksuite.SignIn1.xml). #56/#57: this
+# service answers with a raw message handler, so dbus-next had nothing exported to introspect and replied with an
+# empty node; the shell's proxy then found no lk.worksuite.SignIn1 interface and every PIN or key change failed
+# before polkit was even asked.
+INTROSPECTION = """<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect"><arg name="xml" type="s" direction="out"/></method>
+  </interface>
+  <interface name="lk.worksuite.SignIn1">
+    <method name="SetPin"><arg name="pin" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+    <method name="RemovePin"><arg name="result" type="s" direction="out"/></method>
+    <method name="AddKey"><arg name="name" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+    <method name="RemoveKey"><arg name="id" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+  </interface>
+</node>
+"""
+
+
+def introspect(path):
+    """Introspection XML for PATH and each of its parents (so tools can walk down to it), else None."""
+    if path == PATH:
+        return INTROSPECTION
+    if PATH.startswith(path.rstrip("/") + "/"):
+        child = PATH[len(path.rstrip("/")) + 1:].split("/")[0]
+        return f'<node>\n  <node name="{child}"/>\n</node>\n'
+    return None
+
 
 class NotAuthorized(Exception):
     pass
 
 
-async def dispatch(member, args, uid, authorized, run=subprocess.run, state=None, getpwuid=None):
+async def dispatch(member, args, uid, authorized, run=subprocess.run, state=None, getpwuid=None, devices=None):
     """One call → the cli.manage result dict. authorized: awaitable polkit check for this caller."""
     if member not in METHODS:
         return {"ok": False, "error": "bad_request"}
@@ -50,6 +79,8 @@ async def dispatch(member, args, uid, authorized, run=subprocess.run, state=None
     kw = {"run": run, "state": state}
     if getpwuid is not None:
         kw["getpwuid"] = getpwuid
+    if devices is not None:
+        kw["devices"] = devices
     try:
         return cli.manage(argv, {"PKEXEC_UID": str(uid)}, stdin, 0, **kw)
     except core.SigninError as e:
@@ -75,6 +106,9 @@ def serve_bus(idle_seconds=60):  # pragma: no cover - needs a system bus; dispat
             return r.body
 
         def handler(msg):
+            if msg.interface == "org.freedesktop.DBus.Introspectable" and msg.member == "Introspect":
+                xml = introspect(msg.path or "")
+                return Message.new_method_return(msg, "s", [xml]) if xml else None
             if msg.path != PATH or msg.interface != NAME or msg.member not in METHODS:
                 return None
 

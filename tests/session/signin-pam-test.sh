@@ -54,6 +54,11 @@ for f in bin/worksuite-signin signin/worksuite_signin pam/worksuite-signin-pin p
          systemd/system/worksuite-signin.socket "systemd/system/worksuite-signin@.service" polkit/lk.worksuite.signin.policy; do
   check "packaged: $f" 'grep -q "^services/session/$f " "$I"'
 done
+# #56: the image is built in a chroot (no /run/systemd/system); the socket must be enabled there too.
+check "postinst enables the PIN socket even without a running systemd" 'grep -q "^  systemctl enable worksuite-signin.socket" "$ROOT/packaging/debian/worksuite-session.postinst"'
+# #56/#57: lk.worksuite.SignIn1 is a Python dbus-next service, activated as root.
+check "worksuite-session depends on python3-dbus-next" 'sed -n "/^Package: worksuite-session$/,/^Description/p" "$ROOT/packaging/debian/control" | grep -q "python3-dbus-next"'
+check "SignIn1 is packaged with its bus policy and activation file" 'grep -q "lk.worksuite.SignIn1.conf usr/share/dbus-1/system.d/" "$I" && grep -q "lk.worksuite.SignIn1.service usr/share/dbus-1/system-services/" "$I"'
 check "prerm removes the profiles" 'grep -q "worksuite-signin-pin worksuite-signin-pin-final worksuite-signin-u2f" "$ROOT/packaging/debian/worksuite-session.prerm"'
 check "image ships pam_u2f and pamu2fcfg" 'grep -qx libpam-u2f "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && grep -qx pamu2fcfg "$ROOT/live-build/config/package-lists/worksuite.list.chroot"'
 

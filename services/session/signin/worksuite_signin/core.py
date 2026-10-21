@@ -64,7 +64,9 @@ def _conf(path):
 
 
 def policy(path=None, faillock=None):
-    """{allow_pin, pin_min_length, attempt_limit}. Written by worksuite-device-agent from the signed policy."""
+    """{allow_pin, pin_min_length, pin_max_length, attempt_limit}. Written by worksuite-device-agent from the signed
+    policy. A new PIN is exactly pin_min_length digits unless the policy also sets a longer pin_max_length (#56: the
+    entry field and the helper agree on one length, so a seventh digit is never silently accepted or dropped)."""
     c = _conf(path or POLICY_FILE)
     allow = c.get("allow_pin", "1") not in ("0", "false", "no")
     try:
@@ -72,7 +74,12 @@ def policy(path=None, faillock=None):
     except ValueError:
         mn = PIN_MIN_DEFAULT
     mn = max(PIN_MIN_FLOOR, min(PIN_MAX_LENGTH, mn))
-    return {"allow_pin": allow, "pin_min_length": mn, "attempt_limit": pin_attempt_limit(faillock)}
+    try:
+        mx = int(c.get("pin_max_length", mn))
+    except ValueError:
+        mx = mn
+    mx = max(mn, min(PIN_MAX_LENGTH, mx))
+    return {"allow_pin": allow, "pin_min_length": mn, "pin_max_length": mx, "attempt_limit": pin_attempt_limit(faillock)}
 
 
 def pin_attempt_limit(faillock=None):
@@ -104,7 +111,7 @@ def check_new_pin(pin, pol):
         raise SigninError("digits_only")
     if len(pin) < pol["pin_min_length"]:
         raise SigninError("too_short")
-    if len(pin) > PIN_MAX_LENGTH:
+    if len(pin) > pol.get("pin_max_length", PIN_MAX_LENGTH):
         raise SigninError("too_long")
     if weak(pin):
         raise SigninError("too_simple")
@@ -325,6 +332,46 @@ def any_key(state=None):
     return any(u.get("keys") for u in read_methods(state)["users"].values())
 
 
+# ---- security key detection ----
+
+FIDO_USAGE_PAGE = b"\x06\xd0\xf1"  # HID report descriptor: Usage Page (FIDO Alliance, 0xF1D0)
+
+
+def fido_devices(sys_root="/sys"):
+    """hidraw nodes whose report descriptor declares the FIDO usage page: the keys pamu2fcfg and pam_u2f can use."""
+    base = os.path.join(sys_root, "class", "hidraw")
+    out = []
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return out
+    for n in names:
+        try:
+            with open(os.path.join(base, n, "device", "report_descriptor"), "rb") as f:
+                desc = f.read(4096)
+        except OSError:
+            continue
+        if FIDO_USAGE_PAGE in desc:
+            out.append(n)
+    return out
+
+
+def pamu2fcfg_error(returncode, stderr):
+    """pamu2fcfg's failure → a code the UI explains. Its messages come from libfido2 (FIDO_ERR_*) or pam-u2f."""
+    e = (stderr or "").lower()
+    if "no device" in e or "unable to discover" in e or "no fido" in e:
+        return "key_not_found"
+    if "timeout" in e or "timed out" in e:
+        return "key_timeout"
+    if "pin" in e:
+        return "key_pin_required"
+    if "excluded" in e:
+        return "key_exists"
+    if "not allowed" in e or "operation denied" in e or "unsupported" in e:
+        return "key_unsupported"
+    return "key_failed"
+
+
 # ---- pam_u2f mappings: "user:KeyHandle,PublicKey,CoseType,Options:..." ----
 
 _CRED = re.compile(r"^[A-Za-z0-9+/=_*-]+,[A-Za-z0-9+/=_-]+,[a-zA-Z0-9]+,[+a-zA-Z]*$")
@@ -385,11 +432,13 @@ def add_key(user, cred, name, state=None, path=None, now=None):
 
 
 def remove_key(user, kid, state=None, path=None):
+    """Drops one of the user's keys. Unknown ids are refused (key_unknown) so a stale list can't hide a failure;
+    an index entry with no authfile line is still cleaned up."""
     maps = read_mappings(path)
     before = maps.get(user, [])
+    listed = any(k.get("id") == kid for k in (read_methods(state)["users"].get(user) or {}).get("keys", []))
     maps[user] = [c for c in before if key_id(c) != kid]
-    if len(maps[user]) == len(before):
-        # Not in the authfile; still drop a stale index entry.
-        pass
+    if len(maps[user]) == len(before) and not listed:
+        raise SigninError("key_unknown")
     write_mappings(maps, path)
     update_user(user, lambda u: u.__setitem__("keys", [k for k in u["keys"] if k.get("id") != kid]), state)
