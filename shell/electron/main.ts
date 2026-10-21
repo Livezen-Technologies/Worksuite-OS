@@ -753,6 +753,8 @@ app.whenReady().then(() => {
     else broadcast('ws:toastClicked', key)
   })
   handle('ws:toastsAvailable', () => toasts.available())
+  // Fn keys (worksuite-hotkey, #62): the level indicator over the apps, or in the shell's window without the helper.
+  hooks.osd = (o) => { if (!toasts.osd(o)) broadcast('ws:osd', o) }
   handle('ws:toastShow', (json) => {
     try {
       const t = JSON.parse(json) as ToastMsg

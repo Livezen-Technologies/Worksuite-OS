@@ -15,6 +15,7 @@ import { useDesktops } from '../components/useDesktops'
 import { desktopWallpaper, desktopsAllowed } from '../lib/desktops'
 import { QuickPanel, QuickTray, useQuickState } from '../components/QuickSettings'
 import { InputMethodSwitcher } from '../components/InputMethodSwitcher'
+import { LevelOsd } from '../components/LevelOsd'
 import { OskButton } from '../components/TouchItems'
 import { useTouchMode } from '../lib/touch'
 import { useDisplayState, wallpaperFor, windowsOnOutput } from '../lib/displays'
@@ -673,6 +674,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
           once, or on a timer, showed plain desktop through the overlay while it was still fading in. */}
       {confirmShutdown && <ShutdownConfirm onCancel={() => setConfirmShutdown(false)} onEnd={(a) => setEnding(a)} />}
       {ending && <SessionEnd action={ending} onCancel={() => setEnding(null)} onLogout={onLogout} nameOf={(id) => appLookup(id).name} onOpaque={() => setConfirmShutdown(false)} />}
+      <LevelOsd />
       <CrashDialog onReport={() => openSettingsAt('About')} />
       <SessionFadeIn />
       {a11yOpen && <A11yPanel className="right-4 bottom-[68px]" onClose={() => setA11yOpen(false)} />}

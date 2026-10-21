@@ -1,7 +1,7 @@
 """Toast stack and protocol (run: cd services/session/toasts && python3 -m unittest discover -s tests -t .)."""
 import unittest
 
-from worksuite_toasts.model import MAX_SHOWN, Stack, Toast, parse
+from worksuite_toasts.model import MAX_SHOWN, Osd, Stack, Toast, parse
 
 
 class ProtocolTest(unittest.TestCase):
@@ -41,3 +41,15 @@ class TimingTest(unittest.TestCase):
     def test_toasts_stay_six_seconds(self):
         from worksuite_toasts.model import TIMEOUT_MS
         self.assertEqual(TIMEOUT_MS, 6000)
+
+
+class OsdTest(unittest.TestCase):
+    """#62: the Fn-key level indicator's protocol line."""
+
+    def test_osd_lines(self):
+        self.assertEqual(parse('{"op":"osd","kind":"volume","value":45,"muted":false}'), ("osd", Osd("volume", 45, False)))
+        self.assertEqual(parse('{"op":"osd","kind":"mic","value":0,"muted":true}'), ("osd", Osd("mic", 0, True)))
+        self.assertEqual(parse('{"op":"osd","kind":"brightness","value":180}'), ("osd", Osd("brightness", 100, False)))
+        for bad in ('{"op":"osd","kind":"cpu","value":3}', '{"op":"osd","kind":"volume","value":"5"}', '{"op":"osd","kind":"volume","value":true}',
+                    '{"op":"osd","kind":"volume"}'):
+            self.assertIsNone(parse(bad), bad)

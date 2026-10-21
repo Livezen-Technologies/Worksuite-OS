@@ -1,11 +1,11 @@
 // Wires the panel client (electron/panel.ts) to IPC. Without a session bus or bridge the taskbar shows pinned apps only.
 import dbus from 'dbus-next'
-import { ACTIVATED_FLAG, MAX_DESKTOPS, PanelClient, type PanelWindow } from './panel'
+import { ACTIVATED_FLAG, MAX_DESKTOPS, PanelClient, type OsdLevel, type PanelWindow } from './panel'
 
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 
 /** Open/Capture from Shell1 (Windows-style key bindings), and the lift for others (the snipping overlay) once it exists. */
-export interface PanelHooks { open?(what: string): void; capture?(kind: string): void; lift?: (reason: string, on: boolean) => Promise<void>
+export interface PanelHooks { open?(what: string): void; capture?(kind: string): void; osd?(o: OsdLevel): void; lift?: (reason: string, on: boolean) => Promise<void>
   /** Every window-list change (activity monitoring follows the activated app). */
   windows?(w: PanelWindow[]): void }
 
@@ -23,6 +23,7 @@ export function startPanel(handle: Handle, send: (channel: string, payload: unkn
       workspaces: (w) => send('ws:panelWorkspacesChanged', w),
       open: (w) => hooks.open?.(w),
       capture: (k) => hooks.capture?.(k),
+      osd: (o) => hooks.osd?.(o),
     })
     void client.start().catch(() => undefined)
   } catch {

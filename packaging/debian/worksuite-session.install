@@ -23,6 +23,7 @@ services/session/foot/foot.ini etc/xdg/worksuite/foot/
 services/session/bin/worksuite-screencast-chooser usr/lib/worksuite/
 services/session/bin/worksuite-screencast-stop usr/lib/worksuite/
 services/session/bin/worksuite-workspace-event usr/lib/worksuite/
+services/session/bin/worksuite-hotkey usr/lib/worksuite/
 services/session/bin/worksuite-gestures usr/lib/worksuite/
 services/session/bin/worksuite-osk usr/lib/worksuite/
 services/session/osk/worksuite_osk usr/lib/worksuite/osk/

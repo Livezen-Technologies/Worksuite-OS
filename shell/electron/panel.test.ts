@@ -106,6 +106,18 @@ describe('panel client', () => {
     expect(f.method(new Message({ type: 1, serial: 10, sender: ':1.2', path: SHELL_PATH, interface: SHELL, member: 'OpenArchive', signature: 'u', body: [1] }))).toBe(false)
   })
 
+  it('#62: Osd from worksuite-hotkey shows the level, with its arguments checked', async () => {
+    const f = fakeBus({})
+    const osd = vi.fn()
+    await new PanelClient(f.bus, { windows: vi.fn(), tray: vi.fn(), launcher: vi.fn(), osd }).start()
+    const call = (body: unknown[], serial: number) => f.method(new Message({ type: 1, serial, sender: ':1.2', path: SHELL_PATH, interface: SHELL, member: 'Osd', signature: 'sub', body }))
+    expect(call(['volume', 45, false], 1)).toBe(true)
+    expect(call(['brightness', 250, false], 2)).toBe(true)
+    expect(call(['cpu', 3, false], 3)).toBe(true)
+    expect(osd.mock.calls).toEqual([[{ kind: 'volume', value: 45, muted: false }], [{ kind: 'brightness', value: 100, muted: false }]])
+    expect(f.sent.at(-1)?.errorName).toBe('org.freedesktop.DBus.Error.InvalidArgs')
+  })
+
   it('Open and Capture from the Windows-style key bindings, with their arguments checked', async () => {
     const f = fakeBus({})
     const open = vi.fn(), capture = vi.fn()

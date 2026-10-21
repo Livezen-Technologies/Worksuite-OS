@@ -425,4 +425,5 @@ contextBridge.exposeInMainWorld('worksuiteCapture', {
   onCaptured: on('ws:captured'),
   onShellOpen: on('ws:shellOpen'),
   onToastClicked: on('ws:toastClicked'),
+  onOsd: on('ws:osd'),
 })
