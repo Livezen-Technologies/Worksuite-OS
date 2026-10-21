@@ -18,6 +18,7 @@ services/session/pam/worksuite-keyring usr/share/pam-configs/
 services/session/pam/greetd etc/pam.d/
 services/session/pam/faillock.conf usr/share/worksuite/
 services/session/fcitx5/profile etc/xdg/fcitx5/
+services/session/fcitx5/config etc/xdg/fcitx5/
 services/session/foot/foot.ini etc/xdg/worksuite/foot/
 services/session/bin/worksuite-screencast-chooser usr/lib/worksuite/
 services/session/bin/worksuite-screencast-stop usr/lib/worksuite/

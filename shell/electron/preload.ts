@@ -371,6 +371,8 @@ contextBridge.exposeInMainWorld('worksuitePeripherals', {
   stopScreenCapture: () => ipcRenderer.invoke('ws:stopScreenCapture'),
   inputMethods: () => ipcRenderer.invoke('ws:inputMethods'),
   setInputMethods: (ids: string[]) => ipcRenderer.invoke('ws:setInputMethods', ...(Array.isArray(ids) ? ids.map(String) : [])),
+  imStatus: () => ipcRenderer.invoke('ws:imStatus'),
+  setCurrentIm: (id: string) => ipcRenderer.invoke('ws:setCurrentIm', String(id)),
   syncFailed: () => ipcRenderer.invoke('ws:syncFailed'),
   syncRetry: (mutationId: string) => ipcRenderer.invoke('ws:syncRetry', String(mutationId)),
 })

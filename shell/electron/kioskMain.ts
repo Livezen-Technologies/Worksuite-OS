@@ -28,6 +28,7 @@ let cfg: KioskConfig | null = null
 try { cfg = parseKioskConfig(readFileSync(process.env.WORKSUITE_KIOSK_CONFIG || KIOSK_CONFIG, 'utf8')) } catch { /* no kiosk config */ }
 
 app.commandLine.appendSwitch('enable-wayland-ime')
+app.commandLine.appendSwitch('wayland-text-input-version', '3')   // Labwc offers text-input-v3 only (#58)
 app.commandLine.appendSwitch('disable-pinch')                   // no zooming the kiosk out of its layout
 app.commandLine.appendSwitch('overscroll-history-navigation', '0')
 if (!app.requestSingleInstanceLock()) app.exit(0)

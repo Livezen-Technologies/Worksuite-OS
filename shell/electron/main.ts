@@ -154,6 +154,9 @@ function createWindow() {
 
 // WSOS-INT-011: Sinhala/Tamil typing in the shell and app windows through fcitx5 (Wayland text-input-v3).
 app.commandLine.appendSwitch('enable-wayland-ime')
+// #58: Chromium speaks text-input-v1 unless told otherwise, and Labwc only offers v3: without this the shell's own text
+// fields never reached fcitx5 (no Sinhala in search or Settings), and fcitx5 had no input context to switch.
+app.commandLine.appendSwitch('wayland-text-input-version', '3')
 // #16: GPU compositing, rasterization and VA-API video in the shell and every WorkSuite app window, or software
 // rendering when the session has no usable GPU or the GPU process kept crashing (graphics.ts).
 const accel = accelerationPlan(process.env, readCrashLog(), readRendererChoice())
