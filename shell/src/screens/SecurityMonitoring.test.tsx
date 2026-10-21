@@ -3,9 +3,9 @@
 // indicator with its first-run disclosure, from fixed data (no bridge).
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, describe, expect, it } from 'vitest'
-import type { ActivityStatus, SecurityStatus } from '../lib/os'
-import { SecuritySection } from './settings/Security'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { os, type ActivityStatus, type SecurityStatus } from '../lib/os'
+import { fmtElapsed, SecuritySection } from './settings/Security'
 import { MonitoringSection } from './settings/Monitoring'
 import { MonitoringIndicator } from '../components/MonitoringNotice'
 
@@ -65,6 +65,45 @@ describe('WorkSuite Security section', () => {
     expect(el.textContent).toContain('eicar.com')
     expect(el.textContent).toContain('install as soon as they are available')
     expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Quick scan', 'Full scan', 'Resume', 'End program', 'Restore', 'Delete'])
+  })
+  it('#64: no virus definitions yet → explains, offers Update definitions, scans disabled', async () => {
+    const nodefs: SecurityStatus = { ...sec, issues: ['no_signatures'], antivirus: { ...sec.antivirus, signatures: null, signatures_at: null, signatures_age_days: null, ready: false, last_scan: { kind: 'quick', trigger: 'user', started: 0, finished: Date.now(), files: 0, detections: 0, error: 'NO_SIGNATURES' } } }
+    const update = vi.spyOn(os, 'securityAction').mockResolvedValue({ ok: true, value: true })
+    const el = await render(<SecuritySection info={info} initial={nodefs} />)
+    expect(el.textContent).toContain('Virus definitions haven’t been downloaded yet')
+    expect(el.textContent).toContain('Last scan couldn’t run: no virus definitions')
+    const buttons = [...el.querySelectorAll('button')]
+    expect(buttons.map((b) => [b.textContent, b.disabled])).toEqual([['Update definitions', false], ['Quick scan', true], ['Full scan', true]])
+    await act(async () => { buttons[0].click() })
+    expect(update).toHaveBeenCalledWith('UpdateSecurityDefinitions')
+    expect(el.textContent).toContain('Checking for virus definitions')
+    update.mockRestore()
+  })
+  it('#64: a scan that cannot start says why instead of "Scan started"', async () => {
+    const start = vi.spyOn(os, 'securityScan').mockResolvedValue({ ok: false, error: 'no_signatures' })
+    const el = await render(<SecuritySection info={info} initial={sec} />)
+    await act(async () => { [...el.querySelectorAll('button')].find((b) => b.textContent === 'Quick scan')!.click() })
+    expect(start).toHaveBeenCalledWith('quick')
+    expect(el.textContent).toContain('Couldn’t start a scan: virus definitions haven’t been downloaded yet')
+    start.mockRestore()
+  })
+  it('#64: progress while scanning (files, found, elapsed, current path), Cancel, and recent scans', async () => {
+    const started = Date.now() - 65_000
+    const running: SecurityStatus = { ...sec, scanning: true, antivirus: { ...sec.antivirus, ready: true,
+      progress: { kind: 'full', started, files: 4321, detections: 1, errors: 0, current: '/home/u/Downloads/setup.bin', elapsed_ms: 65_000 },
+      scans: [{ id: 'a', kind: 'quick', trigger: 'user', started: 0, finished: Date.now() - 3_600_000, files: 812, detections: 0 }, { id: 'b', kind: 'full', trigger: 'user', started: 0, finished: Date.now() - 7_200_000, files: 100, detections: 0, error: 'CANCELLED' }] } }
+    const cancel = vi.spyOn(os, 'securityAction').mockResolvedValue({ ok: true, value: true })
+    const el = await render(<SecuritySection info={info} initial={running} />)
+    expect(el.textContent).toMatch(/Full scan · 4,321 files · 1 found · 1:0[5-9]/)
+    expect(el.textContent).toContain('Scanning /home/u/Downloads/setup.bin')
+    expect(el.textContent).toContain('Quick scan · 812 files · 0 found')
+    expect(el.textContent).toContain('Cancelled')
+    const buttons = [...el.querySelectorAll('button')]
+    expect(buttons.map((b) => b.textContent)).toEqual(['Cancel scan'])
+    await act(async () => { buttons[0].click() })
+    expect(cancel).toHaveBeenCalledWith('CancelSecurityScan')
+    cancel.mockRestore()
+    expect(fmtElapsed(3_729_000)).toBe('1:02:09')
   })
   it('says when status is unavailable', async () => {
     const el = await render(<SecuritySection info={null} initial={null} />)

@@ -158,7 +158,7 @@ function center(policy: Policy | null) {
   };
   const host: SecurityHost = {
     async applyFirewall(r) { h.firewall.push(r); }, writeFreshclamEnv() { return false; }, async facts() { return h.facts; }, async restartUnit() {},
-    async resolve() { return ['192.0.2.10']; }, async scan() { return { files: 0, detections: [] }; },
+    async resolve() { return ['192.0.2.10']; }, async scan() { return { code: 0 }; }, async cancelScan() {}, async mounts() { return ''; },
     async quarantine(p) { h.quarantined.push(p); return `0000000${h.quarantined.length}-0000-4000-8000-000000000000`; },
     async load() { return { idle: false, loadPerCore: 0, onBattery: false, hour: 1 }; }, async firewallAlerts() { return { alerts: [] }; },
     publish() {}, audit(e, f) { log.push({ e, f }); },

@@ -77,6 +77,11 @@ profile worksuite-shell flags=(attach_disconnected, complain) {
   # Settings › Display (#60): wlr-randr applies resolution/scale/position; wl-mirror fills mirrored outputs.
   /usr/bin/{wlr-randr,wl-mirror} ix,
   owner /{media,run/media}/*/** rwlk,
+  # Files › This Computer (#63): other mounted volumes (/mnt/*, other users' media folders are still owner-only);
+  # the filesystem's own permissions decide what can be read. udisksctl/lsblk above do mounting and listing.
+  /{mnt,media,run/media}/ r,
+  /mnt/** r,
+  owner /mnt/** rwlk,
 
   deny /etc/shadow r,
   deny /root/** rwx,

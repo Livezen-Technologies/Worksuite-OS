@@ -55,7 +55,7 @@ export interface WorkSuiteApi {
   securityScan(kind: 'quick' | 'full'): Promise<CloudResult<unknown>>
   /** #38 quarantine and suspended programs (polkit lk.worksuite.security.quarantine, an administrator):
    *  RestoreQuarantined(id) (re-scanned first) | DeleteQuarantined(id) | ResolveSuspendedProcess(eventId, resume|terminate). */
-  securityAction(method: 'RestoreQuarantined' | 'DeleteQuarantined' | 'ResolveSuspendedProcess', ...args: string[]): Promise<CloudResult<unknown>>
+  securityAction(method: SecurityMethod, ...args: string[]): Promise<CloudResult<unknown>>
   onSecurityChanged(cb: (s: SecurityStatus) => void): () => void
   /** Employee monitoring (#22): policy, disclosure state and this user's own recorded days. */
   activityStatus(): Promise<ActivityStatus>
@@ -132,6 +132,15 @@ export interface WorkSuiteApi {
   /** An archive opened with Files from elsewhere (default handler for archive types). */
   onOpenArchive(cb: (at: { root: string; rel: string }) => void): () => void
   filesEject(id: string): Promise<CloudResult<true>>
+  /** This Computer (#63): disk partitions and volumes (udisks2). Errors: unavailable, failed. */
+  filesVolumes(): Promise<CloudResult<DiskVolume[]>>
+  /** Mount a volume (polkit may ask for an administrator); value: the Files root that opens it. */
+  filesVolMount(device: string): Promise<CloudResult<string>>
+  filesVolUnmount(device: string): Promise<CloudResult<true>>
+  /** Safely remove the drive the volume lies on (unmount every volume on it, then power it off). */
+  filesVolEject(device: string): Promise<CloudResult<true>>
+  /** A drive was plugged in or removed, or a volume mounted or unmounted (udisks2). */
+  onFilesVolumes(cb: () => void): () => void
   onFilesJob(cb: (e: FileJob) => void): () => void
   // Settings › Devices: real devices from sysfs (electron/hardware.ts).
   hwDevices(): Promise<CloudResult<HwDevice[]>>
@@ -364,6 +373,12 @@ export interface AppImageRecord {
 }
 export interface UpdateSummary { packages: string[]; flatpaks: string[]; reboot_required: boolean; state: string }
 export interface FilePlaces { user: string; folders: string[]; media: { id: string; label: string }[]; disk: { device: string; label?: string; encrypted?: boolean; used: number; total: number } | null }
+export interface DiskVolume {
+  device: string; disk: string; label: string; model: string; fstype: string; kind: 'system' | 'internal' | 'removable' | 'optical'
+  size: number; mountpoint: string | null; total: number | null; free: number | null; encrypted: boolean; locked: boolean; readOnly: boolean
+  /** The Files root that opens it when mounted. */
+  root: string | null
+}
 export interface FileHit { root: string; rel: string; name: string; dir: boolean; size: number | null; modified: number | null; where: string }
 export interface TrashItem { id: string; name: string; dir: boolean; size: number; orig: string; where: string; deleted: number | null }
 export interface FileStamp { size: number; modified: number }
@@ -453,6 +468,7 @@ export interface DeviceInfo {
   specs?: { cpu_model: string | null; cpu_cores: number | null; memory_bytes: number | null }
 }
 
+export interface SecurityScanRecord { id?: string; kind: string; trigger: string; started: number; finished: number; files: number; detections: number; errors?: number; error?: string }
 /** /run/worksuite-device-agent/security.json (services/device-agent/src/security.ts securityStatus). */
 export interface SecurityStatus {
   overall: 'protected' | 'attention' | 'at_risk' | 'unavailable'
@@ -462,7 +478,11 @@ export interface SecurityStatus {
   firewall: { active: boolean; policy_rules: number; log_blocked: boolean }
   isolation: { since: number; until: number } | null
   antivirus: { enabled: boolean; installed: boolean; engine: string | null; signatures: number | null; signatures_at: number | null; signatures_age_days: number | null; updates: string; schedule: string; exclusions: number
-    last_scan: { kind: string; trigger: string; started: number; finished: number; files: number; detections: number; error?: string } | null; last_full_scan: number | null }
+    last_scan: SecurityScanRecord | null; last_full_scan: number | null
+    /** #64 (absent from older agents): a scan can run now; the running scan's progress; recent scans, newest first. */
+    ready?: boolean
+    progress?: { kind: string; started: number; files: number; detections: number; errors: number; current: string | null; elapsed_ms: number } | null
+    scans?: SecurityScanRecord[] }
   threats: { active: number; quarantined: number }
   history: { id: string; at: number; path: string; signature: string; action: string }[]
   firewall_alerts: { at: number; dst: string; dport: number | null; proto: string }[]
@@ -530,6 +550,8 @@ export interface InstalledApp { id: string; name: string; generic_name: string |
 export type SignOutChoice = 'none' | 'export' | 'discard'
 
 export interface CloudAccount { id: string; name: string | null; server_url: string; state?: string }
+/** Device agent methods Settings › WorkSuite Security calls (electron/securityCenter.ts securityAction). */
+export type SecurityMethod = 'RestoreQuarantined' | 'DeleteQuarantined' | 'ResolveSuspendedProcess' | 'CancelSecurityScan' | 'UpdateSecurityDefinitions'
 export type CloudResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 declare global {
@@ -600,10 +622,14 @@ const stub: WorkSuiteApi = {
     if (PV.get('security') === 'none') return null
     const risk = PV.get('security') === 'threat'
     return {
-      overall: risk ? 'at_risk' : 'protected', issues: risk ? ['threats_need_action'] : [], managed: stubManaged, scanning: false,
+      overall: risk ? 'at_risk' : PV.get('security') === 'nodefs' ? 'attention' : 'protected', issues: risk ? ['threats_need_action'] : PV.get('security') === 'nodefs' ? ['no_signatures'] : [], managed: stubManaged, scanning: PV.get('security') === 'scanning',
       firewall: { active: true, policy_rules: stubManaged ? 3 : 0, log_blocked: stubManaged }, isolation: null,
       antivirus: { enabled: true, installed: true, engine: '1.0.7', signatures: 27431, signatures_at: Date.now() - 86_400_000, signatures_age_days: 1, updates: 'active', schedule: 'weekly', exclusions: 0,
-        last_scan: { kind: 'quick', trigger: 'schedule', started: Date.now() - 7_300_000, finished: Date.now() - 7_200_000, files: 18_402, detections: risk ? 1 : 0 }, last_full_scan: Date.now() - 5 * 86_400_000 },
+        last_scan: { kind: 'quick', trigger: 'schedule', started: Date.now() - 7_300_000, finished: Date.now() - 7_200_000, files: 18_402, detections: risk ? 1 : 0 }, last_full_scan: Date.now() - 5 * 86_400_000,
+        // #64 previews: ?security=nodefs (no virus definitions yet) and ?security=scanning (progress).
+        ...(PV.get('security') === 'nodefs' ? { signatures: null, signatures_at: null, signatures_age_days: null, ready: false } : { ready: true }),
+        progress: PV.get('security') === 'scanning' ? { kind: 'full', started: Date.now() - 95_000, files: 5_210, detections: 0, errors: 0, current: '/home/nimal/Documents/report.odt', elapsed_ms: 95_000 } : null,
+        scans: [{ id: 's1', kind: 'quick', trigger: 'schedule', started: Date.now() - 7_300_000, finished: Date.now() - 7_200_000, files: 18_402, detections: risk ? 1 : 0 }] },
       threats: { active: risk ? 1 : 0, quarantined: 1 },
       history: [...(risk ? [{ id: 't2', at: Date.now() - 7_200_000, path: '/home/nimal/Downloads/invoice.pdf.exe', signature: 'Win.Trojan.Agent-1', action: 'detected' }] : []),
         { id: 't1', at: Date.now() - 9 * 86_400_000, path: '/home/nimal/Downloads/eicar.com', signature: 'Win.Test.EICAR_HDB-1', action: 'quarantined' }],
@@ -753,6 +779,11 @@ const stub: WorkSuiteApi = {
   },
   onOpenArchive() { return () => {} },
   async filesEject() { return { ok: false, error: 'unavailable' } },
+  async filesVolumes() { return { ok: true, value: stubVolumes.map((v) => ({ ...v })) } },
+  async filesVolMount(device) { const v = stubVolumes.find((x) => x.device === device); if (!v) return { ok: false, error: 'gone' }; v.mountpoint = `/media/alex/${v.label}`; v.root = `media:${v.label}`; v.total = v.size; v.free = v.size / 2; return { ok: true, value: v.root } },
+  async filesVolUnmount(device) { const v = stubVolumes.find((x) => x.device === device); if (!v) return { ok: false, error: 'gone' }; Object.assign(v, { mountpoint: null, root: null, total: null, free: null }); return { ok: true, value: true as const } },
+  async filesVolEject() { return { ok: false, error: 'unavailable' } },
+  onFilesVolumes() { return () => {} },
   onFilesJob(cb) { stubFileJobs.add(cb); return () => { stubFileJobs.delete(cb) } },
   async filesStatus(root) { return { free_bytes: 212e9, drive: root === 'drive' ? { states: { synced: 2, syncing: 1, pending: 1, conflict: 1, 'online-only': 1, error: 1 }, last_sync: Date.now() - 60_000, service_state: 'idle' } : null } },
   async deviceInfo() {
@@ -1019,6 +1050,11 @@ if (typeof window !== 'undefined') {
 const stubJobs = new Map<string, { job: FileJob; paused: boolean; step: number }>()
 let stubJobSeq = 0
 const stubEmit = (e: FileJob) => stubFileJobs.forEach((l) => l(e))
+const stubVolumes: DiskVolume[] = [
+  { device: '/dev/nvme0n1p2', disk: '/dev/nvme0n1', label: '', model: 'Samsung SSD 980', fstype: 'ext4', kind: 'system', size: 475e9, mountpoint: '/', total: 468e9, free: 301e9, encrypted: true, locked: false, readOnly: false, root: 'home' },
+  { device: '/dev/sda1', disk: '/dev/sda', label: 'Data', model: 'WDC WD10EZEX', fstype: 'ntfs', kind: 'internal', size: 1e12, mountpoint: null, total: null, free: null, encrypted: false, locked: false, readOnly: false, root: null },
+  { device: '/dev/sdb1', disk: '/dev/sdb', label: 'KINGSTON', model: 'DataTraveler 3.0', fstype: 'vfat', kind: 'removable', size: 31e9, mountpoint: '/media/alex/KINGSTON', total: 31e9, free: 18e9, encrypted: false, locked: false, readOnly: false, root: 'media:KINGSTON' },
+]
 const stubFileJobs = new Set<(e: FileJob) => void>()
 function STUB_DOCS(): FileEntry[] {
   const day = 86_400_000, now = Date.now()

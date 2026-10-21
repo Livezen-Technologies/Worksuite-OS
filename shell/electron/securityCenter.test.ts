@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readSecurity, securityNotices, type SecurityStatus } from './securityCenter'
+import { agentError, pollInterval, readSecurity, securityNotices, type SecurityStatus } from './securityCenter'
 
 const base: SecurityStatus = {
   overall: 'protected', issues: [], managed: true, scanning: false,
@@ -41,6 +41,18 @@ describe('WorkSuite Security notices', () => {
     expect(await securityAction('RestoreQuarantined', ['../../etc/passwd'])).toEqual({ ok: false, error: 'invalid_argument' })
     expect(await securityAction('ResolveSuspendedProcess', ['0f0e0d0c-0b0a-4908-8706-050403020100', 'kill'])).toEqual({ ok: false, error: 'invalid_argument' })
     expect(await securityAction('RunShell', [])).toEqual({ ok: false, error: 'invalid_argument' })
+  })
+  it('#64: agent errors become reasons Settings can show; scans are followed every 2 s', async () => {
+    expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'NO_SIGNATURES' })).toBe('no_signatures')
+    expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'ANTIVIRUS_MISSING' })).toBe('missing')
+    expect(agentError({ type: 'lk.worksuite.Error.NotAuthorized', text: 'NotAuthorized' })).toBe('auth_cancelled')
+    expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'FAILED' })).toBe('failed')
+    // The agent is not on the bus (not running): the service name is unknown.
+    expect(agentError({ type: 'org.freedesktop.DBus.Error.ServiceUnknown', text: 'The name is not activatable' })).toBe('agent_unavailable')
+    expect(pollInterval({ ...base, scanning: true })).toBe(2_000)
+    expect(pollInterval(base)).toBe(30_000)
+    const { securityAction } = await import('./securityCenter')
+    expect(await securityAction('CancelSecurityScan', ['x'])).toEqual({ ok: false, error: 'invalid_argument' })
   })
   it('reads the agent file; anything else is unavailable', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'ws-sec-'))

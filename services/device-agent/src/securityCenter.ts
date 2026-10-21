@@ -9,8 +9,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Policy, StateFile } from './state.ts';
 import {
-  emptySecurity, freshclamEnv, isolationActive, isolationPlan, pruneSecurity, renderPolicyFirewall, scanDue, securitySettings,
-  securityStatus, type Detection, type EngineFacts, type SecuritySettings, type SecurityState, type SecurityStatus,
+  emptySecurity, freshclamEnv, isolationActive, isolationPlan, parseScanLine, pruneSecurity, renderPolicyFirewall, scanDue, scanOutcome, scanPlan,
+  securitySettings, securityStatus, type Detection, type ScanProgress, type EngineFacts, type SecuritySettings, type SecurityState, type SecurityStatus,
 } from './security.ts';
 import {
   DNS_BLOCKLIST, DNS_MODE_CONF, downloadDirs, GUARD_CONF, GUARD_UNIT, ONACCESS_CONF, ONACCESS_UNIT, parseDomainFeed, parseGuardLine, parseIpFeed,
@@ -30,8 +30,15 @@ export interface SecurityHost {
   restartUnit(unit: string): Promise<void>;
   /** Addresses of the management server (isolation keeps HTTPS to them open). */
   resolve(host: string): Promise<string[]>;
-  /** Runs clamscan at low priority under the CPU quota over the given files (or roots for a full scan). */
-  scan(kind: 'quick' | 'full', s: SecuritySettings, since: number | null): Promise<{ files: number; detections: Detection[] }>;
+  /**
+   * Runs clamscan (recursive) over the roots at low priority under the CPU quota, as one fixed transient unit outside
+   * the agent's sandbox; each output line (stdout and stderr) goes to onLine as it comes. Resolves with the exit code.
+   */
+  scan(plan: { roots: string[]; exclusions: string[] }, s: SecuritySettings, onLine: (line: string) => void): Promise<{ code: number }>;
+  /** Stops the running scan unit (cancel, or one left over from before the agent restarted). */
+  cancelScan(): Promise<void>;
+  /** The mount table (/proc/self/mounts): network and pseudo file systems a full scan skips. */
+  mounts(): Promise<string>;
   /** Moves the file into the root-only quarantine; returns its quarantine id. */
   quarantine(path: string, signature: string): Promise<string>;
   load(): Promise<{ idle: boolean; loadPerCore: number; onBattery: boolean; hour: number }>;
@@ -68,6 +75,9 @@ export interface SecurityHost {
 
 export class SecurityCenter {
   private running: Promise<unknown> | null = null;
+  private progress: ScanProgress | null = null;
+  private cancelled = false;
+  private lastProgressPublish = 0;
   private o: { state: StateFile; host: SecurityHost; now?: () => number; managed: () => { enrolled: boolean; policy: Policy | null; server: string | null } };
   constructor(o: SecurityCenter['o']) { this.o = o; }
   private now() { return (this.o.now ?? Date.now)(); }
@@ -255,13 +265,17 @@ export class SecurityCenter {
     await this.publish();
   }
 
-  /** Engine health (#20 §11): a failed signature updater is restarted, at most once an hour. */
+  /**
+   * Engine health (#20 §11): a failed signature updater is restarted, at most once an hour. #64: so is one that is not
+   * running at all (it was never enabled on images before #64), and one that has not got any signatures yet — freshclam
+   * tries once at start and then waits hours, so a device that was offline at boot otherwise could not scan all day.
+   */
   async health(): Promise<EngineFacts> {
     const f = await this.o.host.facts();
     const s = this.settings();
-    if (s.antivirus && f.clamav && f.freshclam === 'failed') {
+    if (s.antivirus && f.clamav && (f.freshclam === 'failed' || f.freshclam === 'inactive' || f.clamav.signatures === null) && f.freshclam !== 'missing') {
       const last = this.st.restarts['clamav-freshclam'] ?? 0;
-      if (this.now() - last > 3_600_000) {
+      if (this.now() - last > (f.clamav.signatures === null ? 25 * 60_000 : 3_600_000)) {
         this.save((x) => { x.restarts['clamav-freshclam'] = this.now(); });
         await this.o.host.restartUnit('clamav-freshclam.service').then(() => this.o.host.audit('security_service_restarted', { unit: 'clamav-freshclam' }), () => {});
         return this.o.host.facts();
@@ -273,7 +287,7 @@ export class SecurityCenter {
   async status(): Promise<SecurityStatus> {
     const s = this.settings();
     const f = await this.o.host.facts();
-    return securityStatus(s, this.st, f, this.now(), this.o.managed().enrolled, this.running !== null, this.protection(), this.guarded);
+    return securityStatus(s, this.st, f, this.now(), this.o.managed().enrolled, this.running !== null, this.protection(), this.guarded, this.progress);
   }
 
   async publish(): Promise<SecurityStatus> {
@@ -299,42 +313,99 @@ export class SecurityCenter {
     await this.publish();
   }
 
+  /** Why a scan cannot run now (null = it can): the setting, the engine, its signatures. */
+  private async blocked(): Promise<string | null> {
+    if (!this.settings().antivirus) return 'ANTIVIRUS_DISABLED';
+    const f = await this.o.host.facts();
+    if (!f.clamav) return 'ANTIVIRUS_MISSING';
+    // An empty /var/lib/clamav makes clamscan exit 2 before reading a file: say so instead of a "finished" scan.
+    if (f.clamav.signatures === null) return 'NO_SIGNATURES';
+    return null;
+  }
+
+  /**
+   * Settings' Quick scan / Full scan (#64): resolves once the scan has started, or rejects with why it cannot
+   * (ANTIVIRUS_DISABLED, ANTIVIRUS_MISSING, NO_SIGNATURES) so the person sees the reason, not a scan that never runs.
+   * A scan already running is joined (resolves).
+   */
+  async startScan(kind: 'quick' | 'full', trigger: 'schedule' | 'remote' | 'user'): Promise<void> {
+    if (this.running) return;
+    const why = await this.blocked();
+    if (why) throw new Error(why);
+    void this.scan(kind, trigger).catch(() => {});
+  }
+
   /** One scan at a time; a second request while one runs joins it (no duplicate scans). */
   scan(kind: 'quick' | 'full', trigger: 'schedule' | 'remote' | 'user'): Promise<unknown> {
     if (this.running) return this.running;
-    this.running = this.runScan(kind, trigger).finally(() => { this.running = null; void this.publish().catch(() => {}); });
-    void this.publish().catch(() => {});
+    this.cancelled = false;
+    this.running = this.runScan(kind, trigger).finally(() => { this.running = null; this.progress = null; void this.publish().catch(() => {}); });
     return this.running;
+  }
+
+  /** Stops the running scan; what it found so far is still quarantined and the scan is recorded as cancelled. */
+  async cancelScan(): Promise<void> {
+    if (!this.running) throw new Error('NOT_SCANNING');
+    this.cancelled = true;
+    await this.o.host.cancelScan();
+    await this.running.catch(() => {});
+  }
+
+  /** At start: no scan is ours yet, so a scan unit still running belongs to a previous process. */
+  async stopStaleScan(): Promise<void> { if (!this.running) await this.o.host.cancelScan().catch(() => {}); }
+
+  /** "Update definitions": freshclam checks the mirror at once when its service (re)starts. */
+  async updateDefinitions(): Promise<void> {
+    const f = await this.o.host.facts();
+    if (!f.clamav || f.freshclam === 'missing') throw new Error('ANTIVIRUS_MISSING');
+    try { await this.o.host.restartUnit('clamav-freshclam.service'); } catch { throw new Error('UPDATE_FAILED'); }
+    this.o.host.audit('signatures_update_requested', {});
+    await this.publish();
+  }
+
+  private onScanLine(line: string, found: Detection[], fatal: { v: string | null }) {
+    const r = parseScanLine(line), p = this.progress;
+    if (!r || !p) return;
+    if (r.kind === 'fatal') { fatal.v ??= r.error; return; }
+    p.current = r.path;
+    if (r.kind === 'error') p.errors++;
+    else { p.files++; if (r.kind === 'found') { p.detections++; found.push({ path: r.path, signature: r.signature! }); } }
+    if (this.now() - this.lastProgressPublish >= 1500) { this.lastProgressPublish = this.now(); void this.publish().catch(() => {}); }
   }
 
   private async runScan(kind: 'quick' | 'full', trigger: 'schedule' | 'remote' | 'user') {
     const s = this.settings();
-    if (!s.antivirus) throw new Error('ANTIVIRUS_DISABLED');
     const id = randomUUID(), started = this.now();
-    // Quick scans only look at files changed since the last scan (incremental); the first scan is always full.
-    const since = kind === 'quick' && this.st.last_scan ? this.st.last_scan : null;
-    const eff = since === null ? 'full' : kind;
-    this.o.host.audit('scan_started', { id, kind: eff, trigger });
+    this.progress = { id, kind, trigger, started, files: 0, detections: 0, errors: 0, current: null };
+    await this.publish().catch(() => {});
+    this.o.host.audit('scan_started', { id, kind, trigger });
+    const found: Detection[] = [];
+    let handled = false;
     try {
-      const r = await this.o.host.scan(eff, s, since);
-      for (const d of r.detections) {
-        let quarantine_id: string | undefined;
-        try { quarantine_id = await this.o.host.quarantine(d.path, d.signature); } catch { /* left in place, shown as needing action */ }
-        this.save((x) => { x.threats.push({ id: randomUUID(), at: this.now(), path: d.path, signature: d.signature, action: quarantine_id ? 'quarantined' : 'detected', quarantine_id, scan_id: id }); });
-        this.o.host.audit(quarantine_id ? 'threat_quarantined' : 'threat_detected', { scan_id: id, signature: d.signature, path: d.path });
-      }
+      const why = await this.blocked();
+      if (why) throw new Error(why);
+      const plan = scanPlan(kind, s, await this.o.host.homes(), kind === 'full' ? await this.o.host.mounts().catch(() => '') : '');
+      const fatal = { v: null as string | null };
+      const { code } = await this.o.host.scan(plan, s, (l) => this.onScanLine(l, found, fatal));
+      const p = this.progress!;
+      const error = scanOutcome(code, p, fatal.v, this.cancelled);
+      // Whatever was found is dealt with, even when the scan was cancelled or ended early.
+      handled = true;
+      for (const d of found) await this.quarantineDetection(d, id);
       this.save((x) => {
-        x.scans.push({ id, kind: eff, trigger, started, finished: this.now(), files: r.files, detections: r.detections.length });
-        x.last_scan = started; if (eff === 'full') x.last_full_scan = started;
+        x.scans.push({ id, kind, trigger, started, finished: this.now(), files: p.files, detections: found.length, errors: p.errors, ...(error ? { error } : {}) });
+        if (!error) { x.last_scan = started; if (kind === 'full') x.last_full_scan = started; }
       });
-      this.o.host.audit('scan_completed', { id, files: r.files, detections: r.detections.length });
+      if (error) { this.o.host.audit(error === 'CANCELLED' ? 'scan_cancelled' : 'scan_failed', { id, error, files: p.files }); if (error !== 'CANCELLED') throw new Error(error); return; }
+      this.o.host.audit('scan_completed', { id, files: p.files, detections: found.length, errors: p.errors });
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
-      this.save((x) => { x.scans.push({ id, kind: eff, trigger, started, finished: this.now(), files: 0, detections: 0, error }); });
-      this.o.host.audit('scan_failed', { id, error });
+      if (!handled) for (const d of found) await this.quarantineDetection(d, id).catch(() => {});
+      if (!this.st.scans.some((x) => x.id === id)) {
+        this.save((x) => { x.scans.push({ id, kind, trigger, started, finished: this.now(), files: this.progress?.files ?? 0, detections: found.length, error }); });
+        this.o.host.audit('scan_failed', { id, error });
+      }
       throw e;
-    } finally {
-      await this.publish().catch(() => {});
     }
   }
 

@@ -56,6 +56,8 @@ async function daemon() {
     state, host: linuxSecurityHost({ stateDir: DEFAULT_PATHS.stateDir, runtimeDir: DEFAULT_PATHS.runtimeDir, audit: (e, f) => host.audit(e, f) }),
     managed: () => ({ enrolled: state.state.enrolled, policy: state.state.policy ?? null, server: state.state.server_url ?? null }),
   });
+  // A scan unit left running by a previous agent process would never be recorded: stop it (#64).
+  void security.stopStaleScan();
   const agent = new Agent({ state, host, api, keys: loadKeys(KEY_DIR), security, remoteSupport, powerEventsFile: POWER_EVENTS });
 
   // /run is empty after boot: republish what user services and Settings read.
@@ -88,7 +90,9 @@ async function daemon() {
     effectivePolicy: () => (state.state.enrolled && state.state.policy ? publicPolicy(state.state.policy) : null),
     enroll: (url, token) => serial(() => agent.enroll(url, token)),
     refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); },
-    scan: (kind) => { void security.scan(kind, 'user').catch(() => {}); },
+    scan: (kind) => security.startScan(kind, 'user'),
+    cancelScan: () => security.cancelScan(),
+    updateDefinitions: () => security.updateDefinitions(),
     restore: (id) => security.restore(id, false, 'user'),
     deleteQuarantined: (id) => security.deleteQuarantined(id, 'user'),
     resolveSuspended: (id, action) => security.resolveSuspended(id, action, 'user'),

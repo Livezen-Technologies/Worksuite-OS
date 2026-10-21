@@ -32,6 +32,7 @@ import { accelerationPlan, graphicsState, noteGpuCrash, readCrashLog, readRender
 import { CONNECTIVITY_CHECK_URL, initialPortalState, KILLSWITCH_MARKER, portalNavAllowed, portalStep, type PortalAction, type PortalState } from './connectivity'
 import { archiveJobs, listIn, locate } from './archives'
 import { startAIHost } from './ai'
+import { rootFor, volumesBridge, watchVolumes } from './volumes'
 import { defaultEnv, driveDir, dropPlan, freeBytes, list, resolveIn, roots } from './files'
 import { eject, jobs as fileJobs, desktopDir, mkdirIn, newFileIn, places, recent, removeIn, renameIn, search, setStar, starred, starredHits, templates, trash, trashDelete, trashList, trashRestore } from './fileops'
 import { startPanel, type PanelHooks } from './panelHost'
@@ -639,6 +640,21 @@ app.whenReady().then(() => {
   handle('ws:filesArchivePassword', (id, pw, cancel) => ajobs.password(id, cancel === '1' ? null : pw))
   handle('ws:filesArchiveList', (root, rel, password) => listIn(files, root, rel, password || null))
   handle('ws:filesEject', (id) => eject(files, id))
+  // This Computer (#63): disks and volumes over udisks2; each entry says which Files root opens it.
+  const vols = volumesBridge()
+  handle('ws:filesVolumes', async () => {
+    const r = await vols.list()
+    if (!r.ok) return r
+    const rs = roots(files)
+    return { ok: true, value: r.value.map((v) => ({ ...v, root: rootFor(v, rs) })) }
+  })
+  handle('ws:filesVolMount', async (device) => {
+    const r = await vols.mount(device)
+    return r.ok ? { ok: true, value: rootFor({ mountpoint: r.value, kind: 'removable' }, roots(files)) ?? '' } : r
+  })
+  handle('ws:filesVolUnmount', (device) => vols.unmount(device))
+  handle('ws:filesVolEject', (device) => vols.eject(device))
+  watchVolumes(() => broadcast('ws:filesVolumesChanged', null))
   followJobs((e) => broadcast(e.kind === 'update_status' ? 'ws:updateStatusChanged' : e.kind === 'drivers' ? 'ws:driversChanged' : 'ws:pkgJob', e.kind === 'update_status' || e.kind === 'drivers' ? e.status : e))
   handle('ws:cloudAccounts', async () => {
     const r = await brokerCall('Status')

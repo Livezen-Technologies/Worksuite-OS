@@ -55,13 +55,30 @@ test('read-only methods need no authorization', async () => {
 
 test('StartSecurityScan needs lk.worksuite.security.scan and a valid kind', async () => {
   const seen: string[] = [], kinds: string[] = [];
-  const o = ops({ scan: (k) => { kinds.push(k); } });
+  const o = ops({ scan: async (k) => { kinds.push(k); } });
   await assert.rejects(dispatch('StartSecurityScan', ['quick'], ':1', auth(1000, false, seen), o), (e) => e instanceof BusError && e.code === 'NotAuthorized');
   assert.deepEqual(seen, ['lk.worksuite.security.scan']);
   await assert.rejects(dispatch('StartSecurityScan', ['everything'], ':1', auth(1000, true), o), (e) => e instanceof BusError && e.code === 'InvalidArgs');
   assert.deepEqual(await dispatch('StartSecurityScan', ['full'], ':1', auth(1000, true), o), ['', []]);
   assert.deepEqual(kinds, ['full']);
   await assert.rejects(dispatch('StartSecurityScan', ['quick'], ':1', auth(0, true), ops()), (e) => e instanceof BusError && e.message === 'NOT_SUPPORTED');
+});
+
+test('#64: a scan that cannot start says why; cancel and update definitions need the scan action', async () => {
+  const seen: string[] = [], calls: string[] = [];
+  const o = ops({
+    scan: async () => { throw new Error('NO_SIGNATURES'); },
+    cancelScan: async () => { calls.push('cancel'); throw new Error('NOT_SCANNING'); },
+    updateDefinitions: async () => { calls.push('update'); },
+  });
+  // Before #64 the D-Bus call returned at once and the reason was lost: Settings said "Scan started" and nothing ran.
+  await assert.rejects(dispatch('StartSecurityScan', ['quick'], ':1', auth(1000, true), o), (e) => e instanceof BusError && e.code === 'Failed' && e.message === 'NO_SIGNATURES');
+  await assert.rejects(dispatch('CancelSecurityScan', [], ':1', auth(1000, false, seen), o), (e) => e instanceof BusError && e.code === 'NotAuthorized');
+  await assert.rejects(dispatch('UpdateSecurityDefinitions', [], ':1', auth(1000, false, seen), o), (e) => e instanceof BusError && e.code === 'NotAuthorized');
+  assert.deepEqual(seen, ['lk.worksuite.security.scan', 'lk.worksuite.security.scan']);
+  await assert.rejects(dispatch('CancelSecurityScan', [], ':1', auth(1000, true), o), (e) => e instanceof BusError && e.message === 'NOT_SCANNING');
+  assert.deepEqual(await dispatch('UpdateSecurityDefinitions', [], ':1', auth(1000, true), o), ['', []]);
+  assert.deepEqual(calls, ['cancel', 'update']);
 });
 
 test('quarantine and suspended processes (#38) need lk.worksuite.security.quarantine; agent error codes pass through', async () => {

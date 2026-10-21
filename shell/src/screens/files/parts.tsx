@@ -19,7 +19,7 @@ export const P = {
   duplicate: 'M8 8h12v12H8zM14 11v6M11 14h6', rename: 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4', share: 'M4 12v8h16v-8M12 3v13M7 8l5-5 5 5',
   compress: 'M8 3h8v18H8zM12 6v2M12 10v2M12 14v2', info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01',
   paste: 'M9 4h6v3H9zM6 6h12v15H6z', back: 'M15 6l-6 6 6 6', fwd: 'M9 6l6 6-6 6', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
-  list: 'M4 6h16M4 12h16M4 18h16', close: 'M6 6l12 12M18 6L6 18',
+  list: 'M4 6h16M4 12h16M4 18h16', computer: 'M3 4h18v12H3zM8 20h8M12 16v4', close: 'M6 6l12 12M18 6L6 18',
 }
 
 export function Svg({ d, size = 16, stroke = 'currentColor', width = 2, fill = 'none' }: { d: string; size?: number; stroke?: string; width?: number; fill?: string }) {
@@ -69,7 +69,7 @@ export function startFallback(p: Place, listed: boolean): Place | null {
 export function diskName(d: { device: string; label?: string; encrypted?: boolean }) {
   return d.label || (d.encrypted ? t('files.diskEncrypted') : d.device || t('files.diskSystem'))
 }
-export type Place = { kind: 'dir'; root: string; rel: string } | { kind: 'recent' } | { kind: 'starred' } | { kind: 'trash' } | { kind: 'archive'; root: string; rel: string; inner: string }
+export type Place = { kind: 'dir'; root: string; rel: string } | { kind: 'recent' } | { kind: 'computer' } | { kind: 'starred' } | { kind: 'trash' } | { kind: 'archive'; root: string; rel: string; inner: string }
 
 const FOLDER_ICON: Record<string, [string, MessageKey]> = {
   Documents: [P.folder, 'files.documents'], Downloads: [P.download, 'files.downloads'], Pictures: [P.pictures, 'files.pictures'], Music: [P.music, 'files.music'], Videos: [P.videos, 'files.videos'],
@@ -84,6 +84,7 @@ export function FilesSide({ place, places, drive, onGo, onEject }: {
   const sections: [string, Item[]][] = [
     [t('files.quickAccess'), [
       { key: 'home', label: t('files.home'), icon: P.home, to: { kind: 'dir', root: 'home', rel: '' } },
+      { key: 'computer', label: t('files.thisComputer'), icon: P.computer, to: { kind: 'computer' } },
       { key: 'recent', label: t('files.recent'), icon: P.recent, to: { kind: 'recent' } },
       { key: 'starred', label: t('files.starred'), icon: P.star, to: { kind: 'starred' } },
     ]],
