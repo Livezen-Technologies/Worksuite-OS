@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, parseOskState, oskControlLine, oskSocketSender, worksuiteOskArgs, labwcTouchBlock, carryDesktops, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
+  DEFAULT_GESTURES, DEFAULT_TOUCH, hasTabletModeBit, parseOskState, oskControlLine, oskSocketSender, worksuiteOskArgs, labwcTouchBlock, carryDesktops, rcWithTaskbarMargin, TASKBAR_HEIGHT, loadTouch, mergeRcXml, normalizeTouch, oskArgs, oskLayouts, oskWanted, parseLibinputDevices,
   parseOrientation, parsePenLine, parseSwitchLine, parseUdevProps, saveTouch, touchBridge, touchModeOn, type Spawn,
 } from './touch'
 import type { Exec } from './system'
@@ -103,6 +103,20 @@ describe('Labwc config writer', () => {
     expect(out).toContain('allWorkspaces="yes"')
     expect(out).toContain('worksuite-touch:begin')
     expect(carryDesktops('', sys)).toBe(sys)
+  })
+  it('keeps the taskbar free in touch mode: margin 64, back to 52 when off (#53)', () => {
+    const sys = readFileSync(new URL('../../services/session/labwc/rc.xml', import.meta.url), 'utf8')
+    const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
+    const bar = readFileSync(new URL('../src/screens/Desktop.tsx', import.meta.url), 'utf8')
+    expect(css).toContain(`:root[data-touch] .ws-taskbar { height: ${TASKBAR_HEIGHT.touch}px;`)
+    expect(bar).toMatch(new RegExp(`ws-taskbar [^"]*h-\\[${TASKBAR_HEIGHT.normal}px\\]`))
+    expect(sys).toContain(`<margin bottom="${TASKBAR_HEIGHT.normal}"/>`)
+    const on = rcWithTaskbarMargin(sys, true)
+    expect(on).toContain('<margin bottom="64"/>')
+    expect(on.match(/<margin\b/g)).toHaveLength(1)
+    expect(rcWithTaskbarMargin(on, false)).toBe(sys)
+    expect(rcWithTaskbarMargin('<labwc_config><margin top="0" bottom="52" output="eDP-1"/></labwc_config>', true)).toBe('<labwc_config><margin top="0" bottom="64" output="eDP-1"/></labwc_config>')
+    expect(rcWithTaskbarMargin('<labwc_config></labwc_config>', true)).toBe('<labwc_config>  <margin bottom="64"/>\n</labwc_config>')
   })
   it('carries only Alt+Tab scope into the switcher element with fields (#54: an old bare tag broke the file)', () => {
     const sys = '<labwc_config><windowSwitcher show="yes" preview="yes" allWorkspaces="no">\n<fields><field content="icon" width="6%"/></fields>\n</windowSwitcher></labwc_config>'

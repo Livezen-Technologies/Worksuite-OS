@@ -53,7 +53,8 @@
   </resize>
   <!-- #53: the work area. The taskbar is drawn by the shell's full-screen window (no layer-shell exclusive zone), so the
        52 px at the bottom (shell/src/screens/Desktop.tsx, .ws-taskbar h-[52px]) are kept free here: maximized and
-       snapped windows and new windows' placement stop above the taskbar instead of covering it. -->
+       snapped windows and new windows' placement stop above the taskbar instead of covering it. In touch mode the taskbar
+       is 64 px and shell/electron/touch.ts writes 64 in the user's copy (52 again when touch mode ends). -->
   <margin bottom="52"/>
   <!-- One desktop to start with, like Windows 11; Task View adds more (the bridge rewrites this in the user's copy). -->
   <desktops number="1"><popupTime>0</popupTime><names><name>Desktop 1</name></names></desktops>
