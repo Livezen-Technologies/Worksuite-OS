@@ -4,8 +4,9 @@
 import { existsSync, lstatSync, readdirSync, realpathSync, statfsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { extraMounts, readMounts } from './volumes'
 
-export type Root = 'home' | 'drive' | `media:${string}`
+export type Root = 'home' | 'drive' | `media:${string}` | `vol:${string}`
 export interface Entry { name: string; dir: boolean; size: number | null; modified: number | null; state: string; local: boolean; items?: number | null }
 type Reply<T> = { ok: true; value: T } | { ok: false; error: string }
 
@@ -13,13 +14,16 @@ export interface FileEnv { home: string; user: string; fileStates(dir: string): 
 
 export const driveDir = (home: string) => path.join(home, 'WorkSuite Drive')
 
-/** Roots the user can browse: home, ~/WorkSuite Drive, and mounted removable media (udisks2 mounts). */
-export function roots(env: Pick<FileEnv, 'home' | 'user'>): { id: Root; label: string; path: string }[] {
+/** Roots the user can browse: home, ~/WorkSuite Drive, mounted removable media (udisks2 mounts) and other mounted
+ *  volumes under /mnt, /media and /run/media (This Computer, #63). What the user may read inside them is up to the
+ *  filesystem's own permissions. */
+export function roots(env: Pick<FileEnv, 'home' | 'user'>, mounts: () => string = readMounts): { id: Root; label: string; path: string }[] {
   const out: { id: Root; label: string; path: string }[] = [{ id: 'home', label: 'Home', path: env.home }]
   for (const base of [`/media/${env.user}`, `/run/media/${env.user}`]) {
     if (!existsSync(base)) continue
-    for (const n of readdirSync(base)) out.push({ id: `media:${n}`, label: n, path: path.join(base, n) })
+    try { for (const n of readdirSync(base)) out.push({ id: `media:${n}`, label: n, path: path.join(base, n) }) } catch { /* not readable */ }
   }
+  for (const m of extraMounts(mounts(), env.user)) out.push({ id: `vol:${m}`, label: path.basename(m), path: m })
   out.push({ id: 'drive', label: 'WorkSuite Drive', path: driveDir(env.home) })
   return out
 }
@@ -74,7 +78,9 @@ export async function list(env: FileEnv, root: string, rel: string): Promise<Rep
   if (!p) return { ok: false, error: 'not_found' }
   const entries = new Map<string, Entry>()
   if (existsSync(p.full)) {
-    for (const name of readdirSync(p.full)) {
+    let names: string[]
+    try { names = readdirSync(p.full) } catch (e) { return { ok: false, error: (e as NodeJS.ErrnoException).code === 'EACCES' ? 'denied' : 'not_found' } }
+    for (const name of names) {
       if (name.startsWith('.')) continue
       try {
         const st = lstatSync(path.join(p.full, name))

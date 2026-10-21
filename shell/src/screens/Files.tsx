@@ -4,6 +4,7 @@
 // File operations (FO1–FO4: progress window, conflicts, delete confirmation, toasts and errors) are in files/ops.tsx.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
+import { ComputerView } from './files/computer'
 import { formatBytes, os, type FileEntry, type FileHit, type FileJob, type FilePlaces, type TrashItem } from '../lib/os'
 import { formatDate, formatDecimal, formatNumber, messages, t } from '../i18n'
 import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place, START_PLACE, startFallback } from './files/parts'
@@ -87,12 +88,12 @@ export default function Files({ onClose, archive, folder }: WindowProps & { arch
       void os.filesList(place.root, place.rel).then((r) => {
         if (r.ok) { setEntries(r.value); return }
         const home = hist.i === 0 ? startFallback(place, false) : null
-        if (home) setHist({ list: [home], i: 0 }); else setError(t('files.cantOpen'))
+        if (home) setHist({ list: [home], i: 0 }); else setError(r.error === 'denied' ? t('files.vol.err.denied') : t('files.cantOpen'))
       })
       void os.filesStatus(place.root).then(setStatus)
     } else if (place.kind === 'recent') { setHits(null); void os.filesRecent().then(setHits) }
     else if (place.kind === 'starred') { setHits(null); void os.filesStarred().then((s) => setHits(s.hits)) }
-    else if (place.kind === 'archive') return
+    else if (place.kind === 'archive' || place.kind === 'computer') return
     else { setTrashItems(null); void os.filesTrashList().then(setTrashItems) }
   }, [place, tick])
 
@@ -102,9 +103,9 @@ export default function Files({ onClose, archive, folder }: WindowProps & { arch
     return () => clearTimeout(id)
   }, [search, dir?.root, dir?.rel]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const folderName = (p: Place) => p.kind === 'recent' ? t('files.recent') : p.kind === 'starred' ? t('files.starred') : p.kind === 'trash' ? t('files.trash')
+  const folderName = (p: Place) => p.kind === 'computer' ? t('files.thisComputer') : p.kind === 'recent' ? t('files.recent') : p.kind === 'starred' ? t('files.starred') : p.kind === 'trash' ? t('files.trash')
     : p.kind === 'archive' ? [p.rel.split('/').pop()!, ...p.inner.split('/').filter(Boolean)].join(' › ')
-    : p.rel ? folderLabel(p.rel.split('/').pop()!) : p.root === 'home' ? (places?.user ?? t('files.home')) : p.root === 'drive' ? 'WorkSuite Drive' : places?.media.find((m) => m.id === p.root)?.label ?? p.root
+    : p.rel ? folderLabel(p.rel.split('/').pop()!) : p.root === 'home' ? (places?.user ?? t('files.home')) : p.root === 'drive' ? 'WorkSuite Drive' : places?.media.find((m) => m.id === p.root)?.label ?? (p.root.startsWith('vol:') ? p.root.split('/').pop() || p.root : p.root)
   const crumbs = dir ? [{ label: folderName({ ...dir, rel: '' }), rel: '' }, ...dir.rel.split('/').filter(Boolean).map((s, i, all) => ({ label: i === 0 && dir.root === 'home' ? folderLabel(s) : s, rel: all.slice(0, i + 1).join('/') }))] : []
 
   const rows = entries ?? []
@@ -286,6 +287,7 @@ export default function Files({ onClose, archive, folder }: WindowProps & { arch
             onGo={(inner) => go({ ...arc, inner })} onLeave={() => (hist.i > 0 ? setHist((h) => ({ ...h, i: h.i - 1 })) : go({ kind: 'dir', root: arc.root, rel: arc.rel.split('/').slice(0, -1).join('/') }))}
             onExtract={(items) => extract(arc.root, arc.rel, items.length ? 'here' : 'folder', items, arcPw)} />
           : search && dir ? <SearchView search={search} setSearch={setSearch} found={found} openHit={openHit} />
+          : place.kind === 'computer' ? <ComputerView onOpen={(root) => go({ kind: 'dir', root, rel: '' })} onChanged={reload} />
           : place.kind === 'trash' ? <TrashView items={trashItems} act={act} setNotice={setNotice} />
           : place.kind !== 'dir' ? <HitList hits={hits} empty={place.kind === 'recent' ? t('files.recentNone') : t('files.starredNone')} openHit={openHit} />
           : error ? <p className="p-6 text-sm" style={{ color: '#FF8A7A' }}>{error}</p>
