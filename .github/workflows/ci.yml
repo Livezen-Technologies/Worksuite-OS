@@ -77,6 +77,8 @@ jobs:
       - run: sh tests/session/session-test.sh
       # Window title bars: the Labwc WorkSuite themes, their button images and the rc.xml layout (issues #15, #33).
       - run: sh tests/session/window-theme.test.sh
+      # Settings › Printers: the polkit-gated CUPS helper, its policy and the printing packages (issue #51).
+      - run: sh tests/session/printer-admin.test.sh
       # WorkSuite's polkit agent (C listener + Python agent) against the runner's real polkitd and pkexec.
       - run: sudo apt-get install -y --no-install-recommends polkitd pkexec libpolkit-agent-1-dev gcc make pkgconf && sudo sh tests/session/polkit-agent-integration.sh
       # Kiosk mode session scripts (WSOS-AUTH-002).

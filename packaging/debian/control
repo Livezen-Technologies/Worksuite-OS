@@ -28,9 +28,9 @@ Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archi
  worksuite-user-services, worksuite-ai, worksuite-package-service, worksuite-device-agent, worksuite-directory, worksuite-recovery-boot, worksuite-wayland-bridge,
  labwc, wlr-randr, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, grim, wl-clipboard, wtype, xdg-desktop-portal-gtk, gnome-keyring,
- pipewire, pipewire-pulse, wireplumber, network-manager, wpasupplicant, rfkill, bluez, udisks2, upower, cups, polkitd, pkexec,
+ pipewire, pipewire-pulse, wireplumber, network-manager, wpasupplicant, rfkill, bluez, udisks2, upower, cups, cups-filters, avahi-daemon, libnss-mdns, polkitd, pkexec,
  flatpak, fcitx5, fcitx5-m17n, fcitx5-frontend-gtk3, fcitx5-frontend-gtk4, fcitx5-frontend-qt6, apparmor, ${misc:Depends}
-Recommends: fwupd, wl-mirror, iw, vainfo, vulkan-tools, mesa-va-drivers, libgl1-mesa-dri, worksuite-office | worksuite-desktopeditors
+Recommends: cups-browsed, ipp-usb, cups-ipp-utils, printer-driver-gutenprint, fwupd, wl-mirror, iw, vainfo, vulkan-tools, mesa-va-drivers, libgl1-mesa-dri, worksuite-office | worksuite-desktopeditors
 Conflicts: openssh-server
 Description: WorkSuite OS desktop (metapackage)
  Pulls in the WorkSuite session, shell, system services and the Debian

@@ -79,7 +79,25 @@ network-manager-openvpn
 bluez
 wireplumber
 upower
+# Printing (Settings › Printers, shell/electron/printers.ts; issue #51). The build installs no recommends, so cups'
+# own (avahi-daemon, cups-browsed, drivers) were missing: network printers were never discovered and .local names
+# never resolved. cups-browsed adds shared queues automatically, ipp-usb makes IPP-over-USB printers driverless,
+# cups-ipp-utils brings ippfind, and the printer-driver-* packages cover common printers without IPP Everywhere.
+cups
 cups-client
+cups-daemon
+cups-filters
+cups-browsed
+cups-ipp-utils
+ipp-usb
+avahi-daemon
+libnss-mdns
+printer-driver-gutenprint
+printer-driver-hpcups
+printer-driver-brlaser
+printer-driver-splix
+printer-driver-pxljr
+printer-driver-c2esp
 wlr-randr
 # Touchscreen, pen and touch mode (shell/electron/touch.ts): device listing and tablet-mode switch events,
 # auto-rotate (monitor-sensor), and the on-screen keyboard (virtual-keyboard + layer-shell under Labwc)
