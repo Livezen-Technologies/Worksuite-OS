@@ -94,8 +94,8 @@ export function DisplayPanel() {
       <div className={`${card} flex items-center gap-4 px-[18px] py-3.5`}>
         <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{t('disp.multi')}</span><span className="text-xs text-[#8FA3C8]">{t('disp.multiHint')}</span></span>
         <select aria-label={t('disp.multi')} className={select} value={draft.arrangement} onChange={(e) => setDraft({ ...draft, arrangement: e.target.value as Arrangement })}>
-          <option value="extend" className="bg-[#0F2350]">{t('disp.extend')}</option>
-          <option value="mirror" className="bg-[#0F2350]">{t('disp.mirror')}</option>
+          <option value="extend">{t('disp.extend')}</option>
+          <option value="mirror">{t('disp.mirror')}</option>
         </select>
       </div>
     )}
@@ -117,29 +117,29 @@ export function DisplayPanel() {
             const [w, h] = e.target.value.split('x').map(Number)
             edit({ width: w, height: h, refresh: refreshRates(out, w, h)[0] ?? 0 })
           }}>
-            {res.map((m) => <option key={`${m.width}x${m.height}`} value={`${m.width}x${m.height}`} className="bg-[#0F2350]">{modeLabel(m)}{out.modes.some((x) => x.preferred && x.width === m.width && x.height === m.height) ? ` ${t('disp.recommended')}` : ''}</option>)}
+            {res.map((m) => <option key={`${m.width}x${m.height}`} value={`${m.width}x${m.height}`}>{modeLabel(m)}{out.modes.some((x) => x.preferred && x.width === m.width && x.height === m.height) ? ` ${t('disp.recommended')}` : ''}</option>)}
           </select>
         </Row>
         <Row k={t('settings.disp.refresh')} d={t('settings.disp.refreshHint')}>
           <select aria-label={t('settings.disp.refresh')} className={select} value={String(cfg.refresh)} disabled={!cfg.enabled || rates.length < 2} onChange={(e) => edit({ refresh: Number(e.target.value) })}>
-            {rates.map((r) => <option key={r} value={String(r)} className="bg-[#0F2350]">{r ? `${formatNumber(Math.round(r * 100) / 100)} Hz` : t('disp.fixed')}</option>)}
+            {rates.map((r) => <option key={r} value={String(r)}>{r ? `${formatNumber(Math.round(r * 100) / 100)} Hz` : t('disp.fixed')}</option>)}
           </select>
         </Row>
         <Row k={t('settings.disp.scale')} d={t('disp.scaleHint')}>
           <select aria-label={t('settings.disp.scale')} className={select} value={String(cfg.scale)} disabled={!cfg.enabled} onChange={(e) => edit({ scale: Number(e.target.value) })}>
-            {[...new Set([...SCALES, cfg.scale])].sort((a, b) => a - b).map((s) => <option key={s} value={String(s)} className="bg-[#0F2350]">{formatNumber(Math.round(s * 100))}%</option>)}
+            {[...new Set([...SCALES, cfg.scale])].sort((a, b) => a - b).map((s) => <option key={s} value={String(s)}>{formatNumber(Math.round(s * 100))}%</option>)}
           </select>
         </Row>
         {multi && draft.arrangement === 'extend' && out.name !== draft.primary && (
           <Row k={t('disp.position')} d={t('disp.positionHint')}>
             <select aria-label={t('disp.position')} className={select} value={sides[out.name] ?? 'right'} disabled={!cfg.enabled} onChange={(e) => setSides({ ...sides, [out.name]: e.target.value as Side })}>
-              {(['left', 'right', 'above', 'below'] as Side[]).map((s) => <option key={s} value={s} className="bg-[#0F2350]">{{ left: t('disp.pos.left'), right: t('disp.pos.right'), above: t('disp.pos.above'), below: t('disp.pos.below') }[s]}</option>)}
+              {(['left', 'right', 'above', 'below'] as Side[]).map((s) => <option key={s} value={s}>{{ left: t('disp.pos.left'), right: t('disp.pos.right'), above: t('disp.pos.above'), below: t('disp.pos.below') }[s]}</option>)}
             </select>
           </Row>
         )}
         <Row k={t('settings.app.wallpaper')} d={t('disp.wallpaperHint')}>
           <select aria-label={t('settings.app.wallpaper')} className={select} value={live.wallpapers[out.name] ?? 'default'} onChange={(e) => void displays.displayWallpaper(out.name, e.target.value)}>
-            {Object.entries(WALLPAPERS).map(([id, w]) => <option key={id} value={id} className="bg-[#0F2350]">{w.label}</option>)}
+            {Object.entries(WALLPAPERS).map(([id, w]) => <option key={id} value={id}>{w.label}</option>)}
           </select>
         </Row>
       </div>
