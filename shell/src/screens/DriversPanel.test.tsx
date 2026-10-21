@@ -89,6 +89,13 @@ describe('Settings › Drivers', () => {
     expect(el.textContent).toContain('1 driver update')
   })
 
+  it('#59: package servers unreachable → never "Drivers are up to date"', async () => {
+    mockOs(report({ state: 'offline', offers: [], devices: [] }))
+    const el = await mount(<DriversPanel onOpenUpdates={() => {}} />)
+    expect(el.textContent).not.toContain('Drivers are up to date')
+    expect(el.textContent).toContain("Can't check for drivers right now")
+  })
+
   it('a non-administrator who can’t get the password sees a friendly refusal, never the password', async () => {
     mockOs(report({ secure_boot: true, mok: { pending: true } }))
     vi.spyOn(os, 'hwMokPassword').mockResolvedValue({ ok: false, error: 'not_authorized' })
@@ -174,6 +181,13 @@ describe('driver helpers', () => {
     expect(gs.map((x) => x.group)).toEqual(['display', 'wifi', 'ethernet'])
     expect(driverLabel('amdgpu', null)).toBe('Mesa (amdgpu)')
     expect(driverLabel('nvidia', '550.163.01')).toBe('NVIDIA 550')
+  })
+  it('#59: a virtio network card is not "Mesa"', () => {
+    const net = dev('pci:0000:00:03.0', 'Virtio network device', 'network', 'virtio-pci')
+    const gs = driverGroups([net], report({ devices: [{ id: net.id, kind: 'ethernet', driver: 'virtio-pci', status: 'working', offers: [] }] }))
+    expect(gs[0].items[0].driverLabel).toBe('virtio-pci')
+    const gpu = dev('pci:0000:00:02.0', 'Virtio GPU', 'graphics', 'virtio-pci')
+    expect(driverGroups([gpu], null)[0].items[0].driverLabel).toBe('Mesa (virtio-pci)')
   })
 
   it('notice: the Wi-Fi wording; auto-installed and already announced offers are quiet', () => {
