@@ -15,6 +15,11 @@ command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- /usr/lib/worksu
 user = "_greetd"
 CONF
 systemctl enable greetd.service worksuite-device-agent.service worksuite-power-events.service worksuite-package-service.service worksuite-boot-marker.service
+# WorkSuite Security (#64): virus definitions. clamav-freshclam's postinst only enables its daemon through debconf and
+# update-rc.d, which left it disabled in the image: /var/lib/clamav stayed empty, clamscan exited 2 at once and Quick
+# scan / Full scan never worked. The image ships no signatures (about 200 MB); freshclam fetches them once online.
+systemctl enable clamav-freshclam.service
+[ -x /usr/bin/clamscan ] && [ -x /usr/bin/freshclam ] || { echo "ClamAV missing: WorkSuite Security scans would not work" >&2; exit 1; }
 # Default-deny inbound firewall (/etc/nftables.conf, docs/security/hardening.md).
 systemctl enable nftables.service
 grep -q "table inet worksuite_filter" /etc/nftables.conf || { echo "WorkSuite nftables.conf missing" >&2; exit 1; }

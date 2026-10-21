@@ -54,7 +54,7 @@ export function securitySettings(p: Policy | null | undefined): SecuritySettings
     antivirus: p?.antivirus !== false,
     av_scan_schedule: sched === 'off' || sched === 'daily' || sched === 'weekly' ? sched : 'weekly',
     av_scan_hour: int(p?.av_scan_hour, 0, 23, 12),
-    av_scan_paths: Array.isArray(p?.av_scan_paths) && (p!.av_scan_paths as unknown[]).every(ABS) ? (p!.av_scan_paths as string[]).slice(0, 20) : ['/home'],
+    av_scan_paths: Array.isArray(p?.av_scan_paths) && (p!.av_scan_paths as unknown[]).every(ABS) ? (p!.av_scan_paths as string[]).slice(0, 20) : ['/'],
     av_exclusions: Array.isArray(p?.av_exclusions) ? (p!.av_exclusions as unknown[]).filter(ABS).slice(0, 100) as string[] : [],
     av_signature_checks_per_day: int(p?.av_signature_checks_per_day, 1, 24, 12),
     av_cpu_quota_percent: int(p?.av_cpu_quota_percent, 10, 100, 50),
@@ -172,7 +172,7 @@ export function parseFirewallLog(lines: string[]): { at: number | null; dst: str
   return r;
 }
 
-export interface ScanRecord { id: string; kind: 'quick' | 'full'; trigger: 'schedule' | 'remote' | 'user'; started: number; finished: number; files: number; detections: number; error?: string }
+export interface ScanRecord { id: string; kind: 'quick' | 'full'; trigger: 'schedule' | 'remote' | 'user'; started: number; finished: number; files: number; detections: number; error?: string; /** #64: files clamscan could not read. */ errors?: number }
 export interface ThreatRecord { id: string; at: number; path: string; signature: string; action: 'quarantined' | 'detected' | 'restored' | 'deleted'; quarantine_id?: string; scan_id?: string }
 export interface SecurityState {
   isolation?: Isolation;
@@ -230,13 +230,17 @@ export interface EngineFacts {
 export type Overall = 'protected' | 'attention' | 'at_risk' | 'unavailable';
 
 /** What Settings › Privacy & security › WorkSuite Security and the admin console show. No file contents, ever. */
-export function securityStatus(s: SecuritySettings, st: SecurityState, f: EngineFacts, now: number, managed: boolean, scanning = false, p?: ProtectionSettings, guarded = false) {
+export function securityStatus(s: SecuritySettings, st: SecurityState, f: EngineFacts, now: number, managed: boolean, scanning = false, p?: ProtectionSettings, guarded = false, progress: ScanProgress | null = null) {
   const sigAge = f.clamav?.signatures_at ? Math.floor((now - f.clamav.signatures_at) / DAY) : null;
   const isolated = isolationActive(st.isolation, now);
   const active = st.threats.filter((t) => t.action === 'detected');
   const issues: string[] = [];
   if (!f.firewall_active) issues.push('firewall_off');
   if (s.antivirus && !f.clamav) issues.push('antivirus_missing');
+  // #64: ClamAV is installed but has no signatures yet (freshclam has not reached the mirror: first boot, offline).
+  // Scans cannot run until it has; Settings offers "Update definitions".
+  const noSignatures = s.antivirus && !!f.clamav && f.clamav.signatures === null;
+  if (noSignatures) issues.push('no_signatures');
   if (s.antivirus && f.clamav && f.freshclam !== 'active') issues.push('updates_not_running');
   if (s.antivirus && sigAge !== null && sigAge > 3) issues.push('signatures_outdated');
   if (active.length) issues.push('threats_need_action');
@@ -257,6 +261,10 @@ export function securityStatus(s: SecuritySettings, st: SecurityState, f: Engine
       signatures: f.clamav?.signatures ?? null, signatures_at: f.clamav?.signatures_at ?? null, signatures_age_days: sigAge,
       updates: f.freshclam, schedule: s.av_scan_schedule, exclusions: s.av_exclusions.length,
       last_scan: st.scans.at(-1) ?? null, last_full_scan: st.last_full_scan ?? null,
+      // #64: can a scan run now, the running scan's progress, and the recent scans (newest first).
+      ready: s.antivirus && !!f.clamav && !noSignatures,
+      progress: scanning && progress ? { ...progress, elapsed_ms: Math.max(0, now - progress.started) } : null,
+      scans: st.scans.slice(-10).reverse(),
     },
     threats: { active: active.length, quarantined: st.threats.filter((t) => t.action === 'quarantined').length },
     history: st.threats.slice(-50).reverse().map(({ id, at, path, signature, action }) => ({ id, at, path, signature, action })),
@@ -282,26 +290,66 @@ export function exclusionArgs(paths: string[]): string[] {
   return paths.flatMap((p) => [`--exclude-dir=^${esc(p.replace(/\/+$/, ''))}(/|$)`, `--exclude=^${esc(p)}$`]);
 }
 
-/** Files to scan: under roots, not excluded, regular, and (quick scan) changed since `since`. Bounded walk. */
-export function* walkFiles(roots: string[], exclusions: string[], since: number | null, fs: {
-  readdir(p: string): { name: string; dir: boolean; file: boolean; link: boolean }[];
-  mtimeMs(p: string): number;
-}, limit = 2_000_000): Generator<string> {
-  const excluded = (p: string) => exclusions.some((e) => p === e || p.startsWith(e.replace(/\/+$/, '') + '/'));
-  const stack = [...roots].filter((r) => !excluded(r));
-  let n = 0;
-  while (stack.length) {
-    const d = stack.pop()!;
-    let ents;
-    try { ents = fs.readdir(d); } catch { continue; }
-    for (const e of ents) {
-      const p = d.replace(/\/+$/, '') + '/' + e.name;
-      if (e.link || excluded(p)) continue;
-      if (e.dir) { stack.push(p); continue; }
-      if (!e.file) continue;
-      if (since !== null) { let m = 0; try { m = fs.mtimeMs(p); } catch { continue; } if (m < since) continue; }
-      if (++n > limit) return;
-      yield p;
-    }
+// ---- Scans (#64): what a quick and a full scan cover, and clamscan's output line by line ----
+
+/** Never scanned: kernel and runtime file systems, the quarantine (its files would be found again) and the signatures. */
+export const ALWAYS_EXCLUDED = ['/proc', '/sys', '/dev', '/run', '/var/lib/worksuite-device-agent/quarantine', '/var/lib/clamav'];
+/** Network and pseudo file systems a full scan does not walk into (another computer's files, or no files at all). */
+const SKIP_FS = /^(nfs4?|cifs|smb3?|smbfs|ncpfs|afs|ceph|glusterfs|9p|davfs|fuse\.(sshfs|rclone|gvfsd-fuse|s3fs|davfs2|curlftpfs)|sshfs|proc|sysfs|devtmpfs|devpts|cgroup2?|securityfs|debugfs|tracefs|configfs|pstore|bpf|efivarfs|mqueue|hugetlbfs|fusectl|autofs|binfmt_misc|rpc_pipefs|nsfs)$/;
+
+/** /proc/self/mounts → mount points a full scan skips. Octal escapes (\040 = space) are decoded. */
+export function skippedMounts(mounts: string): string[] {
+  const out: string[] = [];
+  for (const l of mounts.split('\n')) {
+    const f = l.split(' ');
+    if (f.length < 3 || !SKIP_FS.test(f[2])) continue;
+    const target = f[1].replace(/\\([0-7]{3})/g, (_m, o: string) => String.fromCharCode(parseInt(o, 8)));
+    if (target !== '/') out.push(target);
   }
+  return [...new Set(out)];
+}
+
+/**
+ * Quick scan: where malware usually lands — each person's Downloads, Desktop and Documents, autostart entries and
+ * user-installed programs, the shared temporary folders and system-wide autostart. Full scan: the policy's scan paths
+ * (the whole system by default) without kernel/runtime and network file systems.
+ */
+export function scanPlan(kind: 'quick' | 'full', s: SecuritySettings, homes: string[], mounts: string): { roots: string[]; exclusions: string[] } {
+  const ex = [...new Set([...ALWAYS_EXCLUDED, ...s.av_exclusions, ...(kind === 'full' ? skippedMounts(mounts) : [])])];
+  const under = (p: string, e: string) => p === e || p.startsWith(e.replace(/\/+$/, '') + '/');
+  const roots = kind === 'quick'
+    ? [...homes.flatMap((h) => ['Downloads', 'Desktop', 'Documents', '.config/autostart', '.local/bin', '.local/share/applications'].map((d) => h.replace(/\/+$/, '') + '/' + d)),
+      '/tmp', '/var/tmp', '/dev/shm', '/etc/xdg/autostart']
+    : s.av_scan_paths;
+  // /dev/shm is under /dev but is where droppers hide: a quick scan names it on purpose.
+  const exclusions = kind === 'quick' ? ex.filter((e) => e !== '/dev') : ex;
+  return { roots: roots.filter((r) => !exclusions.some((e) => under(r, e))), exclusions };
+}
+
+export type ScanLine = { kind: 'ok' | 'found' | 'error'; path: string; signature?: string } | { kind: 'fatal'; error: 'NO_SIGNATURES' | 'ENGINE_ERROR' } | null;
+
+/** One line of `clamscan --stdout --no-summary` (stderr merged). Paths may contain ": ". */
+export function parseScanLine(line: string): ScanLine {
+  let m;
+  if ((m = /^(\/.*): (\S+) FOUND$/.exec(line))) return { kind: 'found', path: m[1], signature: m[2] };
+  if ((m = /^(\/.*): (?:OK|Empty file)$/.exec(line))) return { kind: 'ok', path: m[1] };
+  if ((m = /^(\/.*): .* ERROR$/.exec(line))) return { kind: 'error', path: m[1] };
+  // An empty /var/lib/clamav (freshclam has not run yet: first boot, offline) or a damaged database: nothing was scanned.
+  if (/No supported database files found|cli_loaddbdir|Can't open file or directory/.test(line) && /^(LibClamAV Error|ERROR)/.test(line)) return { kind: 'fatal', error: 'NO_SIGNATURES' };
+  if (/^(LibClamAV Error: (cl_load|cli_load|Can't load)|ERROR: (Can't initialize|Database initialization))/.test(line)) return { kind: 'fatal', error: 'ENGINE_ERROR' };
+  return null;
+}
+
+export interface ScanProgress { id: string; kind: 'quick' | 'full'; trigger: 'schedule' | 'remote' | 'user'; started: number; files: number; detections: number; errors: number; current: string | null }
+
+/**
+ * clamscan's exit → the scan's outcome. 0 clean, 1 found; 2 is an error, which only fails the scan when nothing was
+ * scanned or the engine could not load (unreadable files alone are not a failed scan).
+ */
+export function scanOutcome(code: number, p: Pick<ScanProgress, 'files'>, fatal: string | null, cancelled: boolean): string | null {
+  if (cancelled) return 'CANCELLED';
+  if (fatal) return fatal;
+  if (code === 0 || code === 1) return null;
+  if (code === 2 && p.files > 0) return null;
+  return code === 2 ? 'SCAN_ERROR' : `CLAMSCAN_${code}`;
 }

@@ -102,16 +102,27 @@ reason. Acks that cannot be sent are queued in state and delivered first on the 
   the administrator's password and the device name.
 - **Antivirus** (ClamAV, `clamav`/`clamav-freshclam` recommended): signature checks per day from policy via
   `/etc/worksuite/freshclam.env` (read by the packaged `clamav-freshclam.service.d/worksuite.conf`); a failed updater
-  is restarted at most hourly. Scheduled scans (`av_scan_schedule`, `av_scan_hour`) start only when every graphical
-  session is idle, load is low and the device is on mains power. Quick scans are incremental (files changed since
-  the last scan); the first scan is full. Scans run as a transient unit (`systemd-run`, `Nice=19`, idle I/O,
-  `CPUQuota=av_cpu_quota_percent`), one at a time. Exclusions come only from policy.
+  is restarted at most hourly, a stopped one too, and one without signatures yet every half hour (the image enables
+  `clamav-freshclam.service` but ships no signatures; until freshclam has reached the mirror scans refuse with
+  `NO_SIGNATURES` and Settings offers *Update definitions*). Scheduled scans (`av_scan_schedule`, `av_scan_hour`) start
+  only when every graphical session is idle, load is low and the device is on mains power. A **quick scan** covers each
+  person's Downloads, Desktop, Documents, `~/.config/autostart`, `~/.local/bin`, `~/.local/share/applications`, `/tmp`,
+  `/var/tmp`, `/dev/shm` and `/etc/xdg/autostart`; a **full scan** covers `av_scan_paths` (default `/`) without `/proc`,
+  `/sys`, `/dev`, `/run`, the quarantine, network and pseudo file systems (from `/proc/self/mounts`). Scans run as the
+  transient unit `worksuite-av-scan.service` (`systemd-run`, `Nice=19`, idle I/O, `CPUQuota=av_cpu_quota_percent`)
+  outside the agent's sandbox, one at a time; `clamscan --recursive --stdout` reports each file, which gives the
+  progress (files, current path, elapsed) in `security.json`. Cancel stops the unit; what was found so far is still
+  quarantined. Exit 2 fails the scan only when nothing was scanned or the engine could not load its signatures.
+  Exclusions come only from policy.
 - **Quarantine**: detections are moved to `/var/lib/worksuite-device-agent/quarantine/` (0700, file mode 000) with a
   root-only metadata record; nothing is uploaded. A file that cannot be moved stays listed as needing action.
 - **Status**: `/run/worksuite-device-agent/security.json` (0644) for Settings › Privacy & security › WorkSuite Security,
   and the same summary in each heartbeat for Admin Center › Security Center. History older than
   `security_log_retention_days` is dropped. Every action is in the agent's audit log.
-- **Scan now**: `lk.worksuite.DeviceAgent1.StartSecurityScan(kind)` behind polkit `lk.worksuite.security.scan`.
+- **Scan now**: `lk.worksuite.DeviceAgent1.StartSecurityScan(kind)` behind polkit `lk.worksuite.security.scan`; it
+  returns once the scan has started or fails with why it cannot (`NO_SIGNATURES`, `ANTIVIRUS_MISSING`,
+  `ANTIVIRUS_DISABLED`). `CancelSecurityScan` and `UpdateSecurityDefinitions` (restarts freshclam, which checks at
+  once) use the same action.
 
 ### Protection layers (issue #38) — `src/protection.ts`, `native/guard/`
 

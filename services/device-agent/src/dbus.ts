@@ -16,6 +16,9 @@ export const ACTIONS: Record<string, string | null> = {
   RefreshNow: null,   // fetches what the server already decided; changes nothing the caller chooses
   // WorkSuite Security (#20): Settings › Privacy & security › WorkSuite Security "Scan now" (active local user).
   StartSecurityScan: 'lk.worksuite.security.scan',
+  // #64: cancel the running scan and fetch virus definitions now (same action: reads files, changes no setting).
+  CancelSecurityScan: 'lk.worksuite.security.scan',
+  UpdateSecurityDefinitions: 'lk.worksuite.security.scan',
   // #38: quarantine restore/delete and suspended processes: an administrator (auth_admin_keep).
   RestoreQuarantined: 'lk.worksuite.security.quarantine',
   DeleteQuarantined: 'lk.worksuite.security.quarantine',
@@ -32,8 +35,13 @@ export interface AgentOps {
   effectivePolicy(): unknown;
   enroll(serverUrl: string, token: string): Promise<string>;
   refresh(): Promise<void>;
-  /** Starts a malware scan (quick | full); resolves when it has started. Absent = no security module. */
-  scan?(kind: 'quick' | 'full'): void;
+  /**
+   * Starts a malware scan (quick | full); resolves when it has started, rejects with why it cannot (NO_SIGNATURES,
+   * ANTIVIRUS_MISSING, ANTIVIRUS_DISABLED). Absent = no security module.
+   */
+  scan?(kind: 'quick' | 'full'): Promise<void>;
+  cancelScan?(): Promise<void>;
+  updateDefinitions?(): Promise<void>;
   /** #38 quarantine and suspended processes; absent = no security module. */
   restore?(id: string): Promise<void>;
   deleteQuarantined?(id: string): Promise<void>;
@@ -71,7 +79,15 @@ export async function dispatch(member: string, body: unknown[], sender: string, 
       const [kind] = body;
       if (kind !== 'quick' && kind !== 'full') throw new BusError('InvalidArgs');
       if (!ops.scan) throw new BusError('Failed', 'NOT_SUPPORTED');
-      ops.scan(kind); return ['', []];
+      try { await ops.scan(kind); } catch (e) { throw failCode(e); }
+      return ['', []];
+    }
+    case 'CancelSecurityScan':
+    case 'UpdateSecurityDefinitions': {
+      const fn = member === 'CancelSecurityScan' ? ops.cancelScan : ops.updateDefinitions;
+      if (!fn) throw new BusError('Failed', 'NOT_SUPPORTED');
+      try { await fn.call(ops); } catch (e) { throw failCode(e); }
+      return ['', []];
     }
     case 'RestoreQuarantined':
     case 'DeleteQuarantined': {

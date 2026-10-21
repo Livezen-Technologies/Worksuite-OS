@@ -9,7 +9,20 @@ import { cpus, loadavg } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { SecurityHost } from './securityCenter.ts';
 import { CLAMD_SOCKET } from './protection.ts';
-import { exclusionArgs, FIREWALL_RULES, FRESHCLAM_ENV, LOG_PREFIX, parseClamscan, parseClamVersion, parseFirewallLog, POLICY_TABLE, walkFiles } from './security.ts';
+import { exclusionArgs, FIREWALL_RULES, FRESHCLAM_ENV, LOG_PREFIX, parseClamscan, parseClamVersion, parseFirewallLog, POLICY_TABLE } from './security.ts';
+
+/** One scan at a time, under a fixed name: cancel and a restarted agent can always find (and stop) it. */
+export const SCAN_UNIT = 'worksuite-av-scan.service';
+
+/** The transient unit's command line (#64): recursive, every file's result on stdout (progress), no summary. */
+export function scanCommand(plan: { roots: string[]; exclusions: string[] }, cpuQuota: number): string[] {
+  return [
+    '--quiet', '--wait', '--pipe', '--collect', `--unit=${SCAN_UNIT}`, '--description=WorkSuite Security malware scan',
+    '-p', `CPUQuota=${cpuQuota}%`, '-p', 'Nice=19', '-p', 'IOSchedulingClass=idle', '-p', 'MemoryHigh=1G',
+    '--', 'clamscan', '--stdout', '--no-summary', '--recursive', '--max-filesize=200M', '--max-scansize=400M',
+    ...exclusionArgs(plan.exclusions), ...plan.roots,
+  ];
+}
 
 function run(cmd: string, args: string[], timeoutMs = 120_000): Promise<{ code: number; out: string }> {
   return new Promise((resolve, reject) => {
@@ -73,29 +86,34 @@ export function linuxSecurityHost(o: { stateDir: string; runtimeDir: string; aud
     },
     async restartUnit(unit) { await run('systemctl', ['restart', unit]); },
     async resolve(host) { return (await lookup(host, { all: true })).map((a) => a.address); },
-    async scan(kind, s, since) {
-      const list = join(o.runtimeDir, `scan-${randomUUID()}.list`);
-      let files = 0;
-      try {
-        const paths: string[] = [];
-        for (const f of walkFiles(s.av_scan_paths, s.av_exclusions, kind === 'quick' ? since : null, {
-          readdir: (p) => readdirSync(p, { withFileTypes: true }).map((e) => ({ name: e.name, dir: e.isDirectory(), file: e.isFile(), link: e.isSymbolicLink() })),
-          mtimeMs: (p) => lstatSync(p).mtimeMs,
-        })) paths.push(f);
-        files = paths.length;
-        if (!files) return { files: 0, detections: [] };
-        writeFileSync(list, paths.join('\n') + '\n', { mode: 0o600 });
-        // Exit 0 = clean, 1 = detections, 2 = errors (unreadable files are not a failed scan when others were scanned).
-        const r = await run('systemd-run', [
-          '--quiet', '--wait', '--pipe', '--collect', '--unit=worksuite-av-scan-' + process.pid + '-' + Date.now(),
-          '-p', `CPUQuota=${s.av_cpu_quota_percent}%`, '-p', 'Nice=19', '-p', 'IOSchedulingClass=idle', '-p', 'MemoryHigh=768M',
-          '--', 'clamscan', '--infected', '--no-summary', '--stdout', '--max-filesize=200M', '--max-scansize=400M',
-          ...exclusionArgs(s.av_exclusions), `--file-list=${list}`,
-        ], 6 * 3_600_000);
-        if (r.code !== 0 && r.code !== 1 && r.code !== 2) throw new Error(`CLAMSCAN_${r.code}`);
-        return { files, detections: parseClamscan(r.out) };
-      } finally { rmSync(list, { force: true }); }
+    async scan(plan, s, onLine) {
+      const roots = plan.roots.filter((r) => existsSync(r));
+      if (!roots.length) return { code: 0 };
+      // A unit left from an agent that stopped mid-scan would make systemd-run refuse the name.
+      await run('systemctl', ['stop', SCAN_UNIT]).catch(() => {});
+      await run('systemctl', ['reset-failed', SCAN_UNIT]).catch(() => {});
+      return new Promise((resolve, reject) => {
+        // Outside the agent's sandbox (PrivateTmp, AppArmor): it sees the real /tmp and can read every local file.
+        const child = spawn('systemd-run', scanCommand({ roots, exclusions: plan.exclusions }, s.av_cpu_quota_percent), { stdio: ['ignore', 'pipe', 'pipe'] });
+        const lines = (stream: NodeJS.ReadableStream) => {
+          let buf = '';
+          stream.setEncoding('utf8');
+          stream.on('data', (c: string) => {
+            buf += c;
+            let i;
+            while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); try { onLine(l); } catch { /* one bad line */ } }
+            if (buf.length > 1 << 20) buf = '';
+          });
+          stream.on('end', () => { if (buf) try { onLine(buf); } catch { /* ignore */ } });
+        };
+        lines(child.stdout!); lines(child.stderr!);
+        child.on('error', (e) => reject(new Error(`SYSTEMD_RUN: ${e.message}`)));
+        child.on('close', (code) => resolve({ code: code ?? -1 }));
+      });
     },
+    async cancelScan() { await run('systemctl', ['stop', SCAN_UNIT]).catch(() => {}); },
+    // Our own mount table: /proc/1 needs CAP_SYS_PTRACE, and host mounts propagate into the agent's namespace.
+    async mounts() { return readFileSync('/proc/self/mounts', 'utf8'); },
     async quarantine(path, signature) {
       mkdirSync(qdir, { recursive: true, mode: 0o700 });
       const id = randomUUID();
