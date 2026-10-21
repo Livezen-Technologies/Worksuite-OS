@@ -210,15 +210,14 @@ export function mergeRcXml(rc: string, block: string): string {
   return `${base.slice(0, close)}${block}\n${base.slice(close)}`
 }
 
-/** The taskbar's height (src/screens/Desktop.tsx h-[52px]; index.css :root[data-touch] .ws-taskbar 64 px) kept free
- *  by Labwc's <margin bottom> (#53), so maximized and snapped windows stop above the taskbar in touch mode too. */
+/** The taskbar's height (src/screens/Desktop.tsx h-[52px]; index.css :root[data-touch] .ws-taskbar 64 px). The Wayland
+ *  bridge reserves it at the bottom of every output (layer-shell exclusive zone, SetPanelHeight): the one reservation
+ *  of the taskbar's edge (#53), so maximized and snapped windows stop above the taskbar, in touch mode too. */
 export const TASKBAR_HEIGHT = { normal: 52, touch: 64 } as const
-export function rcWithTaskbarMargin(rc: string, touchMode: boolean): string {
-  const h = touchMode ? TASKBAR_HEIGHT.touch : TASKBAR_HEIGHT.normal
-  const re = /<margin\b([^>]*?)\bbottom="\d+"([^>]*?)\/>/
-  if (re.test(rc)) return rc.replace(re, (_m, a: string, b: string) => `<margin${a}bottom="${h}"${b}/>`)
-  const close = rc.lastIndexOf('</labwc_config>')
-  return close < 0 ? rc : `${rc.slice(0, close)}  <margin bottom="${h}"/>\n${rc.slice(close)}`
+export const taskbarHeight = (touchMode: boolean) => (touchMode ? TASKBAR_HEIGHT.touch : TASKBAR_HEIGHT.normal)
+/** #53: a <margin bottom> from older versions, which added to the bridge's reservation (108 px free instead of 52). */
+export function rcWithoutTaskbarMargin(rc: string): string {
+  return rc.replace(/[ \t]*<margin\b[^>]*\bbottom="\d+"[^>]*\/>[ \t]*\n?/g, '')
 }
 
 const DESKTOPS = /<desktops\b[^>]*\/>|<desktops\b[^>]*>[\s\S]*?<\/desktops>/
@@ -270,9 +269,9 @@ export function oskArgs(s: TouchSettings, methods: string[]): string[] {
  *  floating layouts, Sinhala and Tamil, and layouts by field type. Preferred over wvkbd when installed. */
 export const WORKSUITE_OSK = '/usr/lib/worksuite/worksuite-osk'
 const WVKBD_SETTLE_MS = 400
-export function worksuiteOskArgs(s: TouchSettings, methods: string[]): string[] {
+export function worksuiteOskArgs(s: TouchSettings, methods: string[], panel: number = TASKBAR_HEIGHT.normal): string[] {
   const langs = ['en', ...['si', 'ta'].filter((l) => methods.some((m) => m.includes(`m17n_${l}`) || m.startsWith(`keyboard-${l === 'si' ? 'lk' : 'in'}`)))]
-  return ['--size', s.oskSize, '--mode', s.oskLayout, '--langs', (langs.length > 1 ? langs : ['en', 'si', 'ta']).join(','), ...(s.oskSuggestions ? [] : ['--no-suggestions'])]
+  return ['--size', s.oskSize, '--mode', s.oskLayout, '--langs', (langs.length > 1 ? langs : ['en', 'si', 'ta']).join(','), ...(s.oskSuggestions ? [] : ['--no-suggestions']), '--panel', String(panel)]
 }
 /** HTML field → text-input-v3 content purpose and hints, as worksuite-osk takes them ("show <purpose> <hints>"). */
 export function oskControlLine(show: boolean, purpose = 0, hints = 0): string {
@@ -361,6 +360,8 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
   const labwcDir = path.join(xdgDirs(home).config, 'worksuite', 'labwc')
   const st: TouchState = { devices: [], settings: loadTouch(file), tabletSwitch: false, touchMode: false, orientation: null, hasAccelerometer: false, osk: { available: false, visible: false }, outputs: [] }
   let listener: (s: TouchState) => void = () => {}
+  let heightListener: (h: number) => unknown = () => undefined
+  let sentHeight = -1
   let osk: Proc | null = null
   let switchWatch: Proc | null = null
   let sensor: Proc | null = null
@@ -415,7 +416,7 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
       let previous = ''
       try { previous = readFileSync(userRc, 'utf8') } catch { /* absent */ }
       try { if (lstatSync(userRc).isSymbolicLink()) unlinkSync(userRc) } catch { /* absent */ }
-      writeFileSync(`${userRc}.tmp`, rcWithTaskbarMargin(carryDesktops(previous, mergeRcXml(base, labwcTouchBlock(st.settings, screens))), st.touchMode))
+      writeFileSync(`${userRc}.tmp`, rcWithoutTaskbarMargin(carryDesktops(previous, mergeRcXml(base, labwcTouchBlock(st.settings, screens)))))
       renameSync(`${userRc}.tmp`, userRc)
     } catch { return { available: false, reason: 'labwc_config' } }
     const r = await exec('labwc', ['--reconfigure'])
@@ -446,7 +447,7 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
     let methods: string[] = []
     try { methods = readFileSync(path.join(xdgDirs(home).config, 'fcitx5', 'profile'), 'utf8').split('\n').map((l) => /^Name=(.+)$/.exec(l.trim())?.[1] ?? '').filter(Boolean) } catch { /* default layout */ }
     oskIsOurs = hasOsk() && !oskOursFailed
-    osk = oskIsOurs ? spawnFn(WORKSUITE_OSK, worksuiteOskArgs(st.settings, methods)) : spawnFn('wvkbd-mobintl', oskArgs(st.settings, methods))
+    osk = oskIsOurs ? spawnFn(WORKSUITE_OSK, worksuiteOskArgs(st.settings, methods, taskbarHeight(st.touchMode))) : spawnFn('wvkbd-mobintl', oskArgs(st.settings, methods))
     st.osk = { available: !!osk, visible: false }
     oskStarted = Date.now()
     const ours = oskIsOurs
@@ -480,8 +481,14 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
     // Off → on re-reads the sensor; on → off puts the panel back upright.
     if (was && !st.touchMode) { const internal = st.outputs.find((n) => /^(eDP|LVDS|DSI)/.test(n)); if (internal) await exec('wlr-randr', ['--output', internal, '--transform', 'normal']) }
     if (!was && st.touchMode && st.orientation) await rotate(st.orientation)
-    // The taskbar grows to 64 px in touch mode and back to 52 px: Labwc's work area follows (#53).
-    if (was !== st.touchMode) await writeLabwc()
+    // The taskbar grows to 64 px in touch mode and back to 52 px: the bridge's reservation follows (#53).
+    const h = taskbarHeight(st.touchMode)
+    if (h !== sentHeight) {
+      // The WorkSuite keyboard docks on the taskbar: started again with the new height (wvkbd has no such setting).
+      if (sentHeight >= 0 && oskIsOurs) stopOsk()
+      sentHeight = h
+      await Promise.resolve(heightListener(h)).catch(() => undefined)
+    }
     if (st.settings.osk === 'off') stopOsk(); else startOsk()
     if (!oskWanted(st.settings, st.touchMode)) setOskVisible(false)
     emit()
@@ -507,6 +514,8 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
 
   return {
     onChange(cb: (s: TouchState) => void) { listener = cb },
+    /** The taskbar's height for the bridge's reservation (#53): at start and when touch mode changes it. */
+    onTaskbarHeight(cb: (h: number) => unknown) { heightListener = cb },
     async start() {
       st.devices = await detect(); st.outputs = await outputs()
       if (st.devices.some((d) => d.kinds.includes('touchscreen'))) await writeLabwc()
@@ -567,8 +576,10 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
   }
 }
 
-export function startTouchHost(handle: Handle, broadcast: (ch: string, p: unknown) => void, home: string, b = touchBridge(home)) {
+export function startTouchHost(handle: Handle, broadcast: (ch: string, p: unknown) => void, home: string, b = touchBridge(home),
+  setPanelHeight: (h: number) => unknown = () => undefined) {
   b.onChange((s) => broadcast('ws:touchChanged', s))
+  b.onTaskbarHeight(setPanelHeight)
   handle('ws:touchState', () => b.state())
   handle('ws:touchSet', (json) => b.set(json))
   handle('ws:oskShow', (on, purpose, hints) => b.osk(on === '1', Number(purpose) || 0, Number(hints) || 0))

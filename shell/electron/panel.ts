@@ -285,6 +285,9 @@ export class PanelClient {
   /** Task View: the shell's window over the apps (it is always on bottom otherwise, rc.xml), and back. */
   setShellRaised(handle: string, raised: boolean) { return this.op('SetShellRaised', 'sb', [handle, raised]) }
 
+  /** #53: the taskbar's height, reserved by the bridge at the bottom of every output (layer-shell exclusive zone). */
+  setPanelHeight(height: number) { return this.op('SetPanelHeight', 'u', [Math.max(0, Math.min(256, Math.round(height)))]) }
+
   /** A small JPEG of an output for Task View, as a data: URL held in memory only; null when the bridge can't. */
   async captureOutput(output: string, maxWidth: number): Promise<string | null> {
     try {

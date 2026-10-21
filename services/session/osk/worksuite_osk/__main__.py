@@ -1,4 +1,4 @@
-"""worksuite-osk [--kiosk] [--size small|medium|large] [--mode full|split|floating] [--langs en,si,ta] [--no-suggestions]
+"""worksuite-osk [--kiosk] [--size small|medium|large] [--mode full|split|floating] [--langs en,si,ta] [--no-suggestions] [--panel PX]
 
 Started by the shell (shell/electron/touch.ts) or the kiosk session (worksuite-kiosk-start, --kiosk: always shown).
 """
@@ -17,6 +17,8 @@ def options(argv=None):
     p.add_argument("--mode", choices=MODES, default="full")
     p.add_argument("--langs", default="en,si,ta")
     p.add_argument("--no-suggestions", action="store_true")
+    # The taskbar's height (52 px, 64 in touch mode; shell/electron/touch.ts), which the docked keyboard sits on (#53).
+    p.add_argument("--panel", type=int, default=None)
     o = p.parse_args(argv)
     o.langs = tuple(x for x in o.langs.split(",") if x in ("en", "si", "ta")) or ("en",)
     return o
@@ -28,7 +30,7 @@ def main(argv=None) -> int:  # pragma: no cover
     kb = Keyboard(lang=o.langs[0], langs=o.langs, mode=o.mode, suggestions_on=not o.no_suggestions,
                   learned_path=None if o.kiosk else os.path.join(data, "worksuite", "osk-words.json"))
     from .ui import run
-    return run(kb, o.size, o.kiosk, os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "worksuite-osk.sock"))
+    return run(kb, o.size, o.kiosk, os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "worksuite-osk.sock"), o.panel)
 
 
 if __name__ == "__main__":  # pragma: no cover

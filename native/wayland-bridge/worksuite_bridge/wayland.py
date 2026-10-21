@@ -74,6 +74,20 @@ class WaylandBackend(Backend):
                     self.reserver.add(key, o)
                 self.display.roundtrip()
 
+    def set_panel_height(self, height: int) -> int:
+        """The taskbar's reserved edge on every output (#53), in logical pixels; returns the height now in force."""
+        height = max(0, min(256, int(height)))
+        self.panel_height = height
+        outs = {key: o for key, (o, _info) in self._outputs.items()}
+        if self.reserver is not None:
+            self.reserver.set_height(height, outs)
+        elif height > 0 and None not in (self.compositor, self.shm, self.layer_shell):
+            from .layer import PanelReserver
+            self.reserver = PanelReserver(self.compositor, self.shm, self.layer_shell, height, self.display.flush)
+            for key, o in outs.items():
+                self.reserver.add(key, o)
+        return height
+
     def disconnect(self) -> None:
         """Drops every proxy before the display goes away (pywayland proxies must not outlive it)."""
         import gc

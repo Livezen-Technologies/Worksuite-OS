@@ -148,6 +148,10 @@ class Backend:
     def activate(self, native: Any, token: str) -> None:
         raise NotSupported("activate")
 
+    def set_panel_height(self, height: int) -> int:
+        """Reserve the taskbar's bottom edge (logical px) on every output; returns the height in force."""
+        raise NotSupported("panel reservation")
+
     def close(self, native: Any) -> None:
         raise NotSupported("close")
 

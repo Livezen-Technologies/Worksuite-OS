@@ -103,6 +103,7 @@ class Bridge:
             (BRIDGE_PATH, BRIDGE_IFACE, "SetSwitcherAllWorkspaces"): self._switcher_all,
             (BRIDGE_PATH, BRIDGE_IFACE, "CaptureOutput"): self._capture_output,
             (BRIDGE_PATH, BRIDGE_IFACE, "SetShellRaised"): self._shell_raised,
+            (BRIDGE_PATH, BRIDGE_IFACE, "SetPanelHeight"): self._panel_height,
             (EVENTS_PATH, EVENTS_IFACE, "Event"): self._workspace_event,
             (EVENTS_PATH, INTROSPECTABLE, "Introspect"): self._xml(EVENTS_XML),
             (BRIDGE_PATH, PROPS, "Get"): self._bridge_prop_get,
@@ -356,6 +357,13 @@ class Bridge:
         log.info("shell %s", "lifted over the apps" if m.body[1] else "back below the apps")
         await self._need_desktops().set_shell_raised(str(m.body[0]), bool(m.body[1]))
         return "", []
+
+    async def _panel_height(self, m: Message) -> tuple[str, list[Any]]:
+        """#53: the taskbar's height (52 px, 64 in touch mode) reserved at the bottom of every output."""
+        h = int(m.body[0])
+        if not 0 <= h <= 256:
+            raise BridgeError("panel height out of range")
+        return "u", [self.backend.set_panel_height(h)]
 
     async def _capture_output(self, m: Message) -> tuple[str, list[Any]]:
         if self.capture is None:

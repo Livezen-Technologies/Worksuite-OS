@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from .model import ACTIVATED, MINIMIZED, NotFound, NotSupported, Window, WindowRegistry
+from .model import ACTIVATED, FULLSCREEN, MAXIMIZED, MINIMIZED, NotFound, NotSupported, Window, WindowRegistry
 
 MAX_WORKSPACES = 16
 NAME_MAX = 40
@@ -229,6 +229,11 @@ LIFT_KEY = "F23"
 LOWER_KEY = "F22"
 RAISE_KEY = "F21"
 SHELL_QUERY = 'identifier="worksuite-shell"'
+# #53: a window restored from maximized (or full screen) goes back to the size it had before. Labwc 0.8 keeps only its
+# top-left corner in the usable area there, so a window as tall as the screen (an app that started maximized, or asked
+# for the whole screen) came back over the taskbar. FitToOutput shrinks the focused window to the usable area (the
+# screen less the taskbar's reservation, layer.py) when it is larger, and leaves it alone otherwise.
+FIT_KEY = "F20"
 
 
 class LabwcKeys:
@@ -274,6 +279,42 @@ class LabwcKeys:
 
     def raise_shell(self) -> None:
         self._send(self.argv(RAISE_KEY, False))
+
+    def fit(self) -> None:
+        self._send(self.argv(FIT_KEY, False))
+
+
+class RestoreFit:
+    """Sends FIT_KEY when the focused app window leaves maximized or full screen (#53). Not for the shell's windows."""
+
+    def __init__(self, registry: WindowRegistry, keys: LabwcKeys, schedule: Callable[[Callable[[], None]], None] | None = None):
+        self.keys = keys
+        self.schedule = schedule or self._executor
+        self._flags: dict[str, int] = {}
+        registry.listeners.append(self._event)
+
+    @staticmethod
+    def _executor(fn: Callable[[], None]) -> None:
+        try:
+            asyncio.get_running_loop().run_in_executor(None, fn)
+        except RuntimeError:  # no loop (tests, tools): at once
+            fn()
+
+    def _fit(self) -> None:
+        try:
+            self.keys.fit()
+        except NotSupported:
+            pass  # no wtype: Labwc's own placement only
+
+    def _event(self, kind: str, w: Window) -> None:
+        before = self._flags.pop(w.handle, 0)
+        if kind == "removed":
+            return
+        self._flags[w.handle] = w.flags
+        big = MAXIMIZED | FULLSCREEN
+        if (kind == "changed" and before & big and not w.flags & (big | MINIMIZED) and w.flags & ACTIVATED
+                and w.app_id.lower() not in OWN_APP_IDS and self.keys.available()):
+            self.schedule(self._fit)
 
 
 # ---- rc.xml ---------------------------------------------------------------------------------------------------
@@ -650,4 +691,5 @@ def rc_bindings(count: int = MAX_WORKSPACES) -> str:
                  f'<action name="ToggleAlwaysOnBottom"/></then></action></keybind>')
     lines.append(f'    <keybind key="C-A-W-{RAISE_KEY}"><action name="ForEach"><query {SHELL_QUERY}/><then><action name="Raise"/></then></action></keybind>')
     lines.append(f'    <keybind key="C-A-W-{OMNI_KEY}"><action name="ToggleOmnipresent"/></keybind>')
+    lines.append(f'    <keybind key="C-A-W-{FIT_KEY}"><action name="FitToOutput"/></keybind>')
     return "\n".join(lines)

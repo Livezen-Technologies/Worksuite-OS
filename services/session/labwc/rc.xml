@@ -51,11 +51,12 @@
     <drawContents>yes</drawContents>
     <cornerRange>8</cornerRange>
   </resize>
-  <!-- #53: the work area. The taskbar is drawn by the shell's full-screen window (no layer-shell exclusive zone), so the
-       52 px at the bottom (shell/src/screens/Desktop.tsx, .ws-taskbar h-[52px]) are kept free here: maximized and
-       snapped windows and new windows' placement stop above the taskbar instead of covering it. In touch mode the taskbar
-       is 64 px and shell/electron/touch.ts writes 64 in the user's copy (52 again when touch mode ends). -->
-  <margin bottom="52"/>
+  <!-- #53: the work area. No <margin bottom> here: the taskbar's edge is reserved once, by the Wayland bridge's
+       layer-shell exclusive zone on every output (native/wayland-bridge/worksuite_bridge/layer.py), sized to the taskbar
+       (52 px; 64 px in touch mode, which shell/electron/touch.ts sets with SetPanelHeight). A margin here as well was
+       added to it (108 px kept free under maximized windows instead of 52). Maximized and snapped windows and new
+       windows' size and placement stay in that usable area; C-A-W-F20 (FitToOutput, below) is how the bridge shrinks a
+       window restored from maximized that would reach under the taskbar. -->
   <!-- One desktop to start with, like Windows 11; Task View adds more (the bridge rewrites this in the user's copy). -->
   <desktops number="1"><popupTime>0</popupTime><names><name>Desktop 1</name></names></desktops>
   <!-- Alt+Tab (#54): Labwc's own switcher (drawn by the compositor: no extra process, no CPU while closed). A list of the
@@ -180,6 +181,7 @@
     <keybind key="C-A-W-F22"><action name="ForEach"><query identifier="worksuite-shell" omnipresent="yes"/><then><action name="ToggleOmnipresent"/><action name="ToggleAlwaysOnBottom"/></then></action></keybind>
     <keybind key="C-A-W-F21"><action name="ForEach"><query identifier="worksuite-shell"/><then><action name="Raise"/></then></action></keybind>
     <keybind key="C-A-W-F24"><action name="ToggleOmnipresent"/></keybind>
+    <keybind key="C-A-W-F20"><action name="FitToOutput"/></keybind>
     <!-- Screenshots (shell/electron/capture.ts through worksuite-screenshot; xdg-desktop-portal when the shell is not running):
          Print = whole screen, saved to Pictures/Screenshots and copied (or the snipping overlay, Settings › Keyboard),
          Super+Print = the same, Alt+Print = a window to the clipboard, Super+Shift+S and Shift+Print = snipping overlay. -->

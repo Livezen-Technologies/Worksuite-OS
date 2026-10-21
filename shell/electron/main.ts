@@ -748,7 +748,8 @@ app.whenReady().then(() => {
     readPolicy: () => { try { return readFileSync(AGENT_POLICY_PATH, 'utf8') } catch { return null } },
     stateDir: path.join(app.getPath('home'), '.local/state/worksuite/permissions'),
   }))
-  startTouchHost(handle, broadcast, app.getPath('home'))
+  // #53: the bridge reserves the taskbar's height (52 px, touch mode 64 px) at the bottom of every output.
+  startTouchHost(handle, broadcast, app.getPath('home'), undefined, (h) => panelClient?.setPanelHeight(h))
   // Settings › Mouse & touchpad (#35): Labwc libinput block, applied live with labwc --reconfigure.
   startPointerHost(handle, app.getPath('home'))
   // The shell is the session's org.freedesktop.Notifications server (WSOS-INT-007).

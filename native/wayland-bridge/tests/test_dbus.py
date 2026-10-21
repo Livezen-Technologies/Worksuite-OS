@@ -37,6 +37,10 @@ class FakeBackend(Backend):
     def set_minimized(self, native, state):
         self.calls.append(("minimize", native, state))
 
+    def set_panel_height(self, height):
+        self.calls.append(("panel", height))
+        return height
+
 
 class Item(ServiceInterface):
     def __init__(self):
@@ -93,6 +97,19 @@ class BridgeDbusTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.backend.calls, [("activate", "native-1", "tok"), ("minimize", "native-1", True), ("close", "native-1")])
         o = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "ListOutputs")
         self.assertEqual(o.body[0], [["HDMI-A-1", "Dell", 0, 0, 1920, 1080, 1.5]])
+
+    async def test_panel_height_follows_the_taskbar(self):
+        # #53: touch mode's 64 px taskbar, and back to 52; the shell only (the call is on the protected path).
+        r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "SetPanelHeight", "u", [64])
+        self.assertEqual(r.body, [64])
+        await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "SetPanelHeight", "u", [52])
+        self.assertEqual(self.backend.calls, [("panel", 64), ("panel", 52)])
+        r = await call(self.client, BRIDGE_PATH, BRIDGE_IFACE, "SetPanelHeight", "u", [5000])
+        self.assertEqual(r.message_type, MessageType.ERROR)
+        self.assertEqual(len(self.backend.calls), 2)
+        self.assertIn(BRIDGE_PATH, self.bridge.protected)               # shell/panel callers only
+        r = await call(self.client, BRIDGE_PATH, "org.freedesktop.DBus.Introspectable", "Introspect")
+        self.assertIn("SetPanelHeight", r.body[0])
 
     async def test_stale_handle_is_not_found(self):
         w = self.registry.add("n", "foot", "t")

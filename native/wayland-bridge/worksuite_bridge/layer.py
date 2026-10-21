@@ -2,7 +2,9 @@
 
 For every wl_output the bridge maps a transparent, input-less wlr-layer-shell surface on the `bottom` layer,
 anchored to the bottom edge with an exclusive zone of the panel height. Labwc then shrinks each output's usable
-area, so maximised windows stop above the shell's taskbar on every monitor. When an output goes away its
+area, so maximised and snapped windows, and new windows' size and placement, stop above the shell's taskbar on every
+monitor. This is the only reservation of the taskbar's edge (#53): rc.xml has no <margin bottom>, which added to it.
+The height is the taskbar's (52 px, 64 in touch mode); the shell sets it with SetPanelHeight when touch mode changes. When an output goes away its
 surface is destroyed and Labwc re-arranges (and moves windows off the removed output); a new output gets a
 new surface. The surfaces draw nothing: the taskbar itself is the shell's per-output Electron panel window.
 """
@@ -45,6 +47,26 @@ class PanelReserver:
     def reserved(self) -> dict[Any, tuple[int, int]]:
         """Configured (width, height) per output key, for tests and diagnostics."""
         return {k: (r.width, r.height) for k, r in self._res.items() if r.configured}
+
+    def set_height(self, height: int, outputs: dict[Any, Any]) -> None:
+        """A new panel height for every output (touch mode); 0 drops the reservations. `outputs`: key → wl_output,
+        for the outputs to reserve when there were no reservations before."""
+        height = max(0, int(height))
+        if height == self.height:
+            return
+        self.height = height
+        if height <= 0:
+            self.clear()
+            return
+        for key, output in outputs.items():
+            r = self._res.get(key)
+            if r is None:
+                self.add(key, output)
+                continue
+            r.layer.set_size(0, height)
+            r.layer.set_exclusive_zone(height)
+            r.surface.commit()  # the compositor answers with a configure of the new size
+        self.flush()
 
     def add(self, key: Any, output: Any) -> None:
         if key in self._res or self.height <= 0:

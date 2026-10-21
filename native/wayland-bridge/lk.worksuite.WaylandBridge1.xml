@@ -94,6 +94,12 @@
     <method name="SetShellRaised">
       <arg name="handle" type="s" direction="in"/><arg name="raised" type="b" direction="in"/>
     </method>
+    <!-- #53: the shell's taskbar height in logical pixels (52, touch mode 64), reserved at the bottom of every output
+         with a layer-shell exclusive zone, so maximized, snapped and new windows stop above the taskbar. 0 removes it.
+         Returns the height in force. -->
+    <method name="SetPanelHeight">
+      <arg name="height" type="u" direction="in"/><arg name="applied" type="u" direction="out"/>
+    </method>
     <signal name="WorkspacesChanged">
       <arg name="current" type="u"/><arg name="count" type="u"/>
     </signal>
