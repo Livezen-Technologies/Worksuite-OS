@@ -297,7 +297,7 @@ export function layoutMatches(layout: Layout, outputs: OutputInfo[]): boolean {
   })
 }
 
-export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Clock; spawn?: Spawn; onChange?: (s: DisplayState) => void; drivers?: () => Record<string, string> }) {
+export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Clock; spawn?: Spawn; onChange?: (s: DisplayState) => void; settle?: (layout: Layout) => Promise<void>; drivers?: () => Record<string, string> }) {
   const { exec, storeFile } = opts
   const drivers = opts.drivers ?? (() => drmDrivers())
   let arrangement: Arrangement = 'extend'
@@ -345,6 +345,12 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
     return { ok: true, value: { outputs: connected, layout: currentLayout(connected, primary, arrangement), wallpapers, pending: timer.deadline ? { deadline: timer.deadline } : null } }
   }
   async function emit() { const s = await state(); if (s.ok) opts.onChange?.(s.value) }
+  // Waits until the shell's windows are redrawn at the layout's geometry (main.ts): the countdown and its Keep button
+  // must not appear while what is drawn and where clicks land still disagree (#60). Never fails the change.
+  async function settle(layout: Layout) {
+    await emit()
+    try { await opts.settle?.(layout) } catch { /* the countdown still starts */ }
+  }
 
   return {
     timer,
@@ -372,6 +378,7 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
       primary = layout.primary
       wallpapers = walls
       applied = layout
+      await settle(layout)
       const deadline = timer.start(() => { void this.revert() })
       void emit()
       return { ok: true, value: { deadline } }
@@ -409,6 +416,9 @@ export function displayManager(opts: { exec: Exec; storeFile: string; clock?: Cl
       wallpapers = p.wallpapers
       const o = await read()
       const r = await run(p.layout, o.ok ? o.value : [])
+      // Back to the old layout and the old shell geometry together, before anything else is applied.
+      applying++
+      try { await settle(p.layout) } finally { applying-- }
       void emit()
       return r
     },

@@ -20,9 +20,18 @@ export function planOutputWindows(open: Map<string, Omit<Rect, 'name' | 'primary
 
 export interface ShellWindow { setBounds(b: { x: number; y: number; width: number; height: number }): void; setFullScreen(f: boolean): void; close(): void }
 
+/** Whether Electron's view of the screens (logical, DIP bounds) has caught up with a layout's output rectangles:
+ *  after wlr-randr changes a scale or mode, Chromium learns of it from wl_output a little later (#60). */
+export function screensMatch(rects: Omit<Rect, 'name' | 'primary'>[], screens: { bounds: { x: number; y: number; width: number; height: number } }[], slack = 2): boolean {
+  const near = (a: number, b: number) => Math.abs(a - b) <= slack
+  return rects.every((r) => screens.some(({ bounds: b }) => near(b.width, r.width) && near(b.height, r.height)))
+}
+
 /** Applies plans to real windows; `make` creates the window for one output. */
-export function outputWindows(make: (r: Rect) => ShellWindow, primaryWindow: () => ShellWindow | null) {
-  const open = new Map<string, { win: ShellWindow; rect: Rect }>()
+export function outputWindows<W extends ShellWindow>(make: (r: Rect) => W, primaryWindow: () => W | null) {
+  const open = new Map<string, { win: W; rect: Rect }>()
+  // Fullscreen is dropped and re-asserted so the compositor sizes the window to the output's new geometry; the shell
+  // windows are frameless, so this never shows them as decorated windows (#60).
   const place = (w: ShellWindow, r: Rect) => { w.setFullScreen(false); w.setBounds(r); w.setFullScreen(true) }
   let primaryRect: Rect | null = null
   return {
@@ -34,6 +43,18 @@ export function outputWindows(make: (r: Rect) => ShellWindow, primaryWindow: () 
       const p = primaryWindow()
       if (p && plan.primary && JSON.stringify(plan.primary) !== JSON.stringify(primaryRect)) { primaryRect = plan.primary; place(p, plan.primary) }
       return plan
+    },
+    /** Re-places every shell window, the main one too, on its current output rectangle, whether or not the plan
+     *  changed: after a scale or mode change, and whenever Electron reports new display metrics (#60). */
+    refit() {
+      for (const o of open.values()) place(o.win, o.rect)
+      const p = primaryWindow()
+      if (p && primaryRect) place(p, primaryRect)
+    },
+    /** Every shell window with the rectangle it should fill. */
+    placed(): { win: W; rect: Rect }[] {
+      const p = primaryWindow()
+      return [...(p && primaryRect ? [{ win: p, rect: primaryRect }] : []), ...open.values()]
     },
     names: () => [...open.keys()],
     forget(name: string) { open.delete(name) },
