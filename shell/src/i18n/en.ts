@@ -146,6 +146,7 @@ const en = {
   'a11y.highContrast': 'High contrast',
   'a11y.reducedMotion': 'Reduce motion',
   'a11y.reducedMotionSystem': 'On because the system asks for reduced motion',
+  'a11y.group.display': 'Display',
   'a11y.textSize': 'Text size',
   'a11y.language': 'Language',
   'a11y.languageDraft': '{name} (draft)',

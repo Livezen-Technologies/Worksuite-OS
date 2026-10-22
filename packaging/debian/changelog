@@ -13,6 +13,10 @@ worksuite-os (1.0.0~dev2) trixie; urgency=medium
     freshclam is started when a scan is asked for; Settings names why
     automatic updates aren't running and offers Update definitions; the image
     creates /var/lib/clamav and /var/log/clamav for clamav at boot.
+  * Shell (#70): the taskbar's Accessibility panel uses the design-system
+    pieces: Display and Language groups, the Settings switch with On/Off,
+    a segmented text-size control (radio group, arrow keys), a full-width
+    language picker, theme variables and rem sizes so it scales.
 
  -- WorkSuite OS Team <os@worksuitecloud.com>  Thu, 22 Oct 2026 09:00:00 +0000
 

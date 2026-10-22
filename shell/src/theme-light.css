@@ -3,7 +3,6 @@
 :root[data-theme="light"] .bg-\[\#050B18\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #DFE5F3; }
 :root[data-theme="light"] .bg-\[\#050E24\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #E4E9F5; }
 :root[data-theme="light"] .bg-\[\#071330\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #EBEEF7; }
-:root[data-theme="light"] .bg-\[\#0A1838\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #EFF2F9; }
 :root[data-theme="light"] .bg-\[\#0A1A3D\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #F2F4FA; }
 :root[data-theme="light"] .bg-\[\#0C1E46\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #F6F8FC; }
 :root[data-theme="light"] .bg-\[\#0F2350\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #FBFCFE; }
@@ -92,7 +91,6 @@
 :root[data-theme="light"] .border-\[rgba\(95\,211\,154\,0\.4\)\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(39,140,90,0.5); }
 :root[data-theme="light"] .border-white\/10:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.16); }
 :root[data-theme="light"] .border-white\/15:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.24); }
-:root[data-theme="light"] .border-white\/20:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.32); }
 :root[data-theme="light"] .border-white\/25:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.4); }
 :root[data-theme="light"] .border-white\/\[0\.12\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.192); }
 :root[data-theme="light"] .border-white\/\[0\.14\]:not(.ws-dark-zone *, .ws-dark-zone) { border-color: rgba(89,89,89,0.224); }

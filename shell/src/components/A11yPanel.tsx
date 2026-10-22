@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { motionReduced, setA11y, systemReducedMotion, TEXT_SCALES, useA11y } from '../lib/a11y'
+import { rowLine, Switch } from './Dk'
 import { LOCALES, REVIEW, setLocale, useT, getLocale, type Locale } from '../i18n'
 
 // Accessibility quick panel (WSOS-ACC-001…006): high contrast, reduced motion, text size and language.
@@ -12,46 +13,70 @@ export default function A11yPanel({ onClose, className = '' }: { onClose: () => 
 
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null
-    ref.current?.querySelector<HTMLElement>('input, button, select')?.focus()
+    ref.current?.querySelector<HTMLElement>('[role=switch], input, select')?.focus()
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
     window.addEventListener('keydown', onKey, true)
     return () => { window.removeEventListener('keydown', onKey, true); opener?.focus?.() }
   }, [onClose])
 
-  const row = 'flex min-h-11 items-center justify-between gap-4 rounded-lg px-1 text-sm'
+  // #70: one design-system look (Dk tokens, --ws-g-* theme variables): grouped rows on a card, the Settings switch with
+  // its On/Off word, a segmented control for text size, the language picker full width under its label. Sizes are in
+  // rem so the panel grows with the text size it sets, and rows wrap rather than clip at 150%.
+  const group = 'flex flex-col overflow-hidden rounded-[0.75rem] border border-[var(--ws-g-line)] bg-[var(--ws-g-card)]'
+  const row = 'flex min-h-[2.75rem] flex-wrap items-center justify-between gap-x-4 gap-y-1 px-[0.875rem] py-2 text-sm'
+  const heading = 'm-0 px-1 text-xs font-medium uppercase tracking-[0.08em] text-[var(--ws-g-muted)]'
+  const pick = (dir: 1 | -1) => {
+    const i = Math.max(0, TEXT_SCALES.indexOf(prefs.textScale))
+    const next = TEXT_SCALES[(i + dir + TEXT_SCALES.length) % TEXT_SCALES.length]
+    setA11y({ textScale: next })
+    ref.current?.querySelector<HTMLElement>(`[data-scale="${next}"]`)?.focus()
+  }
   return (
-    <div ref={ref} role="dialog" aria-modal="false" aria-labelledby="ws-a11y-title"
-      className={`absolute z-50 flex w-[320px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-2xl border border-[rgba(127,178,255,0.25)] bg-[#0A1838] p-4 text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)] ${className}`}>
-      <div className="flex items-center justify-between">
+    <div ref={ref} role="dialog" aria-modal="false" aria-labelledby="ws-a11y-title" data-testid="a11y-panel"
+      className={`absolute z-50 flex w-[20rem] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-5rem)] flex-col gap-3 overflow-y-auto rounded-2xl border border-[rgba(127,178,255,0.25)] bg-[var(--ws-g-dialog)] p-4 text-[var(--ws-g-ink)] shadow-[0_24px_60px_rgba(0,0,0,0.5)] ${className}`}>
+      <div className="flex items-center justify-between gap-2">
         <h2 id="ws-a11y-title" className="m-0 text-base font-semibold">{t('a11y.title')}</h2>
-        <button type="button" aria-label={t('a11y.close')} onClick={onClose} className="flex size-8 cursor-pointer items-center justify-center rounded-md text-[#C9D6EE] hover:bg-white/10">×</button>
+        <button type="button" aria-label={t('a11y.close')} onClick={onClose} className="flex size-[2.75rem] -mr-2 cursor-pointer items-center justify-center rounded-lg text-lg text-[var(--ws-g-soft)] hover:bg-white/10">×</button>
       </div>
-      <label className={row}>
-        <span>{t('a11y.highContrast')}</span>
-        <input type="checkbox" role="switch" checked={prefs.highContrast} onChange={(e) => setA11y({ highContrast: e.target.checked })} className="size-5 accent-[#1F6BFF]" />
-      </label>
-      <label className={row}>
-        <span className="flex flex-col">
-          <span>{t('a11y.reducedMotion')}</span>
-          {sysMotion && <span className="text-xs text-[#C9D6EE]">{t('a11y.reducedMotionSystem')}</span>}
-        </span>
-        <input type="checkbox" role="switch" checked={motionReduced(prefs)} disabled={sysMotion} onChange={(e) => setA11y({ reducedMotion: e.target.checked })} className="size-5 accent-[#1F6BFF]" />
-      </label>
-      <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0 px-1">
-        <legend className="mb-1.5 p-0 text-sm">{t('a11y.textSize')}</legend>
-        <div className="flex gap-1.5">
-          {TEXT_SCALES.map((s) => (
-            <button key={s} type="button" aria-pressed={prefs.textScale === s} onClick={() => setA11y({ textScale: s })}
-              className={`h-9 flex-1 cursor-pointer rounded-lg text-sm ${prefs.textScale === s ? 'bg-[#1F6BFF] font-semibold text-white' : 'bg-white/[0.08] hover:bg-white/15'}`}>{s * 100}%</button>
-          ))}
+      <section aria-labelledby="ws-a11y-display" className="flex flex-col gap-1.5">
+        <h3 id="ws-a11y-display" className={heading}>{t('a11y.group.display')}</h3>
+        <div className={group}>
+          <div className={row}>
+            <span id="ws-a11y-hc">{t('a11y.highContrast')}</span>
+            <Switch label={t('a11y.highContrast')} checked={prefs.highContrast} onChange={(v) => setA11y({ highContrast: v })} small />
+          </div>
+          <div className={`${row} ${rowLine}`}>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span>{t('a11y.reducedMotion')}</span>
+              {sysMotion && <span className="text-xs text-[var(--ws-g-soft)]">{t('a11y.reducedMotionSystem')}</span>}
+            </span>
+            <Switch label={t('a11y.reducedMotion')} checked={motionReduced(prefs)} disabled={sysMotion} onChange={(v) => setA11y({ reducedMotion: v })} small />
+          </div>
+          <div className={`flex flex-col gap-2 px-[0.875rem] py-2.5 text-sm ${rowLine}`}>
+            <span id="ws-a11y-size">{t('a11y.textSize')}</span>
+            <div role="radiogroup" aria-labelledby="ws-a11y-size" data-testid="a11y-text-size"
+              onKeyDown={(e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); pick(1) } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); pick(-1) } }}
+              className="grid gap-0.5 rounded-[0.625rem] border border-[var(--ws-g-line)] bg-[var(--ws-g-field)] p-0.5" style={{ gridTemplateColumns: `repeat(${TEXT_SCALES.length}, minmax(0, 1fr))` }}>
+              {TEXT_SCALES.map((s) => {
+                const on = prefs.textScale === s
+                return (
+                  <button key={s} type="button" role="radio" aria-checked={on} tabIndex={on ? 0 : -1} data-scale={s} onClick={() => setA11y({ textScale: s })}
+                    className={`min-h-[2.25rem] cursor-pointer rounded-lg px-1 text-sm tabular-nums transition-colors ${on ? 'bg-[#1F6BFF] font-semibold text-white shadow-[0_1px_3px_rgba(0,0,0,0.35)]' : 'text-[var(--ws-g-soft)] hover:bg-white/10'}`}>{Math.round(s * 100)}%</button>
+                )
+              })}
+            </div>
+          </div>
         </div>
-      </fieldset>
-      <label className={row}>
-        <span>{t('a11y.language')}</span>
-        <select value={getLocale()} onChange={(e) => setLocale(e.target.value as Locale)} className="h-9 rounded-lg border border-white/20 bg-[#0A1838] px-2 text-sm text-[#E8EEFA]">
-          {LOCALES.map((l) => <option key={l.id} value={l.id} lang={l.id}>{l.id !== 'en' && !REVIEW[l.id].reviewed ? t('a11y.languageDraft', { name: l.name }) : l.name}</option>)}
-        </select>
-      </label>
+      </section>
+      <section aria-labelledby="ws-a11y-lang-h" className="flex flex-col gap-1.5">
+        <h3 id="ws-a11y-lang-h" className={heading}>{t('a11y.language')}</h3>
+        <div className={`${group} px-[0.875rem] py-2.5`}>
+          <select aria-labelledby="ws-a11y-lang-h" value={getLocale()} onChange={(e) => setLocale(e.target.value as Locale)}
+            className="min-h-[2.5rem] w-full cursor-pointer rounded-[0.5625rem] border border-[rgba(127,178,255,0.25)] bg-[var(--ws-g-field)] px-3 text-sm text-[var(--ws-g-ink)] outline-none focus:border-[#1F6BFF]">
+            {LOCALES.map((l) => <option key={l.id} value={l.id} lang={l.id}>{l.id !== 'en' && !REVIEW[l.id].reviewed ? t('a11y.languageDraft', { name: l.name }) : l.name}</option>)}
+          </select>
+        </div>
+      </section>
     </div>
   )
 }
