@@ -330,9 +330,32 @@ export class SecurityCenter {
    */
   async startScan(kind: 'quick' | 'full', trigger: 'schedule' | 'remote' | 'user'): Promise<void> {
     if (this.running) return;
-    const why = await this.blocked();
+    let why: string | null;
+    // #68: an engine probe that fails (systemctl, clamscan --version) is said as such, not a bare "FAILED".
+    try { why = await this.blocked(); } catch { throw new Error('ENGINE_CHECK_FAILED'); }
+    if (why === 'NO_SIGNATURES') throw new Error(await this.noSignaturesReason());
     if (why) throw new Error(why);
     void this.scan(kind, trigger).catch(() => {});
+  }
+
+  /**
+   * #68: why there are no definitions yet, in the engine's real state: still downloading (freshclam runs), the updater
+   * isn't installed, or it has stopped — then it is started now (at most every 2 minutes) so the next try can work.
+   */
+  private async noSignaturesReason(): Promise<string> {
+    const f = await this.o.host.facts().catch(() => null);
+    if (!f || f.freshclam === 'missing') return f ? 'UPDATER_MISSING' : 'NO_SIGNATURES';
+    if (f.freshclam === 'active') return 'SIGNATURES_DOWNLOADING';
+    const last = this.st.restarts['clamav-freshclam'] ?? 0;
+    if (this.now() - last > 2 * 60_000) {
+      this.save((x) => { x.restarts['clamav-freshclam'] = this.now(); });
+      try {
+        await this.o.host.restartUnit('clamav-freshclam.service');
+        this.o.host.audit('security_service_restarted', { unit: 'clamav-freshclam', reason: 'scan_without_signatures' });
+        return 'SIGNATURES_DOWNLOADING';
+      } catch { return 'UPDATER_FAILED'; }
+    }
+    return f.freshclam === 'failed' ? 'UPDATER_FAILED' : 'NO_SIGNATURES';
   }
 
   /** One scan at a time; a second request while one runs joins it (no duplicate scans). */
@@ -357,7 +380,8 @@ export class SecurityCenter {
   /** "Update definitions": freshclam checks the mirror at once when its service (re)starts. */
   async updateDefinitions(): Promise<void> {
     const f = await this.o.host.facts();
-    if (!f.clamav || f.freshclam === 'missing') throw new Error('ANTIVIRUS_MISSING');
+    if (!f.clamav) throw new Error('ANTIVIRUS_MISSING');
+    if (f.freshclam === 'missing') throw new Error('UPDATER_MISSING');
     try { await this.o.host.restartUnit('clamav-freshclam.service'); } catch { throw new Error('UPDATE_FAILED'); }
     this.o.host.audit('signatures_update_requested', {});
     await this.publish();

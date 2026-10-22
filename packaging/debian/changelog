@@ -7,6 +7,12 @@ worksuite-os (1.0.0~dev2) trixie; urgency=medium
     keyrings are refused by name. Settings › Drivers names the failed stage
     and the source, offers Try again, and asks for a restart only after a
     successful install that needs one.
+  * Security (#68): Quick scan / Full scan say why they can't start in the
+    engine's real state (definitions still downloading, updater failed or not
+    installed, engine not responding, or the agent's own code); a stopped
+    freshclam is started when a scan is asked for; Settings names why
+    automatic updates aren't running and offers Update definitions; the image
+    creates /var/lib/clamav and /var/log/clamav for clamav at boot.
 
  -- WorkSuite OS Team <os@worksuitecloud.com>  Thu, 22 Oct 2026 09:00:00 +0000
 
