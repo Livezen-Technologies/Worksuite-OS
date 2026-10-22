@@ -12,6 +12,10 @@ for p in clamav clamav-freshclam; do grep -qx "$p" "$list" || fail "$p not in th
 grep -qx 'systemctl enable clamav-freshclam.service' "$hook" || fail "clamav-freshclam.service not enabled: no virus definitions, scans fail"
 grep -q '/usr/bin/systemd-run rix' "$aa" || fail "AppArmor profile does not allow systemd-run (scans run as a transient unit)"
 grep -q '/usr/bin/{systemctl' "$aa" || fail "AppArmor profile does not allow systemctl (cancel stops the scan unit)"
+tmp="$root/live-build/config/includes.chroot/etc/tmpfiles.d/worksuite-clamav.conf"
+grep -q '^d /var/lib/clamav 0755 clamav clamav' "$tmp" || fail "/var/lib/clamav not created for clamav: freshclam cannot store definitions"
+grep -q '^d /var/log/clamav 0755 clamav' "$tmp" || fail "/var/log/clamav not created for clamav: freshclam refuses to start"
+grep -q 'clamav-freshclam' "$root/services/device-agent/src/securityCenter.ts" || fail "the agent no longer starts a stopped updater"
 grep -q "SCAN_UNIT = 'worksuite-av-scan.service'" "$root/services/device-agent/src/securityHost.ts" || fail "scan unit name changed"
 for m in StartSecurityScan CancelSecurityScan UpdateSecurityDefinitions; do
   grep -q "<method name=\"$m\"" "$root/services/device-agent/dbus/lk.worksuite.DeviceAgent1.xml" || fail "$m missing from the D-Bus interface"

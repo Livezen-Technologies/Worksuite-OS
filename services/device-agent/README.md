@@ -122,7 +122,12 @@ reason. Acks that cannot be sent are queued in state and delivered first on the 
 - **Scan now**: `lk.worksuite.DeviceAgent1.StartSecurityScan(kind)` behind polkit `lk.worksuite.security.scan`; it
   returns once the scan has started or fails with why it cannot (`NO_SIGNATURES`, `ANTIVIRUS_MISSING`,
   `ANTIVIRUS_DISABLED`). `CancelSecurityScan` and `UpdateSecurityDefinitions` (restarts freshclam, which checks at
-  once) use the same action.
+  once) use the same action. #68: without definitions the reason is the updater's real state —
+  `SIGNATURES_DOWNLOADING` (freshclam runs; a stopped one is started at once, at most every 2 minutes),
+  `UPDATER_FAILED`, `UPDATER_MISSING` — and a failing engine probe is `ENGINE_CHECK_FAILED`. Settings shows each in
+  words (any other code is shown by name), says whether automatic updates stopped, failed or are missing, and offers
+  *Update definitions* whenever the updater isn't running. The image creates `/var/lib/clamav` and `/var/log/clamav`
+  for the clamav user at boot (`/etc/tmpfiles.d/worksuite-clamav.conf`), without which freshclam refuses to start.
 
 ### Protection layers (issue #38) — `src/protection.ts`, `native/guard/`
 

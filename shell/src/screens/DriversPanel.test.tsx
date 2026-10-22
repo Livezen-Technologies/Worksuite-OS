@@ -257,8 +257,37 @@ describe('Settings › Drivers: per-driver results on an installed system (#59)'
     await act(async () => { [...el.querySelectorAll('button')].find((b) => b.textContent === 'Install selected')!.click() })
     await flush()
     const alert = document.body.querySelector('[role=alert]')!.textContent!
-    expect(alert).toContain('software source on this computer isn’t signed')
+    expect(alert).toContain('software source /etc/apt/sources.list isn’t signed')
     expect(alert).not.toContain('The app')
+  })
+
+  it('#69: a failed install that needed a restart offers Try again, never Restart; the stage is named', async () => {
+    const DK: DriverOffer = { ...FW, id: 'dkms:tp-smapi-dkms', kind: 'dkms', name: 'ThinkPad SMAPI driver', restart: true }
+    mockOs(report({ offers: [DK] }))
+    const listeners: ((e: PackageJobEvent) => void)[] = []
+    vi.spyOn(os, 'onPkgJob').mockImplementation((cb) => { listeners.push(cb); return () => {} })
+    vi.spyOn(os, 'hwInstallDrivers').mockImplementation(async () => {
+      listeners.forEach((l) => l({ job: '/job/1', kind: 'finished', result: 'failed', error: '/etc/apt/sources.list: missing Signed-By' }))
+      return { ok: true, value: '/job/1' }
+    })
+    const el = await mount(<DriversPanel onOpenUpdates={() => {}} />)
+    await act(async () => { [...el.querySelectorAll('button')].find((b) => b.textContent === 'Install selected')!.click() })
+    await flush()
+    expect(document.body.querySelector('[data-testid="drv-fail-stage"]')!.textContent).toBe('Software source not approved')
+    expect(document.body.querySelector('[role=alert]')!.textContent).toContain('/etc/apt/sources.list isn’t signed or approved')
+    const labels = [...document.body.querySelectorAll('button')].map((b) => b.textContent)
+    expect(labels).toContain('Try again')
+    expect(labels).not.toContain('Restart now')
+    expect(document.body.textContent).not.toContain('a restart is needed to finish')
+    // Once it installs, the restart is asked for.
+    vi.spyOn(os, 'hwInstallDrivers').mockImplementation(async () => {
+      listeners.forEach((l) => l({ job: '/job/2', kind: 'finished', result: 'success' }))
+      return { ok: true, value: '/job/2' }
+    })
+    await act(async () => { [...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Try again')!.click() })
+    await flush()
+    expect(document.body.querySelector('[data-testid="drv-fail-stage"]')).toBeNull()
+    expect([...document.body.querySelectorAll('button')].map((b) => b.textContent)).toContain('Restart now')
   })
 
   it('the list keeps the last failure next to the driver until it installs', async () => {

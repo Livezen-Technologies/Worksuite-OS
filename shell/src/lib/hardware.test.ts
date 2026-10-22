@@ -43,4 +43,16 @@ describe('driver job phases (#45)', () => {
     expect(driverFailureText("apt-get: E: Package 'firmware-x' has no installation candidate")).toMatch(/isn’t available/)
     expect(driverFailureText('apt-get: dpkg: error processing package firmware-x (--configure):')).toBe('It couldn’t be installed.')
   })
+  it('#69: names the stage (sources check, download, install) and the source that blocks installs', async () => {
+    const { driverFailureKind, driverFailureText, driverFailureTitle } = await import('./hardware')
+    const src = '/etc/apt/sources.list.d/vendor.list: repository ppa.example.com is not an approved source'
+    expect(driverFailureKind(src)).toBe('sources')
+    expect(driverFailureTitle('sources')).toBe('Software source not approved')
+    expect(driverFailureText(src)).toContain('/etc/apt/sources.list.d/vendor.list isn’t signed or approved')
+    expect(driverFailureText(src)).toContain('Try again')
+    expect(driverFailureKind('/etc/apt/sources.list: trusted=yes turns off signature checks')).toBe('sources')
+    expect(driverFailureKind("apt-get update: E: Failed to fetch https://deb.debian.org/x  Temporary failure resolving 'deb.debian.org'")).toBe('download')
+    expect(driverFailureKind('apt-get: dpkg: error processing package tp-smapi-dkms (--configure):')).toBe('install')
+    expect(driverFailureKind('anything', 'downloading')).toBe('download')
+  })
 })

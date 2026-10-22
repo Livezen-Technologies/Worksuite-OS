@@ -342,6 +342,39 @@ test('sources: live-build\'s deb-src lines are disabled too, so the sources chec
   assert.equal(tidyLegacySources('deb-src https://deb.debian.org/debian trixie-backports main\n', [deb822]), null);
 });
 
+// #69: "A software source on this computer isn't signed or approved" for tp-smapi-dkms on an installed system whose
+// sources were all Debian's: a deb822 stanza with an embedded key, a national mirror, an http:// line, a cdrom line.
+test('sources: Debian\'s own sources are recognised however they are written (#69)', () => {
+  const embedded = 'Types: deb\nURIs: https://deb.debian.org/debian\nSuites: trixie\nComponents: main\nSigned-By:\n -----BEGIN PGP PUBLIC KEY BLOCK-----\n .\n mQINBF...\n -----END PGP PUBLIC KEY BLOCK-----\n';
+  assert.deepEqual(checkSources(embedded, '/etc/apt/sources.list.d/debian.sources'), [], 'embedded Signed-By key block');
+  const mirror = 'Types: deb deb-src\n# national mirror\nURIs: http://ftp.lk.debian.org/debian/\nSuites: trixie trixie-updates\nComponents: main contrib\nSigned-By: /usr/share/keyrings/debian-archive-keyring.pgp\nEnabled: yes\n';
+  assert.deepEqual(checkSources(mirror, '/etc/apt/sources.list.d/debian.sources'), [], '*.debian.org mirror, .pgp keyring');
+  const pinned = 'deb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://mirror.example.lk/debian trixie main\n';
+  assert.deepEqual(checkSources(pinned, '/etc/apt/sources.list'), [], 'any mirror pinned to Debian\'s archive keyring');
+  assert.deepEqual(checkSources('deb cdrom:[Debian GNU/Linux 13.1.0 _Trixie_ - Official amd64 DVD Binary-1]/ trixie contrib main\n', '/etc/apt/sources.list'), [], 'installation disc');
+  // Still refused: a third-party archive, an unsigned one, signature checks turned off, a key that isn't there.
+  assert.match(checkSources('deb [signed-by=/usr/share/keyrings/x.gpg] https://ppa.example.com/x trixie main\n', 'x.list').join(), /not an approved source/);
+  assert.match(checkSources('deb [trusted=yes signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian trixie main\n', 'x.list').join(), /trusted=yes turns off signature checks/);
+  assert.match(checkSources('Types: deb\nURIs: https://deb.debian.org/debian\nSuites: trixie\nTrusted: yes\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n', 'd.sources').join(), /trusted=yes/);
+  assert.deepEqual(checkSources(mirror, 'd.sources', [], (k) => k.endsWith('.pgp')), []);
+  assert.match(checkSources(mirror, 'd.sources', [], () => false).join(), /Signed-By key \/usr\/share\/keyrings\/debian-archive-keyring\.pgp is not installed/);
+  assert.deepEqual(checkSources(mirror.replace('Enabled: yes', 'Enabled: false').replace('trixie trixie-updates', 'sid'), 'd.sources'), [], 'Enabled: false is off too');
+});
+
+test('sources: unsigned Debian lines are pinned to Debian\'s keyring; http and https lines a stanza covers are disabled (#69)', () => {
+  const deb822 = readFileSync(new URL('../../../live-build/config/includes.chroot/etc/apt/sources.list.d/debian.sources', import.meta.url), 'utf8');
+  const list = 'deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware\ndeb http://ftp.lk.debian.org/debian/ trixie main\ndeb http://example.com/debian trixie main\n';
+  const K = '/usr/share/keyrings/debian-archive-keyring.pgp';
+  const out = tidyLegacySources(list, [deb822], K)!;
+  const lines = out.split('\n');
+  assert.match(lines[0], /^# deb http:\/\/deb\.debian\.org/, 'same archive as the https stanza');
+  assert.equal(lines[1], `deb [signed-by=${K}] http://ftp.lk.debian.org/debian/ trixie main`);
+  assert.equal(lines[2], 'deb http://example.com/debian trixie main', 'not Debian: left for the check to refuse');
+  assert.deepEqual(checkSources(lines.slice(0, 2).join('\n'), '/etc/apt/sources.list'), []);
+  assert.equal(tidyLegacySources(out, [deb822], K), null, 'idempotent');
+  assert.equal(tidyLegacySources('deb http://ftp.lk.debian.org/debian/ trixie main\n', [], undefined), null, 'no keyring installed: left alone');
+});
+
 test('service: driver jobs tidy sources.list before checking it (it can change after the service started)', async () => {
   const { PackageService } = await import('../src/service.ts');
   const deb822 = readFileSync(new URL('../../../live-build/config/includes.chroot/etc/apt/sources.list.d/debian.sources', import.meta.url), 'utf8');

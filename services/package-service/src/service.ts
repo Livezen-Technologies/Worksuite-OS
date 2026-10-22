@@ -35,6 +35,8 @@ export interface Env {
   tidySources?(): void;
   /** Hosts of the configured Update Center / organisation mirror, approved as https APT sources besides ALLOWED_HOSTS. */
   updateHosts?(): string[];
+  /** #69: whether a Signed-By keyring file exists (absent = not checked). */
+  keyExists?(path: string): boolean;
   /** AC power, battery percent (null if no battery) and free bytes on / for WSOS-UPD-001. */
   power(): { ac: boolean; battery: number | null };
   freeBytes(): number;
@@ -504,7 +506,7 @@ export class PackageService extends EventEmitter {
   private checkSources() {
     try { this.env.tidySources?.(); } catch (e) { this.env.audit('sources_list_tidy_failed', { error: String(e) }); }
     const extra = this.env.updateHosts?.() ?? [];
-    const issues = this.env.sources().flatMap(([f, t]) => checkSources(t, f, extra));
+    const issues = this.env.sources().flatMap(([f, t]) => checkSources(t, f, extra, this.env.keyExists));
     if (issues.length) { this.env.audit('sources_rejected', { issues }); throw new ServiceError('SourcesInvalid', issues[0]); }
   }
 

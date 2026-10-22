@@ -62,6 +62,10 @@ export const driversEn = {
   'drv.installedTitle': 'Recently installed',
   'drv.installedOn': 'Installed {time}',
   'drv.restartPending': 'Restart your computer to finish installing drivers.',
+  'drv.failTitle.sources': 'Software source not approved',
+  'drv.failTitle.download': 'Download failed',
+  'drv.failTitle.install': 'Installation failed',
+  'drv.fail.sourcesNamed': 'The software source {source} isn’t signed or approved, so nothing can be installed. An administrator can remove that source or give it a trusted signing key (Signed-By), then select Try again.',
 }
 
 export const driversSi: Record<keyof typeof driversEn, string> = {
@@ -124,6 +128,10 @@ export const driversSi: Record<keyof typeof driversEn, string> = {
   'drv.installedTitle': 'මෑතකදී ස්ථාපිත',
   'drv.installedOn': 'ස්ථාපිත {time}',
   'drv.restartPending': 'ධාවක ස්ථාපනය අවසන් කිරීමට ඔබේ පරිගණකය නැවත අරඹන්න.',
+  'drv.failTitle.sources': 'මෘදුකාංග මූලාශ්‍රය අනුමත නැත',
+  'drv.failTitle.download': 'බාගැනීම අසාර්ථක විය',
+  'drv.failTitle.install': 'ස්ථාපනය අසාර්ථක විය',
+  'drv.fail.sourcesNamed': '{source} මෘදුකාංග මූලාශ්‍රය අත්සන් කර හෝ අනුමත කර නැති බැවින් කිසිවක් ස්ථාපනය කළ නොහැක. පරිපාලකයෙකුට එම මූලාශ්‍රය ඉවත් කිරීමට හෝ විශ්වාසදායක අත්සන් යතුරක් (Signed-By) ලබා දීමට හැකිය, ඉන්පසු නැවත උත්සාහ කරන්න තෝරන්න.',
 }
 
 export const driversTa: Record<keyof typeof driversEn, string> = {
@@ -186,4 +194,8 @@ export const driversTa: Record<keyof typeof driversEn, string> = {
   'drv.installedTitle': 'சமீபத்தில் நிறுவப்பட்டவை',
   'drv.installedOn': 'நிறுவப்பட்டது {time}',
   'drv.restartPending': 'இயக்கிகளை நிறுவி முடிக்க உங்கள் கணினியை மறுதொடக்கம் செய்யுங்கள்.',
+  'drv.failTitle.sources': 'மென்பொருள் மூலம் அங்கீகரிக்கப்படவில்லை',
+  'drv.failTitle.download': 'பதிவிறக்கம் தோல்வியடைந்தது',
+  'drv.failTitle.install': 'நிறுவல் தோல்வியடைந்தது',
+  'drv.fail.sourcesNamed': '{source} மென்பொருள் மூலம் கையொப்பமிடப்படவில்லை அல்லது அங்கீகரிக்கப்படவில்லை, எனவே எதையும் நிறுவ முடியாது. ஒரு நிர்வாகி அந்த மூலத்தை அகற்றலாம் அல்லது நம்பகமான கையொப்ப விசையை (Signed-By) வழங்கலாம், பின்னர் மீண்டும் முயல் என்பதைத் தேர்ந்தெடுக்கவும்.',
 }
