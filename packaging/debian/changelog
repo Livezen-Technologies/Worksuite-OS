@@ -1,3 +1,15 @@
+worksuite-os (1.0.0~dev2) trixie; urgency=medium
+
+  * Drivers (#69): Debian's own APT sources are recognised (deb822 embedded
+    Signed-By keys, *.debian.org mirrors, mirrors pinned to Debian's archive
+    keyring, http/https duplicates, installation-disc entries); unsigned
+    Debian lines get Debian's keyring; trusted=yes and missing Signed-By
+    keyrings are refused by name. Settings › Drivers names the failed stage
+    and the source, offers Try again, and asks for a restart only after a
+    successful install that needs one.
+
+ -- WorkSuite OS Team <os@worksuitecloud.com>  Thu, 22 Oct 2026 09:00:00 +0000
+
 worksuite-os (1.0.0~dev1) trixie; urgency=medium
 
   * First packaged development build: shell, session, user services (sync,

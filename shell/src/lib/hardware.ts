@@ -139,8 +139,25 @@ export function driverJobPhase(phase: string): { offer: string; step: DriverStep
 
 /** Why one driver didn't install, in words (the service's error stays for <ErrorDetails>, #59). A sources problem
  *  (an unsigned or unapproved APT source, which blocks every install) is named as such. */
+const SOURCES_ERROR = /missing Signed-By|not an approved source|is not part of trixie|is not allowed \(testing|turns off signature checks|Signed-By key .* is not installed|SourcesInvalid/
+
+/** #69: which stage a driver install failed at, so the dialog can say so: the sources check (nothing was tried),
+ *  the download (the package lists or the files), or the install itself (dpkg, DKMS). */
+export type DriverFailureKind = 'sources' | 'download' | 'install'
+export function driverFailureKind(error: string, step?: 'downloading' | 'installing'): DriverFailureKind {
+  if (SOURCES_ERROR.test(error)) return 'sources'
+  if (step) return step === 'downloading' ? 'download' : 'install'
+  const k = classifyError(error)
+  return /^apt-get update: |Failed to fetch|has no installation candidate|Unable to locate package/.test(error) || k === 'offline' || k === 'not_found' ? 'download' : 'install'
+}
+export const driverFailureTitle = (k: DriverFailureKind) => t(k === 'sources' ? 'drv.failTitle.sources' : k === 'download' ? 'drv.failTitle.download' : 'drv.failTitle.install')
+
 export function driverFailureText(error: string): string {
-  if (/missing Signed-By|not an approved source|is not part of trixie|is not allowed \(testing|SourcesInvalid/.test(error)) return t('drv.fail.sources')
+  if (SOURCES_ERROR.test(error)) {
+    // The service names the file ("/etc/apt/sources.list.d/x.list: repository … is not an approved source").
+    const file = /^(\/etc\/apt\/[^\s:]+):/.exec(error.replace(/^SourcesInvalid:\s*/, ''))?.[1]
+    return file ? t('drv.fail.sourcesNamed', { source: file }) : t('drv.fail.sources')
+  }
   if (/has no installation candidate|Unable to locate package/.test(error) && !/^apt-get update: /.test(error)) return t('drv.fail.notFound')
   const k = classifyError(error)
   return k === 'offline' ? t('drv.fail.offline') : k === 'not_found' ? t('drv.fail.notFound') : k === 'no_space' ? t('err.kind.noSpace') : k === 'busy' ? t('err.kind.busy')

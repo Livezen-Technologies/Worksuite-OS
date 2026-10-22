@@ -20,6 +20,11 @@ systemctl enable greetd.service worksuite-device-agent.service worksuite-power-e
 # scan / Full scan never worked. The image ships no signatures (about 200 MB); freshclam fetches them once online.
 systemctl enable clamav-freshclam.service
 [ -x /usr/bin/clamscan ] && [ -x /usr/bin/freshclam ] || { echo "ClamAV missing: WorkSuite Security scans would not work" >&2; exit 1; }
+# #69: every keyring the image's APT sources name must be installed; a missing Signed-By key makes every driver and
+# app install fail the package service's source check.
+for k in $(sed -n 's/^Signed-By: *\(\/.*\)$/\1/p' /etc/apt/sources.list.d/*.sources); do
+  [ -e "$k" ] || { echo "APT keyring $k (Signed-By) missing" >&2; exit 1; }
+done
 # Default-deny inbound firewall (/etc/nftables.conf, docs/security/hardening.md).
 systemctl enable nftables.service
 grep -q "table inet worksuite_filter" /etc/nftables.conf || { echo "WorkSuite nftables.conf missing" >&2; exit 1; }

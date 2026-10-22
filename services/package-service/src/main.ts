@@ -44,7 +44,9 @@ function tidySources() {
   const list = '/etc/apt/sources.list', dir = '/etc/apt/sources.list.d';
   if (!existsSync(list)) return;
   const deb822 = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.sources')).map((f) => readOr(join(dir, f))) : [];
-  const next = tidyLegacySources(readFileSync(list, 'utf8'), deb822);
+  // trixie's debian-archive-keyring ships .pgp; older images had .gpg.
+  const keyring = ['/usr/share/keyrings/debian-archive-keyring.pgp', '/usr/share/keyrings/debian-archive-keyring.gpg'].find((k) => existsSync(k));
+  const next = tidyLegacySources(readFileSync(list, 'utf8'), deb822, keyring);
   if (next === null) return;
   writeFileSync(list + '.worksuite-tmp', next, { mode: 0o644 }); renameSync(list + '.worksuite-tmp', list);
   linuxEnv.audit('sources_list_tidied', { file: list });
@@ -77,6 +79,7 @@ export const linuxEnv: Env = {
   // The Update Center the coordinator uses (policy update_mirror > /etc/worksuite/updates.json > default) is an approved
   // APT source too, so pointing worksuite.sources at it doesn't lock APT.
   tidySources: () => tidySources(),
+  keyExists: (p) => existsSync(p),
   updateHosts: () => {
     let local: { update_host?: string } = {};
     try { local = JSON.parse(readFileSync('/etc/worksuite/updates.json', 'utf8')); } catch { /* defaults */ }
