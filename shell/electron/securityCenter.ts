@@ -95,8 +95,12 @@ export function agentError(e: unknown): string {
   const codes: Record<string, string> = {
     NO_SIGNATURES: 'no_signatures', ANTIVIRUS_MISSING: 'missing', ANTIVIRUS_DISABLED: 'unavailable', NOT_SUPPORTED: 'unavailable',
     NOT_SCANNING: 'not_scanning', UPDATE_FAILED: 'update_failed', STILL_DETECTED: 'still_detected', PATH_EXISTS: 'path_exists',
+    // #68: the engine's real state when a scan can't start.
+    SIGNATURES_DOWNLOADING: 'signatures_downloading', UPDATER_MISSING: 'updater_missing', UPDATER_FAILED: 'updater_failed', ENGINE_CHECK_FAILED: 'engine_check_failed',
   }
   if (err?.text && codes[err.text]) return codes[err.text]
+  // Any other agent code is kept ("failed:<CODE>") so Settings can show it instead of a bare "Couldn't start a scan".
+  if (err?.type?.startsWith('lk.worksuite.Error.') && err.text && /^[A-Z_]{3,40}$/.test(err.text) && err.text !== 'FAILED') return `failed:${err.text}`
   // Anything else from the agent itself failed; no reply at all (not running, not on the bus) is "agent unavailable".
   return err?.type?.startsWith('lk.worksuite.Error.') ? 'failed' : 'agent_unavailable'
 }

@@ -23,6 +23,23 @@ const ACTION_ERROR: Record<string, Parameters<typeof t>[0]> = { still_detected: 
 const SCAN_ERROR: Record<string, Parameters<typeof t>[0]> = {
   no_signatures: 'sec.err.no_signatures', missing: 'sec.err.missing', unavailable: 'sec.err.unavailable', agent_unavailable: 'sec.err.agent_unavailable',
   not_scanning: 'sec.err.not_scanning', update_failed: 'sec.err.update_failed', auth_cancelled: 'sec.authCancelled',
+  // #68: the engine's real state when a scan can't start.
+  signatures_downloading: 'sec.err.signatures_downloading', updater_missing: 'sec.err.updater_missing', updater_failed: 'sec.err.updater_failed',
+  engine_check_failed: 'sec.err.engine_check_failed',
+}
+/** #68: a reason Settings has words for, or the agent's own code ("failed:FAILED") instead of a bare "Couldn't start". */
+export function scanErrorText(error: string): string {
+  if (SCAN_ERROR[error]) return t(SCAN_ERROR[error])
+  const code = error.startsWith('failed:') ? error.slice(7) : error === 'failed' ? 'FAILED' : error
+  return t('sec.err.failed', { code: code || 'FAILED' })
+}
+/** #68: why automatic definition updates aren't running, in the updater's real state. */
+export function updatesText(updates: string): string | null {
+  return updates === 'active' ? null : updates === 'failed' ? t('sec.updatesFailed') : updates === 'missing' ? t('sec.updatesMissing') : t('sec.updatesStopped')
+}
+/** #68: the agent's code for a scan that stopped ("CLAMSCAN_50", "SYSTEMD_RUN: spawn …" → "SYSTEMD_RUN"), never free text. */
+export function scanErrorCode(error: string): string {
+  return /^[A-Z][A-Z0-9_]{2,40}$/.test(error) ? error : /^([A-Z][A-Z0-9_]{2,40}):/.exec(error)?.[1] ?? 'ERROR'
 }
 /** 0:42, 12:05, 1:02:09 */
 export function fmtElapsed(ms: number): string {
@@ -36,7 +53,10 @@ export function lastScanText(last: Scan | null): string {
   if (!last) return t('sec.never')
   if (last.error === 'CANCELLED') return t('sec.scanCancelled')
   if (last.error === 'NO_SIGNATURES') return t('sec.scanNoSignatures')
-  if (last.error) return t('sec.scanFailed')
+  // #68: a scan that started and then stopped says why, not just "did not finish".
+  if (last.error === 'ENGINE_ERROR') return t('sec.scanEngineError')
+  if (last.error === 'ANTIVIRUS_MISSING') return t('sec.scanMissing')
+  if (last.error) return t('sec.scanFailedCode', { code: scanErrorCode(last.error) })
   return t('sec.scanSummary', { kind: last.kind === 'full' ? t('sec.full') : t('sec.quick'), files: formatNumber(last.files), found: formatNumber(last.detections), when: fmtWhen(last.finished) })
 }
 const baseName = (p: string) => p.split('/').pop() || p
@@ -83,7 +103,7 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
   const [cancelling, setCancelling] = useState(false)
   const reload = async () => { const next = await os.securityStatus().catch(() => null); if (next) setS(next) }
   const scan = (kind: 'quick' | 'full') => void os.securityScan(kind).then(async (r) => {
-    setMsg(r.ok ? t('sec.scanStarted') : t(SCAN_ERROR[r.error] ?? 'sec.scanError'))
+    setMsg(r.ok ? t('sec.scanStarted') : scanErrorText(r.error))
     await reload()
   })
   const cancel = () => { setCancelling(true); void os.securityAction('CancelSecurityScan').then(async (r) => { setCancelling(false); if (!r.ok) setMsg(t(SCAN_ERROR[r.error] ?? 'sec.actionFailed')); else setMsg(null); await reload() }) }
@@ -118,7 +138,7 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
             <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">{t('sec.virus')}</span>
               <span className="text-[11px] text-[#8FA3C8]">{!av?.enabled ? t('sec.virusOff') : !av.installed ? t('sec.virusMissing')
                 : [av.engine && t('sec.engine', { version: av.engine }), `${t('sec.definitions')}: ${av.signatures_age_days === null ? t('common.unknown') : av.signatures_age_days <= 1 ? t('sec.definitionsToday') : t('sec.definitionsAge', { days: formatNumber(av.signatures_age_days) })}`,
-                  av.updates !== 'active' ? t('sec.updatesStopped') : null].filter(Boolean).join(' · ')}</span>
+                  updatesText(av.updates)].filter(Boolean).join(' · ')}</span>
               {s.scanning && prog ? <>
                 <span className="text-[11px] text-[#C9D6EE]" role="status" aria-live="polite">{t('sec.scanProgress', { kind: prog.kind === 'full' ? t('sec.full') : t('sec.quick'), files: formatNumber(prog.files), found: formatNumber(prog.detections), elapsed: fmtElapsed(Math.max(prog.elapsed_ms, Date.now() - prog.started)) })}</span>
                 {prog.current && <span className="max-w-[420px] truncate text-[11px] text-[#8FA3C8]" title={prog.current}>{t('sec.scanCurrent', { path: prog.current })}</span>}
@@ -127,7 +147,7 @@ export function SecuritySection({ info, initial }: { info: DeviceInfo | null; in
               <span className="text-[11px]" style={{ color: s.threats.active ? '#FF8A7A' : '#8FA3C8' }}>{t('sec.threats')}: {t('sec.threatCounts', { active: formatNumber(s.threats.active), quarantined: formatNumber(s.threats.quarantined) })}</span></span>
             {av?.enabled && av.installed && <span className="flex flex-wrap justify-end gap-2">
               {s.scanning ? <button type="button" className={btnGhost} disabled={cancelling} onClick={cancel}>{cancelling ? t('sec.scanCancelling') : t('sec.cancelScan')}</button> : <>
-                {noDefs && <button type="button" className={btnGhost} onClick={updateDefs}>{t('sec.updateDefinitions')}</button>}
+                {(noDefs || av.updates === 'failed' || av.updates === 'inactive') && <button type="button" className={btnGhost} onClick={updateDefs}>{t('sec.updateDefinitions')}</button>}
                 <button type="button" className={btnGhost} disabled={noDefs} onClick={() => scan('quick')}>{t('sec.quickScan')}</button>
                 <button type="button" className={btnGhost} disabled={noDefs} onClick={() => scan('full')}>{t('sec.fullScan')}</button>
               </>}

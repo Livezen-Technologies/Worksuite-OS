@@ -143,6 +143,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'a11y.highContrast': 'உயர் மாறுபாடு',
   'a11y.reducedMotion': 'அசைவைக் குறை',
   'a11y.reducedMotionSystem': 'கணினி குறைந்த அசைவைக் கோருவதால் இயக்கத்தில் உள்ளது',
+  'a11y.group.display': 'காட்சி',
   'a11y.textSize': 'எழுத்து அளவு',
   'a11y.language': 'மொழி',
   'a11y.languageDraft': '{name} (வரைவு)',

@@ -143,6 +143,7 @@ const si: Partial<Record<MessageKey, string>> = {
   'a11y.highContrast': 'ඉහළ වෙනස',
   'a11y.reducedMotion': 'චලනය අඩු කරන්න',
   'a11y.reducedMotionSystem': 'පද්ධතිය අඩු චලනයක් ඉල්ලන නිසා සක්‍රියයි',
+  'a11y.group.display': 'සංදර්ශකය',
   'a11y.textSize': 'අකුරු ප්‍රමාණය',
   'a11y.language': 'භාෂාව',
   'a11y.languageDraft': '{name} (කෙටුම්පත)',

@@ -5,7 +5,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { os, type ActivityStatus, type SecurityStatus } from '../lib/os'
-import { fmtElapsed, SecuritySection } from './settings/Security'
+import { fmtElapsed, lastScanText, scanErrorCode, SecuritySection } from './settings/Security'
 import { MonitoringSection } from './settings/Monitoring'
 import { MonitoringIndicator } from '../components/MonitoringNotice'
 
@@ -87,6 +87,22 @@ describe('WorkSuite Security section', () => {
     expect(el.textContent).toContain('Couldn’t start a scan: virus definitions haven’t been downloaded yet')
     start.mockRestore()
   })
+  it('#68: the engine\'s real state when a scan cannot start; a stopped updater is named and can be restarted', async () => {
+    const start = vi.spyOn(os, 'securityScan')
+    const stopped: SecurityStatus = { ...sec, antivirus: { ...sec.antivirus, updates: 'failed' } }
+    const el = await render(<SecuritySection info={info} initial={stopped} />)
+    expect(el.textContent).toContain('Automatic updates stopped after an error')
+    expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toContain('Update definitions')
+    const quick = () => [...el.querySelectorAll('button')].find((b) => b.textContent === 'Quick scan')!
+    for (const [error, text] of [['signatures_downloading', 'virus definitions are still downloading'], ['updater_missing', 'freshclam) isn’t installed'],
+      ['engine_check_failed', 'antivirus engine didn’t respond'], ['missing', 'antivirus engine isn’t installed'], ['failed:SYSTEMD_RUN', 'reported an error (SYSTEMD_RUN)'], ['failed', 'reported an error (FAILED)']]) {
+      start.mockResolvedValue({ ok: false, error })
+      await act(async () => { quick().click() })
+      expect(el.textContent).toContain(text)
+    }
+    expect(el.textContent).not.toMatch(/Couldn’t start a scan\.(?!\S)/)
+    start.mockRestore()
+  })
   it('#64: progress while scanning (files, found, elapsed, current path), Cancel, and recent scans', async () => {
     const started = Date.now() - 65_000
     const running: SecurityStatus = { ...sec, scanning: true, antivirus: { ...sec.antivirus, ready: true,
@@ -104,6 +120,15 @@ describe('WorkSuite Security section', () => {
     expect(cancel).toHaveBeenCalledWith('CancelSecurityScan')
     cancel.mockRestore()
     expect(fmtElapsed(3_729_000)).toBe('1:02:09')
+  })
+  it('#68: a scan that started and then stopped says why', () => {
+    const last = { id: 'x', kind: 'quick' as const, trigger: 'user' as const, started: 0, finished: Date.now(), files: 0, detections: 0 }
+    expect(lastScanText({ ...last, error: 'ENGINE_ERROR' })).toContain('couldn’t load its virus definitions. Select Update definitions')
+    expect(lastScanText({ ...last, error: 'ANTIVIRUS_MISSING' })).toContain('antivirus engine isn’t installed')
+    expect(lastScanText({ ...last, error: 'CLAMSCAN_50' })).toContain('stopped with an error (CLAMSCAN_50)')
+    expect(lastScanText({ ...last, error: 'SYSTEMD_RUN: spawn systemd-run ENOENT' })).toContain('(SYSTEMD_RUN)')
+    expect(scanErrorCode('something went wrong')).toBe('ERROR')
+    expect(lastScanText({ ...last, error: 'CANCELLED' })).toBe('Last scan was cancelled')
   })
   it('says when status is unavailable', async () => {
     const el = await render(<SecuritySection info={null} initial={null} />)

@@ -9,7 +9,7 @@ import {
   scanOutcome, scanPlan, securitySettings, securityStatus, skippedMounts, emptySecurity, type EngineFacts,
 } from '../src/security.ts';
 import { SecurityCenter, type SecurityHost } from '../src/securityCenter.ts';
-import { scanCommand } from '../src/securityHost.ts';
+import { SCAN_MEMORY_HIGH, scanCommand } from '../src/securityHost.ts';
 import { StateFile, type Policy } from '../src/state.ts';
 
 const NOW = Date.parse('2026-10-20T13:00:00Z');
@@ -108,6 +108,8 @@ test('#64 scan plan: quick covers high-risk folders; full covers / without kerne
   const cmd = scanCommand(f, 50);
   assert.ok(cmd.includes('--unit=worksuite-av-scan.service') && cmd.includes('--recursive') && cmd.includes('--stdout') && !cmd.includes('--infected'));
   assert.equal(cmd.at(-1), '/');
+  // #68: room for the signature database, so a scan isn't throttled before it reads a file.
+  assert.ok(cmd.includes(`MemoryHigh=${SCAN_MEMORY_HIGH}`) && SCAN_MEMORY_HIGH === '2G');
 });
 
 const CLAMSCAN = spawnSync('clamscan', ['--version']).status === 0;
@@ -231,7 +233,8 @@ test('#64 center: no signatures → the scan does not start and says why; a sche
   const w = center(null);
   try {
     w.h.facts = facts({ clamav: { engine: '1.4.3', signatures: null, signatures_at: null } });
-    await assert.rejects(w.c.startScan('quick', 'user'), /NO_SIGNATURES/);
+    // freshclam is running: the definitions are on their way (#68).
+    await assert.rejects(w.c.startScan('quick', 'user'), /SIGNATURES_DOWNLOADING/);
     assert.equal(w.h.scans, 0);
     await assert.rejects(w.c.scan('full', 'schedule'), /NO_SIGNATURES/);
     const st = await w.c.status();
@@ -248,6 +251,44 @@ test('#64 center: no signatures → the scan does not start and says why; a sche
     w.h.facts = facts({ clamav: { engine: '1.4.3', signatures: null, signatures_at: null } });
     await w.c.updateDefinitions();
     assert.deepEqual(w.h.restarts, ['clamav-freshclam.service']);
+  } finally { w.cleanup(); }
+});
+
+test('#68 center: a scan that cannot start says the engine\'s real state, and a stopped updater is started', async () => {
+  const w = center(null);
+  try {
+    const none = { engine: '1.4.3', signatures: null, signatures_at: null };
+    // Updater stopped (never enabled, or it gave up): started now, and the person is told definitions are coming.
+    w.h.facts = facts({ clamav: none, freshclam: 'inactive' });
+    await assert.rejects(w.c.startScan('quick', 'user'), /SIGNATURES_DOWNLOADING/);
+    assert.deepEqual(w.h.restarts, ['clamav-freshclam.service']);
+    assert.ok(w.log.includes('security_service_restarted'));
+    // Asked again at once: not restarted again; a failed updater is named as failed.
+    w.h.facts = facts({ clamav: none, freshclam: 'failed' });
+    await assert.rejects(w.c.startScan('full', 'user'), /UPDATER_FAILED/);
+    assert.equal(w.h.restarts.length, 1);
+    // The restart itself fails.
+    w.setNow(NOW + 10 * 60_000);
+    w.h.restarts = [];
+    const restart = w.host.restartUnit;
+    w.host.restartUnit = async () => { throw new Error('UNIT_RESTART_FAILED'); };
+    await assert.rejects(w.c.startScan('full', 'user'), /UPDATER_FAILED/);
+    w.host.restartUnit = restart;
+    // No updater at all.
+    w.h.facts = facts({ clamav: none, freshclam: 'missing' });
+    await assert.rejects(w.c.startScan('quick', 'user'), /UPDATER_MISSING/);
+    await assert.rejects(w.c.updateDefinitions(), /UPDATER_MISSING/);
+    // The engine probe itself fails (systemctl or clamscan could not run): said so, not "FAILED".
+    const probe = w.host.facts;
+    w.host.facts = async () => { throw new Error('spawn systemctl EACCES'); };
+    await assert.rejects(w.c.startScan('quick', 'user'), /^Error: ENGINE_CHECK_FAILED$/);
+    w.host.facts = probe;
+    // Definitions present, updater stopped: the scan still starts (updates are a separate warning).
+    w.h.facts = facts({ freshclam: 'inactive' });
+    await w.c.startScan('quick', 'user');
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(w.h.scans, 1);
+    assert.ok((await w.c.status()).issues.includes('updates_not_running'));
   } finally { w.cleanup(); }
 });
 
