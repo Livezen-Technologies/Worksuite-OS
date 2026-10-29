@@ -47,14 +47,25 @@ describe('#70 accessibility quick panel', () => {
     expect(radios()[2].getAttribute('aria-checked')).toBe('true')
   })
 
-  it('the language picker is labelled by its heading, full width; sizes are rem so the panel scales', () => {
+  it('the language picker is labelled by its heading, full width; the panel widens with the text size it sets', () => {
     const el = render()
     const sel = el.querySelector('select')!
     expect(sel.getAttribute('aria-labelledby')).toBe('ws-a11y-lang-h')
     expect(sel.className).toContain('w-full')
     const panel = el.querySelector<HTMLElement>('[data-testid=a11y-panel]')!
-    expect(panel.className).toContain('w-[20rem]')
+    // Text size scales the text, not rem (index.css), so the width follows --ws-text-scale: 20rem at 100%, 26rem at 200%.
+    expect(panel.className).toContain('w-[calc(14rem+6rem*var(--ws-text-scale,1))]')
     expect(panel.className).toContain('overflow-y-auto')
     expect(panel.className).not.toMatch(/w-\[\d+px\]/)
+  })
+
+  it('at large text sizes: switches stay at the end of their row, text-size segments never break inside "200%"', () => {
+    const el = render()
+    for (const sw of el.querySelectorAll('[role=switch]')) {
+      const row = sw.closest('[data-testid=a11y-panel] section > div > div')!
+      expect(row.className).not.toContain('flex-wrap')
+      expect(row.firstElementChild!.className).toContain('flex-1')
+    }
+    for (const r of el.querySelectorAll('[role=radio]')) expect(r.className).toContain('whitespace-nowrap')
   })
 })

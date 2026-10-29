@@ -1,5 +1,6 @@
 // Real-browser accessibility check (WSOS-ACC-001…006) of the built shell preview in Chromium (Playwright):
 //   node scripts/a11y-browser.mjs [outDir]      (after `npx vite build`; Playwright from the CI image or `npm i -g playwright`)
+//   A11Y_SCREENS=a11y-panel,a11y-panel-greeter node scripts/a11y-browser.mjs   (only those screens)
 // For each main screen, at 100 % and 200 % text, in the normal and high-contrast themes, with reduced motion:
 //  - axe-core with colour contrast (needs layout, so it is not part of the jsdom audit),
 //  - no text cut off vertically by a fixed-size container (WCAG 1.4.4), no horizontal page scroll at 200 % (1.4.10),
@@ -26,11 +27,15 @@ const BASE = `http://localhost:${PORT}/`
 // Screen → how to reach it from the preview (greeter → desktop → window).
 const SCREENS = {
   greeter: async () => {},
-  desktop: async (p) => { await p.fill('#ws-pw', 'preview'); await p.keyboard.press('Enter'); await p.waitForSelector('nav[aria-label]') },
+  // The sign-in fade (SessionFadeIn, 0.9 s) is opaque in high contrast, which forces opacity 1: wait until it is gone.
+  desktop: async (p) => { await p.fill('#ws-pw', 'preview'); await p.keyboard.press('Enter'); await p.waitForSelector('nav[aria-label]'); await p.waitForTimeout(1000) },
   launcher: async (p) => { await SCREENS.desktop(p); await p.click('button[aria-label="Open launcher"]'); await p.waitForSelector('#ws-launcher') },
   settings: async (p) => { await SCREENS.desktop(p); await p.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', metaKey: true }))); await p.click('button[aria-label="Open launcher"]'); await p.getByRole('button', { name: /^Settings$/ }).first().click(); await p.waitForSelector('[role="dialog"][aria-label="Settings"]') },
   files: async (p) => { await SCREENS.desktop(p); await p.click('button[aria-label="Open launcher"]'); await p.getByRole('button', { name: /^More/ }).first().click(); await p.waitForTimeout(300) },
   lock: async (p) => { await SCREENS.desktop(p); await p.keyboard.press('Meta+l'); await p.waitForTimeout(400) },
+  // #70: the Accessibility quick panel, from the taskbar and from the greeter, at each text size and theme.
+  'a11y-panel': async (p) => { await SCREENS.desktop(p); await p.click('nav button[aria-label="Accessibility"]'); await p.waitForSelector('[data-testid="a11y-panel"]') },
+  'a11y-panel-greeter': async (p) => { await p.click('button[aria-label="Accessibility"]'); await p.waitForSelector('[data-testid="a11y-panel"]') },
 }
 const MODES = [
   { name: '100', a11y: { highContrast: false, reducedMotion: false, textScale: 1 } },
@@ -43,7 +48,9 @@ const MODES = [
 
 const findings = []
 const browser = await chromium.launch()
-for (const [screen, go] of Object.entries(SCREENS)) {
+// A11Y_SCREENS=a11y-panel,lock checks only those screens.
+const only = process.env.A11Y_SCREENS?.split(',').filter(Boolean)
+for (const [screen, go] of Object.entries(SCREENS).filter(([n]) => !only?.length || only.includes(n))) {
   for (const m of MODES) {
     const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 }, bypassCSP: true, reducedMotion: m.a11y.reducedMotion ? 'reduce' : 'no-preference' })
     await ctx.addInitScript(([a, theme]) => {

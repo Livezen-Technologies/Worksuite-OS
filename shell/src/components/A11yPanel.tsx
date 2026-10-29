@@ -21,9 +21,10 @@ export default function A11yPanel({ onClose, className = '' }: { onClose: () => 
 
   // #70: one design-system look (Dk tokens, --ws-g-* theme variables): grouped rows on a card, the Settings switch with
   // its On/Off word, a segmented control for text size, the language picker full width under its label. Sizes are in
-  // rem so the panel grows with the text size it sets, and rows wrap rather than clip at 150%.
+  // rem; the width follows --ws-text-scale (20rem at 100%, 26rem at 200%) because text size scales the text, not rem.
   const group = 'flex flex-col overflow-hidden rounded-[0.75rem] border border-[var(--ws-g-line)] bg-[var(--ws-g-card)]'
-  const row = 'flex min-h-[2.75rem] flex-wrap items-center justify-between gap-x-4 gap-y-1 px-[0.875rem] py-2 text-sm'
+  // The label takes the free width and wraps; the switch keeps its place at the end of the row at every text size.
+  const row = 'flex min-h-[2.75rem] items-center justify-between gap-3 px-[0.875rem] py-2 text-sm'
   const heading = 'm-0 px-1 text-xs font-medium uppercase tracking-[0.08em] text-[var(--ws-g-muted)]'
   const pick = (dir: 1 | -1) => {
     const i = Math.max(0, TEXT_SCALES.indexOf(prefs.textScale))
@@ -33,7 +34,7 @@ export default function A11yPanel({ onClose, className = '' }: { onClose: () => 
   }
   return (
     <div ref={ref} role="dialog" aria-modal="false" aria-labelledby="ws-a11y-title" data-testid="a11y-panel"
-      className={`absolute z-50 flex w-[20rem] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-5rem)] flex-col gap-3 overflow-y-auto rounded-2xl border border-[rgba(127,178,255,0.25)] bg-[var(--ws-g-dialog)] p-4 text-[var(--ws-g-ink)] shadow-[0_24px_60px_rgba(0,0,0,0.5)] ${className}`}>
+      className={`absolute z-50 flex w-[calc(14rem+6rem*var(--ws-text-scale,1))] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-5rem)] flex-col gap-3 overflow-y-auto rounded-2xl border border-[rgba(127,178,255,0.25)] bg-[var(--ws-g-dialog)] p-4 text-[var(--ws-g-ink)] shadow-[0_24px_60px_rgba(0,0,0,0.5)] ${className}`}>
       <div className="flex items-center justify-between gap-2">
         <h2 id="ws-a11y-title" className="m-0 text-base font-semibold">{t('a11y.title')}</h2>
         <button type="button" aria-label={t('a11y.close')} onClick={onClose} className="flex size-[2.75rem] -mr-2 cursor-pointer items-center justify-center rounded-lg text-lg text-[var(--ws-g-soft)] hover:bg-white/10">×</button>
@@ -42,15 +43,15 @@ export default function A11yPanel({ onClose, className = '' }: { onClose: () => 
         <h3 id="ws-a11y-display" className={heading}>{t('a11y.group.display')}</h3>
         <div className={group}>
           <div className={row}>
-            <span id="ws-a11y-hc">{t('a11y.highContrast')}</span>
-            <Switch label={t('a11y.highContrast')} checked={prefs.highContrast} onChange={(v) => setA11y({ highContrast: v })} small />
+            <span className="min-w-0 flex-1">{t('a11y.highContrast')}</span>
+            <span className="shrink-0"><Switch label={t('a11y.highContrast')} checked={prefs.highContrast} onChange={(v) => setA11y({ highContrast: v })} small /></span>
           </div>
           <div className={`${row} ${rowLine}`}>
             <span className="flex min-w-0 flex-1 flex-col">
               <span>{t('a11y.reducedMotion')}</span>
               {sysMotion && <span className="text-xs text-[var(--ws-g-soft)]">{t('a11y.reducedMotionSystem')}</span>}
             </span>
-            <Switch label={t('a11y.reducedMotion')} checked={motionReduced(prefs)} disabled={sysMotion} onChange={(v) => setA11y({ reducedMotion: v })} small />
+            <span className="shrink-0"><Switch label={t('a11y.reducedMotion')} checked={motionReduced(prefs)} disabled={sysMotion} onChange={(v) => setA11y({ reducedMotion: v })} small /></span>
           </div>
           <div className={`flex flex-col gap-2 px-[0.875rem] py-2.5 text-sm ${rowLine}`}>
             <span id="ws-a11y-size">{t('a11y.textSize')}</span>
@@ -61,7 +62,7 @@ export default function A11yPanel({ onClose, className = '' }: { onClose: () => 
                 const on = prefs.textScale === s
                 return (
                   <button key={s} type="button" role="radio" aria-checked={on} tabIndex={on ? 0 : -1} data-scale={s} onClick={() => setA11y({ textScale: s })}
-                    className={`min-h-[2.25rem] cursor-pointer rounded-lg px-1 text-sm tabular-nums transition-colors ${on ? 'bg-[#1F6BFF] font-semibold text-white shadow-[0_1px_3px_rgba(0,0,0,0.35)]' : 'text-[var(--ws-g-soft)] hover:bg-white/10'}`}>{Math.round(s * 100)}%</button>
+                    className={`min-h-[2.25rem] cursor-pointer whitespace-nowrap rounded-lg px-1 text-sm tabular-nums transition-colors ${on ? 'bg-[#1F6BFF] font-semibold text-white shadow-[0_1px_3px_rgba(0,0,0,0.35)]' : 'text-[var(--ws-g-soft)] hover:bg-white/10'}`}>{Math.round(s * 100)}%</button>
                 )
               })}
             </div>

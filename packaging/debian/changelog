@@ -8,6 +8,11 @@ worksuite-os (1.0.0~dev3) trixie; urgency=medium
     scan (definitions couldn't load, engine missing, or the agent's code);
     scan units may use 2 GB before they are throttled, so loading ClamAV's
     signature database no longer stalls a scan on machines without swap.
+  * Shell (#70): the Accessibility panel keeps its switches at the end of
+    each row and its text-size segments whole at 150% and 200%, and widens
+    with the text size; switches show in high contrast again (their hit
+    area painted over them). The browser accessibility check covers the
+    panel from the taskbar and the greeter in every mode.
 
  -- WorkSuite OS Team <os@worksuitecloud.com>  Thu, 29 Oct 2026 12:00:00 +0000
 

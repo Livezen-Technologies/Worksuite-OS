@@ -171,6 +171,11 @@ select option:checked { background-color: #1F4FB0; color: #FFFFFF; }
   background-color: transparent !important; color: #000000 !important;
 }
 [data-high-contrast] svg [stroke]:not([stroke="none"]) { stroke: currentColor !important; }
+/* Switch (components/Dk.tsx, #70): its ::after is the enlarged hit area over the control. Black from the rule above,
+   it hid every switch in high contrast; the knob shows white on the black track (off) and black on yellow (on). */
+[data-high-contrast] [role="switch"]::after { background-color: transparent !important; }
+[data-high-contrast] [role="switch"] > span { background-color: #ffffff !important; }
+[data-high-contrast] [role="switch"][aria-checked="true"] > span { background-color: #000000 !important; }
 [data-high-contrast] ::placeholder { color: #d4d4d4 !important; }
 [data-high-contrast] :focus-visible:not([tabindex="-1"]) { outline: 3px solid #ffd400 !important; outline-offset: 2px !important; }
 [data-high-contrast] :has(> :is(input, textarea, select).outline-none:focus-visible) { outline: 3px solid #ffd400 !important; outline-offset: 2px !important; }
