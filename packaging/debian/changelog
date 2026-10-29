@@ -1,3 +1,12 @@
+worksuite-os (1.0.0~dev3) trixie; urgency=medium
+
+  * Drivers (#69): a Debian mirror other than deb.debian.org and
+    security.debian.org is approved only when it is pinned to Debian's
+    archive keyring; other *.debian.org hosts with their own key
+    (people.debian.org) are refused like any third-party archive.
+
+ -- WorkSuite OS Team <os@worksuitecloud.com>  Thu, 29 Oct 2026 12:00:00 +0000
+
 worksuite-os (1.0.0~dev2) trixie; urgency=medium
 
   * Drivers (#69): Debian's own APT sources are recognised (deb822 embedded

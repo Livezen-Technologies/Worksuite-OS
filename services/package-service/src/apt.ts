@@ -35,7 +35,9 @@ export function parseUpgradable(out: string): Change[] {
 export const ALLOWED_HOSTS = ['deb.debian.org', 'security.debian.org', 'download.worksuitecloud.com'];
 const BAD_SUITES = /^(testing|unstable|sid|experimental|forky)(-|$)/;
 const OK_SUITES = /^trixie(-updates|-security|-backports|-dev|-pilot|-stable)?$/;
-/** #69: Debian's own mirrors (ftp.<cc>.debian.org, cdn-*.deb.debian.org, …) are the distribution's sources too. */
+/** #69: Debian's own mirrors (ftp.<cc>.debian.org, cdn-*.deb.debian.org, …). tidyLegacySources pins their unsigned
+ *  sources.list lines to Debian's archive keyring; checkEntry approves them only through that keyring, because
+ *  *.debian.org also serves archives Debian does not sign (people.debian.org, personal repositories). */
 const DEBIAN_HOST = /(^|\.)debian\.org$/;
 /** #69: a source pinned to Debian's archive keyring only ever installs what Debian signed, from whichever mirror it
  *  names (a local or national mirror, snapshot.debian.org). trixie ships the keyring as .pgp; older images used .gpg. */
@@ -99,7 +101,9 @@ function checkEntry(e: { uris: string[]; suites: string[]; signedBy: string; tru
     let u: URL;
     try { u = new URL(uri); } catch { issues.push(`${file}: bad URI ${uri}`); continue; }
     const host = u.hostname;
-    const ok = ALLOWED_HOSTS.includes(host) || DEBIAN_HOST.test(host) || (debianSigned && /^https?:$/.test(u.protocol)) || (u.protocol === 'https:' && extraHosts.includes(u.host));
+    // Another host is approved only when Debian's archive keyring is its Signed-By (APT then accepts only what Debian
+    // signed, from whichever mirror), or it is the configured Update Center over https.
+    const ok = ALLOWED_HOSTS.includes(host) || (debianSigned && /^https?:$/.test(u.protocol)) || (u.protocol === 'https:' && extraHosts.includes(u.host));
     if (!ok) issues.push(`${file}: repository ${u.host} is not an approved source`);
   }
   for (const s of e.suites) {

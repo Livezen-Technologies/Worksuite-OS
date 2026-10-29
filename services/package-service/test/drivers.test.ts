@@ -354,6 +354,11 @@ test('sources: Debian\'s own sources are recognised however they are written (#6
   assert.deepEqual(checkSources('deb cdrom:[Debian GNU/Linux 13.1.0 _Trixie_ - Official amd64 DVD Binary-1]/ trixie contrib main\n', '/etc/apt/sources.list'), [], 'installation disc');
   // Still refused: a third-party archive, an unsigned one, signature checks turned off, a key that isn't there.
   assert.match(checkSources('deb [signed-by=/usr/share/keyrings/x.gpg] https://ppa.example.com/x trixie main\n', 'x.list').join(), /not an approved source/);
+  // A *.debian.org host that is not the archive (people.debian.org) with its own key is a third-party archive too;
+  // a Debian mirror is approved through Debian's keyring only (#69 follow-up).
+  assert.match(checkSources('deb [signed-by=/etc/apt/keyrings/someone.gpg] https://people.debian.org/~someone/repo trixie main\n', 'p.list').join(), /people\.debian\.org is not an approved source/);
+  assert.match(checkSources(mirror.replace('/usr/share/keyrings/debian-archive-keyring.pgp', '/etc/apt/keyrings/other.gpg'), 'd.sources').join(), /ftp\.lk\.debian\.org is not an approved source/);
+  assert.match(checkSources('deb http://ftp.lk.debian.org/debian/ trixie main\n', 'u.list').join(), /missing Signed-By/, 'unsigned mirror line (not yet pinned by tidyLegacySources) is refused');
   assert.match(checkSources('deb [trusted=yes signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian trixie main\n', 'x.list').join(), /trusted=yes turns off signature checks/);
   assert.match(checkSources('Types: deb\nURIs: https://deb.debian.org/debian\nSuites: trixie\nTrusted: yes\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n', 'd.sources').join(), /trusted=yes/);
   assert.deepEqual(checkSources(mirror, 'd.sources', [], (k) => k.endsWith('.pgp')), []);

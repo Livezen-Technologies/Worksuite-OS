@@ -142,9 +142,11 @@ image doesn't carry is found online:
   source check, live-build's unsigned `sources.list` lines (`deb` and `deb-src`) that a signed deb822 file covers are
   commented out (#45, #59). #69: other Debian-archive lines without Signed-By get Debian's archive keyring
   (`debian-archive-keyring.pgp`, else `.gpg`); http and https lines for the same archive count as covered. The check
-  reads deb822 continuation lines (an embedded `Signed-By` key block), accepts any `*.debian.org` mirror and any mirror
-  pinned to Debian's archive keyring, skips installation-disc (`cdrom:`) entries, and refuses `trusted=yes` and a
-  `Signed-By` keyring that is not installed. Settings › Drivers names the stage that failed (source not approved,
+  reads deb822 continuation lines (an embedded `Signed-By` key block), accepts `deb.debian.org`, `security.debian.org`,
+  the WorkSuite repository and the configured Update Center, and any other mirror (a national `ftp.<cc>.debian.org`
+  too) only when it is pinned to Debian's archive keyring; other `*.debian.org` hosts with their own key
+  (people.debian.org) are third-party archives and are refused. It skips installation-disc (`cdrom:`) entries, and
+  refuses `trusted=yes` and a `Signed-By` keyring that is not installed. Settings › Drivers names the stage that failed (source not approved,
   download, install) and the source file, offers Try again, and asks for a restart only after a driver that needs one
   has installed.
 - **Secure Boot**: DKMS modules are signed with DKMS's MOK; the service runs `mokutil --import /var/lib/dkms/mok.pub`
