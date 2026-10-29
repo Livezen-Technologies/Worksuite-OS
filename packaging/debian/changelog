@@ -1,3 +1,25 @@
+worksuite-os (1.0.0~dev2) trixie; urgency=medium
+
+  * Drivers (#69): Debian's own APT sources are recognised (deb822 embedded
+    Signed-By keys, *.debian.org mirrors, mirrors pinned to Debian's archive
+    keyring, http/https duplicates, installation-disc entries); unsigned
+    Debian lines get Debian's keyring; trusted=yes and missing Signed-By
+    keyrings are refused by name. Settings › Drivers names the failed stage
+    and the source, offers Try again, and asks for a restart only after a
+    successful install that needs one.
+  * Security (#68): Quick scan / Full scan say why they can't start in the
+    engine's real state (definitions still downloading, updater failed or not
+    installed, engine not responding, or the agent's own code); a stopped
+    freshclam is started when a scan is asked for; Settings names why
+    automatic updates aren't running and offers Update definitions; the image
+    creates /var/lib/clamav and /var/log/clamav for clamav at boot.
+  * Shell (#70): the taskbar's Accessibility panel uses the design-system
+    pieces: Display and Language groups, the Settings switch with On/Off,
+    a segmented text-size control (radio group, arrow keys), a full-width
+    language picker, theme variables and rem sizes so it scales.
+
+ -- WorkSuite OS Team <os@worksuitecloud.com>  Thu, 22 Oct 2026 09:00:00 +0000
+
 worksuite-os (1.0.0~dev1) trixie; urgency=medium
 
   * First packaged development build: shell, session, user services (sync,

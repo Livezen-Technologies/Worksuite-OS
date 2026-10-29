@@ -87,6 +87,22 @@ describe('WorkSuite Security section', () => {
     expect(el.textContent).toContain('Couldn’t start a scan: virus definitions haven’t been downloaded yet')
     start.mockRestore()
   })
+  it('#68: the engine\'s real state when a scan cannot start; a stopped updater is named and can be restarted', async () => {
+    const start = vi.spyOn(os, 'securityScan')
+    const stopped: SecurityStatus = { ...sec, antivirus: { ...sec.antivirus, updates: 'failed' } }
+    const el = await render(<SecuritySection info={info} initial={stopped} />)
+    expect(el.textContent).toContain('Automatic updates stopped after an error')
+    expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toContain('Update definitions')
+    const quick = () => [...el.querySelectorAll('button')].find((b) => b.textContent === 'Quick scan')!
+    for (const [error, text] of [['signatures_downloading', 'virus definitions are still downloading'], ['updater_missing', 'freshclam) isn’t installed'],
+      ['engine_check_failed', 'antivirus engine didn’t respond'], ['missing', 'antivirus engine isn’t installed'], ['failed:SYSTEMD_RUN', 'reported an error (SYSTEMD_RUN)'], ['failed', 'reported an error (FAILED)']]) {
+      start.mockResolvedValue({ ok: false, error })
+      await act(async () => { quick().click() })
+      expect(el.textContent).toContain(text)
+    }
+    expect(el.textContent).not.toMatch(/Couldn’t start a scan\.(?!\S)/)
+    start.mockRestore()
+  })
   it('#64: progress while scanning (files, found, elapsed, current path), Cancel, and recent scans', async () => {
     const started = Date.now() - 65_000
     const running: SecurityStatus = { ...sec, scanning: true, antivirus: { ...sec.antivirus, ready: true,

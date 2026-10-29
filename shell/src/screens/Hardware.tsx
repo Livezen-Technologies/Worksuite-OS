@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { formatBytes, os, type Avail, type DriverOffer, type DriverReport, type HwDevice, type PackageJobEvent, type Printer } from '../lib/os'
 import { friendlyError, type FriendlyError } from '../lib/errors'
 import { ErrorDetails } from '../components/ErrorDetails'
-import { KIND_ICON, STATUS_COLOR, deviceStatus, driverFailureText, driverJobPhase, type DriverStep, deviceSub, driverGroups, driverNotice, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerText, offerTitle, offerVersion, statusLabel } from '../lib/hardware'
+import { KIND_ICON, STATUS_COLOR, deviceStatus, driverFailureKind, driverFailureText, driverFailureTitle, type DriverFailureKind, driverJobPhase, type DriverStep, deviceSub, driverGroups, driverNotice, driversInUse, groupDevices, newDevices, offerLocked, offerTag, offerText, offerTitle, offerVersion, statusLabel } from '../lib/hardware'
 import { C, Dialog, OptionCard, Progress, Spinner, Svg, Tag, btnGhost, btnPrimary, card, dialogFooter, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { ICON } from './Updates'
 import { formatDate, formatNumber, t } from '../i18n'
@@ -289,6 +289,8 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
   const [pct, setPct] = useState<Record<string, number>>({})
   const [step, setStep] = useState<Record<string, DriverStep>>({})
   const [error, setError] = useState<FriendlyError | null>(null)
+  // #69: the stage the job failed at (sources check, download, install), named above the reason.
+  const [stage, setStage] = useState<DriverFailureKind | null>(null)
   const [attempt, setAttempt] = useState<DriverOffer[]>(offers)
   const [versions, setVersions] = useState<Record<string, string | null>>({})
   const [failed, setFailed] = useState<Record<string, string>>({})
@@ -306,6 +308,7 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
       if (e.kind === 'finished' && e.result !== 'success') {
         const raw = e.error ?? 'failed'
         const f = friendlyError(raw, 'package')
+        setStage(f.kind === 'cancelled' ? null : driverFailureKind(raw))
         setError({ ...f, text: f.kind === 'cancelled' ? t('hw.installUnfinished') : `${t('hw.installUnfinished')} ${driverFailureText(raw)}` })
         // Per driver: the step and apt's error from the report.
         void os.hwDriverReport(false).then((r) => {
@@ -330,10 +333,11 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
   }, [attempt]) // eslint-disable-line react-hooks/exhaustive-deps
   const retry = () => {
     const rest = offers.filter((o) => (pct[o.id] ?? 0) < 100)
-    setError(null); setFailed((f) => Object.fromEntries(Object.entries(f).filter(([id]) => !rest.some((o) => o.id === id)))); setAttempt(rest.length ? rest : offers)
+    setError(null); setStage(null); setFailed((f) => Object.fromEntries(Object.entries(f).filter(([id]) => !rest.some((o) => o.id === id)))); setAttempt(rest.length ? rest : offers)
   }
   const done = offers.every((o) => (pct[o.id] ?? 0) >= 100)
-  const restart = offers.filter((o) => o.restart)
+  // #69: a restart is only asked for once a driver that needs one has actually installed, never after a failure.
+  const restart = offers.filter((o) => o.restart && !(o.id in failed) && (pct[o.id] ?? 0) >= 100)
   const active = offers.find((o) => (pct[o.id] ?? 0) < 100 && pct[o.id] != null)
   const stepText = (o: DriverOffer, n: string) => {
     const s = step[o.id]
@@ -365,6 +369,7 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
                 {st === 'active' && <div className="ml-8"><Progress value={p} label={t('hw.progressOf', { name: names(o) })} height={4} /></div>}
                 {st === 'failed' && why && (
                   <div className="ml-8 flex flex-col gap-1.5 text-[12px] text-[#FFB0A6]" data-testid={`drv-failed-${o.id}`}>
+                    <span className="font-semibold">{driverFailureTitle(driverFailureKind(why))}</span>
                     <span>{driverFailureText(why)}</span>
                     <ErrorDetails details={why} />
                   </div>
@@ -375,6 +380,7 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
         </ul>
         {error && (
           <div role="alert" className="mx-4 mb-4 flex flex-col gap-2 rounded-xl border border-[rgba(255,138,122,0.3)] bg-[rgba(255,138,122,0.08)] px-3.5 py-3 text-[13px] text-[#FFB0A6]">
+            {stage && <span className="font-semibold" data-testid="drv-fail-stage">{driverFailureTitle(stage)}</span>}
             <span>{error.text}</span>
             <ErrorDetails details={error.details} />
           </div>
@@ -387,7 +393,7 @@ export function DriverInstallDialog({ offers, onClose, names = (o) => o.name, se
         <div className={dialogFooter}>
           <button type="button" onClick={onClose} className={btnGhost}>{done || error ? t('common.close') : t('hw.background')}</button>
           {error && error.kind !== 'cancelled' && <button type="button" onClick={retry} className={btnPrimary}>{t('common.tryAgain')}</button>}
-          {!error && restart.length > 0 && <button type="button" disabled={!done || !!active} onClick={() => void os.power('restart')} className={btnPrimary}>{t('upd.action.restart')}</button>}
+          {restart.length > 0 && <button type="button" disabled={!!active} onClick={() => void os.power('restart')} className={btnPrimary}>{t('upd.action.restart')}</button>}
         </div>
       </>}
     </Dialog>

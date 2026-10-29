@@ -47,6 +47,12 @@ describe('WorkSuite Security notices', () => {
     expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'ANTIVIRUS_MISSING' })).toBe('missing')
     expect(agentError({ type: 'lk.worksuite.Error.NotAuthorized', text: 'NotAuthorized' })).toBe('auth_cancelled')
     expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'FAILED' })).toBe('failed')
+    // #68: the engine's real state, and any other agent code kept for Settings to show.
+    expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'SIGNATURES_DOWNLOADING' })).toBe('signatures_downloading')
+    expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'UPDATER_MISSING' })).toBe('updater_missing')
+    expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'UPDATER_FAILED' })).toBe('updater_failed')
+    expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'ENGINE_CHECK_FAILED' })).toBe('engine_check_failed')
+    expect(agentError({ type: 'lk.worksuite.Error.Failed', text: 'SYSTEMD_RUN' })).toBe('failed:SYSTEMD_RUN')
     // The agent is not on the bus (not running): the service name is unknown.
     expect(agentError({ type: 'org.freedesktop.DBus.Error.ServiceUnknown', text: 'The name is not activatable' })).toBe('agent_unavailable')
     expect(pollInterval({ ...base, scanning: true })).toBe(2_000)
