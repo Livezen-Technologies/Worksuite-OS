@@ -37,6 +37,10 @@ export function scanErrorText(error: string): string {
 export function updatesText(updates: string): string | null {
   return updates === 'active' ? null : updates === 'failed' ? t('sec.updatesFailed') : updates === 'missing' ? t('sec.updatesMissing') : t('sec.updatesStopped')
 }
+/** #68: the agent's code for a scan that stopped ("CLAMSCAN_50", "SYSTEMD_RUN: spawn …" → "SYSTEMD_RUN"), never free text. */
+export function scanErrorCode(error: string): string {
+  return /^[A-Z][A-Z0-9_]{2,40}$/.test(error) ? error : /^([A-Z][A-Z0-9_]{2,40}):/.exec(error)?.[1] ?? 'ERROR'
+}
 /** 0:42, 12:05, 1:02:09 */
 export function fmtElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60
@@ -49,7 +53,10 @@ export function lastScanText(last: Scan | null): string {
   if (!last) return t('sec.never')
   if (last.error === 'CANCELLED') return t('sec.scanCancelled')
   if (last.error === 'NO_SIGNATURES') return t('sec.scanNoSignatures')
-  if (last.error) return t('sec.scanFailed')
+  // #68: a scan that started and then stopped says why, not just "did not finish".
+  if (last.error === 'ENGINE_ERROR') return t('sec.scanEngineError')
+  if (last.error === 'ANTIVIRUS_MISSING') return t('sec.scanMissing')
+  if (last.error) return t('sec.scanFailedCode', { code: scanErrorCode(last.error) })
   return t('sec.scanSummary', { kind: last.kind === 'full' ? t('sec.full') : t('sec.quick'), files: formatNumber(last.files), found: formatNumber(last.detections), when: fmtWhen(last.finished) })
 }
 const baseName = (p: string) => p.split('/').pop() || p

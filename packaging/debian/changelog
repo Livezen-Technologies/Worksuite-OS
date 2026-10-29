@@ -4,6 +4,10 @@ worksuite-os (1.0.0~dev3) trixie; urgency=medium
     security.debian.org is approved only when it is pinned to Debian's
     archive keyring; other *.debian.org hosts with their own key
     (people.debian.org) are refused like any third-party archive.
+  * Security (#68): a scan that starts and then stops says why under Last
+    scan (definitions couldn't load, engine missing, or the agent's code);
+    scan units may use 2 GB before they are throttled, so loading ClamAV's
+    signature database no longer stalls a scan on machines without swap.
 
  -- WorkSuite OS Team <os@worksuitecloud.com>  Thu, 29 Oct 2026 12:00:00 +0000
 

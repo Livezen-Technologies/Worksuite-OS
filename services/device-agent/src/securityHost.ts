@@ -14,11 +14,19 @@ import { exclusionArgs, FIREWALL_RULES, FRESHCLAM_ENV, LOG_PREFIX, parseClamscan
 /** One scan at a time, under a fixed name: cancel and a restarted agent can always find (and stop) it. */
 export const SCAN_UNIT = 'worksuite-av-scan.service';
 
+/**
+ * #68: memory a scan may use before the kernel throttles it. clamscan loads the whole signature database (main, daily,
+ * bytecode: well over 1 GB with ClamAV 1.4) before it reads a file. Below that, a machine without swap (the live
+ * session, most laptops) keeps reclaiming the same pages and the scan sits at "0 files" for minutes. MemoryHigh only
+ * throttles; it never kills the scan, and CPUQuota/Nice/idle I/O still keep the desktop responsive.
+ */
+export const SCAN_MEMORY_HIGH = '2G';
+
 /** The transient unit's command line (#64): recursive, every file's result on stdout (progress), no summary. */
 export function scanCommand(plan: { roots: string[]; exclusions: string[] }, cpuQuota: number): string[] {
   return [
     '--quiet', '--wait', '--pipe', '--collect', `--unit=${SCAN_UNIT}`, '--description=WorkSuite Security malware scan',
-    '-p', `CPUQuota=${cpuQuota}%`, '-p', 'Nice=19', '-p', 'IOSchedulingClass=idle', '-p', 'MemoryHigh=1G',
+    '-p', `CPUQuota=${cpuQuota}%`, '-p', 'Nice=19', '-p', 'IOSchedulingClass=idle', '-p', `MemoryHigh=${SCAN_MEMORY_HIGH}`,
     '--', 'clamscan', '--stdout', '--no-summary', '--recursive', '--max-filesize=200M', '--max-scansize=400M',
     ...exclusionArgs(plan.exclusions), ...plan.roots,
   ];
@@ -252,7 +260,7 @@ export function linuxSecurityHost(o: { stateDir: string; runtimeDir: string; aud
       const useClamd = existsSync(CLAMD_SOCKET);
       const r = useClamd
         ? await run('clamdscan', ['--fdpass', '--infected', '--no-summary', '--stdout', ...files], 10 * 60_000)
-        : await run('systemd-run', ['--quiet', '--wait', '--pipe', '--collect', '-p', `CPUQuota=${s.av_cpu_quota_percent}%`, '-p', 'Nice=10', '-p', 'MemoryHigh=768M',
+        : await run('systemd-run', ['--quiet', '--wait', '--pipe', '--collect', '-p', `CPUQuota=${s.av_cpu_quota_percent}%`, '-p', 'Nice=10', '-p', `MemoryHigh=${SCAN_MEMORY_HIGH}`,
           '--', 'clamscan', '--infected', '--no-summary', '--stdout', '--max-filesize=200M', '--max-scansize=400M', ...files], 10 * 60_000);
       if (r.code !== 0 && r.code !== 1 && r.code !== 2) throw new Error(`CLAMSCAN_${r.code}`);
       return parseClamscan(r.out);

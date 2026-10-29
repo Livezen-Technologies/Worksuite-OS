@@ -9,7 +9,7 @@ import {
   scanOutcome, scanPlan, securitySettings, securityStatus, skippedMounts, emptySecurity, type EngineFacts,
 } from '../src/security.ts';
 import { SecurityCenter, type SecurityHost } from '../src/securityCenter.ts';
-import { scanCommand } from '../src/securityHost.ts';
+import { SCAN_MEMORY_HIGH, scanCommand } from '../src/securityHost.ts';
 import { StateFile, type Policy } from '../src/state.ts';
 
 const NOW = Date.parse('2026-10-20T13:00:00Z');
@@ -108,6 +108,8 @@ test('#64 scan plan: quick covers high-risk folders; full covers / without kerne
   const cmd = scanCommand(f, 50);
   assert.ok(cmd.includes('--unit=worksuite-av-scan.service') && cmd.includes('--recursive') && cmd.includes('--stdout') && !cmd.includes('--infected'));
   assert.equal(cmd.at(-1), '/');
+  // #68: room for the signature database, so a scan isn't throttled before it reads a file.
+  assert.ok(cmd.includes(`MemoryHigh=${SCAN_MEMORY_HIGH}`) && SCAN_MEMORY_HIGH === '2G');
 });
 
 const CLAMSCAN = spawnSync('clamscan', ['--version']).status === 0;

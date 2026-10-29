@@ -5,7 +5,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { os, type ActivityStatus, type SecurityStatus } from '../lib/os'
-import { fmtElapsed, SecuritySection } from './settings/Security'
+import { fmtElapsed, lastScanText, scanErrorCode, SecuritySection } from './settings/Security'
 import { MonitoringSection } from './settings/Monitoring'
 import { MonitoringIndicator } from '../components/MonitoringNotice'
 
@@ -120,6 +120,15 @@ describe('WorkSuite Security section', () => {
     expect(cancel).toHaveBeenCalledWith('CancelSecurityScan')
     cancel.mockRestore()
     expect(fmtElapsed(3_729_000)).toBe('1:02:09')
+  })
+  it('#68: a scan that started and then stopped says why', () => {
+    const last = { id: 'x', kind: 'quick' as const, trigger: 'user' as const, started: 0, finished: Date.now(), files: 0, detections: 0 }
+    expect(lastScanText({ ...last, error: 'ENGINE_ERROR' })).toContain('couldn’t load its virus definitions. Select Update definitions')
+    expect(lastScanText({ ...last, error: 'ANTIVIRUS_MISSING' })).toContain('antivirus engine isn’t installed')
+    expect(lastScanText({ ...last, error: 'CLAMSCAN_50' })).toContain('stopped with an error (CLAMSCAN_50)')
+    expect(lastScanText({ ...last, error: 'SYSTEMD_RUN: spawn systemd-run ENOENT' })).toContain('(SYSTEMD_RUN)')
+    expect(scanErrorCode('something went wrong')).toBe('ERROR')
+    expect(lastScanText({ ...last, error: 'CANCELLED' })).toBe('Last scan was cancelled')
   })
   it('says when status is unavailable', async () => {
     const el = await render(<SecuritySection info={null} initial={null} />)
