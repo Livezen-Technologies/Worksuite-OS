@@ -246,6 +246,10 @@
       <translation>WorkSuite கூறுகளை நிறுவுகிறது</translation>
     </message>
     <message>
+      <source>Install WorkSuite apps</source>
+      <translation>WorkSuite பயன்பாடுகளை நிறுவுகிறது</translation>
+    </message>
+    <message>
       <source>Install bootloader</source>
       <translation>துவக்க ஏற்றியை நிறுவுகிறது</translation>
     </message>

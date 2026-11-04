@@ -41,6 +41,9 @@ class InstallerAsksTest(unittest.TestCase):
         self.assertEqual(users["sudoersGroup"], "sudo")
         groups = [g["name"] if isinstance(g, dict) else g for g in users["defaultGroups"]]
         self.assertIn("sudo", groups)
+        # WorkSuite POS: receipt printers / cash drawers (printer ports) and serial devices
+        self.assertIn("lp", groups)
+        self.assertIn("dialout", groups)
         self.assertFalse(users["setRootPassword"], "root stays locked; the first user administers through sudo/polkit")
         self.assertFalse(users["doAutologin"])
         self.assertGreaterEqual(users["passwordRequirements"]["minLength"], 8)
@@ -117,6 +120,20 @@ class FreshIdentityTest(unittest.TestCase):
             self.assertIn(path, script)
         _, _, execs = sequence()
         self.assertLess(execs.index("unpackfs"), execs.index("shellprocess@worksuite"))
+
+    def test_bundled_apps_step(self):
+        # "Install WorkSuite apps": after the live tools are removed, before the identities are cleared; offline only
+        sp = load(MODULES / "shellprocess-apps.conf")
+        self.assertFalse(sp["dontChroot"])
+        self.assertEqual(sp["script"], ["/usr/libexec/worksuite/worksuite-apps-check"])
+        check = (MODULES.parent.parent / "live-build/config/includes.chroot/usr/libexec/worksuite/worksuite-apps-check").read_text()
+        for pkg in ("worksuite-office", "worksuite", "worksuite-frameflow", "worksuite-pos"):
+            self.assertIn(pkg, check)
+        self.assertNotIn("apt-get", check)
+        _, _, execs = sequence()
+        self.assertLess(execs.index("packages"), execs.index("worksuitephase@apps"))
+        self.assertLess(execs.index("worksuitephase@apps"), execs.index("shellprocess@apps"))
+        self.assertLess(execs.index("shellprocess@apps"), execs.index("shellprocess@worksuite"))
 
     def test_live_tools_are_removed(self):
         removed = load(MODULES / "packages.conf")["operations"][0]["remove"]

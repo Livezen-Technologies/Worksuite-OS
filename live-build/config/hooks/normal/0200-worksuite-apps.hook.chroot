@@ -1,0 +1,18 @@
+#!/bin/sh
+# Bundled WorkSuite apps (live-build/build.sh: WorkSuite Desktop, Worksuite FrameFlow, WorkSuite POS) must run offline
+# on the installed system: unpackfs copies this chroot, so every library they load has to be in it now. Each bundled
+# package that is installed is checked: dpkg state, its launcher on PATH, its desktop entry, and no "not found" in
+# ldd of the program. Runs inside the chroot at build time.
+set -eu
+check() {  # check PACKAGE PROGRAM DESKTOP-ID
+  dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed' || return 0
+  [ -e "/usr/share/applications/$3.desktop" ] || { echo "$1: /usr/share/applications/$3.desktop missing" >&2; exit 1; }
+  bin=$(readlink -f "/usr/bin/$2" 2>/dev/null || true)
+  [ -x "${bin:-/nonexistent}" ] || { echo "$1: /usr/bin/$2 missing" >&2; exit 1; }
+  missing=$(ldd "$bin" 2>/dev/null | grep 'not found' || true)
+  [ -z "$missing" ] || { echo "$1: $bin needs libraries the image lacks:" >&2; echo "$missing" >&2; exit 1; }
+  echo "WorkSuite apps: $1 $(dpkg-query -W -f='${Version}' "$1") ok ($bin)"
+}
+check worksuite worksuite worksuite
+check worksuite-frameflow worksuite-frameflow worksuite-frameflow
+check worksuite-pos worksuite-pos worksuite-pos

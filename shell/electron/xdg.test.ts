@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { execProgram, findOffice, findWorkSuiteDesktop, installedApps, parseDesktopFile, toEntry } from './xdg'
+import { execProgram, findFrameFlow, findOffice, findPos, findWorkSuiteDesktop, installedApps, parseDesktopFile, toEntry } from './xdg'
 
 const entry = (extra = '') => `[Desktop Entry]\nType=Application\nName=Foo\nName[si]=ෆූ\nExec=/usr/bin/foo %U\nCategories=Utility;\n${extra}\n[Desktop Action new]\nName=Other\n`
 
@@ -58,5 +58,20 @@ describe('findWorkSuiteDesktop', () => {
   })
   it('does not take the web app windows or Office for it', () => {
     expect(findWorkSuiteDesktop([e('worksuite-mail', 'worksuite-app mail'), e('worksuite-url-handler', 'worksuite-app %u'), e('worksuite-office', '/opt/worksuite-office/desktopeditors')])).toBeNull()
+  })
+})
+
+describe('findFrameFlow / findPos', () => {
+  const e = (id: string, exec: string | null) => ({ id, name: id, generic_name: null, comment: null, icon: null, categories: [], keywords: [], exec, mime_types: [] })
+  it('finds the bundled apps by their package entry id or program', () => {
+    expect(findFrameFlow([e('foot', 'foot'), e('worksuite-frameflow', '"/opt/Worksuite FrameFlow/worksuite-frameflow" %U')])?.id).toBe('worksuite-frameflow')
+    expect(findFrameFlow([e('com.worksuitecloud.frameflow', '"/opt/Worksuite FrameFlow/worksuite-frameflow" %U')])?.id).toBe('com.worksuitecloud.frameflow')
+    expect(findPos([e('worksuite-pos', '"/opt/WorkSuite POS/worksuite-pos" %U')])?.id).toBe('worksuite-pos')
+    expect(findPos([e('lk.worksuite.pos', '/usr/bin/worksuite-pos %U')])?.id).toBe('lk.worksuite.pos')
+  })
+  it('does not take other WorkSuite entries for them', () => {
+    const others = [e('worksuite', '/opt/WorkSuite/worksuite %U'), e('worksuite-mail', 'worksuite-app mail'), e('worksuite-office', '/opt/worksuite-office/desktopeditors')]
+    expect(findFrameFlow(others)).toBeNull()
+    expect(findPos(others)).toBeNull()
   })
 })

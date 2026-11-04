@@ -246,6 +246,10 @@
       <translation>WorkSuite සංරචක ස්ථාපනය කරමින්</translation>
     </message>
     <message>
+      <source>Install WorkSuite apps</source>
+      <translation>WorkSuite යෙදුම් ස්ථාපනය කරමින්</translation>
+    </message>
+    <message>
       <source>Install bootloader</source>
       <translation>ආරම්භක කාරකය ස්ථාපනය කරමින්</translation>
     </message>

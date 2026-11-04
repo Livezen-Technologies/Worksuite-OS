@@ -12,6 +12,13 @@ name: Image
 # Secret WORKSUITE_DESKTOP_TOKEN (optional): actions:read on Livezen-Technologies/worksuite-desktop, for the
 # "worksuite-Linux" artifact of its build.yml (tools/fetch-desktop.sh); falls back to WORKSUITE_OFFICE_TOKEN. Variables
 # WORKSUITE_DESKTOP_URL + WORKSUITE_DESKTOP_SHA256 fetch a published deb instead.
+# Worksuite FrameFlow (public Livezen-Technologies/worksuite-frameflow, desktop-build.yml artifact
+# "Worksuite-FrameFlow-Linux", tools/fetch-frameflow.sh): this run's GITHUB_TOKEN can download a public repository's
+# artifacts; secret WORKSUITE_FRAMEFLOW_TOKEN overrides it, variables WORKSUITE_FRAMEFLOW_URL + _SHA256 fetch a
+# published deb (GitHub release or download center) instead.
+# Secret WORKSUITE_POS_TOKEN (optional): actions:read on Livezen-Technologies/worksuite-pos, for the
+# "worksuite-pos-Linux" artifact of its build.yml (tools/fetch-pos.sh); falls back to WORKSUITE_OFFICE_TOKEN. Variables
+# WORKSUITE_POS_URL + WORKSUITE_POS_SHA256 fetch a published deb instead.
 # Secret WORKSUITE_OFFICE_TOKEN: a token with actions:read on Livezen-Technologies/worksuite-office, used to download
 # the "linux-packages-$ARCH" artifact of its build.yml (tools/fetch-office.sh). Optional variables
 # WORKSUITE_OFFICE_URL fetches a published deb instead. Variable WORKSUITE_OFFICE_SHA256 pins the deb and is required
@@ -30,6 +37,12 @@ on:
         type: string
       desktop_run:
         description: worksuite-desktop build.yml run ID to take the Desktop deb from (empty for the latest)
+        default: ''
+      frameflow_run:
+        description: worksuite-frameflow desktop-build.yml run ID to take the FrameFlow deb from (empty for the latest)
+        default: ''
+      pos_run:
+        description: worksuite-pos build.yml run ID to take the POS deb from (empty for the latest)
         default: ''
       perf:
         description: also build the -perf image and apply the perf gates
@@ -73,6 +86,7 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: ''
       HAS_OFFICE_SOURCE: ${{ secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_OFFICE_URL != '' }}
       HAS_DESKTOP_SOURCE: ${{ secrets.WORKSUITE_DESKTOP_TOKEN != '' || secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_DESKTOP_URL != '' }}
+      HAS_POS_SOURCE: ${{ secrets.WORKSUITE_POS_TOKEN != '' || secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_POS_URL != '' }}
     steps:
       - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gh live-build debootstrap debhelper dpkg-dev fakeroot build-essential dbus-daemon ${{ matrix.qemu }} xorriso squashfs-tools mtools dosfstools
       - uses: actions/checkout@v4
@@ -111,6 +125,29 @@ jobs:
           WORKSUITE_DESKTOP_SHA256: ${{ vars.WORKSUITE_DESKTOP_SHA256 }}
           WORKSUITE_DESKTOP_RUN: ${{ inputs.desktop_run }}
         run: tools/fetch-desktop.sh
+      # Worksuite FrameFlow (public worksuite-frameflow desktop-build.yml, artifact Worksuite-FrameFlow-Linux). Its
+      # Linux job builds amd64 only so far; when nothing can be fetched the image ships without it (warning below).
+      - name: Fetch Worksuite FrameFlow
+        id: frameflow
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.WORKSUITE_FRAMEFLOW_TOKEN || github.token }}
+          WORKSUITE_FRAMEFLOW_URL: ${{ vars.WORKSUITE_FRAMEFLOW_URL }}
+          WORKSUITE_FRAMEFLOW_SHA256: ${{ vars.WORKSUITE_FRAMEFLOW_SHA256 }}
+          WORKSUITE_FRAMEFLOW_RUN: ${{ inputs.frameflow_run }}
+        run: tools/fetch-frameflow.sh
+      # WorkSuite POS (worksuite-pos build.yml, artifact worksuite-pos-Linux). WORKSUITE_POS_TOKEN (actions:read on
+      # Livezen-Technologies/worksuite-pos), else the Office token when it covers that repository too.
+      - name: Fetch WorkSuite POS
+        id: pos
+        if: env.HAS_POS_SOURCE == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.WORKSUITE_POS_TOKEN || secrets.WORKSUITE_OFFICE_TOKEN }}
+          WORKSUITE_POS_URL: ${{ vars.WORKSUITE_POS_URL }}
+          WORKSUITE_POS_SHA256: ${{ vars.WORKSUITE_POS_SHA256 }}
+          WORKSUITE_POS_RUN: ${{ inputs.pos_run }}
+        run: tools/fetch-pos.sh
       # Release mode (Office required) everywhere but fork pull requests, which have no secrets. arm64 without an
       # Office deb (none published for arm64 yet) warns and builds without it.
       - name: Build the ISO
@@ -124,6 +161,14 @@ jobs:
           if [ "${{ steps.desktop.outcome }}" != success ]; then
             [ $release = 1 ] && echo "::warning::No WorkSuite Desktop deb (worksuite-Linux); the image's start menu uses web app windows"
             export WORKSUITE_DESKTOP_OPTIONAL=1
+          fi
+          if [ "${{ steps.frameflow.outcome }}" != success ]; then
+            [ $release = 1 ] && echo "::warning::No Worksuite FrameFlow deb (Worksuite-FrameFlow-Linux); the image ships without it"
+            export WORKSUITE_FRAMEFLOW_OPTIONAL=1
+          fi
+          if [ "${{ steps.pos.outcome }}" != success ]; then
+            [ $release = 1 ] && echo "::warning::No WorkSuite POS deb (worksuite-pos-Linux); the image ships without it"
+            export WORKSUITE_POS_OPTIONAL=1
           fi
           # Point the image's APT source at the Update Center's OS repository once its archive keyring is packaged.
           [ -f packaging/keyring/worksuite-archive-keyring.gpg ] && export WORKSUITE_REPO=1

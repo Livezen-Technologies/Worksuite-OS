@@ -129,7 +129,9 @@ export default function App() {
     case 'loggingOut':
       return null
     case 'active':
-      if (firstRun) return <FirstRun userName={realName || displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false) }} />
+      // First sign-in only: once the first-run assistant is done, WorkSuite Desktop opens on its Home (its own welcome
+      // and onboarding); a no-op when it isn't installed.
+      if (firstRun) return <FirstRun userName={realName || displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false); void os.launchWorkSuite('home').catch(() => {}) }} />
       return (
         <Desktop user={user} fullName={realName || undefined} onLock={() => { void requestLock(() => os.lock(), () => send('lock')) }} onLogout={() => { void os.logout(); if (!(window as { worksuite?: unknown }).worksuite) send('logout') /* Electron: the session ends; never the preview greeter */ }} onOpen={setWin} notes={notes}
           shellWindows={taskbarWins} onShellWindow={(app, how) => setWins((w) => (how === 'focus' ? focusWin(w, app) : taskbarClick(w, app)))}>
