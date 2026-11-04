@@ -1,3 +1,15 @@
+worksuite-os (0.1.0) trixie; urgency=medium
+
+  * First published build. Renumbered from the 1.0.0~dev series for the
+    0.1.0 release; see CHANGELOG.md for the consolidated notes and for why
+    this orders below the dev builds (nothing was ever published to an APT
+    repository, so no installed machine upgrades across it).
+  * No signed APT suite is published with this release: the archive signing
+    key is not configured, so machines installed from this ISO have no
+    update source yet.
+
+ -- WorkSuite OS Team <os@worksuitecloud.com>  Wed, 04 Nov 2026 12:00:00 +0000
+
 worksuite-os (1.0.0~dev3) trixie; urgency=medium
 
   * Drivers (#69): a Debian mirror other than deb.debian.org and
