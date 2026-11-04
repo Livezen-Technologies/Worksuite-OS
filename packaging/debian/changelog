@@ -1,14 +1,17 @@
-worksuite-os (0.1.0) trixie; urgency=medium
+worksuite-os (1.0.0~rc1) trixie; urgency=medium
 
-  * First published build. Renumbered from the 1.0.0~dev series for the
-    0.1.0 release; see CHANGELOG.md for the consolidated notes and for why
-    this orders below the dev builds (nothing was ever published to an APT
-    repository, so no installed machine upgrades across it).
+  * First published build, released to the development ring on
+    download.worksuitecloud.com.
+  * Stays in the 1.0 series on purpose. The WorkSuite Desktop package
+    declares Breaks: worksuite-desktop (< 1.0~) to tell the old 0.x app
+    apart from this OS metapackage, so any version below 1.0~ makes the
+    image unresolvable ("Breaks: worksuite-desktop (< 1.0~) but 0.1.0 is
+    to be installed"). Do not renumber below 1.0~.
   * No signed APT suite is published with this release: the archive signing
     key is not configured, so machines installed from this ISO have no
     update source yet.
 
- -- WorkSuite OS Team <os@worksuitecloud.com>  Wed, 04 Nov 2026 12:00:00 +0000
+ -- WorkSuite OS Team <os@worksuitecloud.com>  Wed, 04 Nov 2026 12:30:00 +0000
 
 worksuite-os (1.0.0~dev3) trixie; urgency=medium
 

@@ -7,7 +7,7 @@ All notable changes to WorkSuite OS are recorded here. The format follows
 Per-package detail for the Debian packages is in
 [`packaging/debian/changelog`](packaging/debian/changelog).
 
-## [0.1.0] — 2026-11-04
+## [1.0.0-rc1] — 2026-11-04
 
 First published build. Consolidates the three development builds
 (`1.0.0~dev1`–`1.0.0~dev3`) that were built but never released.
@@ -46,8 +46,9 @@ First published build. Consolidates the three development builds
 - Published to the `development` ring only.
 
 ### Versioning note
-The Debian packages were previously versioned `1.0.0~dev1`–`1.0.0~dev3`.
-This release renumbers them to `0.1.0`, which dpkg orders *below* those dev
-builds. Nothing was ever published to an APT repository, so no installed
-machine can be on a dev build via apt and no upgrade path is broken; a
-machine installed from a dev ISO must be reinstalled rather than upgraded.
+This release stays in the 1.0 series on purpose. The WorkSuite Desktop
+package declares `Breaks: worksuite-desktop (< 1.0~)` so that the old 0.x
+application is told apart from this OS metapackage. Numbering the OS below
+`1.0~` makes the image unresolvable at build time — apt reports
+`Breaks: worksuite-desktop (< 1.0~) but 0.1.0 is to be installed` and the
+live-build run fails. A 0.x version for WorkSuite OS is not available.
