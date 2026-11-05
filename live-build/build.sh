@@ -185,7 +185,7 @@ while :; do
   rc=0; lb build > build.log 2>&1 || rc=$?
   iso=$(ls ./*.iso 2>/dev/null | head -n1)
   [ "$rc" = 0 ] && [ -n "$iso" ] && break
-  if [ "$attempt" -ge 3 ] || ! grep -q "Couldn't download packages" build.log; then
+  if [ "$attempt" -ge 3 ] || ! grep -qE "Couldn't download packages|Failed to fetch|Unable to fetch|apt-get: terminated by signal" build.log; then
     tail -40 build.log >&2; echo "lb build produced no ISO" >&2; exit 1
   fi
   echo "lb build: package downloads failed (attempt $attempt of 3); retrying" >&2
