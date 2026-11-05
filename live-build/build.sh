@@ -178,7 +178,18 @@ else
 fi
 ARCH="$ARCH" SNAPSHOT="$SNAPSHOT" lb config
 # Snapshot Release files are past Valid-Until by design; auto/config disables that check for apt.
-lb build > build.log 2>&1 || { tail -40 build.log >&2; exit 1; }
+# snapshot.debian.org drops requests under load; debootstrap has no retry of its own. When the bootstrap stage
+# fails only on downloads, clean the stages (keeping cache/, so fetched packages are reused) and try again.
+attempt=1
+until lb build > build.log 2>&1; do
+  if [ "$attempt" -ge 3 ] || ! grep -q "Couldn't download packages" build.log; then
+    tail -40 build.log >&2; exit 1
+  fi
+  echo "lb build: package downloads failed (attempt $attempt of 3); retrying" >&2
+  attempt=$((attempt + 1))
+  lb clean > /dev/null 2>&1 || true
+  sleep 30
+done
 iso=$(ls ./*.iso 2>/dev/null | head -n1)
 [ -n "$iso" ] || { tail -40 build.log >&2; echo "lb build produced no ISO" >&2; exit 1; }
 out="$here/out"; mkdir -p "$out"
