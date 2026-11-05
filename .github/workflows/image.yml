@@ -81,7 +81,9 @@ jobs:
       image: debian:trixie
       options: --privileged
     env:
-      SNAPSHOT: ${{ inputs.snapshot || '20261001T000000Z' }}
+      # Pull requests build from deb.debian.org (snapshot.debian.org outages blocked them); pushes, tags and runs
+      # started by hand stay pinned to the snapshot.
+      SNAPSHOT: ${{ github.event_name == 'pull_request' && 'none' || inputs.snapshot || '20261001T000000Z' }}
       ARCH: ${{ matrix.arch }}
       ELECTRON_SKIP_BINARY_DOWNLOAD: ''
       HAS_OFFICE_SOURCE: ${{ secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_OFFICE_URL != '' }}

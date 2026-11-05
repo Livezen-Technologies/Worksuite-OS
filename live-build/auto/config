@@ -4,9 +4,16 @@
 set -eu
 ARCH="${ARCH:-amd64}"
 case "$ARCH" in amd64|arm64) ;; *) echo "unsupported ARCH=$ARCH" >&2; exit 2 ;; esac
-SNAPSHOT="${SNAPSHOT:?pin a snapshot.debian.org timestamp for reproducible builds}"
-MIRROR="https://snapshot.debian.org/archive/debian/${SNAPSHOT}/"
-SECMIRROR="https://snapshot.debian.org/archive/debian-security/${SNAPSHOT}/"
+SNAPSHOT="${SNAPSHOT:?pin a snapshot.debian.org timestamp for reproducible builds, or none}"
+# SNAPSHOT=none builds from Debian's live trixie mirror instead of a pinned snapshot: pull-request images use it so
+# a snapshot.debian.org outage does not block them. Release images always pin a snapshot (image.yml).
+if [ "$SNAPSHOT" = none ]; then
+  MIRROR="https://deb.debian.org/debian/"
+  SECMIRROR="https://security.debian.org/debian-security/"
+else
+  MIRROR="https://snapshot.debian.org/archive/debian/${SNAPSHOT}/"
+  SECMIRROR="https://snapshot.debian.org/archive/debian-security/${SNAPSHOT}/"
+fi
 
 # Kernel flavour and serial console per architecture (PL011 ttyAMA0 on arm64 virt and most ARM boards).
 if [ "$ARCH" = amd64 ]; then KFLAVOUR=amd64; SERIAL=ttyS0; else KFLAVOUR=arm64; SERIAL=ttyAMA0; fi
