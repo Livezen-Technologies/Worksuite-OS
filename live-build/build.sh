@@ -81,6 +81,41 @@ if [ "$desktop_found" = 0 ]; then
   fi
   echo "WorkSuite Desktop: no .deb found; building without it (the start menu falls back to web app windows)" >&2
 fi
+# Worksuite FrameFlow (github.com/Livezen-Technologies/worksuite-frameflow, package worksuite-frameflow) and WorkSuite
+# POS (github.com/Livezen-Technologies/worksuite-pos, package worksuite-pos) ship the same way as Desktop:
+# tools/fetch-frameflow.sh / tools/fetch-pos.sh put them at config/packages.chroot/<package>_*.deb (or pass
+# WORKSUITE_FRAMEFLOW_DEB / WORKSUITE_POS_DEB=path; *_SHA256 pins them). Release images need both unless
+# WORKSUITE_FRAMEFLOW_OPTIONAL=1 / WORKSUITE_POS_OPTIONAL=1 (CI sets those when no source is configured). Their
+# Depends resolve from the snapshot mirror at build time, so the installed system has them offline (unpackfs copies
+# the image); hook 0200-worksuite-apps checks every bundled app's libraries in the chroot.
+bundle_app() {  # bundle_app LABEL PACKAGE FETCH-SCRIPT LOCAL-DEB SHA256 OPTIONAL
+  label=$1 want=$2 local_deb=$4 pin=$5 optional=$6 found=0
+  [ -z "$local_deb" ] || cp "$local_deb" "config/packages.chroot/${want}_local.deb"
+  for deb in config/packages.chroot/"$want"_*.deb; do
+    [ -f "$deb" ] || continue
+    if [ -n "$pin" ]; then
+      echo "$pin  $deb" | sha256sum -c - >/dev/null || { echo "$label: checksum mismatch for $deb" >&2; exit 1; }
+    fi
+    dpkg-deb --info "$deb" >/dev/null || { echo "$label: $deb is not a valid .deb" >&2; exit 1; }
+    pkg=$(dpkg-deb -f "$deb" Package); parch=$(dpkg-deb -f "$deb" Architecture)
+    [ "$pkg" = "$want" ] || { echo "$label: $deb is $pkg, not $want; skipping" >&2; rm -f "$deb"; continue; }
+    case "$parch" in "$ARCH"|all) ;; *) echo "$label: $deb is $parch, not $ARCH; skipping" >&2; rm -f "$deb"; continue ;; esac
+    echo "$pkg" >> "config/package-lists/$want.list.chroot"
+    found=1
+    echo "$label: installing $pkg $(dpkg-deb -f "$deb" Version)"
+  done
+  if [ "$found" = 0 ]; then
+    if [ "$WORKSUITE_RELEASE" = 1 ] && [ "$optional" != 1 ]; then
+      echo "$label: no $ARCH .deb, and release images must include it; run $3 first" >&2
+      exit 1
+    fi
+    echo "$label: no .deb found; building without it" >&2
+  fi
+}
+bundle_app "Worksuite FrameFlow" worksuite-frameflow tools/fetch-frameflow.sh "${WORKSUITE_FRAMEFLOW_DEB:-}" \
+  "${WORKSUITE_FRAMEFLOW_SHA256:-}" "${WORKSUITE_FRAMEFLOW_OPTIONAL:-0}"
+bundle_app "WorkSuite POS" worksuite-pos tools/fetch-pos.sh "${WORKSUITE_POS_DEB:-}" "${WORKSUITE_POS_SHA256:-}" \
+  "${WORKSUITE_POS_OPTIONAL:-0}"
 if [ -n "${BUILD_HTTPS_PROXY:-}" ]; then
   export https_proxy="$BUILD_HTTPS_PROXY" HTTPS_PROXY="$BUILD_HTTPS_PROXY"
   mkdir -p config/includes.chroot_before_packages/etc/apt/apt.conf.d
@@ -143,8 +178,21 @@ else
 fi
 ARCH="$ARCH" SNAPSHOT="$SNAPSHOT" lb config
 # Snapshot Release files are past Valid-Until by design; auto/config disables that check for apt.
-lb build > build.log 2>&1 || { tail -40 build.log >&2; exit 1; }
-iso=$(ls ./*.iso 2>/dev/null | head -n1)
+# snapshot.debian.org drops requests under load; debootstrap has no retry of its own. When the bootstrap stage
+# fails only on downloads, clean the stages (keeping cache/, so fetched packages are reused) and try again.
+attempt=1
+while :; do
+  rc=0; lb build > build.log 2>&1 || rc=$?
+  iso=$(ls ./*.iso 2>/dev/null | head -n1)
+  [ "$rc" = 0 ] && [ -n "$iso" ] && break
+  if [ "$attempt" -ge 3 ] || ! grep -qE "Couldn't download packages|Failed to fetch|Unable to fetch|apt-get: terminated by signal" build.log; then
+    tail -40 build.log >&2; echo "lb build produced no ISO" >&2; exit 1
+  fi
+  echo "lb build: package downloads failed (attempt $attempt of 3); retrying" >&2
+  attempt=$((attempt + 1))
+  lb clean > /dev/null 2>&1 || true
+  sleep 30
+done
 [ -n "$iso" ] || { tail -40 build.log >&2; echo "lb build produced no ISO" >&2; exit 1; }
 out="$here/out"; mkdir -p "$out"
 name="worksuite-os-1.0.0-dev-$ARCH${suffix:-}.iso"

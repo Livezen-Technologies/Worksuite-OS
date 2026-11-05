@@ -4,7 +4,7 @@
 import libcalamares
 
 GS_KEY = "worksuitePhase"
-PHASES = ("prepare", "copy", "locale", "unlock", "account", "components", "boot", "cleanup")
+PHASES = ("prepare", "copy", "locale", "unlock", "account", "components", "apps", "boot", "cleanup")
 
 
 def pretty_name():

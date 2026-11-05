@@ -29,7 +29,7 @@ export interface WorkSuiteApi {
   /** Installed applications from XDG desktop entries, and the detected WorkSuite Office entry id (null if absent). */
   /** App icons for desktop entries' Icon= values at a size (CSS px) and scale: data: URLs, null when none exists. */
   appIcons?(names: string[], size: number, scale: number): Promise<Record<string, string | null>>
-  installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null }>
+  installedApps(): Promise<{ apps: InstalledApp[]; office: string | null; desktop?: string | null; frameflow?: string | null; pos?: string | null }>
   /** WorkSuite Office: 'start' (start centre) or a new 'docs' | 'sheets' | 'slides' document. */
   launchOffice(kind: 'start' | 'docs' | 'sheets' | 'slides'): Promise<void>
   /** WorkSuite Desktop with --module=<id> (only when installed; the launcher checks). */

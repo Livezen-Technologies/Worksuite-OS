@@ -33,6 +33,15 @@ worksuite-os (1.0.0~dev3) trixie; urgency=medium
 
 worksuite-os (1.0.0~dev2) trixie; urgency=medium
 
+  * Bundled apps: release images ship Worksuite FrameFlow (worksuite-frameflow)
+    and WorkSuite POS (worksuite-pos) next to WorkSuite Office and Desktop
+    (tools/fetch-frameflow.sh, tools/fetch-pos.sh, build.sh, image.yml); a
+    chroot hook checks every bundled app's libraries for offline installs.
+    Calamares shows an "Install WorkSuite apps" step; the shell pins Desktop,
+    Office, FrameFlow and POS in the start menu and taskbar; Office is the
+    default for Office documents; the first account joins lp and dialout for
+    POS receipt printers and cash drawers; WorkSuite Desktop opens on its
+    Home after the first-run assistant.
   * Drivers (#69): Debian's own APT sources are recognised (deb822 embedded
     Signed-By keys, *.debian.org mirrors, mirrors pinned to Debian's archive
     keyring, http/https duplicates, installation-disc entries); unsigned

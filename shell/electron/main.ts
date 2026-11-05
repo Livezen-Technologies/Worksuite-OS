@@ -25,7 +25,7 @@ import { shellPrefsFrom } from '../src/lib/shellPrefs'
 import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
 import { createWidgets } from './widgets'
-import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
+import { DESKTOP_MODULES, execProgram, findFrameFlow, findOffice, findPos, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge, AGENT_POLICY_PATH } from './system'
 import { applyFix, diagnose, diagnosisText, type RadioFix, type RadioKind } from './radios'
 import { accelerationPlan, graphicsState, noteGpuCrash, readCrashLog, readRendererChoice, resetGpuFallback, setRenderer } from './graphics'
@@ -259,8 +259,15 @@ app.whenReady().then(() => {
     const all = installedApps()
     const office = findOffice(all)
     const desktop = findWorkSuiteDesktop(all)
-    // worksuite-* entries are the web app windows, listed from the org's data instead.
-    return { apps: all.filter((e) => !e.id.startsWith('worksuite-') || e === office).map(({ exec: _e, ...e }) => e), office: office?.id ?? null, desktop: desktop?.id ?? null }
+    const frameflow = findFrameFlow(all)
+    const pos = findPos(all)
+    // worksuite-* entries are the web app windows, listed from the org's data instead; the bundled native apps
+    // (Office, FrameFlow, POS) stay and get their own WorkSuite tiles.
+    const native = new Set([office, frameflow, pos].filter(Boolean))
+    return {
+      apps: all.filter((e) => !e.id.startsWith('worksuite-') || native.has(e)).map(({ exec: _e, ...e }) => e),
+      office: office?.id ?? null, desktop: desktop?.id ?? null, frameflow: frameflow?.id ?? null, pos: pos?.id ?? null,
+    }
   })
   // WorkSuite Desktop modules: its program with --module=<id> (fixed list, no shell), in its own app scope. A second
   // launch is handed to the running WorkSuite (single instance).

@@ -1,0 +1,19 @@
+#!/bin/sh
+# Installer step "Install WorkSuite apps" (installer/modules/shellprocess-apps.conf), run in the target. The bundled
+# apps (WorkSuite Office, WorkSuite Desktop, Worksuite FrameFlow, WorkSuite POS) are already installed in the system
+# image with all their dependencies (live-build/build.sh, hook 0200-worksuite-apps), so nothing is downloaded: each
+# one present must be fully installed, then the desktop-entry and MIME caches the start menu and the default apps
+# read are refreshed. WORKSUITE_APPS_ROOT (tests) prefixes the cache paths.
+set -eu
+root=${WORKSUITE_APPS_ROOT:-}
+for p in worksuite-office worksuite worksuite-frameflow worksuite-pos; do
+  s=$(dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null) || continue
+  [ -n "$s" ] || continue
+  case "$s" in
+    "ii "*) echo "worksuite-apps: $p $(dpkg-query -W -f='${Version}' "$p")" ;;
+    "un "*) ;;
+    *) echo "worksuite-apps: $p is not fully installed ($s)" >&2; exit 1 ;;
+  esac
+done
+if command -v update-desktop-database >/dev/null; then update-desktop-database -q "$root/usr/share/applications" || true; fi
+if command -v update-mime-database >/dev/null; then update-mime-database "$root/usr/share/mime" || true; fi

@@ -46,6 +46,13 @@ const WS_STYLE: Record<string, { name: string; mark: string; bg: string; fg: str
 export const FALLBACK_WEB_APPS = Object.keys(WS_STYLE).map((id) => ({ id, name: WS_STYLE[id].name }))
 
 const OFFICE_STYLE = { bg: '#ffedd5', fg: '#c2410c' }
+/** Desktop entry ids of the bundled WorkSuite apps beyond Office and Desktop (ws:installedApps). */
+export interface BundledApps { frameflow?: string | null; pos?: string | null }
+const BUNDLED = {
+  frameflow: { name: 'FrameFlow', mark: 'Ff', bg: '#ede9fe', fg: '#6d28d9', keywords: ['worksuite frameflow', 'flameflow', 'video', 'editor', 'screen recording'] },
+  pos: { name: 'POS', mark: 'P', bg: '#cffafe', fg: '#0e7490', keywords: ['worksuite pos', 'point of sale', 'till', 'checkout', 'receipt'] },
+} as const
+
 const LINUX_FAV = new Set(['firefox-esr', 'firefox', 'org.mozilla.firefox'])
 
 export const APP_CENTER: LauncherApp = { id: 'appcenter', name: 'App Center', mark: 'A', bg: '#2563eb', fg: '#ffffff', kind: 'System', launch: { screen: 'appcenter' }, keywords: ['software', 'install'] }
@@ -72,9 +79,11 @@ function initials(name: string) {
  * webApps: the org's enabled modules, or null when unknown (fallback list). installed: XDG entries, or null when
  * the bridge isn't available. office: the detected WorkSuite Office desktop id, or null when it isn't installed.
  * desktop: the WorkSuite Desktop entry id when it is installed: its modules open there (`--module=<id>`), the rest
- * in worksuite-app web windows. whatsapp: false when policy turns WhatsApp off (or on a kiosk).
+ * in worksuite-app web windows. whatsapp: false when policy turns WhatsApp off (or on a kiosk). bundled: the desktop
+ * entry ids of the other WorkSuite apps the image bundles (Worksuite FrameFlow, WorkSuite POS) when installed; each
+ * gets a pinned WorkSuite tile ('frameflow', 'pos') instead of a Linux app tile.
  */
-export function buildLauncherApps(webApps: { id: string; name: string; offline_level?: OfflineLevel }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null, whatsapp = true): LauncherApp[] {
+export function buildLauncherApps(webApps: { id: string; name: string; offline_level?: OfflineLevel }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null, whatsapp = true, bundled: BundledApps = {}): LauncherApp[] {
   const out: LauncherApp[] = []
   if (desktop) {
     out.push({ id: 'worksuite-desktop', name: 'WorkSuite', mark: 'W', bg: '#2563eb', fg: '#ffffff', kind: 'WorkSuite', fav: true, launch: { worksuite: 'home' }, keywords: ['worksuite', 'home', 'desktop'] })
@@ -96,9 +105,16 @@ export function buildLauncherApps(webApps: { id: string; name: string; offline_l
       { id: 'office-slides', name: t('launcher.presentations'), mark: 'Sl', ...OFFICE_STYLE, kind: 'WorkSuite', launch: { office: 'slides' }, keywords: ['office', 'powerpoint', 'pptx', 'slides', 'new presentation'] },
     )
   }
+  for (const [id, b] of Object.entries(BUNDLED) as [keyof BundledApps, (typeof BUNDLED)[keyof BundledApps]][]) {
+    const entry = bundled[id] ? (installed ?? []).find((e) => e.id === bundled[id]) : undefined
+    if (!entry) continue
+    out.push({ id, name: b.name, mark: b.mark, bg: b.bg, fg: b.fg, kind: 'WorkSuite', fav: true, launch: { desktop: entry.id }, icon: entry.icon,
+      appIds: [entry.id, ...(entry.wm_class ? [entry.wm_class] : [])], keywords: [...b.keywords, ...entry.keywords] })
+  }
   if (whatsapp) out.push(WHATSAPP)
+  const bundledIds = new Set(Object.values(bundled).filter(Boolean))
   for (const e of installed ?? []) {
-    if (e.id === office || e.id === desktop || e.id.startsWith('worksuite-') || e.id === WHATSAPP_APP_ID) continue
+    if (e.id === office || e.id === desktop || bundledIds.has(e.id) || e.id.startsWith('worksuite-') || e.id === WHATSAPP_APP_ID) continue
     const terminal = e.categories.includes('TerminalEmulator')
     out.push({
       id: e.id, name: e.name, mark: terminal ? '>_' : initials(e.name), bg: terminal ? '#0f172a' : '#f1f5f9', fg: terminal ? '#e2e8f0' : '#334155',

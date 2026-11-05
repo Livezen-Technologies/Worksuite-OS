@@ -74,6 +74,8 @@ jobs:
       - run: sudo apt-get install -y --no-install-recommends nftables && sudo sh tests/security/firewall.test.sh
       - run: tests/perf/gates.test.sh
       - run: tests/image/fetch-desktop.sh
+      - run: tests/image/fetch-frameflow.sh
+      - run: tests/image/fetch-pos.sh
       # Session scripts with stubbed programs: lock, idle, greeter, polkit agent fallback, screen-sharing consent.
       - run: sh tests/session/session-test.sh
       # Window title bars: the Labwc WorkSuite themes, their button images and the rc.xml layout (issues #15, #33).
