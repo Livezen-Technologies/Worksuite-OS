@@ -1,7 +1,7 @@
 // Admin console UI: one static page, no build step, no third-party code. All data is rendered with textContent
 // (never innerHTML), and the page runs under a CSP with script-src 'self'.
 
-const LOGO = `<svg viewBox="0 0 30 38" width="22" height="28" aria-hidden="true"><rect x="10" y="0" width="20" height="20" fill="#0A6CFF"/><rect x="0" y="10" width="10" height="10" fill="#00DAF2"/><rect x="10" y="10" width="10" height="10" fill="#0B2A66"/><rect x="10" y="20" width="10" height="10" fill="#00DAF2"/><rect x="0" y="33" width="30" height="5" rx="2.5" fill="#E2E8F0"/></svg>`;
+const LOGO = `<svg viewBox="54 54 404 404" width="28" height="28" aria-hidden="true"><defs><linearGradient id="wslogo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9eef7"/></linearGradient></defs><rect x="56" y="56" width="400" height="400" rx="92" fill="url(#wslogo)" stroke="#d9e2f2" stroke-width="3"/><rect x="136" y="136" width="108" height="108" rx="16" fill="#0a6cff"/><rect x="268" y="136" width="108" height="108" rx="16" fill="#00daf2"/><rect x="136" y="268" width="108" height="108" rx="16" fill="#00daf2"/><rect x="268" y="268" width="108" height="108" rx="16" fill="#001842"/><circle cx="322" cy="322" r="22" fill="none" stroke="#00daf2" stroke-width="10"/></svg>`;
 
 export const APP_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WorkSuite Admin</title><link rel="stylesheet" href="/admin/app.css"></head><body>

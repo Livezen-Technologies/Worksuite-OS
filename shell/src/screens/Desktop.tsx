@@ -628,7 +628,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
         {/* Start and the app icons: one group. Start comes first in tab order. */}
         <div data-testid="taskbar-main" className="flex min-w-0 flex-[0_1_auto] items-center gap-1.5">
           <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
-            className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
+            className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} /></button>
           {searchButton}
           {desktopsOn && desk.prefs.taskViewButton && (
             <span className="relative" onMouseEnter={() => hoverTaskView(true)} onMouseLeave={() => { hoverTaskView(false); setFlyout(false) }}>

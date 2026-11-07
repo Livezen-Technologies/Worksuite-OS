@@ -7,6 +7,16 @@ All notable changes to WorkSuite OS are recorded here. The format follows
 Per-package detail for the Debian packages is in
 [`packaging/debian/changelog`](packaging/debian/changelog).
 
+## [Unreleased]
+
+### Changed
+- New WorkSuite OS icon: a light rounded tile with four cells replaces the
+  old mark everywhere it appears: the app icon (hicolor, scalable and the
+  rendered sizes), the shell's favicon, the boot splash and the shutdown
+  overlay, the GRUB menus, the wallpaper, the installer's logo, sidebar and
+  loading screen, the sign-in veil, setup, Settings › About, recovery and
+  the admin console.
+
 ## [1.0.0-rc1] — 2026-11-04
 
 First published build. Consolidates the three development builds

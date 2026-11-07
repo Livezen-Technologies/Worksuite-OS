@@ -3,7 +3,7 @@
 set -eu
 here=$(dirname "$0"); out=$1
 mkdir -p "$out/plymouth" "$out/grub" "$out/icons"
-rsvg-convert -w 120 -h 152 "$here/logo-dark.svg" -o "$out/plymouth/logo.png"
+rsvg-convert -w 120 -h 120 "$here/logo-dark.svg" -o "$out/plymouth/logo.png"
 # Each splash asset at 1x and @2x (HiDPI heads, worksuite.script picks one device scale for every head).
 for k in 1 2; do
   sfx=; [ $k = 2 ] && sfx=@2x
