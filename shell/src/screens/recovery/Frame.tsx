@@ -43,7 +43,7 @@ export function Header({ onBack, right, logo = false }: { onBack?: () => void; r
           <Icon d={[RP.back]} size={16} stroke="#C9D6EE" />
         </button>
       )}
-      {logo && <Mark size={26} hole="#061029" />}
+      {logo && <Mark size={26} />}
       <span className="text-base font-semibold">{t('rec.title')}</span>
       {right != null && <span className="ml-auto">{right}</span>}
     </header>

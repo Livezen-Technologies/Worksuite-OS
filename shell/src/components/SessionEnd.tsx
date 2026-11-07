@@ -9,6 +9,7 @@ import { errorMessage } from '../lib/errors'
 import { sessionApi, type EndAction, type EndState } from '../lib/sessionApi'
 import { ANYWAY, BLOCKED_TITLE, CLOSE_TIMEOUT_MS, SUB, TITLE, appWindows, blockers, closeProgress, type Blocker } from '../lib/sessionEnd'
 import { t } from '../i18n'
+import { Mark } from './Ws'
 
 const BG = '#040A1A'
 /** How long a forced restart/shutdown may wait for polkit before the dialog comes back. */
@@ -22,12 +23,7 @@ function RingMark() {
         <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(127,178,255,0.12)" strokeWidth="4" />
         <path d="M60 6a54 54 0 0 1 54 54" fill="none" stroke="#18D4F0" strokeWidth="4" strokeLinecap="round" />
       </svg>
-      <svg width="48" height="48" viewBox="0 0 60 60" className="absolute top-9 left-9">
-        <rect x="20" y="0" width="40" height="40" rx="3" fill="#1F6BFF" />
-        <rect x="20" y="20" width="20" height="20" fill={BG} />
-        <rect x="0" y="20" width="20" height="20" rx="3" fill="#18D4F0" />
-        <rect x="20" y="40" width="20" height="20" rx="3" fill="#18D4F0" />
-      </svg>
+      <span className="absolute top-9 left-9"><Mark size={48} /></span>
     </div>
   )
 }

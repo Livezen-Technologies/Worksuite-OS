@@ -1,5 +1,5 @@
 // Shared pieces of the navy boot / sign-in / setup look (docs/design/boot-install).
-import type { CSSProperties, ReactNode } from 'react'
+import { useId, type CSSProperties, type ReactNode } from 'react'
 
 export const BG = {
   setupCenter: 'radial-gradient(ellipse 70% 60% at 50% 20%, #163B82 0%, #0A1A3D 60%, #060E22 100%)',
@@ -39,14 +39,27 @@ export function Icon({ d, size = 20, stroke = 'currentColor', width = 2, classNa
   )
 }
 
-/** The WorkSuite mark from the boards (blue square, cyan steps). */
-export function Mark({ size = 96, hole = '#0D2353' }: { size?: number; hole?: string }) {
+/**
+ * The WorkSuite OS mark: the app icon's light tile with its four cells (branding/icons/worksuite.svg), cropped to the
+ * tile so `size` is the tile's size.
+ */
+export function Mark({ size = 96, label }: { size?: number; label?: string }) {
+  const id = useId()
+  const a11y = label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true }
   return (
-    <svg width={size} height={size} viewBox="0 0 60 60" aria-hidden="true">
-      <rect x="20" y="0" width="40" height="40" rx="3" fill="#1F6BFF" />
-      <rect x="20" y="20" width="20" height="20" fill={hole} />
-      <rect x="0" y="20" width="20" height="20" rx="3" fill="#18D4F0" />
-      <rect x="20" y="40" width="20" height="20" rx="3" fill="#18D4F0" />
+    <svg {...a11y} width={size} height={size} viewBox="54 54 404 404" className="shrink-0">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset="1" stopColor="#e9eef7" />
+        </linearGradient>
+      </defs>
+      <rect x="56" y="56" width="400" height="400" rx="92" fill={`url(#${id})`} stroke="#d9e2f2" strokeWidth="3" />
+      <rect x="136" y="136" width="108" height="108" rx="16" fill="#0a6cff" />
+      <rect x="268" y="136" width="108" height="108" rx="16" fill="#00daf2" />
+      <rect x="136" y="268" width="108" height="108" rx="16" fill="#00daf2" />
+      <rect x="268" y="268" width="108" height="108" rx="16" fill="#001842" />
+      <circle cx="322" cy="322" r="22" fill="none" stroke="#00daf2" strokeWidth="10" />
     </svg>
   )
 }
