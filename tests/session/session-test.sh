@@ -250,6 +250,11 @@ grep -q -- '--column=Screen' "$LOG" && grep -q 'eDP-1 HDMI-A-1' "$LOG" && ok "ch
 printf 'eDP-1\n' | sh "$CH" >/dev/null; check "cancel denies the request" "$?" "1"
 printf 'eDP-1\n' | ZENITY_PICK=evil sh "$CH" >/dev/null; check "unknown answer denies the request" "$?" "1"
 : > "$LOG"; printf '' | ZENITY_PICK=eDP-1 sh "$CH" >/dev/null; check "no outputs: denied without asking" "$?:$(cat "$LOG")" "1:"
+# xdg-desktop-portal-wlr 0.8: "Monitor: NAME" lines (answered back verbatim), "Window: TITLE" lines not offered.
+: > "$LOG"
+check "xdpw 0.8: answers the monitor line verbatim" "$(printf 'Monitor: eDP-1\nMonitor: HDMI-A-1\nWindow: Firefox\n' | ZENITY_PICK=HDMI-A-1 sh "$CH")" "Monitor: HDMI-A-1"
+grep -q 'eDP-1 HDMI-A-1' "$LOG" && ! grep -q 'Firefox\|Monitor:' "$LOG" && ok "xdpw 0.8: lists screens by name, no windows" || bad "xdpw 0.8: lists screens by name, no windows"
+: > "$LOG"; printf 'Window: Firefox\n' | ZENITY_PICK=Firefox sh "$CH" >/dev/null; check "xdpw 0.8: windows only: denied without asking" "$?:$(cat "$LOG")" "1:"
 grep -q '^chooser_cmd=/usr/lib/worksuite/worksuite-screencast-chooser$' "$ROOT/services/session/xdg-desktop-portal-wlr/config" && ok "xdpw runs the consent chooser" || bad "xdpw runs the consent chooser"
 
 
