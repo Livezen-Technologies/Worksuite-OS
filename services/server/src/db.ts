@@ -107,6 +107,10 @@ export function openDb(path: string): DatabaseSync {
   const orgCols = (db.prepare('PRAGMA table_info(orgs)').all() as { name: string }[]).map((c) => c.name);
   if (!orgCols.includes('licence')) db.exec('ALTER TABLE orgs ADD COLUMN licence TEXT');
   if (!orgCols.includes('web_apps')) db.exec('ALTER TABLE orgs ADD COLUMN web_apps TEXT');
+  // Catalog items belong to the organization whose admin added them; NULL is a platform item (CLI catalog-put) that
+  // every organization sees and only the operator changes.
+  const catCols = (db.prepare('PRAGMA table_info(catalog)').all() as { name: string }[]).map((c) => c.name);
+  if (!catCols.includes('org_id')) db.exec('ALTER TABLE catalog ADD COLUMN org_id INTEGER')
   // Directory sign-in: TOTP second factor, password expiry / change-at-next-login, OS login codes (WSOS-DIR-007/008/009).
   if (!cols.includes('totp_secret')) db.exec('ALTER TABLE users ADD COLUMN totp_secret TEXT');
   if (!cols.includes('pw_changed_at')) db.exec('ALTER TABLE users ADD COLUMN pw_changed_at INTEGER');

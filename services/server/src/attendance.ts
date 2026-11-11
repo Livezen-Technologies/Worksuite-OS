@@ -3,6 +3,8 @@
 // through a signed outbound webhook the administrator configures. Nothing beyond those three figures leaves: no
 // applications, domains or events.
 import { createHmac, randomBytes } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import type { DatabaseSync } from 'node:sqlite';
 import { HttpError, invalid } from './http.ts';
 import { orgPolicy } from './monitoring.ts';
@@ -59,8 +61,32 @@ export function validateWebhookUrl(u: unknown): string {
   try { url = new URL(u); } catch { throw invalid('url', 'a URL'); }
   if (url.protocol !== 'https:') throw invalid('url', 'https only');
   if (url.username || url.password) throw invalid('url', 'no credentials in the URL; verify the signature instead');
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost') || (isIP(host) && internalAddress(host))) throw invalid('url', 'must be a public HR system address, not a local or private network address');
   return url.toString();
 }
+
+/** Loopback, private, link-local (cloud metadata), CGNAT, unspecified and multicast: never a webhook destination. */
+export function internalAddress(ip: string): boolean {
+  // IPv4-mapped IPv6, dotted (::ffff:127.0.0.1) or as URL parsing normalises it (::ffff:7f00:1).
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(ip);
+  const v4 = hex ? [parseInt(hex[1], 16) >> 8, parseInt(hex[1], 16) & 255, parseInt(hex[2], 16) >> 8, parseInt(hex[2], 16) & 255].join('.')
+    : /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip)?.[1] ?? ip;
+  if (isIP(v4) === 4) {
+    const [a, b] = v4.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const x = ip.toLowerCase();
+  return x === '::' || x === '::1' || /^f[cd]/.test(x) || /^fe[89ab]/.test(x) || /^ff/.test(x);
+}
+
+/** The server's webhook fetch: resolves the host first and refuses internal addresses (a name can point inward). */
+export const publicWebhookFetch: WebhookFetch = async (url, init) => {
+  const host = new URL(url).hostname.replace(/^\[|\]$/g, '');
+  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
+  if (!addrs.length || addrs.some((a) => internalAddress(a.address))) throw new Error('destination resolves to a local or private network address');
+  return fetch(url, init);
+};
 
 export function getHrWebhook(db: DatabaseSync, orgId: number) {
   const w = db.prepare('SELECT url, enabled, last_day, last_status, last_at FROM hr_webhooks WHERE org_id = ?').get(orgId) as { url: string; enabled: number; last_day: string | null; last_status: string | null; last_at: number | null } | undefined;

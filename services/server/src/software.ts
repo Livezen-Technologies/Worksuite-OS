@@ -54,8 +54,14 @@ export function assignedTo(db: DatabaseSync, item: CatalogItem, d: DeviceRow): b
   return users.some((u) => a.users?.includes(u.email) || (!!u.department && !!a.departments?.includes(u.department)));
 }
 
-export function catalogItems(db: DatabaseSync): CatalogItem[] {
-  return (db.prepare('SELECT item FROM catalog ORDER BY id').all() as { item: string }[]).map((r) => json<CatalogItem>(r.item));
+/** The catalog one organization sees: platform items (org_id NULL) and its own. */
+export function catalogItems(db: DatabaseSync, orgId: number): CatalogItem[] {
+  return (db.prepare('SELECT item FROM catalog WHERE (org_id IS NULL OR org_id = ?) ORDER BY id').all(orgId) as { item: string }[]).map((r) => json<CatalogItem>(r.item));
+}
+
+/** One catalog item as the organization sees it (platform or its own), or undefined. */
+export function catalogRow(db: DatabaseSync, orgId: number, id: string): { item: string; org_id: number | null } | undefined {
+  return db.prepare('SELECT item, org_id FROM catalog WHERE id = ? AND (org_id IS NULL OR org_id = ?)').get(id, orgId) as { item: string; org_id: number | null } | undefined;
 }
 
 /** Installed catalog ids from a device's last inventory (apt packages and Flatpak apps). */
@@ -64,9 +70,11 @@ export function installedIds(db: DatabaseSync, deviceId: string): Set<string> | 
   if (!row) return null;
   const b = json<{ packages?: { name?: string }[]; flatpaks?: { name?: string }[]; software?: { source?: string; name?: string }[] }>(row.body);
   const out = new Set<string>();
-  for (const p of b.packages ?? []) if (p?.name) out.add(`apt:${p.name}`);
-  for (const f of b.flatpaks ?? []) if (f?.name) out.add(`flatpak:${f.name}`);
-  for (const s of b.software ?? []) if (s?.source && s.name) out.add(`${s.source}:${s.name}`);
+  // Reports stored before shape checking existed may hold anything: read only well-formed lists.
+  const list = <T>(v: T[] | undefined): T[] => (Array.isArray(v) ? v : [])
+  for (const p of list(b.packages)) if (typeof p?.name === 'string') out.add(`apt:${p.name}`);
+  for (const f of list(b.flatpaks)) if (typeof f?.name === 'string') out.add(`flatpak:${f.name}`);
+  for (const s of list(b.software)) if (typeof s?.source === 'string' && typeof s.name === 'string') out.add(`${s.source}:${s.name}`);
   return out;
 }
 
@@ -103,7 +111,7 @@ export function deploy(db: DatabaseSync, orgId: number, deviceId: string, comman
  * install command. Runs after catalog changes, inventory reports and sign-ins. Returns the commands issued.
  */
 export function reconcileRequired(db: DatabaseSync, orgId: number, now = Date.now(), onlyDevice?: string): { device_id: string; catalog_id: string; command_id: string }[] {
-  const required = catalogItems(db).filter((i) => i.required && !i.blocked && i.source !== 'appimage');
+  const required = catalogItems(db, orgId).filter((i) => i.required && !i.blocked && i.source !== 'appimage');
   if (!required.length) return [];
   const devices = db.prepare(`SELECT id, org_id, arch, department FROM devices WHERE org_id = ? AND revoked = 0 ${onlyDevice ? 'AND id = ?' : ''}`)
     .all(...(onlyDevice ? [orgId, onlyDevice] : [orgId])) as unknown as DeviceRow[];
@@ -129,7 +137,7 @@ export interface SoftwareRequest { id: string; device_id: string; catalog_id: st
 
 export function createRequest(db: DatabaseSync, d: DeviceRow, b: Record<string, unknown>, now = Date.now()): SoftwareRequest {
   const catalogId = typeof b.catalog_id === 'string' ? b.catalog_id : '';
-  const row = db.prepare('SELECT item FROM catalog WHERE id = ?').get(catalogId) as { item: string } | undefined;
+  const row = catalogRow(db, d.org_id, catalogId);
   if (!row) throw invalid('catalog_id', 'not in the catalog');
   const item = json<CatalogItem>(row.item);
   if (item.blocked) throw invalid('catalog_id', 'blocked by the organization');
@@ -179,7 +187,7 @@ export function deployments(db: DatabaseSync, orgId: number, limit = 200) {
 /** Software inventory: for each catalog app, which devices report it installed; plus every device's app count. */
 export function inventorySummary(db: DatabaseSync, orgId: number) {
   const devices = db.prepare('SELECT id, org_id, hostname, arch, department FROM devices WHERE org_id = ? AND revoked = 0 ORDER BY hostname').all(orgId) as unknown as (DeviceRow & { hostname: string })[];
-  const items = catalogItems(db);
+  const items = catalogItems(db, orgId);
   const inst = new Map(devices.map((d) => [d.id, installedIds(db, d.id)]));
   return {
     apps: items.map((i) => {
@@ -197,14 +205,14 @@ export function inventorySummary(db: DatabaseSync, orgId: number) {
 }
 
 /** One device's installed software from its last inventory (for the device page). */
-export function deviceSoftware(db: DatabaseSync, deviceId: string) {
+export function deviceSoftware(db: DatabaseSync, orgId: number, deviceId: string) {
   const row = db.prepare('SELECT body, at FROM inventory WHERE device_id = ?').get(deviceId) as { body: string; at: number } | undefined;
   if (!row) return { reported_at: null, items: [] };
   const b = json<{ packages?: { name: string; version?: string }[]; flatpaks?: { name: string; version?: string; origin?: string }[] }>(row.body);
-  const catalog = new Map(catalogItems(db).map((i) => [i.id, i]));
+  const catalog = new Map(catalogItems(db, orgId).map((i) => [i.id, i]));
   const items = [
-    ...(b.flatpaks ?? []).map((f) => ({ id: `flatpak:${f.name}`, version: f.version ?? null })),
-    ...(b.packages ?? []).map((p) => ({ id: `apt:${p.name}`, version: p.version ?? null })),
+    ...(Array.isArray(b.flatpaks) ? b.flatpaks : []).map((f) => ({ id: `flatpak:${f?.name}`, version: f?.version ?? null })),
+    ...(Array.isArray(b.packages) ? b.packages : []).map((p) => ({ id: `apt:${p?.name}`, version: p?.version ?? null })),
   ].map((x) => ({ ...x, catalog_name: catalog.get(x.id)?.name ?? null }));
   return { reported_at: row.at, items };
 }

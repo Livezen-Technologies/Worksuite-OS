@@ -223,8 +223,9 @@ export function buildBundle(db: DatabaseSync, m: Record<string, unknown>, debs: 
   return manifest;
 }
 
-export function putCatalogItem(db: DatabaseSync, item: { id: string; source: string; name: string; arches: string[]; [k: string]: unknown }) {
-  db.prepare('INSERT INTO catalog (id, item) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET item = excluded.item').run(item.id, JSON.stringify(item));
+/** orgId null: a platform item every organization sees (operator CLI). Callers check ownership before replacing. */
+export function putCatalogItem(db: DatabaseSync, item: { id: string; source: string; name: string; arches: string[]; [k: string]: unknown }, orgId: number | null = null) {
+  db.prepare('INSERT INTO catalog (id, item, org_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET item = excluded.item').run(item.id, JSON.stringify(item), orgId);
 }
 
 export function putApp(db: DatabaseSync, item: { id: string; name: string; offline_level: string }) {

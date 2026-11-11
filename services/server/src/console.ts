@@ -17,8 +17,8 @@ import { REMOTE_SUPPORT_PERMISSION, getSignals as rsGetSignals, postSignal as rs
   appendRecording, elevateSession, readRecording, recordEvent, sessionEvents, sessionIceServers } from './remoteSupport.ts';
 import { Throttle } from './throttle.ts';
 import { liveOverview, logFilter, monitoringOverview, searchLog, securityOverview } from './monitoring.ts';
-import { attendance, attendanceCsv, deliverAttendance, getHrWebhook, setHrWebhook, type WebhookFetch } from './attendance.ts';
-import { decideRequest, deploy, deployments, deviceSoftware, inventorySummary, reconcileRequired, validateAssignment, validDepartment } from './software.ts';
+import { attendance, publicWebhookFetch, attendanceCsv, deliverAttendance, getHrWebhook, setHrWebhook, type WebhookFetch } from './attendance.ts';
+import { catalogRow, decideRequest, deploy, deployments, deviceSoftware, inventorySummary, reconcileRequired, validateAssignment, validDepartment } from './software.ts';
 import { gatewayPeers, getVpnSettings, removePeer, setVpnSettings, validateVpnSettings } from './vpn.ts';
 
 const SESSION_TTL = 8 * 3_600_000;
@@ -194,7 +194,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const args: Record<string, unknown> = {};
     if (command === 'InstallApprovedApplication' || command === 'RemoveApplication') {
       const id = String((b.args as Record<string, unknown> | undefined)?.catalog_id ?? '');
-      if (!db.prepare('SELECT 1 FROM catalog WHERE id = ?').get(id)) throw invalid('args.catalog_id', 'not in the catalog');
+      if (!catalogRow(db, a.org_id, id)) throw invalid('args.catalog_id', 'not in the catalog');
       if (id.startsWith('appimage:')) throw invalid('args.catalog_id', 'AppImages are imported by the user, not deployed');
       // Through the deployment path so the app is allowlisted in the signed policy the device checks.
       const cid = deploy(db, a.org_id, d.id, command, id);
@@ -355,7 +355,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const a = admin(ctx);
     const b = (await ctx.body() ?? {}) as Record<string, unknown>;
     const day = typeof b.day === 'string' ? b.day : new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-    const r2 = await deliverAttendance(db, a.org_id, day, o.webhookFetch ?? ((url, init) => fetch(url, init)));
+    const r2 = await deliverAttendance(db, a.org_id, day, o.webhookFetch ?? publicWebhookFetch);
     log(a, 'hr_webhook_sent', { day, status: r2.status, employees: r2.employees });
     send(ctx, 200, r2);
   });
@@ -531,10 +531,11 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     send(ctx, 204);
   });
 
-  // ---- catalog (global in this single-organization MVP) ----
+  // ---- catalog: platform items (org_id NULL, operator CLI) plus this organization's own ----
   r.on('GET', '/admin/api/catalog', (ctx) => {
-    admin(ctx);
-    send(ctx, 200, { items: (db.prepare('SELECT item FROM catalog ORDER BY id').all() as { item: string }[]).map((c) => json(c.item)) });
+    const a = admin(ctx);
+    send(ctx, 200, { items: (db.prepare('SELECT item, org_id FROM catalog WHERE (org_id IS NULL OR org_id = ?) ORDER BY id').all(a.org_id) as { item: string; org_id: number | null }[])
+      .map((c) => ({ ...json<Record<string, unknown>>(c.item), platform: c.org_id === null })) });
   });
   r.on('PUT', '/admin/api/catalog/{id}', async (ctx) => {
     const a = admin(ctx);
@@ -549,10 +550,13 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     if (!arches.length) throw invalid('arches', 'amd64 and/or arm64');
     if (source === 'appimage' && !/^[0-9a-f]{64}$/.test(String(b.sha256 ?? ''))) throw invalid('sha256', 'AppImages need a sha256');
     const text = (k: string, max: number) => (typeof b[k] === 'string' && (b[k] as string).trim() ? { [k]: (b[k] as string).trim().slice(0, max) } : {});
+    // Another organization's item, or a platform item, is never replaced from here (it would reach their devices).
+    const owner = db.prepare('SELECT org_id FROM catalog WHERE id = ?').get(id) as { org_id: number | null } | undefined;
+    if (owner && owner.org_id !== a.org_id) throw new HttpError(409, 'CONFLICT', owner.org_id === null ? 'this is a platform catalog item; it can only be changed by the server operator' : 'this catalog id is already in use; choose another id');
     const assign = validateAssignment(b.assign);
     const item = { id, source, name, arches, required: b.required === true, blocked: b.blocked === true, ...(source === 'appimage' ? { sha256: b.sha256 } : {}),
       ...text('category', 40), ...text('summary', 200), ...text('publisher', 100), ...(assign ? { assign } : {}) };
-    putCatalogItem(db, item);
+    putCatalogItem(db, item, a.org_id);
     log(a, 'catalog_put', { id });
     // Required apps deploy to the devices they are assigned to straight away.
     const deployed = item.required && !item.blocked ? reconcileRequired(db, a.org_id).filter((x) => x.catalog_id === id).length : 0;
@@ -560,7 +564,8 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
   });
   r.on('DELETE', '/admin/api/catalog/{id}', (ctx) => {
     const a = admin(ctx);
-    db.prepare('DELETE FROM catalog WHERE id = ?').run(ctx.params.id);
+    const res = db.prepare('DELETE FROM catalog WHERE id = ? AND org_id = ?').run(ctx.params.id, a.org_id);
+    if (!res.changes) throw new HttpError(404, 'NOT_FOUND', 'no such catalog item in your organization');
     log(a, 'catalog_deleted', { id: ctx.params.id });
     send(ctx, 204);
   });
@@ -577,7 +582,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
   r.on('GET', '/admin/api/devices/{id}/software', (ctx) => {
     const a = admin(ctx);
     device(a, ctx.params.id);
-    send(ctx, 200, deviceSoftware(db, ctx.params.id));
+    send(ctx, 200, deviceSoftware(db, a.org_id, ctx.params.id));
   });
   /** Remote install or uninstall of one catalog app on several devices at once. */
   r.on('POST', '/admin/api/software/deploy', async (ctx) => {
@@ -586,7 +591,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const catalogId = String(b.catalog_id ?? '');
     const action = b.action === 'uninstall' ? 'RemoveApplication' : b.action === 'install' ? 'InstallApprovedApplication' : null;
     if (!action) throw invalid('action', 'install or uninstall');
-    const row = db.prepare('SELECT item FROM catalog WHERE id = ?').get(catalogId) as { item: string } | undefined;
+    const row = catalogRow(db, a.org_id, catalogId);
     if (!row) throw invalid('catalog_id', 'not in the catalog');
     if (catalogId.startsWith('appimage:')) throw invalid('catalog_id', 'AppImages are imported by the user, not deployed');
     if (action === 'InstallApprovedApplication' && json<{ blocked?: boolean }>(row.item).blocked) throw invalid('catalog_id', 'the app is blocked');
