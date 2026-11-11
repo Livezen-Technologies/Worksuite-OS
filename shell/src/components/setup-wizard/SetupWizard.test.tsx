@@ -53,7 +53,7 @@ describe('SetupWizard', () => {
     await click('Continue'); await until(() => heading() === 'Organization')
     await click('Continue'); await until(() => heading() === 'Security') // first run: no disk step
     await click('Continue'); await until(() => heading() === 'WorkSuite apps')
-    const desktop = button(/WorkSuite Desktop:/)!
+    const desktop = button(/^WorkSuite Desktop/)!
     expect(desktop.disabled).toBe(true)
     expect(desktop.getAttribute('aria-checked')).toBe('true')
     await click('Continue'); await until(() => heading() === 'More apps')
