@@ -79,6 +79,10 @@
   --ws-g-dialog: #0F2350; --ws-g-menu: rgba(12,28,66,0.98); --ws-g-field: rgba(4,10,26,0.5); --ws-g-strong: #FFFFFF;
   --ws-g-glow: #12306B; --ws-g-glow-green: #0F3A3A;
 }
+/* First run (and other setup screens using .ws-setup-bg): the dark gradient by default, a light one in the light theme. */
+.ws-setup-bg { background: var(--ws-setup-bg); }
+:root[data-theme="light"] .ws-setup-bg { background: radial-gradient(ellipse 70% 60% at 50% 20%, #DCE6FA 0%, #EEF2F9 60%, #F3F6FB 100%); }
+
 :root[data-theme="light"] {
   --ws-g-ink: #0F172A; --ws-g-soft: #24324F; --ws-g-muted: #3F5175; --ws-g-dim: #4A5B80; --ws-g-link: #1D4FC4;
   --ws-g-green: #13653F; --ws-g-amber: #8A4B0F; --ws-g-red: #B42318; --ws-g-cyan: #0B6577;

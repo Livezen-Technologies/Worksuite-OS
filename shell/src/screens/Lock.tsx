@@ -74,7 +74,7 @@ export default function Lock({ user, name: realName, onUnlock, notices = [], unr
   const counts = unreadCounts(notices, unread ?? notices.length)
 
   return (
-    <main aria-labelledby="ws-lock-h1" className="relative flex h-full w-full flex-col overflow-hidden font-sans text-white" style={{ background: BG.lock }}
+    <main aria-labelledby="ws-lock-h1" className="ws-dark-zone relative flex h-full w-full flex-col overflow-hidden font-sans text-white" style={{ background: BG.lock }}
       onMouseDown={(e) => { if (!asking && e.button === 0 && !(e.target as HTMLElement).closest('button,input,a')) { e.preventDefault(); setAsking(true) } }}>
       {/* Orca announces the screen as "Locked" on arrival (WSOS-ACC-003). */}
       <h1 id="ws-lock-h1" className="sr-only">{t('lock.locked')}</h1>

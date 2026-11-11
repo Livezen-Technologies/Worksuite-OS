@@ -1,5 +1,5 @@
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react'
 import type { FirstRunProps } from './types'
 import { cloudErrorText, os, serverUrlFor, type CloudAccount } from '../lib/os'
 import {
@@ -319,7 +319,9 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
 
 function Screen({ bg, center, children }: { bg: string; center?: boolean; children: ReactNode }) {
   return (
-    <main className={`relative flex h-full w-full flex-col items-center overflow-auto font-sans text-[#E8EEFA] ${center ? 'justify-center gap-[18px] p-4' : 'gap-8 px-4 pt-16 pb-12'}`} style={{ background: bg }}>
+    // The backdrop goes through --ws-setup-bg so the light theme can swap it (index.css .ws-setup-bg): its text classes
+    // turn dark there, and on the dark gradient they were unreadable (QA, first run after picking Light).
+    <main className={`ws-setup-bg relative flex h-full w-full flex-col items-center overflow-auto font-sans text-[#E8EEFA] ${center ? 'justify-center gap-[18px] p-4' : 'gap-8 px-4 pt-16 pb-12'}`} style={{ '--ws-setup-bg': bg } as CSSProperties}>
       {children}
     </main>
   )

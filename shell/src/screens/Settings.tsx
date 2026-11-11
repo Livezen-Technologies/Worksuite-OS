@@ -633,13 +633,13 @@ function AboutPanel() {
   const drives = disks.state === 'ok' ? disks.value : []
   return <>
     <h1 className="sr-only">{t('settings.nav.About')}</h1>
-    <div className="flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.2)] px-6 py-[22px]" style={{ background: 'radial-gradient(circle at 88% 15%, rgba(24,212,240,0.32), transparent 45%), linear-gradient(120deg, #173F94, #0D2353)' }}>
+    <div className="ws-dark-zone flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.2)] px-6 py-[22px] text-[#E8EEFA]" style={{ background: 'radial-gradient(circle at 88% 15%, rgba(24,212,240,0.32), transparent 45%), linear-gradient(120deg, #173F94, #0D2353)' }}>
       <Mark size={76} hole="#14357A" />
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="text-[28px] font-bold tracking-[-0.02em]">{d?.os_version ?? 'WorkSuite OS'}</span>
         <span className="font-mono text-xs text-[#C9D6EE]">{[info.policies?.update_ring, d?.hostname, d?.arch].filter(Boolean).join(' · ') || t('settings.about.versionUnknown')}</span>
-        {status && <span className="flex items-center gap-1.5 text-[13px]" style={{ color: upToDate ? C.green : needsAttention(status) ? C.amber : '#C9D6EE' }}>
-          {upToDate && <Svg d="M5 12.5l4.5 4.5L19 7.5" size={14} stroke={C.green} width={2.6} />}
+        {status && <span className="flex items-center gap-1.5 text-[13px]" style={{ color: upToDate ? '#5FD39A' : needsAttention(status) ? '#FFB98A' : '#C9D6EE' /* the hero is always dark */ }}>
+          {upToDate && <Svg d="M5 12.5l4.5 4.5L19 7.5" size={14} stroke="#5FD39A" width={2.6} />}
           {upToDate ? t('settings.priv.checked', { when: status.last_check ? fmtWhen(status.last_check) : '—' }) : needsAttention(status) ? t('settings.priv.updateWaiting') : t('settings.priv.seeUpdates')}
         </span>}
       </span>

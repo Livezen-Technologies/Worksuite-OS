@@ -205,11 +205,11 @@ export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, on
       className="absolute right-3 bottom-16 z-40 box-border flex w-[360px] max-w-[calc(100%-24px)] flex-col gap-3.5 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] p-4 text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
       <div className="grid grid-cols-2 gap-2">
         {tiles.map((x) => (
-          <span key={x.id} className="flex min-w-0 overflow-hidden rounded-xl" style={{ background: x.on ? '#1F6BFF' : 'rgba(255,255,255,0.07)' }}>
+          <span key={x.id} className={`flex min-w-0 overflow-hidden rounded-xl ${x.on ? 'bg-[#1F6BFF] text-white' : 'bg-white/[0.07]'}`}>
             <button type="button" aria-pressed={x.id === 'mode' ? undefined : x.on} disabled={x.disabled} onClick={x.click}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left disabled:cursor-default disabled:opacity-60">
               <Ico d={x.d} size={18} />
-              <span className="flex min-w-0 flex-col"><span className="text-[13px] font-semibold">{x.title}</span><span className="truncate text-[11px]" style={{ color: x.on ? '#DCE7FF' : '#8FA3C8' }}>{x.sub}</span></span>
+              <span className="flex min-w-0 flex-col"><span className="text-[13px] font-semibold">{x.title}</span><span className={`truncate text-[11px] ${x.on ? '' : 'text-[#8FA3C8]'}`} style={x.on ? { color: '#DCE7FF' } : undefined /* always on the blue tile */}>{x.sub}</span></span>
             </button>
             {x.section && onOpenSettings && (
               <button type="button" aria-label={t('qs.openSettings', { name: x.title })} title={t('qs.openSettings', { name: x.title })} onClick={() => onOpenSettings(x.section!)}

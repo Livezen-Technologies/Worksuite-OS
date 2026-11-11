@@ -105,7 +105,7 @@ export default function Greeter({ onSignIn }: GreeterProps) {
   )
 
   return (
-    <div className="relative h-full w-full overflow-hidden font-sans text-white" style={{ background: BG.greeter }}>
+    <div className="ws-dark-zone relative h-full w-full overflow-hidden font-sans text-white" style={{ background: BG.greeter }}>
       <header className="absolute top-5 right-4 left-4 flex items-center justify-between gap-4 text-sm text-white/85 sm:top-7 sm:right-10 sm:left-10">
         <time dateTime={now.toISOString()}>{aShortDate(now)} · {aTime(now)}</time>
         <span className="flex items-center gap-5"><StatusIndicators /><span>{LOCALES.find((l) => l.id === getLocale())?.name}</span></span>

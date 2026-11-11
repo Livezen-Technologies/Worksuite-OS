@@ -92,3 +92,10 @@ describe('lock screen empty submit', () => {
     expect(h.textContent).not.toContain('Enter your password.')
   })
 })
+
+describe('lock screen in the light theme (QA: its text vanished on the dark wallpaper)', () => {
+  it('is a dark zone, so the light theme leaves its light text alone', async () => {
+    const h = await render(<Lock user="u" onUnlock={() => {}} notices={[]} />)
+    expect(h.querySelector('main')!.classList.contains('ws-dark-zone')).toBe(true)
+  })
+})
