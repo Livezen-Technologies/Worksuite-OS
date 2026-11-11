@@ -6,16 +6,18 @@
 set -u
 outputs=$(cat)
 [ -n "$outputs" ] || exit 1
-# xdg-desktop-portal-wlr 0.7 sends bare output names; 0.8 sends "Monitor: NAME" (and "Window: TITLE" lines for
-# windows, which this screen-sharing consent does not offer) and only accepts the line back exactly as it came.
+# xdg-desktop-portal-wlr 0.7 sends bare output names. 0.8 sends "Monitor: NAME DESCRIPTION" (the description when
+# the output has one) and "Window: TITLE (ID)" lines (src/screencast/chooser.c), and accepts only a line back exactly
+# as it came. This consent offers screens only, listed by output name (names have no spaces: DP-1, HDMI-A-1).
 nl='
 '
+name_of() { n=${1#Monitor: }; printf '%s' "${n%% *}"; }
 labels=''
 IFS=$nl
 set -f
 for line in $outputs; do
     case "$line" in Window:*|'') continue ;; esac
-    labels="$labels${labels:+$nl}${line#Monitor: }"
+    labels="$labels${labels:+$nl}$(name_of "$line")"
 done
 [ -n "$labels" ] || exit 1
 case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
@@ -27,6 +29,6 @@ esac
 choice=$(zenity --list --title="$title" --text="$text" --column="$col" --ok-label="$okl" --cancel-label="$nol" --hide-header $labels) || exit 1
 for line in $outputs; do
     case "$line" in Window:*|'') continue ;; esac
-    [ "${line#Monitor: }" = "$choice" ] && { printf '%s\n' "$line"; exit 0; }
+    [ "$(name_of "$line")" = "$choice" ] && { printf '%s\n' "$line"; exit 0; }
 done
 exit 1
