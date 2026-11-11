@@ -98,7 +98,7 @@ Rollback is **offered only** when a checkpoint with a `verified` handle exists b
 
 ## Setup service (`services/setup`, `lk.worksuite.Setup1`)
 
-The privileged half of the machine. Root, system bus, started by D-Bus activation only, packaged as `worksuite-setup`. It is not yet in the desktop metapackage: the UI adopts it in phase 3.
+The privileged half of the machine. Root, system bus, started by D-Bus activation only, packaged as `worksuite-setup`. The `worksuite-desktop` metapackage depends on it, so every installed system runs the setup wizard at first sign-in.
 
 - **Machine:** `src/machine/` is a byte-identical copy of the shell's `core/` and `recovery/`, made by `npm run sync-machine`. `test/machine-sync.test.ts` fails when the copies differ.
 - **Durable state** (`src/store.ts`):

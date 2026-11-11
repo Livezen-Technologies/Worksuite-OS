@@ -26,6 +26,7 @@ Package: worksuite-desktop
 Architecture: all
 Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archive-keyring,
  worksuite-user-services, worksuite-ai, worksuite-package-service, worksuite-device-agent, worksuite-directory, worksuite-recovery-boot, worksuite-wayland-bridge,
+ worksuite-setup,
  labwc, wlr-randr, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, grim, wl-clipboard, wtype, xdg-desktop-portal-gtk, gnome-keyring,
  pipewire, pipewire-pulse, wireplumber, brightnessctl, playerctl, network-manager, wpasupplicant, rfkill, bluez, udisks2, upower, cups, cups-filters, avahi-daemon, libnss-mdns, polkitd, pkexec,
@@ -39,6 +40,7 @@ Description: WorkSuite OS desktop (metapackage)
  Office (native editors) is published separately and added to the image when
  its .deb is provided. The shell is also the panel (taskbar, tray,
  update badge); its window list comes from worksuite-wayland-bridge.
+ The first sign-in runs the setup wizard on worksuite-setup.
 
 Package: worksuite-shell
 Architecture: amd64 arm64
