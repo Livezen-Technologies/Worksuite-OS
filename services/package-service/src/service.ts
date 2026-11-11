@@ -10,6 +10,10 @@ import { checkSources, isCritical, parseCatalogId, parseDiskChange, parseSimulat
 import { debFieldsUnprivileged, type Unprivileged } from './untrusted.ts';
 import type { HistoryKind, UpdateHistory } from './history.ts';
 
+/** apt's signature failures. gpgv (bookworm, Ubuntu) says NO_PUBKEY/BADSIG/EXPKEYSIG; Debian 13's apt verifies with sqv
+ *  and says "OpenPGP signature verification failed: … Missing key …" instead, so both families are recognised. */
+export const SIG_ERROR = /NO_PUBKEY|not signed|InRelease.*(invalid|is not valid)|EXPKEYSIG|BADSIG|OpenPGP signature verification failed|Missing key [0-9A-F]{16,}/
+
 export type Source = 'apt' | 'flatpak';
 export const APPIMAGE_NOT_INSTALLABLE = 'AppImages are not installed by the package service; import the AppImage file in the App Center (worksuite-appimage import)';
 export interface RunResult { code: number; stdout: string; stderr: string }
@@ -388,7 +392,7 @@ export class PackageService extends EventEmitter {
     for (let i = 1; ; i++) {
       const r = await this.env.runner.run('apt-get', ['-y', '-q', '-o', 'Acquire::Retries=3', ...this.bandwidthArgs(), '--download-only', ...verb]);
       if (r.code === 0) return;
-      if (/NO_PUBKEY|not signed|EXPKEYSIG|BADSIG|Hash Sum mismatch/.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
+      if (SIG_ERROR.test(r.stderr) || /Hash Sum mismatch/.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
       this.env.audit('download_interrupted', { attempt: i, error: firstLine(r.stderr) });
       if (i >= attempts) throw new ServiceError('Failed', `download interrupted; it resumes from where it stopped next time (${firstLine(r.stderr) || `exit ${r.code}`})`);
       await (this.env.sleep ?? ((ms) => new Promise((res) => setTimeout(res, ms))))(i * 10_000);
@@ -470,7 +474,7 @@ export class PackageService extends EventEmitter {
   private async mustRun(cmd: string, args: string[]) {
     const r = await this.env.runner.run(cmd, args);
     if (r.code !== 0) {
-      if (cmd === 'apt-get' && /NO_PUBKEY|not signed|InRelease.*(invalid|is not valid)|EXPKEYSIG|BADSIG/.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
+      if (cmd === 'apt-get' && SIG_ERROR.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
       if (/Could not get lock|dpkg was interrupted/.test(r.stderr)) throw new ServiceError('Busy', firstLine(r.stderr));
       throw new ServiceError('Failed', `${cmd}: ${firstLine(r.stderr) || `exit ${r.code}`}`);
     }
