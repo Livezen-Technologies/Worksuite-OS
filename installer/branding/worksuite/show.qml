@@ -260,7 +260,7 @@ Presentation {
                                 Item {
                                     width: 22; height: 22
                                     Rectangle { anchors.fill: parent; radius: 11; visible: done; color: "#2E3DDC97"
-                                        Text { anchors.centerIn: parent; text: "✓"; color: "#3DDC97"; font.pixelSize: 13; font.weight: Font.Bold } }
+                                        WsCheck { anchors.centerIn: parent; color: "#3DDC97"; size: 13; lineWidth: 2.2 } }
                                     Rectangle { anchors.fill: parent; radius: 11; visible: active; color: "transparent"; border.width: 2; border.color: "#2E7FB2FF"
                                         Rectangle { width: 22; height: 22; radius: 11; color: "transparent"; border.width: 2; border.color: "#18D4F0"; visible: active
                                             Rectangle { width: 12; height: 12; x: 10; y: -1; color: "#0E2048" }

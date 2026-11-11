@@ -93,7 +93,7 @@ WsPage {
                     Rectangle {
                         width: 18; height: 18; radius: 4
                         color: modelData[0] ? "#1F6BFF" : "transparent"; border.width: modelData[0] ? 0 : 1; border.color: "#5E739C"
-                        Text { anchors.centerIn: parent; visible: modelData[0]; text: "✓"; color: "#FFFFFF"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                        WsCheck { anchors.centerIn: parent; visible: modelData[0]; size: 12 }
                     }
                     Text { Layout.fillWidth: true; text: modelData[1]; color: "#C9D6EE"; font.family: "IBM Plex Sans"; font.pixelSize: 14 }
                 }
