@@ -13,6 +13,7 @@ import { ErrorDetails } from '../components/ErrorDetails'
 import { errorMessage, friendlyError } from '../lib/errors'
 import { OfflineUpdates, showsOffline, useUsbBundles } from './UpdatesOffline'
 import { formatNumber, messages, t } from '../i18n'
+import { Button } from '../components/ui/button'
 
 export const ICON = {
   download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
@@ -429,11 +430,11 @@ export function UpdateToast({ onDetails, onSchedule, onDismiss }: { onDetails: (
       </div>
       <div className="flex gap-2 pr-[18px] pb-[18px] pl-[76px]">
         {ready || st.state === 'restart_pending' ? <>
-          <button type="button" onClick={() => void os.power('restart')} className="cursor-pointer rounded-[9px] bg-[#1F6BFF] px-3.5 py-[9px] text-[13px] font-semibold text-white hover:bg-[#3A7DFF]">{t('upd.action.restart')}</button>
-          {ready && <button type="button" onClick={onSchedule} className="cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-3.5 py-[9px] text-[13px] font-medium hover:bg-white/[0.06]">{t('upd.action.schedule')}</button>}
+          <Button variant="primary" size="sm" onClick={() => void os.power('restart')}>{t('upd.action.restart')}</Button>
+          {ready && <Button size="sm" onClick={onSchedule}>{t('upd.action.schedule')}</Button>}
         </> : <>
-          <button type="button" disabled={busy} onClick={() => void act(updates.installNow)} className="cursor-pointer rounded-[9px] bg-[#1F6BFF] px-3.5 py-[9px] text-[13px] font-semibold text-white hover:bg-[#3A7DFF] disabled:opacity-60">{t('upd.installNow')}</button>
-          {canDefer(st) && <button type="button" disabled={busy} onClick={() => void act(async () => { await updates.defer(); onDismiss() })} className="cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-3.5 py-[9px] text-[13px] font-medium hover:bg-white/[0.06] disabled:opacity-60">{t('upd.action.later')}</button>}
+          <Button variant="primary" size="sm" disabled={busy} onClick={() => void act(updates.installNow)}>{t('upd.installNow')}</Button>
+          {canDefer(st) && <Button size="sm" disabled={busy} onClick={() => void act(async () => { await updates.defer(); onDismiss() })}>{t('upd.action.later')}</Button>}
         </>}
         <button type="button" onClick={onDetails} className={`${linkBtn} px-2.5 py-[9px]`}>{t('common.details')}</button>
       </div>

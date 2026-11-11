@@ -14,6 +14,7 @@ import { EMOJI, SYMBOLS, searchEmoji } from '../lib/emoji'
 import { captureApi } from '../lib/captureApi'
 import { formatTime, t, useT, type MessageKey } from '../i18n'
 import { requestSettingsSection } from '../lib/settingsNav'
+import { Button } from './ui/button'
 
 export type FlyoutTab = 'emoji' | 'symbols' | 'clipboard'
 const TABS: { id: FlyoutTab; icon: string }[] = [
@@ -133,7 +134,7 @@ export default function ClipboardFlyout({ tab: first, previous, backdrop, onClos
                   <div className="flex flex-col items-start gap-3 p-4">
                     <p className="m-0 text-sm font-semibold">{t('flyout.offTitle')}</p>
                     <p className="m-0 text-[13px] leading-[1.45] text-[#C9D6EE]">{t('flyout.offBody')}</p>
-                    <button type="button" onClick={() => void desktopApi?.clipboardSetEnabled(true).then(setState)} className="cursor-pointer rounded-lg bg-[#1F6BFF] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#3A7DFF]">{t('flyout.turnOn')}</button>
+                    <Button variant="primary" size="sm" onClick={() => void desktopApi?.clipboardSetEnabled(true).then(setState)}>{t('flyout.turnOn')}</Button>
                   </div>
                 ) : (
                   <>

@@ -1,5 +1,6 @@
 // Shared pieces of the navy boot / sign-in / setup look (docs/design/boot-install).
 import type { CSSProperties, ReactNode } from 'react'
+import { buttonClass } from './ui/button'
 
 export const BG = {
   setupCenter: 'radial-gradient(ellipse 70% 60% at 50% 20%, #163B82 0%, #0A1A3D 60%, #060E22 100%)',
@@ -77,7 +78,8 @@ export function Avatar({ name, size, font, bg = AVATAR_GRADIENTS[0], style, chil
 }
 
 /** Translucent square icon button used on the greeter and lock screens. */
-export const glassBtn = 'flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-white/10 bg-[rgba(8,20,48,0.5)] text-white hover:bg-[rgba(8,20,48,0.75)]'
-export const primaryBtn = 'cursor-pointer rounded-[10px] bg-[#1F6BFF] px-7 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(31,107,255,0.35)] hover:bg-[#3A7DFF] disabled:cursor-default disabled:opacity-60'
-export const ghostBtn = 'cursor-pointer rounded-[10px] border border-[rgba(127,178,255,0.25)] px-6 py-3 text-[15px] font-medium text-[#E8EEFA] hover:bg-white/5 disabled:cursor-default disabled:opacity-60'
+// Button styles come from the shared system (components/ui/button.tsx); these names stay for existing screens.
+export const glassBtn = buttonClass({ variant: 'glass', size: 'icon' })
+export const primaryBtn = buttonClass({ variant: 'primary', size: 'lg' })
+export const ghostBtn = buttonClass({ variant: 'secondary', size: 'lg' })
 export const mono = "font-['IBM_Plex_Mono',ui-monospace,monospace]"

@@ -98,7 +98,6 @@
 :root[data-theme="light"] .disabled\:bg-white\/\[0\.06\]:not(.ws-dark-zone *, .ws-dark-zone):disabled { background-color: rgba(15,23,42,0.06); }
 :root[data-theme="light"] .disabled\:hover\:bg-\[rgba\(14\,32\,72\,0\.55\)\]:not(.ws-dark-zone *, .ws-dark-zone):hover:disabled { background-color: rgba(248,249,252,0.94); }
 :root[data-theme="light"] .disabled\:text-\[\#8FA3C8\]:not(.ws-dark-zone *, .ws-dark-zone):disabled { color: #405782; }
-:root[data-theme="light"] .disabled\:text-white\/50:not(.ws-dark-zone *, .ws-dark-zone):disabled:not(:where(.bg-\[\#18D4F0\], .bg-\[\#1F6BFF\], .bg-\[\#25D366\], .bg-\[\#5FD39A\], .bg-\[\#7FB2FF\], .bg-\[\#B3541B\], .bg-\[\#B7791F\], .bg-\[\#C42B1C\], .bg-\[\#C9D6EE\], .bg-\[\#D9452B\], .bg-\[\#F4F7FC\], .bg-\[\#F59E0B\], .bg-\[\#FF8A7A\], .bg-\[\#FFB84D\], [style*="background"])) { color: rgba(15,23,42,0.7); }
 :root[data-theme="light"] .focus-visible\:bg-white\/10:not(.ws-dark-zone *, .ws-dark-zone):focus-visible { background-color: rgba(15,23,42,0.08); }
 :root[data-theme="light"] .focus-visible\:bg-white\/\[0\.07\]:not(.ws-dark-zone *, .ws-dark-zone):focus-visible { background-color: rgba(15,23,42,0.07); }
 :root[data-theme="light"] .focus-visible\:outline-white:not(.ws-dark-zone *, .ws-dark-zone):focus-visible { outline-color: rgba(89,89,89,0.5); }

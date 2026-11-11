@@ -9,6 +9,7 @@ import {
 import { BG, Icon, Mark, P, StepDots, ghostBtn, mono, primaryBtn } from '../components/Ws'
 import FirstRunNetwork from './FirstRunNetwork'
 import { getLocale, setLocale, t as tr, type Locale, type MessageKey } from '../i18n'
+import { Button } from '../components/ui/button'
 
 // First boot: Welcome → Appearance → Privacy → WorkSuite apps (+ network and workspace sign-in) → Ready.
 type Mode = 'personal' | 'enterprise'
@@ -116,9 +117,9 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
       <div className="mt-5 text-lg text-[#8FA3C8]">{greeting}</div>
       <h1 ref={headingRef} tabIndex={-1} className="m-0 text-center text-[52px] leading-tight font-bold tracking-[-0.03em] outline-none">{tr('setup.welcome')}</h1>
       <p className="m-0 max-w-[560px] text-center text-[17px] leading-normal text-[#8FA3C8]">{tr('setup.welcomeSub')}</p>
-      <button type="button" onClick={() => setStep(1)} className="mt-7 flex cursor-pointer items-center gap-2.5 rounded-xl bg-[#1F6BFF] px-10 py-[15px] text-base font-semibold text-white shadow-[0_10px_30px_rgba(31,107,255,0.4)] hover:bg-[#3A7DFF]">
+      <Button variant="primary" size="xl" onClick={() => setStep(1)} className="mt-7">
         {tr('setup.getStarted')}<Icon d={P.arrow} size={18} width={2.5} />
-      </button>
+      </Button>
       {!required && <button type="button" onClick={finish} className="cursor-pointer rounded-lg p-2.5 text-sm text-[#8FA3C8] hover:text-[#E8EEFA]">{tr('setup.skip')}</button>}
       <div className="mt-10"><StepDots step={0} /></div>
     </Screen>
@@ -148,7 +149,7 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
           </ul>
         )}
         {!signedIn && <p className="m-0 text-[13px] text-[#8FA3C8]">{tr('setup.notSignedIn')}</p>}
-        <button type="button" onClick={finish} className="mt-6 cursor-pointer rounded-xl bg-[#1F6BFF] px-10 py-[15px] text-base font-semibold text-white shadow-[0_10px_30px_rgba(31,107,255,0.4)] hover:bg-[#3A7DFF]">{tr('setup.goDesktop')}</button>
+        <Button variant="primary" size="xl" onClick={finish} className="mt-6">{tr('setup.goDesktop')}</Button>
       </Screen>
     )
   }

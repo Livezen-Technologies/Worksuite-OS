@@ -2,16 +2,18 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { Icon, Mark, mono } from '../../components/Ws'
 import { t } from '../../i18n'
+import { buttonClass, focusRing } from '../../components/ui/button'
 
 export const BG_TOP = 'radial-gradient(ellipse 70% 50% at 50% 0%, #0E2A55 0%, #061029 60%, #030816 100%)'
 export const BG_CENTER = 'radial-gradient(ellipse 60% 50% at 50% 35%, #0E2A55 0%, #061029 60%, #030816 100%)'
 
-export const ring = 'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7FB2FF]'
-export const primary = `cursor-pointer rounded-[10px] bg-[#1F6BFF] px-7 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(31,107,255,0.35)] hover:bg-[#3A7DFF] disabled:cursor-default disabled:opacity-50 disabled:shadow-none disabled:hover:bg-[#1F6BFF] ${ring}`
-export const danger = `cursor-pointer rounded-[10px] bg-[#D9452B] px-7 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(217,69,43,0.35)] hover:bg-[#E5563C] disabled:cursor-default disabled:opacity-50 disabled:shadow-none ${ring}`
-export const ghost = `cursor-pointer rounded-[10px] border border-[rgba(127,178,255,0.25)] px-[22px] py-3 text-[15px] font-medium text-[#E8EEFA] hover:bg-white/5 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent ${ring}`
-export const small = `cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-4 py-[9px] text-[13px] text-[#E8EEFA] hover:bg-white/5 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent ${ring}`
-export const link = `cursor-pointer text-[13px] text-[#7FB2FF] underline-offset-2 hover:text-[#B8D4FF] hover:underline ${ring} rounded-sm`
+// Recovery boards use the shared button system (components/ui/button.tsx) at the large size.
+export const ring = focusRing
+export const primary = buttonClass({ variant: 'primary', size: 'lg' })
+export const danger = buttonClass({ variant: 'danger', size: 'lg' })
+export const ghost = buttonClass({ variant: 'secondary', size: 'lg' })
+export const small = buttonClass({ variant: 'secondary', size: 'sm' })
+export const link = buttonClass({ variant: 'link' })
 
 export const RP = {
   repair: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z',
