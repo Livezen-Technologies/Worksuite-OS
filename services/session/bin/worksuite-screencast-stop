@@ -9,10 +9,12 @@
 set -u
 log() { printf '%s\n' "worksuite-screencast-stop: $1" | systemd-cat -t worksuite-screencast-stop -p "${2:-notice}" 2>/dev/null || true; }
 
-# PipeWire nodes of xdpw streams. pw-cli prints "id N, type PipeWire:Interface:Node/3" then the properties.
+# PipeWire nodes of xdpw streams. pw-cli prints "id N, type PipeWire:Interface:Node/3" then the properties. xdpw names
+# its stream "xdpw-stream-XXXXXX"; depending on the PipeWire version that shows as node.name or media.name, with the
+# hyphen kept or turned into an underscore.
 ids=$(pw-cli ls Node 2>/dev/null | awk '
     /^[[:space:]]*id [0-9]+,/ { gsub(/,/, "", $2); id = $2 }
-    /node\.name = "xdpw_stream/ { print id }')
+    /(node|media)\.name = "xdpw[-_]stream/ && id != last { print id; last = id }')
 count=0
 for id in $ids; do
     pw-cli destroy "$id" >/dev/null 2>&1 && count=$((count + 1))
@@ -20,7 +22,8 @@ done
 
 # Restarting the backend closes every portal ScreenCast session it held (D-Bus activation starts it again on demand).
 if ! systemctl --user restart xdg-desktop-portal-wlr.service 2>/dev/null; then
-    pkill -x xdg-desktop-portal-wlr 2>/dev/null || true
+    # Process names are cut to 15 characters ("xdg-desktop-por"), so -x never matches: match the command line.
+    pkill -f '(^|/)xdg-desktop-portal-wlr( |$)' 2>/dev/null || true
 fi
 log "stopped $count screen-sharing stream(s)"
 echo "$count"

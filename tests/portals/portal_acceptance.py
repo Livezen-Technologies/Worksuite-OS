@@ -11,6 +11,7 @@ tested.
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -232,7 +233,8 @@ class PortalAcceptance(unittest.TestCase):
             await asyncio.sleep(0.5)
             nodes = pw_nodes()
             self.assertIn(node, nodes, 'the shared stream is a PipeWire node')
-            self.assertTrue(str(nodes[node]['info']['props'].get('node.name', '')).startswith('xdpw_stream'))
+            props = nodes[node]['info']['props']
+            self.assertTrue(any(re.match(r'xdpw[-_]stream', str(props.get(k, ''))) for k in ('node.name', 'media.name')), props)
             out = subprocess.run(['sh', STOP], capture_output=True, text=True, timeout=30)
             self.assertEqual(out.returncode, 0, out.stderr)
             self.assertGreaterEqual(int(out.stdout.strip()), 1)
