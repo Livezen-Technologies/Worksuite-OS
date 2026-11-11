@@ -9,10 +9,13 @@
 set -u
 log() { printf '%s\n' "worksuite-screencast-stop: $1" | systemd-cat -t worksuite-screencast-stop -p "${2:-notice}" 2>/dev/null || true; }
 
-# PipeWire nodes of xdpw streams. pw-cli prints "id N, type PipeWire:Interface:Node/3" then the properties. xdpw names
-# its stream "xdpw-stream-XXXXXX"; depending on the PipeWire version that shows as node.name or media.name, with the
-# hyphen kept or turned into an underscore.
-ids=$(pw-cli ls Node 2>/dev/null | awk '
+# PipeWire nodes of xdpw streams. xdpw names its stream "xdpw-stream-XXXXXX"; depending on the PipeWire version that
+# shows as node.name or media.name, with the hyphen kept or turned into an underscore. pw-dump (JSON, one key per line)
+# has every property; `pw-cli ls` prints only a few, so it is the fallback when pw-dump is missing.
+ids=$(pw-dump 2>/dev/null | awk '
+    /^    "id": [0-9]+,/ { id = $2; gsub(/,/, "", id) }
+    /"(node|media)\.name": "xdpw[-_]stream/ && id != last { print id; last = id }')
+[ -n "$ids" ] || ids=$(pw-cli ls Node 2>/dev/null | awk '
     /^[[:space:]]*id [0-9]+,/ { gsub(/,/, "", $2); id = $2 }
     /(node|media)\.name = "xdpw[-_]stream/ && id != last { print id; last = id }')
 count=0

@@ -287,6 +287,23 @@ EOF'
 check "stop finds xdpw 0.8 streams (hyphenated names) once each" "$(sh "$ST")" "2"
 grep -q 'pw-cli destroy 46' "$LOG" && grep -q 'pw-cli destroy 47' "$LOG" && ok "stop destroys xdpw 0.8 stream nodes" || bad "stop destroys xdpw 0.8 stream nodes"
 grep -q "pkill -f (^|/)xdg-desktop-portal-wlr( |\$)" "$LOG" || grep -q 'systemctl --user restart' "$LOG" && ok "stop restarts xdpw (systemd, else by command line)" || bad "stop restarts xdpw (systemd, else by command line)"
+# pw-dump (preferred): JSON with every property; only top-level object ids count, not ids inside props.
+stub pw-dump 'cat <<EOF
+[
+  {
+    "id": 31,
+    "info": { "props": { "node.name": "alsa_output.pci", "client.id": 46 } }
+  },
+  {
+    "id": 46,
+    "info": { "props": { "media.name": "xdpw-stream-Ab12Cd", "node.name": "xdpw-stream-Ab12Cd", "client.id": 31 } }
+  }
+]
+EOF'
+: > "$LOG"
+check "stop reads pw-dump and ends the xdpw stream" "$(sh "$ST")" "1"
+grep -q 'pw-cli destroy 46' "$LOG" && ! grep -q 'pw-cli destroy 31' "$LOG" && ok "stop destroys only the xdpw node found by pw-dump" || bad "stop destroys only the xdpw node found by pw-dump"
+stub pw-dump 'exit 1'
 stub pw-cli 'exit 1'
 check "stop with nothing shared still succeeds" "$(sh "$ST"; echo ":$?")" "0
 :0"
