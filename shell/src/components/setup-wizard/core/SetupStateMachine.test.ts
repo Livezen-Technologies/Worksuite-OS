@@ -1,11 +1,11 @@
 // The setup state machine: explicit transition rules, checkpoints, persistence across restarts, recovery and
 // rollback boundaries.
 import { describe, expect, it } from 'vitest'
-import { SetupStateMachine } from './SetupStateMachine'
-import { MemoryPersistence, serialize } from './SetupPersistence'
-import { flowFor, MAIN_FLOW, SIDE_RULES, SIDE_STATES, SPECS, type SetupMode } from './states'
-import { recoveryOptions } from '../recovery/RecoveryManager'
-import { planRollback } from '../recovery/RollbackManager'
+import { SetupStateMachine } from './SetupStateMachine.ts'
+import { MemoryPersistence, serialize } from './SetupPersistence.ts'
+import { flowFor, MAIN_FLOW, SIDE_RULES, SIDE_STATES, SPECS, type SetupMode } from './states.ts'
+import { recoveryOptions } from '../recovery/RecoveryManager.ts'
+import { planRollback } from '../recovery/RollbackManager.ts'
 
 let clock = 1_000
 const answers = { locale: 'en_US', timezone: 'Asia/Colombo', keyboard: 'us', accountType: 'personal', account: { user: 'ana' }, disk: 'vda', diskConfirmed: 'vda', encryption: { enabled: true }, worksuiteApps: ['worksuite-desktop', 'worksuite-office'], reviewAccepted: true }

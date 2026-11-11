@@ -1,13 +1,14 @@
 // Checkpoints: the verified points setup can resume or roll back to. Taken when a checkpoint state is left forward
 // with valid answers (states.ts `checkpoint`), and before every reversible/destructive state, carrying the
 // host's rollback handle when one exists.
-import type { Checkpoint } from './SetupPersistence'
-import type { MainState } from './states'
+import type { Checkpoint } from './SetupPersistence.ts'
+import type { MainState } from './states.ts'
 
 const MAX = 32
 
 export class SetupCheckpointManager {
-  constructor(private list: Checkpoint[] = []) {}
+  private list: Checkpoint[]
+  constructor(list: Checkpoint[] = []) { this.list = list }
   all(): readonly Checkpoint[] { return this.list }
   latest(): Checkpoint | undefined { return this.list[this.list.length - 1] }
   find(id: string): Checkpoint | undefined { return this.list.find((c) => c.id === id) }

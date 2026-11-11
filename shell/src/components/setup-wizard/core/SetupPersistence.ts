@@ -5,7 +5,7 @@
 //   live session's tmpfs, so a reboot mid-install can resume or offer recovery;
 // - first run: the same service path on the installed root.
 // The React UI never writes these files itself; it reaches the service through a validated API (see the doc).
-import type { MainState, SetupMode, SetupState } from './states'
+import type { MainState, SetupMode, SetupState } from './states.ts'
 
 export const SCHEMA_VERSION = 1
 

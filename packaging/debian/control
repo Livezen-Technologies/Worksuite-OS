@@ -104,6 +104,16 @@ Description: WorkSuite system package service (D-Bus + polkit)
  Flatpak software for the shell and the device agent, behind polkit, one job
  at a time.
 
+Package: worksuite-setup
+Architecture: amd64 arm64
+Depends: worksuite-shell (= ${binary:Version}), polkitd, dbus, systemd, ${misc:Depends}
+Recommends: btrfs-progs
+Description: WorkSuite setup service (install and first-run state machine)
+ Root service on the system bus (lk.worksuite.Setup1) that keeps the setup
+ state machine, its crash-safe checkpoints (mirrored on the ESP during an
+ install), recovery options and rollback of reversible setup steps.
+ Started only by D-Bus activation.
+
 Package: worksuite-device-agent
 Architecture: amd64 arm64
 Depends: worksuite-shell (= ${binary:Version}), worksuite-archive-keyring, cryptsetup, dbus, systemd, ${shlibs:Depends}, ${misc:Depends}

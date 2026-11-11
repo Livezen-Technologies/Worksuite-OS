@@ -1,0 +1,21 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- WorkSuite setup service: the install / first-run state machine (docs/setup-wizard-state-machine.md).
+     Every JSON string is validated by the service (services/setup/src/validate.ts). -->
+<node>
+  <interface name="lk.worksuite.Setup1">
+    <!-- Current state, answers, checkpoints and the UI actions to run (JSON). Read-only. -->
+    <method name="GetState"><arg name="state" type="s" direction="out"/></method>
+    <!-- Recovery screen: actions with what each preserves or changes, and the rollback plan (JSON). -->
+    <method name="GetRecoveryOptions"><arg name="options" type="s" direction="out"/></method>
+    <method name="GetLog"><arg name="lines" type="u" direction="in"/><arg name="log" type="s" direction="out"/></method>
+    <!-- A UI event: {"type":"NEXT"} … (polkit lk.worksuite.setup.manage). Work results never come from the UI. -->
+    <method name="Send"><arg name="event" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+    <!-- One answer: known keys only, never a password or passphrase (polkit lk.worksuite.setup.manage). -->
+    <method name="SetAnswer"><arg name="key" type="s" direction="in"/><arg name="value" type="s" direction="in"/></method>
+    <!-- System components only (uid 0): NetworkManager dispatcher, Calamares jobs. -->
+    <method name="ConnectivityChanged"><arg name="online" type="b" direction="in"/></method>
+    <method name="TargetMounted"><arg name="root" type="s" direction="in"/></method>
+    <method name="WorkResult"><arg name="state" type="s" direction="in"/><arg name="ok" type="b" direction="in"/><arg name="error" type="s" direction="in"/></method>
+    <signal name="StateChanged"><arg name="state" type="s"/></signal>
+  </interface>
+</node>

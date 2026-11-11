@@ -1,0 +1,9 @@
+services/setup/dbus/lk.worksuite.Setup1.conf usr/share/dbus-1/system.d/
+services/setup/dbus/lk.worksuite.Setup1.service usr/share/dbus-1/system-services/
+services/setup/dbus/lk.worksuite.Setup1.xml usr/share/dbus-1/interfaces/
+services/setup/polkit/lk.worksuite.setup.policy usr/share/polkit-1/actions/
+services/setup/systemd/worksuite-setup.service usr/lib/systemd/system/
+services/setup/src usr/lib/worksuite/setup/
+services/setup/package.json usr/lib/worksuite/setup/
+services/setup/node_modules usr/lib/worksuite/setup/
+docs/setup-wizard-state-machine.md usr/share/doc/worksuite-setup/

@@ -1,0 +1,31 @@
+[Unit]
+Description=WorkSuite setup service (install and first-run state machine, recovery, rollback)
+Documentation=file:///usr/share/doc/worksuite-setup/setup-wizard-state-machine.md
+After=dbus.service
+
+[Service]
+AppArmorProfile=-worksuite-setup
+Type=dbus
+BusName=lk.worksuite.Setup1
+ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/setup/src/main.ts
+# Never killed in the middle of a rollback or a state write.
+KillMode=mixed
+TimeoutStopSec=10min
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+UMask=0077
+# State (and its mirror on the ESP during an install), rollback handles, the log; package rollback needs dpkg.
+StateDirectory=worksuite/setup
+StateDirectoryMode=0700
+LogsDirectory=worksuite
+ReadWritePaths=-/boot/efi /var/lib/dpkg /var/lib/apt /var/cache/apt /usr /etc /opt -/target
+
+# Started by D-Bus activation only (lk.worksuite.Setup1.service): nothing at boot until setup asks for it.

@@ -1,8 +1,8 @@
 // Rollback boundaries: what can be undone, and how. Rollback is offered only when a checkpoint with a VERIFIED
 // rollback handle exists at or before every change made since. Destructive disk work is never "undone" without
 // an A/B slot or snapshot taken before it; deleted partitions and overwritten data are never promised back.
-import type { Checkpoint } from '../core/SetupPersistence'
-import { flowFor, SPECS, type MainState, type SetupMode } from '../core/states'
+import type { Checkpoint } from '../core/SetupPersistence.ts'
+import { flowFor, SPECS, type MainState, type SetupMode } from '../core/states.ts'
 
 /** How each reversible/destructive state is undone by the setup service (never by the UI). */
 export const ROLLBACK_METHOD: Partial<Record<MainState, { handle: NonNullable<Checkpoint['rollback']>['kind']; undo: string }>> = {

@@ -1,13 +1,13 @@
 // The setup state machine: enforces states.ts, persists every transition, and tells the host which entry/exit
 // actions to run. It performs no side effects itself; the host (shell UI talking to the setup service) runs the
 // actions and reports back with events (WORK_DONE, WORK_FAILED, NETWORK_LOST …).
-import { SetupCheckpointManager } from './SetupCheckpointManager'
-import { deserialize, SCHEMA_VERSION, serialize, type Checkpoint, type SetupPersistence, type SetupSnapshot } from './SetupPersistence'
-import { validate } from './SetupValidation'
+import { SetupCheckpointManager } from './SetupCheckpointManager.ts'
+import { deserialize, SCHEMA_VERSION, serialize, type Checkpoint, type SetupPersistence, type SetupSnapshot } from './SetupPersistence.ts'
+import { validate } from './SetupValidation.ts'
 import {
   flowFor, isMain, POINT_OF_NO_RETURN, SIDE_RULES, SPECS, WORK_STATES,
   type MainState, type SetupEvent, type SetupMode, type SetupState, type SideState,
-} from './states'
+} from './states.ts'
 
 export interface TransitionResult {
   ok: boolean
@@ -33,7 +33,10 @@ export class SetupStateMachine {
   /** Why start() went to recovery (corrupt state file, interrupted work …), for the recovery screen. */
   startReason: 'fresh' | 'resumed' | 'interrupted' | 'corrupt' | 'version' | 'completed' = 'fresh'
 
-  constructor(private o: MachineOptions) {
+  private readonly o: MachineOptions
+
+  constructor(o: MachineOptions) {
+    this.o = o
     this.now = o.now ?? Date.now
     this.online = o.online ?? (() => true)
     this.flow = flowFor(o.mode)

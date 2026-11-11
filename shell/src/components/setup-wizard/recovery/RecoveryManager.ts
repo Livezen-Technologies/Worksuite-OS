@@ -1,7 +1,7 @@
 // Recovery options for the recovery screen: which actions are available now, and what each preserves or changes.
-import type { SetupSnapshot } from '../core/SetupPersistence'
-import { isMain, WORK_STATES, type MainState } from '../core/states'
-import { planRollback, type RollbackPlan } from './RollbackManager'
+import type { SetupSnapshot } from '../core/SetupPersistence.ts'
+import { isMain, WORK_STATES, type MainState } from '../core/states.ts'
+import { planRollback, type RollbackPlan } from './RollbackManager.ts'
 
 export type RecoveryActionId = 'resume' | 'retry' | 'restore' | 'rollback' | 'logs' | 'restart' | 'exit'
 
