@@ -187,6 +187,12 @@ contextBridge.exposeInMainWorld('worksuite', {
   signinSetDefault: (method: string) => ipcRenderer.invoke('ws:signinSetDefault', String(method)),
   cloudAccounts: () => ipcRenderer.invoke('ws:cloudAccounts'),
   pkgRepair: () => ipcRenderer.invoke('ws:pkgRepair'),
+  // Setup wizard: events and answers travel as JSON strings; main and the setup service validate them.
+  setupState: () => ipcRenderer.invoke('ws:setupState'),
+  setupRecovery: () => ipcRenderer.invoke('ws:setupRecovery'),
+  setupLog: (lines: number) => ipcRenderer.invoke('ws:setupLog', String(lines)),
+  setupSend: (event: unknown) => ipcRenderer.invoke('ws:setupSend', JSON.stringify(event)),
+  setupAnswer: (key: string, value: unknown) => ipcRenderer.invoke('ws:setupAnswer', String(key), JSON.stringify(value ?? null)),
   pkgState: () => ipcRenderer.invoke('ws:pkgState'),
   reportCollect: () => ipcRenderer.invoke('ws:reportCollect'),
   reportSave: (id: string, keep: string[], description: string) => ipcRenderer.invoke('ws:reportSave', String(id), keep.map(String).join(','), String(description)),
