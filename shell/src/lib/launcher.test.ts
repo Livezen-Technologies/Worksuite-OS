@@ -27,6 +27,18 @@ describe('launcher list', () => {
     expect(apps.find((a) => a.id === 'office')?.icon).toBe(office.icon)
     expect(apps.some((a) => a.id === 'worksuite-office')).toBe(false)
   })
+  it('gives the bundled FrameFlow and POS pinned WorkSuite tiles launching their entries', () => {
+    const fl = { id: 'worksuite-frameflow', name: 'Worksuite FrameFlow', generic_name: null, comment: null, icon: 'worksuite-frameflow', categories: ['AudioVideo'], keywords: [] }
+    const pos = { id: 'worksuite-pos', name: 'WorkSuite POS', generic_name: null, comment: null, icon: 'worksuite-pos', categories: ['Office'], keywords: [], wm_class: 'WorkSuite POS' }
+    expect(buildLauncherApps([], [ff, fl, pos], null).some((a) => a.id === 'frameflow' || a.id === 'pos')).toBe(false)
+    const apps = buildLauncherApps([], [ff, fl, pos], null, null, true, { frameflow: 'worksuite-frameflow', pos: 'worksuite-pos' })
+    expect(apps.filter((a) => a.id === 'frameflow' || a.id === 'pos').map((a) => [a.id, a.kind, a.fav, a.launch])).toEqual([
+      ['frameflow', 'WorkSuite', true, { desktop: 'worksuite-frameflow' }], ['pos', 'WorkSuite', true, { desktop: 'worksuite-pos' }]])
+    expect(apps.find((a) => a.id === 'pos')?.appIds).toEqual(['worksuite-pos', 'WorkSuite POS'])
+    expect(apps.some((a) => a.id === 'worksuite-frameflow' || a.id === 'worksuite-pos')).toBe(false)
+    expect(filterApps(apps, 'all', 'flameflow').map((a) => a.id)).toEqual(['frameflow'])
+    expect(taskbarApps(apps, ['worksuite-desktop', 'frameflow', 'pos']).map((a) => a.id)).toEqual(['frameflow', 'pos'])
+  })
   it('lists installed Linux apps and skips worksuite-* entries', () => {
     const apps = buildLauncherApps([], [ff, term, { ...ff, id: 'worksuite-mail', name: 'WorkSuite Mail' }], null)
     expect(apps.filter((a) => a.kind === 'Linux app').map((a) => a.id)).toEqual(['lk.worksuite.whatsapp', 'firefox-esr', 'foot'])

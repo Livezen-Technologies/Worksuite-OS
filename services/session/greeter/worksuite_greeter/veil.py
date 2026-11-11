@@ -182,16 +182,36 @@ def build(Gtk, Pango, PangoCairo):
             cr.arc(rc[0], rc[1], 54, -math.pi / 2 + self.angle, self.angle)
             cr.stroke()
             alpha, scale = breath(self.t) if self.alive else (1.0, 1.0)
-            k = 0.8 * scale                                     # the mark, 48 px (60-unit artwork scaled 0.8)
-            mx, my = cx - 30 * k, g["ring_y"] + 60 - 30 * k
-            def rect(x, y, s, rgb):
-                cr.set_source_rgba(*rgb, alpha) if rgb is not BG else cr.set_source_rgb(*rgb)
-                cr.rectangle(mx + x * k, my + y * k, s * k, s * k)
+            k = 48 / 404 * scale                                # the mark, 48 px (branding/plymouth/mark.svg, 404-unit crop)
+            mx, my = cx - 257 * k, g["ring_y"] + 60 - 257 * k   # art units 54..458, centre 256 (+1 for the crop)
+
+            def rrect(x, y, s, r):
+                x, y, s, r = mx + (x - 54) * k, my + (y - 54) * k, s * k, r * k
+                cr.new_sub_path()
+                cr.arc(x + s - r, y + r, r, -math.pi / 2, 0)
+                cr.arc(x + s - r, y + s - r, r, 0, math.pi / 2)
+                cr.arc(x + r, y + s - r, r, math.pi / 2, math.pi)
+                cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
+                cr.close_path()
+            tile = __import__("cairo").LinearGradient(0, my + 2 * k, 0, my + 402 * k)
+            tile.add_color_stop_rgba(0, 1, 1, 1, alpha)               # #ffffff
+            tile.add_color_stop_rgba(1, 0.914, 0.933, 0.969, alpha)   # #e9eef7
+            rrect(56, 56, 400, 92)
+            cr.set_source(tile)
+            cr.fill_preserve()
+            cr.set_source_rgba(0.851, 0.886, 0.949, alpha)            # #d9e2f2 border
+            cr.set_line_width(3 * k)
+            cr.stroke()
+            for x, y, rgb in ((136, 136, (0.039, 0.424, 1.0)), (268, 136, (0.0, 0.855, 0.949)),
+                              (136, 268, (0.0, 0.855, 0.949)), (268, 268, (0.0, 0.094, 0.259))):
+                rrect(x, y, 108, 16)
+                cr.set_source_rgba(*rgb, alpha)
                 cr.fill()
-            rect(20, 0, 40, (0.122, 0.420, 1.0))
-            rect(20, 20, 20, BG)
-            rect(0, 20, 20, (0.094, 0.831, 0.941))
-            rect(20, 40, 20, (0.094, 0.831, 0.941))
+            cr.set_source_rgba(0.0, 0.855, 0.949, alpha)              # #00daf2 ring in the navy cell
+            cr.set_line_width(10 * k)
+            cr.new_sub_path()
+            cr.arc(mx + (322 - 54) * k, my + (322 - 54) * k, 22 * k, 0, 2 * math.pi)
+            cr.stroke()
             if self.mark_only:
                 return
             if self.title:

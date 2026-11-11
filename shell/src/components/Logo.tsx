@@ -1,36 +1,16 @@
-// WorkSuite OS mark, concept A "Foundation" (WorkSuite OS — Logo canvas): three cells on a base bar.
-// On dark grounds the inner cell and base switch to their dark-ground colours, as in the lockup spec.
+// WorkSuite OS mark: the app icon's light tile (branding/icons/worksuite.svg), drawn by Ws.tsx's Mark.
+import { Mark } from './Ws'
 
-const BLUE = '#0A6CFF'
-const CYAN = '#00DAF2'
 const NAVY = '#001842'
 
-export function LogoMark({ onDark = false, height = 28, label }: { onDark?: boolean; height?: number; label?: string }) {
-  const a11y = label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true }
-  return (
-    <svg {...a11y} width={(height * 30) / 38} height={height} viewBox="0 0 30 38" className="shrink-0">
-      <rect x="10" y="0" width="20" height="20" fill={BLUE} />
-      <rect x="0" y="10" width="10" height="10" fill={CYAN} />
-      <rect x="10" y="10" width="10" height="10" fill={onDark ? '#0B2A66' : NAVY} />
-      <rect x="10" y="20" width="10" height="10" fill={CYAN} />
-      <rect x="0" y="33" width="30" height="5" rx="2.5" fill={onDark ? '#E2E8F0' : NAVY} />
-    </svg>
-  )
+/** The mark on its own; `onDark` is kept for callers, the light tile reads on either ground. */
+export function LogoMark({ height = 28, label }: { onDark?: boolean; height?: number; label?: string }) {
+  return <Mark size={height} label={label} />
 }
 
-/** OS icon: the mark on a navy rounded tile (app icon, About, installer). */
+/** OS icon: the mark's tile (app icon, About, installer). */
 export function AppIcon({ size = 64, label }: { size?: number; label?: string }) {
-  const a11y = label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true }
-  return (
-    <svg {...a11y} width={size} height={size} viewBox="0 0 64 64" className="shrink-0">
-      <rect width="64" height="64" rx="14" fill={NAVY} />
-      <rect x="27" y="10" width="20" height="20" fill={BLUE} />
-      <rect x="17" y="20" width="10" height="10" fill={CYAN} />
-      <rect x="27" y="20" width="10" height="10" fill="#0B2A66" />
-      <rect x="27" y="30" width="10" height="10" fill={CYAN} />
-      <rect x="17" y="45" width="30" height="5" rx="2.5" fill="#E2E8F0" />
-    </svg>
-  )
+  return <Mark size={size} label={label} />
 }
 
 /**

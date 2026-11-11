@@ -130,5 +130,28 @@ export function findWorkSuiteDesktop(entries: DesktopEntry[]): DesktopEntry | nu
     entries.find((e) => { const p = execProgram(e.exec); return !!p && /(^|\/)(WorkSuite\/)?worksuite$/.test(p) }) ?? null
 }
 
+/**
+ * Worksuite FrameFlow (package worksuite-frameflow from github.com/Livezen-Technologies/worksuite-frameflow) installs
+ * /usr/share/applications/worksuite-frameflow.desktop, Exec "/opt/Worksuite FrameFlow/worksuite-frameflow" %U.
+ * Found by that id, or by an Exec whose program is .../worksuite-frameflow.
+ */
+export function findFrameFlow(entries: DesktopEntry[]): DesktopEntry | null {
+  return findApp(entries, 'worksuite-frameflow')
+}
+
+/**
+ * WorkSuite POS (package worksuite-pos from github.com/Livezen-Technologies/worksuite-pos) installs
+ * /usr/share/applications/worksuite-pos.desktop, Exec "/opt/WorkSuite POS/worksuite-pos" %U. Found by that id, or by
+ * an Exec whose program is .../worksuite-pos.
+ */
+export function findPos(entries: DesktopEntry[]): DesktopEntry | null {
+  return findApp(entries, 'worksuite-pos')
+}
+
+function findApp(entries: DesktopEntry[], exe: string): DesktopEntry | null {
+  return entries.find((e) => e.id === exe) ??
+    entries.find((e) => { const p = execProgram(e.exec); return !!p && path.basename(p) === exe }) ?? null
+}
+
 /** Modules WorkSuite Desktop opens with --module=<id> (its shared/os-mode.ts LAUNCH_MODULES). */
 export const DESKTOP_MODULES = ['home', 'mail', 'chat', 'calendar', 'tasks', 'files', 'crm', 'hr'] as const

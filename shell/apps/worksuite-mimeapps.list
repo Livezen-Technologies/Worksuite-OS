@@ -1,5 +1,5 @@
 # WorkSuite OS defaults: /usr/share/applications/worksuite-mimeapps.list (XDG_CURRENT_DESKTOP=WorkSuite)
-# and /etc/xdg/mimeapps.list. Office document types are claimed by WorkSuite Office's own package when installed.
+# and /etc/xdg/mimeapps.list.
 [Default Applications]
 # worksuite:// goes to WorkSuite Desktop (worksuite.desktop, package worksuite) when it is installed, else to
 # the web app windows (worksuite-url-handler.desktop): XDG takes the first installed entry of the list.
@@ -21,6 +21,22 @@ audio/flac=io.github.celluloid_player.Celluloid.desktop;
 audio/x-wav=io.github.celluloid_player.Celluloid.desktop;
 audio/mp4=io.github.celluloid_player.Celluloid.desktop;
 audio/aac=io.github.celluloid_player.Celluloid.desktop;
+# Office documents: WorkSuite Office (bundled in the image; its entry is worksuite-office.desktop, or
+# onlyoffice-desktopeditors.desktop in builds that keep the upstream id: XDG takes the first installed).
+# Worksuite FrameFlow has no project file type and opens no files from the command line,
+# so it claims nothing; video and audio stay with Celluloid.
+application/vnd.openxmlformats-officedocument.wordprocessingml.document=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+application/msword=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+application/vnd.oasis.opendocument.text=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+application/rtf=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+text/rtf=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+application/vnd.ms-excel=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+application/vnd.oasis.opendocument.spreadsheet=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+text/csv=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+application/vnd.openxmlformats-officedocument.presentationml.presentation=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+application/vnd.ms-powerpoint=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
+application/vnd.oasis.opendocument.presentation=worksuite-office.desktop;onlyoffice-desktopeditors.desktop;
 # Windows programs never run: they open an explanation (WSOS-LCH-003).
 application/x-ms-dos-executable=worksuite-windows-app.desktop;
 application/x-msdownload=worksuite-windows-app.desktop;

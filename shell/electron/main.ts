@@ -26,7 +26,7 @@ import { shellPrefsFrom } from '../src/lib/shellPrefs'
 import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
 import { createWidgets } from './widgets'
-import { DESKTOP_MODULES, execProgram, findOffice, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
+import { DESKTOP_MODULES, execProgram, findFrameFlow, findOffice, findPos, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
 import { systemBridge, AGENT_POLICY_PATH } from './system'
 import { applyFix, diagnose, diagnosisText, type RadioFix, type RadioKind } from './radios'
 import { accelerationPlan, graphicsState, noteGpuCrash, readCrashLog, readRendererChoice, resetGpuFallback, setRenderer } from './graphics'
@@ -260,9 +260,14 @@ app.whenReady().then(() => {
     const all = installedApps()
     const office = findOffice(all)
     const desktop = findWorkSuiteDesktop(all)
+    const frameflow = findFrameFlow(all)
+    const pos = findPos(all)
     // The shell's own worksuite-* entries are its web app windows, listed from the org's data instead; any other app
     // (WorkSuite POS, Desk, FrameFlow …) is listed like every installed app.
-    return { apps: all.filter((e) => !SHELL_ENTRIES.has(e.id)).map(({ exec: _e, ...e }) => e), office: office?.id ?? null, desktop: desktop?.id ?? null }
+    return {
+      apps: all.filter((e) => !SHELL_ENTRIES.has(e.id)).map(({ exec: _e, ...e }) => e),
+      office: office?.id ?? null, desktop: desktop?.id ?? null, frameflow: frameflow?.id ?? null, pos: pos?.id ?? null,
+    }
   })
   // WorkSuite Desktop modules: its program with --module=<id> (fixed list, no shell), in its own app scope. A second
   // launch is handed to the running WorkSuite (single instance).

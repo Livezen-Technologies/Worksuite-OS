@@ -39,7 +39,6 @@ constexpr int HOLD_MS = 900;    // the window's first page settles under the cur
 constexpr int FADE_MS = 700;    // the cross-fade into it
 constexpr int CONTENT_MS = 350; // then a QML page in a window of its own fades in over its background
 const QColor BG( 4, 10, 26 );   // #040A1A, the splash background
-const QColor SIDEBAR( 7, 19, 48 );   // #071330, the sidebar (the mark's notch there)
 const QColor PAGE( 10, 26, 61 );     // #0A1A3D, the main window behind the pages
 const QColor BLUE( 31, 107, 255 ), CYAN( 24, 212, 240 );
 
@@ -56,13 +55,6 @@ easeInOut( double p )
 {
     p = qBound( 0.0, p, 1.0 );
     return p < 0.5 ? 4 * p * p * p : 1 - std::pow( -2 * p + 2, 3 ) / 2;
-}
-
-QColor
-mix( const QColor& a, const QColor& b, double p )
-{
-    return QColor::fromRgbF( a.redF() + ( b.redF() - a.redF() ) * p, a.greenF() + ( b.greenF() - a.greenF() ) * p,
-                             a.blueF() + ( b.blueF() - a.blueF() ) * p );
 }
 
 class Curtain : public QWidget
@@ -184,7 +176,6 @@ protected:
         const double s = 0.5 - 0.5 * std::cos( 2 * M_PI * t / BREATH_S );
         double alpha = 1 - 0.22 * s, size = 48 * ( 1 + 0.04 * s );
         QPointF centre( cx, ringY + 60 );
-        QColor notch = BG;
         if ( m_fading )
         {
             if ( m_o.reducedMotion )
@@ -197,23 +188,39 @@ protected:
                 centre = centre + ( to - centre ) * f;
                 size = size + ( 28 - size ) * f;
                 alpha = alpha + ( 1 - alpha ) * f;
-                notch = mix( BG, SIDEBAR, f );
             }
         }
-        const double k = size / 60;
-        const QPointF m = centre - QPointF( 30 * k, 30 * k );
-        auto sq = [ & ]( double x, double y, double w, const QColor& c, bool round ) {
-            QColor col = c;
-            col.setAlphaF( col.alphaF() * alpha );
-            p.setPen( Qt::NoPen );
-            p.setBrush( col );
-            const QRectF r( m.x() + x * k, m.y() + y * k, w * k, w * k );
-            round ? p.drawRoundedRect( r, 3 * k, 3 * k ) : p.drawRect( r );
+        // The art is branding/plymouth/mark.svg: units 54..458 of the 512 icon, so `size` is the light tile.
+        const double k = size / 404;
+        const QPointF m = centre - QPointF( 202 * k, 202 * k );
+        auto at = [ & ]( double x, double y, double w, double r ) {
+            return std::make_pair( QRectF( m.x() + ( x - 54 ) * k, m.y() + ( y - 54 ) * k, w * k, w * k ), r * k );
         };
-        sq( 20, 0, 40, BLUE, true );
-        sq( 20, 20, 20, notch, false );
-        sq( 0, 20, 20, CYAN, true );
-        sq( 20, 40, 20, CYAN, true );
+        auto tint = [ & ]( QColor c ) {
+            c.setAlphaF( c.alphaF() * alpha );
+            return c;
+        };
+        {
+            const auto [ r, rad ] = at( 56, 56, 400, 92 );
+            QLinearGradient tile( r.topLeft(), r.bottomLeft() );
+            tile.setColorAt( 0, tint( QColor( 0xff, 0xff, 0xff ) ) );
+            tile.setColorAt( 1, tint( QColor( 0xe9, 0xee, 0xf7 ) ) );
+            p.setPen( QPen( tint( QColor( 0xd9, 0xe2, 0xf2 ) ), 3 * k ) );
+            p.setBrush( tile );
+            p.drawRoundedRect( r, rad, rad );
+        }
+        p.setPen( Qt::NoPen );
+        const QColor blue( 0x0a, 0x6c, 0xff ), cyan( 0x00, 0xda, 0xf2 ), navy( 0x00, 0x18, 0x42 );
+        const struct { double x, y; QColor c; } cells[] = { { 136, 136, blue }, { 268, 136, cyan }, { 136, 268, cyan }, { 268, 268, navy } };
+        for ( const auto& cell : cells )
+        {
+            const auto [ r, rad ] = at( cell.x, cell.y, 108, 16 );
+            p.setBrush( tint( cell.c ) );
+            p.drawRoundedRect( r, rad, rad );
+        }
+        p.setBrush( Qt::NoBrush );
+        p.setPen( QPen( tint( cyan ), 10 * k ) );
+        p.drawEllipse( QPointF( m.x() + ( 322 - 54 ) * k, m.y() + ( 322 - 54 ) * k ), 22 * k, 22 * k );
     }
 
 public:

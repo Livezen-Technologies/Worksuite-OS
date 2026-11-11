@@ -70,7 +70,8 @@ const SETTINGS_PAGES: [MessageKey, string][] = [
 const RECENT_MAX = 6
 
 // Taskbar pins (running windows from the Wayland bridge join them, components/PanelItems.tsx); entries the org hasn't enabled or that aren't installed drop out.
-const TASKBAR = ['worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office', WHATSAPP_APP_ID, 'firefox-esr']
+// Bundled WorkSuite apps first when installed (taskbarApps drops ids that aren't).
+const TASKBAR = ['worksuite-desktop', 'worksuite-mail', 'worksuite-chat', 'worksuite-drive', 'office', 'frameflow', 'pos', WHATSAPP_APP_ID, 'firefox-esr']
 
 // Settings as a Start menu tile (G02); it opens the Settings window like the footer button.
 const SETTINGS_TILE: LauncherApp = { id: 'settings', get name() { return t0('launcher.settings') }, mark: '⚙', bg: '#5E739C', fg: '#ffffff', kind: 'System', launch: { screen: 'settings' }, keywords: [] }
@@ -325,7 +326,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
     let inst: Inst | undefined
     const apply = () => {
       if (!live) return
-      setAllApps([...buildLauncherApps(web?.ok ? web.value : null, inst?.apps ?? null, inst?.office ?? null, inst?.desktop ?? null), SNIP_TILE])
+      setAllApps([...buildLauncherApps(web?.ok ? web.value : null, inst?.apps ?? null, inst?.office ?? null, inst?.desktop ?? null, true, { frameflow: inst?.frameflow, pos: inst?.pos }), SNIP_TILE])
       setAppsCached(!!(web?.ok && web.cached))
     }
     void instP.then((i) => { inst = i; if (web === undefined) apply() })
@@ -627,7 +628,7 @@ export default function Desktop({ user, fullName, onLock, onLogout, onOpen, note
         {/* Start and the app icons: one group. Start comes first in tab order. */}
         <div data-testid="taskbar-main" className="flex min-w-0 flex-[0_1_auto] items-center gap-1.5">
           <button ref={launcherButton} type="button" aria-label={t('panel.openLauncher')} aria-expanded={launcher} aria-controls="ws-launcher" onClick={(e) => { markLauncherRequest(e.timeStamp); setLauncher((v) => !v) }}
-            className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} hole="#0A1A3D" /></button>
+            className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[10px] ${launcher ? 'bg-[rgba(31,107,255,0.5)]' : 'bg-[rgba(31,107,255,0.25)] hover:bg-[rgba(31,107,255,0.4)]'}`}><Mark size={22} /></button>
           {searchButton}
           {desktopsOn && desk.prefs.taskViewButton && (
             <span className="relative" onMouseEnter={() => hoverTaskView(true)} onMouseLeave={() => { hoverTaskView(false); setFlyout(false) }}>

@@ -18,6 +18,7 @@ Presentation {
         ["unlock", qsTr("Set up disk unlocking")],
         ["account", qsTr("Create your account and computer name")],
         ["components", qsTr("Install WorkSuite components")],
+        ["apps", qsTr("Install WorkSuite apps")],
         ["boot", qsTr("Install bootloader")],
         ["cleanup", qsTr("Clean up")]
     ]
