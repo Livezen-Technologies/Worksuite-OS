@@ -19,13 +19,14 @@ ProtectControlGroups=yes
 ProtectHostname=yes
 RestrictRealtime=yes
 LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_NETLINK
+# AF_INET/AF_INET6: apt and flatpak download the selected apps (signed sources only, src/apps/engine.ts).
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
 SystemCallArchitectures=native
 UMask=0077
 # State (and its mirror on the ESP during an install), rollback handles, the log; package rollback needs dpkg.
 StateDirectory=worksuite/setup
 StateDirectoryMode=0700
 LogsDirectory=worksuite
-ReadWritePaths=-/boot/efi /var/lib/dpkg /var/lib/apt /var/cache/apt /usr /etc /opt -/target
+ReadWritePaths=-/boot/efi /var/lib/dpkg /var/lib/apt /var/cache/apt -/var/lib/flatpak /usr /etc /opt -/target
 
 # Started by D-Bus activation only (lk.worksuite.Setup1.service): nothing at boot until setup asks for it.

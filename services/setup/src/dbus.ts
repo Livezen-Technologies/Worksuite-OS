@@ -18,6 +18,7 @@ export const ACTIONS: Record<string, string | null | 'root'> = {
   GetState: null,
   GetRecoveryOptions: null,
   GetLog: null,
+  GetApps: null,
   Send: 'lk.worksuite.setup.manage',
   SetAnswer: 'lk.worksuite.setup.manage',
   ConnectivityChanged: 'root',
@@ -29,7 +30,7 @@ export interface Authority { uid(sender: string): Promise<number>; check(sender:
 
 const errorReply = (msg: Msg, name: string, text: string) => Message.newError(msg as unknown as string, name, text)
 
-export function serve(bus: Bus, svc: SetupService, auth: Authority, introspectionXml: string) {
+export function serve(bus: Bus, svc: SetupService, auth: Authority, introspectionXml: string, apps: () => unknown[] = () => []) {
   svc.on('changed', (st: unknown) => bus.send(Message.newSignal(PATH, IFACE, 'StateChanged', 's', [JSON.stringify(st)])))
 
   async function call(msg: Msg): Promise<Msg> {
@@ -44,6 +45,7 @@ export function serve(bus: Bus, svc: SetupService, auth: Authority, introspectio
     switch (member) {
       case 'GetState': return json(svc.getState())
       case 'GetRecoveryOptions': return json(svc.recovery())
+      case 'GetApps': return json(apps())
       case 'GetLog': {
         const n = Number(b[0]); return Message.newMethodReturn(msg, 's', [svc.readLog(Number.isInteger(n) && n > 0 && n <= 5000 ? n : 200)])
       }

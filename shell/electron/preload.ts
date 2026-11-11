@@ -190,6 +190,7 @@ contextBridge.exposeInMainWorld('worksuite', {
   // Setup wizard: events and answers travel as JSON strings; main and the setup service validate them.
   setupState: () => ipcRenderer.invoke('ws:setupState'),
   setupRecovery: () => ipcRenderer.invoke('ws:setupRecovery'),
+  setupApps: () => ipcRenderer.invoke('ws:setupApps'),
   setupLog: (lines: number) => ipcRenderer.invoke('ws:setupLog', String(lines)),
   setupSend: (event: unknown) => ipcRenderer.invoke('ws:setupSend', JSON.stringify(event)),
   setupAnswer: (key: string, value: unknown) => ipcRenderer.invoke('ws:setupAnswer', String(key), JSON.stringify(value ?? null)),

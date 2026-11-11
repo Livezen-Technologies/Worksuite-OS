@@ -7,6 +7,8 @@
     <method name="GetState"><arg name="state" type="s" direction="out"/></method>
     <!-- Recovery screen: actions with what each preserves or changes, and the rollback plan (JSON). -->
     <method name="GetRecoveryOptions"><arg name="options" type="s" direction="out"/></method>
+    <!-- Per-app progress of the app installation step and the offline queue (JSON array). Read-only. -->
+    <method name="GetApps"><arg name="apps" type="s" direction="out"/></method>
     <method name="GetLog"><arg name="lines" type="u" direction="in"/><arg name="log" type="s" direction="out"/></method>
     <!-- A UI event: {"type":"NEXT"} … (polkit lk.worksuite.setup.manage). Work results never come from the UI. -->
     <method name="Send"><arg name="event" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>

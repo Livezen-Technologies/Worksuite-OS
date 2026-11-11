@@ -103,6 +103,28 @@ describe('SetupWizard', () => {
   })
 })
 
+describe('app installation progress', () => {
+  it('shows each app with its state while apps install (GetApps)', async () => {
+    const base = previewApi()
+    const api: SetupApi = {
+      ...base,
+      state: async () => ({ ok: true, value: { state: 'INSTALLING_APPLICATIONS', mode: 'firstRun', resumeTo: null, answers: {}, lastError: null, attempts: 1, checkpoints: [], startReason: '', uiActions: [] } }),
+      apps: async () => ({ ok: true, value: [
+        { id: 'worksuite-desktop', name: 'WorkSuite Desktop', required: true, state: 'installed', attempts: 1, error: null },
+        { id: 'worksuite-pos', name: 'WorkSuite POS', required: false, state: 'installing', attempts: 2, error: null },
+        { id: 'vlc', name: 'VLC', required: false, state: 'queued', attempts: 0, error: null },
+        { id: 'gimp', name: 'GIMP', required: false, state: 'skipped', attempts: 0, error: null },
+        { id: 'worksuite-desk', name: 'WorkSuite Desk', required: false, state: 'failed', attempts: 3, error: 'E: Connection reset' },
+      ] }),
+    }
+    act(() => root.render(<SetupWizard api={api} onDone={() => {}} />))
+    await until(() => !!host.querySelector('section[aria-label="Your apps"] li'))
+    const rows = [...host.querySelectorAll('section[aria-label="Your apps"] li')].map((li) => li.textContent)
+    expect(rows).toEqual(['WorkSuite DesktopInstalled', 'POSInstalling…', 'VLCInstalls when you’re online', 'GIMPNot allowed by your organization', 'DeskCouldn’t install'])
+    expect(host.querySelector('[title="E: Connection reset"]')).not.toBeNull()
+  })
+})
+
 describe('SetupGate', () => {
   const fallback = <p>first-run-screens</p>
   it('keeps the first-run screens without a setup service, when it errors, and once setup has finished', async () => {

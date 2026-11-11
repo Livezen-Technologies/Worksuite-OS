@@ -1,0 +1,25 @@
+[Unit]
+Description=WorkSuite setup: install the apps queued while the computer was offline
+Documentation=file:///usr/share/doc/worksuite-setup/setup-wizard-state-machine.md
+After=network-online.target
+Wants=network-online.target
+# Nothing queued = nothing to do.
+ConditionPathExists=/var/lib/worksuite/setup/app-queue.json
+
+[Service]
+AppArmorProfile=-worksuite-setup
+Type=oneshot
+ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/setup/src/main.ts --drain-queue
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0022
+StateDirectory=worksuite/setup
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/dpkg /var/lib/apt /var/cache/apt -/var/lib/flatpak /usr /etc /opt

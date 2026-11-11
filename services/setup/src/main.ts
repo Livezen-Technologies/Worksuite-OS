@@ -11,6 +11,9 @@ import { ActionError, SetupService, type ActionHandler } from './service.ts'
 import { MirroredFileStore } from './store.ts'
 import { btrfsSnapshot, configBackup, packageTransaction, type Runner } from './rollback.ts'
 import type { SetupMode } from './machine/core/states.ts'
+import { CATALOG } from './apps/catalog.ts'
+import { plan, type AppPolicy } from './apps/plan.ts'
+import { AppEngine, readStatus } from './apps/engine.ts'
 
 const { Message, Variant } = dbus
 const STATE_DIR = '/var/lib/worksuite/setup'
@@ -18,6 +21,9 @@ const ESP_DIR = '/boot/efi/worksuite-setup'
 const LOG_DIR = '/var/log/worksuite/setup'
 const XML = '/usr/share/dbus-1/interfaces/lk.worksuite.Setup1.xml'
 const BUNDLED = '/usr/share/worksuite/bundled'
+const POLICY = '/run/worksuite-device-agent/policy.json'
+const APPS_STATUS = path.join(STATE_DIR, 'apps.json')
+const APP_QUEUE = path.join(STATE_DIR, 'app-queue.json')
 const RUN_ENV = { PATH: '/usr/sbin:/usr/bin:/sbin:/bin', LC_ALL: 'C.UTF-8', DEBIAN_FRONTEND: 'noninteractive' }
 
 /** Fixed executables, argument vectors, no shell. */
@@ -44,6 +50,25 @@ const bundledVerified = () => {
   return n
 }
 
+function policy(): AppPolicy | null { try { return JSON.parse(readFileSync(POLICY, 'utf8')) as AppPolicy } catch { return null } }
+const selection = (a: Readonly<Record<string, unknown>>) => [
+  ...(Array.isArray(a.worksuiteApps) ? a.worksuiteApps : []), ...(Array.isArray(a.thirdPartyApps) ? a.thirdPartyApps : []),
+].filter((x): x is string => typeof x === 'string')
+const appPlan = (a: Readonly<Record<string, unknown>>) => plan(selection(a), policy())
+const engine = (log: (l: string) => void) => new AppEngine({
+  runner, bundledDir: BUNDLED, online, statusFile: APPS_STATUS, queueFile: APP_QUEUE, log,
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+})
+
+// `--drain-queue` (worksuite-setup-queue.timer): install the apps queued while offline, then exit.
+if (process.argv.includes('--drain-queue')) {
+  if (!online()) { console.log('offline; the queue stays'); process.exit(0) }
+  const r = await engine((l) => console.log(l)).drain(new Map(CATALOG.map((a) => [a.id, a])))
+  console.log(`installed ${r.installed.length}, still queued ${r.left.length}`)
+  if (!r.left.length) { try { (await import('node:fs')).rmSync(APP_QUEUE) } catch { /* already gone */ } }
+  process.exit(0)
+}
+
 const handlers: Record<string, ActionHandler> = {
   async loadPersistedState() {},
   async probeHardware({ log }) { log(`arch ${arch()}, memory ${Math.round(Number(/MemTotal:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8'))?.[1] ?? 0) / 1024)} MiB`) },
@@ -57,7 +82,12 @@ const handlers: Record<string, ActionHandler> = {
     log(`free ${free.toFixed(1)} GiB, need ${need} GiB`)
     if (free < need) throw new ActionError(`not enough free space: ${free.toFixed(1)} GiB free, ${need} GiB needed`, false)
   },
-  async resolveDependencies({ log }) { log('applications are resolved by the package service when they are queued') },
+  async resolveDependencies({ answers, log }) {
+    // App-level: the plan (policy, catalog dependencies, order). Package-level: apt simulates each install in the engine.
+    const p = appPlan(answers)
+    log(`apps to install: ${p.install.map((x) => `${x.app.id}${x.required ? ' (required)' : ''}`).join(', ') || 'none'}`)
+    for (const s of p.skipped) log(`not installed: ${s.id} (${s.why})`)
+  },
   async verifyBundledPackages({ log }) { log(`${bundledVerified()} bundled package(s) verified`) },
   async enrollDevice({ answers, log }) {
     // Enrollment itself happens in the UI through lk.worksuite.DeviceAgent1.Enroll (polkit; the token never enters
@@ -69,10 +99,7 @@ const handlers: Record<string, ActionHandler> = {
     log(`enrolled with ${String(info.org_name?.value ?? 'the organization')}`)
   },
   async queueInstalls({ answers, log }) {
-    // Phase 4 replaces this with the application installation engine. Until then the selection is recorded and
-    // installed by the App Center; nothing is reported as installed that was not.
-    const apps = [...(Array.isArray(answers.worksuiteApps) ? answers.worksuiteApps : []), ...(Array.isArray(answers.thirdPartyApps) ? answers.thirdPartyApps : [])]
-    log(`${apps.length} application(s) selected; queued for the App Center: ${apps.join(', ') || 'none'}`)
+    try { await engine(log).run(appPlan(answers)) } catch (e) { throw new ActionError((e as Error).message, (e as { retryable?: boolean }).retryable !== false) }
   },
   async verifyPackages({ log }) {
     const r = await runner.run('dpkg', ['--audit'])
@@ -121,6 +148,6 @@ const auth: Authority = {
   },
 }
 await svc.start()
-serve(bus, svc, auth, readFileSync(XML, 'utf8'))
+serve(bus, svc, auth, readFileSync(XML, 'utf8'), () => readStatus(APPS_STATUS))
 await bus.requestName(NAME, 0)
 svc.log(`worksuite-setup started (${mode}), state ${svc.getState().state}`)

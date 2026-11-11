@@ -37,6 +37,7 @@ export function setupClient(exec: Exec = realExec) {
   return {
     async state(): Promise<Reply<unknown>> { return jsonOf(await call(exec, 'GetState', '', [])) },
     async recovery(): Promise<Reply<unknown>> { return jsonOf(await call(exec, 'GetRecoveryOptions', '', [])) },
+    async apps(): Promise<Reply<unknown>> { return jsonOf(await call(exec, 'GetApps', '', [])) },
     async log(lines: number): Promise<Reply<string>> {
       const n = Number.isInteger(lines) && lines > 0 && lines <= 5000 ? lines : 200
       const r = await call(exec, 'GetLog', 'u', [String(n)])
@@ -65,6 +66,7 @@ const parse = (raw: string): unknown => { try { return JSON.parse(raw) } catch {
 export function registerSetup(handle: (channel: string, fn: (...a: string[]) => unknown) => void, client = setupClient()) {
   handle('ws:setupState', () => client.state())
   handle('ws:setupRecovery', () => client.recovery())
+  handle('ws:setupApps', () => client.apps())
   handle('ws:setupLog', (lines) => client.log(Number(lines)))
   handle('ws:setupSend', (event) => client.send(parse(String(event))))
   handle('ws:setupAnswer', (key, value) => client.answer(String(key), parse(String(value))))

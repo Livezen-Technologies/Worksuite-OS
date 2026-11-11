@@ -11,7 +11,7 @@ import { Button } from '../ui/button'
 import { BG, Icon, Mark } from '../Ws'
 import FirstRunNetwork from '../../screens/FirstRunNetwork'
 import { cloudErrorText, os, serverUrlFor } from '../../lib/os'
-import type { SetupApi } from '../../lib/setupApi'
+import type { AppProgress, SetupApi } from '../../lib/setupApi'
 import { flowFor, isMain, WORK_STATES, type MainState, type SetupEvent } from './core/states.ts'
 import { asks, useSetup } from './useSetup'
 import RecoveryScreen from './recovery/RecoveryScreen'
@@ -82,7 +82,7 @@ export default function SetupWizard({ api, onDone, onExitToRecovery, userName }:
   if (RECOVERY.has(v.state)) body = <RecoveryScreen api={api} view={v} send={send} busy={s.busy} onExit={onExitToRecovery} />
   else if (!isMain(v.state)) body = <SidePanel state={v.state} attempts={v.attempts} lastError={v.lastError} busy={s.busy} send={send} headingRef={heading} />
   else if (complete) body = <DonePanel answers={v.answers} onDone={onDone} headingRef={heading} />
-  else if (!asks(v.state)) body = <WorkPanel state={v.state} flow={flow} send={send} busy={s.busy} headingRef={heading} />
+  else if (!asks(v.state)) body = <WorkPanel api={api} state={v.state} flow={flow} send={send} busy={s.busy} headingRef={heading} />
   else body = <Ask state={v.state} answers={v.answers} answer={s.answer} fieldErrors={s.fieldErrors} headingRef={heading} send={send} busy={s.busy} userName={userName} first={idx <= 0} />
 
   return (
@@ -472,7 +472,7 @@ function AppCard({ checked, disabled, onClick, icon, name, desc, badge }: { chec
 }
 
 /** Unattended steps: the install phase's work as a checklist, the running one highlighted. */
-function WorkPanel({ state, flow, send, busy, headingRef }: { state: MainState; flow: MainState[]; send: (e: SetupEvent) => Promise<boolean>; busy: boolean; headingRef: HeadingRef }) {
+function WorkPanel({ api, state, flow, send, busy, headingRef }: { api: SetupApi; state: MainState; flow: MainState[]; send: (e: SetupEvent) => Promise<boolean>; busy: boolean; headingRef: HeadingRef }) {
   const work = flow.filter((s) => WORK_STATES.includes(s) && s !== 'INITIALIZING')
   const i = work.indexOf(state)
   return (
@@ -484,7 +484,8 @@ function WorkPanel({ state, flow, send, busy, headingRef }: { state: MainState; 
       </div>
       <div role="status" aria-live="polite"><h1 ref={headingRef} tabIndex={-1} className="m-0 text-[32px] font-bold tracking-[-0.025em] outline-none">{stepName(state)}</h1></div>
       <p className="m-0 text-[15px] text-[#AFC0DD]">{t('sw.work.body')}</p>
-      {work.length > 1 && (
+      {state === 'INSTALLING_APPLICATIONS' && <AppRows api={api} />}
+      {state !== 'INSTALLING_APPLICATIONS' && work.length > 1 && (
         <ol className="m-0 mt-4 flex w-full max-w-[420px] list-none flex-col gap-1 rounded-2xl border border-[rgba(127,178,255,0.14)] bg-[rgba(10,24,56,0.45)] p-3 text-left">
           {work.map((w, n) => (
             <li key={w} aria-current={n === i ? 'step' : undefined} className={`flex items-center gap-3 rounded-xl px-3 py-2 text-[14px] ${n === i ? 'bg-[rgba(31,107,255,0.14)] font-semibold text-white' : n < i ? 'text-[#C9D6EE]' : 'text-[#8FA3C8]'}`}>
@@ -544,5 +545,46 @@ function SidePanel({ state, attempts, lastError, busy, send, headingRef }: { sta
         {actions.map(([label, e, variant]) => <Button key={label} variant={variant} size="lg" disabled={busy} onClick={() => void send(e)}>{t(label)}</Button>)}
       </div>
     </Center>
+  )
+}
+
+const APP_STATE_LOOK: Record<AppProgress['state'], string> = {
+  pending: 'text-[#8FA3C8]', installing: 'text-[#9CC2FF]', installed: 'text-[#8BE3B5]', already: 'text-[#8BE3B5]', queued: 'text-[#FFD9A0]', failed: 'text-[#FFB4A6]', skipped: 'text-[#8FA3C8]',
+}
+/** Per-app progress of the app installation step (GetApps), polled while the step runs. */
+function AppRows({ api }: { api: SetupApi }) {
+  const [apps, setApps] = useState<AppProgress[]>([])
+  useEffect(() => {
+    let alive = true
+    const load = () => void api.apps().then((r) => { if (alive && r.ok) setApps(r.value) })
+    load(); const id = setInterval(load, 1000)
+    return () => { alive = false; clearInterval(id) }
+  }, [api])
+  if (!apps.length) return null
+  const nameOf = (a: AppProgress) => {
+    const k = (WORKSUITE_APPS as readonly string[]).includes(a.id) ? `sw.app.${a.id}` : (THIRD_PARTY_APPS as readonly string[]).includes(a.id) ? `sw.third.${a.id}` : null
+    return k ? split(t(k as MessageKey))[0] : a.name
+  }
+  return (
+    <section aria-label={t('sw.apps.title')} className="mt-4 w-full max-w-[460px] rounded-2xl border border-[rgba(127,178,255,0.14)] bg-[rgba(10,24,56,0.45)] p-2 text-left">
+      <ul className="m-0 flex list-none flex-col p-0">
+        {apps.map((a) => {
+          const icon = (APP_ICON as Record<string, string>)[a.id]
+          const third = (THIRD_LOOK as Record<string, [string, string]>)[a.id]
+          return (
+            <li key={a.id} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${a.state === 'installing' ? 'bg-[rgba(31,107,255,0.12)]' : ''}`}>
+              {icon ? <img src={icon} alt="" className="size-8 rounded-lg" draggable={false} />
+                : <span className="flex size-8 items-center justify-center rounded-lg text-white" style={{ background: third?.[1] ?? '#5E739C' }}><Icon d={[third?.[0] ?? 'M4 4h16v16H4z']} size={16} /></span>}
+              <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{nameOf(a)}</span>
+              <span className={`flex items-center gap-1.5 text-[12px] font-medium ${APP_STATE_LOOK[a.state]}`} title={a.error ?? undefined}>
+                {a.state === 'installing' && <Spinner size={13} />}
+                {(a.state === 'installed' || a.state === 'already') && <Icon d={[CHECK]} size={13} width={3} />}
+                {t(`sw.appState.${a.state}` as MessageKey)}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

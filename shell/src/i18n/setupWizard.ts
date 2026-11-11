@@ -2,6 +2,14 @@
 // text, waiting and retry panels, the recovery screen and the installation log. Sinhala and Tamil are machine drafts
 // like the rest of their catalogs (docs/i18n/README.md). Spread into en.ts, si.ts and ta.ts.
 export const setupWizardEn = {
+  'sw.appState.pending': 'Waiting',
+  'sw.appState.installing': 'Installing…',
+  'sw.appState.installed': 'Installed',
+  'sw.appState.already': 'Already installed',
+  'sw.appState.queued': 'Installs when you’re online',
+  'sw.appState.failed': 'Couldn’t install',
+  'sw.appState.skipped': 'Not allowed by your organization',
+  'sw.apps.title': 'Your apps',
   'sw.phase.start': 'Get started',
   'sw.phase.account': 'Your account',
   'sw.phase.apps': 'Apps and security',
@@ -166,6 +174,14 @@ export const setupWizardEn = {
 } as const
 
 export const setupWizardSi: Partial<Record<keyof typeof setupWizardEn, string>> = {
+  'sw.appState.pending': 'රැඳී සිටිමින්',
+  'sw.appState.installing': 'ස්ථාපනය කරමින්…',
+  'sw.appState.installed': 'ස්ථාපනය කළා',
+  'sw.appState.already': 'දැනටමත් ස්ථාපනය කර ඇත',
+  'sw.appState.queued': 'ඔබ සම්බන්ධ වූ විට ස්ථාපනය වේ',
+  'sw.appState.failed': 'ස්ථාපනය කළ නොහැකි විය',
+  'sw.appState.skipped': 'ඔබේ සංවිධානය ඉඩ නොදේ',
+  'sw.apps.title': 'ඔබේ යෙදුම්',
   'sw.phase.start': 'ආරම්භය',
   'sw.phase.account': 'ඔබේ ගිණුම',
   'sw.phase.apps': 'යෙදුම් සහ ආරක්ෂාව',
@@ -330,6 +346,14 @@ export const setupWizardSi: Partial<Record<keyof typeof setupWizardEn, string>> 
 }
 
 export const setupWizardTa: Partial<Record<keyof typeof setupWizardEn, string>> = {
+  'sw.appState.pending': 'காத்திருக்கிறது',
+  'sw.appState.installing': 'நிறுவப்படுகிறது…',
+  'sw.appState.installed': 'நிறுவப்பட்டது',
+  'sw.appState.already': 'ஏற்கனவே நிறுவப்பட்டுள்ளது',
+  'sw.appState.queued': 'இணைந்ததும் நிறுவப்படும்',
+  'sw.appState.failed': 'நிறுவ முடியவில்லை',
+  'sw.appState.skipped': 'உங்கள் நிறுவனம் அனுமதிக்கவில்லை',
+  'sw.apps.title': 'உங்கள் பயன்பாடுகள்',
   'sw.phase.start': 'தொடங்குதல்',
   'sw.phase.account': 'உங்கள் கணக்கு',
   'sw.phase.apps': 'பயன்பாடுகள் மற்றும் பாதுகாப்பு',

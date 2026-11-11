@@ -21,10 +21,13 @@ export interface SetupView {
 }
 export interface SendResult { ok: boolean; state: SetupState; fieldErrors?: Record<string, string>; error?: string }
 export type RecoveryView = ReturnType<typeof recoveryOptions>
+/** Per-app progress of the app installation step (services/setup/src/apps/engine.ts AppStatus). */
+export interface AppProgress { id: string; name: string; required: boolean; state: 'pending' | 'installing' | 'installed' | 'already' | 'queued' | 'failed' | 'skipped'; attempts: number; error: string | null }
 
 export interface SetupApi {
   state(): Promise<Reply<SetupView>>
   recovery(): Promise<Reply<RecoveryView>>
+  apps(): Promise<Reply<AppProgress[]>>
   log(lines?: number): Promise<Reply<string>>
   send(e: SetupEvent): Promise<Reply<SendResult>>
   answer(key: string, value: unknown): Promise<Reply<true>>
@@ -33,6 +36,7 @@ export interface SetupApi {
 interface Bridge {
   setupState(): Promise<Reply<SetupView>>
   setupRecovery(): Promise<Reply<RecoveryView>>
+  setupApps?(): Promise<Reply<AppProgress[]>>
   setupLog(lines: number): Promise<Reply<string>>
   setupSend(e: unknown): Promise<Reply<SendResult>>
   setupAnswer(k: string, v: unknown): Promise<Reply<true>>
@@ -40,7 +44,7 @@ interface Bridge {
 
 export function bridgeApi(b: Bridge): SetupApi {
   return {
-    state: () => b.setupState(), recovery: () => b.setupRecovery(), log: (n = 400) => b.setupLog(n),
+    state: () => b.setupState(), recovery: () => b.setupRecovery(), apps: () => (b.setupApps ? b.setupApps() : Promise.resolve({ ok: true as const, value: [] })), log: (n = 400) => b.setupLog(n),
     send: (e) => b.setupSend(e), answer: (k, v) => b.setupAnswer(k, v),
   }
 }
@@ -82,6 +86,13 @@ export function previewApi(o: { mode?: SetupMode; scenario?: 'fresh' | 'recovery
   return {
     async state() { await ready(); return { ok: true, value: view() } },
     async recovery() { await ready(); return { ok: true, value: recoveryOptions(m.snapshot as SetupSnapshot) } },
+    async apps() {
+      // Preview: the selected apps move through the install step one after another.
+      await ready()
+      const sel = ['worksuite-desktop', ...((m.snapshot.answers.worksuiteApps as string[] | undefined) ?? []).filter((x) => x !== 'worksuite-desktop'), ...((m.snapshot.answers.thirdPartyApps as string[] | undefined) ?? [])]
+      const i = m.state === 'INSTALLING_APPLICATIONS' ? Math.floor((Date.now() / 400) % (sel.length + 1)) : sel.length
+      return { ok: true, value: sel.map((id, n) => ({ id, name: id, required: n === 0, state: n < i ? 'installed' : n === i ? 'installing' : 'pending', attempts: n <= i ? 1 : 0, error: null })) as AppProgress[] }
+    },
     async log(n = 400) { await ready(); return { ok: true, value: lines.slice(-n).join('\n') } },
     async send(e) {
       await ready()

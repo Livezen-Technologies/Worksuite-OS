@@ -140,5 +140,10 @@ The React UI only holds the machine and sends events. Partitioning, package tran
    - `SetupGate`: first run uses the wizard only while the setup service answers and setup hasn't finished. Otherwise it keeps the shell's own first-run screens, as on systems without `worksuite-setup`.
    - Bridge: `electron/setup.ts` calls the service through `busctl`; `lib/setupApi.ts` adds an in-memory preview at `?setup=1`, `?setup=recovery` and `?setup=install`.
    - Strings are in en/si/ta (`i18n/setupWizard.ts`).
-4. Application catalog and installation engine: WorkSuite apps (Desktop required; Office, POS, Desk, FrameFlow) and third-party apps via apt/Flatpak/AppImage/web apps from trusted sources only, organization policy (mandatory/restricted), dependency resolution, verified downloads, per-app retry, offline queue.
-5. Animated install graphics bound to real job states (reduced motion respected), and enterprise deployment sync.
+4. **Done:** the application catalog and installation engine (`services/setup/src/apps/`).
+   - `catalog.ts`: WorkSuite Desktop (required), Office, POS, Desk and FrameFlow, plus Firefox, VLC, GIMP and Thunderbird. Trusted sources only: bundled `.deb` files checked against the image's `SHA256SUMS`, signed APT, and Flathub when it is configured system-wide.
+   - `plan.ts`: the person's selection, plus the organization's mandatory apps (`setup_mandatory_apps`), minus restricted ones (`setup_restricted_apps`) and third-party apps outside Software Management's allowlist, with dependencies installed first.
+   - `engine.ts`: each app is its own transaction, with a dependency check (`apt-get -s`), retries with backoff, and no retry when packages can't be resolved. An optional app that fails never fails setup. Apps that need the network while offline are queued and installed by `worksuite-setup-queue.timer`.
+   - Progress for each app is exposed through `GetApps`, and the wizard shows it during "Installing apps".
+   - End-to-end test: `tests/setup-apps/`, report in `docs/testing/setup-apps-e2e-2026-11-11.md`.
+5. Next: animated install graphics bound to real job states (reduced motion respected), and enterprise deployment sync.
