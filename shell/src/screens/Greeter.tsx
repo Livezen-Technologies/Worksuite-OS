@@ -6,10 +6,12 @@ import { validateAccountName } from '../components/AAccount'
 import { AVATAR_GRADIENTS, Avatar, BG, Icon, P, glassBtn } from '../components/Ws'
 import { PowerMenu, ShutdownConfirm } from '../components/Power'
 import A11yPanel from '../components/A11yPanel'
+import FirstRunNetwork from './FirstRunNetwork'
 import StatusIndicators from '../components/StatusIndicators'
 import AuthError from '../components/AuthError'
 import { LOCALES, useT, getLocale } from '../i18n'
 import { motionReduced } from '../lib/a11y'
+import { Button } from '../components/ui/button'
 
 // Login and LoginUsers boards. No automatic sign-in: the person always submits a password.
 interface AUser { id: string; name: string; role: string }
@@ -22,6 +24,14 @@ export default function Greeter({ onSignIn }: GreeterProps) {
   const t = useT()
   const now = useANow()
   const [a11y, setA11y] = useState(false)
+  // Network flyout: the same NetworkManager card as first run, so Wi-Fi can be joined before signing in.
+  const [net, setNet] = useState(false)
+  useEffect(() => {
+    if (!net) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setNet(false) } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [net])
   const [view, setView] = useState<'password' | 'users'>('password')
   const [USERS, setUsers] = useState<AUser[]>([])
   const [selected, setSelected] = useState<string>(OTHER)
@@ -85,9 +95,10 @@ export default function Greeter({ onSignIn }: GreeterProps) {
 
   const bottomRight = (
     <div className="absolute right-4 bottom-6 flex gap-2.5 sm:right-10 sm:bottom-8">
-      {view === 'password' && <button type="button" aria-label={t('greeter.network')} className={glassBtn}><Icon d={P.wifi} /></button>}
-      <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11y} onClick={() => { setA11y((v) => !v); setPower(false) }} className={glassBtn}><Icon d={P.a11y}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
-      <button type="button" aria-label={t('greeter.powerOptions')} aria-haspopup="menu" aria-expanded={power} data-power-toggle onClick={() => setPower((v) => !v)} className={glassBtn}><Icon d={P.power} /></button>
+      {view === 'password' && <button type="button" aria-label={t('greeter.network')} aria-haspopup="dialog" aria-expanded={net} onClick={() => { setNet((v) => !v); setA11y(false); setPower(false) }} className={glassBtn}><Icon d={P.wifi} /></button>}
+      <button type="button" aria-label={t('a11y.button')} aria-haspopup="dialog" aria-expanded={a11y} onClick={() => { setA11y((v) => !v); setPower(false); setNet(false) }} className={glassBtn}><Icon d={P.a11y}><circle cx="12" cy="4.5" r="1.5" /></Icon></button>
+      <button type="button" aria-label={t('greeter.powerOptions')} aria-haspopup="menu" aria-expanded={power} data-power-toggle onClick={() => { setPower((v) => !v); setNet(false) }} className={glassBtn}><Icon d={P.power} /></button>
+      {net && <div role="dialog" aria-label={t('greeter.network')} className="absolute right-0 bottom-14 w-[min(440px,calc(100vw-32px))] text-left"><FirstRunNetwork /></div>}
       {a11y && <A11yPanel className="right-0 bottom-14" onClose={() => setA11y(false)} />}
       {power && <PowerMenu onClose={() => setPower(false)} onShutdown={() => setConfirm(true)} className="right-0 bottom-14" />}
     </div>
@@ -141,10 +152,9 @@ export default function Greeter({ onSignIn }: GreeterProps) {
                 value={password} onChange={(e) => { setPassword(e.target.value); setError(null) }}
                 aria-invalid={wrong || undefined} aria-describedby="ws-pw-hint"
                 className="min-w-0 flex-1 border-0 bg-transparent text-[15px] text-white outline-none placeholder:text-white/50" />
-              <button type="submit" aria-label={t('greeter.signIn')} disabled={busy}
-                className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-[9px] bg-[#1F6BFF] outline-none hover:bg-[#3A7DFF] focus-visible:ring-2 focus-visible:ring-[#7FB2FF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A1A3A] disabled:opacity-70">
+              <Button type="submit" variant="primary" size="icon-sm" aria-label={t('greeter.signIn')} disabled={busy}>
                 <Icon d={P.arrow} size={18} width={2.5} />
-              </button>
+              </Button>
             </div>
             <AuthError id="ws-pw-hint" error={error} hint={busy ? t('greeter.signingIn') : t('greeter.pressEnter')} />
           </form>

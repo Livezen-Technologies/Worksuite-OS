@@ -2209,6 +2209,7 @@ const si: Partial<Record<MessageKey, string>> = {
   'signin.lockPin': 'PIN',
   'signin.lockKeyWait': 'ඔබගේ ආරක්ෂණ යතුර ඇතුළු කර, අගුළු හරින්න තෝරා, දැල්වෙන විට එය ස්පර්ශ කරන්න',
   'signin.wrongPin': 'වැරදි PIN, හෝ බොහෝ උත්සාහයන්ට පසු PIN අගුළු දමා ඇත. මුරපදය භාවිත කරන්න.',
+  'signin.enterPin': 'ඔබේ PIN ඇතුළත් කරන්න.',
   'signin.keyFailed': 'ආරක්ෂණ යතුර පිළිගත්තේ නැත. එය ඇතුළු කර, දැල්වෙන විට ස්පර්ශ කරන්න, නැතහොත් මුරපදය භාවිත කරන්න.',
   'signin.err.too_short': 'PIN සඳහා අවම ඉලක්කම් {min} ක් අවශ්‍යයි.',
   'signin.err.too_long': 'PIN හි උපරිම ඉලක්කම් {max} යි.',

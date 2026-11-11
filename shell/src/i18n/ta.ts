@@ -2209,6 +2209,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'signin.lockPin': 'PIN',
   'signin.lockKeyWait': 'உங்கள் பாதுகாப்பு விசையைச் செருகி, திற என்பதைத் தேர்ந்து, மினுங்கும்போது தொடுக',
   'signin.wrongPin': 'தவறான PIN, அல்லது பல முயற்சிகளுக்குப் பின் PIN பூட்டப்பட்டது. கடவுச்சொல்லைப் பயன்படுத்துக.',
+  'signin.enterPin': 'உங்கள் PIN ஐ உள்ளிடுக.',
   'signin.keyFailed': 'பாதுகாப்பு விசை ஏற்கப்படவில்லை. செருகி, மினுங்கும்போது தொடுக, அல்லது கடவுச்சொல்லைப் பயன்படுத்துக.',
   'signin.err.too_short': 'PIN க்கு குறைந்தது {min} இலக்கங்கள் தேவை.',
   'signin.err.too_long': 'PIN அதிகபட்சம் {max} இலக்கங்கள்.',

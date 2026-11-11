@@ -78,3 +78,17 @@ describe('lock screen unlock', () => {
     expect(document.activeElement).toBe(input)
   })
 })
+
+describe('lock screen empty submit', () => {
+  it('asks for the PIN, not the password, when PIN sign-in is chosen (QA finding)', async () => {
+    const { os } = await import('../lib/os')
+    const { vi } = await import('vitest')
+    vi.spyOn(os, 'signinMethods').mockResolvedValue({ available: true, value: { pin: true, allow_pin: true, keys: [], default: 'pin' } as never })
+    const h = await render(<Lock user="u" onUnlock={() => {}} notices={[]} />)
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })) })
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { h.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
+    expect(h.textContent).toContain('Enter your PIN.')
+    expect(h.textContent).not.toContain('Enter your password.')
+  })
+})

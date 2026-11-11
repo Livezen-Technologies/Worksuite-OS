@@ -2239,6 +2239,7 @@ const en = {
   'signin.lockPin': 'PIN',
   'signin.lockKeyWait': 'Insert your security key, choose Unlock, then touch it when it blinks',
   'signin.wrongPin': 'Incorrect PIN, or the PIN is locked after too many tries. Use your password.',
+  'signin.enterPin': 'Enter your PIN.',
   'signin.keyFailed': 'The security key wasn’t accepted. Insert it, touch it when it blinks, or use your password.',
   'signin.err.too_short': 'The PIN needs at least {min} digits.',
   'signin.err.too_long': 'The PIN can have at most {max} digits.',
