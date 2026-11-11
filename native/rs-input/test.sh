@@ -25,10 +25,10 @@ check 'motion_absolute([0-9]*, 50, 50, 100, 100)'
 check 'button([0-9]*, 272, 0)'
 check 'axis_discrete([0-9]*, 0, -30.00000000, -2)'
 check 'modifiers(1, 0, 0, 0)'
-check 'zwp_virtual_keyboard_v1@[0-9]*.key([0-9]*, 1, 1)'
-check 'zwp_virtual_keyboard_v1@[0-9]*.key([0-9]*, 1, 0)'
+check 'zwp_virtual_keyboard_v1[@#][0-9]*.key([0-9]*, 1, 1)'
+check 'zwp_virtual_keyboard_v1[@#][0-9]*.key([0-9]*, 1, 0)'
 # "r" releases the still-held ß key (keycode 2).
-check 'zwp_virtual_keyboard_v1@[0-9]*.key([0-9]*, 2, 0)'
+check 'zwp_virtual_keyboard_v1[@#][0-9]*.key([0-9]*, 2, 0)'
 if grep -qi 'protocol error\|error.*keymap' "$t/labwc.log"; then echo "FAIL: compositor error"; grep -i error "$t/labwc.log"; fail=1; fi
 [ $fail = 0 ] && echo "rs-input: all checks passed"
 exit $fail
