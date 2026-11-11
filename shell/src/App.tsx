@@ -5,6 +5,8 @@ import type { WindowApp } from './screens/types'
 import Greeter from './screens/Greeter'
 import Lock from './screens/Lock'
 import FirstRun from './screens/FirstRun'
+import SetupGate from './components/setup-wizard/SetupGate'
+import { setupApi } from './lib/setupApi'
 import Desktop from './screens/Desktop'
 import Files from './screens/Files'
 import AppCenter from './screens/AppCenter'
@@ -35,6 +37,7 @@ export default function App() {
   const [user, setUser] = useState('')
   // The account's full name from /etc/passwd (GECOS), shown on the lock screen and the first-run greeting.
   const [realName, setRealName] = useState('')
+  const [setup] = useState(() => setupApi())
   const [firstRun, setFirstRun] = useState(() => localStorageGet('ws.firstRunDone') !== '1')
   // The shell's own windows, bottom to top (lib/shellWindows.ts): several can be open, moved, resized, minimized.
   const [wins, setWins] = useState<ShellWins>([])
@@ -131,7 +134,12 @@ export default function App() {
     case 'active':
       // First sign-in only: once the first-run assistant is done, WorkSuite Desktop opens on its Home (its own welcome
       // and onboarding); a no-op when it isn't installed.
-      if (firstRun) return <FirstRun userName={realName || displayName(user)} onDone={() => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false); void os.launchWorkSuite('home').catch(() => {}) }} />
+      if (firstRun) {
+        const done = () => { localStorageSet('ws.firstRunDone', '1'); setFirstRun(false); void os.launchWorkSuite('home').catch(() => {}) }
+        const name = realName || displayName(user)
+        // The setup wizard when the setup service runs and setup isn't finished; the first-run screens otherwise.
+        return <SetupGate api={setup} userName={name} onDone={done} fallback={<FirstRun userName={name} onDone={done} />} />
+      }
       return (
         <Desktop user={user} fullName={realName || undefined} onLock={() => { void requestLock(() => os.lock(), () => send('lock')) }} onLogout={() => { void os.logout(); if (!(window as { worksuite?: unknown }).worksuite) send('logout') /* Electron: the session ends; never the preview greeter */ }} onOpen={setWin} notes={notes}
           shellWindows={taskbarWins} onShellWindow={(app, how) => setWins((w) => (how === 'focus' ? focusWin(w, app) : taskbarClick(w, app)))}>

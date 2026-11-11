@@ -15,6 +15,7 @@ import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broke
 import { deviceCredential, deviceInfo, enrollDevice, STATUS_PATH } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
 import { SHELL_ENTRIES } from './shellEntries'
+import { registerSetup } from './setup'
 import { listDevices } from './hardware'
 import { checkOwnPassword, localUsers } from './users'
 import { ask, signinHost, type SignInMethod } from './signin'
@@ -433,6 +434,8 @@ app.whenReady().then(() => {
   handle('ws:enrollDevice', (serverUrl, code) => enrollDevice(serverUrl, code))
   // App Center (WSOS-APP-001/002): preview before confirmation, then a job whose result arrives as an event.
   const pkg = packageClient()
+  // Setup wizard (services/setup, lk.worksuite.Setup1).
+  registerSetup(handle)
   handle('ws:pkgPreview', (catalogId, op) => pkg.preview(catalogId, op === 'remove' ? 'remove' : 'install'))
   handle('ws:pkgInstall', (catalogId) => pkg.start('Install', catalogId))
   handle('ws:pkgRemove', (catalogId) => pkg.start('Remove', catalogId))

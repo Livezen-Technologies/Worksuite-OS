@@ -134,6 +134,11 @@ The React UI only holds the machine and sends events. Partitioning, package tran
 
 1. **Done here:** states, explicit rules, checkpoint and rollback boundaries, persistence format, recovery and rollback planning, tests.
 2. **Done:** the setup service above.
-3. UI: recovery screen (`recovery/RecoveryScreen`, `InstallationLogViewer`) on `recoveryOptions()`, then the wizard steps on the machine (replacing first run's local step counter), keeping the current look and the shared `components/ui` kit.
+3. **Done:** the UI on the machine (`shell/src/components/setup-wizard/`).
+   - `SetupWizard`: one screen per main state; answers via `SetAnswer`, Continue/Back as `NEXT`/`BACK`, Review's "Change" as `GOTO`. Unattended steps, waiting, retries and cancellation show the service's state, and the rail shows progress.
+   - `recovery/RecoveryScreen`: the options from `GetRecoveryOptions`, each with what it keeps and what it changes. Rollback appears only when a verified rollback point exists, and always asks for confirmation listing what is and isn't undone. `recovery/InstallationLogViewer` shows `GetLog`, with a problems-only filter.
+   - `SetupGate`: first run uses the wizard only while the setup service answers and setup hasn't finished. Otherwise it keeps the shell's own first-run screens, as on systems without `worksuite-setup`.
+   - Bridge: `electron/setup.ts` calls the service through `busctl`; `lib/setupApi.ts` adds an in-memory preview at `?setup=1`, `?setup=recovery` and `?setup=install`.
+   - Strings are in en/si/ta (`i18n/setupWizard.ts`).
 4. Application catalog and installation engine: WorkSuite apps (Desktop required; Office, POS, Desk, FrameFlow) and third-party apps via apt/Flatpak/AppImage/web apps from trusted sources only, organization policy (mandatory/restricted), dependency resolution, verified downloads, per-app retry, offline queue.
 5. Animated install graphics bound to real job states (reduced motion respected), and enterprise deployment sync.

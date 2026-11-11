@@ -10,6 +10,7 @@ import { whatsappSi } from './whatsapp'
 import { desktopsSi } from './desktops'
 import { controlsSi } from './controls'
 import { desktopShellSi } from './desktopShell'
+import { setupWizardSi } from './setupWizard'
 import { bootuiSi } from './bootui'
 import { hardwareSi } from './hardware'
 
@@ -27,6 +28,7 @@ const si: Partial<Record<MessageKey, string>> = {
   ...desktopsSi,
   ...controlsSi,
   ...desktopShellSi,
+  ...setupWizardSi,
   ...bootuiSi,
   ...hardwareSi,
   'panel.taskbar': 'කාර්ය තීරුව',

@@ -10,6 +10,7 @@ import { whatsappEn } from './whatsapp'
 import { desktopsEn } from './desktops'
 import { controlsEn } from './controls'
 import { desktopShellEn } from './desktopShell'
+import { setupWizardEn } from './setupWizard'
 import { bootuiEn } from './bootui'
 import { hardwareEn } from './hardware'
 
@@ -25,6 +26,7 @@ const en = {
   ...desktopsEn,
   ...controlsEn,
   ...desktopShellEn,
+  ...setupWizardEn,
   ...bootuiEn,
   ...hardwareEn,
   // Panel / taskbar

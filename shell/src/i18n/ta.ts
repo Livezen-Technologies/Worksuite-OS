@@ -10,6 +10,7 @@ import { whatsappTa } from './whatsapp'
 import { desktopsTa } from './desktops'
 import { controlsTa } from './controls'
 import { desktopShellTa } from './desktopShell'
+import { setupWizardTa } from './setupWizard'
 import { bootuiTa } from './bootui'
 import { hardwareTa } from './hardware'
 
@@ -27,6 +28,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   ...desktopsTa,
   ...controlsTa,
   ...desktopShellTa,
+  ...setupWizardTa,
   ...bootuiTa,
   ...hardwareTa,
   'panel.taskbar': 'பணிப்பட்டி',
