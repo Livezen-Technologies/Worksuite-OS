@@ -15,6 +15,7 @@ import type { AppProgress, SetupApi } from '../../lib/setupApi'
 import { flowFor, isMain, WORK_STATES, type MainState, type SetupEvent } from './core/states.ts'
 import { asks, useSetup } from './useSetup'
 import RecoveryScreen from './recovery/RecoveryScreen'
+import InstallGraphic from './InstallGraphic'
 import worksuitePng from '../../assets/brand/worksuite.png'
 import officePng from '../../assets/brand/worksuite-office.png'
 import posPng from '../../assets/brand/worksuite-pos.png'
@@ -475,16 +476,13 @@ function AppCard({ checked, disabled, onClick, icon, name, desc, badge }: { chec
 function WorkPanel({ api, state, flow, send, busy, headingRef }: { api: SetupApi; state: MainState; flow: MainState[]; send: (e: SetupEvent) => Promise<boolean>; busy: boolean; headingRef: HeadingRef }) {
   const work = flow.filter((s) => WORK_STATES.includes(s) && s !== 'INITIALIZING')
   const i = work.indexOf(state)
+  const apps = useAppProgress(api, state === 'INSTALLING_APPLICATIONS')
   return (
     <Center>
-      <div className="relative mb-2 flex size-24 items-center justify-center">
-        <div aria-hidden className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(31,107,255,0.35),transparent_70%)] blur-md" />
-        <Spinner size={84} />
-        <span className="absolute"><Mark size={36} /></span>
-      </div>
+      <InstallGraphic apps={apps} icon={(a) => <AppIcon id={a.id} size={44} />} label={t('sw.apps.title')} />
       <div role="status" aria-live="polite"><h1 ref={headingRef} tabIndex={-1} className="m-0 text-[32px] font-bold tracking-[-0.025em] outline-none">{stepName(state)}</h1></div>
       <p className="m-0 text-[15px] text-[#AFC0DD]">{t('sw.work.body')}</p>
-      {state === 'INSTALLING_APPLICATIONS' && <AppRows api={api} />}
+      {state === 'INSTALLING_APPLICATIONS' && <AppRows apps={apps} />}
       {state !== 'INSTALLING_APPLICATIONS' && work.length > 1 && (
         <ol className="m-0 mt-4 flex w-full max-w-[420px] list-none flex-col gap-1 rounded-2xl border border-[rgba(127,178,255,0.14)] bg-[rgba(10,24,56,0.45)] p-3 text-left">
           {work.map((w, n) => (
@@ -552,14 +550,27 @@ const APP_STATE_LOOK: Record<AppProgress['state'], string> = {
   pending: 'text-[#8FA3C8]', installing: 'text-[#9CC2FF]', installed: 'text-[#8BE3B5]', already: 'text-[#8BE3B5]', queued: 'text-[#FFD9A0]', failed: 'text-[#FFB4A6]', skipped: 'text-[#8FA3C8]',
 }
 /** Per-app progress of the app installation step (GetApps), polled while the step runs. */
-function AppRows({ api }: { api: SetupApi }) {
+function useAppProgress(api: SetupApi, on: boolean): AppProgress[] {
   const [apps, setApps] = useState<AppProgress[]>([])
   useEffect(() => {
+    if (!on) return
     let alive = true
     const load = () => void api.apps().then((r) => { if (alive && r.ok) setApps(r.value) })
     load(); const id = setInterval(load, 1000)
     return () => { alive = false; clearInterval(id) }
-  }, [api])
+  }, [api, on])
+  return on ? apps : []
+}
+
+/** An app's own icon (WorkSuite packages) or its glyph on the brand colour (third-party). */
+function AppIcon({ id, size }: { id: string; size: number }) {
+  const icon = (APP_ICON as Record<string, string>)[id]
+  const third = (THIRD_LOOK as Record<string, [string, string]>)[id]
+  if (icon) return <img src={icon} alt="" style={{ width: size, height: size }} className="block rounded-xl" draggable={false} />
+  return <span style={{ width: size, height: size, background: third?.[1] ?? '#5E739C' }} className="flex items-center justify-center rounded-xl text-white"><Icon d={[third?.[0] ?? 'M4 4h16v16H4z']} size={Math.round(size / 2)} /></span>
+}
+
+function AppRows({ apps }: { apps: AppProgress[] }) {
   if (!apps.length) return null
   const nameOf = (a: AppProgress) => {
     const k = (WORKSUITE_APPS as readonly string[]).includes(a.id) ? `sw.app.${a.id}` : (THIRD_PARTY_APPS as readonly string[]).includes(a.id) ? `sw.third.${a.id}` : null

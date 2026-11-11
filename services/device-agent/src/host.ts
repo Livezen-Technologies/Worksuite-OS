@@ -10,7 +10,7 @@ import { lookup } from 'node:dns/promises';
 import { ENFORCED_PATHS, type Enforcement } from './enforce.ts';
 import { KILLSWITCH_TABLE, parseNmConnections, renderKillSwitch, renderNmConnection, VPN_CONNECTION_UUID, VPN_KEYFILE, wgKeyPair, wgPublicKey } from './vpn.ts';
 import type { Policy } from './state.ts';
-import { collectHardware, readUpdateStatus } from './inventory.ts';
+import { collectHardware, readSetupReport, readUpdateStatus } from './inventory.ts';
 import { runPackageJob, systemJobBus } from './packageJob.ts';
 import { diagnosticProfiles, type DiagnosticProfile } from './diagnostics.ts';
 import { parseSeatSessions, type RsDeps } from './remoteSupport.ts';
@@ -115,6 +115,8 @@ export function linuxHost(paths: HostPaths = DEFAULT_PATHS): Host {
         },
         versions: await this.facts(),
         update: readUpdateStatus(),
+        // Enterprise deployment sync: setup state and each app's result (null when setup never ran here).
+        setup: readSetupReport(),
         packages: pkgs.split('\n').filter(Boolean).map((l) => { const [name, version, arch] = l.split('\t'); return { source: 'apt', name, version, arch }; }),
         flatpaks: flatpaks.split('\n').filter(Boolean).map((l) => { const [name, version, origin] = l.split('\t'); return { source: 'flatpak', name, version, origin }; }),
       };

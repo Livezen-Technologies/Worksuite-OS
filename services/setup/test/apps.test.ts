@@ -128,3 +128,15 @@ test('engine: restricted and not-allowed apps are reported as skipped, never ins
   assert.ok(!h.cmds.some((c) => c.includes('worksuite-pos') || c.includes('vlc')))
   assert.ok(JSON.parse(readFileSync(h.env.statusFile, 'utf8')).length === 3)
 })
+
+test('deployment sync: the report carries states, never answers; defaults apply only where unanswered and well-formed', async () => {
+  const { buildReport, defaultsToApply } = await import('../src/apps/report.ts')
+  const r = buildReport({ state: 'INSTALLING_APPLICATIONS', mode: 'install', lastError: 'e'.repeat(500) },
+    [{ id: 'worksuite-pos', name: 'WorkSuite POS', required: false, state: 'failed', source: 'apt', attempts: 3, error: 'E: reset' }], 10, null)
+  assert.deepEqual(r, { state: 'INSTALLING_APPLICATIONS', mode: 'install', updated_at: 10, completed_at: null, last_error: 'e'.repeat(300),
+    apps: [{ id: 'worksuite-pos', state: 'failed', required: false, attempts: 3, error: 'E: reset' }] })
+  assert.ok(!JSON.stringify(r).includes('WorkSuite POS'), 'no display names or answers, ids only')
+  assert.deepEqual(defaultsToApply({ locale: 'si_LK', timezone: 'Asia/Colombo', keyboard: 'us; reboot' }, { timezone: 'UTC' }), [['locale', 'si_LK']])
+  assert.deepEqual(defaultsToApply(null, {}), [])
+  assert.deepEqual(defaultsToApply(['si_LK'], {}), [])
+})

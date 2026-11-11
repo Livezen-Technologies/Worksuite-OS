@@ -146,4 +146,17 @@ The React UI only holds the machine and sends events. Partitioning, package tran
    - `engine.ts`: each app is its own transaction, with a dependency check (`apt-get -s`), retries with backoff, and no retry when packages can't be resolved. An optional app that fails never fails setup. Apps that need the network while offline are queued and installed by `worksuite-setup-queue.timer`.
    - Progress for each app is exposed through `GetApps`, and the wizard shows it during "Installing apps".
    - End-to-end test: `tests/setup-apps/`, report in `docs/testing/setup-apps-e2e-2026-11-11.md`.
-5. Next: animated install graphics bound to real job states (reduced motion respected), and enterprise deployment sync.
+5. **Done:** install graphics and enterprise deployment sync.
+   - **Graphics:** `InstallGraphic`, bound to real job states.
+     - The ring fills as apps settle; its value is in `aria-valuenow`.
+     - Each app's icon shows its own state: waiting, installing (bobs and glows), installed (pops in with a check), queued or failed.
+     - Other unattended steps show a turning ring with no value.
+     - Under reduced motion nothing moves, whether set by the system or in Settings › Accessibility, and the same facts stay visible.
+   - **Organization policy**, signed and validated by the server: `setup_mandatory_apps`, `setup_restricted_apps`, and `setup_defaults` (language, time zone, keyboard).
+     - Set in the admin console under Policy › Device setup.
+     - The device agent publishes it in `policy.json`.
+     - Setup pre-fills the defaults, still validated as answers, and applies the app rules (phase 4).
+   - **Report back:**
+     - The setup service writes `/run/worksuite-setup/report.json`: the state and each app's result, by id. No answers or user names.
+     - The device agent sends it with the inventory (`setup`), and also at once when setup calls `ReportInventory` at each milestone.
+     - The server checks its shape, and the console's device page shows a Setup section with each app's result.

@@ -14,6 +14,7 @@ import type { SetupMode } from './machine/core/states.ts'
 import { CATALOG } from './apps/catalog.ts'
 import { plan, type AppPolicy } from './apps/plan.ts'
 import { AppEngine, readStatus } from './apps/engine.ts'
+import { buildReport, defaultsToApply, writeReport } from './apps/report.ts'
 
 const { Message, Variant } = dbus
 const STATE_DIR = '/var/lib/worksuite/setup'
@@ -24,6 +25,7 @@ const BUNDLED = '/usr/share/worksuite/bundled'
 const POLICY = '/run/worksuite-device-agent/policy.json'
 const APPS_STATUS = path.join(STATE_DIR, 'apps.json')
 const APP_QUEUE = path.join(STATE_DIR, 'app-queue.json')
+const REPORT = '/run/worksuite-setup/report.json'
 const RUN_ENV = { PATH: '/usr/sbin:/usr/bin:/sbin:/bin', LC_ALL: 'C.UTF-8', DEBIAN_FRONTEND: 'noninteractive' }
 
 /** Fixed executables, argument vectors, no shell. */
@@ -55,8 +57,10 @@ const selection = (a: Readonly<Record<string, unknown>>) => [
   ...(Array.isArray(a.worksuiteApps) ? a.worksuiteApps : []), ...(Array.isArray(a.thirdPartyApps) ? a.thirdPartyApps : []),
 ].filter((x): x is string => typeof x === 'string')
 const appPlan = (a: Readonly<Record<string, unknown>>) => plan(selection(a), policy())
+/** Set once the service runs: refreshes the setup report after each app step. */
+let onAppProgress = () => {}
 const engine = (log: (l: string) => void) => new AppEngine({
-  runner, bundledDir: BUNDLED, online, statusFile: APPS_STATUS, queueFile: APP_QUEUE, log,
+  runner, bundledDir: BUNDLED, online, statusFile: APPS_STATUS, queueFile: APP_QUEUE, log: (l) => { log(l); onAppProgress() },
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
 })
 
@@ -148,6 +152,27 @@ const auth: Authority = {
   },
 }
 await svc.start()
+
+// Enterprise deployment sync (src/apps/report.ts): the organization's defaults, and the report the device agent sends.
+for (const [k, v] of defaultsToApply((policy() as { setup_defaults?: unknown } | null)?.setup_defaults, svc.getState().answers)) {
+  try { await svc.setAnswer(k, v); svc.log(`organization default ${k} = ${v}`) } catch (e) { svc.log(`organization default ${k} refused: ${(e as Error).message}`) }
+}
+let completedAt: number | null = null
+let lastState = ''
+const report = () => {
+  const st = svc.getState()
+  if (st.state === 'SETUP_COMPLETED' && completedAt === null) completedAt = Date.now()
+  try { writeReport(REPORT, buildReport(st, readStatus(APPS_STATUS), Date.now(), completedAt)) } catch (e) { svc.log(`setup report not written: ${(e as Error).message}`) }
+  // Milestones go to the organization at once rather than with the next daily inventory.
+  if (st.state !== lastState && ['INSTALLING_APPLICATIONS', 'VERIFYING_INSTALLATION', 'SETUP_COMPLETED', 'FAILED', 'RECOVERY_MODE', 'ROLLED_BACK', 'CANCELLED'].includes(st.state)) {
+    bus.call(new Message({ destination: 'lk.worksuite.DeviceAgent1', path: '/lk/worksuite/DeviceAgent1', interface: 'lk.worksuite.DeviceAgent1', member: 'ReportInventory' }))
+      .catch(() => { /* not enrolled or no agent: the report waits for the next inventory */ })
+  }
+  lastState = st.state
+}
+svc.on('changed', report)
+onAppProgress = report
+report()
 serve(bus, svc, auth, readFileSync(XML, 'utf8'), () => readStatus(APPS_STATUS))
 await bus.requestName(NAME, 0)
 svc.log(`worksuite-setup started (${mode}), state ${svc.getState().state}`)

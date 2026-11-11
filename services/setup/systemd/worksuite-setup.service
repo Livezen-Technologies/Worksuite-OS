@@ -25,6 +25,10 @@ SystemCallArchitectures=native
 UMask=0077
 # State (and its mirror on the ESP during an install), rollback handles, the log; package rollback needs dpkg.
 StateDirectory=worksuite/setup
+# /run/worksuite-setup/report.json: world-readable setup report for the device agent (enterprise sync).
+RuntimeDirectory=worksuite-setup
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
 StateDirectoryMode=0700
 LogsDirectory=worksuite
 ReadWritePaths=-/boot/efi /var/lib/dpkg /var/lib/apt /var/cache/apt -/var/lib/flatpak /usr /etc /opt -/target

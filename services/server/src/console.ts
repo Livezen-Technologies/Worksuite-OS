@@ -173,7 +173,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
     const requestedPolicy = policyRow?.version ?? null;
     const kiosk = json<{ kiosk?: KioskPolicy }>(policyRow?.body ?? null)?.kiosk;
     const inv = db.prepare('SELECT body, at FROM inventory WHERE device_id = ?').get(ctx.params.id) as { body: string; at: number } | undefined;
-    const invBody = json<{ hardware?: unknown; software?: unknown[] }>(inv?.body ?? null);
+    const invBody = json<{ hardware?: unknown; software?: unknown[]; setup?: unknown }>(inv?.body ?? null);
     const updates = (db.prepare('SELECT body, at FROM update_results WHERE device_id = ? ORDER BY id DESC LIMIT 20').all(ctx.params.id) as { body: string; at: number }[])
       .map((u) => ({ ...json<Record<string, unknown>>(u.body), at: u.at }));
     send(ctx, 200, {
@@ -181,6 +181,7 @@ export function consoleRoutes(r: Router, db: DatabaseSync, o: { secureCookie: bo
       kiosk: kiosk?.enabled && kiosk.devices?.includes(ctx.params.id) ? { user: kiosk.user, app: kiosk.app } : null,
       policy: observedPolicy(requestedPolicy, json<{ policy_version?: unknown }>(d.heartbeat as string | null)?.policy_version),
       inventory: inv ? { at: inv.at, hardware: invBody?.hardware ?? null, software_count: invBody?.software?.length ?? 0 } : null,
+      setup: invBody?.setup ?? null,
       break_glass_escrowed: !!db.prepare('SELECT 1 FROM break_glass WHERE device_id = ?').get(ctx.params.id),
     });
   });

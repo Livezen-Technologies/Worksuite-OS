@@ -512,6 +512,8 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
           // Shape check before anything is stored: a bad report must not poison later reconciles and sign-ins.
           for (const k of ['software', 'packages', 'flatpaks']) if (b[k] !== undefined && !Array.isArray(b[k])) throw invalid(k, 'must be an array');
           if (!b.hardware || typeof b.hardware !== 'object' || Array.isArray(b.hardware)) throw invalid('hardware', 'must be an object');
+          // Enterprise deployment sync: the setup report (services/device-agent/src/inventory.ts readSetupReport).
+          if (b.setup != null && (typeof b.setup !== 'object' || Array.isArray(b.setup) || !Array.isArray((b.setup as { apps?: unknown }).apps))) throw invalid('setup', 'must be an object with apps');
           db.prepare('INSERT INTO inventory (device_id, body, at) VALUES (?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET body = excluded.body, at = excluded.at').run(d.id, JSON.stringify(b), Date.now());
           reconcileRequired(db, d.org_id, Date.now(), d.id);   // required apps the device doesn't have yet
         }
