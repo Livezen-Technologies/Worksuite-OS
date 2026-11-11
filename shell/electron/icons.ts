@@ -12,6 +12,7 @@ const NAME = /^[A-Za-z0-9][A-Za-z0-9._+@-]{0,200}$/
 const THEME = /^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,100}$/
 const MAX_BYTES = 1024 * 1024
 const EXTS = ['svg', 'png'] as const
+const UNLISTED_HICOLOR = ['1024x1024/apps', '2048x2048/apps']
 
 export interface IconEnv {
   /** Base directories in spec order: $HOME/.icons, $XDG_DATA_HOME/icons, $XDG_DATA_DIRS/icons. */
@@ -170,6 +171,14 @@ export function lookupIcon(value: string, size: number, scale: number, env: Icon
       }
     }
     if (best) return best.file
+  }
+  // Many app packages ship only hicolor/1024x1024 (electron-builder's default), a size hicolor's index.theme does
+  // not list, so the spec lookup above never sees it. Accept those before the unthemed pixmaps.
+  for (const d of UNLISTED_HICOLOR) {
+    for (const b of env.bases) {
+      const file = path.join(b, 'hicolor', d, `${name}.png`)
+      if (fs.isFile(file)) return file
+    }
   }
   for (const p of env.pixmaps) {
     for (const ext of EXTS) {

@@ -3,6 +3,7 @@
 import type { InstalledApp } from './os'
 import { t } from '../i18n'
 import { WHATSAPP_APP_ID } from '../../electron/whatsapp'
+import { SHELL_ENTRIES } from '../../electron/shellEntries'
 
 export type Kind = 'WorkSuite' | 'Linux app' | 'System'
 
@@ -76,33 +77,41 @@ function initials(name: string) {
  */
 export function buildLauncherApps(webApps: { id: string; name: string; offline_level?: OfflineLevel }[] | null, installed: InstalledApp[] | null, office: string | null, desktop: string | null = null, whatsapp = true): LauncherApp[] {
   const out: LauncherApp[] = []
+  const entry = (id: string | null) => (id ? (installed ?? []).find((e) => e.id === id) : undefined)
+  // Installed apps show their own icon (Icon= of their desktop entry) and own their windows by id / StartupWMClass.
+  const own = (e: InstalledApp | undefined) => (e ? { icon: e.icon, appIds: [e.id, ...(e.wm_class ? [e.wm_class] : [])] } : {})
+  const web = (webApps ?? FALLBACK_WEB_APPS) as { id: string; name: string; offline_level?: OfflineLevel }[]
   if (desktop) {
-    out.push({ id: 'worksuite-desktop', name: 'WorkSuite', mark: 'W', bg: '#2563eb', fg: '#ffffff', kind: 'WorkSuite', fav: true, launch: { worksuite: 'home' }, keywords: ['worksuite', 'home', 'desktop'] })
+    // WorkSuite Desktop holds Mail, Chat, Calendar, Drive, Tasks, CRM and HR: one tile, not a tile per module. The
+    // module names stay searchable on it.
+    const inside = web.filter((a) => DESKTOP_MODULE_FOR[a.id]).map((a) => WS_STYLE[a.id]?.name ?? a.name)
+    out.push({ id: 'worksuite-desktop', name: 'WorkSuite', mark: 'W', bg: '#2563eb', fg: '#ffffff', kind: 'WorkSuite', fav: true, launch: { worksuite: 'home' },
+      keywords: ['worksuite', 'home', 'desktop', ...inside.map((n) => n.toLowerCase())], ...own(entry(desktop)) })
   }
-  for (const a of (webApps ?? FALLBACK_WEB_APPS) as { id: string; name: string; offline_level?: OfflineLevel }[]) {
+  for (const a of web) {
     const st = WS_STYLE[a.id]
-    const mod = desktop ? DESKTOP_MODULE_FOR[a.id] : undefined
+    if (desktop && DESKTOP_MODULE_FOR[a.id]) continue   // inside WorkSuite Desktop
     out.push({
       id: `worksuite-${a.id}`, name: st?.name ?? a.name, mark: st?.mark ?? initials(a.name), bg: st?.bg ?? '#e2e8f0', fg: st?.fg ?? '#1e293b',
-      kind: 'WorkSuite', fav: st?.fav, launch: mod ? { worksuite: mod } : { desktop: `worksuite-${a.id}` }, keywords: ['worksuite', a.id],
+      kind: 'WorkSuite', fav: st?.fav, launch: { desktop: `worksuite-${a.id}` }, keywords: ['worksuite', a.id],
       ...(a.offline_level ? { offline: a.offline_level } : {}),
     })
   }
   if (office) {
-    out.push(
-      { id: 'office', name: 'Office', mark: 'O', ...OFFICE_STYLE, kind: 'WorkSuite', fav: true, launch: { office: 'start' }, keywords: ['worksuite office', 'documents', 'editor'] },
-      { id: 'office-docs', name: t('files.documents'), mark: 'Do', bg: '#dbeafe', fg: '#1d4ed8', kind: 'WorkSuite', launch: { office: 'docs' }, keywords: ['office', 'word', 'docx', 'writer', 'new document'] },
-      { id: 'office-sheets', name: t('setup.app.sheets'), mark: 'Sh', bg: '#dcfce7', fg: '#15803d', kind: 'WorkSuite', launch: { office: 'sheets' }, keywords: ['office', 'excel', 'xlsx', 'calc', 'new spreadsheet'] },
-      { id: 'office-slides', name: t('launcher.presentations'), mark: 'Sl', ...OFFICE_STYLE, kind: 'WorkSuite', launch: { office: 'slides' }, keywords: ['office', 'powerpoint', 'pptx', 'slides', 'new presentation'] },
-    )
+    // One Office tile with the suite's own icon; its start centre creates documents, spreadsheets and presentations,
+    // so those words find it in search instead of separate tiles.
+    out.push({ id: 'office', name: 'Office', mark: 'O', ...OFFICE_STYLE, kind: 'WorkSuite', fav: true, launch: { office: 'start' },
+      keywords: ['worksuite office', 'documents', 'editor', 'word', 'docx', 'writer', 'spreadsheet', 'spreadsheets', 'excel', 'xlsx', 'calc', 'presentation', 'presentations', 'powerpoint', 'pptx', 'slides', 'pdf'], ...own(entry(office)) })
   }
   if (whatsapp) out.push(WHATSAPP)
   for (const e of installed ?? []) {
-    if (e.id === office || e.id === desktop || e.id.startsWith('worksuite-') || e.id === WHATSAPP_APP_ID) continue
+    if (e.id === office || e.id === desktop || SHELL_ENTRIES.has(e.id) || e.id === WHATSAPP_APP_ID) continue
     const terminal = e.categories.includes('TerminalEmulator')
+    // WorkSuite's own apps (POS, Desk, FrameFlow …) sit with WorkSuite; everything else is a Linux app.
+    const ours = e.id.startsWith('worksuite-') || /^work ?suite\b/i.test(e.name)
     out.push({
       id: e.id, name: e.name, mark: terminal ? '>_' : initials(e.name), bg: terminal ? '#0f172a' : '#f1f5f9', fg: terminal ? '#e2e8f0' : '#334155',
-      kind: 'Linux app', fav: LINUX_FAV.has(e.id), launch: { desktop: e.id }, icon: e.icon, ...(e.wm_class ? { appIds: [e.wm_class] } : {}),
+      kind: ours ? 'WorkSuite' : 'Linux app', fav: LINUX_FAV.has(e.id), launch: { desktop: e.id }, icon: e.icon, ...(e.wm_class ? { appIds: [e.wm_class] } : {}),
       keywords: [e.generic_name ?? '', e.comment ?? '', ...e.keywords, ...e.categories].filter(Boolean),
     })
   }
@@ -139,7 +148,12 @@ export function startPins(apps: LauncherApp[], max = 12, tail: LauncherApp[] = [
   const sys = new Set(['appcenter', 'monitor'])
   const own = apps.filter((a) => !sys.has(a.id))
   const end = [...apps.filter((a) => a.id === 'appcenter'), ...tail, ...apps.filter((a) => a.id === 'monitor')]
-  return [...own.filter((a) => a.fav), ...own.filter((a) => !a.fav)].slice(0, Math.max(0, max - end.length)).concat(end)
+  // Favourites, then installed WorkSuite apps (POS, Desk, FrameFlow …: they have a desktop entry and its icon), then
+  // WorkSuite web app tiles, then everything else.
+  const rest = own.filter((a) => !a.fav)
+  const installedWs = (a: LauncherApp) => a.kind === 'WorkSuite' && 'desktop' in a.launch && !!a.icon
+  return [...own.filter((a) => a.fav), ...rest.filter(installedWs), ...rest.filter((a) => a.kind === 'WorkSuite' && !installedWs(a)), ...rest.filter((a) => a.kind !== 'WorkSuite')]
+    .slice(0, Math.max(0, max - end.length)).concat(end)
 }
 
 /** "All apps" (G02): A–Z groups by first letter; digits and symbols under '#'. */
@@ -191,5 +205,13 @@ export function appForWindow(apps: LauncherApp[], appId: string): LauncherApp | 
 
 /** Taskbar pins that exist in the current list (an app the org disabled or that isn't installed drops out). */
 export function taskbarApps(apps: LauncherApp[], pins: string[]): LauncherApp[] {
-  return pins.map((id) => apps.find((a) => a.id === id)).filter((a): a is LauncherApp => !!a)
+  // A pin for a module that now lives in WorkSuite Desktop (Mail, Chat, Drive …) becomes the WorkSuite pin, once.
+  const desk = apps.find((a) => a.id === 'worksuite-desktop')
+  const out: LauncherApp[] = []
+  for (const id of pins) {
+    const m = /^worksuite-(.+)$/.exec(id)
+    const a = apps.find((x) => x.id === id) ?? (desk && m && DESKTOP_MODULE_FOR[m[1]] ? desk : undefined)
+    if (a && !out.includes(a)) out.push(a)
+  }
+  return out
 }

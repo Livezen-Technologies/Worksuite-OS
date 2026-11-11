@@ -8,7 +8,7 @@ import { shellPrefsFrom, taskbarAlign } from './shellPrefs'
 describe('brandIcon', () => {
   it('bundles WorkSuite, Office, module and system icons; others get none', () => {
     expect(brandIcon('worksuite-desktop')).toMatch(/worksuite\.png/)
-    expect(decodeURIComponent(brandIcon('office')!)).toMatch(/#4552E0/i)
+    expect(brandIcon('office')).toMatch(/worksuite-office\.png/)   // the WorkSuite Office package's own icon
     for (const id of ['worksuite-mail', 'worksuite-chat', 'worksuite-calendar', 'worksuite-tasks', 'worksuite-drive', 'worksuite-crm', 'worksuite-hr', 'appcenter', 'monitor', 'settings', 'office-sheets'])
       expect(brandIcon(id), id).toMatch(/^data:image\/svg\+xml,/)
     expect(brandIcon('worksuite-unknown')).toBeNull()
@@ -79,5 +79,15 @@ describe('taskbar window matching', () => {
     const { matchesApp } = await import('./panel')
     expect(matchesApp('worksuite-mail', 'lk.worksuite.mail')).toBe(true)
     expect(matchesApp('worksuite-mail', 'lk.worksuite.chat')).toBe(false)
+  })
+})
+
+describe('icon names', () => {
+  it("the OS's own logo never takes an app's icon name (worksuite is WorkSuite Desktop's Icon=)", async () => {
+    const { readFileSync } = await import('node:fs')
+    const rules = readFileSync('../packaging/debian/rules', 'utf8')
+    // A same-named OS icon at 16–512 px won the theme lookup over the app's 1024 px icon: the WorkSuite app showed the OS logo.
+    expect(rules).not.toMatch(/hicolor\/[^ ]*\/apps\/worksuite\.(png|svg)/)
+    expect(rules).toMatch(/apps\/worksuite-os\.svg/)
   })
 })

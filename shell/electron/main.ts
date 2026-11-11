@@ -14,6 +14,7 @@ import { appLaunchCommand, scopeCommand, lockPaths, logoutCommand, readLockSetti
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceCredential, deviceInfo, enrollDevice, STATUS_PATH } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
+import { SHELL_ENTRIES } from './shellEntries'
 import { listDevices } from './hardware'
 import { checkOwnPassword, localUsers } from './users'
 import { ask, signinHost, type SignInMethod } from './signin'
@@ -259,8 +260,9 @@ app.whenReady().then(() => {
     const all = installedApps()
     const office = findOffice(all)
     const desktop = findWorkSuiteDesktop(all)
-    // worksuite-* entries are the web app windows, listed from the org's data instead.
-    return { apps: all.filter((e) => !e.id.startsWith('worksuite-') || e === office).map(({ exec: _e, ...e }) => e), office: office?.id ?? null, desktop: desktop?.id ?? null }
+    // The shell's own worksuite-* entries are its web app windows, listed from the org's data instead; any other app
+    // (WorkSuite POS, Desk, FrameFlow …) is listed like every installed app.
+    return { apps: all.filter((e) => !SHELL_ENTRIES.has(e.id)).map(({ exec: _e, ...e }) => e), office: office?.id ?? null, desktop: desktop?.id ?? null }
   })
   // WorkSuite Desktop modules: its program with --module=<id> (fixed list, no shell), in its own app scope. A second
   // launch is handed to the running WorkSuite (single instance).

@@ -2,8 +2,8 @@
 // Livezen-Technologies/worksuite-desktop resources/icons and worksuite-office branding/icon), WorkSuite modules in
 // WorkSuite Desktop's own glyphs and colours (its src/modules/registry.ts icons and src/core/app-look.ts colours),
 // and the OS's own apps in the design canvas's tile colours (Start menu board G02). Glyphs are white on the colour.
-import worksuitePng from '../assets/brand/worksuite.png'
-import officeSvg from '../assets/brand/worksuite-office.svg'
+import worksuitePng from '../assets/brand/worksuite.png'   // WorkSuite Desktop 0.2.300 package icon (256 px)
+import officeSvg from '../assets/brand/worksuite-office.png'   // WorkSuite Office 10.1 package icon (256 px)
 import { GLYPHS } from './appGlyphs'
 import whatsappSvg from '../../apps/icons/lk.worksuite.whatsapp.svg'
 
