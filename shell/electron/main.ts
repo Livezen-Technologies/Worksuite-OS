@@ -1,4 +1,5 @@
 import { findBundles, mountRemovable } from './bundles'
+import { viaInbox } from './inbox'
 import { app, BrowserWindow, clipboard, screen, dialog, ipcMain, nativeImage, Notification, powerMonitor, session, shell, type IpcMainInvokeEvent } from 'electron'
 
 // Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
@@ -548,7 +549,7 @@ app.whenReady().then(() => {
     } catch { return { ok: false, error: 'invalid_file' } }
   })
   startPortalWatch(sys)
-  handle('ws:localDebPreview', (h) => { const p = pickedPath(h, 'deb'); return p ? pkg.localDebPreview(p) : noFile })
+  handle('ws:localDebPreview', (h) => { const p = pickedPath(h, 'deb'); return p ? viaInbox(p, '.deb', (q) => pkg.localDebPreview(q)) : noFile })
   handle('ws:localDebInstall', (token) => pkg.localDebInstall(token))
   const fpUser = flatpakUserClient()
   handle('ws:appPermissions', (id) => pkg.appPermissions(id))
@@ -568,8 +569,8 @@ app.whenReady().then(() => {
     return fpPerms.set(id, perm, on === 'on', (d.value as { permissions?: string[] }).permissions ?? [])
   })
   handle('ws:pruneRuntimes', () => pkg.pruneRuntimes())
-  handle('ws:bundleInspect', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInspect(p) : noFile })
-  handle('ws:bundleInstall', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInstall(p) : noFile })
+  handle('ws:bundleInspect', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? viaInbox(p, '.wsupdate', (q) => pkg.bundleInspect(q)) : noFile })
+  handle('ws:bundleInstall', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? viaInbox(p, '.wsupdate', (q) => pkg.bundleInstall(q)) : noFile })
   const appimages = appimageClient()
   handle('ws:appimageList', () => appimages.list())
   handle('ws:appimageImport', (h) => { const p = pickedPath(h, 'appimage'); return p ? appimages.import(p, `file://${p}`) : noFile })

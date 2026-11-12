@@ -5,7 +5,7 @@ import { randomUUID, type KeyObject } from 'node:crypto';
 import { join } from 'node:path';
 import { renameSync, rmSync } from 'node:fs';
 import { extractBundle, inspectBundle, type BundleManifest } from './bundle.ts';
-import { stageBundle, stageFile, stagedCopy } from './staging.ts';
+import { BUNDLE_ROOTS, stageBundle, stageFile, stagedCopy, underRoots } from './staging.ts';
 import { checkSources, isCritical, parseCatalogId, parseDiskChange, parseSimulation, parseUpgradable, ServiceError, type Plan } from './apt.ts';
 import { debFieldsUnprivileged, type Unprivileged } from './untrusted.ts';
 import type { HistoryKind, UpdateHistory } from './history.ts';
@@ -47,7 +47,7 @@ export interface Env {
   audit(event: string, fields: Record<string, unknown>): void;
   /** Root-owned spool for staged local .deb copies and extracted bundles (default /var/lib/worksuite-package-service/spool). */
   spool?: string;
-  /** Where .wsupdate files may be read from (default: removable media and /home). */
+  /** Where picked files (.wsupdate, local .deb) may be read from (default: the inbox, staging.ts INBOX). */
   bundleRoots?: string[];
   /** Release keys, device arch and installed OS version for offline bundles (WSOS-AUP-010). */
   release?: { keys(id: string): KeyObject | undefined; arch: string; installed(): string };
@@ -232,6 +232,7 @@ export class PackageService extends EventEmitter {
 
   /** Stage the caller's file, read its control fields, and let apt validate dependencies; nothing is installed. */
   async previewLocalDeb(caller: number, path: string): Promise<LocalDebPreview> {
+    if (typeof path !== 'string' || !path.startsWith('/') || !underRoots(path, this.env.bundleRoots ?? BUNDLE_ROOTS)) throw new ServiceError('InvalidArgs', 'files are read from the WorkSuite inbox only');
     const staged = stageFile(path, caller, this.spool('debs'), '.deb');
     return this.inspectLocalDeb(staged.path, staged.sha256);
   }

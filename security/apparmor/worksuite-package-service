@@ -40,6 +40,14 @@ profile worksuite-package-service flags=(attach_disconnected) {
   /var/log/worksuite/ rw,
   /var/log/worksuite/** rwk,
   /run/worksuite-device-agent/policy.json r,
+  # The service's own RuntimeDirectory=: update-status.json for the device agent (written as .tmp, then renamed).
+  /run/worksuite-package-service/ rw,
+  /run/worksuite-package-service/** rwk,
+  # Files a person picked to install arrive only through the inbox (tmpfiles.d, 1733): the shell copies them in as
+  # that person; the service opens one with O_NOFOLLOW, checks it belongs to the caller and works on its own copy.
+  # Home folders and removable media stay closed to this profile.
+  /var/spool/worksuite-incoming/ r,
+  /var/spool/worksuite-incoming/* r,
   /run/reboot-required r,
   # Unsigned duplicates of the signed Debian sources are commented out at start (#45, main.ts tidySources).
   /etc/apt/sources.list rw,
