@@ -1,4 +1,5 @@
 // Dark navy pieces shared by Settings, update and device screens (boot-install boards: Set*, Upd*, Hw*, U*, H*).
+import { WorkSuiteLoader } from './WorkSuiteLoader'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { t } from '../i18n'
 import { createPortal } from 'react-dom'
@@ -29,8 +30,10 @@ export function Svg({ d, size = 20, stroke = 'currentColor', width = 2, classNam
   )
 }
 
-export function Spinner({ size = 14, stroke = C.cyan }: { size?: number; stroke?: string }) {
-  return <svg className="ws-spin" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9" /></svg>
+/** Busy indicator: the WorkSuite loader ("assemble"), decorative (the busy control carries the text). `stroke` is kept
+ *  for callers from the ring era and no longer changes the colours: the mark is always in brand colours. */
+export function Spinner({ size = 14 }: { size?: number; stroke?: string }) {
+  return <WorkSuiteLoader size={Math.max(size, 12)} decorative />
 }
 
 /** What a switch's change handler may answer: a failed bridge reply (`ok: false` / `available: false`) or a thrown

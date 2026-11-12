@@ -8,12 +8,12 @@ import { formatBytes, os, bundleErrorText, packageErrorText, type AppUpdate, typ
 import { useOsUpdate, updates } from '../lib/useOsUpdate'
 import { REMIND_KEY, SEEN_KEY, UPDATE_PHASES, fmtWhen, heroView, needsAttention, canDefer, restartOptions, whatsNew, type Action, type RestartChoice, type Tone } from '../lib/updates'
 import { C, Dialog, OptionCard, Progress, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, heroCard, linkBtn, rowLine } from '../components/Dk'
-import { Mark } from '../components/Ws'
 import { ErrorDetails } from '../components/ErrorDetails'
 import { errorMessage, friendlyError } from '../lib/errors'
 import { OfflineUpdates, showsOffline, useUsbBundles } from './UpdatesOffline'
 import { formatNumber, messages, t } from '../i18n'
 import { Button } from '../components/ui/button'
+import { WorkSuiteLoader } from '../components/WorkSuiteLoader'
 
 export const ICON = {
   download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
@@ -334,10 +334,7 @@ export function RestartDialog({ onClose }: { onClose: () => void }) {
 export function UpdatingScreen({ from, to, percent, phase }: { from: string; to: string | null; percent: number | null; phase: string | null }) {
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="updating-t" className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-7 bg-[#040A1A] font-sans text-[#E8EEFA]">
-      <div className="relative h-[120px] w-[120px]">
-        <svg className="ws-spin absolute inset-0" width="120" height="120" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" fill="none" stroke="rgba(127,178,255,0.12)" strokeWidth="4" /><path d="M60 6a54 54 0 0 1 54 54" fill="none" stroke="#18D4F0" strokeWidth="4" strokeLinecap="round" /></svg>
-        <span className="absolute top-9 left-9"><Mark size={48} /></span>
-      </div>
+      <WorkSuiteLoader size={120} decorative />
       <div className="flex flex-col items-center gap-2.5">
         <h1 id="updating-t" className="m-0 text-[28px] font-medium">{t('upd.updating')}{percent != null ? <> · <CountUp value={percent} /></> : ''}</h1>
         <p className="m-0 text-[15px] text-[#8FA3C8]">{t('upd.dontTurnOff')}</p>

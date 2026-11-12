@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="96" height="96" role="img" aria-label="Loading WorkSuite">
+  <title>Loading WorkSuite</title>
+  <style>
+    .ws-c { transform-box: fill-box; transform-origin: center; animation-duration: 2.4s; animation-iteration-count: infinite; animation-timing-function: cubic-bezier(.5,0,.2,1); }
+    .ws-left   { animation-name: ws-left; }
+    .ws-bottom { animation-name: ws-bottom; }
+    .ws-blue   { animation-name: ws-blue; transform-origin: 100% 0%; }
+    .ws-navy   { animation-name: ws-navy; }
+
+    /* cyan left cell slides in from the left */
+    @keyframes ws-left {
+      0%        { transform: translateX(-28px); opacity: 0 }
+      14%, 70%  { transform: translateX(0);     opacity: 1 }
+      86%, 100% { transform: translateX(-28px); opacity: 0 }
+    }
+    /* cyan bottom cell rises from below */
+    @keyframes ws-bottom {
+      0%, 8%    { transform: translateY(28px);  opacity: 0 }
+      22%, 74%  { transform: translateY(0);     opacity: 1 }
+      90%, 100% { transform: translateY(28px);  opacity: 0 }
+    }
+    /* blue square grows out of the top-right corner */
+    @keyframes ws-blue {
+      0%, 16%   { transform: scale(0);   opacity: 0 }
+      32%       { transform: scale(1.06); opacity: 1 }
+      38%, 66%  { transform: scale(1);   opacity: 1 }
+      82%, 100% { transform: scale(0);   opacity: 0 }
+    }
+    /* navy overlap locks in once both layers meet */
+    @keyframes ws-navy {
+      0%, 34%   { transform: scale(0);    opacity: 0 }
+      44%, 62%  { transform: scale(1);    opacity: 1 }
+      72%, 100% { transform: scale(0);    opacity: 0 }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ws-c { animation: none; }
+    }
+  </style>
+
+  <!-- 3×3 grid, 32px cells, 16px margin -->
+  <rect class="ws-c ws-left"   x="16" y="48" width="32" height="32" fill="#00daf2"/>
+  <rect class="ws-c ws-bottom" x="48" y="80" width="32" height="32" fill="#00daf2"/>
+  <rect class="ws-c ws-blue"   x="48" y="16" width="64" height="64" fill="#0a6cff"/>
+  <rect class="ws-c ws-navy"   x="48" y="48" width="32" height="32" fill="#001842"/>
+</svg>

@@ -10,6 +10,7 @@ import type { RecoveryActionId } from './RecoveryManager.ts'
 import type { SetupEvent, MainState } from '../core/states.ts'
 import type { RecoveryView, SetupApi, SetupView } from '../../../lib/setupApi'
 import InstallationLogViewer from './InstallationLogViewer'
+import { WorkSuiteLoader } from '../../WorkSuiteLoader'
 
 const stepName = (s: MainState | null) => (s ? t(`sw.step.${s}` as MessageKey) : '—')
 
@@ -35,7 +36,7 @@ export default function RecoveryScreen({ api, view, send, busy, onExit, extra }:
 
   if (view.state === 'ROLLING_BACK') return (
     <Shell><div role="status" aria-live="polite" className="flex flex-col items-center gap-4 py-10">
-      <span aria-hidden className="size-10 animate-spin rounded-full border-[3px] border-[rgba(127,178,255,0.25)] border-t-[#7FB2FF] motion-reduce:animate-none" />
+      <WorkSuiteLoader size={56} decorative />
       <p className="m-0 text-lg font-semibold">{t('swr.rolling')}</p>
     </div></Shell>
   )

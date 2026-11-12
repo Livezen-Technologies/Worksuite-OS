@@ -1,5 +1,5 @@
 # WorkSuite OS boot splash (design: "WorkSuite OS Boot & Install" > BootSplash, 1280x800 board).
-# One centred column, 28 px apart: the mark in a spinning ring (120 px), the title (Plex Sans Medium 28) over the
+# One centred column, 28 px apart: the WorkSuite loader (the mark assembling, 120 px), the title (Plex Sans Medium 28) over the
 # subtitle (Plex Sans 15, #8FA3C8), then a 420 x 4 progress bar with the phase on the left and "WorkSuite OS <version>" (filled in at package build)
 # on the right (Plex Mono 12, #5E739C); "Press Esc for details" sits 32 px from the bottom (Plex Mono 12, #3D5280).
 # Modes (Plymouth.GetMode): boot -> "Booting…", shutdown -> "Shutting down…", reboot -> "Restarting…",
@@ -61,14 +61,70 @@ title_y = ring_y + 148 * S;
 sub_y = title_y + 47 * S;
 track_y = sub_y + 48 * S;
 
-ring.track = Sprite(img("ring-track"));
-ring.track.SetPosition(cx - 60 * S, ring_y, 1);
-ring.arc_image = img("ring-arc");
-ring.arc = Sprite(ring.arc_image);
-ring.arc.SetPosition(cx - 60 * S, ring_y, 2);
-ring.angle = 0;
-mark = Sprite(img("mark"));
-mark.SetPosition(cx - 24 * S, ring_y + 36 * S, 3);
+# Loader: the WorkSuite mark assembling (the brand "assemble" loader, branding/loaders/worksuite-loader-assemble.svg,
+# 2.4 s loop), replayed here with four solid cells because Plymouth cannot run SVG/CSS animation. The shell's
+# loader (shell/src/components/WorkSuiteLoader.tsx) plays the same keyframes, so shutdown continues the same motion.
+# Geometry is the SVG's 128-unit grid drawn 120 px wide: cyan left cell, cyan bottom cell, blue square, navy overlap.
+U = 120 * S / 128;
+LX = cx - 60 * S;
+LY = ring_y;
+cell.left = Sprite(img("cell-cyan"));
+cell.bottom = Sprite(img("cell-cyan"));
+cell.blue_image = img("cell-blue");
+cell.blue = Sprite(cell.blue_image);
+cell.navy_image = img("cell-navy");
+cell.navy = Sprite(cell.navy_image);
+cell.t = 0;
+cell.alpha = 1;
+# Keyframes as (time 0..1, value) lists; each span eases like the SVG's cubic-bezier(.5,0,.2,1) (smootherstep).
+fun ease(x) { return x * x * x * (x * (x * 6 - 15) + 10); }
+fun kf(t, ts, vs, n) {
+  if (t <= ts[0]) return vs[0];
+  for (k = 1; k < n; k++) {
+    if (t <= ts[k]) {
+      if (ts[k] == ts[k - 1]) return vs[k];
+      return vs[k - 1] + (vs[k] - vs[k - 1]) * ease((t - ts[k - 1]) / (ts[k] - ts[k - 1]));
+    }
+  }
+  return vs[n - 1];
+}
+# left: slides in from 28 units left; bottom: rises from 28 below; blue: grows from its top-right corner (overshoot
+# 1.06); navy: grows from its centre once both layers meet. Opacity follows each piece in and out.
+kl.t[0] = 0; kl.t[1] = 0.14; kl.t[2] = 0.70; kl.t[3] = 0.86; kl.t[4] = 1;
+kl.v[0] = 1; kl.v[1] = 0;    kl.v[2] = 0;    kl.v[3] = 1;    kl.v[4] = 1;
+kb.t[0] = 0; kb.t[1] = 0.08; kb.t[2] = 0.22; kb.t[3] = 0.74; kb.t[4] = 0.90; kb.t[5] = 1;
+kb.v[0] = 1; kb.v[1] = 1;    kb.v[2] = 0;    kb.v[3] = 0;    kb.v[4] = 1;    kb.v[5] = 1;
+kq.t[0] = 0; kq.t[1] = 0.16; kq.t[2] = 0.32; kq.t[3] = 0.38; kq.t[4] = 0.66; kq.t[5] = 0.82; kq.t[6] = 1;
+kq.v[0] = 0; kq.v[1] = 0;    kq.v[2] = 1.06; kq.v[3] = 1;    kq.v[4] = 1;    kq.v[5] = 0;    kq.v[6] = 0;
+kn.t[0] = 0; kn.t[1] = 0.34; kn.t[2] = 0.44; kn.t[3] = 0.62; kn.t[4] = 0.72; kn.t[5] = 1;
+kn.v[0] = 0; kn.v[1] = 0;    kn.v[2] = 1;    kn.v[3] = 1;    kn.v[4] = 0;    kn.v[5] = 0;
+fun clamp01(v) { if (v < 0) return 0; if (v > 1) return 1; return v; }
+fun draw_loader() {
+  t = cell.t / 120;                                      # 2.4 s at 50 Hz
+  a = cell.alpha;
+  off = kf(t, kl.t, kl.v, 5);                            # 1 = away (28 units, transparent), 0 = in place
+  cell.left.SetPosition(Math.Int(LX + (16 - 28 * off) * U), Math.Int(LY + 48 * U), 3);
+  cell.left.SetOpacity(a * (1 - off));
+  off = kf(t, kb.t, kb.v, 6);
+  cell.bottom.SetPosition(Math.Int(LX + 48 * U), Math.Int(LY + (80 + 28 * off) * U), 3);
+  cell.bottom.SetOpacity(a * (1 - off));
+  sc = kf(t, kq.t, kq.v, 7);
+  w = Math.Int(64 * U * sc + 0.5);
+  if (w < 1) { cell.blue.SetOpacity(0); }
+  else {
+    cell.blue.SetImage(cell.blue_image.Scale(w, w));
+    cell.blue.SetPosition(Math.Int(LX + 112 * U - w), Math.Int(LY + 16 * U), 4);
+    cell.blue.SetOpacity(a * clamp01(sc));
+  }
+  sc = kf(t, kn.t, kn.v, 6);
+  w = Math.Int(32 * U * sc + 0.5);
+  if (w < 1) { cell.navy.SetOpacity(0); }
+  else {
+    cell.navy.SetImage(cell.navy_image.Scale(w, w));
+    cell.navy.SetPosition(Math.Int(LX + 64 * U - w / 2), Math.Int(LY + 64 * U - w / 2), 5);
+    cell.navy.SetOpacity(a * sc);
+  }
+}
 
 # Mode: title and subtitle.
 mode = Plymouth.GetMode();
@@ -121,11 +177,12 @@ fun apply_fade() {
   else { p = fade.t / fade.frames; a = 1 - (1 - p) * (1 - p) * (1 - p); }   # ease-out cubic
   if (a == fade.value) return;
   fade.value = a;
-  ring.track.SetOpacity(a); ring.arc.SetOpacity(a); mark.SetOpacity(a);
+  cell.alpha = a;
   title.SetOpacity(a); sub.SetOpacity(a); track.sprite.SetOpacity(a); bar.sprite.SetOpacity(a);
   brand.SetOpacity(a); phase.SetOpacity(a); hint.SetOpacity(a);
 }
 apply_fade();
+draw_loader();
 
 fun set_phase(p) {
   if (p != last_phase) {
@@ -181,9 +238,9 @@ fun step_shimmer() {
 }
 
 fun refresh_callback() {
-  ring.angle += 0.0898;                                  # one turn per 1.4 s at Plymouth's 50 Hz refresh
-  if (ring.angle > 6.2832) ring.angle -= 6.2832;
-  ring.arc.SetImage(ring.arc_image.Rotate(ring.angle));
+  cell.t += 1;
+  if (cell.t >= 120) cell.t = 0;
+  draw_loader();
   if (fade.t < fade.frames) { fade.t++; apply_fade(); }
   step_bar();
   step_shimmer();

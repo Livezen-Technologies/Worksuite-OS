@@ -22,6 +22,7 @@ import officePng from '../../assets/brand/worksuite-office.png'
 import posPng from '../../assets/brand/worksuite-pos.png'
 import deskPng from '../../assets/brand/worksuite-desk.png'
 import frameflowPng from '../../assets/brand/worksuite-frameflow.png'
+import { WorkSuiteLoader } from '../WorkSuiteLoader'
 
 export const WORKSUITE_APPS = ['worksuite-desktop', 'worksuite-office', 'worksuite-pos', 'worksuite-desk', 'worksuite-frameflow'] as const
 export const THIRD_PARTY_APPS = ['firefox-esr', 'vlc', 'gimp', 'thunderbird'] as const
@@ -159,7 +160,7 @@ function Frame({ children }: { children: ReactNode }) {
   return <main className="ws-setup-bg flex h-full w-full overflow-hidden font-sans text-[#E8EEFA]" style={{ '--ws-setup-bg': BG.setupCenter } as React.CSSProperties}>{children}</main>
 }
 const Center = ({ children }: { children: ReactNode }) => <section className="m-auto flex w-full max-w-[620px] flex-col items-center gap-3 py-6 text-center">{children}</section>
-const Spinner = ({ size = 36 }: { size?: number }) => <span aria-hidden style={{ width: size, height: size }} className="animate-spin rounded-full border-[3px] border-[rgba(127,178,255,0.2)] border-t-[#7FB2FF] motion-reduce:animate-none" />
+const Spinner = ({ size = 48 }: { size?: number }) => <WorkSuiteLoader size={size} decorative />
 
 type AskProps = {
   state: MainState; answers: Record<string, unknown>; answer: (k: string, v: unknown) => Promise<boolean>; fieldErrors: Record<string, string>
