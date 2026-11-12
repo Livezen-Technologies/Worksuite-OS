@@ -3,6 +3,10 @@ set -e
 # /etc/pam.d/greetd is WorkSuite's (services/session/pam/greetd); greetd's own file is kept as greetd.distrib.
 if [ "$1" = install ] || [ "$1" = upgrade ]; then
   dpkg-divert --package worksuite-session --add --rename --divert /etc/pam.d/greetd.distrib /etc/pam.d/greetd
+  # GDM (installed systems): WorkSuite's gdm-password (no second keyring pass) and GNOME Shell's theme with the
+  # WorkSuite sign-in look, built from the stock file by worksuite-gdm-theme (postinst and the dpkg trigger).
+  dpkg-divert --package worksuite-session --add --rename --divert /etc/pam.d/gdm-password.distrib /etc/pam.d/gdm-password
+  dpkg-divert --package worksuite-session --add --rename --divert /usr/share/gnome-shell/gnome-shell-theme.gresource.distrib /usr/share/gnome-shell/gnome-shell-theme.gresource
 fi
 #DEBHELPER#
 exit 0

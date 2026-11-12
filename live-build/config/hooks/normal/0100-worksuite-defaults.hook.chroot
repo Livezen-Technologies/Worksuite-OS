@@ -14,6 +14,12 @@ vt = 1
 command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-gnome-session"
 user = "_greetd"
 CONF
+# gdm3 is installed for the installed system (installer: worksuite-use-gdm); its postinst claimed display-manager.service.
+# The live ISO keeps greetd (installer and offline-update windows run in greetd's session).
+systemctl disable gdm3.service >/dev/null 2>&1 || true
+rm -f /etc/systemd/system/display-manager.service
+echo /usr/sbin/greetd > /etc/X11/default-display-manager
+[ -x /usr/libexec/worksuite/worksuite-use-gdm ] || { echo "worksuite-use-gdm missing: installed systems would have no lock screen" >&2; exit 1; }
 systemctl enable greetd.service worksuite-device-agent.service worksuite-power-events.service worksuite-package-service.service worksuite-boot-marker.service
 # WorkSuite Security (#64): virus definitions. clamav-freshclam's postinst only enables its daemon through debconf and
 # update-rc.d, which left it disabled in the image: /var/lib/clamav stayed empty, clamscan exited 2 at once and Quick

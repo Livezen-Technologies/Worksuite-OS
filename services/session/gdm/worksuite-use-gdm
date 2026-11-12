@@ -1,0 +1,38 @@
+#!/bin/sh
+# Installed systems sign in through GDM (GNOME's display manager): its lock screen is the only supported one for
+# GNOME Shell, and it carries the WorkSuite look (worksuite-gdm-theme). The live ISO keeps greetd (installer and
+# offline-update windows run in greetd's session), so the installer runs this in the new system (shellprocess).
+#   worksuite-use-gdm   (root, in the target system)
+set -eu
+CONF=${WORKSUITE_GDM_CONF:-/etc/gdm3/daemon.conf}
+[ -x /usr/sbin/gdm3 ] || { echo "worksuite-use-gdm: gdm3 is not installed; keeping greetd" >&2; exit 0; }
+# daemon.conf: Wayland, the WorkSuite session for people with no saved choice, no automatic sign-in (WSOS-AUTH-002;
+# worksuite-autologin turns it on only by explicit configuration).
+mkdir -p "$(dirname "$CONF")"
+cat > "$CONF" <<'C'
+# WorkSuite OS (worksuite-use-gdm). Automatic sign-in: worksuite-autologin only (WSOS-AUTH-002).
+[daemon]
+WaylandEnable=true
+DefaultSession=worksuite-gnome.desktop
+AutomaticLoginEnable=false
+
+[security]
+DisallowTCP=true
+
+[xdmcp]
+Enable=false
+
+[chooser]
+
+[debug]
+Enable=false
+C
+echo /usr/sbin/gdm3 > /etc/X11/default-display-manager
+systemctl disable greetd.service >/dev/null 2>&1 || true
+systemctl enable gdm3.service >/dev/null 2>&1 || systemctl enable gdm.service
+# Every existing person starts in the WorkSuite session (AccountsService keeps GDM's per-user choice).
+for d in /var/lib/AccountsService/users/*; do
+  [ -f "$d" ] || continue
+  grep -q '^Session=' "$d" || printf 'Session=worksuite-gnome\n' >> "$d"
+done
+echo "worksuite-use-gdm: GDM is the display manager"

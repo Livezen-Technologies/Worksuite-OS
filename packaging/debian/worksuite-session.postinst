@@ -1,6 +1,16 @@
 #!/bin/sh
 set -e
+if [ "$1" = triggered ]; then
+  # gnome-shell-common replaced the stock theme (now .distrib): rebuild the WorkSuite sign-in look on top of it.
+  /usr/libexec/worksuite/worksuite-gdm-theme || true
+  exit 0
+fi
 if [ "$1" = configure ]; then
+  /usr/libexec/worksuite/worksuite-gdm-theme || true
+  # GDM's greeter defaults (logo, fonts, dark): GDM reads the "gdm" dconf database.
+  install -d -m 0755 /etc/dconf/db/gdm.d
+  install -m 0644 /usr/share/worksuite/gdm/dconf/90-worksuite /etc/dconf/db/gdm.d/90-worksuite
+  if command -v dconf >/dev/null 2>&1; then dconf update || true; fi
   # pam_faillock reads its thresholds from here (WSOS-AUTH-004); the device agent rewrites it from policy. Never
   # overwritten once present, and it must exist before the PAM profiles name it.
   install -d -m 0755 /etc/worksuite

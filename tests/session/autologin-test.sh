@@ -41,5 +41,26 @@ $A enable --personal nimali >/dev/null 2>&1 && bad "managed device: personal ref
 $A enable --kiosk nimali >/dev/null 2>&1 && bad "kiosk: only the policy's account" || ok "kiosk: only the policy's account"
 $A enable --kiosk kiosk >/dev/null && ok "kiosk: policy account enabled" || bad "kiosk: policy account enabled"
 [ "$(grep -c '^\[initial_session\]' "$T/config.toml")" = 1 ] && ok "one initial_session" || bad "one initial_session"
+
+# GDM (installed systems, worksuite-use-gdm): the same rules, written to GDM's daemon.conf and AccountsService.
+rm -f "$T/state.json"
+U=$ROOT/services/session/gdm/worksuite-use-gdm
+sed -n "/^cat > \"\$CONF\" <<'C'$/,/^C$/p" "$U" | sed '1d;$d' > "$T/daemon.conf"
+grep -qx 'AutomaticLoginEnable=false' "$T/daemon.conf" && ok "gdm: shipped daemon.conf has no automatic sign-in" || bad "gdm: shipped daemon.conf has no automatic sign-in"
+grep -qx 'DefaultSession=worksuite-gnome.desktop' "$T/daemon.conf" && ok "gdm: WorkSuite session by default" || bad "gdm: WorkSuite session by default"
+echo /usr/sbin/gdm3 > "$T/dm"; mkdir -p "$T/accounts"
+export WORKSUITE_GDM_CONF="$T/daemon.conf" WORKSUITE_DM_FILE="$T/dm" WORKSUITE_ACCOUNTS_DIR="$T/accounts"
+[ "$($A status)" = disabled ] && ok "gdm: status disabled" || bad "gdm: status disabled"
+$A enable --personal hasarinda >/dev/null 2>&1 && bad "gdm: administrators refused" || ok "gdm: administrators refused"
+$A enable --personal nimali >/dev/null && ok "gdm: personal device enabled" || bad "gdm: personal device enabled"
+[ "$(sed -n '/^\[daemon\]$/,/^\[/p' "$T/daemon.conf" | grep -c '^AutomaticLogin')" = 2 ] && grep -qx 'AutomaticLogin=nimali' "$T/daemon.conf" && grep -qx 'AutomaticLoginEnable=true' "$T/daemon.conf" \
+  && ok "gdm: [daemon] AutomaticLogin written once" || bad "gdm: [daemon] AutomaticLogin written once"
+grep -qx 'DisallowTCP=true' "$T/daemon.conf" && grep -qx 'WaylandEnable=true' "$T/daemon.conf" && ok "gdm: other settings kept" || bad "gdm: other settings kept"
+grep -qx 'Session=worksuite-gnome' "$T/accounts/nimali" && ok "gdm: the account signs in to the WorkSuite session" || bad "gdm: the account signs in to the WorkSuite session"
+[ "$($A status)" = "enabled: nimali" ] && ok "gdm: status enabled" || bad "gdm: status enabled"
+$A enable --personal nimali >/dev/null; [ "$(grep -c '^AutomaticLogin=' "$T/daemon.conf")" = 1 ] && ok "gdm: enabling twice keeps one entry" || bad "gdm: enabling twice keeps one entry"
+$A disable >/dev/null
+grep -qx 'AutomaticLoginEnable=false' "$T/daemon.conf" && ! grep -q '^AutomaticLogin=' "$T/daemon.conf" && ok "gdm: disable turns it off" || bad "gdm: disable turns it off"
+[ "$($A status)" = disabled ] && ok "gdm: status disabled again" || bad "gdm: status disabled again"
 echo "1..$n"
 exit $fail

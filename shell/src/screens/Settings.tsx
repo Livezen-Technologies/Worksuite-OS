@@ -36,6 +36,7 @@ import { CloudSignIn } from './settings/CloudSignIn'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
 import { UpdatesPanel } from './Updates'
+import { PersonalizationPanel } from './settings/Personalization'
 import { DeviceProblemDialog, DevicesPanel, DriversPanel, Empty } from './Hardware'
 import { formatDate, formatNumber, t, type MessageKey } from '../i18n'
 
@@ -50,6 +51,7 @@ const NAV = [
   { id: 'Multitasking', tint: '#0E8FA8', icon: 'M3 5h8v6H3zM13 5h8v6h-8zM3 15h18v4H3z' },
   { id: 'Keyboard', tint: '#7A4FE0', icon: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10' },
   { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
+  { id: 'Personalization', tint: '#7A4FE0', icon: 'M4 18h16M4 18V6h16v12M8 14h8M9 22h6M12 18v4' },
   { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
   { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
   { id: 'Clipboard', tint: '#0E8FA8', icon: 'M9 4h6v3H9zM7 5H5v16h14V5h-2' },
@@ -71,7 +73,7 @@ export type Section = (typeof NAV)[number]['id']
 const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
 const navLabel = (id: Section) => t(`settings.nav.${id}` as MessageKey)
 // Older names (launcher search, earlier builds) still land somewhere sensible.
-const ALIAS: Record<string, Section> = { Time: 'Date & time', Clock: 'Date & time', 'Time zone': 'Date & time', Date: 'Date & time', 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Mouse: 'Mouse & touchpad', Touchpad: 'Mouse & touchpad', Pointer: 'Mouse & touchpad', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard', GPU: 'Graphics', 'Hardware acceleration': 'Graphics' }
+const ALIAS: Record<string, Section> = { Taskbar: 'Personalization', 'Visual effects': 'Personalization', Glass: 'Personalization', 'Glass effects': 'Personalization', Time: 'Date & time', Clock: 'Date & time', 'Time zone': 'Date & time', Date: 'Date & time', 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Mouse: 'Mouse & touchpad', Touchpad: 'Mouse & touchpad', Pointer: 'Mouse & touchpad', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard', GPU: 'Graphics', 'Hardware acceleration': 'Graphics' }
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
 /** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
@@ -992,6 +994,7 @@ export default function Settings({ onClose, active }: WindowProps) {
         {section === 'Clipboard' && (gnome ? <GnomeHandoff section="Clipboard" /> : <ClipboardPanel />)}
         {section === 'Appearance' && (gnome ? <GnomeHandoff section="Appearance" /> : <AppearancePanel />)}
         {section === 'Multitasking' && (gnome ? <GnomeHandoff section="Multitasking" /> : <MultitaskingPanel />)}
+        {section === 'Personalization' && <PersonalizationPanel />}
         {section === 'Sound' && <SoundPanel />}
         {section === 'Notifications' && (gnome ? <GnomeHandoff section="Notifications" /> : <NotificationsPanel />)}
         {section === 'Date & time' && <DateTimePanel />}

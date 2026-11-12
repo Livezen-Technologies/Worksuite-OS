@@ -1,0 +1,108 @@
+# WorkSuite desktop (1.1): taskbar, Start menu, tray, tiling and the optional glass look, all from Debian's packaged
+# GNOME Shell 48 extensions, configured here. These are defaults: people change them in WorkSuite Settings ›
+# Personalization (which writes the same keys) and organizations lock them with dconf. Every key below exists in the
+# trixie package's schema (checked by tests/session/desktop-schema-test.sh against the packages' own schema files).
+# Taskbar layout per monitor index 0-3 (dash-to-panel falls back to the index when a monitor id is not stored yet).
+
+[org.gnome.shell]
+enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com', 'dash-to-panel@jderose9.github.com', 'arcmenu@arcmenu.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@leleat-on-github', 'blur-my-shell@aunetx']
+
+# Taskbar: one bottom bar, 48 px, centred Start button and app icons (left-aligned is one switch away), tray, clock,
+# Quick Settings and the notification list on the right, on every monitor. Running apps are grouped with a dot.
+[org.gnome.shell.extensions.dash-to-panel]
+panel-position='BOTTOM'
+panel-sizes='{"0":48,"1":48,"2":48,"3":48}'
+panel-element-positions='{"0":[{"element":"showAppsButton","visible":false,"position":"stackedTL"},{"element":"activitiesButton","visible":false,"position":"stackedTL"},{"element":"leftBox","visible":true,"position":"stackedTL"},{"element":"centerBox","visible":true,"position":"centerMonitor"},{"element":"taskbar","visible":true,"position":"centerMonitor"},{"element":"rightBox","visible":true,"position":"stackedBR"},{"element":"systemMenu","visible":true,"position":"stackedBR"},{"element":"dateMenu","visible":true,"position":"stackedBR"},{"element":"desktopButton","visible":true,"position":"stackedBR"}],"1":[{"element":"showAppsButton","visible":false,"position":"stackedTL"},{"element":"activitiesButton","visible":false,"position":"stackedTL"},{"element":"leftBox","visible":true,"position":"stackedTL"},{"element":"centerBox","visible":true,"position":"centerMonitor"},{"element":"taskbar","visible":true,"position":"centerMonitor"},{"element":"rightBox","visible":true,"position":"stackedBR"},{"element":"systemMenu","visible":true,"position":"stackedBR"},{"element":"dateMenu","visible":true,"position":"stackedBR"},{"element":"desktopButton","visible":true,"position":"stackedBR"}],"2":[{"element":"showAppsButton","visible":false,"position":"stackedTL"},{"element":"activitiesButton","visible":false,"position":"stackedTL"},{"element":"leftBox","visible":true,"position":"stackedTL"},{"element":"centerBox","visible":true,"position":"centerMonitor"},{"element":"taskbar","visible":true,"position":"centerMonitor"},{"element":"rightBox","visible":true,"position":"stackedBR"},{"element":"systemMenu","visible":true,"position":"stackedBR"},{"element":"dateMenu","visible":true,"position":"stackedBR"},{"element":"desktopButton","visible":true,"position":"stackedBR"}],"3":[{"element":"showAppsButton","visible":false,"position":"stackedTL"},{"element":"activitiesButton","visible":false,"position":"stackedTL"},{"element":"leftBox","visible":true,"position":"stackedTL"},{"element":"centerBox","visible":true,"position":"centerMonitor"},{"element":"taskbar","visible":true,"position":"centerMonitor"},{"element":"rightBox","visible":true,"position":"stackedBR"},{"element":"systemMenu","visible":true,"position":"stackedBR"},{"element":"dateMenu","visible":true,"position":"stackedBR"},{"element":"desktopButton","visible":true,"position":"stackedBR"}]}'
+panel-element-positions-monitors-sync=true
+multi-monitors=true
+stockgs-keep-top-panel=false
+appicon-margin=4
+appicon-padding=6
+dot-position='BOTTOM'
+dot-style-focused='DASHES'
+dot-style-unfocused='DOTS'
+focus-highlight=true
+focus-highlight-opacity=18
+show-window-previews=true
+show-favorites=true
+group-apps=true
+isolate-workspaces=false
+intellihide=false
+trans-use-custom-bg=true
+trans-bg-color='#061029'
+trans-use-custom-opacity=true
+trans-panel-opacity=0.62
+trans-use-dynamic-opacity=false
+hot-keys=false
+show-showdesktop-hover=false
+
+# Start menu: WorkSuite button in the taskbar centre, pinned apps, all apps, search (local .desktop files only:
+# no file indexer, no web results), user, Settings, Files and the power actions (lock, log out, restart, shut down).
+[org.gnome.shell.extensions.arcmenu]
+menu-layout='Eleven'
+position-in-panel='Center'
+menu-button-icon='Custom_Icon'
+custom-menu-button-icon='/usr/share/icons/hicolor/scalable/apps/worksuite-os.svg'
+custom-menu-button-icon-size=24.0
+arcmenu-hotkey=['Super_L']
+multi-monitor=true
+default-menu-view='Pinned_Apps'
+search-provider-open-windows=false
+search-provider-recent-files=true
+max-search-results=8
+power-options=[(0, true), (1, true), (2, true), (3, true), (4, false), (5, false), (6, false), (7, false)]
+pinned-apps=[{'id': 'worksuite-app.desktop'}, {'id': 'worksuite-office.desktop'}, {'id': 'worksuite-files.desktop'}, {'id': 'firefox-esr.desktop'}, {'id': 'org.gnome.Nautilus.desktop'}, {'id': 'worksuite-settings.desktop'}, {'id': 'org.gnome.TextEditor.desktop'}, {'id': 'org.gnome.Calculator.desktop'}, {'id': 'org.gnome.Console.desktop'}, {'id': 'org.gnome.SystemMonitor.desktop'}]
+eleven-layout-extra-shortcuts=[{'id': 'org.gnome.Nautilus.desktop'}, {'id': 'worksuite-settings.desktop'}]
+override-menu-theme=true
+menu-background-color='rgba(10,22,52,0.86)'
+menu-foreground-color='rgb(232,238,250)'
+menu-border-color='rgba(127,178,255,0.22)'
+menu-border-width=1
+menu-border-radius=14
+menu-separator-color='rgba(127,178,255,0.14)'
+menu-item-hover-bg-color='rgba(31,107,255,0.28)'
+menu-item-hover-fg-color='rgb(255,255,255)'
+menu-item-active-bg-color='rgb(31,107,255)'
+menu-item-active-fg-color='rgb(255,255,255)'
+
+# Tray: StatusNotifierItem/AppIndicator icons next to the clock.
+[org.gnome.shell.extensions.appindicator]
+tray-pos='right'
+icon-size=18
+
+# Snap: drag to an edge for halves (Mutter), to a corner for quarters, Super+arrows; no gaps.
+[org.gnome.shell.extensions.tiling-assistant]
+enable-tiling-popup=true
+window-gap=0
+single-screen-gap=0
+tile-topleft-quarter=['<Super>KP_7']
+tile-topright-quarter=['<Super>KP_9']
+tile-bottomleft-quarter=['<Super>KP_1']
+tile-bottomright-quarter=['<Super>KP_3']
+
+# Glass (on by default, Settings › Personalization › Visual effects turns it off): static blur only, behind the
+# taskbar, overview, app folders and lock screen; never behind app windows; the cheapest pipeline (hacks-level 0).
+[org.gnome.shell.extensions.blur-my-shell]
+hacks-level=0
+sigma=24
+brightness=0.7
+[org.gnome.shell.extensions.blur-my-shell.panel]
+blur=true
+static-blur=true
+override-background=false
+[org.gnome.shell.extensions.blur-my-shell.overview]
+blur=true
+[org.gnome.shell.extensions.blur-my-shell.appfolder]
+blur=true
+[org.gnome.shell.extensions.blur-my-shell.lockscreen]
+blur=true
+[org.gnome.shell.extensions.blur-my-shell.applications]
+blur=false
+[org.gnome.shell.extensions.blur-my-shell.dash-to-dock]
+blur=false
+[org.gnome.shell.extensions.blur-my-shell.screenshot]
+blur=false
+[org.gnome.shell.extensions.blur-my-shell.window-list]
+blur=false
+[org.gnome.shell.extensions.blur-my-shell.dash-to-panel]
+blur-original-panel=true

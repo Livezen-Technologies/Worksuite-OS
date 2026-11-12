@@ -2,6 +2,11 @@
 set -e
 if [ "$1" = remove ] || [ "$1" = purge ] || [ "$1" = abort-install ]; then
   dpkg-divert --package worksuite-session --remove --rename --divert /etc/pam.d/greetd.distrib /etc/pam.d/greetd
+  dpkg-divert --package worksuite-session --remove --rename --divert /etc/pam.d/gdm-password.distrib /etc/pam.d/gdm-password
+  # Our built theme is not dpkg's file: remove it so the stock one can be renamed back.
+  rm -f /usr/share/gnome-shell/gnome-shell-theme.gresource
+  dpkg-divert --package worksuite-session --remove --rename --divert /usr/share/gnome-shell/gnome-shell-theme.gresource.distrib /usr/share/gnome-shell/gnome-shell-theme.gresource
+  rm -f /etc/dconf/db/gdm.d/90-worksuite
 fi
 #DEBHELPER#
 exit 0

@@ -1,0 +1,52 @@
+/* WorkSuite sign-in and lock screen on GDM / GNOME Shell 48 (appended to the stock theme by worksuite-gdm-theme).
+ * The look of the WorkSuite greeter (services/session/greeter/worksuite_greeter/ui.py): the WorkSuite wallpaper,
+ * a large clock, one glass card with the person's round avatar, the password field and a blue button, IBM Plex Sans.
+ * Only the login/unlock classes are touched; everything else stays the stock theme. St has no radial gradients, so
+ * the wallpaper image carries the glow. */
+#lockDialogGroup { background: #061029 url("file:///usr/share/backgrounds/worksuite/default.png"); background-size: cover; background-position: center; }
+.login-dialog, .unlock-dialog { font-family: "IBM Plex Sans", sans-serif; color: #ffffff; background-color: transparent; }
+.login-dialog { background-color: rgba(4, 10, 26, 0.35); }
+
+/* The card: user list and prompt sit on one translucent navy panel with a soft shadow. */
+.login-dialog-user-selection-box, .login-dialog-prompt-layout, .unlock-dialog .login-dialog-prompt-layout {
+  background-color: rgba(8, 20, 48, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 28px;
+  padding: 36px 40px 28px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.40); }
+.login-dialog-user-selection-box { padding: 20px 16px; }
+.login-dialog-user-list-view { -st-vfade-offset: 1em; }
+.login-dialog-user-list-item { border-radius: 16px; padding: 10px 14px; }
+.login-dialog-user-list-item:hover, .login-dialog-user-list-item:focus { background-color: rgba(31, 107, 255, 0.22); }
+.login-dialog-user-list-item:selected { background-color: rgba(31, 107, 255, 0.35); }
+
+/* The person: big round avatar with the WorkSuite ring, name in semibold. */
+.user-icon { border-radius: 999px; background-color: rgba(31, 107, 255, 0.9); color: #ffffff;
+  border: 3px solid rgba(24, 212, 240, 0.55); box-shadow: 0 0 0 9px rgba(31, 107, 255, 0.16); }
+.user-icon StIcon { background-color: transparent; color: #ffffff; }
+.user-widget-label, .login-dialog-username { color: #ffffff; font-weight: 600; font-size: 22pt; }
+
+/* Password field and buttons. */
+.login-dialog-prompt-entry, .unlock-dialog StPasswordEntry, .login-dialog StEntry {
+  background-color: rgba(4, 10, 26, 0.60); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: 14px; padding: 10px 14px; min-height: 26px; caret-color: #7fb2ff; selection-background-color: #1f6bff; }
+.login-dialog-prompt-entry:focus, .unlock-dialog StPasswordEntry:focus, .login-dialog StEntry:focus {
+  border-color: #7fb2ff; box-shadow: 0 0 0 3px rgba(127, 178, 255, 0.18); }
+.login-dialog-prompt-label { color: #c9d6ee; font-size: 11pt; }
+.login-dialog-message-warning { color: #ffd58a; }
+.login-dialog-message { color: rgba(255, 255, 255, 0.75); }
+.login-dialog-message.login-dialog-message-warning, .login-dialog .login-dialog-message-hint { color: rgba(255, 255, 255, 0.6); }
+.login-dialog-button, .login-dialog .modal-dialog-button, .unlock-dialog .modal-dialog-button {
+  background-color: rgba(14, 32, 72, 0.6); color: #e8eefa; border: 1px solid rgba(127, 178, 255, 0.18); border-radius: 12px; }
+.login-dialog-button:hover, .login-dialog .modal-dialog-button:hover { background-color: rgba(255, 255, 255, 0.12); }
+.login-dialog-button.a11y-button, .login-dialog-button.switch-user-button, .login-dialog-session-list-button { border-radius: 12px; }
+.login-dialog-button.cancel-button { color: #c9d6ee; }
+.login-dialog-not-listed-label { color: #7fb2ff; }
+.login-dialog-not-listed-button:hover .login-dialog-not-listed-label, .login-dialog-not-listed-button:focus .login-dialog-not-listed-label { color: #b8d4ff; }
+
+/* Lock screen clock: large and light, like the greeter's wall clock. */
+.unlock-dialog-clock-time { font-size: 72pt; font-weight: 300; color: rgba(255, 255, 255, 0.92); }
+.unlock-dialog-clock-date { font-size: 16pt; color: rgba(255, 255, 255, 0.78); }
+.unlock-dialog-clock-hint { color: rgba(255, 255, 255, 0.6); }
+.unlock-dialog-notifications-container .notification, .unlock-dialog-notification-source { background-color: rgba(8, 20, 48, 0.72); border-radius: 16px; }
+
+/* Top bar on the sign-in screen: transparent over the wallpaper. */
+#panel.login-screen, #panel.unlock-screen, #panel.lock-screen { background-color: transparent; }
+.login-dialog-logo-bin { padding: 24px 0; }

@@ -51,6 +51,7 @@ import { arrange, displayManager, outputRects, type DisplayState } from './displ
 import type { Layout } from './displays'
 import { outputWindows, screensMatch, type Rect } from './outputWindows'
 import { realExec } from './system'
+import { cleanLookChange, makeDesktopLook } from './desktopLook'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
 import { powerArgs, startSessionHost } from './sessionHost'
@@ -289,6 +290,13 @@ app.whenReady().then(() => {
       c.once('error', () => resolve({ ok: false, error: 'unavailable' }))
       c.once('spawn', () => { c.unref(); resolve({ ok: true }) })
     })
+  })
+  // Settings › Personalization (desktopLook.ts): only the known fields with known values reach gsettings.
+  const look = makeDesktopLook(realExec)
+  handle('ws:desktopLook', () => look.read())
+  handle('ws:setDesktopLook', (raw) => {
+    const c = cleanLookChange(raw)
+    return c ? look.apply(c) : { available: false, reason: 'invalid_argument' }
   })
   handle('ws:launchApp', (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined })
   // Settings: idle lock timeout within the policy maximum (WSOS-LOCK-003).

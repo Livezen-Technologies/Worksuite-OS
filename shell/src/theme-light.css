@@ -127,6 +127,7 @@
 :root[data-theme="light"] .hover\:bg-\[rgba\(16\,36\,80\,0\.6\)\]:not(.ws-dark-zone *, .ws-dark-zone):hover { background-color: rgba(251,252,254,0.94); }
 :root[data-theme="light"] .hover\:bg-\[rgba\(16\,36\,80\,0\.75\)\]:not(.ws-dark-zone *, .ws-dark-zone):hover { background-color: rgba(251,252,254,0.94); }
 :root[data-theme="light"] .hover\:bg-\[rgba\(20\,44\,96\,0\.7\)\]:not(.ws-dark-zone *, .ws-dark-zone):hover { background-color: rgba(251,252,254,0.94); }
+:root[data-theme="light"] .hover\:bg-\[rgba\(255\,255\,255\,0\.08\)\]:not(.ws-dark-zone *, .ws-dark-zone):hover { background-color: rgba(15,23,42,0.08); }
 :root[data-theme="light"] .hover\:bg-\[rgba\(8\,20\,48\,0\.75\)\]:not(.ws-dark-zone *, .ws-dark-zone):hover { background-color: rgba(235,239,247,0.94); }
 :root[data-theme="light"] .hover\:bg-\[rgba\(8\,20\,48\,0\.8\)\]:not(.ws-dark-zone *, .ws-dark-zone):hover { background-color: rgba(235,239,247,0.94); }
 :root[data-theme="light"] .hover\:bg-white\/10:not(.ws-dark-zone *, .ws-dark-zone):hover { background-color: rgba(15,23,42,0.08); }

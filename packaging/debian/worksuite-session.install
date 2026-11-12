@@ -81,5 +81,11 @@ services/session/gnome/worksuite-gnome-session usr/bin/
 services/session/gnome/worksuite.session usr/share/gnome-session/sessions/
 services/session/gnome/worksuite-gnome.desktop usr/share/wayland-sessions/
 services/session/gnome/95_worksuite-gnome.gschema.override usr/share/glib-2.0/schemas/
+services/session/gnome/96_worksuite-desktop.gschema.override usr/share/glib-2.0/schemas/
+services/session/gdm/worksuite-gdm.css usr/share/worksuite/gdm/
+services/session/gdm/worksuite-gdm-theme usr/libexec/worksuite/
+services/session/gdm/90-worksuite usr/share/worksuite/gdm/dconf/
+services/session/gdm/worksuite-use-gdm usr/libexec/worksuite/
+services/session/pam/gdm-password etc/pam.d/
 services/session/gnome/applications/worksuite-settings.desktop usr/share/applications/
 services/session/gnome/autostart/worksuite-setup.desktop etc/xdg/autostart/

@@ -253,3 +253,18 @@ gnome-control-center
 nautilus
 xdg-desktop-portal-gnome
 gnome-console
+
+# Desktop (1.1): GDM sign-in and lock screen, taskbar (dash-to-panel), Start menu (ArcMenu), tray (AppIndicator), corner
+# tiling, optional glass (blur-my-shell), and the everyday utilities a desktop needs. All Debian trixie packages.
+gdm3
+gnome-shell-extension-dash-to-panel
+gnome-shell-extension-arc-menu
+gnome-shell-extension-blur-my-shell
+gnome-shell-extension-appindicator
+gnome-shell-extension-tiling-assistant
+gnome-text-editor
+gnome-calculator
+loupe
+file-roller
+gnome-disk-utility
+gnome-system-monitor

@@ -1,5 +1,10 @@
 // Typed renderer API. In Electron the preload exposes `window.worksuite` with named functions only
 // (WSOS-SEC-001, §10.3); in a plain browser (dev/design review) a local stub answers instead.
+export type LookAnimations = 'off' | 'reduced' | 'standard'
+export interface DesktopLook { glass: boolean; transparency: boolean; animations: LookAnimations; taskbar: { align: 'center' | 'left'; size: number; position: 'BOTTOM' | 'TOP'; autohide: boolean } }
+export type DesktopLookChange = Partial<Omit<DesktopLook, 'taskbar'>> & { taskbar?: Partial<DesktopLook['taskbar']>; lightest?: boolean }
+export type DesktopLookResult = { available: true; value: DesktopLook } | { available: false; reason: string }
+
 export interface WorkSuiteApi {
   /** method 'pin' sends the PIN where the password goes; 'key' sends no secret (pam_u2f asks for a touch). */
   /** reason (PIN): 'pin_locked' after too many wrong PINs, 'unavailable' when the PIN service can't be reached. */
@@ -133,6 +138,9 @@ export interface WorkSuiteApi {
   onSettingsSection(cb: (section: string) => void): () => void
   /** GNOME session: open a GNOME Settings panel (allow-listed names only). */
   openGnomeSettings(panel: string): Promise<{ ok: true } | { ok: false; error: string }>
+  /** Settings › Personalization: glass, transparency, animations and the taskbar (electron/desktopLook.ts). */
+  desktopLook(): Promise<DesktopLookResult>
+  setDesktopLook(change: DesktopLookChange): Promise<DesktopLookResult>
   onOpenArchive(cb: (at: { root: string; rel: string }) => void): () => void
   filesEject(id: string): Promise<CloudResult<true>>
   /** This Computer (#63): disk partitions and volumes (udisks2). Errors: unavailable, failed. */
@@ -794,6 +802,12 @@ const stub: WorkSuiteApi = {
   },
   onSettingsSection() { return () => {} },
   async openGnomeSettings() { return { ok: false as const, error: 'unavailable' } },
+  async desktopLook() { return { available: true as const, value: { ...stubLook, taskbar: { ...stubLook.taskbar } } } },
+  async setDesktopLook(c) {
+    if (c.lightest) Object.assign(stubLook, { glass: false, transparency: false, animations: 'off' })
+    else { const { taskbar, lightest: _l, ...rest } = c; Object.assign(stubLook, rest); Object.assign(stubLook.taskbar, taskbar ?? {}) }
+    return { available: true as const, value: { ...stubLook, taskbar: { ...stubLook.taskbar } } }
+  },
   onOpenArchive() { return () => {} },
   async filesEject() { return { ok: false, error: 'unavailable' } },
   async filesVolumes() { return { ok: true, value: stubVolumes.map((v) => ({ ...v })) } },
@@ -1067,6 +1081,7 @@ if (typeof window !== 'undefined') {
 const stubJobs = new Map<string, { job: FileJob; paused: boolean; step: number }>()
 let stubJobSeq = 0
 const stubEmit = (e: FileJob) => stubFileJobs.forEach((l) => l(e))
+const stubLook: DesktopLook = { glass: true, transparency: true, animations: 'standard', taskbar: { align: 'center', size: 48, position: 'BOTTOM', autohide: false } }
 const stubVolumes: DiskVolume[] = [
   { device: '/dev/nvme0n1p2', disk: '/dev/nvme0n1', label: '', model: 'Samsung SSD 980', fstype: 'ext4', kind: 'system', size: 475e9, mountpoint: '/', total: 468e9, free: 301e9, encrypted: true, locked: false, readOnly: false, root: 'home' },
   { device: '/dev/sda1', disk: '/dev/sda', label: 'Data', model: 'WDC WD10EZEX', fstype: 'ntfs', kind: 'internal', size: 1e12, mountpoint: null, total: null, free: null, encrypted: false, locked: false, readOnly: false, root: null },

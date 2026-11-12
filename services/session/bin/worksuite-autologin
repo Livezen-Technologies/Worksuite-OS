@@ -4,9 +4,21 @@
 # WSOS-AUTH-002: automatic sign-in is off by default. It is turned on only by an explicit configuration:
 #   --personal  an unmanaged (not enrolled) personal device, for a standard (non-administrator) account;
 #   --kiosk     a managed device whose signed policy sets "kiosk_autologin_user" to this account.
-# It writes greetd's [initial_session] (the WorkSuite session as USER); `disable` removes it.
+# With GDM as the display manager (installed systems, worksuite-use-gdm) it sets GDM's AutomaticLogin in daemon.conf
+# and the person's session; otherwise greetd's [initial_session] (the WorkSuite session as USER). `disable` removes it.
 set -eu
 CONF=${WORKSUITE_GREETD_CONF:-/etc/greetd/config.toml}
+GDM_CONF=${WORKSUITE_GDM_CONF:-/etc/gdm3/daemon.conf}
+DM_FILE=${WORKSUITE_DM_FILE:-/etc/X11/default-display-manager}
+ACCOUNTS=${WORKSUITE_ACCOUNTS_DIR:-/var/lib/AccountsService/users}
+gdm() { grep -qs 'gdm3$' "$DM_FILE"; }
+gdm_set() {  # gdm_set USER|"" : [daemon] AutomaticLoginEnable / AutomaticLogin; every other line kept
+    tmp=$(mktemp "$GDM_CONF.XXXXXX")
+    { [ -f "$GDM_CONF" ] && grep -q '^\[daemon\]' "$GDM_CONF" || printf '[daemon]\n'
+      [ -f "$GDM_CONF" ] && grep -v '^AutomaticLogin\(Enable\)\?[[:space:]]*=' "$GDM_CONF"; true; } \
+    | awk -v u="$1" '{ print } $0 == "[daemon]" && !d { d = 1; if (u != "") { print "AutomaticLoginEnable=true"; print "AutomaticLogin=" u } else print "AutomaticLoginEnable=false" }' > "$tmp"
+    chmod 0644 "$tmp"; mv "$tmp" "$GDM_CONF"
+}
 AGENT_STATE=${WORKSUITE_AGENT_STATE:-/var/lib/worksuite-device-agent/state.json}
 SESSION=/usr/bin/worksuite-gnome-session   # the GNOME-based WorkSuite session (1.1)
 
@@ -28,13 +40,16 @@ policy_kiosk_user() {  # kiosk_autologin_user from the device's signed policy (s
 
 case "${1:-}" in
   status)
-    if grep -q '^\[initial_session\]' "$CONF" 2>/dev/null; then
+    if gdm; then
+        u=$(sed -n 's/^AutomaticLogin=\(.*\)$/\1/p' "$GDM_CONF" 2>/dev/null | head -n 1)
+        if grep -qs '^AutomaticLoginEnable=true' "$GDM_CONF" && [ -n "$u" ]; then echo "enabled: $u"; else echo disabled; fi
+    elif grep -q '^\[initial_session\]' "$CONF" 2>/dev/null; then
         echo "enabled: $(awk '/^\[initial_session\]/{f=1} f && /^user *=/{gsub(/.*= *"|"/,""); print; exit}' "$CONF")"
     else
         echo disabled
     fi ;;
   disable)
-    tmp=$(mktemp "$CONF.XXXXXX"); strip > "$tmp"; chmod 0644 "$tmp"; mv "$tmp" "$CONF"
+    if gdm; then gdm_set ""; else tmp=$(mktemp "$CONF.XXXXXX"); strip > "$tmp"; chmod 0644 "$tmp"; mv "$tmp" "$CONF"; fi
     echo disabled ;;
   enable)
     mode=${2:-}; user=${3:-}
@@ -50,9 +65,16 @@ case "${1:-}" in
         [ "$(policy_kiosk_user)" = "$user" ] || die "policy does not name $user as the kiosk account" ;;
       *) die "choose --kiosk or --personal" ;;
     esac
-    tmp=$(mktemp "$CONF.XXXXXX")
-    { strip; printf '\n[initial_session]\ncommand = "%s"\nuser = "%s"\n' "$SESSION" "$user"; } > "$tmp"
-    chmod 0644 "$tmp"; mv "$tmp" "$CONF"
+    if gdm; then
+        gdm_set "$user"
+        mkdir -p "$ACCOUNTS"; f="$ACCOUNTS/$user"
+        if [ -f "$f" ] && grep -q '^Session=' "$f"; then sed -i 's/^Session=.*/Session=worksuite-gnome/' "$f"
+        else { [ -f "$f" ] || printf '[User]\n'; printf 'Session=worksuite-gnome\n'; } >> "$f"; fi
+    else
+        tmp=$(mktemp "$CONF.XXXXXX")
+        { strip; printf '\n[initial_session]\ncommand = "%s"\nuser = "%s"\n' "$SESSION" "$user"; } > "$tmp"
+        chmod 0644 "$tmp"; mv "$tmp" "$CONF"
+    fi
     logger -p authpriv.notice -t worksuite-autologin -- "automatic sign-in enabled for $user (${mode#--})" 2>/dev/null || true
     echo "enabled: $user" ;;
   *) echo "usage: worksuite-autologin enable --kiosk|--personal USER | disable | status" >&2; exit 2 ;;
