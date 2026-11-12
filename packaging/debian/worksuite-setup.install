@@ -9,3 +9,4 @@ services/setup/node_modules usr/lib/worksuite/setup/
 docs/setup-wizard-state-machine.md usr/share/doc/worksuite-setup/
 services/setup/systemd/worksuite-setup-queue.service usr/lib/systemd/system/
 services/setup/systemd/worksuite-setup-queue.timer usr/lib/systemd/system/
+services/setup/polkit/50-worksuite-setup.rules usr/share/polkit-1/rules.d/
