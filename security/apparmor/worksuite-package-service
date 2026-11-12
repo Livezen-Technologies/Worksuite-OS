@@ -73,6 +73,28 @@ profile worksuite-package-service flags=(attach_disconnected) {
   /usr/bin/{isenkram-lookup,fwupdmgr} Ux,
   /usr/bin/{apt-get,apt-cache,dpkg,dpkg-query,flatpak} Ux,
 
+  # WSOS-SEC-005: a picked .deb is first parsed as nobody (untrusted.ts: setpriv → dpkg-deb --field on a private copy).
+  # Without this rule the exec of setpriv was denied in a VM and every local .deb was "not a valid Debian package".
+  # The child profile is narrower than this one: drop to nobody, run dpkg-deb and its helpers, read the copy.
+  /usr/bin/setpriv Cx -> untrusted_deb,
+
+  profile untrusted_deb {
+    include <abstractions/base>
+    capability setuid,
+    capability setgid,
+    capability setpcap,
+    /usr/bin/setpriv mr,
+    /usr/bin/dpkg-deb mrix,
+    /usr/bin/{tar,gzip,xz,zstd} mrix,
+    /etc/dpkg/** r,
+    /usr/share/dpkg/** r,
+    @{PROC}/@{pid}/** r,
+    /tmp/ws-untrusted-*/ r,
+    /tmp/ws-untrusted-*/package.deb r,
+    owner /tmp/dpkg-deb.*/ rw,
+    owner /tmp/dpkg-deb.*/** rw,
+  }
+
   profile journal {
     include <abstractions/base>
     /usr/bin/journalctl mr,
