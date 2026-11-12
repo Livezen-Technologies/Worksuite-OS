@@ -73,3 +73,16 @@ export function registerSetup(handle: (channel: string, fn: (...a: string[]) => 
   handle('ws:setupSend', (event) => client.send(parse(String(event))))
   handle('ws:setupAnswer', (key, value) => client.answer(String(key), parse(String(value))))
 }
+
+/**
+ * Does the Setup window have anything to do? Only when the setup service answers and setup is not finished. It
+ * autostarts at every sign-in, so a finished (or absent) setup must quit before any window or renderer starts.
+ */
+export async function setupNeeded(client: { state(): Promise<Reply<unknown>> }): Promise<boolean> {
+  try {
+    const r = await client.state()
+    if (!r.ok) return false
+    const v = r.value as { state?: unknown } | null
+    return !!v && typeof v.state === 'string' && v.state !== 'SETUP_COMPLETED'
+  } catch { return false }
+}

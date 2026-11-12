@@ -16,7 +16,7 @@ import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broke
 import { deviceCredential, deviceInfo, enrollDevice, STATUS_PATH } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
 import { SHELL_ENTRIES } from './shellEntries'
-import { registerSetup } from './setup'
+import { registerSetup, setupClient, setupNeeded } from './setup'
 import { listDevices } from './hardware'
 import { checkOwnPassword, localUsers } from './users'
 import { ask, signinHost, type SignInMethod } from './signin'
@@ -147,10 +147,21 @@ function markSessionVeil() {
   try { mkdirSync(path.join(run, 'worksuite'), { recursive: true, mode: 0o700 }); writeFileSync(path.join(run, 'worksuite', 'shell-ready'), `${process.pid}\n`) } catch { /* no veil to tell */ }
 }
 
+/** How long Settings/Setup wait for ready-to-show before showing their window anyway. */
+export const WINDOW_SHOW_FALLBACK_MS = 4000
+
 function createWindow() {
   let cmdlineEarly: string | null = null
   try { cmdlineEarly = readFileSync('/proc/cmdline', 'utf8') } catch { /* not Linux */ }
   const appMode = bootMode(process.argv, cmdlineEarly)
+  if (appMode === 'setup' && !process.env.WORKSUITE_SETUP_CHECKED) {
+    void setupNeeded(setupClient()).then((needed) => {
+      if (!needed) { app.quit(); return }
+      process.env.WORKSUITE_SETUP_CHECKED = '1'
+      createWindow()
+    })
+    return
+  }
   if (appMode === 'control' || appMode === 'setup') {
     // An ordinary GNOME window (decorated, resizable), not the old full-screen desktop layer.
     win = new BrowserWindow({
@@ -160,6 +171,10 @@ function createWindow() {
     })
     shellContents.add(win.webContents)
     win.once('ready-to-show', () => win?.show())
+    // A window must appear even if Chromium never reports the first paint (its GPU helper aborted on a VM without a
+    // GPU, and the window stayed hidden for the whole session).
+    const shown = win
+    setTimeout(() => { if (!shown.isDestroyed() && !shown.isVisible()) shown.show() }, WINDOW_SHOW_FALLBACK_MS)
     win.webContents.on('will-navigate', (e) => e.preventDefault())
     win.webContents.setWindowOpenHandler(({ url }) => { if (externalAllowed(url)) void shell.openExternal(url); return { action: 'deny' } })
     const section = controlSection(process.argv)
@@ -238,6 +253,9 @@ function startShell() {
 {
   const m = bootMode(process.argv, null)
   if (m === 'control' || m === 'setup') {
+    // Settings and Setup are separate windows with separate locks: they shared one, so while Setup ran (even hidden)
+    // every Settings launch handed its section to Setup and quit (installed VM: Settings never opened).
+    if (m === 'setup') app.setPath('userData', `${app.getPath('userData')}-setup`)
     if (!app.requestSingleInstanceLock({ mode: m })) { app.quit(); return }
     app.on('second-instance', (_e, argv) => {
       if (!win) return

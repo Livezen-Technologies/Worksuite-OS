@@ -1,6 +1,9 @@
 [Unit]
 Description=WorkSuite Wayland bridge (restricted window operations over D-Bus)
 PartOf=worksuite-session.target
+# Labwc only: it needs wlr-foreign-toplevel, which GNOME Shell does not offer. Under GNOME it failed to connect and
+# restarted every second for the whole session (installed VM); the condition makes activation a quiet no-op.
+ConditionEnvironment=!XDG_CURRENT_DESKTOP=WorkSuite:GNOME
 
 [Service]
 Type=dbus
