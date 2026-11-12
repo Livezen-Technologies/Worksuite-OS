@@ -1,4 +1,4 @@
-import { findBundles } from './bundles'
+import { findBundles, mountRemovable } from './bundles'
 import { app, BrowserWindow, clipboard, screen, dialog, ipcMain, nativeImage, Notification, powerMonitor, session, shell, type IpcMainInvokeEvent } from 'electron'
 
 // Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
@@ -508,7 +508,8 @@ app.whenReady().then(() => {
   const pickedPath = (h: string, kind: string) => (h.startsWith(`${kind}:`) ? picked.get(h) ?? null : null)
   const noFile = { ok: false, error: 'invalid_argument' }
   // G14: .wsupdate bundles on mounted USB drives, behind the same opaque handles as a picked file.
-  handle('ws:findBundles', () => {
+  handle('ws:findBundles', async () => {
+    await mountRemovable(vols)
     const found = findBundles(roots(files).filter((r) => r.id.startsWith('media:')))
     return { ok: true, value: found.map((f) => {
       const h = [...picked].find(([, p]) => p === f.path)?.[0] ?? `wsupdate:${picked.size + 1}:${Date.now()}`

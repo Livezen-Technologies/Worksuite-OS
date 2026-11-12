@@ -6,6 +6,7 @@
 #   tests/vm/vm.sh shot DIR NAME               DIR/NAME.png
 #   tests/vm/vm.sh keys DIR KEY...             QEMU key names: tab ret spc esc up down shift-tab ctrl-a …
 #   tests/vm/vm.sh click DIR X Y              left click at screen pixel X,Y (virtio tablet, absolute)
+#   tests/vm/vm.sh scroll DIR X Y [N]         mouse wheel at X,Y, N notches (negative: up)
 #   tests/vm/vm.sh type DIR TEXT               types [A-Za-z0-9 .@_=/-] and most shell punctuation
 #   tests/vm/vm.sh console DIR LINE         send LINE to the serial console (log in as user/live on the live ISO)
 #   tests/vm/vm.sh usb DIR IMAGE               plug IMAGE in as a USB stick (xHCI); vm.sh unusb DIR unplugs it
@@ -52,6 +53,13 @@ click) # Absolute position on the virtio tablet through QMP. The monitor's mouse
        ev "{\"type\":\"abs\",\"data\":{\"axis\":\"x\",\"value\":$ax}},{\"type\":\"abs\",\"data\":{\"axis\":\"y\",\"value\":$ay}}"
        sleep 0.3; ev '{"type":"btn","data":{"down":true,"button":"left"}}'
        sleep 0.15; ev '{"type":"btn","data":{"down":false,"button":"left"}}' ;;
+scroll) # Mouse wheel at X,Y: vm.sh scroll DIR X Y [N] (N > 0 down, < 0 up; default 5 notches).
+       x=${3:?x}; y=${4:?y}; n=${5:-5}; W=${VM_W:-1280}; H=${VM_H:-800}; b=wheel-down; [ "$n" -lt 0 ] && { b=wheel-up; n=$((-n)); }
+       ax=$((x * 32767 / (W - 1))); ay=$((y * 32767 / (H - 1)))
+       ev() { printf '{"execute":"qmp_capabilities"}\n{"execute":"input-send-event","arguments":{"events":[%s]}}\n' "$1" \
+                | socat -t 1 - "UNIX-CONNECT:$dir/qmp.sock" >/dev/null; }
+       ev "{\"type\":\"abs\",\"data\":{\"axis\":\"x\",\"value\":$ax}},{\"type\":\"abs\",\"data\":{\"axis\":\"y\",\"value\":$ay}}"
+       i=0; while [ $i -lt "$n" ]; do sleep 0.1; ev "{\"type\":\"btn\",\"data\":{\"down\":true,\"button\":\"$b\"}}"; ev "{\"type\":\"btn\",\"data\":{\"down\":false,\"button\":\"$b\"}}"; i=$((i + 1)); done ;;
 keys) shift 2; for k in "$@"; do mon "sendkey $k"; sleep 0.3; done ;;
 type) t=${3:?text}; i=0
       while [ $i -lt ${#t} ]; do c=$(printf %s "$t" | cut -c$((i+1))); i=$((i+1))
