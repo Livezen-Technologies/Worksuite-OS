@@ -8,6 +8,9 @@ describe('update view', () => {
   it('offers install and later for an open release, not for a paused one', () => {
     expect(heroView(S({}), null)).toMatchObject({ title: 'WorkSuite OS 1.1 is available', primary: 'install', secondary: 'later' })
     expect(heroView(S({ deferrals_left: 0, mandatory: true }), null)).toMatchObject({ secondary: null, primary: 'install' })
+    // Never checked: not "up to date" (found in a VM with no route to the update server).
+    expect(heroView(S({ state: 'up_to_date', version: null, last_check: null }), null)).toMatchObject({ title: 'WorkSuite OS hasn’t checked for updates yet', tone: 'warn', primary: 'check' })
+    expect(heroView(S({ state: 'up_to_date', version: null, last_check: 1 }), null)).toMatchObject({ title: 'WorkSuite OS is up to date', tone: 'ok' })
     expect(heroView(S({ reason: 'paused' }), null)).toMatchObject({ primary: 'check', secondary: null })
   })
   it('shows real job progress while installing', () => {

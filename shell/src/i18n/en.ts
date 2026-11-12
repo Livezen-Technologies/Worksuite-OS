@@ -591,6 +591,8 @@ const en = {
   'upd.hero.restarting': 'Restarting in {mins} min to install WorkSuite OS {version}',
   'upd.hero.saveWork': 'This update is required by your organization. Save your work.',
   'upd.hero.upToDate': 'WorkSuite OS is up to date',
+  'upd.hero.notChecked': 'WorkSuite OS hasn’t checked for updates yet',
+  'upd.hero.notCheckedSub': 'Version {version} · check now, or connect to the internet',
   'upd.hero.upToDateSub': 'Version {version} · last checked {when}',
   'upd.hero.verified': 'WorkSuite OS {version} is installed and verified · restart to start using it',
   'upd.inWindow': 'In the window {window}',

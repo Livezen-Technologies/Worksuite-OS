@@ -1221,6 +1221,8 @@ const si: Partial<Record<MessageKey, string>> = {
   'upd.hero.leftOne': 'කල් දැමීම් 1 ක් ඉතිරියි',
   'upd.hero.leftMany': 'කල් දැමීම් {count} ක් ඉතිරියි',
   'upd.hero.upToDate': 'WorkSuite OS යාවත්කාලීනයි',
+  'upd.hero.notChecked': 'WorkSuite OS තවම යාවත්කාලීන පරීක්ෂා කර නැත',
+  'upd.hero.notCheckedSub': 'අනුවාදය {version} · දැන් පරීක්ෂා කරන්න, නැතහොත් අන්තර්ජාලයට සම්බන්ධ වන්න',
   'upd.hero.upToDateSub': 'අනුවාදය {version} · අවසන් පරීක්ෂාව {when}',
   'upd.hero.contacting': 'යාවත්කාලීන සේවාදායකය අමතමින්',
   'upd.hero.available': 'WorkSuite OS {version} ලබා ගත හැක',

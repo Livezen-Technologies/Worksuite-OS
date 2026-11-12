@@ -1221,6 +1221,8 @@ const ta: Partial<Record<MessageKey, string>> = {
   'upd.hero.leftOne': 'ஒத்திவைப்பு 1 மீதம்',
   'upd.hero.leftMany': 'ஒத்திவைப்புகள் {count} மீதம்',
   'upd.hero.upToDate': 'WorkSuite OS புதுப்பித்த நிலையில் உள்ளது',
+  'upd.hero.notChecked': 'WorkSuite OS இன்னும் புதுப்பிப்புகளைச் சரிபார்க்கவில்லை',
+  'upd.hero.notCheckedSub': 'பதிப்பு {version} · இப்போது சரிபார்க்கவும், அல்லது இணையத்துடன் இணைக்கவும்',
   'upd.hero.upToDateSub': 'பதிப்பு {version} · கடைசிச் சரிபார்ப்பு {when}',
   'upd.hero.contacting': 'புதுப்பிப்புச் சேவையகத்தைத் தொடர்புகொள்கிறது',
   'upd.hero.available': 'WorkSuite OS {version} கிடைக்கிறது',

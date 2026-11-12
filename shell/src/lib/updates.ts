@@ -63,7 +63,9 @@ export function heroView(s: OsUpdateStatus, job: JobProgress | null, now = Date.
   const due = s.deadline ? ` · ${t('upd.hero.due', { when: fmtWhen(s.deadline) })}` : ''
   const left = s.deferrals_left != null ? ` · ${s.deferrals_left === 1 ? t('upd.hero.leftOne') : t('upd.hero.leftMany', { count: s.deferrals_left })}` : ''
   switch (s.state) {
-    case 'up_to_date': return { tone: 'ok', title: t('upd.hero.upToDate'), sub: t('upd.hero.upToDateSub', { version: s.installed, when: fmtWhen(s.last_check) }), progress: null, secondary: null, primary: 'check' }
+    // Never checked (first start, or no network since): nothing is known to be current, so it says so.
+    case 'up_to_date': if (s.last_check == null) return { tone: 'warn', title: t('upd.hero.notChecked'), sub: t('upd.hero.notCheckedSub', { version: s.installed }), progress: null, secondary: null, primary: 'check' }
+      return { tone: 'ok', title: t('upd.hero.upToDate'), sub: t('upd.hero.upToDateSub', { version: s.installed, when: fmtWhen(s.last_check) }), progress: null, secondary: null, primary: 'check' }
     case 'checking': return { tone: 'busy', title: t('appc.checking'), sub: t('upd.hero.contacting'), progress: 'indeterminate', secondary: null, primary: null }
     case 'available':
     case 'waiting': {
