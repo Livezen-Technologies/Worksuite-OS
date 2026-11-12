@@ -3,13 +3,13 @@ Type=Application
 Name=WorkSuite Settings
 Name[si]=WorkSuite සැකසීම්
 Name[ta]=WorkSuite அமைப்புகள்
-Comment=Updates, USB updates, drivers, date & time, apps and your organization
+Comment=WorkSuite account, updates, drivers, security, taskbar and glass effects (system settings: GNOME Settings)
 Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center
 Icon=worksuite
 Categories=Settings;System;
-Keywords=update;usb;driver;firmware;date;time;timezone;enroll;organization;
+Keywords=update;usb;driver;firmware;enroll;organization;taskbar;glass;blur;personalization;security;account;
 StartupWMClass=worksuite-shell
-Actions=Updates;Drivers;DateTime;
+Actions=Updates;Drivers;Personalization;
 
 [Desktop Action Updates]
 Name=Updates
@@ -19,6 +19,6 @@ Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center Updates
 Name=Drivers
 Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center Drivers
 
-[Desktop Action DateTime]
-Name=Date & time
-Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center "Date & time"
+[Desktop Action Personalization]
+Name=Personalization
+Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center Personalization

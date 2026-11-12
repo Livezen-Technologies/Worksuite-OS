@@ -23,4 +23,14 @@ done
 cp "$SRC"/services/session/gnome/*.gschema.override "$S/"
 if out=$(glib-compile-schemas --strict --targetdir="$W" "$S" 2>&1); then echo "ok 1 - WorkSuite GNOME overrides compile strictly against trixie's schemas"
 else echo "$out"; echo "not ok 1 - WorkSuite GNOME overrides compile strictly against trixie's schemas"; exit 1; fi
-echo 1..1
+# Every .desktop id pinned or made a default must be a real app in trixie (a wrong id silently drops the pin).
+apt-get download -qq nautilus gnome-control-center gnome-text-editor gnome-calculator loupe file-roller gnome-console gnome-system-monitor firefox-esr >/dev/null
+for d in *.deb; do dpkg-deb -x "$d" root; done
+ids=$( { grep -oh "'[A-Za-z0-9._-]*\.desktop'" "$SRC"/services/session/gnome/*.gschema.override | tr -d "'"; sed -n 's/^[^#][^=]*=\(.*\.desktop\)$/\1/p' "$SRC/services/session/gnome/worksuite-mimeapps.list"; } | sort -u)
+miss=""
+for id in $ids; do
+  case $id in worksuite-*|lk.worksuite.*) [ -f "$SRC/shell/apps/$id" ] || [ -f "$SRC/services/session/gnome/applications/$id" ] || [ "$id" = worksuite-app.desktop ] || [ "$id" = worksuite-office.desktop ] || miss="$miss $id"; continue ;; esac
+  [ -f "root/usr/share/applications/$id" ] || miss="$miss $id"
+done
+if [ -z "$miss" ]; then echo "ok 2 - every pinned or default app exists"; else echo "not ok 2 - apps not found:$miss"; exit 1; fi
+echo 1..2

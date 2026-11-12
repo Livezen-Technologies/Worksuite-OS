@@ -24,7 +24,7 @@ import { RadioProblems, useRadio } from './settings/Radio'
 import { GraphicsPanel } from './settings/Graphics'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
 import { DateTimePanel } from './settings/DateTime'
-import { GnomeHandoff, isGnomeSession } from './settings/GnomeHandoff'
+import { GNOME_PANELS, GnomeHandoff, WORKSUITE_ONLY, isGnomeSession } from './settings/GnomeHandoff'
 import { KioskPanel } from './settings/Kiosk'
 import { AIPanel } from './settings/AI'
 import { MultitaskingPanel } from './settings/Multitasking'
@@ -922,7 +922,7 @@ function UnsentDialog({ account, unsent, onCancel, onChoose }: { account: CloudA
 
 function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (s: Section) => void; badges: Partial<Record<Section, string>>; user: { name: string; role: string } | null }) {
   const [q, setQ] = useState('')
-  const items = NAV.filter((n) => navLabel(n.id).toLowerCase().includes(q.trim().toLowerCase()) || n.id.toLowerCase().includes(q.trim().toLowerCase()))
+  const items = NAV.filter((n) => !isGnomeSession() || WORKSUITE_ONLY.has(n.id)).filter((n) => navLabel(n.id).toLowerCase().includes(q.trim().toLowerCase()) || n.id.toLowerCase().includes(q.trim().toLowerCase()))
   return (
     <nav aria-label={t('launcher.settings')} className="box-border flex w-[260px] shrink-0 flex-col gap-3.5 overflow-auto border-r border-[rgba(127,178,255,0.12)] bg-[#071330] px-3.5 pt-5 pb-[72px]">
       <div className="flex items-center gap-3 px-2 pt-2 pb-1">
@@ -961,14 +961,14 @@ export default function Settings({ onClose, active }: WindowProps) {
   const activeRef = useRef(active)
   activeRef.current = active
   const first = useMemo(() => takeSettingsSection(), [])
-  const [section, setSection] = useState<Section>(() => (isSection(first) ? first : (first && ALIAS[first]) || 'Network'))
+  const [section, setSection] = useState<Section>(() => (isSection(first) ? first : (first && ALIAS[first]) || (isGnomeSession() ? 'Personalization' : 'Network')))
   // Settings › Keyboard opens on Shortcuts, or on the on-screen keyboard when that was asked for.
   const [kbTab, setKbTab] = useState<'osk' | 'shortcuts'>(first === 'On-screen keyboard' ? 'osk' : 'shortcuts')
   const [problem, setProblem] = useState<HwDevice | null>(null)
   const [driverCount, setDriverCount] = useState(0)
   const [user, setUser] = useState<{ name: string; role: string } | null>(null)
   const { status } = useOsUpdate()
-  useEffect(() => onSettingsSection((s) => { setSection(isSection(s) ? s : ALIAS[s] ?? 'Network'); setKbTab(s === 'On-screen keyboard' ? 'osk' : 'shortcuts') }), [])
+  useEffect(() => onSettingsSection((s) => { setSection(isSection(s) ? s : ALIAS[s] ?? (isGnomeSession() ? 'Personalization' : 'Network')); setKbTab(s === 'On-screen keyboard' ? 'osk' : 'shortcuts') }), [])
   useEffect(() => {
     void os.hwDriverReport(false).then((r) => setDriverCount(r.ok ? r.value.offers.length : 0)).catch(() => {})
     void os.sysUsers().then((r) => {
@@ -987,6 +987,7 @@ export default function Settings({ onClose, active }: WindowProps) {
       <SetNav section={section} onPick={setSection} badges={badges} user={user} />
       {/* Page frame from the Set* boards: 26/36 px padding, 14 px gap; Privacy & security has its own green tint. */}
       <main className="relative flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-9 pt-[26px] pb-[82px] [&>*]:shrink-0" style={{ background: `radial-gradient(ellipse 80% 50% at 80% 0%, ${section === 'Privacy & security' ? 'var(--ws-g-glow-green)' : 'var(--ws-g-glow)'} 0%, var(--ws-g-page) 60%)` }}>
+        {gnome && !WORKSUITE_ONLY.has(section) && GNOME_PANELS[section] ? <GnomeHandoff section={section} /> : <>
         {section === 'Network' && <NetworkPanel />}
         {section === 'VPN' && <VpnPanel />}
         {section === 'Bluetooth' && <BluetoothPanel />}
@@ -1015,6 +1016,7 @@ export default function Settings({ onClose, active }: WindowProps) {
         {section === 'Updates' && <><H1>{t('settings.nav.Updates')}</H1><UpdatesPanel /></>}
         {section === 'Managed' && <ManagedPanel />}
         {section === 'About' && <AboutPanel />}
+        </>}
       </main>
       {problem && <DeviceProblemDialog device={problem} onClose={() => setProblem(null)} onOpenUpdates={() => setSection('Updates')} onOpenDrivers={() => setSection('Drivers')} />}
     </div>

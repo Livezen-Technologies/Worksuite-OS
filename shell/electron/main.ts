@@ -231,7 +231,7 @@ if (appRequest?.id === AUTH_CALLBACK_ID) {
 /** The shell's Wayland app_id is Electron's default, "worksuite-shell" (package.json name): Labwc's window rule
  *  (services/session/labwc/rc.xml) keeps it always on bottom by that id: below every app, and on every desktop. */
 export const SHELL_APP_ID = 'worksuite-shell'
-const GNOME_SETTINGS_PANELS = new Set(['display', 'mouse', 'keyboard', 'multitasking', 'wacom', 'privacy', 'background', 'notifications'])
+const GNOME_SETTINGS_PANELS = new Set(['display', 'mouse', 'keyboard', 'multitasking', 'wacom', 'privacy', 'background', 'notifications', 'network', 'bluetooth', 'sound', 'power', 'printers', 'system', 'applications', 'universal-access'])
 function startShell() {
 // WorkSuite Settings / Setup under GNOME: one window. A second launch (the app grid, a notification's "Details",
 // gnome-control-center's "WorkSuite" panel link) focuses it and opens the section it asked for.

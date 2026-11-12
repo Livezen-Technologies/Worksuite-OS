@@ -10,8 +10,12 @@ import { H1, Note } from './ui'
 export const GNOME_PANELS: Record<string, string> = {
   Display: 'display', 'Mouse & touchpad': 'mouse', Keyboard: 'keyboard', Multitasking: 'multitasking',
   'Touchscreen & pen': 'wacom', 'Lock screen': 'privacy', Appearance: 'background', Notifications: 'notifications',
-  Clipboard: 'privacy',
+  Clipboard: 'privacy', Network: 'network', VPN: 'network', Bluetooth: 'bluetooth', Sound: 'sound', Power: 'power',
+  Printers: 'printers', 'Date & time': 'system', 'Default apps': 'applications', About: 'system', Accessibility: 'universal-access',
 }
+/** As on Ubuntu, GNOME Settings is the system settings app; under GNOME, WorkSuite Settings lists only what GNOME
+ *  Settings has no panel for. Every other section opens its GNOME Settings panel (old shortcuts keep working). */
+export const WORKSUITE_ONLY = new Set(['Personalization', 'Graphics', 'AI', 'Privacy & security', 'Users', 'Devices', 'Drivers', 'Updates', 'Managed'])
 export const isGnomeSession = () => new URLSearchParams(location.search).get('mode') === 'control'
 
 export function GnomeHandoff({ section }: { section: string }) {

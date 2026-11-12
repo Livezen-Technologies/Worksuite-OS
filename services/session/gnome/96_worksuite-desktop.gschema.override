@@ -36,6 +36,8 @@ trans-use-dynamic-opacity=false
 hot-keys=false
 show-showdesktop-hover=false
 
+# Files and Settings as on Ubuntu: GNOME Files (Nautilus) and GNOME Settings; WorkSuite Settings keeps what GNOME
+# Settings has no panel for (WorkSuite account, updates, drivers, security, personalization).
 # Start menu: WorkSuite button in the taskbar centre, pinned apps, all apps, search (local .desktop files only:
 # no file indexer, no web results), user, Settings, Files and the power actions (lock, log out, restart, shut down).
 [org.gnome.shell.extensions.arcmenu]
@@ -51,8 +53,8 @@ search-provider-open-windows=false
 search-provider-recent-files=true
 max-search-results=8
 power-options=[(0, true), (1, true), (2, true), (3, true), (4, false), (5, false), (6, false), (7, false)]
-pinned-apps=[{'id': 'worksuite-app.desktop'}, {'id': 'worksuite-office.desktop'}, {'id': 'worksuite-files.desktop'}, {'id': 'firefox-esr.desktop'}, {'id': 'org.gnome.Nautilus.desktop'}, {'id': 'worksuite-settings.desktop'}, {'id': 'org.gnome.TextEditor.desktop'}, {'id': 'org.gnome.Calculator.desktop'}, {'id': 'org.gnome.Console.desktop'}, {'id': 'org.gnome.SystemMonitor.desktop'}]
-eleven-layout-extra-shortcuts=[{'id': 'org.gnome.Nautilus.desktop'}, {'id': 'worksuite-settings.desktop'}]
+pinned-apps=[{'id': 'worksuite-app.desktop'}, {'id': 'worksuite-office.desktop'}, {'id': 'firefox-esr.desktop'}, {'id': 'org.gnome.Nautilus.desktop'}, {'id': 'org.gnome.Settings.desktop'}, {'id': 'worksuite-settings.desktop'}, {'id': 'org.gnome.TextEditor.desktop'}, {'id': 'org.gnome.Calculator.desktop'}, {'id': 'org.gnome.Console.desktop'}, {'id': 'org.gnome.SystemMonitor.desktop'}]
+eleven-layout-extra-shortcuts=[{'id': 'org.gnome.Nautilus.desktop'}, {'id': 'org.gnome.Settings.desktop'}]
 override-menu-theme=true
 menu-background-color='rgba(10,22,52,0.86)'
 menu-foreground-color='rgb(232,238,250)'
