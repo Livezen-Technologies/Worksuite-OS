@@ -24,6 +24,7 @@ import { RadioProblems, useRadio } from './settings/Radio'
 import { GraphicsPanel } from './settings/Graphics'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
 import { DateTimePanel } from './settings/DateTime'
+import { GnomeHandoff, isGnomeSession } from './settings/GnomeHandoff'
 import { KioskPanel } from './settings/Kiosk'
 import { AIPanel } from './settings/AI'
 import { MultitaskingPanel } from './settings/Multitasking'
@@ -950,6 +951,7 @@ function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (
 }
 
 export default function Settings({ onClose, active }: WindowProps) {
+  const gnome = isGnomeSession()
   const activeRef = useRef(active)
   activeRef.current = active
   const first = useMemo(() => takeSettingsSection(), [])
@@ -982,23 +984,23 @@ export default function Settings({ onClose, active }: WindowProps) {
         {section === 'Network' && <NetworkPanel />}
         {section === 'VPN' && <VpnPanel />}
         {section === 'Bluetooth' && <BluetoothPanel />}
-        {section === 'Display' && <DisplayPanel />}
+        {section === 'Display' && (gnome ? <GnomeHandoff section="Display" /> : <DisplayPanel />)}
         {section === 'Graphics' && <GraphicsPanel onOpen={setSection} />}
-        {section === 'Touchscreen & pen' && <TouchPanel />}
-        {section === 'Mouse & touchpad' && <PointerPanel />}
-        {section === 'Keyboard' && <KeyboardPanel tab={kbTab} />}
-        {section === 'Clipboard' && <ClipboardPanel />}
-        {section === 'Appearance' && <AppearancePanel />}
-        {section === 'Multitasking' && <MultitaskingPanel />}
+        {section === 'Touchscreen & pen' && (gnome ? <GnomeHandoff section="Touchscreen & pen" /> : <TouchPanel />)}
+        {section === 'Mouse & touchpad' && (gnome ? <GnomeHandoff section="Mouse & touchpad" /> : <PointerPanel />)}
+        {section === 'Keyboard' && (gnome ? <GnomeHandoff section="Keyboard" /> : <KeyboardPanel tab={kbTab} />)}
+        {section === 'Clipboard' && (gnome ? <GnomeHandoff section="Clipboard" /> : <ClipboardPanel />)}
+        {section === 'Appearance' && (gnome ? <GnomeHandoff section="Appearance" /> : <AppearancePanel />)}
+        {section === 'Multitasking' && (gnome ? <GnomeHandoff section="Multitasking" /> : <MultitaskingPanel />)}
         {section === 'Sound' && <SoundPanel />}
-        {section === 'Notifications' && <NotificationsPanel />}
+        {section === 'Notifications' && (gnome ? <GnomeHandoff section="Notifications" /> : <NotificationsPanel />)}
         {section === 'Date & time' && <DateTimePanel />}
         {section === 'Power' && <PowerPanel />}
         {section === 'Printers' && <PrintersPanel />}
         {section === 'Default apps' && <DefaultAppsPanel />}
         {section === 'AI' && <AIPanel />}
         {section === 'Privacy & security' && <PrivacyPanel />}
-        {section === 'Lock screen' && <LockScreenPanel onLock={() => void os.lock()} />}
+        {section === 'Lock screen' && (gnome ? <GnomeHandoff section="Lock screen" /> : <LockScreenPanel onLock={() => void os.lock()} />)}
         {section === 'Users' && <UsersPanel />}
         {section === 'Devices' && <><DevicesPanel onProblem={setProblem} /><DeviceExtras /></>}
         {section === 'Drivers' && <DriversPanel onOpenUpdates={() => setSection('Updates')} />}

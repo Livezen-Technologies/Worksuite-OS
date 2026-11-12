@@ -224,6 +224,7 @@ if (appRequest?.id === WHATSAPP_ID) {
 /** The shell's Wayland app_id is Electron's default, "worksuite-shell" (package.json name): Labwc's window rule
  *  (services/session/labwc/rc.xml) keeps it always on bottom by that id: below every app, and on every desktop. */
 export const SHELL_APP_ID = 'worksuite-shell'
+const GNOME_SETTINGS_PANELS = new Set(['display', 'mouse', 'keyboard', 'multitasking', 'wacom', 'privacy', 'background', 'notifications'])
 function startShell() {
 // WorkSuite Settings / Setup under GNOME: one window. A second launch (the app grid, a notification's "Details",
 // gnome-control-center's "WorkSuite" panel link) focuses it and opens the section it asked for.
@@ -275,6 +276,15 @@ app.whenReady().then(() => {
     permission: (perm, url) => permissionAllowed(webGrants, url, perm),
   })
   handle('ws:openWorkSuiteApp', (id, url) => apps.open(id, url))
+  // GNOME session: hand a section to GNOME Settings (GnomeHandoff.tsx); only these panel names, no arguments beyond it.
+  handle('ws:openGnomeSettings', (panel) => {
+    if (!GNOME_SETTINGS_PANELS.has(panel)) return { ok: false, error: 'invalid_argument' }
+    return new Promise((resolve) => {
+      const c = spawn('gnome-control-center', [panel], { detached: true, stdio: 'ignore' })
+      c.once('error', () => resolve({ ok: false, error: 'unavailable' }))
+      c.once('spawn', () => { c.unref(); resolve({ ok: true }) })
+    })
+  })
   handle('ws:launchApp', (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined })
   // Settings: idle lock timeout within the policy maximum (WSOS-LOCK-003).
   const lock = lockPaths(app.getPath('home'))

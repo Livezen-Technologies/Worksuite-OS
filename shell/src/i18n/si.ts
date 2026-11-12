@@ -191,6 +191,11 @@ const si: Partial<Record<MessageKey, string>> = {
   // Settings sections VPN/Power/Printers/Lock screen/Managed, About, Notifications, Updates; notification dock
   'settings.nav.VPN': 'VPN',
   'settings.nav.Power': 'බලය',
+  'settings.gnome.title': 'මෙය GNOME සැකසීම් තුළ සකසන්න',
+  'settings.gnome.body': 'GNOME යටතේ මෙම සැකසුම GNOME සැකසීම්වල කොටසකි; එය මෙම කවුළුව අසල විවෘත වේ.',
+  'settings.gnome.open': 'GNOME සැකසීම් විවෘත කරන්න',
+  'settings.gnome.failed': 'GNOME සැකසීම් විවෘත කළ නොහැකි විය.',
+  'settings.gnome.note': 'GNOME හි නැති WorkSuite සැකසීම් (යාවත්කාලීන, ධාවක, ආයතනය, සහායක) මෙහි පවතී.',
   'settings.nav.Date & time': 'දිනය සහ වේලාව',
   'settings.dt.reading': 'ඔරලෝසුව කියවමින්…',
   'settings.dt.zone': 'වේලා කලාපය',

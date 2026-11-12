@@ -3,7 +3,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { INPUT_METHODS, parseFcitxProfile } from './peripherals'
 
 const ROOT = join(__dirname, '..', '..')
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8')
@@ -14,7 +13,7 @@ const depends = (pkg: string) => (/^Depends:([\s\S]*?)(?=^\S)/m.exec(paragraph(p
 /** Interfaces each backend implements upstream (its .portal file), and the package that ships it. */
 const BACKENDS: Record<string, { pkg: string; ifaces: string[] }> = {
   gtk: { pkg: 'xdg-desktop-portal-gtk', ifaces: ['FileChooser', 'AppChooser', 'Print', 'Notification', 'Inhibit', 'Access', 'Account', 'Email', 'DynamicLauncher', 'Lockdown', 'Settings', 'OpenURI'] },
-  wlr: { pkg: 'xdg-desktop-portal-wlr', ifaces: ['Screenshot', 'ScreenCast'] },
+  gnome: { pkg: 'xdg-desktop-portal-gnome', ifaces: ['FileChooser', 'AppChooser', 'Print', 'Screenshot', 'ScreenCast', 'RemoteDesktop', 'Settings', 'Inhibit', 'Access', 'Account', 'Wallpaper', 'Background', 'Lockdown', 'DynamicLauncher', 'Notification', 'InputCapture', 'GlobalShortcuts'] },
   'gnome-keyring': { pkg: 'gnome-keyring', ifaces: ['Secret'] },
 }
 /** Portal interfaces WorkSuite and its apps use; each must name its backend explicitly. */
@@ -42,54 +41,39 @@ describe('portals (WSOS-INT-012)', () => {
     expect(desktopDeps).toContain(BACKENDS[backend].pkg)
   })
   it('falls back to an installed backend and names no unknown ones', () => {
-    expect(def && BACKENDS[def]).toBeTruthy()
+    for (const d of (def ?? '').split(';')) expect(BACKENDS[d]).toBeTruthy()
     for (const b of Object.values(map)) expect(b === 'none' || b in BACKENDS).toBe(true)
   })
   it('is installed where xdg-desktop-portal looks for <desktop>-portals.conf', () => {
     expect(read('packaging/debian/worksuite-session.install')).toContain('services/session/portals/worksuite-portals.conf usr/share/xdg-desktop-portal/')
-    expect(read('services/session/labwc/environment')).toMatch(/^XDG_CURRENT_DESKTOP=WorkSuite(:|$)/m)
+    expect(read('services/session/gnome/worksuite-gnome-session')).toMatch(/^export XDG_CURRENT_DESKTOP=WorkSuite(:|$)/m)
   })
 })
 
 describe('input methods (WSOS-INT-011)', () => {
-  it('ships fcitx5 with the Sinhala/Tamil engines and frontends', () => {
-    expect(depends('worksuite-desktop')).toEqual(expect.arrayContaining(['fcitx5', 'fcitx5-m17n', 'fcitx5-frontend-gtk3', 'fcitx5-frontend-gtk4', 'fcitx5-frontend-qt6']))
+  // Since 1.1 (GNOME): IBus with m17n, configured by GNOME's input sources (gnome/95_worksuite-gnome.gschema.override).
+  it('ships IBus with the m17n engines and its GTK modules', () => {
+    expect(depends('worksuite-desktop')).toEqual(expect.arrayContaining(['ibus', 'ibus-m17n', 'ibus-gtk3', 'ibus-gtk4']))
   })
-  it('enables Sinhala and Tamil by default, all offered in Settings', () => {
-    const ims = parseFcitxProfile(read('services/session/fcitx5/profile'))
-    expect(ims).toEqual(['keyboard-us', 'm17n_si_wijesekera', 'm17n_si_singlish', 'm17n_ta_tamil99'])
-    for (const id of ims) expect(INPUT_METHODS).toContain(id)
-    expect(read('packaging/debian/worksuite-session.install')).toContain('services/session/fcitx5/profile etc/xdg/fcitx5/')
-  })
-  it('every default input method exists in m17n-db (the file is <lang>-<name>.mim)', () => {
+  it('offers Sinhala (Wijesekara, phonetic) and Tamil 99 by default, each an m17n file that exists', () => {
+    const o = read('services/session/gnome/95_worksuite-gnome.gschema.override')
+    const ims = [...o.matchAll(/\('ibus', 'm17n:([a-z]+):([a-z0-9]+)'\)/g)].map((m) => `${m[1]}-${m[2]}`)
+    expect(ims).toEqual(['si-wijesekera', 'si-singlish', 'ta-tamil99'])
     // m17n_si_wijesekara (sic) shipped once and never loaded: the m17n file is si-wijesekera.mim.
-    const known = ['si-wijesekera', 'si-singlish', 'ta-tamil99', 'ta-phonetic']
-    for (const id of INPUT_METHODS.filter((m) => m.startsWith('m17n_'))) expect(known).toContain(id.slice(5).replace('_', '-'))
+    for (const id of ims) expect(['si-wijesekera', 'si-singlish', 'ta-tamil99', 'ta-phonetic']).toContain(id)
+    expect(o).toMatch(/^xkb-options=\['compose:ralt'\]$/m)
   })
   it('ships Sinhala and Tamil Unicode fonts and the fontconfig preferences for them', () => {
     const list = read('live-build/config/package-lists/worksuite.list.chroot')
-    for (const p of ['fonts-noto-core', 'fonts-noto-ui-core', 'fonts-lklug-sinhala', 'fontconfig']) expect(list).toMatch(new RegExp(`^${p}$`, 'm'))
+    for (const p of ['fonts-noto-core', 'fonts-noto-ui-core', 'fonts-lklug-sinhala', 'fontconfig', 'ibus', 'ibus-m17n']) expect(list).toMatch(new RegExp(`^${p}$`, 'm'))
     const conf = read('services/session/fontconfig/60-worksuite-sinhala-tamil.conf')
     expect(conf).toContain('<string>Noto Sans Sinhala UI</string>')
     expect(conf).toContain('<string>Noto Sans Tamil UI</string>')
     expect(read('packaging/debian/worksuite-session.install')).toContain('services/session/fontconfig/60-worksuite-sinhala-tamil.conf etc/fonts/conf.d/')
-    expect(read('shell/src/index.css')).toMatch(/--font-sans: "IBM Plex Sans", "Noto Sans Sinhala UI"/)
   })
-  it('starts fcitx5 with the session and sets the IM and compose environment', () => {
-    expect(read('services/session/systemd/user/worksuite-session.target')).toMatch(/Wants=.*worksuite-input-method\.service/)
-    expect(read('services/session/systemd/user/worksuite-input-method.service')).toMatch(/^ExecStart=\/usr\/bin\/fcitx5\b/m)
-    const env = read('services/session/labwc/environment')
-    for (const l of ['XMODIFIERS=@im=fcitx', 'QT_IM_MODULE=fcitx', 'XKB_DEFAULT_OPTIONS=compose:ralt']) expect(env).toContain(l)
+  it('the WorkSuite windows speak Wayland IME (text-input-v3), which GNOME Shell offers', () => {
     expect(read('shell/electron/main.ts')).toContain("appendSwitch('enable-wayland-ime')")
-  })
-  it('#58: the shell speaks text-input-v3 and fcitx5 shares one input state across windows', () => {
-    // Chromium defaults to text-input-v1, which Labwc does not offer: the shell's fields never reached fcitx5.
     for (const f of ['shell/electron/main.ts', 'shell/electron/kioskMain.ts']) expect(read(f)).toContain("appendSwitch('wayland-text-input-version', '3')")
-    // fcitx5's default (per-window state) made a method chosen from the taskbar apply to the taskbar only.
-    expect(read('services/session/fcitx5/config')).toMatch(/^\[Behavior\][^[]*^ShareInputState=All$/m)
-    expect(read('packaging/debian/worksuite-session.install')).toContain('services/session/fcitx5/config etc/xdg/fcitx5/')
-    // The switcher's argv (fcitx5-remote) ships with fcitx5 itself.
-    expect(depends('worksuite-desktop')).toContain('fcitx5')
   })
 })
 

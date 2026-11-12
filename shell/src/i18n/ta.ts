@@ -191,6 +191,11 @@ const ta: Partial<Record<MessageKey, string>> = {
   // Settings sections VPN/Power/Printers/Lock screen/Managed, About, Notifications, Updates; notification dock
   'settings.nav.VPN': 'VPN',
   'settings.nav.Power': 'மின்சக்தி',
+  'settings.gnome.title': 'இதை GNOME அமைப்புகளில் அமைக்கவும்',
+  'settings.gnome.body': 'GNOME இல் இந்த அமைப்பு GNOME அமைப்புகளின் பகுதி; அது இந்தச் சாளரத்தின் அருகில் திறக்கும்.',
+  'settings.gnome.open': 'GNOME அமைப்புகளைத் திற',
+  'settings.gnome.failed': 'GNOME அமைப்புகளைத் திறக்க முடியவில்லை.',
+  'settings.gnome.note': 'GNOME இல் இல்லாத WorkSuite அமைப்புகள் (புதுப்பிப்புகள், இயக்கிகள், நிறுவனம், உதவியாளர்) இங்கேயே இருக்கும்.',
   'settings.nav.Date & time': 'தேதி மற்றும் நேரம்',
   'settings.dt.reading': 'கடிகாரத்தைப் படிக்கிறது…',
   'settings.dt.zone': 'நேர மண்டலம்',

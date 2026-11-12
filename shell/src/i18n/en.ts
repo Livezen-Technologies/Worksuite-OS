@@ -434,6 +434,11 @@ const en = {
   // Settings sections VPN/Power/Printers/Lock screen/Managed, About, Notifications, Updates; notification dock
   'settings.nav.VPN': 'VPN',
   'settings.nav.Power': 'Power',
+  'settings.gnome.title': 'Set this in GNOME Settings',
+  'settings.gnome.body': 'Under GNOME this setting is part of GNOME Settings, which opens beside this window.',
+  'settings.gnome.open': 'Open GNOME Settings',
+  'settings.gnome.failed': 'GNOME Settings couldn’t be opened.',
+  'settings.gnome.note': 'WorkSuite settings that GNOME doesn’t have (updates, drivers, organization, assistant) stay here.',
   'settings.nav.Date & time': 'Date & time',
   'settings.dt.reading': 'Reading the clock…',
   'settings.dt.zone': 'Time zone',

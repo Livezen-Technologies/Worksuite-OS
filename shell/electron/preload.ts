@@ -142,6 +142,7 @@ contextBridge.exposeInMainWorld('worksuite', {
     ipcRenderer.on('ws:filesVolumesChanged', listener)
     return () => { ipcRenderer.removeListener('ws:filesVolumesChanged', listener) }
   },
+  openGnomeSettings: (panel: string) => ipcRenderer.invoke('ws:openGnomeSettings', String(panel)),
   /** WorkSuite Settings window (GNOME): a second launch asked for a section. */
   onSettingsSection: (cb: (section: string) => void) => {
     const listener = (_e: unknown, s: unknown) => { if (typeof s === 'string') cb(s) }

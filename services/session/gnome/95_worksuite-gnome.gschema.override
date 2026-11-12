@@ -55,3 +55,8 @@ send-software-usage-stats=false
 power-button-action='interactive'
 [org.gnome.desktop.session]
 idle-delay=uint32 600
+
+# Sinhala and Tamil typing (WSOS-INT-011) through IBus/m17n, GNOME's input method framework: Super+Space switches.
+[org.gnome.desktop.input-sources]
+sources=[('xkb', 'us'), ('ibus', 'm17n:si:wijesekera'), ('ibus', 'm17n:si:singlish'), ('ibus', 'm17n:ta:tamil99')]
+xkb-options=['compose:ralt']
