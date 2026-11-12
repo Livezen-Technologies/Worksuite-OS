@@ -88,6 +88,8 @@ jobs:
       - run: sh tests/session/autologin-test.sh
       # Installed systems switch to GDM: it must end up as display-manager.service (a static unit), else greetd stays.
       - run: sh tests/session/use-gdm-test.sh
+      # WorkSuite artwork instead of Debian's (vendor logo, backgrounds, banners).
+      - run: sh tests/image/branding-test.sh
       # No path shipped by two packages (dpkg would refuse the second and the image build fails).
       - run: sh tests/packaging/no-duplicate-files.sh
       # Window title bars: the Labwc WorkSuite themes, their button images and the rc.xml layout (issues #15, #33).

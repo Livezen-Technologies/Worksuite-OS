@@ -51,7 +51,7 @@ override_dh_auto_build:
 	# Lock screen: gtklock's "PIN or password:" label catalogues (services/session/lock-lang, used by worksuite-lock).
 	python3 -I services/session/lock-lang/build-mo.py build-lock-lang
 	# Branding PNGs from the SVG sources.
-	branding/render.sh build-branding
+	WORKSUITE_VERSION=$$(dpkg-parsechangelog -SVersion | sed -E 's/^([0-9]+\.[0-9]+).*/\1/') branding/render.sh build-branding
 	dh_auto_build
 
 override_dh_auto_install:
@@ -105,7 +105,8 @@ override_dh_auto_install:
 	install -D -m 0644 branding/icons/worksuite.svg $$d/usr/share/icons/hicolor/scalable/apps/worksuite-os.svg && \
 	for s in 16 24 32 48 64 128 256 512; do install -D -m 0644 build-branding/icons/worksuite-$$s.png $$d/usr/share/icons/hicolor/$${s}x$${s}/apps/worksuite-os.png; done && \
 	install -D -m 0644 build-branding/wallpaper.png $$d/usr/share/backgrounds/worksuite/default.png && \
-	install -D -m 0644 branding/wallpaper.svg $$d/usr/share/backgrounds/worksuite/default.svg
+	install -D -m 0644 branding/wallpaper.svg $$d/usr/share/backgrounds/worksuite/default.svg && \
+	install -D -m 0644 -t $$d/usr/share/worksuite/vendor-logos build-branding/vendor-logos/*.svg build-branding/vendor-logos/*.png
 
 override_dh_auto_test:
 	cd build-installer && QT_QPA_PLATFORM=offscreen ctest --output-on-failure

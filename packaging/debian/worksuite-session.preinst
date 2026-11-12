@@ -6,6 +6,9 @@ if [ "$1" = install ] || [ "$1" = upgrade ]; then
   # GDM (installed systems): WorkSuite's gdm-password (no second keyring pass) and GNOME Shell's theme with the
   # WorkSuite sign-in look, built from the stock file by worksuite-gdm-theme (postinst and the dpkg trigger).
   dpkg-divert --package worksuite-session --add --rename --divert /etc/pam.d/gdm-password.distrib /etc/pam.d/gdm-password
+  # One session at the sign-in screen, the WorkSuite desktop (as Ubuntu offers one): GDM started Labwc's own session
+  # entry instead (a black screen with a pointer, seen on an install). Kiosk mode runs Labwc directly, not through it.
+  dpkg-divert --package worksuite-session --add --rename --divert /usr/share/wayland-sessions/labwc.desktop.distrib /usr/share/wayland-sessions/labwc.desktop
   dpkg-divert --package worksuite-session --add --rename --divert /usr/share/gnome-shell/gnome-shell-theme.gresource.distrib /usr/share/gnome-shell/gnome-shell-theme.gresource
 fi
 #DEBHELPER#

@@ -44,4 +44,11 @@ S
 chmod +x "$T/stub/systemctl"
 PATH="$T/stub:$PATH" WORKSUITE_ROOT="$T/r" sh "$ROOT/services/session/gdm/worksuite-use-gdm" >/dev/null 2>&1
 [ "$(readlink "$T/r/etc/systemd/system/display-manager.service")" = /etc/systemd/system/greetd.service ] && ok "without gdm.service greetd stays the display manager" || bad "without gdm.service greetd stays"
+# One session at the sign-in screen: ours ships only worksuite-gnome.desktop and diverts Labwc's (GDM picked it once).
+D=$ROOT/packaging/debian
+[ "$(grep -h 'usr/share/wayland-sessions/' "$D"/*.install | awk '{print $1}' | xargs -n1 basename | sort | tr '\n' ' ')" = "worksuite-gnome.desktop " ] \
+  && ok "only the WorkSuite desktop session is installed" || bad "only the WorkSuite desktop session is installed"
+grep -q 'divert /usr/share/wayland-sessions/labwc.desktop.distrib /usr/share/wayland-sessions/labwc.desktop' "$D/worksuite-session.preinst" \
+  && grep -q 'remove --rename --divert /usr/share/wayland-sessions/labwc.desktop.distrib' "$D/worksuite-session.postrm" \
+  && ok "Labwc's session entry is diverted away (and restored on removal)" || bad "Labwc's session entry is diverted away"
 echo "1..$n"; exit $fail
