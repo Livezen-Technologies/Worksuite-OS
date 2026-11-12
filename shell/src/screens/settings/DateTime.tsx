@@ -44,8 +44,10 @@ export function DateTimePanel() {
   if (!clock) return <><H1>{t('settings.nav.Date & time')}</H1><Empty title={t('settings.dt.reading')} /></>
   if (!clock.available) return <><H1>{t('settings.nav.Date & time')}</H1><Unavail what={t('settings.nav.Date & time')} reason={clock.reason} /></>
   const c = clock.value
-  // The system time read last, moved on by the seconds since (re-read after every change).
-  const shownMs = c.nowUs / 1000 + tick * 1000
+  // The renderer's clock is the system clock; the tick only re-renders it every second. (Adding the seconds since the
+  // panel opened to the last read made it run fast after every re-read, seen in a VM.)
+  void tick
+  const shownMs = Date.now()
   const list = zones.includes(c.timezone) ? zones : [c.timezone, ...zones]
   return <>
     <H1>{t('settings.nav.Date & time')}</H1>

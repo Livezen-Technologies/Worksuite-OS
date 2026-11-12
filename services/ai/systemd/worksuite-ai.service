@@ -1,7 +1,7 @@
 [Unit]
 Description=WorkSuite AI assistant (on-device models: catalog, downloads, hash checks, policy)
 Documentation=file:///usr/share/doc/worksuite-ai/README.md
-PartOf=worksuite-session.target
+PartOf=worksuite-session.target worksuite-services.target
 After=worksuite-session.target
 
 [Service]
