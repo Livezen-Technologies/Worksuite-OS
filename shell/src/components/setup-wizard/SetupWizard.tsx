@@ -85,7 +85,7 @@ export default function SetupWizard({ api, onDone, onExitToRecovery, userName }:
   else if (!isMain(v.state)) body = <SidePanel state={v.state} attempts={v.attempts} lastError={v.lastError} busy={s.busy} send={send} headingRef={heading} />
   else if (complete) body = <DonePanel answers={v.answers} onDone={onDone} headingRef={heading} />
   else if (!asks(v.state)) body = <WorkPanel api={api} state={v.state} flow={flow} send={send} busy={s.busy} headingRef={heading} />
-  else body = <Ask state={v.state} answers={v.answers} answer={s.answer} fieldErrors={s.fieldErrors} headingRef={heading} send={send} busy={s.busy} userName={userName} first={idx <= 0} />
+  else body = <Ask state={v.state} answers={v.answers} answer={s.answer} fieldErrors={s.fieldErrors} headingRef={heading} send={send} busy={s.busy} userName={userName} first={idx <= 0} flow={flow} />
 
   return (
     <Frame>
@@ -163,10 +163,10 @@ const Spinner = ({ size = 36 }: { size?: number }) => <span aria-hidden style={{
 
 type AskProps = {
   state: MainState; answers: Record<string, unknown>; answer: (k: string, v: unknown) => Promise<boolean>; fieldErrors: Record<string, string>
-  headingRef: HeadingRef; send: (e: SetupEvent) => Promise<boolean>; busy: boolean; userName?: string; first: boolean
+  headingRef: HeadingRef; send: (e: SetupEvent) => Promise<boolean>; busy: boolean; userName?: string; first: boolean; flow: readonly MainState[]
 }
 
-function Ask({ state, answers, answer, fieldErrors, headingRef, send, busy, userName, first }: AskProps) {
+function Ask({ state, answers, answer, fieldErrors, headingRef, send, busy, userName, first, flow }: AskProps) {
   const [extraError, setExtraError] = useState<string | null>(null)
   const [enroll, setEnroll] = useState({ server: '', code: '' })
   const a = answers as Record<string, any>
@@ -353,7 +353,7 @@ function Ask({ state, answers, answer, fieldErrors, headingRef, send, busy, user
       )
       break
     case 'REVIEW_CONFIGURATION':
-      content = <Review answers={a} send={send} answer={answer} errOf={errOf} />
+      content = <Review answers={a} send={send} answer={answer} errOf={errOf} flow={flow} />
       break
   }
 
@@ -386,7 +386,7 @@ function Ask({ state, answers, answer, fieldErrors, headingRef, send, busy, user
 /** "Name: description" catalog strings → [name, description]. */
 const split = (s: string): [string, string] => { const i = s.indexOf(':'); return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1).trim()] }
 
-function Review({ answers: a, send, answer, errOf }: { answers: Record<string, any>; send: (e: SetupEvent) => Promise<boolean>; answer: (k: string, v: unknown) => Promise<boolean>; errOf: (k: string) => ReactNode }) {
+function Review({ answers: a, send, answer, errOf, flow }: { flow: readonly MainState[]; answers: Record<string, any>; send: (e: SetupEvent) => Promise<boolean>; answer: (k: string, v: unknown) => Promise<boolean>; errOf: (k: string) => ReactNode }) {
   const yesNo = (b: unknown) => t(b ? 'sw.review.yes' : 'sw.review.no')
   const names = (ids: unknown, prefix: string) => Array.isArray(ids) && ids.length ? ids.map((id) => split(t(`${prefix}${id}` as MessageKey))[0]).join(', ') : t('sw.review.none')
   const groups: [string, [MainState, string, string][]][] = useMemo(() => [
@@ -405,7 +405,8 @@ function Review({ answers: a, send, answer, errOf }: { answers: Record<string, a
       ['THIRD_PARTY_APP_SELECTION', t('sw.step.THIRD_PARTY_APP_SELECTION'), names(a.thirdPartyApps, 'sw.third.')],
       ['AI_MCP_CONFIGURATION', t('sw.ai.enable'), yesNo(a.aiMcp?.enabled)],
     ]],
-  ], [a])
+  ].map(([title, rows]) => [title, (rows as [MainState, string, string][]).filter(([st]) => flow.includes(st))] as [string, [MainState, string, string][]])
+    .filter(([, rows]) => rows.length > 0), [a, flow])
   return (
     <div className="flex flex-col gap-4">
       {groups.map(([title, rows]) => (

@@ -212,9 +212,11 @@ describe('checkpoints and rollback boundaries', () => {
 })
 
 describe('first run on an installed system', () => {
-  it('goes from security straight to app selection and never installs an OS', async () => {
+  it('skips the account, disk and encryption steps and never installs an OS', async () => {
     const { m } = await machine('firstRun')
-    await driveTo(m, 'SECURITY_CONFIGURATION')
+    await driveTo(m, 'ACCOUNT_TYPE')
+    await m.setAnswer('accountType', 'personal')
+    expect((await m.send({ type: 'NEXT' })).state).toBe('DEVICE_ENROLLMENT')
     expect((await m.send({ type: 'NEXT' })).state).toBe('WORKSUITE_APP_SELECTION')
     await driveTo(m, 'PRE_INSTALL_VALIDATION')
     expect((await m.send({ type: 'WORK_DONE' })).state).toBe('INSTALLING_APPLICATIONS')

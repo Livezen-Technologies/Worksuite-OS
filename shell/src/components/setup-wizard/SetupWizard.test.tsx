@@ -47,11 +47,8 @@ describe('SetupWizard', () => {
     expect(heading()).toBe('How you’ll use it')
     expect(host.textContent).toContain('Choose or fill this in to continue.')
     await click(/For myself/)
-    await click('Continue'); await until(() => heading() === 'Your account')
-    await input('User name', 'Nimal')
-    expect((host.querySelector('input[autocomplete="username"]') as HTMLInputElement).value).toBe('nimal')
+    // First run: the installer already made the account and set up the disk, so no account, disk or encryption step.
     await click('Continue'); await until(() => heading() === 'Organization')
-    await click('Continue'); await until(() => heading() === 'Security') // first run: no disk step
     await click('Continue'); await until(() => heading() === 'WorkSuite apps')
     const desktop = button(/^WorkSuite Desktop/)!
     expect(desktop.disabled).toBe(true)
@@ -59,7 +56,8 @@ describe('SetupWizard', () => {
     await click('Continue'); await until(() => heading() === 'More apps')
     await click('Continue'); await until(() => heading() === 'Assistant')
     await click('Continue'); await until(() => heading() === 'Review')
-    expect(host.textContent).toContain('nimal')
+    expect(host.textContent).not.toContain('Encrypt the disk')
+    expect(host.textContent).not.toContain('User name')
     await click('Continue')
     expect(heading()).toBe('Review') // not accepted yet
     await act(async () => { (host.querySelector('input[type="checkbox"]') as HTMLInputElement).click() }); await flush(5)
@@ -70,6 +68,19 @@ describe('SetupWizard', () => {
     // The UI only ever sent events a person may send.
     const types = new Set(sent.mock.calls.map(([e]) => e.type))
     for (const t of ['WORK_DONE', 'WORK_FAILED', 'ROLLBACK_DONE', 'NETWORK_RESTORED']) expect(types.has(t as never)).toBe(false)
+  })
+
+  it('asks for the account and encryption when installing (not on first run)', async () => {
+    const api = previewApi({ workMs: 5, mode: 'install' })
+    act(() => root.render(<SetupWizard api={api} onDone={() => {}} />))
+    await until(() => heading() === 'Let’s set up your computer')
+    await click('Get started'); await until(() => heading() === 'Language and region')
+    await click('Continue'); await until(() => heading() === 'Network')
+    await click('Continue'); await until(() => heading() === 'How you’ll use it')
+    await click(/For myself/)
+    await click('Continue'); await until(() => heading() === 'Your account')
+    await input('User name', 'Nimal')
+    expect((host.querySelector('input[autocomplete="username"]') as HTMLInputElement).value).toBe('nimal')
   })
 
   it('opens recovery after a failed install: retry offered, resume explained, rollback confirmed first', async () => {

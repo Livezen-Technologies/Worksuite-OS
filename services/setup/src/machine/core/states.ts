@@ -72,11 +72,12 @@ export const SPECS: Record<MainState, StateSpec> = {
   LANGUAGE_REGION: ask(['locale', 'timezone', 'keyboard'], { exit: ['applyLocalePreview'] }),
   NETWORK_SETUP: ask([], { network: 'optional', entry: ['scanNetworks'] }),
   ACCOUNT_TYPE: ask(['accountType']),
-  ACCOUNT_AUTHENTICATION: ask(['account'], { network: 'optional', entry: ['loadAuthMethods'], timeoutMs: 120_000, retry: NET_RETRY }),
+  // firstRun: the account was made by the installer and the disk is already set up; these answers would change nothing.
+  ACCOUNT_AUTHENTICATION: ask(['account'], { modes: INSTALL_ONLY, network: 'optional', entry: ['loadAuthMethods'], timeoutMs: 120_000, retry: NET_RETRY }),
   // Enrollment creates a device identity on the server: undone by revoking it (reversible).
   DEVICE_ENROLLMENT: ask([], { effect: 'reversible', network: 'required', entry: ['fetchEnrollmentRequirement'], exit: ['enrollDevice'], timeoutMs: 120_000, retry: NET_RETRY }),
   STORAGE_CONFIGURATION: ask(['disk', 'diskConfirmed'], { modes: INSTALL_ONLY, entry: ['probeDisks'] }),
-  SECURITY_CONFIGURATION: ask(['encryption'], {}),
+  SECURITY_CONFIGURATION: ask(['encryption'], { modes: INSTALL_ONLY }),
   WORKSUITE_APP_SELECTION: ask(['worksuiteApps'], { network: 'optional', entry: ['loadWorksuiteCatalog', 'applyOrgPolicy'] }),
   THIRD_PARTY_APP_SELECTION: ask([], { network: 'optional', entry: ['loadThirdPartyCatalog'] }),
   AI_MCP_CONFIGURATION: ask([]),
