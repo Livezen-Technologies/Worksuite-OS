@@ -1,6 +1,9 @@
 # WorkSuite OS defaults: /usr/share/applications/worksuite-mimeapps.list (XDG_CURRENT_DESKTOP=WorkSuite)
 # and /etc/xdg/mimeapps.list.
 [Default Applications]
+# Folders: GNOME Files (Nautilus), as on Ubuntu.
+inode/directory=org.gnome.Nautilus.desktop;
+application/x-gnome-saved-search=org.gnome.Nautilus.desktop;
 # worksuite:// goes to WorkSuite Desktop (worksuite.desktop, package worksuite) when it is installed, else to
 # the web app windows (worksuite-url-handler.desktop): XDG takes the first installed entry of the list.
 x-scheme-handler/worksuite=worksuite.desktop;worksuite-url-handler.desktop;
@@ -62,23 +65,23 @@ application/x-ms-installer=worksuite-windows-app.desktop;
 application/x-ms-shortcut=worksuite-windows-app.desktop;
 application/x-bat=worksuite-windows-app.desktop;
 application/x-msdos-program=worksuite-windows-app.desktop;
-# Archives (zip, 7z, rar, tar.*, gz, xz, bz2, zst): WorkSuite Files browses them read-only and extracts them
-# (shell/apps/worksuite-files.desktop -> worksuite-open-archive -> lk.worksuite.Shell1.OpenArchive).
-application/zip=worksuite-files.desktop;
-application/x-zip-compressed=worksuite-files.desktop;
-application/x-7z-compressed=worksuite-files.desktop;
-application/vnd.rar=worksuite-files.desktop;
-application/x-rar=worksuite-files.desktop;
-application/x-rar-compressed=worksuite-files.desktop;
-application/x-tar=worksuite-files.desktop;
-application/x-compressed-tar=worksuite-files.desktop;
-application/x-xz-compressed-tar=worksuite-files.desktop;
-application/x-bzip2-compressed-tar=worksuite-files.desktop;
-application/x-bzip-compressed-tar=worksuite-files.desktop;
-application/x-zstd-compressed-tar=worksuite-files.desktop;
-application/gzip=worksuite-files.desktop;
-application/x-gzip=worksuite-files.desktop;
-application/x-xz=worksuite-files.desktop;
-application/x-bzip2=worksuite-files.desktop;
-application/x-bzip=worksuite-files.desktop;
-application/zstd=worksuite-files.desktop;
+# Archives (zip, 7z, rar, tar.*, gz, xz, bz2, zst): Archive Manager, as on Ubuntu; WorkSuite Files' read-only browser
+# (worksuite-files.desktop) stays the fallback when Archive Manager is not installed.
+application/zip=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-zip-compressed=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-7z-compressed=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/vnd.rar=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-rar=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-rar-compressed=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-tar=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-compressed-tar=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-xz-compressed-tar=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-bzip2-compressed-tar=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-bzip-compressed-tar=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-zstd-compressed-tar=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/gzip=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-gzip=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-xz=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-bzip2=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/x-bzip=org.gnome.FileRoller.desktop;worksuite-files.desktop;
+application/zstd=org.gnome.FileRoller.desktop;worksuite-files.desktop;
