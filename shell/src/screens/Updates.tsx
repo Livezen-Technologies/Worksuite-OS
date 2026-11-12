@@ -4,7 +4,7 @@
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { formatBytes, os, packageErrorText, type AppUpdate, type BundleInfo, type DeviceInfo, type OsUpdateStatus, type UpdateHistory, type UpdateHistoryEntry } from '../lib/os'
+import { formatBytes, os, bundleErrorText, packageErrorText, type AppUpdate, type BundleInfo, type DeviceInfo, type OsUpdateStatus, type UpdateHistory, type UpdateHistoryEntry } from '../lib/os'
 import { useOsUpdate, updates } from '../lib/useOsUpdate'
 import { REMIND_KEY, SEEN_KEY, UPDATE_PHASES, fmtWhen, heroView, needsAttention, canDefer, restartOptions, whatsNew, type Action, type RestartChoice, type Tone } from '../lib/updates'
 import { C, Dialog, OptionCard, Progress, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, heroCard, linkBtn, rowLine } from '../components/Dk'
@@ -274,7 +274,7 @@ function OfflineBundle() {
   useEffect(() => os.onPkgJob((e) => {
     if (e.kind !== 'finished' || e.job !== job) return
     setJob(null)
-    setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: packageErrorText(e.error ?? 'failed'), error: true })
+    setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: bundleErrorText(e.error ?? 'failed'), error: true })
   }), [job])
   const choose = async () => {
     setMsg(null); setInfo(null)
@@ -282,12 +282,12 @@ function OfflineBundle() {
     if (!f.ok) { if (f.error !== 'cancelled') setMsg({ text: packageErrorText(f.error), error: true }); return }
     setPicked(f.value)
     const r = await os.bundleInspect(f.value.handle)
-    if (r.ok) setInfo(r.value); else setMsg({ text: packageErrorText(r.error), error: true })
+    if (r.ok) setInfo(r.value); else setMsg({ text: bundleErrorText(r.error), error: true })
   }
   const install = async () => {
     if (!picked) return
     const r = await os.bundleInstall(picked.handle)
-    if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: packageErrorText(r.error), error: true })
+    if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: bundleErrorText(r.error), error: true })
   }
   return (
     <section aria-labelledby="upd-usb" className={`${card} flex flex-col gap-2 px-[18px] py-4 text-[13px]`}>

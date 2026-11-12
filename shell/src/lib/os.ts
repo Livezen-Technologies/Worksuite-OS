@@ -423,6 +423,18 @@ export function packageErrorText(code: string): string {
   }
 }
 
+/** Offline update files (.wsupdate): the service's refusals as sentences; anything else as for packages. */
+export function bundleErrorText(code: string): string {
+  if (/not signed|not in the signed manifest|does not match the signed manifest|failed its checksum|missing packages listed/i.test(code)) return t('upd.usb.err.signature')
+  if (/downgrade/i.test(code)) return t('upd.usb.err.older')
+  if (/is already installed/i.test(code)) return t('upd.usb.err.same')
+  if (/bundle is for/i.test(code)) return t('upd.usb.err.arch')
+  if (/pulled/i.test(code)) return t('upd.usb.err.pulled')
+  if (code === 'inbox_failed' || /not found|is a link|truncated|not a \.wsupdate|no manifest|bad tar/i.test(code)) return t('upd.usb.err.unreadable')
+  if (/does not install cleanly|Unmet dependencies|Depends:/i.test(code)) return t('upd.usb.err.deps')
+  return packageErrorText(code)
+}
+
 import type { SyncStatus } from './syncNotices'
 import type { CheckId, CheckResult, SnapshotInfo } from './recovery'
 import { formatDecimal, formatNumber, t } from '../i18n'

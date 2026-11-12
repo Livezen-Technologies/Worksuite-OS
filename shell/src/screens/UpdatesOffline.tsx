@@ -5,7 +5,7 @@
 // by apt's progress, so the download line says how far it got in percent.
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
-import { formatBytes, os, packageErrorText, type BundleInfo, type DeviceInfo, type FoundBundle, type OsUpdateStatus } from '../lib/os'
+import { formatBytes, os, bundleErrorText, packageErrorText, type BundleInfo, type DeviceInfo, type FoundBundle, type OsUpdateStatus } from '../lib/os'
 import { updates } from '../lib/useOsUpdate'
 import { fmtWhen, type JobProgress } from '../lib/updates'
 import { Progress, Svg } from '../components/Dk'
@@ -116,13 +116,13 @@ function UsbCard({ st, bundles }: { st: OsUpdateStatus; bundles: FoundBundle[] }
     setInfo(null)
     if (!found) return
     let live = true
-    void os.bundleInspect(found.handle).then((r) => { if (!live) return; if (r.ok) setInfo(r.value); else setMsg({ text: packageErrorText(r.error), error: true }) })
+    void os.bundleInspect(found.handle).then((r) => { if (!live) return; if (r.ok) setInfo(r.value); else setMsg({ text: bundleErrorText(r.error), error: true }) })
     return () => { live = false }
   }, [found?.handle]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => os.onPkgJob((e) => {
     if (e.kind !== 'finished' || e.job !== job) return
     setJob(null)
-    setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: packageErrorText(e.error ?? 'failed'), error: true })
+    setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: bundleErrorText(e.error ?? 'failed'), error: true })
   }), [job])
   const choose = async () => {
     setMsg(null)
@@ -133,7 +133,7 @@ function UsbCard({ st, bundles }: { st: OsUpdateStatus; bundles: FoundBundle[] }
   const install = async () => {
     if (!found) return
     const r = await os.bundleInstall(found.handle)
-    if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: packageErrorText(r.error), error: true })
+    if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: bundleErrorText(r.error), error: true })
   }
   const newer = info ? cmpVersion(info.version, st.installed) > 0 : false
   return (
