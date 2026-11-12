@@ -59,3 +59,32 @@ test('make-wsupdate: refuses bad input before writing anything', () => {
   writeFileSync(rsa, generateKeyPairSync('rsa', { modulusLength: 1024 }).privateKey.export({ type: 'pkcs8', format: 'pem' }));
   assert.throws(() => makeBundle(parseArgs([...base, '--version', '1.0.1', '--key', rsa, ...s.debs])), /Ed25519/);
 });
+
+test('make-wsupdate --baseline: refuses a bundle whose dependencies an older system lacks, names them', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { mkdirSync } = await import('node:fs');
+  // @ts-expect-error plain JavaScript tool without types
+  const { unmetDependencies } = await import('../../../tools/release/make-wsupdate.mjs');
+  const s = setup();
+  const deb = (name: string, version: string, depends = '') => {
+    const root = join(s.dir, `${name}-src`);
+    mkdirSync(join(root, 'DEBIAN'), { recursive: true });
+    writeFileSync(join(root, 'DEBIAN/control'), `Package: ${name}\nVersion: ${version}\nArchitecture: all\nMaintainer: QA <qa@example.invalid>\n${depends ? `Depends: ${depends}\n` : ''}Description: test\n test\n`);
+    const out = join(s.dir, `${name}_${version}_all.deb`);
+    execFileSync('dpkg-deb', ['--root-owner-group', '-b', root, out], { stdio: 'ignore' });
+    return out;
+  };
+  // The rc1 → rc3 case seen in a VM: the new desktop needs power-profiles-daemon, which rc1 does not have.
+  const desktop = deb('worksuite-desktop', '1.0.0~rc3', 'worksuite-shell (= 1.0.0~rc3), power-profiles-daemon, python3 | python3-minimal');
+  const shell = deb('worksuite-shell', '1.0.0~rc3', 'libc6 (>= 2.36)');
+  const baseline = new Map([['worksuite-shell', '1.0.0~rc1'], ['libc6', '2.41-12'], ['python3-minimal', '3.13.5-1']]);
+  assert.deepEqual(unmetDependencies([desktop, shell], baseline), ['worksuite-desktop: power-profiles-daemon']);
+  const ppd = deb('power-profiles-daemon', '0.30-1.1');
+  assert.deepEqual(unmetDependencies([desktop, shell, ppd], baseline), []);
+  // A version the baseline has but too old, when the bundle does not carry the package, is unmet too.
+  assert.deepEqual(unmetDependencies([shell], new Map([['libc6', '2.31-13']])), ['worksuite-shell: libc6 (>= 2.36)']);
+  const list = join(s.dir, 'rc1.txt');
+  writeFileSync(list, 'worksuite-shell 1.0.0~rc1\nlibc6:amd64 2.41-12\npython3-minimal 3.13.5-1\n');
+  assert.throws(() => makeBundle(parseArgs(['--key', s.key, '--key-id', 'ws-release-1', '--version', '1.0.0~rc3', '--min-version', '1.0.0~rc1',
+    '--baseline', list, '--out', join(s.dir, 'x.wsupdate'), desktop, shell])), /power-profiles-daemon/);
+});

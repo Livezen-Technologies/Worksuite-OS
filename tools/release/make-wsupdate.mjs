@@ -4,7 +4,12 @@
 //
 //   node tools/release/make-wsupdate.mjs --key release.key.pem --key-id ws-release-1 \
 //     --version 1.0.1 --min-version 1.0.0 [--ring stable] [--arch amd64] [--release-id rel-1.0.1] \
-//     [--critical] [--security] [--notes "text"] --out worksuite-os-1.0.1-amd64.wsupdate  pool/*.deb
+//     [--critical] [--security] [--notes "text"] [--baseline installed.txt] --out worksuite-os-1.0.1-amd64.wsupdate  pool/*.deb
+//
+// --baseline: the packages of the oldest release this bundle must update, as `dpkg-query -W -f='${Package} ${Version}\n'`
+// prints them on such a system. Every Depends/Pre-Depends of every package must then be met by the bundle itself or by
+// that list, or nothing is written: an offline update cannot download what it lacks (power-profiles-daemon, added to
+// worksuite-desktop in 1.0.0~rc2, made an rc3 bundle uninstallable on rc1 systems). Add the missing .deb files.
 //
 // The bundle is a plain ustar archive: manifest.json (the release manifest signed with the Ed25519 release key, in the
 // same canonical form the device verifies) and pool/<name>.deb. The signature covers every package's name, size and
@@ -42,6 +47,7 @@ export function parseArgs(argv) {
     else if (a === '--critical') o.critical = true;
     else if (a === '--security') o.security = true;
     else if (a === '--out') o.out = v();
+    else if (a === '--baseline') o.baseline = v();
     else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);
     else o.debs.push(a);
   }
@@ -78,7 +84,53 @@ export function buildManifest(o, privateKey) {
   return { ...JSON.parse(JSON.stringify(body)), signature };
 }
 
+const control = (deb) => {
+  const f = {};
+  for (const k of ['Package', 'Version', 'Architecture', 'Depends', 'Pre-Depends']) {
+    try { f[k] = execFileSync('dpkg-deb', ['-f', deb, k], { encoding: 'utf8' }).trim(); } catch { f[k] = ''; }
+  }
+  return f;
+};
+const versionOk = (have, op, want) => {
+  if (!op) return true;
+  const deb = { '<<': 'lt', '<=': 'le', '=': 'eq', '>=': 'ge', '>>': 'gt' }[op];
+  try { execFileSync('dpkg', ['--compare-versions', have, deb, want]); return true; } catch { return false; }
+};
+
+/** Dependencies of the bundle's packages that neither the bundle nor the baseline (Map name → version) satisfies. */
+export function unmetDependencies(debs, baseline) {
+  const pkgs = debs.map(control);
+  const have = new Map(baseline);
+  for (const p of pkgs) have.set(p.Package, p.Version);   // the bundle wins over the baseline
+  const unmet = [];
+  for (const p of pkgs) {
+    for (const clause of [p['Pre-Depends'], p.Depends].filter(Boolean).join(',').split(',').map((x) => x.trim()).filter(Boolean)) {
+      const ok = clause.split('|').some((alt) => {
+        const m = /^([a-z0-9][a-z0-9+.-]*)(?::[a-z0-9-]+)?\s*(?:\((<<|<=|=|>=|>>)\s*([^)\s]+)\))?/.exec(alt.trim());
+        if (!m) return false;
+        const v = have.get(m[1]);
+        return v !== undefined && versionOk(v, m[2], m[3]);
+      });
+      if (!ok) unmet.push(`${p.Package}: ${clause}`);
+    }
+  }
+  return [...new Set(unmet)];
+}
+
+export function readBaseline(path) {
+  const m = new Map();
+  for (const line of readFileSync(path, 'utf8').split('\n')) {
+    const [name, version] = line.trim().split(/\s+/);
+    if (name && version) m.set(name.replace(/:[a-z0-9-]+$/, ''), version);
+  }
+  return m;
+}
+
 export function makeBundle(o) {
+  if (o.baseline) {
+    const unmet = unmetDependencies(o.debs, readBaseline(o.baseline));
+    if (unmet.length) throw new Error(`these dependencies are neither in the bundle nor on ${o.baseline}; add their .deb files:\n  ${unmet.join('\n  ')}`);
+  }
   const key = createPrivateKey(readFileSync(o.key));
   if (key.asymmetricKeyType !== 'ed25519') throw new Error('the release key must be Ed25519');
   const manifest = buildManifest(o, key);
