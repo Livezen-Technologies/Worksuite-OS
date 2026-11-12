@@ -109,6 +109,9 @@ function UsbCard({ st, bundles }: { st: OsUpdateStatus; bundles: FoundBundle[] }
   const [info, setInfo] = useState<BundleInfo | null>(null)
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null)
   const [job, setJob] = useState<string | null>(null)
+  // The version a finished bundle install put in place: the coordinator's status is not re-read after it, so without
+  // this the card kept offering the bundle it had just installed (seen in a VM).
+  const [justInstalled, setJustInstalled] = useState<string | null>(null)
   const found = chosen ?? (bundles[0] ? { ...bundles[0] } : null)
   useEffect(() => {
     setInfo(null)
@@ -120,8 +123,9 @@ function UsbCard({ st, bundles }: { st: OsUpdateStatus; bundles: FoundBundle[] }
   useEffect(() => os.onPkgJob((e) => {
     if (e.kind !== 'finished' || e.job !== job) return
     setJob(null)
+    if (e.result === 'success' && info) setJustInstalled(info.version)
     setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: bundleErrorText(e.error ?? 'failed'), error: true })
-  }), [job])
+  }), [job, info])
   const choose = async () => {
     setMsg(null)
     const f = await os.pickFile('wsupdate')
@@ -133,7 +137,8 @@ function UsbCard({ st, bundles }: { st: OsUpdateStatus; bundles: FoundBundle[] }
     const r = await os.bundleInstall(found.handle)
     if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: bundleErrorText(r.error), error: true })
   }
-  const newer = info ? cmpVersion(info.version, st.installed) > 0 : false
+  const installed = justInstalled && cmpVersion(justInstalled, st.installed) > 0 ? justInstalled : st.installed
+  const newer = info ? cmpVersion(info.version, installed) > 0 : false
   return (
     <section aria-labelledby="g14-usb" className={`${panel} flex items-center gap-4 px-5 py-[18px]`}>
       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[rgba(31,107,255,0.18)]"><Svg d="M9 3h6v6H9zM6 9h12v12H6zM10 13v4M14 13v4" size={24} stroke="#7FB2FF" /></span>
@@ -147,7 +152,7 @@ function UsbCard({ st, bundles }: { st: OsUpdateStatus; bundles: FoundBundle[] }
         {info && (
           <span className="flex items-center gap-1.5 text-xs" style={{ color: newer ? '#5FD39A' : '#FFB98A' }}>
             <Svg d={newer ? 'M5 12.5l4.5 4.5L19 7.5' : 'M12 8v5M12 16.5v.5'} size={14} stroke={newer ? '#5FD39A' : '#FFB98A'} />
-            {t('upd.g14.verified')} · {t(newer ? 'upd.g14.newer' : 'upd.g14.notNewer', { installed: st.installed })} · {formatBytes(info.bytes)}
+            {t('upd.g14.verified')} · {t(newer ? 'upd.g14.newer' : 'upd.g14.notNewer', { installed })} · {formatBytes(info.bytes)}
           </span>
         )}
         {msg && <span role={msg.error ? 'alert' : 'status'} className={`text-xs ${msg.error ? 'text-[#FF8A7A]' : 'text-[#C9D6EE]'}`}>{msg.text}</span>}
