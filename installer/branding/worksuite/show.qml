@@ -30,7 +30,10 @@ Presentation {
     readonly property bool copying: phase === "prepare" || phase === "copy" || phase === ""
     readonly property bool preparing: phase === "prepare" || phase === ""
     property WsState wsState: WsState {}
-    readonly property int current: { for (var i = 0; i < tasks.length; i++) if (tasks[i][0] === phase) return i; return -1 }
+    // Disk unlocking only means something on an encrypted install: an unencrypted one never lists it (its job still runs
+    // and does nothing), so the page does not claim a step that changed nothing.
+    readonly property var shownTasks: encrypted ? tasks : tasks.filter(function (t) { return t[0] !== "unlock" })
+    readonly property int current: { for (var i = 0; i < shownTasks.length; i++) if (shownTasks[i][0] === phase) return i; return phase === "unlock" ? 1 : -1 }
     // Global storage has no change signal: poll() re-reads the real state. worksuiteEncrypted is recorded from the
     // partition page's Encrypt box and the planned jobs (worksuiteconfirm); "partitions" once the partition job ran.
     property bool encrypted: false
@@ -250,7 +253,7 @@ Presentation {
                     anchors.fill: parent; anchors.margins: 8
                     spacing: 0
                     Repeater {
-                        model: presentation.tasks
+                        model: presentation.shownTasks
                         Rectangle {
                             readonly property bool done: index < presentation.current
                             readonly property bool active: index === presentation.current

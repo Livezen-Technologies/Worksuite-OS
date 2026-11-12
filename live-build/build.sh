@@ -33,6 +33,12 @@ find config/packages.chroot -name '*-dbgsym_*' -delete
 # without it leave Office out. Nothing is downloaded here. WORKSUITE_OFFICE_SHA256 (optional) pins the file; the
 # package's architecture must match ARCH.
 : "${WORKSUITE_RELEASE:=0}"
+# The installer's Terms page (installer/branding/worksuite/terms/LICENSE-*.txt) ships as a marked draft until the
+# approved legal text replaces it. A release image never shows a draft as the agreement people accept.
+if [ "$WORKSUITE_RELEASE" = 1 ] && grep -ql 'DRAFT — REPLACE WITH THE FINAL LEGAL TEXT' "$here"/../installer/branding/worksuite/terms/LICENSE-*.txt; then
+  echo "Installer terms are still the draft placeholder; add the approved legal text before a release build" >&2
+  exit 1
+fi
 office_found=0
 [ -z "${WORKSUITE_OFFICE_DEB:-}" ] || cp "$WORKSUITE_OFFICE_DEB" "config/packages.chroot/worksuite-office_local_$(dpkg-deb -f "$WORKSUITE_OFFICE_DEB" Architecture).deb"
 for office in config/packages.chroot/worksuite-office*.deb; do

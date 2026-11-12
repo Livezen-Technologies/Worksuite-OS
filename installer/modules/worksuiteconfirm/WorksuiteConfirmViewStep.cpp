@@ -966,6 +966,18 @@ WorksuiteConfirmViewStep::onActivate()
                                                                    : tr( "SET" );
             m_ops->addWidget( opRow( kind, tag, text ) );
         }
+        // Encryption, said plainly: Calamares' own descriptions never mention it (an encrypted root is "... with entries
+        // root"), so without this row the last screen before erasing gave no hint whether the disk will be encrypted.
+        {
+            const auto* jq = Calamares::JobQueue::instance();
+            const bool encrypted = jq && jq->globalStorage()->value( QString::fromLatin1( ENCRYPTED_KEY ) ).toBool();
+            m_ops->addWidget( encrypted
+                ? opRow( QStringLiteral( "SET" ), tr( "ENCRYPT" ),
+                         tr( "Encrypt the WorkSuite partition (LUKS2). You type your passphrase each time the computer starts; "
+                             "keep the recovery key shown at the end of the installation." ) )
+                : opRow( QStringLiteral( "SET" ), tr( "PLAIN" ),
+                         tr( "No encryption: anyone who has this disk can read its files." ) ) );
+        }
         m_inputLabel->setText( tr( "Type %1 to confirm that all data on it will be permanently deleted" ).arg( m_disk ) );
         m_input->clear();
         m_input->setEnabled( !m_disk.isEmpty() );
