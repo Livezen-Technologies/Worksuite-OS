@@ -24,6 +24,10 @@ describe('package client', () => {
     expect(await packageClient(f.exec).preview('apt:gimp', 'install')).toEqual({ ok: true, value: preview })
   })
 
+  it('treats an empty reply from a method with no return value as success (busctl prints nothing)', async () => {
+    expect(await packageClient(fakeExec({ stdout: '' }).exec).installUpdateNow()).toEqual({ ok: true, value: true })
+  })
+
   it('rejects odd catalog ids before calling anything', async () => {
     const f = fakeExec({})
     for (const id of ['gimp', 'deb:gimp', 'apt:-oFoo=1', 'apt:gimp; reboot']) expect((await packageClient(f.exec).start('Install', id)).ok).toBe(false)

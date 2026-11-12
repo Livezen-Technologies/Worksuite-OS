@@ -23,6 +23,8 @@ function failure(stderr: string): string {
 async function call(exec: Exec, member: string, signature: string, args: string[]): Promise<Reply<unknown[]>> {
   const r = await exec('busctl', ['--system', '--json=short', '--allow-interactive-authorization=yes', '--timeout=300', 'call', NAME, PATH, NAME, member, ...(signature ? [signature, ...args] : [])])
   if (r.code !== 0) return { ok: false, error: failure(r.stderr) }
+  // A method with no return value makes busctl print nothing at all.
+  if (!r.stdout.trim()) return { ok: true, value: [] }
   try { return { ok: true, value: (JSON.parse(r.stdout) as { data: unknown[] }).data } } catch { return { ok: false, error: 'failed' } }
 }
 const jsonOf = (r: Reply<unknown[]>): Reply<unknown> => {
