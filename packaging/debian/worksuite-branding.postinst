@@ -4,9 +4,12 @@ if [ "$1" = configure ]; then
   update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth \
     /usr/share/plymouth/themes/worksuite/worksuite.plymouth 150
   update-alternatives --set default.plymouth /usr/share/plymouth/themes/worksuite/worksuite.plymouth
-  # Debian's plymouth reads the theme from /etc/plymouth/plymouthd.conf; -R rebuilds the initramfs with it.
-  if command -v plymouth-set-default-theme >/dev/null 2>&1; then
-    plymouth-set-default-theme -R worksuite || true
+  # Debian's plymouth reads the theme from /etc/plymouth/plymouthd.conf. The initramfs (which carries the splash) is
+  # rebuilt once, by initramfs-tools' trigger at the end of the dpkg run: plymouth-set-default-theme -R rebuilt it here
+  # and the trigger then rebuilt it again (two full rebuilds per update, minutes each on a slow machine; seen in a VM).
+  if command -v plymouth-set-default-theme >/dev/null 2>&1; then plymouth-set-default-theme worksuite || true; fi
+  if [ -n "${DPKG_MAINTSCRIPT_PACKAGE:-}" ] && command -v dpkg-trigger >/dev/null 2>&1; then
+    dpkg-trigger --no-await update-initramfs || update-initramfs -u || true
   elif command -v update-initramfs >/dev/null 2>&1; then update-initramfs -u || true; fi
   # WorkSuite instead of Debian's artwork wherever Debian shows it (desktop-base's alternatives, at a higher priority:
   # nothing of Debian's is edited, and removing this package brings Debian's back): the vendor logo (GDM's sign-in

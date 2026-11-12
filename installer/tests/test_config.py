@@ -166,7 +166,10 @@ class BootSplashTest(unittest.TestCase):
     def test_initramfs_has_framebuffer_and_theme(self):
         self.assertIn("FRAMEBUFFER=y", (REPO / "branding/initramfs/worksuite-splash.conf").read_text())
         self.assertIn("etc/initramfs-tools/conf.d/worksuite-splash", (REPO / "packaging/debian/rules").read_text())
-        self.assertIn("plymouth-set-default-theme -R worksuite", (REPO / "packaging/debian/worksuite-branding.postinst").read_text())
+        post = (REPO / "packaging/debian/worksuite-branding.postinst").read_text()
+        self.assertIn("plymouth-set-default-theme worksuite", post)          # the theme, then ONE rebuild via the trigger
+        self.assertIn("dpkg-trigger --no-await update-initramfs", post)
+        self.assertNotRegex(post, r"(?m)^[^#]*plymouth-set-default-theme -R")
         script = " ".join(load(MODULES / "shellprocess-worksuite.conf")["script"])
         self.assertIn("plymouth-set-default-theme worksuite", script)
         _, _, execs = sequence()
