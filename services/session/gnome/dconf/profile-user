@@ -1,0 +1,3 @@
+# WorkSuite: the person's own settings first, then the WorkSuite defaults (dconf/00-worksuite-desktop).
+user-db:user
+system-db:worksuite

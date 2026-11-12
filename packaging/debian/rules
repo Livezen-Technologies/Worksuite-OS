@@ -55,6 +55,7 @@ override_dh_auto_build:
 	dh_auto_build
 
 override_dh_auto_install:
+	install -D -m 0644 services/session/gnome/dconf/profile-user debian/worksuite-session/etc/dconf/profile/user
 	install -D -m 0755 services/session/polkit/listener/worksuite-polkit-listener debian/worksuite-session/usr/lib/worksuite/worksuite-polkit-listener
 	install -D -m 0755 native/rs-input/worksuite-rs-input debian/worksuite-shell/usr/lib/worksuite/worksuite-rs-input
 	install -D -m 0755 native/guard/worksuite-guard debian/worksuite-device-agent/usr/lib/worksuite/worksuite-guard

@@ -6,8 +6,10 @@ import type { Exec } from './system'
 /** gsettings over an in-memory dconf, seeded from the shipped overrides (the values a new account starts with). */
 function fakeGsettings() {
   const db = new Map<string, string>()
+  // The shipped defaults: GNOME's in the gschema overrides, the extensions' in the dconf keyfile ([org/gnome/...] paths).
   const override = readFileSync(new URL('../../services/session/gnome/96_worksuite-desktop.gschema.override', import.meta.url), 'utf8')
     + readFileSync(new URL('../../services/session/gnome/95_worksuite-gnome.gschema.override', import.meta.url), 'utf8')
+    + readFileSync(new URL('../../services/session/gnome/dconf/00-worksuite-desktop', import.meta.url), 'utf8').replace(/^\[([^\]]+)\]$/gm, (_m, p: string) => `[${p.replace(/\//g, '.')}]`)
   let schema = ''
   for (const line of override.split('\n')) {
     const h = /^\[(.+)\]$/.exec(line); if (h) { schema = h[1]; continue }

@@ -82,6 +82,7 @@ services/session/gnome/gnome-session@worksuite.target.d/worksuite.session.conf u
 services/session/gnome/worksuite-gnome.desktop usr/share/wayland-sessions/
 services/session/gnome/95_worksuite-gnome.gschema.override usr/share/glib-2.0/schemas/
 services/session/gnome/96_worksuite-desktop.gschema.override usr/share/glib-2.0/schemas/
+services/session/gnome/dconf/00-worksuite-desktop etc/dconf/db/worksuite.d/
 services/session/gdm/worksuite-gdm.css usr/share/worksuite/gdm/
 services/session/gdm/worksuite-gdm-theme usr/libexec/worksuite/
 services/session/gdm/90-worksuite usr/share/worksuite/gdm/dconf/
