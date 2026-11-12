@@ -139,3 +139,11 @@ override_dh_shlibdeps:
 	# node-llama-cpp's addon finds its bundled libllama/libggml*.so through RUNPATH $$ORIGIN, so no -l is needed.
 	dh_shlibdeps --exclude=usr/lib/worksuite/shell/electron
 override_dh_dwz:
+
+# The package service runs apt/dpkg itself: OS updates, USB bundles and driver installs upgrade
+# worksuite-package-service from inside one of its own jobs. Stopping or restarting it then (prerm/postinst,
+# KillMode=mixed) killed the apt and dpkg doing the update and left packages unconfigured (seen in a VM). Its units
+# are neither stopped nor restarted on upgrade; the new code runs from the next start (the reboot an OS update asks for).
+override_dh_installsystemd:
+	dh_installsystemd -pworksuite-package-service --no-stop-on-upgrade --no-restart-after-upgrade
+	dh_installsystemd --remaining-packages

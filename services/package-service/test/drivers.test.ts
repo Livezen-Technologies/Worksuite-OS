@@ -462,6 +462,10 @@ test('unit: network and DNS stay reachable for apt; no device allow-list that wo
   // ProtectSystem=full/yes/strict make /usr read-only and ReadWritePaths=/usr does not reopen it (systemd 257, seen in
   // a VM: every dpkg run failed with EROFS). dpkg must be able to write /usr, /etc and /boot.
   assert.ok(!/^ProtectSystem=(full|yes|true|strict)\b/m.test(unit), 'dpkg can write /etc, /usr and /boot');
+  // The service upgrades itself from inside its own apt job: stopping/restarting it on upgrade killed that apt/dpkg
+  // (KillMode=mixed) and left packages unconfigured (seen in a VM installing a USB bundle).
+  const rules = readFileSync(new URL('../../../packaging/debian/rules', import.meta.url), 'utf8');
+  assert.match(rules, /dh_installsystemd -pworksuite-package-service --no-stop-on-upgrade --no-restart-after-upgrade/);
 });
 
 test('#59: unreachable package servers → state offline (never "up to date"); installed() read once per check', async () => {
