@@ -60,6 +60,7 @@ esac
 EOF
 printf '#!/bin/sh\necho "apt-get $*" >> "$STUB_LOG"\n[ -e "$STUB_BROKEN" ] && exit 100\nexit 0\n' > "$t/bin/apt-get"
 chmod +x "$t/bin/dpkg" "$t/bin/apt-get"
+printf '#!/bin/sh\nexit 1\n' > "$t/bin/pgrep"; chmod +x "$t/bin/pgrep"   # no package manager running
 repair() { PATH="$t/bin:$PATH" STUB_LOG="$t/log" STUB_DIRTY="$t/dirty" STUB_BROKEN="$t/broken" \
   WORKSUITE_REPAIR_FLAG="$t/flag" WORKSUITE_RUN_DIR="$t/run" sh "$rb/bin/worksuite-boot-repair" >/dev/null; }
 : > "$t/log"; repair
@@ -70,6 +71,13 @@ check "interrupted dpkg is repaired" '[ "$(cat "$t/run/boot-repair")" = repaired
 check "requested repair runs and clears the flag" '[ "$(cat "$t/run/boot-repair")" = repaired ] && [ ! -e "$t/flag" ]'
 : > "$t/dirty"; : > "$t/broken"
 check "failed repair exits non-zero (unit isolates recovery)" '! repair && [ "$(cat "$t/run/boot-repair")" = failed ]'
+check "a second run in the same boot after a failure does not isolate recovery again (no loop)" 'repair && [ "$(cat "$t/run/boot-repair")" = failed ]'
+rm -f "$t/run/boot-repair"
+# Seen in a VM: an upgrade restarted the unit while dpkg was configuring; it 'repaired', failed on the lock and
+# isolated the recovery target in the middle of the session.
+printf '#!/bin/sh\necho 4242\n' > "$t/bin/pgrep"; chmod +x "$t/bin/pgrep"; : > "$t/log"
+check "a running package manager is left alone: no repair, no failure" 'repair && [ "$(cat "$t/run/boot-repair")" = busy ] && ! grep -q configure "$t/log"'
+printf '#!/bin/sh\nexit 1\n' > "$t/bin/pgrep"
 
 # GRUB theme on /boot and the locked command line (E2E: stock menu on encrypted installs; Esc reached "grub>")
 check "recovery and previous-kernel entries boot without the GRUB superuser" '[ "$(echo "$out" | grep "^menuentry" | grep -vc -- "--unrestricted")" = 0 ]'
