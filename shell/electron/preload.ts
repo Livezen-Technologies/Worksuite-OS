@@ -393,7 +393,7 @@ contextBridge.exposeInMainWorld('worksuitePeripherals', {
   timezones: () => ipcRenderer.invoke('ws:timezones'),
   setTimezone: (tz: string) => ipcRenderer.invoke('ws:setTimezone', String(tz)),
   setNtp: (on: boolean) => ipcRenderer.invoke('ws:setNtp', on ? 'true' : 'false'),
-  setTime: (local: string) => ipcRenderer.invoke('ws:setTime', String(local)),
+  setTime: (local: string, tz: string) => ipcRenderer.invoke('ws:setTime', String(local), String(tz)),
   powerProfiles: () => ipcRenderer.invoke('ws:powerProfiles'),
   setPowerProfile: (name: string) => ipcRenderer.invoke('ws:setPowerProfile', String(name)),
   inhibitors: () => ipcRenderer.invoke('ws:powerInhibitors'),

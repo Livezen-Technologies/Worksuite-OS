@@ -36,7 +36,7 @@ export interface PeripheralsApi {
   setTimezone(tz: string): Promise<Avail<true>>
   setNtp(on: boolean): Promise<Avail<true>>
   /** YYYY-MM-DD HH:MM[:SS], local time; only while automatic time is off. */
-  setTime(local: string): Promise<Avail<true>>
+  setTime(local: string, tz: string): Promise<Avail<true>>
   powerProfiles(): Promise<Avail<PowerProfiles>>
   setPowerProfile(name: string): Promise<Avail<true>>
   inhibitors(): Promise<Avail<Inhibitor[]>>

@@ -19,7 +19,7 @@ const fake: PeripheralsApi = {
   async timezones() { return ok(['Asia/Colombo', 'Europe/London', 'UTC']) },
   async setTimezone(tz) { calls.push(`tz ${tz}`); clock = { ...clock, timezone: tz }; return ok(true as const) },
   async setNtp(on) { calls.push(`ntp ${on}`); clock = { ...clock, ntp: on }; return ok(true as const) },
-  async setTime(l) { calls.push(`time ${l}`); return clock.ntp ? { available: false as const, reason: 'ntp_on' } : ok(true as const) },
+  async setTime(l, _tz) { calls.push(`time ${l}`); return clock.ntp ? { available: false as const, reason: 'ntp_on' } : ok(true as const) },
   async btScan() { calls.push('scan'); return ok([{ address: 'AA:BB:CC:DD:EE:01', name: 'Keyboard K380' }]) },
   async btPair(a) { calls.push(`pair ${a}`); return ok(true as const) },
   async btRemove(a) { calls.push(`remove ${a}`); return ok(true as const) },

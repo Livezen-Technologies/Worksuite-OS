@@ -88,8 +88,33 @@ export function parseTimedatectl(text: string): ClockState | null {
 export const TZ_RE = /^(UTC|[A-Z][A-Za-z_-]+(\/[A-Za-z0-9_+-]+){1,2})$/
 /** A local time the person typed: YYYY-MM-DD HH:MM[:SS]. */
 export const LOCAL_TIME_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/
+/** A wall-clock time in `tz` (YYYY-MM-DD HH:MM[:SS]) → microseconds since the epoch, or null if it is not valid. */
+export function localToEpochUs(local: string, tz: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?::(\d{2}))?$/.exec(local)
+  if (!m) return null
+  const [y, mo, d, h, mi, se] = m.slice(1).map((x) => Number(x ?? 0))
+  const guess = Date.UTC(y, mo - 1, d, h, mi, se)
+  // The zone's offset at that moment, from Intl (two passes settle DST edges).
+  const offsetAt = (t: number) => {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      .formatToParts(new Date(t)).map((x) => [x.type, x.value]))
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - t
+  }
+  let t = guess - offsetAt(guess)
+  t = guess - offsetAt(t)
+  return Number.isFinite(t) ? t * 1000 : null
+}
+
+/** A timedated method over busctl, interactive polkit; refusals as reasons. */
+async function timedate1(exec: Exec, member: string, sig: string, args: string[]): Promise<Avail<true>> {
+  const r = await exec('busctl', ['--system', '--allow-interactive-authorization=yes', '--timeout=300', 'call', 'org.freedesktop.timedate1', '/org/freedesktop/timedate1', 'org.freedesktop.timedate1', member, sig, ...args])
+  if (r.code === 0) return { available: true, value: true }
+  if (r.missing) return { available: false, reason: 'busctl_missing' }
+  return { available: false, reason: timedateError(r.stderr) }
+}
+
 export function timedateError(text: string): string {
-  if (/not authorized|Access denied|Interactive authentication required/i.test(text)) return 'not_authorized'
+  if (/not authorized|Access denied|Interactive authentication required|NotAuthorized|dismissed/i.test(text)) return 'not_authorized'
   if (/NTP is enabled|Automatic time synchronization is enabled/i.test(text)) return 'ntp_on'
   if (/Invalid (or not installed )?(time ?zone|timezone)/i.test(text)) return 'invalid_argument'
   return 'failed'
@@ -275,21 +300,23 @@ export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin
       const r = await exec('timedatectl', ['list-timezones'])
       return r.code === 0 ? ok(r.stdout.split('\n').map((x) => x.trim()).filter((x) => TZ_RE.test(x))) : tool(r, 'timedatectl', 'service_unavailable')
     },
+    // Changes go to timedated over D-Bus with interactive authorization allowed, so polkit asks through the session's
+    // agent: timedatectl without a terminal never asks and is simply refused (seen in a VM).
     async setTimezone(tz: string): Promise<Avail<true>> {
       if (typeof tz !== 'string' || !TZ_RE.test(tz)) return fail('invalid_argument')
-      const r = await exec('timedatectl', ['set-timezone', tz])
-      return r.code === 0 ? ok(true) : (r.missing ? tool(r, 'timedatectl', 'service_unavailable') : fail(timedateError(r.stderr)))
+      return timedate1(exec, 'SetTimezone', 'sb', [tz, 'true'])
     },
     async setNtp(on: string): Promise<Avail<true>> {
       if (on !== 'true' && on !== 'false') return fail('invalid_argument')
-      const r = await exec('timedatectl', ['set-ntp', on])
-      return r.code === 0 ? ok(true) : (r.missing ? tool(r, 'timedatectl', 'service_unavailable') : fail(timedateError(r.stderr)))
+      return timedate1(exec, 'SetNTP', 'bb', [on, 'true'])
     },
     /** Only while automatic time is off (timedated refuses otherwise, which is reported as 'ntp_on'). */
-    async setTime(local: string): Promise<Avail<true>> {
+    async setTime(local: string, tz?: string): Promise<Avail<true>> {
       if (typeof local !== 'string' || !LOCAL_TIME_RE.test(local)) return fail('invalid_argument')
-      const r = await exec('timedatectl', ['set-time', local.length === 16 ? `${local}:00` : local])
-      return r.code === 0 ? ok(true) : (r.missing ? tool(r, 'timedatectl', 'service_unavailable') : fail(timedateError(r.stderr)))
+      const zone = tz && TZ_RE.test(tz) ? tz : 'UTC'
+      const usec = localToEpochUs(local, zone)
+      if (usec === null) return fail('invalid_argument')
+      return timedate1(exec, 'SetTime', 'xbb', [String(usec), 'false', 'true'])
     },
 
     // Power (WSOS-INT-005)
@@ -387,7 +414,7 @@ export function startPeripheralsHost(handle: Handle, home: string, b: Peripheral
   handle('ws:timezones', () => b.timezones())
   handle('ws:setTimezone', (tz) => b.setTimezone(tz))
   handle('ws:setNtp', (on) => b.setNtp(on))
-  handle('ws:setTime', (local) => b.setTime(local))
+  handle('ws:setTime', (local, tz) => b.setTime(local, tz))
   handle('ws:powerProfiles', () => b.powerProfiles())
   handle('ws:setPowerProfile', (n) => b.setPowerProfile(n))
   handle('ws:powerInhibitors', () => b.inhibitors())   // 'ws:inhibitors' is the session-end overlay's (sessionHost.ts)

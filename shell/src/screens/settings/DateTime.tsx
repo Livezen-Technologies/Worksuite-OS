@@ -71,7 +71,7 @@ export function DateTimePanel() {
               value={manual} onChange={(e) => setManual(e.target.value)} disabled={busy} />
           </label>
           <button type="button" className="h-11 rounded-xl bg-[#1F6BFF] px-5 text-[14px] font-semibold text-white disabled:opacity-50" disabled={busy || !manual}
-            onClick={() => void apply(() => api!.setTime(manual.replace('T', ' ')))}>{t('settings.dt.apply')}</button>
+            onClick={() => void apply(() => api!.setTime(manual.replace('T', ' '), c.timezone))}>{t('settings.dt.apply')}</button>
         </div>
       )}
     </div>
