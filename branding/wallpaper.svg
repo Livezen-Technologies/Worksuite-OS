@@ -1,1 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160" viewBox="0 0 3840 2160"><defs><radialGradient id="g" cx="0.7" cy="0.3" r="0.9"><stop offset="0" stop-color="#0B2A66"/><stop offset="1" stop-color="#0b1120"/></radialGradient></defs><rect width="3840" height="2160" fill="url(#g)"/><g opacity="0.08"><svg x="2700" y="700" width="720" height="720" viewBox="54 54 404 404"><defs><linearGradient id="wsmark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9eef7"/></linearGradient></defs><rect x="56" y="56" width="400" height="400" rx="92" fill="url(#wsmark)" stroke="#d9e2f2" stroke-width="3"/><rect x="136" y="136" width="108" height="108" rx="16" fill="#0a6cff"/><rect x="268" y="136" width="108" height="108" rx="16" fill="#00daf2"/><rect x="136" y="268" width="108" height="108" rx="16" fill="#00daf2"/><rect x="268" y="268" width="108" height="108" rx="16" fill="#001842"/><circle cx="322" cy="322" r="22" fill="none" stroke="#00daf2" stroke-width="10"/></svg></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160" viewBox="0 0 3840 2160">
+  <!-- WorkSuite OS wallpaper (1.1): deep navy with soft blue and cyan light, and the mark's three cells drawn large as
+       frosted glass in the lower right. The centre stays calm so the sign-in card and the taskbar read clearly.
+       Static (no animation), one file for the desktop, the lock screen and the sign-in screen. -->
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071433"/>
+      <stop offset="0.55" stop-color="#050E26"/>
+      <stop offset="1" stop-color="#030918"/>
+    </linearGradient>
+    <radialGradient id="glowBlue" cx="2760" cy="1160" r="1500" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1F6BFF" stop-opacity="0.50"/><stop offset="0.45" stop-color="#1F6BFF" stop-opacity="0.18"/><stop offset="1" stop-color="#1F6BFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowCyan" cx="2380" cy="1760" r="1100" gradientUnits="userSpaceOnUse" gradientTransform="translate(0 1760) scale(1 0.5) translate(0 -1760)">
+      <stop offset="0" stop-color="#18D4F0" stop-opacity="0.26"/><stop offset="1" stop-color="#18D4F0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowViolet" cx="520" cy="220" r="1200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5B4FE0" stop-opacity="0.20"/><stop offset="1" stop-color="#5B4FE0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowTop" cx="3560" cy="240" r="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#18D4F0" stop-opacity="0.12"/><stop offset="1" stop-color="#18D4F0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glassBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3D86FF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#0A6CFF" stop-opacity="0.18"/>
+    </linearGradient>
+    <linearGradient id="glassCyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5BE8FA" stop-opacity="0.50"/>
+      <stop offset="1" stop-color="#00DAF2" stop-opacity="0.14"/>
+    </linearGradient>
+    <linearGradient id="glassNavy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1B3A78" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#001842" stop-opacity="0.55"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.45"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.18"/>
+    </linearGradient>
+    <pattern id="dots" width="64" height="64" patternUnits="userSpaceOnUse">
+      <circle cx="32" cy="32" r="2.2" fill="#7FB2FF" fill-opacity="0.10"/>
+    </pattern>
+    <radialGradient id="dotfade" cx="0.72" cy="0.62" r="0.6">
+      <stop offset="0" stop-color="#fff" stop-opacity="1"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="dotmask"><rect width="3840" height="2160" fill="url(#dotfade)"/></mask>
+  </defs>
+
+  <rect width="3840" height="2160" fill="url(#base)"/>
+  <!-- Light: a blue glow behind the mark, a cyan one under it, a faint violet one top left. -->
+  <rect width="3840" height="2160" fill="url(#glowBlue)"/>
+  <rect width="3840" height="2160" fill="url(#glowCyan)"/>
+  <rect width="3840" height="2160" fill="url(#glowViolet)"/>
+  <rect width="3840" height="2160" fill="url(#glowTop)"/>
+  <rect width="3840" height="2160" fill="url(#dots)" mask="url(#dotmask)"/>
+
+  <!-- The mark, large: blue square, cyan left and bottom cells, navy overlap (same geometry as the logo). -->
+  <g transform="translate(2140 560) rotate(-8 640 640)">
+    <rect x="320" y="0" width="640" height="640" rx="96" fill="url(#glassBlue)"/>
+    <rect x="320" y="0" width="640" height="640" rx="96" fill="none" stroke="url(#edge)" stroke-width="4"/>
+    <rect x="0" y="320" width="320" height="320" rx="64" fill="url(#glassCyan)"/>
+    <rect x="0" y="320" width="320" height="320" rx="64" fill="none" stroke="url(#edge)" stroke-width="4"/>
+    <rect x="320" y="640" width="320" height="320" rx="64" fill="url(#glassCyan)"/>
+    <rect x="320" y="640" width="320" height="320" rx="64" fill="none" stroke="url(#edge)" stroke-width="4"/>
+    <rect x="320" y="320" width="320" height="320" rx="48" fill="url(#glassNavy)"/>
+    <rect x="320" y="320" width="320" height="320" rx="48" fill="none" stroke="url(#edge)" stroke-width="3"/>
+  </g>
+</svg>

@@ -1,52 +1,86 @@
 /* WorkSuite sign-in and lock screen on GDM / GNOME Shell 48 (appended to the stock theme by worksuite-gdm-theme).
- * The look of the WorkSuite greeter (services/session/greeter/worksuite_greeter/ui.py): the WorkSuite wallpaper,
- * a large clock, one glass card with the person's round avatar, the password field and a blue button, IBM Plex Sans.
- * Only the login/unlock classes are touched; everything else stays the stock theme. St has no radial gradients, so
- * the wallpaper image carries the glow. */
-#lockDialogGroup { background: #061029 url("file:///usr/share/backgrounds/worksuite/default.png"); background-size: cover; background-position: center; }
-.login-dialog, .unlock-dialog { font-family: "IBM Plex Sans", sans-serif; color: #ffffff; background-color: transparent; }
-.login-dialog { background-color: rgba(4, 10, 26, 0.35); }
+ * The look of the WorkSuite greeter: the WorkSuite wallpaper, one frosted navy card with a round avatar on a blue-to-
+ * cyan ring, a glassy password field with a blue focus ring, quiet secondary buttons, IBM Plex Sans.
+ * Every rule is prefixed with #lockDialogGroup (the sign-in and lock dialogs live in it): GNOME's own selectors chain
+ * up to three classes, and an id outranks them all, so these win without editing GNOME's file. St has no radial
+ * gradients or backdrop blur, so the wallpaper carries the light. High contrast keeps the stock theme. */
 
-/* The card: user list and prompt sit on one translucent navy panel with a soft shadow. */
-.login-dialog-user-selection-box, .login-dialog-prompt-layout, .unlock-dialog .login-dialog-prompt-layout {
-  background-color: rgba(8, 20, 48, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 28px;
-  padding: 36px 40px 28px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.40); }
-.login-dialog-user-selection-box { padding: 20px 16px; }
-.login-dialog-user-list-view { -st-vfade-offset: 1em; }
-.login-dialog-user-list-item { border-radius: 16px; padding: 10px 14px; }
-.login-dialog-user-list-item:hover, .login-dialog-user-list-item:focus { background-color: rgba(31, 107, 255, 0.22); }
-.login-dialog-user-list-item:selected { background-color: rgba(31, 107, 255, 0.35); }
+#lockDialogGroup { background: #050E26 url("file:///usr/share/backgrounds/worksuite/default.png"); background-size: cover; background-position: center; }
+#lockDialogGroup .login-dialog, #lockDialogGroup .unlock-dialog { font-family: "IBM Plex Sans", sans-serif; color: #ffffff; background-color: transparent; }
+#lockDialogGroup .login-dialog { background-color: rgba(3, 9, 24, 0.30); }
 
-/* The person: big round avatar with the WorkSuite ring, name in semibold. */
-.user-icon { border-radius: 999px; background-color: rgba(31, 107, 255, 0.9); color: #ffffff;
-  border: 3px solid rgba(24, 212, 240, 0.55); box-shadow: 0 0 0 9px rgba(31, 107, 255, 0.16); }
-.user-icon StIcon { background-color: transparent; color: #ffffff; }
-.user-widget-label, .login-dialog-username { color: #ffffff; font-weight: 600; font-size: 22pt; }
+/* The card. */
+#lockDialogGroup .login-dialog-user-selection-box,
+#lockDialogGroup .login-dialog-prompt-layout {
+  background-color: rgba(10, 22, 52, 0.62);
+  border: 1px solid rgba(160, 200, 255, 0.16);
+  border-radius: 32px;
+  padding: 40px 44px 30px;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.45);
+}
+#lockDialogGroup .login-dialog-user-selection-box { padding: 18px 16px; }
 
-/* Password field and buttons. */
-.login-dialog-prompt-entry, .unlock-dialog StPasswordEntry, .login-dialog StEntry {
-  background-color: rgba(4, 10, 26, 0.60); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.20);
-  border-radius: 14px; padding: 10px 14px; min-height: 26px; caret-color: #7fb2ff; selection-background-color: #1f6bff; }
-.login-dialog-prompt-entry:focus, .unlock-dialog StPasswordEntry:focus, .login-dialog StEntry:focus {
-  border-color: #7fb2ff; box-shadow: 0 0 0 3px rgba(127, 178, 255, 0.18); }
-.login-dialog-prompt-label { color: #c9d6ee; font-size: 11pt; }
-.login-dialog-message-warning { color: #ffd58a; }
-.login-dialog-message { color: rgba(255, 255, 255, 0.75); }
-.login-dialog-message.login-dialog-message-warning, .login-dialog .login-dialog-message-hint { color: rgba(255, 255, 255, 0.6); }
-.login-dialog-button, .login-dialog .modal-dialog-button, .unlock-dialog .modal-dialog-button {
-  background-color: rgba(14, 32, 72, 0.6); color: #e8eefa; border: 1px solid rgba(127, 178, 255, 0.18); border-radius: 12px; }
-.login-dialog-button:hover, .login-dialog .modal-dialog-button:hover { background-color: rgba(255, 255, 255, 0.12); }
-.login-dialog-button.a11y-button, .login-dialog-button.switch-user-button, .login-dialog-session-list-button { border-radius: 12px; }
-.login-dialog-button.cancel-button { color: #c9d6ee; }
-.login-dialog-not-listed-label { color: #7fb2ff; }
-.login-dialog-not-listed-button:hover .login-dialog-not-listed-label, .login-dialog-not-listed-button:focus .login-dialog-not-listed-label { color: #b8d4ff; }
+/* People to choose from. */
+#lockDialogGroup .login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item {
+  background-color: rgba(255, 255, 255, 0.04); border: 1px solid rgba(160, 200, 255, 0.10);
+  border-radius: 18px; padding: 12px 16px; color: #ffffff; }
+#lockDialogGroup .login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:hover {
+  background-color: rgba(31, 107, 255, 0.20); border-color: rgba(127, 178, 255, 0.40); }
+#lockDialogGroup .login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:focus,
+#lockDialogGroup .login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:selected {
+  background-color: rgba(31, 107, 255, 0.28); border-color: #7fb2ff; box-shadow: 0 0 0 3px rgba(127, 178, 255, 0.22); }
 
-/* Lock screen clock: large and light, like the greeter's wall clock. */
-.unlock-dialog-clock-time { font-size: 72pt; font-weight: 300; color: rgba(255, 255, 255, 0.92); }
-.unlock-dialog-clock-date { font-size: 16pt; color: rgba(255, 255, 255, 0.78); }
-.unlock-dialog-clock-hint { color: rgba(255, 255, 255, 0.6); }
-.unlock-dialog-notifications-container .notification, .unlock-dialog-notification-source { background-color: rgba(8, 20, 48, 0.72); border-radius: 16px; }
+/* The person: round avatar on the WorkSuite ring. */
+#lockDialogGroup .user-icon {
+  border-radius: 999px; background-color: #1f6bff; color: #ffffff;
+  background-gradient-direction: diagonal; background-gradient-start: #1f6bff; background-gradient-end: #18d4f0;
+  border: 3px solid rgba(255, 255, 255, 0.85); box-shadow: 0 0 0 8px rgba(31, 107, 255, 0.22), 0 18px 40px rgba(0, 0, 0, 0.45); }
+#lockDialogGroup .user-icon StIcon { background-color: transparent; color: #ffffff; }
+#lockDialogGroup .login-dialog .user-widget.horizontal .user-widget-label,
+#lockDialogGroup .unlock-dialog .user-widget.horizontal .user-widget-label { color: #ffffff; font-weight: 600; }
+#lockDialogGroup .user-widget-label { color: #ffffff; font-weight: 600; font-size: 20pt; }
 
-/* Top bar on the sign-in screen: transparent over the wallpaper. */
+/* Password field. */
+#lockDialogGroup .login-dialog .login-dialog-prompt-entry,
+#lockDialogGroup .unlock-dialog .login-dialog-prompt-entry {
+  background-color: rgba(3, 9, 24, 0.55); color: #ffffff; border: 1px solid rgba(160, 200, 255, 0.24);
+  border-radius: 16px; padding: 12px 16px; caret-color: #7fb2ff; selection-background-color: #1f6bff; box-shadow: none; }
+#lockDialogGroup .login-dialog .login-dialog-prompt-entry:hover,
+#lockDialogGroup .unlock-dialog .login-dialog-prompt-entry:hover { background-color: rgba(3, 9, 24, 0.65); border-color: rgba(160, 200, 255, 0.36); }
+#lockDialogGroup .login-dialog .login-dialog-prompt-entry:focus,
+#lockDialogGroup .unlock-dialog .login-dialog-prompt-entry:focus {
+  background-color: rgba(3, 9, 24, 0.70); border-color: #7fb2ff; box-shadow: 0 0 0 4px rgba(127, 178, 255, 0.22); }
+#lockDialogGroup .login-dialog .login-dialog-prompt-entry StLabel.hint-text,
+#lockDialogGroup .unlock-dialog .login-dialog-prompt-entry StLabel.hint-text { color: rgba(201, 214, 238, 0.65); }
+#lockDialogGroup .login-dialog-prompt-label { color: #c9d6ee; font-size: 11pt; }
+#lockDialogGroup .login-dialog-message { color: rgba(255, 255, 255, 0.78); }
+#lockDialogGroup .login-dialog-message-warning { color: #ffd58a; }
+
+/* Buttons: round and quiet (back, switch user, session), the primary one blue. */
+#lockDialogGroup .login-dialog-button.cancel-button,
+#lockDialogGroup .login-dialog-button.switch-user-button,
+#lockDialogGroup .login-dialog-button.login-dialog-session-list-button,
+#lockDialogGroup .unlock-dialog .button {
+  background-color: rgba(255, 255, 255, 0.08); color: #e8eefa; border: 1px solid rgba(160, 200, 255, 0.18); border-radius: 999px; }
+#lockDialogGroup .login-dialog-button.cancel-button:hover,
+#lockDialogGroup .login-dialog-button.switch-user-button:hover,
+#lockDialogGroup .login-dialog-button.login-dialog-session-list-button:hover,
+#lockDialogGroup .unlock-dialog .button:hover { background-color: rgba(255, 255, 255, 0.16); }
+#lockDialogGroup .login-dialog .button.default, #lockDialogGroup .unlock-dialog .button.default {
+  background-color: #1f6bff; color: #ffffff; border-color: #1f6bff; }
+
+/* "Not listed?": a text link, not a grey pill. */
+#lockDialogGroup .login-dialog-not-listed-button { background-color: transparent; border: none; box-shadow: none; padding: 8px 12px; border-radius: 12px; }
+#lockDialogGroup .login-dialog-not-listed-button:hover, #lockDialogGroup .login-dialog-not-listed-button:focus { background-color: rgba(255, 255, 255, 0.08); }
+#lockDialogGroup .login-dialog-not-listed-label { color: #7fb2ff; font-weight: 600; }
+
+/* Lock screen clock: large and light. */
+#lockDialogGroup .unlock-dialog-clock .unlock-dialog-clock-time { font-size: 80pt; font-weight: 300; color: rgba(255, 255, 255, 0.95); }
+#lockDialogGroup .unlock-dialog-clock .unlock-dialog-clock-date { font-size: 17pt; color: rgba(255, 255, 255, 0.80); }
+#lockDialogGroup .unlock-dialog-clock-hint { color: rgba(255, 255, 255, 0.60); }
+
+/* The logo under the card, with room to breathe. */
+#lockDialogGroup .login-dialog-logo-bin { padding: 28px 0 36px; }
+
+/* Top bar over the wallpaper. */
 #panel.login-screen, #panel.unlock-screen, #panel.lock-screen { background-color: transparent; }
-.login-dialog-logo-bin { padding: 24px 0; }
