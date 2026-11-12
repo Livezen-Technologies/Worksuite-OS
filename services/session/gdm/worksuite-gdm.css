@@ -12,7 +12,7 @@
 /* The card. */
 #lockDialogGroup .login-dialog-user-selection-box,
 #lockDialogGroup .login-dialog-prompt-layout {
-  background-color: rgba(10, 22, 52, 0.62);
+  background-color: rgba(9, 20, 48, 0.86);
   border: 1px solid rgba(160, 200, 255, 0.16);
   border-radius: 32px;
   padding: 40px 44px 30px;
