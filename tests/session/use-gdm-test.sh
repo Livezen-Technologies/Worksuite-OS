@@ -59,4 +59,7 @@ grep -qx 'Requires=org.gnome.Shell.target' "$G/gnome-session@worksuite.target.d/
   && ok "gnome-session@worksuite.target pulls in GNOME Shell and the session's required components" || bad "session drop-in out of sync: [$want] vs [$req]"
 grep -q 'gnome-session@worksuite.target.d/worksuite.session.conf usr/lib/systemd/user/gnome-session@worksuite.target.d/' "$ROOT/packaging/debian/worksuite-session.install" \
   && ok "the drop-in is installed" || bad "the drop-in is installed"
+# The Start menu builds from gnome-menus' menu: the package is required and the session names its prefix.
+grep -q '^export XDG_MENU_PREFIX=gnome-$' "$G/worksuite-gnome-session" && sed -n '/^Package: worksuite-session$/,/^Description:/p' "$D/control" | grep -q 'gnome-menus' \
+  && ok "Start menu: gnome-menus required and XDG_MENU_PREFIX=gnome- exported" || bad "Start menu: gnome-menus / XDG_MENU_PREFIX"
 echo "1..$n"; exit $fail

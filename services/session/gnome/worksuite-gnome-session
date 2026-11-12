@@ -7,6 +7,9 @@ export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=WorkSuite:GNOME
 export XDG_SESSION_DESKTOP=worksuite
 export GNOME_SHELL_SESSION_MODE=user
+# The freedesktop menu the Start menu (ArcMenu) builds its categories from: gnome-menus' gnome-applications.menu.
+# Without the prefix it looked for applications.menu, found none and never opened (installed VM).
+export XDG_MENU_PREFIX=gnome-
 # Electron apps (WorkSuite apps, Settings) on Wayland natively, with GNOME's decorations.
 export ELECTRON_OZONE_PLATFORM_HINT=auto
 exec gnome-session --session=worksuite

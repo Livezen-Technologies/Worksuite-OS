@@ -39,6 +39,8 @@ show-showdesktop-hover=false
 # no file indexer, no web results), user, Settings, Files and the power actions (lock, log out, restart, shut down).
 
 [org/gnome/shell/extensions/arcmenu]
+# Sign-in lands on the desktop, not GNOME's overview.
+hide-overview-on-startup=true
 update-notifier-enabled=false
 menu-layout='Eleven'
 position-in-panel='Center'
