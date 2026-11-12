@@ -2,6 +2,7 @@
 :root[data-theme="light"] .bg-\[\#040A1A\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #E0E5F3; }
 :root[data-theme="light"] .bg-\[\#050B18\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #DFE5F3; }
 :root[data-theme="light"] .bg-\[\#050E24\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #E4E9F5; }
+:root[data-theme="light"] .bg-\[\#061029\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #E7EBF6; }
 :root[data-theme="light"] .bg-\[\#071330\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #EBEEF7; }
 :root[data-theme="light"] .bg-\[\#0A1838\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #EFF2F9; }
 :root[data-theme="light"] .bg-\[\#0A1A3D\]:not(.ws-dark-zone *, .ws-dark-zone) { background-color: #F2F4FA; }
