@@ -14,7 +14,7 @@
 #
 # What apply does: verifies the signed bundle (the same code as Settings › Updates, package-service/bundle-cli.ts) with
 # the keys the installed system trusts, copies the packages into the target and installs them there with apt, offline
-# (--no-download), in a chroot. Only packages are changed: files, accounts, settings and apps stay. A bundle that is
+# (no package sources for these runs: only the bundle and what is installed count), in a chroot. Only packages are changed: files, accounts, settings and apps stay. A bundle that is
 # older than the installed system, for another architecture, unsigned or altered is refused before anything changes.
 # Exit codes: 0 done, 1 refused or failed, 2 usage.
 set -eu
@@ -152,9 +152,13 @@ case "$cmd" in
         debs=$(printf '%s' "$out" | tr ',' '\n' | sed -n 's#.*"\(/[^"]*\.deb\)".*#\1#p' | sed "s#^$root##")
         [ -n "$debs" ] || die 1 "the bundle has no packages"
         bind_system
+        # No package sources at all for these runs: a dependency the bundle lacks is unmet, never downloaded. Not
+        # --no-download: apt 3.0 fails a real install of a local .deb with '~' in its version under it.
+        : > "$pool/no-sources.list"
+        offline="-o Dir::Etc::SourceList=${pool#"$root"}/no-sources.list -o Dir::Etc::SourceParts=/nonexistent"
         echo "progress 20 checking"
         # shellcheck disable=SC2086 # one argument per package path (no spaces: checked by the bundle's name rule)
-        if ! sim=$($CHROOT "$root" apt-get -s -q --no-download install -- $debs 2>&1); then
+        if ! sim=$($CHROOT "$root" apt-get -s -q $offline install -- $debs 2>&1); then
             printf 'error %s\n' "$(printf '%s\n' "$sim" | grep -m1 '^E:' || echo 'the update does not install cleanly on this system')"; rm -rf "$pool"; exit 1
         fi
         echo "progress 30 installing"
@@ -165,7 +169,7 @@ case "$cmd" in
         # A pipe hides apt's exit status (no pipefail in sh): apt writes it to a file.
         st="$MNT/apt-status"; mkdir -p "$MNT"; echo 1 > "$st"
         # shellcheck disable=SC2086
-        { DEBIAN_FRONTEND=noninteractive $CHROOT "$root" apt-get -y -q --no-download -o APT::Status-Fd=1 \
+        { DEBIAN_FRONTEND=noninteractive $CHROOT "$root" apt-get -y -q $offline -o APT::Status-Fd=1 \
                 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -- $debs 2>>"$log"; echo $? > "$st"; } \
              | tee -a "$log" | awk -F: '/^pmstatus:/ { p = int(30 + $3 * 0.6); if (p > last) { print "progress " p " installing"; last = p; fflush() } }'
         [ "$(cat "$st")" = 0 ] || die 1 "installing the packages failed (see /var/log/worksuite-offline-update.log on the installed system)"

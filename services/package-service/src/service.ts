@@ -3,7 +3,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID, type KeyObject } from 'node:crypto';
 import { join } from 'node:path';
-import { renameSync, rmSync } from 'node:fs';
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { extractBundle, inspectBundle, type BundleManifest } from './bundle.ts';
 import { BUNDLE_ROOTS, stageBundle, stageFile, stagedCopy, underRoots } from './staging.ts';
 import { checkSources, isCritical, parseCatalogId, parseDiskChange, parseSimulation, parseUpgradable, ServiceError, type Plan } from './apt.ts';
@@ -335,6 +335,16 @@ export class PackageService extends EventEmitter {
 
   // ---- offline .wsupdate bundles (WSOS-AUP-010) ----
 
+  /** apt options for an offline run: no package sources at all (an empty list), so only local files and the installed
+   *  system count. */
+  private offlineAptArgs(): string[] {
+    const dir = this.spool('apt');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const list = join(dir, 'no-sources.list');
+    writeFileSync(list, '');
+    return ['-o', `Dir::Etc::SourceList=${list}`, '-o', 'Dir::Etc::SourceParts=/nonexistent'];
+  }
+
   private bundleOptions() {
     const r = this.env.release;
     if (!r) throw new ServiceError('Failed', 'release keys are not available');
@@ -366,12 +376,16 @@ export class PackageService extends EventEmitter {
       catch (e) { this.env.audit('bundle_rejected', { caller, error: (e as Error).message }); throw e; }
       job.subject = { kind: 'os', title: 'WorkSuite OS', version: manifest.version };
       try {
-        // Offline: everything must come from the bundle (--no-download); apt still checks dependencies and conflicts.
-        const sim = await this.env.runner.run('apt-get', ['-s', '-q', '--no-download', 'install', '--', ...debs]);
+        // Offline: everything must come from the bundle or what is installed. Not --no-download: apt 3.0 then fails a
+        // real install of a local .deb whose version has a '~' ("Pathname to install is not absolute"; 1.0.1~rc1 does,
+        // seen in a VM) although its simulation passes. No package sources for these runs gives the same guarantee:
+        // a dependency the bundle lacks is unmet, never fetched. apt still checks dependencies and conflicts.
+        const offline = this.offlineAptArgs();
+        const sim = await this.env.runner.run('apt-get', ['-s', '-q', ...offline, 'install', '--', ...debs]);
         if (sim.code !== 0) throw new ServiceError('Failed', firstLine(sim.stderr) || 'the bundle does not install cleanly on this device');
         this.refuseCritical(parseSimulation(sim.stdout));
         job.phase = 'applying'; this.progress(job, 40);
-        await this.mustRun('apt-get', ['-y', '-q', '--no-download', ...APT_ENV_ARGS, 'install', '--', ...debs]);
+        await this.mustRun('apt-get', ['-y', '-q', ...offline, ...APT_ENV_ARGS, 'install', '--', ...debs]);
         job.phase = 'checking'; this.progress(job, 90);
         if (await this.detectInterrupted()) throw new ServiceError('Failed', 'packages left unconfigured; repair needed');
         this.rebootRequired = (await this.env.runner.run('test', ['-e', '/run/reboot-required'])).code === 0;

@@ -53,7 +53,7 @@ out=$(sh "$up" apply --target /dev/fake --bundle "$t/media/update.wsupdate")
 check "apply: ends with done" '[ "$(echo "$out" | tail -1)" = done ]'
 check "apply: progress rises through installing to 100" 'echo "$out" | grep -q "^progress 60 installing" && echo "$out" | grep -q "^progress 100 done"'
 check "apply: simulated first, then installed offline from the copied packages" \
-  'head -1 "$t/calls" | grep -q "^apt-get -s -q --no-download install -- /var/cache/worksuite-offline-update/worksuite-desktop_1.0.0~rc2_all.deb /var/cache/worksuite-offline-update/worksuite-shell_1.0.0~rc2_amd64.deb" && grep -q "^apt-get -y -q --no-download .*--force-confold install -- /var/cache/worksuite-offline-update/" "$t/calls"'
+  'head -1 "$t/calls" | grep -q "^apt-get -s -q -o Dir::Etc::SourceList=/var/cache/worksuite-offline-update/no-sources.list -o Dir::Etc::SourceParts=/nonexistent install -- /var/cache/worksuite-offline-update/worksuite-desktop_1.0.0~rc2_all.deb /var/cache/worksuite-offline-update/worksuite-shell_1.0.0~rc2_amd64.deb" && grep -q "^apt-get -y -q -o Dir::Etc::SourceList=.*no-sources.list .*--force-confold install -- /var/cache/worksuite-offline-update/" "$t/calls"'
 check "apply: copied packages removed afterwards" '[ ! -e "$root/var/cache/worksuite-offline-update" ]'
 check "apply: logged on the installed system" 'grep -q "update 1.0.0~rc1 -> 1.0.0~rc2 from update.wsupdate" "$root/var/log/worksuite-offline-update.log" && grep -q "updated to 1.0.0~rc2" "$root/var/log/worksuite-offline-update.log"'
 

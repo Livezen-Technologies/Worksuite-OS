@@ -214,7 +214,11 @@ test('bundle: signed manifest and package hashes verified; installs offline with
   assert.equal(job.state, 'success', job.error);
   const dir = join(b.env.spool!, 'bundle');
   const debs = [join(dir, 'worksuite-desktop_1.1.0_amd64.deb'), join(dir, 'worksuite-shell_1.1.0_amd64.deb')].join(' ');
-  assert.ok(b.calls.includes(`apt-get -y -q --no-download -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -- ${debs}`), b.calls.join('\n'));
+  // No package sources (not --no-download: apt 3.0 fails real installs of local ~-versions under it, seen in a VM).
+  const offline = `-o Dir::Etc::SourceList=${join(b.env.spool!, 'apt', 'no-sources.list')} -o Dir::Etc::SourceParts=/nonexistent`;
+  assert.ok(b.calls.includes(`apt-get -s -q ${offline} install -- ${debs}`), b.calls.join('\n'));
+  assert.ok(b.calls.includes(`apt-get -y -q ${offline} -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -- ${debs}`), b.calls.join('\n'));
+  assert.ok(!b.calls.some((c) => c.includes('--no-download')));
   assert.ok(b.audit.some(([e]) => e === 'bundle_installed'));
   assert.ok(!existsSync(dir), 'extracted packages cleaned up');
 });

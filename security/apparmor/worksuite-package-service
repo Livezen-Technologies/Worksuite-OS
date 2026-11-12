@@ -88,6 +88,8 @@ profile worksuite-package-service flags=(attach_disconnected) {
     /usr/bin/{tar,gzip,xz,zstd} mrix,
     /etc/dpkg/** r,
     /usr/share/dpkg/** r,
+    # tar (run by dpkg-deb) looks up owner names; read-only.
+    /etc/{passwd,group,nsswitch.conf} r,
     @{PROC}/@{pid}/** r,
     /tmp/ws-untrusted-*/ r,
     /tmp/ws-untrusted-*/package.deb r,
