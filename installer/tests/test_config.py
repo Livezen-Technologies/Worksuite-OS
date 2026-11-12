@@ -266,6 +266,12 @@ class CopyPageTest(unittest.TestCase):
         self.assertIn("/usr/share/worksuite/rootfs.packages", hook)
         cpp = (ROOT / "modules" / "worksuiteconfirm" / "WorksuiteConfirmViewStep.cpp").read_text()
         self.assertIn("worksuiteImagePackages", cpp)
+        # An unencrypted install never lists "Set up disk unlocking" (it used to, VM finding), and the confirm-disk
+        # screen states encryption either way.
+        self.assertIn('encrypted ? tasks : tasks.filter(function (t) { return t[0] !== "unlock" })', qml)
+        self.assertIn("model: presentation.shownTasks", qml)
+        self.assertIn("ENCRYPT", cpp)
+        self.assertIn("PLAIN", cpp)
         self.assertIn("f_files - vfs.f_ffree", cpp)
 
 
