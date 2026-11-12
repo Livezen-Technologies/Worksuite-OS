@@ -1,6 +1,7 @@
 // Settings app (boards SetNav, SetNetwork, SetBluetooth, SetDisplay, SetAppearance, SetSound, SetPrivacy, SetUsers,
 // UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
 // can't tell, the section says so instead of showing sample values.
+import { useActionError } from '../lib/useActionError'
 import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { localTaskbarAlign, saveTaskbarAlign, shellPrefsFrom, type TaskbarAlign } from '../lib/shellPrefs'
@@ -110,6 +111,7 @@ function NetworkPanel() {
   const { r, reload: reloadNet } = useAvail(os.sysNetwork, 15_000, 'network')
   const radio = useRadio('wifi')
   const reload = async () => { await Promise.all([reloadNet(), radio.reload()]) }
+  const action = useActionError()
   const [join, setJoin] = useState<Join | null>(null)
   const [scanning, setScanning] = useState(false)
   // #42: the form closes, and its error goes, once NetworkManager reports that network in use — also when nmcli had
@@ -119,7 +121,7 @@ function NetworkPanel() {
   const problems = <RadioProblems kind="wifi" d={radio.d} onFixed={() => void reload()} always />
   if (r.state !== 'ok') return <><H1>{t('settings.nav.Network')}</H1>{r.state === 'loading' ? <Empty title={t('settings.net.reading')} /> : <><Unavail what={t('settings.net.info')} reason={r.reason} />{problems}</>}</>
   const n = r.value
-  const rescan = async () => { setScanning(true); await os.sysWifiRescan(); setTimeout(() => { setScanning(false); void reload() }, 4000) }
+  const rescan = async () => { setScanning(true); await action.run(os.sysWifiRescan()); setTimeout(() => { setScanning(false); void reload() }, 4000) }
   const wifi = n.devices.find((d) => d.type === 'wifi')
   const eth = n.devices.filter((d) => d.type === 'ethernet')
   const active = n.networks.find((w) => w.in_use)
@@ -136,6 +138,7 @@ function NetworkPanel() {
   }
   return <>
     <H1>{t('settings.nav.Network')}</H1>
+    {action.error && <p role="alert" className="m-0 rounded-lg bg-[rgba(217,69,43,0.14)] px-3 py-2 text-[13px] text-[#FFB4A6]">{t('common.actionFailed', { reason: action.error })}</p>}
     <div className={`${heroCard} flex items-center gap-4 px-5 py-[18px]`}>
       <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#1F6BFF]"><Svg d={WIFI_BARS(100)} size={24} stroke="#FFFFFF" /></span>
       <span className="flex flex-1 flex-col gap-0.5">
@@ -164,7 +167,7 @@ function NetworkPanel() {
                   <span className="text-xs text-[#8FA3C8]">{w.in_use ? t('common.connected') : w.saved ? t('settings.net.saved') : w.security ? '' : t('settings.net.open')}</span>
                   {w.security && <Svg d={LOCK} size={14} stroke={C.muted} />}
                   <span className="sr-only">{t('settings.net.signal', { security: w.security || t('settings.net.open'), signal: w.signal })}</span>
-                  {w.in_use && <button type="button" onClick={() => void os.sysWifiDisconnect().then(reload)} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{t('common.disconnect')}</button>}
+                  {w.in_use && <button type="button" onClick={() => void action.run(os.sysWifiDisconnect()).then(reload)} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{t('common.disconnect')}</button>}
                   {!w.in_use && join?.ssid !== w.ssid && <button type="button" onClick={() => {
                     // Saved networks join with their stored password, without asking again (#42).
                     const j = { ssid: w.ssid, secure: !!w.security && !w.saved, password: '', error: null, busy: false }
@@ -199,6 +202,7 @@ function BluetoothPanel() {
   const { r, reload: reloadBt } = useAvail(os.sysBluetooth, 15_000)
   const radio = useRadio('bluetooth')
   const reload = async () => { await Promise.all([reloadBt(), radio.reload()]) }
+  const action = useActionError()
   const [err, setErr] = useState<string | null>(null)
   const problems = <RadioProblems kind="bluetooth" d={radio.d} onFixed={() => void reload()} always />
   if (r.state !== 'ok') return <><H1>{t('settings.nav.Bluetooth')}</H1>{r.state === 'loading' ? <Empty title={t('settings.bt.reading')} /> : <><Unavail what={t('settings.nav.Bluetooth')} reason={r.reason} />{problems}</>}</>
@@ -211,6 +215,7 @@ function BluetoothPanel() {
   }
   return <>
     <H1>{t('settings.nav.Bluetooth')}</H1>
+    {action.error && <p role="alert" className="m-0 rounded-lg bg-[rgba(217,69,43,0.14)] px-3 py-2 text-[13px] text-[#FFB4A6]">{t('common.actionFailed', { reason: action.error })}</p>}
     <div className={`${heroCard} flex items-center gap-4 px-5 py-[18px]`}>
       <span className="flex flex-1 flex-col gap-0.5">
         <span className="text-base font-semibold">{t('settings.nav.Bluetooth')}</span>
@@ -228,7 +233,7 @@ function BluetoothPanel() {
             <li key={d.address} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
               <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(31,107,255,0.16)]"><Svg d="M7 7l10 10-5 5V2l5 5L7 17" size={18} stroke="#7FB2FF" /></span>
               <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{d.name}</span><span className="text-xs" style={{ color: d.connected ? C.green : C.muted }}>{d.connected ? t('common.connected') : t('common.notConnected')}</span></span>
-              <button type="button" disabled={!b.powered} onClick={() => void os.sysBtConnect(d.address, !d.connected).then(reload)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{d.connected ? t('common.disconnect') : t('common.connect')}</button>
+              <button type="button" disabled={!b.powered} onClick={() => void action.run(os.sysBtConnect(d.address, !d.connected)).then(reload)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{d.connected ? t('common.disconnect') : t('common.connect')}</button>
             </li>
           ))}
         </ul>
@@ -323,6 +328,7 @@ function TaskbarAlignChoice({ accent }: { accent: string }) {
 
 function SoundPanel() {
   const { r, reload } = useAvail(os.sysSound)
+  const action = useActionError()
   const [vol, setVol] = useState<number | null>(null)
   if (r.state !== 'ok') return <><H1>{t('settings.nav.Sound')}</H1>{r.state === 'loading' ? <Empty title={t('settings.snd.reading')} /> : <Unavail what={t('settings.nav.Sound')} reason={r.reason} />}</>
   const s = r.value
@@ -332,17 +338,18 @@ function SoundPanel() {
   const v = vol ?? s.volume
   return <>
     <H1>{t('settings.nav.Sound')}</H1>
+    {action.error && <p role="alert" className="m-0 rounded-lg bg-[rgba(217,69,43,0.14)] px-3 py-2 text-[13px] text-[#FFB4A6]">{t('common.actionFailed', { reason: action.error })}</p>}
     <section aria-label={t('settings.snd.output')} className={`${card} flex flex-col gap-2.5 px-5 py-[18px]`}>
       <div className="flex items-center justify-between gap-3"><h2 className="m-0 text-[15px] font-semibold">{t('settings.snd.output')}</h2>
         {s.outputs.length > 1
-          ? <select aria-label={t('settings.snd.outputDevice')} value={out?.id ?? ''} onChange={(e) => void os.sysSetDefaultAudio(+e.target.value).then(reload)} className={select}>{s.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
+          ? <select aria-label={t('settings.snd.outputDevice')} value={out?.id ?? ''} onChange={(e) => void action.run(os.sysSetDefaultAudio(+e.target.value)).then(reload)} className={select}>{s.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
           : <Value min={260}>{out?.name ?? null}</Value>}
       </div>
       <div className="flex items-center gap-3.5">
-        <button type="button" aria-pressed={s.muted} aria-label={t('settings.snd.mute')} onClick={() => void os.sysSetMute(!s.muted).then(reload)} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg hover:bg-white/10">
+        <button type="button" aria-pressed={s.muted} aria-label={t('settings.snd.mute')} onClick={() => void action.run(os.sysSetMute(!s.muted)).then(reload)} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg hover:bg-white/10">
           <Svg d={s.muted ? 'M4 9v6h4l5 4V5L8 9zM17 9l4 6M21 9l-4 6' : 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7'} size={20} stroke={C.soft} />
         </button>
-        <input type="range" aria-label={t('settings.snd.volume')} min={0} max={100} value={v} onChange={(e) => { setVol(+e.target.value); void os.sysSetVolume(+e.target.value) }} onPointerUp={() => void reload().then(() => setVol(null))} onKeyUp={() => void reload().then(() => setVol(null))} className="flex-1 accent-[#1F6BFF]" />
+        <input type="range" aria-label={t('settings.snd.volume')} min={0} max={100} value={v} onChange={(e) => { setVol(+e.target.value); void action.run(os.sysSetVolume(+e.target.value)) }} onPointerUp={() => void reload().then(() => setVol(null))} onKeyUp={() => void reload().then(() => setVol(null))} className="flex-1 accent-[#1F6BFF]" />
         <span className="w-[56px] text-right font-mono text-[13px]">{s.muted ? t('settings.snd.muted') : `${formatNumber(v)}%`}</span>
       </div>
     </section>

@@ -148,6 +148,17 @@ wtype
 # Web browser and media player (WorkSuite defaults: shell/apps/worksuite-mimeapps.list)
 firefox-esr
 celluloid
+# Everyday apps an ordinary desktop needs (defaults: shell/apps/worksuite-mimeapps.list): PDFs (Papers), images
+# (Loupe), plain text (Text Editor), a calculator, document scanning (Simple Scan, SANE), phones and network shares
+# in GTK apps (gvfs MTP/SMB backends), the screen reader (Orca) and power profiles (Settings › Power, Quick settings).
+papers
+loupe
+gnome-text-editor
+gnome-calculator
+simple-scan
+gvfs-backends
+orca
+power-profiles-daemon
 # The GSettings key that gives client-drawn title bars Minimize, Maximize and Close (#49, #50:
 # services/session/gsettings, compiled by libglib2.0-bin's trigger).
 gsettings-desktop-schemas

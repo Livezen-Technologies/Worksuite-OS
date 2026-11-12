@@ -29,9 +29,9 @@ Depends: worksuite-shell, worksuite-session, worksuite-branding, worksuite-archi
  worksuite-setup,
  labwc, wlr-randr, greetd, cage, gtkgreet | worksuite-greeter, gtklock, swayidle,
  xdg-desktop-portal, xdg-desktop-portal-wlr, grim, wl-clipboard, wtype, xdg-desktop-portal-gtk, gnome-keyring,
- pipewire, pipewire-pulse, wireplumber, brightnessctl, playerctl, network-manager, wpasupplicant, rfkill, bluez, udisks2, upower, cups, cups-filters, avahi-daemon, libnss-mdns, polkitd, pkexec,
+ pipewire, pipewire-pulse, wireplumber, brightnessctl, playerctl, power-profiles-daemon, network-manager, wpasupplicant, rfkill, bluez, udisks2, upower, cups, cups-filters, avahi-daemon, libnss-mdns, polkitd, pkexec,
  flatpak, fcitx5, fcitx5-m17n, fcitx5-frontend-gtk3, fcitx5-frontend-gtk4, fcitx5-frontend-qt6, apparmor, ${misc:Depends}
-Recommends: cups-browsed, ipp-usb, cups-ipp-utils, printer-driver-gutenprint, fwupd, wl-mirror, iw, vainfo, vulkan-tools, mesa-va-drivers, libgl1-mesa-dri, worksuite-office | worksuite-desktopeditors
+Recommends: papers, loupe, gnome-text-editor, gnome-calculator, simple-scan, gvfs-backends, orca, cups-browsed, ipp-usb, cups-ipp-utils, printer-driver-gutenprint, fwupd, wl-mirror, iw, vainfo, vulkan-tools, mesa-va-drivers, libgl1-mesa-dri, worksuite-office | worksuite-desktopeditors
 Conflicts: openssh-server
 Description: WorkSuite OS desktop (metapackage)
  Pulls in the WorkSuite session, shell, system services and the Debian

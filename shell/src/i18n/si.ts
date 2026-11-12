@@ -633,6 +633,7 @@ const si: Partial<Record<MessageKey, string>> = {
   'upd.fail.title': 'යාවත්කාලීනය අවසන් කළ නොහැකි විය',
   'upd.fail.body': 'WorkSuite OS {version} ස්ථාපනය නොවීය. ඔබේ ගොනු ස්පර්ශ නොකළේය. යෙදුමක් හෝ සැකසුමක් වැරදි ලෙස හැසිරේ නම්, ප්‍රතිසාධනය විවෘත කර පැකේජ අලුත්වැඩියා කරන්න තෝරන්න.',
   'common.tryAgain': 'නැවත උත්සාහ කරන්න',
+  'common.actionFailed': 'එය සාර්ථක නොවීය ({reason}). නැවත උත්සාහ කරන්න, නැතහොත් උපාංගය සහ එහි සැකසුම් පරීක්ෂා කරන්න.',
   'upd.fail.continue': 'ඩෙස්ක්ටොප් වෙත යන්න',
   'upd.new.updatedTo': '{version} වෙත යාවත්කාලීන විය',
   'upd.new.title': 'WorkSuite OS හි අලුත් දේ',

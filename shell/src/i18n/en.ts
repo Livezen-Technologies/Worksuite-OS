@@ -192,6 +192,7 @@ const en = {
   'common.remove': 'Remove',
   'common.removeName': 'Remove {name}',
   'common.tryAgain': 'Try again',
+  'common.actionFailed': 'That didn’t work ({reason}). Try again, or check the device and its settings.',
   'common.unavailable': 'Unavailable',
   'common.unknown': 'Unknown',
   // Settings
