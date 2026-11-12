@@ -310,8 +310,8 @@ check "stop with nothing shared still succeeds" "$(sh "$ST"; echo ":$?")" "0
 grep -q '<keybind key="W-S-Escape" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-screencast-stop"/>' "$ROOT/services/session/labwc/rc.xml" \
   && ok "Super+Shift+Esc stops sharing, also on the lock screen" || bad "Super+Shift+Esc stops sharing, also on the lock screen"
 P=$ROOT/services/session/portals/worksuite-portals.conf
-grep -qx 'org.freedesktop.impl.portal.ScreenCast=wlr' "$P" && grep -qx 'org.freedesktop.impl.portal.Screenshot=wlr' "$P" && grep -qx 'default=gtk' "$P" \
-  && ok "portals.conf: ScreenCast/Screenshot on wlr, the rest on gtk" || bad "portals.conf: ScreenCast/Screenshot on wlr, the rest on gtk"
+grep -qx 'org.freedesktop.impl.portal.ScreenCast=gnome' "$P" && grep -qx 'org.freedesktop.impl.portal.Screenshot=gnome' "$P" && grep -qx 'default=gnome;gtk' "$P" && ! grep -q '=wlr' "$P" \
+  && ok "portals.conf: ScreenCast/Screenshot on GNOME's portal, gtk fallback" || bad "portals.conf: ScreenCast/Screenshot on GNOME's portal, gtk fallback"
 
 # ---- sign-in speed: no Python for "was a PIN used?" when no PIN profile is on ----
 export WORKSUITE_PAM_COMMON_AUTH="$T/common-auth"
