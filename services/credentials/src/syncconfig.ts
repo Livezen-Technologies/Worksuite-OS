@@ -21,8 +21,13 @@ export interface SyncConfigFile {
  * (`online_only` modules are not synced, WSOS-SYN-009) and optional `data_type` (default `document`, SRS §8.4).
  */
 export function buildSyncConfig(account: Account, apiBase: string, mode: 'personal' | 'enterprise', bootstrap: unknown): SyncConfigFile {
-  const b = bootstrap as { user?: { id?: unknown }; org?: { id?: unknown }; modules?: unknown };
-  const userId = b.user?.id, orgId = b.org?.id;
+  // A real WorkSuite server (3.1, desktop-v1) wraps the payload in {status, message, data} and names the
+  // organization by organization_id / default_organization_id / organizations[] instead of an org object.
+  const raw = bootstrap as { data?: unknown } | null;
+  const b = (raw && typeof raw === 'object' && raw.data && typeof raw.data === 'object' ? raw.data : raw ?? {}) as {
+    user?: { id?: unknown }; org?: { id?: unknown }; organization_id?: unknown; default_organization_id?: unknown; organizations?: { id?: unknown }[]; modules?: unknown };
+  const userId = b.user?.id;
+  const orgId = b.org?.id ?? b.organization_id ?? b.default_organization_id ?? (Array.isArray(b.organizations) ? b.organizations[0]?.id : undefined);
   if ((typeof userId !== 'string' && typeof userId !== 'number') || (typeof orgId !== 'string' && typeof orgId !== 'number')) throw new OidcError('bootstrap_invalid');
   const modules: Record<string, DataType> = {};
   for (const m of Array.isArray(b.modules) ? b.modules : []) {

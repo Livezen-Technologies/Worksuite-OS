@@ -38,7 +38,7 @@ export function networkError(e: unknown): OidcError {
 /** At most this many redirects, each to https (or the allowed loopback) again; never with a body. */
 const MAX_REDIRECTS = 3;
 
-async function getJson(url: URL, o: OidcOptions, init?: RequestInit) {
+export async function getJson(url: URL, o: OidcOptions, init?: RequestInit) {
   let res: Response;
   // #55: redirect "error" made every redirect (say example.com → www.example.com, a trailing slash) a failed sign-in.
   // Redirects are followed by hand so each hop is checked again: https only, and only for GETs.

@@ -25,7 +25,7 @@ import { prepareAppMode, runAppMode } from './appwindow'
 import { prepareWhatsApp, runWhatsApp } from './whatsappwindow'
 import { WHATSAPP_ID } from './whatsapp'
 import { shellPrefsFrom } from '../src/lib/shellPrefs'
-import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
+import { launcherApps, loadSession, parseAppArgs, AUTH_CALLBACK_ID, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
 import { createWidgets } from './widgets'
 import { DESKTOP_MODULES, execProgram, findFrameFlow, findOffice, findPos, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
@@ -212,7 +212,12 @@ app.on('child-process-gone', (_e, d) => {
 })
 // `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
 const appRequest = parseAppArgs(process.argv)
-if (appRequest?.id === WHATSAPP_ID) {
+if (appRequest?.id === AUTH_CALLBACK_ID) {
+  // worksuite://auth/callback: the server's sign-in page hands the browser back to the desktop. The credentials
+  // broker already collects the session by polling with its PKCE verifier, so the code in this link is not needed
+  // (and not trusted); nothing opens.
+  app.quit()
+} else if (appRequest?.id === WHATSAPP_ID) {
   // WhatsApp Web: its own window, partition and app_id; no WorkSuite account involved (whatsappwindow.ts).
   if (prepareWhatsApp()) runWhatsApp()
   else app.quit()
