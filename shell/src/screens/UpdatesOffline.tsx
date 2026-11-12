@@ -5,6 +5,7 @@
 // by apt's progress, so the download line says how far it got in percent.
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
+import { compareVersions } from '../lib/updates'
 import { formatBytes, os, bundleErrorText, packageErrorText, type BundleInfo, type DeviceInfo, type FoundBundle, type OsUpdateStatus } from '../lib/os'
 import { updates } from '../lib/useOsUpdate'
 import { fmtWhen, type JobProgress } from '../lib/updates'
@@ -15,11 +16,8 @@ const RING: Record<string, string> = messages({ development: 'upd.ring.developme
 const panel = 'rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(14,32,72,0.6)]'
 
 /** Numeric dotted-version compare: >0 when a is newer. */
-export function cmpVersion(a: string, b: string): number {
-  const pa = a.split(/[.+~-]/).map((x) => parseInt(x, 10) || 0), pb = b.split(/[.+~-]/).map((x) => parseInt(x, 10) || 0)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) { const d = (pa[i] ?? 0) - (pb[i] ?? 0); if (d) return d }
-  return 0
-}
+/** Same order as the package service (Debian: 1.0.0~rc3 > 1.0.0~rc1, 1.0.0 > 1.0.0~rc3, 1.1.0 > 1.1), which decides. */
+export const cmpVersion = (a: string, b: string): number => compareVersions(a, b)
 
 const offered = (st: OsUpdateStatus) => (st.version && st.version !== st.installed ? st.version : null)
 const emergency = (st: OsUpdateStatus) => !!st.critical && !!offered(st) && ['available', 'waiting', 'installing', 'checking'].includes(st.state)

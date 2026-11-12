@@ -7,7 +7,10 @@ const S = (p: Partial<OsUpdateStatus>): OsUpdateStatus => ({ state: 'available',
 describe('G14 offline / resume / emergency', () => {
   it('compares versions numerically', () => {
     expect(cmpVersion('1.1.10', '1.1.9')).toBeGreaterThan(0)
-    expect(cmpVersion('1.1.0', '1.1')).toBe(0)
+    expect(cmpVersion('1.1.0', '1.1')).toBeGreaterThan(0)   // Debian order, as the service decides
+    // Seen in a VM: an rc3 bundle on an rc1 system was shown as 'not newer'.
+    expect(cmpVersion('1.0.0~rc3', '1.0.0~rc1')).toBeGreaterThan(0)
+    expect(cmpVersion('1.0.0', '1.0.0~rc3')).toBeGreaterThan(0)
     expect(cmpVersion('1.0.9', '1.1.0')).toBeLessThan(0)
   })
   it('shows for an emergency release, a resumed or interrupted download, or a USB bundle', () => {
