@@ -81,7 +81,9 @@ export function parseTimedatectl(text: string): ClockState | null {
   const kv = new Map(text.split('\n').map((l) => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1)] as [string, string] }).filter(([k]) => k))
   if (!kv.has('Timezone')) return null
   const yes = (k: string) => kv.get(k) === 'yes'
-  return { timezone: kv.get('Timezone') || 'UTC', ntp: yes('NTP'), canNtp: yes('CanNTP'), synchronized: yes('NTPSynchronized'), localRtc: yes('LocalRTC'), nowUs: Number(kv.get('TimeUSec')) || 0 }
+  // TimeUSec is printed as a date ("Thu 2026-11-12 11:30:00 +0530"), not a number (seen in a VM: the panel showed
+  // 1970). The system clock is this process's clock, read when the state is read.
+  return { timezone: kv.get('Timezone') || 'UTC', ntp: yes('NTP'), canNtp: yes('CanNTP'), synchronized: yes('NTPSynchronized'), localRtc: yes('LocalRTC'), nowUs: Date.now() * 1000 }
 }
 export const TZ_RE = /^(UTC|[A-Z][A-Za-z_-]+(\/[A-Za-z0-9_+-]+){1,2})$/
 /** A local time the person typed: YYYY-MM-DD HH:MM[:SS]. */

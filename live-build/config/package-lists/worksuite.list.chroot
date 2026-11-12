@@ -159,6 +159,8 @@ simple-scan
 gvfs-backends
 orca
 power-profiles-daemon
+# Automatic time (Settings › Date & time): systemd-timedated reports CanNTP=no without an NTP unit.
+systemd-timesyncd
 # The GSettings key that gives client-drawn title bars Minimize, Maximize and Close (#49, #50:
 # services/session/gsettings, compiled by libglib2.0-bin's trigger).
 gsettings-desktop-schemas

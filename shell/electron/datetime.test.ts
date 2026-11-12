@@ -6,6 +6,8 @@ const SHOW = 'Timezone=Asia/Colombo\nLocalRTC=no\nCanNTP=yes\nNTP=yes\nNTPSynchr
 describe('date & time bridge (timedatectl)', () => {
   it('parses timedatectl show', () => {
     expect(parseTimedatectl(SHOW)).toMatchObject({ timezone: 'Asia/Colombo', ntp: true, canNtp: true, synchronized: false, localRtc: false })
+    // The time is the system clock now, never 1970 from the formatted TimeUSec.
+    expect(Math.abs(parseTimedatectl(SHOW)!.nowUs / 1000 - Date.now())).toBeLessThan(5000)
     expect(parseTimedatectl('garbage')).toBeNull()
   })
   it('runs fixed timedatectl commands and refuses odd input before running anything', async () => {
