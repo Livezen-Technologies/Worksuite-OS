@@ -23,6 +23,7 @@ import { Diagnostics } from './settings/Diagnostics'
 import { RadioProblems, useRadio } from './settings/Radio'
 import { GraphicsPanel } from './settings/Graphics'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
+import { DateTimePanel } from './settings/DateTime'
 import { KioskPanel } from './settings/Kiosk'
 import { AIPanel } from './settings/AI'
 import { MultitaskingPanel } from './settings/Multitasking'
@@ -51,6 +52,7 @@ const NAV = [
   { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
   { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
   { id: 'Clipboard', tint: '#0E8FA8', icon: 'M9 4h6v3H9zM7 5H5v16h14V5h-2' },
+  { id: 'Date & time', tint: '#1F6BFF', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2' },
   { id: 'Power', tint: '#B7791F', icon: 'M13 2L4 14h7l-1 8 9-12h-7z' },
   { id: 'Printers', tint: '#5E739C', icon: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z' },
   { id: 'Default apps', tint: '#0E8FA8', icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 16.5h7M16.5 13v7' },
@@ -68,7 +70,7 @@ export type Section = (typeof NAV)[number]['id']
 const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
 const navLabel = (id: Section) => t(`settings.nav.${id}` as MessageKey)
 // Older names (launcher search, earlier builds) still land somewhere sensible.
-const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Mouse: 'Mouse & touchpad', Touchpad: 'Mouse & touchpad', Pointer: 'Mouse & touchpad', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard', GPU: 'Graphics', 'Hardware acceleration': 'Graphics' }
+const ALIAS: Record<string, Section> = { Time: 'Date & time', Clock: 'Date & time', 'Time zone': 'Date & time', Date: 'Date & time', 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Mouse: 'Mouse & touchpad', Touchpad: 'Mouse & touchpad', Pointer: 'Mouse & touchpad', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard', GPU: 'Graphics', 'Hardware acceleration': 'Graphics' }
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
 /** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
@@ -990,6 +992,7 @@ export default function Settings({ onClose, active }: WindowProps) {
         {section === 'Multitasking' && <MultitaskingPanel />}
         {section === 'Sound' && <SoundPanel />}
         {section === 'Notifications' && <NotificationsPanel />}
+        {section === 'Date & time' && <DateTimePanel />}
         {section === 'Power' && <PowerPanel />}
         {section === 'Printers' && <PrintersPanel />}
         {section === 'Default apps' && <DefaultAppsPanel />}

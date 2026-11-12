@@ -74,6 +74,25 @@ export function mountedAt(text: string): string | null {
   return /\bat (\/\S+?)\.?\s*$/m.exec(text.trim())?.[1] ?? null
 }
 
+// ---------- date & time (systemd-timedated through timedatectl; polkit asks through the session's agent) ----------
+export interface ClockState { timezone: string; ntp: boolean; canNtp: boolean; synchronized: boolean; localRtc: boolean; nowUs: number }
+/** `timedatectl show` (key=value lines) → the state Settings › Date & time shows; null when it says nothing usable. */
+export function parseTimedatectl(text: string): ClockState | null {
+  const kv = new Map(text.split('\n').map((l) => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1)] as [string, string] }).filter(([k]) => k))
+  if (!kv.has('Timezone')) return null
+  const yes = (k: string) => kv.get(k) === 'yes'
+  return { timezone: kv.get('Timezone') || 'UTC', ntp: yes('NTP'), canNtp: yes('CanNTP'), synchronized: yes('NTPSynchronized'), localRtc: yes('LocalRTC'), nowUs: Number(kv.get('TimeUSec')) || 0 }
+}
+export const TZ_RE = /^(UTC|[A-Z][A-Za-z_-]+(\/[A-Za-z0-9_+-]+){1,2})$/
+/** A local time the person typed: YYYY-MM-DD HH:MM[:SS]. */
+export const LOCAL_TIME_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/
+export function timedateError(text: string): string {
+  if (/not authorized|Access denied|Interactive authentication required/i.test(text)) return 'not_authorized'
+  if (/NTP is enabled|Automatic time synchronization is enabled/i.test(text)) return 'ntp_on'
+  if (/Invalid (or not installed )?(time ?zone|timezone)/i.test(text)) return 'invalid_argument'
+  return 'failed'
+}
+
 // ---------- power ----------
 export interface PowerProfiles { active: string; profiles: string[]; degraded: string | null }
 export interface Inhibitor { what: string; who: string; why: string; mode: string }
@@ -244,6 +263,33 @@ export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin
       return p.code === 0 ? ok(true) : tool(p, 'udisksctl', udisksError(p.stderr + p.stdout))
     },
 
+    // Date & time (Settings › Date & time): the system clock, not a per-user setting.
+    async clock(): Promise<Avail<ClockState>> {
+      const r = await exec('timedatectl', ['show'])
+      const c = r.code === 0 ? parseTimedatectl(r.stdout) : null
+      return c ? ok(c) : tool(r, 'timedatectl', 'service_unavailable')
+    },
+    async timezones(): Promise<Avail<string[]>> {
+      const r = await exec('timedatectl', ['list-timezones'])
+      return r.code === 0 ? ok(r.stdout.split('\n').map((x) => x.trim()).filter((x) => TZ_RE.test(x))) : tool(r, 'timedatectl', 'service_unavailable')
+    },
+    async setTimezone(tz: string): Promise<Avail<true>> {
+      if (typeof tz !== 'string' || !TZ_RE.test(tz)) return fail('invalid_argument')
+      const r = await exec('timedatectl', ['set-timezone', tz])
+      return r.code === 0 ? ok(true) : (r.missing ? tool(r, 'timedatectl', 'service_unavailable') : fail(timedateError(r.stderr)))
+    },
+    async setNtp(on: string): Promise<Avail<true>> {
+      if (on !== 'true' && on !== 'false') return fail('invalid_argument')
+      const r = await exec('timedatectl', ['set-ntp', on])
+      return r.code === 0 ? ok(true) : (r.missing ? tool(r, 'timedatectl', 'service_unavailable') : fail(timedateError(r.stderr)))
+    },
+    /** Only while automatic time is off (timedated refuses otherwise, which is reported as 'ntp_on'). */
+    async setTime(local: string): Promise<Avail<true>> {
+      if (typeof local !== 'string' || !LOCAL_TIME_RE.test(local)) return fail('invalid_argument')
+      const r = await exec('timedatectl', ['set-time', local.length === 16 ? `${local}:00` : local])
+      return r.code === 0 ? ok(true) : (r.missing ? tool(r, 'timedatectl', 'service_unavailable') : fail(timedateError(r.stderr)))
+    },
+
     // Power (WSOS-INT-005)
     async powerProfiles(): Promise<Avail<PowerProfiles>> {
       const r = await exec('powerprofilesctl', ['list'])
@@ -335,6 +381,11 @@ export function startPeripheralsHost(handle: Handle, home: string, b: Peripheral
   handle('ws:volMount', (d) => b.mount(d))
   handle('ws:volUnlock', (d, p) => b.unlock(d, p))
   handle('ws:volEject', (d) => b.eject(d))
+  handle('ws:clock', () => b.clock())
+  handle('ws:timezones', () => b.timezones())
+  handle('ws:setTimezone', (tz) => b.setTimezone(tz))
+  handle('ws:setNtp', (on) => b.setNtp(on))
+  handle('ws:setTime', (local) => b.setTime(local))
   handle('ws:powerProfiles', () => b.powerProfiles())
   handle('ws:setPowerProfile', (n) => b.setPowerProfile(n))
   handle('ws:powerInhibitors', () => b.inhibitors())   // 'ws:inhibitors' is the session-end overlay's (sessionHost.ts)

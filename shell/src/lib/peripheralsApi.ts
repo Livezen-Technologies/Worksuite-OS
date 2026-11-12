@@ -4,6 +4,7 @@
 export type Avail<T> = { available: true; value: T } | { available: false; reason: string; detail?: string }
 export interface BtFound { address: string; name: string }
 export interface Volume { device: string; disk: string; label: string; size: string; fstype: string; mountpoint: string | null; encrypted: boolean; unlocked: string | null }
+export interface ClockState { timezone: string; ntp: boolean; canNtp: boolean; synchronized: boolean; localRtc: boolean; nowUs: number }
 export interface PowerProfiles { active: string; profiles: string[]; degraded: string | null }
 export interface Inhibitor { what: string; who: string; why: string; mode: string }
 export interface FoundPrinter { uri: string; name: string; makeModel?: string; deviceId?: string; kind?: 'network' | 'usb' }
@@ -30,6 +31,12 @@ export interface PeripheralsApi {
   volMount(device: string): Promise<Avail<string>>
   volUnlock(device: string, passphrase: string): Promise<Avail<string>>
   volEject(device: string): Promise<Avail<true>>
+  clock(): Promise<Avail<ClockState>>
+  timezones(): Promise<Avail<string[]>>
+  setTimezone(tz: string): Promise<Avail<true>>
+  setNtp(on: boolean): Promise<Avail<true>>
+  /** YYYY-MM-DD HH:MM[:SS], local time; only while automatic time is off. */
+  setTime(local: string): Promise<Avail<true>>
   powerProfiles(): Promise<Avail<PowerProfiles>>
   setPowerProfile(name: string): Promise<Avail<true>>
   inhibitors(): Promise<Avail<Inhibitor[]>>
