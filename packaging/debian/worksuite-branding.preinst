@@ -5,5 +5,10 @@ set -e
 if [ "$1" = install ] || [ "$1" = upgrade ]; then
   dpkg-divert --package worksuite-branding --add --rename --divert /usr/lib/os-release.debian /usr/lib/os-release
 fi
+# New accounts start with the WorkSuite face (blue-to-cyan circle), not desktop-base's Debian logo: the Start menu,
+# the sign-in screen and Settings show ~/.face, copied from /etc/skel at account creation.
+if [ "$1" = install ] || [ "$1" = upgrade ]; then
+  dpkg-divert --package worksuite-branding --add --rename --divert /etc/skel/.face.distrib /etc/skel/.face
+fi
 #DEBHELPER#
 exit 0

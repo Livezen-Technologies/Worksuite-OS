@@ -107,7 +107,9 @@ override_dh_auto_install:
 	for s in 16 24 32 48 64 128 256 512; do install -D -m 0644 build-branding/icons/worksuite-$$s.png $$d/usr/share/icons/hicolor/$${s}x$${s}/apps/worksuite-os.png; done && \
 	install -D -m 0644 build-branding/wallpaper.png $$d/usr/share/backgrounds/worksuite/default.png && \
 	install -D -m 0644 branding/wallpaper.svg $$d/usr/share/backgrounds/worksuite/default.svg && \
-	install -D -m 0644 -t $$d/usr/share/worksuite/vendor-logos build-branding/vendor-logos/*.svg build-branding/vendor-logos/*.png
+	install -D -m 0644 -t $$d/usr/share/worksuite/vendor-logos build-branding/vendor-logos/*.svg build-branding/vendor-logos/*.png && \
+	install -D -m 0644 branding/faces/worksuite-default.png $$d/usr/share/worksuite/faces/worksuite-default.png && \
+	install -D -m 0644 branding/faces/worksuite-default.png $$d/etc/skel/.face
 
 override_dh_auto_test:
 	cd build-installer && QT_QPA_PLATFORM=offscreen ctest --output-on-failure

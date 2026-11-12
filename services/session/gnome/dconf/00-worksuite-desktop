@@ -41,6 +41,11 @@ show-showdesktop-hover=false
 [org/gnome/shell/extensions/arcmenu]
 # Sign-in lands on the desktop, not GNOME's overview.
 hide-overview-on-startup=true
+# Room for the six-column pinned grid (its first column was clipped at the default width) and a Recommended
+# row of recent files under it, as a modern Start menu has.
+menu-width-adjustment=70
+menu-height=640
+eleven-disable-frequent-apps=false
 update-notifier-enabled=false
 menu-layout='Eleven'
 position-in-panel='Center'
