@@ -1,0 +1,12 @@
+#!/bin/sh
+# WorkSuite OS session (since 1.1): GNOME Shell on Mutter, themed as WorkSuite. Started by greetd after the
+# WorkSuite greeter signs the person in (worksuite_greeter/login.py DEFAULT_SESSION). GNOME's own polkit agent,
+# notifications, lock screen and portals replace the old Labwc-era helpers; WorkSuite Settings, Setup and the
+# WorkSuite services run alongside (gnome/applications, gnome/autostart).
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=WorkSuite:GNOME
+export XDG_SESSION_DESKTOP=worksuite
+export GNOME_SHELL_SESSION_MODE=user
+# Electron apps (WorkSuite apps, Settings) on Wayland natively, with GNOME's decorations.
+export ELECTRON_OZONE_PLATFORM_HINT=auto
+exec gnome-session --session=worksuite

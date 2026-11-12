@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=WorkSuite Setup
+Comment=Finish setting up this computer (closes by itself once setup is done)
+Exec=/usr/lib/worksuite/shell/worksuite-shell --setup
+Icon=worksuite
+OnlyShowIn=GNOME;
+NoDisplay=true
+X-GNOME-Autostart-Phase=Applications

@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Name=WorkSuite Settings
+Name[si]=WorkSuite සැකසීම්
+Name[ta]=WorkSuite அமைப்புகள்
+Comment=Updates, USB updates, drivers, date & time, apps and your organization
+Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center
+Icon=worksuite
+Categories=Settings;System;
+Keywords=update;usb;driver;firmware;date;time;timezone;enroll;organization;
+StartupWMClass=worksuite-shell
+Actions=Updates;Drivers;DateTime;
+
+[Desktop Action Updates]
+Name=Updates
+Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center Updates
+
+[Desktop Action Drivers]
+Name=Drivers
+Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center Drivers
+
+[Desktop Action DateTime]
+Name=Date & time
+Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center "Date & time"

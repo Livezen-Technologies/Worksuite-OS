@@ -12,6 +12,7 @@ import Files from './screens/Files'
 import AppCenter from './screens/AppCenter'
 import Monitor from './screens/Monitor'
 import Settings from './screens/Settings'
+import { ControlCenter, SetupWindow } from './screens/AppWindows'
 import Recovery from './screens/Recovery'
 import Installer from './screens/Installer'
 import { useNotices } from './lib/useNotices'
@@ -115,6 +116,8 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [state, send])
 
+  if (mode === 'control') return <ControlCenter section={new URLSearchParams(location.search).get('section')} />
+  if (mode === 'setup') return <SetupWindow userName={realName || user} />
   if (installing) return <Installer onDone={() => setInstalling(false)} />
   // Minimal launcher after repeated shell crashes (WSOS-SES-005).
   if (mode === 'safe') return <SafeLauncher />

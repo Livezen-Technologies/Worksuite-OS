@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
-import { bootMode } from './bootmode'
+import { bootMode, controlSection } from './bootmode'
 import { appLaunchCommand, scopeCommand, lockPaths, logoutCommand, readLockSettings, writeLockTimeout } from './session'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceCredential, deviceInfo, enrollDevice, STATUS_PATH } from './device'
@@ -146,6 +146,24 @@ function markSessionVeil() {
 }
 
 function createWindow() {
+  let cmdlineEarly: string | null = null
+  try { cmdlineEarly = readFileSync('/proc/cmdline', 'utf8') } catch { /* not Linux */ }
+  const appMode = bootMode(process.argv, cmdlineEarly)
+  if (appMode === 'control' || appMode === 'setup') {
+    // An ordinary GNOME window (decorated, resizable), not the old full-screen desktop layer.
+    win = new BrowserWindow({
+      width: 1180, height: 780, minWidth: 720, minHeight: 520, show: false, backgroundColor: '#061029',
+      title: appMode === 'setup' ? 'WorkSuite Setup' : 'WorkSuite Settings', icon: '/usr/share/icons/hicolor/256x256/apps/worksuite.png',
+      autoHideMenuBar: true, webPreferences: shellPrefs(),
+    })
+    shellContents.add(win.webContents)
+    win.once('ready-to-show', () => win?.show())
+    win.webContents.on('will-navigate', (e) => e.preventDefault())
+    win.webContents.setWindowOpenHandler(({ url }) => { if (externalAllowed(url)) void shell.openExternal(url); return { action: 'deny' } })
+    const section = controlSection(process.argv)
+    void win.loadFile(path.join(__dirname, '../dist/index.html'), { query: { mode: appMode, ...(section ? { section } : {}) } })
+    return
+  }
   win = new BrowserWindow({
     fullscreen: true,
     // Frameless: re-asserting fullscreen after a scale or mode change must never leave a decorated window (#60).
@@ -207,6 +225,21 @@ if (appRequest?.id === WHATSAPP_ID) {
  *  (services/session/labwc/rc.xml) keeps it always on bottom by that id: below every app, and on every desktop. */
 export const SHELL_APP_ID = 'worksuite-shell'
 function startShell() {
+// WorkSuite Settings / Setup under GNOME: one window. A second launch (the app grid, a notification's "Details",
+// gnome-control-center's "WorkSuite" panel link) focuses it and opens the section it asked for.
+{
+  const m = bootMode(process.argv, null)
+  if (m === 'control' || m === 'setup') {
+    if (!app.requestSingleInstanceLock({ mode: m })) { app.quit(); return }
+    app.on('second-instance', (_e, argv) => {
+      if (!win) return
+      if (win.isMinimized()) win.restore()
+      win.focus()
+      const sec = controlSection(argv)
+      if (sec) win.webContents.send('ws:settingsSection', sec)
+    })
+  }
+}
 app.whenReady().then(() => {
   // Web permissions denied by default; the shell's own session never gets any (WSOS-SEC-003).
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))

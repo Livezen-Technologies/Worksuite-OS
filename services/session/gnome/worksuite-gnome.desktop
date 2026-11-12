@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=WorkSuite
+Comment=WorkSuite OS desktop (GNOME)
+Exec=/usr/bin/worksuite-gnome-session
+TryExec=/usr/bin/gnome-shell
+Type=Application
+DesktopNames=WorkSuite;GNOME
+X-GDM-SessionRegisters=true

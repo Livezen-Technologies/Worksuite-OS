@@ -242,3 +242,14 @@ pciutils
 usbutils
 fwupd
 mokutil
+
+# Desktop since 1.1: GNOME Shell on Mutter with the WorkSuite theme (services/session/gnome), kept lean: core apps only,
+# no Tracker indexer and no GNOME Software (WorkSuite's package service updates the system).
+gnome-shell
+gnome-session-bin
+gnome-shell-extensions
+gnome-settings-daemon
+gnome-control-center
+nautilus
+xdg-desktop-portal-gnome
+gnome-console

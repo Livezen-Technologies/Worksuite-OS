@@ -130,6 +130,7 @@ export interface WorkSuiteApi {
   /** An archive's entries, read-only. Errors: password, wrong_password, tool_missing, password_unsupported, failed. */
   filesArchiveList(root: string, rel: string, password: string | null): Promise<CloudResult<ArchiveListing>>
   /** An archive opened with Files from elsewhere (default handler for archive types). */
+  onSettingsSection(cb: (section: string) => void): () => void
   onOpenArchive(cb: (at: { root: string; rel: string }) => void): () => void
   filesEject(id: string): Promise<CloudResult<true>>
   /** This Computer (#63): disk partitions and volumes (udisks2). Errors: unavailable, failed. */
@@ -789,6 +790,7 @@ const stub: WorkSuiteApi = {
       e('worksuite-agent/config', 0, 'dir'), e('worksuite-agent/config/agent.toml', 4_100), e('worksuite-agent/config/policies.json', 12_800), e('worksuite-agent/README.md', 9_600), e('worksuite-agent/LICENSE', 11_300), e('worksuite-agent/CHANGELOG.md', 38_000)]
     return rel.endsWith('.zip') ? { ok: true, value: { kind: 'zip', entries, encrypted: false, total: 69_676_800, packed: 38_200_000 } } : { ok: false, error: 'failed' }
   },
+  onSettingsSection() { return () => {} },
   onOpenArchive() { return () => {} },
   async filesEject() { return { ok: false, error: 'unavailable' } },
   async filesVolumes() { return { ok: true, value: stubVolumes.map((v) => ({ ...v })) } },

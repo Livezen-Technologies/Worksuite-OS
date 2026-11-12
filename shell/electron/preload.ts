@@ -142,6 +142,12 @@ contextBridge.exposeInMainWorld('worksuite', {
     ipcRenderer.on('ws:filesVolumesChanged', listener)
     return () => { ipcRenderer.removeListener('ws:filesVolumesChanged', listener) }
   },
+  /** WorkSuite Settings window (GNOME): a second launch asked for a section. */
+  onSettingsSection: (cb: (section: string) => void) => {
+    const listener = (_e: unknown, s: unknown) => { if (typeof s === 'string') cb(s) }
+    ipcRenderer.on('ws:settingsSection', listener)
+    return () => { ipcRenderer.removeListener('ws:settingsSection', listener) }
+  },
   onOpenArchive: (cb: (e: unknown) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on('ws:openArchive', listener)
