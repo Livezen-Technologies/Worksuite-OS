@@ -125,6 +125,7 @@ override_dh_auto_test:
 	cd services/ai && npm test
 	cd services/directory && npm test
 	tests/boot/recovery-boot.test.sh
+	tests/boot/offline-update.test.sh
 	cd shell && npx vitest run
 	$(MAKE) -C native/wayland-bridge test
 	sh native/pam-worksuite/test.sh

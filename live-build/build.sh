@@ -183,6 +183,20 @@ if [ "$WORKSUITE_REPO" = 1 ]; then
 else
   rm -f config/archives/worksuite.list.* config/includes.chroot/etc/apt/sources.list.d/worksuite.sources
 fi
+# Boot menu › Update WorkSuite OS: with WORKSUITE_RELEASE_KEY=release.key.pem and WORKSUITE_RELEASE_KEY_ID (the id of
+# the public key devices ship in /usr/share/worksuite/keys/release/), the drive also carries a signed .wsupdate of this
+# image's WorkSuite packages at /worksuite/, so booting it can update an installed system with no other drive.
+# Without a key the updater still finds .wsupdate files on other drives.
+if [ -n "${WORKSUITE_RELEASE_KEY:-}" ]; then
+  : "${WORKSUITE_RELEASE_KEY_ID:?WORKSUITE_RELEASE_KEY needs WORKSUITE_RELEASE_KEY_ID}"
+  osv=$(dpkg-deb -f config/packages.chroot/worksuite-desktop_*.deb Version)
+  mkdir -p config/includes.binary/worksuite
+  # shellcheck disable=SC2046 # one argument per package
+  node "$here/../tools/release/make-wsupdate.mjs" --key "$WORKSUITE_RELEASE_KEY" --key-id "$WORKSUITE_RELEASE_KEY_ID" \
+    --version "$osv" --min-version "${WORKSUITE_UPDATE_MIN_VERSION:-1.0.0~rc1}" --arch "$ARCH" \
+    --out "config/includes.binary/worksuite/worksuite-os-$osv-$ARCH.wsupdate" \
+    $(ls config/packages.chroot/worksuite-*_*.deb | grep -v -e '_local_' -e '/worksuite-app_' -e '/worksuite-office')
+fi
 ARCH="$ARCH" SNAPSHOT="$SNAPSHOT" lb config
 # Snapshot Release files are past Valid-Until by design; auto/config disables that check for apt.
 # snapshot.debian.org drops requests under load; debootstrap has no retry of its own. When the bootstrap stage

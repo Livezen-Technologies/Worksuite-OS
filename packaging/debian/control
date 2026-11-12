@@ -136,13 +136,16 @@ Description: WorkSuite directory sign-in and break-glass admin
 
 Package: worksuite-recovery-boot
 Architecture: all
-Depends: worksuite-shell, worksuite-session, cage, grub-common, dpkg, apt, systemd, passwd, squashfs-tools, util-linux, pkexec, ${misc:Depends}
+Depends: worksuite-shell, worksuite-session, worksuite-package-service, cage, grub-common, dpkg, apt, systemd, passwd, squashfs-tools, util-linux, pkexec, ${misc:Depends}
+Recommends: cryptsetup-bin
 Description: WorkSuite Recovery boot entry, previous-kernel retention and boot-time repair
  Adds the "WorkSuite Recovery" and "previous kernel" GRUB entries, keeps the
  previous kernel from apt autoremove, boots worksuite-recovery.target into
  the shell recovery screens, and repairs interrupted package operations
  before the greeter starts. Also reinstalls the system from the recovery
- image keeping /home (worksuite-reinstall).
+ image keeping /home (worksuite-reinstall), and updates an installed system
+ from a signed .wsupdate bundle when started from the live USB
+ (worksuite-offline-update, boot menu "Update WorkSuite OS").
 
 Package: calamares-settings-worksuite
 Architecture: amd64 arm64

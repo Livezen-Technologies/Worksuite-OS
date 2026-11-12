@@ -62,6 +62,11 @@ jobs:
       - uses: actions/checkout@v4
       # GRUB recovery/previous-kernel entries, kernel retention, boot-time repair (WSOS-BOOT-003, SRS §9.2).
       - run: tests/boot/recovery-boot.test.sh
+      # Boot menu › Update WorkSuite OS: the offline updater with the real bundle tool and verifier (Node 22).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: tests/boot/offline-update.test.sh
       # Reinstall keeping /home (SRS §9.2-R6): directory run, then a loop-device disk with /home in LUKS2.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends squashfs-tools cryptsetup-bin fdisk
       - run: sudo sh tests/boot/reinstall-keep-home.test.sh

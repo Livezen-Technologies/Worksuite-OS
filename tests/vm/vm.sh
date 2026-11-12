@@ -8,6 +8,7 @@
 #   tests/vm/vm.sh click DIR X Y              left click at screen pixel X,Y (virtio tablet, absolute)
 #   tests/vm/vm.sh type DIR TEXT               types [A-Za-z0-9 .@_=/-] and most shell punctuation
 #   tests/vm/vm.sh console DIR LINE         send LINE to the serial console (log in as user/live on the live ISO)
+#   tests/vm/vm.sh usb DIR IMAGE               plug IMAGE in as a USB stick (xHCI); vm.sh unusb DIR unplugs it
 #   tests/vm/vm.sh stop DIR
 set -eu
 cmd=${1:?}; dir=${2:?}
@@ -25,7 +26,7 @@ run() {
     -drive if=pflash,format=raw,readonly=on,file="$FW_CODE" -drive if=pflash,format=raw,file="$dir/vars.fd" \
     -drive if=virtio,format=qcow2,file="$dir/disk.qcow2" "$@" \
     -display none -monitor "unix:$dir/monitor.sock,server,nowait" -qmp "unix:$dir/qmp.sock,server=on,wait=off" -chardev "socket,id=s0,path=$dir/serial.sock,server=on,wait=off,logfile=$dir/serial.log" -serial chardev:s0 \
-    -device virtio-tablet-pci -device virtio-keyboard-pci -nic user,model=virtio-net-pci -daemonize -pidfile "$dir/qemu.pid"
+    -device qemu-xhci,id=xhci -device virtio-tablet-pci -device virtio-keyboard-pci -nic user,model=virtio-net-pci -daemonize -pidfile "$dir/qemu.pid"
 }
 # amd64 boots the CD first with -boot; arm64 uses bootindex on the scsi-cd (qemu-arch.sh).
 cdrom_args_for() { if [ "$ARCH" = arm64 ]; then echo "-device virtio-scsi-pci,id=scsi0 -drive if=none,id=cd0,media=cdrom,readonly=on,format=raw,file=$1 -device scsi-cd,drive=cd0,bootindex=0"; else echo "-cdrom $1 -boot order=dc"; fi; }
@@ -61,6 +62,9 @@ type) t=${3:?text}; i=0
           *) echo "cannot type '$c'" >&2; exit 2 ;;
         esac; mon "sendkey $k"; sleep 0.15; done ;;
 console) printf '%s\r' "${3:?line}" | socat -t 2 - "UNIX-CONNECT:$dir/serial.sock" >/dev/null ;;
+usb) # Plug a disk image in as a USB stick (xHCI): vm.sh usb DIR IMAGE; unplug with vm.sh unusb DIR.
+     mon "drive_add 0 if=none,id=usbstick,format=raw,file=${3:?image}"; mon "device_add usb-storage,bus=xhci.0,drive=usbstick,id=usbstick,removable=on" ;;
+unusb) mon "device_del usbstick" ;;
 stop) [ -f "$dir/qemu.pid" ] && kill "$(cat "$dir/qemu.pid")" 2>/dev/null || true ;;
 *) echo "unknown command $cmd" >&2; exit 2 ;;
 esac
