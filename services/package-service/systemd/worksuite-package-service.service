@@ -12,10 +12,12 @@ ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/package-servi
 # Bus-activated. Must not be killed mid-dpkg.
 KillMode=mixed
 TimeoutStopSec=30min
-# Hardening (WSOS-SEC-007). dpkg needs to write / so ProtectSystem=strict is not possible;
-# writes are confined to package-manager paths via ReadWritePaths with ProtectSystem=full.
+# Hardening (WSOS-SEC-007). dpkg must write /usr, /etc, /boot and /opt, which are exactly what ProtectSystem=full
+# makes read-only, and systemd (257 at least) does not let ReadWritePaths= reopen the very same paths: in a VM the
+# service's namespace had /usr, /etc and /boot read-only, so every apt/dpkg run it started failed (EROFS), and
+# sources tidying failed at each start. So no ProtectSystem=; the service itself stays confined by AppArmor (only
+# apt-get, dpkg and flatpak leave confinement, with fixed argument vectors), home stays read-only below.
 NoNewPrivileges=no
-ProtectSystem=full
 ProtectHome=read-only
 PrivateTmp=yes
 ProtectKernelTunables=yes
