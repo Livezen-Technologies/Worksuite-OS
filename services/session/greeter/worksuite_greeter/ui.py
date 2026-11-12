@@ -36,6 +36,9 @@ from . import login  # noqa: E402
 from . import osk  # noqa: E402
 from . import pam_errors  # noqa: E402
 from . import veil  # noqa: E402
+from . import loader  # noqa: E402
+
+Loader = loader.build(Gtk)   # the WorkSuite loader where GTK would show a spinner
 from .greetd import Greetd, GreetdError  # noqa: E402
 
 _T = i18n.translation()
@@ -696,8 +699,7 @@ class Greeter(Gtk.ApplicationWindow):
         self.go.set_child(icon("go", 18))
         self.go.update_property([Gtk.AccessibleProperty.LABEL], [_("Sign in")])
         self.go.connect("clicked", lambda *_a: self.submit())
-        self.spinner = Gtk.Spinner(spinning=False, visible=False, valign=Gtk.Align.CENTER, margin_end=8)
-        self.spinner.set_size_request(20, 20)
+        self.spinner = Loader(size=20, visible=False, valign=Gtk.Align.CENTER, margin_end=8)
         self.pwrow.append(self.go)
         self.pwrow.append(self.spinner)
         box.append(self.pwrow)

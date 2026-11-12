@@ -17,6 +17,7 @@ cross-fades from it into its first page, the mark gliding into the sidebar's log
 Calamares' shows no cut. Reduced motion (WORKSUITE_REDUCED_MOTION=1, or GTK animations off): a still frame and a
 plain fade.
 """
+from . import loader
 import math
 import os
 import re
@@ -114,7 +115,7 @@ def build(Gtk, Pango, PangoCairo):
         def __init__(self, title="", sub="", phase="", show_column=True, mark_only=False):
             super().__init__(hexpand=True, vexpand=True, can_target=False)
             self.title, self.sub, self.phase, self.show_column = title, sub, phase, show_column
-            self.mark_only = mark_only   # the ring (spinning, see spin()) and the mark; no texts, no bar
+            self.mark_only = mark_only   # the loader only (playing, see spin()); no texts, no bar
             self.angle = 0.0
             self.alive = False           # the installer's loading screen: breathing mark, shimmer bar (animate())
             self.t = 0.0
@@ -122,13 +123,13 @@ def build(Gtk, Pango, PangoCairo):
             self.set_draw_func(self._draw)
 
         def spin(self):
-            """Turns the ring's arc, like the splash's spinner, until the widget goes."""
+            """Plays the loader, like the splash, until the widget goes."""
             t0 = [None]
 
             def tick(_w, clock):
                 now = clock.get_frame_time()
                 t0[0] = now if t0[0] is None else t0[0]
-                self.angle = ((now - t0[0]) / 1e6) * 2 * math.pi / 1.4   # one turn in 1.4 s
+                self.t = (now - t0[0]) / 1e6
                 self.queue_draw()
                 return True
             self.add_tick_callback(tick)
@@ -140,7 +141,6 @@ def build(Gtk, Pango, PangoCairo):
 
             def tick(_w, clock):
                 self.t = max(0.0, (clock.get_frame_time() - t0_us) / 1e6)
-                self.angle = self.t * 2 * math.pi / 1.4
                 self.queue_draw()
                 return True
             self.add_tick_callback(tick)
@@ -172,46 +172,9 @@ def build(Gtk, Pango, PangoCairo):
                 return
             cx, cy = w / 2, h / 2
             g = column(cx, cy)
-            rc = (cx, g["ring_y"] + 60)
-            cr.set_line_width(4)
-            cr.set_source_rgba(0.498, 0.698, 1.0, 0.12)         # ring track
-            cr.arc(rc[0], rc[1], 54, 0, 2 * math.pi)
-            cr.stroke()
-            cr.set_source_rgb(0.094, 0.831, 0.941)              # #18D4F0 arc, a quarter turn
-            cr.set_line_cap(1)
-            cr.arc(rc[0], rc[1], 54, -math.pi / 2 + self.angle, self.angle)
-            cr.stroke()
-            alpha, scale = breath(self.t) if self.alive else (1.0, 1.0)
-            k = 48 / 404 * scale                                # the mark, 48 px (branding/plymouth/mark.svg, 404-unit crop)
-            mx, my = cx - 257 * k, g["ring_y"] + 60 - 257 * k   # art units 54..458, centre 256 (+1 for the crop)
-
-            def rrect(x, y, s, r):
-                x, y, s, r = mx + (x - 54) * k, my + (y - 54) * k, s * k, r * k
-                cr.new_sub_path()
-                cr.arc(x + s - r, y + r, r, -math.pi / 2, 0)
-                cr.arc(x + s - r, y + s - r, r, 0, math.pi / 2)
-                cr.arc(x + r, y + s - r, r, math.pi / 2, math.pi)
-                cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
-                cr.close_path()
-            tile = __import__("cairo").LinearGradient(0, my + 2 * k, 0, my + 402 * k)
-            tile.add_color_stop_rgba(0, 1, 1, 1, alpha)               # #ffffff
-            tile.add_color_stop_rgba(1, 0.914, 0.933, 0.969, alpha)   # #e9eef7
-            rrect(56, 56, 400, 92)
-            cr.set_source(tile)
-            cr.fill_preserve()
-            cr.set_source_rgba(0.851, 0.886, 0.949, alpha)            # #d9e2f2 border
-            cr.set_line_width(3 * k)
-            cr.stroke()
-            for x, y, rgb in ((136, 136, (0.039, 0.424, 1.0)), (268, 136, (0.0, 0.855, 0.949)),
-                              (136, 268, (0.0, 0.855, 0.949)), (268, 268, (0.0, 0.094, 0.259))):
-                rrect(x, y, 108, 16)
-                cr.set_source_rgba(*rgb, alpha)
-                cr.fill()
-            cr.set_source_rgba(0.0, 0.855, 0.949, alpha)              # #00daf2 ring in the navy cell
-            cr.set_line_width(10 * k)
-            cr.new_sub_path()
-            cr.arc(mx + (322 - 54) * k, my + (322 - 54) * k, 22 * k, 0, 2 * math.pi)
-            cr.stroke()
+            # The WorkSuite loader in the splash's 120 px box, the same "assemble" motion the boot splash plays
+            # (loader.py), so splash → veil → greeter never changes picture.
+            loader.draw(cr, cx - 60, g["ring_y"], 120, self.t)
             if self.mark_only:
                 return
             if self.title:

@@ -86,6 +86,8 @@ jobs:
       # WorkSuite GNOME overrides against the real trixie schemas (a wrong key would drop every override on the image).
       - run: docker run --rm -e DEBIAN_FRONTEND=noninteractive -v "$PWD:/src:ro" debian:trixie sh /src/tests/session/desktop-schema-test.sh
       - run: sh tests/session/autologin-test.sh
+      # Installed systems switch to GDM: it must end up as display-manager.service (a static unit), else greetd stays.
+      - run: sh tests/session/use-gdm-test.sh
       # No path shipped by two packages (dpkg would refuse the second and the image build fails).
       - run: sh tests/packaging/no-duplicate-files.sh
       # Window title bars: the Labwc WorkSuite themes, their button images and the rc.xml layout (issues #15, #33).

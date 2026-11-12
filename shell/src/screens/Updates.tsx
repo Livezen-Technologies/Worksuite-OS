@@ -92,7 +92,7 @@ export function UpdatesPanel() {
       {/* SetUpdates board hero: tinted by state */}
       <div className="flex items-center gap-5 rounded-[18px] border px-6 py-[22px]" style={{ background: hero.bg, borderColor: hero.border }} aria-live="polite">
         <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-2xl" style={{ background: hero.icon }}>
-          <span className={v.tone === 'busy' && !pct ? 'ws-spin inline-flex' : 'inline-flex'}><Svg d={v.tone === 'busy' && st.state === 'checking' ? ICON.restart : tone.icon} size={30} stroke="#FFFFFF" /></span>
+          {v.tone === 'busy' && !pct ? <WorkSuiteLoader size={34} decorative /> : <span className="inline-flex"><Svg d={tone.icon} size={30} stroke="#FFFFFF" /></span>}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
           <span className="text-xl font-bold">{v.title}</span>

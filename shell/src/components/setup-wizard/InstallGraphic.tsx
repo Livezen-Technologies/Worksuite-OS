@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { useReducedMotion } from '../AnimatedProgress'
 import { Icon, Mark } from '../Ws'
 import type { AppProgress } from '../../lib/setupApi'
+import { WorkSuiteLoader } from '../WorkSuiteLoader'
 
 const SETTLED = new Set<AppProgress['state']>(['installed', 'already', 'queued', 'skipped', 'failed'])
 const R = 52
@@ -26,16 +27,16 @@ export default function InstallGraphic({ apps, icon, label }: { apps: readonly A
     <div className="mb-2 flex flex-col items-center gap-5">
       <div className="relative flex size-[132px] items-center justify-center">
         <div aria-hidden className="absolute inset-2 rounded-full bg-[radial-gradient(circle,rgba(31,107,255,0.35),transparent_70%)] blur-md" />
-        <svg viewBox="0 0 120 120" className={`absolute inset-0 size-full -rotate-90 ${pct === null && !reduced ? 'animate-spin [animation-duration:1.6s]' : ''}`}
+        <svg viewBox="0 0 120 120" className="absolute inset-0 size-full -rotate-90"
           {...(pct === null ? { 'aria-hidden': true } : { role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': pct })}>
           <defs><linearGradient id="ws-install-ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#1F6BFF" /><stop offset="1" stopColor="#18D4F0" /></linearGradient></defs>
           <circle cx="60" cy="60" r={R} fill="none" stroke="rgba(127,178,255,0.15)" strokeWidth="7" />
           <circle cx="60" cy="60" r={R} fill="none" stroke="url(#ws-install-ring)" strokeWidth="7" strokeLinecap="round"
-            strokeDasharray={C} strokeDashoffset={pct === null ? C * 0.72 : C * (1 - pct / 100)}
+            strokeDasharray={C} strokeDashoffset={pct === null ? C : C * (1 - pct / 100)}
             style={{ transition: reduced ? 'none' : 'stroke-dashoffset 0.6s ease-out' }} />
         </svg>
         <div className="relative flex flex-col items-center">
-          <Mark size={40} />
+          {pct === null ? <WorkSuiteLoader size={48} decorative /> : <Mark size={40} />}
           {pct !== null && <span className="mt-1 text-[13px] font-semibold text-[#C9D6EE] tabular-nums">{pct}%</span>}
         </div>
       </div>

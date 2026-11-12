@@ -76,7 +76,7 @@ def main(argv=None):  # pragma: no cover - GTK window, exercised in the VM
     from gi.repository import GLib, Gtk
 
     from . import i18n
-    from .ui import CSS, label, undecorate
+    from .ui import CSS, Loader, label, undecorate
 
     _ = i18n.translation().gettext
 
@@ -144,7 +144,7 @@ def main(argv=None):  # pragma: no cover - GTK window, exercised in the VM
 
         # ---- steps ----
         def search(self):
-            spinner = Gtk.Spinner(spinning=True, halign=Gtk.Align.START)
+            spinner = Loader(size=24, halign=Gtk.Align.START)
             self.show(_("Looking for WorkSuite OS and update files…"), None, spinner)
             self.background(lambda: tool("scan"), self.found)
 
@@ -158,7 +158,7 @@ def main(argv=None):  # pragma: no cover - GTK window, exercised in the VM
                 return self.nothing(_("No update file was found. Copy a .wsupdate file to the top level of a USB drive, plug it in and search again."))
             self.target = found["systems"][0]
             dev = self.target[0]
-            self.show(_("Checking the update…"), None, Gtk.Spinner(spinning=True, halign=Gtk.Align.START))
+            self.show(_("Checking the update…"), None, Loader(size=24, halign=Gtk.Align.START))
             self.background(lambda: [(p, parse_json(tool("inspect", "--target", dev, "--bundle", p)[1])) for p in found["bundles"]],
                             self.checked)
 
@@ -174,7 +174,7 @@ def main(argv=None):  # pragma: no cover - GTK window, exercised in the VM
                 pw = entry.get_text()
                 if not pw:
                     return
-                self.show(_("Unlocking…"), None, Gtk.Spinner(spinning=True, halign=Gtk.Align.START))
+                self.show(_("Unlocking…"), None, Loader(size=24, halign=Gtk.Align.START))
                 self.background(lambda: tool("unlock", dev, stdin=pw + "\n"), lambda r: self.search() if r[0] == 0 else again())
 
             def again():

@@ -265,10 +265,7 @@ Presentation {
                                     width: 22; height: 22
                                     Rectangle { anchors.fill: parent; radius: 11; visible: done; color: "#2E3DDC97"
                                         WsCheck { anchors.centerIn: parent; color: "#3DDC97"; size: 13; lineWidth: 2.2 } }
-                                    Rectangle { anchors.fill: parent; radius: 11; visible: active; color: "transparent"; border.width: 2; border.color: "#2E7FB2FF"
-                                        Rectangle { width: 22; height: 22; radius: 11; color: "transparent"; border.width: 2; border.color: "#18D4F0"; visible: active
-                                            Rectangle { width: 12; height: 12; x: 10; y: -1; color: "#0E2048" }
-                                            RotationAnimation on rotation { from: 0; to: 360; duration: 1000; loops: Animation.Infinite; running: active } } }
+                                    WsLoader { anchors.centerIn: parent; size: 22; visible: active; running: active }
                                     Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; visible: !done && !active; color: "#5E739C" }
                                 }
                                 Text {

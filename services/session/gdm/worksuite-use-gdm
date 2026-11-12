@@ -4,8 +4,9 @@
 # offline-update windows run in greetd's session), so the installer runs this in the new system (shellprocess).
 #   worksuite-use-gdm   (root, in the target system)
 set -eu
-CONF=${WORKSUITE_GDM_CONF:-/etc/gdm3/daemon.conf}
-[ -x /usr/sbin/gdm3 ] || { echo "worksuite-use-gdm: gdm3 is not installed; keeping greetd" >&2; exit 0; }
+R=${WORKSUITE_ROOT:-}   # tests run it against a fake root
+CONF=${WORKSUITE_GDM_CONF:-$R/etc/gdm3/daemon.conf}
+[ -x "$R/usr/sbin/gdm3" ] || { echo "worksuite-use-gdm: gdm3 is not installed; keeping greetd" >&2; exit 0; }
 # daemon.conf: Wayland, the WorkSuite session for people with no saved choice, no automatic sign-in (WSOS-AUTH-002;
 # worksuite-autologin turns it on only by explicit configuration).
 mkdir -p "$(dirname "$CONF")"
@@ -27,11 +28,29 @@ Enable=false
 [debug]
 Enable=false
 C
-echo /usr/sbin/gdm3 > /etc/X11/default-display-manager
+# GDM's settings (logo, fonts): compile the "gdm" dconf database now. worksuite-session's postinst may have run before
+# dconf-cli was unpacked in the image build, which left Debian's logo on the sign-in screen.
+if [ -f $R/usr/share/worksuite/gdm/dconf/90-worksuite ]; then
+  install -d -m 0755 $R/etc/dconf/db/gdm.d
+  install -m 0644 $R/usr/share/worksuite/gdm/dconf/90-worksuite $R/etc/dconf/db/gdm.d/90-worksuite
+fi
+command -v dconf >/dev/null 2>&1 && dconf update || echo "worksuite-use-gdm: dconf missing; GDM keeps its own defaults" >&2
+# Debian's gdm.service is static (no [Install]): `systemctl enable` does nothing for it, and disabling greetd removed
+# the display-manager.service alias, which left a machine with no sign-in screen at all (seen in a VM). The display
+# manager is the display-manager.service link, as Debian's own postinst sets it.
+UNIT=$(systemctl show -P FragmentPath gdm.service 2>/dev/null); [ -n "$UNIT" ] || UNIT=$R/usr/lib/systemd/system/gdm.service
+if [ ! -f "$UNIT" ]; then echo "worksuite-use-gdm: no gdm.service; keeping greetd" >&2; exit 0; fi
 systemctl disable greetd.service >/dev/null 2>&1 || true
-systemctl enable gdm3.service >/dev/null 2>&1 || systemctl enable gdm.service
+ln -sfn "$UNIT" $R/etc/systemd/system/display-manager.service
+echo /usr/sbin/gdm3 > $R/etc/X11/default-display-manager
+# Never leave the machine without a sign-in screen: if the link is not GDM's now, put greetd back.
+if [ "$(readlink -f $R/etc/systemd/system/display-manager.service)" != "$(readlink -f "$UNIT")" ]; then
+  echo "worksuite-use-gdm: could not make GDM the display manager; keeping greetd" >&2
+  rm -f $R/etc/systemd/system/display-manager.service; systemctl enable greetd.service; echo /usr/sbin/greetd > $R/etc/X11/default-display-manager
+  exit 1
+fi
 # Every existing person starts in the WorkSuite session (AccountsService keeps GDM's per-user choice).
-for d in /var/lib/AccountsService/users/*; do
+for d in $R/var/lib/AccountsService/users/*; do
   [ -f "$d" ] || continue
   grep -q '^Session=' "$d" || printf 'Session=worksuite-gnome\n' >> "$d"
 done

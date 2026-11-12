@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatedProgress } from '../components/AnimatedProgress'
 import { kioskApi, type KioskApi, type KioskExitResult } from '../lib/kioskApi'
 import { useT } from '../i18n'
+import { WorkSuiteLoader } from '../components/WorkSuiteLoader'
 
 const RED = '#FF8A7A'
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'] as const
@@ -150,8 +151,8 @@ export function KioskStatus({ state, host = '', secs = 0, attempt = 0, until = '
   return (
     <main className={`fixed inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center font-sans ${light ? 'bg-[#F4F7FC] text-[#0A1A3D]' : 'bg-[linear-gradient(160deg,#12306B,#050E24)] text-[#E8EEFA]'}`}>
       <span className={`mb-1 flex size-[72px] items-center justify-center rounded-[20px] ${tint}`}>
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
-          className={state === 'restarting' ? 'motion-safe:animate-spin [animation-duration:2.4s]' : ''}><path d={ICON[state]} /></svg>
+        {state === 'restarting' ? <WorkSuiteLoader size={40} decorative />
+          : <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON[state]} /></svg>}
       </span>
       <h1 className="m-0 text-[28px] font-bold">{title}</h1>
       <p role="status" className={`m-0 max-w-[460px] text-base leading-normal ${light ? 'text-[#3B4F75]' : 'text-[#C9D6EE]'}`}>{body}</p>

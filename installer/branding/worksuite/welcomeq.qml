@@ -135,7 +135,7 @@ WsPage {
             Layout.fillWidth: true
             visible: page.applying
             spacing: 10
-            BusyIndicator { running: page.applying; implicitWidth: 20; implicitHeight: 20 }
+            WsLoader { size: 20; running: page.applying; visible: page.applying }
             Text { text: qsTr("Applying the language…"); color: "#18D4F0"; font.family: "IBM Plex Sans"; font.pixelSize: 13 }
         }
 
