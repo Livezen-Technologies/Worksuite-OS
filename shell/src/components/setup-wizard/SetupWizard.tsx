@@ -16,6 +16,7 @@ import { flowFor, isMain, WORK_STATES, type MainState, type SetupEvent } from '.
 import { asks, useSetup } from './useSetup'
 import RecoveryScreen from './recovery/RecoveryScreen'
 import InstallGraphic from './InstallGraphic'
+import { AnimatedProgress, CountUp } from '../AnimatedProgress'
 import worksuitePng from '../../assets/brand/worksuite.png'
 import officePng from '../../assets/brand/worksuite-office.png'
 import posPng from '../../assets/brand/worksuite-pos.png'
@@ -80,7 +81,7 @@ export default function SetupWizard({ api, onDone, onExitToRecovery, userName }:
   const send = (e: SetupEvent) => s.send(e)
 
   let body: ReactNode
-  if (RECOVERY.has(v.state)) body = <RecoveryScreen api={api} view={v} send={send} busy={s.busy} onExit={onExitToRecovery} />
+  if (RECOVERY.has(v.state)) body = <RecoveryScreen api={api} view={v} send={send} busy={s.busy} onExit={onExitToRecovery} extra={v.resumeTo === 'INSTALLING_APPLICATIONS' ? <AppSummary api={api} /> : undefined} />
   else if (!isMain(v.state)) body = <SidePanel state={v.state} attempts={v.attempts} lastError={v.lastError} busy={s.busy} send={send} headingRef={heading} />
   else if (complete) body = <DonePanel answers={v.answers} onDone={onDone} headingRef={heading} />
   else if (!asks(v.state)) body = <WorkPanel api={api} state={v.state} flow={flow} send={send} busy={s.busy} headingRef={heading} />
@@ -477,13 +478,13 @@ function WorkPanel({ api, state, flow, send, busy, headingRef }: { api: SetupApi
   const work = flow.filter((s) => WORK_STATES.includes(s) && s !== 'INITIALIZING')
   const i = work.indexOf(state)
   const apps = useAppProgress(api, state === 'INSTALLING_APPLICATIONS')
+  if (state === 'INSTALLING_APPLICATIONS') return <InstallAppsPanel apps={apps} send={send} busy={busy} headingRef={headingRef} />
   return (
     <Center>
       <InstallGraphic apps={apps} icon={(a) => <AppIcon id={a.id} size={44} />} label={t('sw.apps.title')} />
       <div role="status" aria-live="polite"><h1 ref={headingRef} tabIndex={-1} className="m-0 text-[32px] font-bold tracking-[-0.025em] outline-none">{stepName(state)}</h1></div>
       <p className="m-0 text-[15px] text-[#AFC0DD]">{t('sw.work.body')}</p>
-      {state === 'INSTALLING_APPLICATIONS' && <AppRows apps={apps} />}
-      {state !== 'INSTALLING_APPLICATIONS' && work.length > 1 && (
+      {work.length > 1 && (
         <ol className="m-0 mt-4 flex w-full max-w-[420px] list-none flex-col gap-1 rounded-2xl border border-[rgba(127,178,255,0.14)] bg-[rgba(10,24,56,0.45)] p-3 text-left">
           {work.map((w, n) => (
             <li key={w} aria-current={n === i ? 'step' : undefined} className={`flex items-center gap-3 rounded-xl px-3 py-2 text-[14px] ${n === i ? 'bg-[rgba(31,107,255,0.14)] font-semibold text-white' : n < i ? 'text-[#C9D6EE]' : 'text-[#8FA3C8]'}`}>
@@ -570,32 +571,81 @@ function AppIcon({ id, size }: { id: string; size: number }) {
   return <span style={{ width: size, height: size, background: third?.[1] ?? '#5E739C' }} className="flex items-center justify-center rounded-xl text-white"><Icon d={[third?.[0] ?? 'M4 4h16v16H4z']} size={Math.round(size / 2)} /></span>
 }
 
-function AppRows({ apps }: { apps: AppProgress[] }) {
-  if (!apps.length) return null
-  const nameOf = (a: AppProgress) => {
-    const k = (WORKSUITE_APPS as readonly string[]).includes(a.id) ? `sw.app.${a.id}` : (THIRD_PARTY_APPS as readonly string[]).includes(a.id) ? `sw.third.${a.id}` : null
-    return k ? split(t(k as MessageKey))[0] : a.name
-  }
+const appName = (a: AppProgress) => {
+  const k = (WORKSUITE_APPS as readonly string[]).includes(a.id) ? `sw.app.${a.id}` : (THIRD_PARTY_APPS as readonly string[]).includes(a.id) ? `sw.third.${a.id}` : null
+  return k ? split(t(k as MessageKey))[0] : a.name
+}
+const SETTLED: readonly AppProgress['state'][] = ['installed', 'already', 'failed', 'queued']
+/** One app's share of the work, 0–100: settled apps count in full, the running one by its reported progress. */
+const appPct = (a: AppProgress) => (SETTLED.includes(a.state) ? 100 : a.state === 'installing' ? a.progress ?? 0 : 0)
+const appTone = (a: AppProgress) => (a.state === 'failed' ? 'error' : a.state === 'queued' ? 'paused' : a.state === 'installed' || a.state === 'already' ? 'success' : 'default') as 'error' | 'paused' | 'success' | 'default'
+
+/** Installing apps: overall progress across the apps, and each app with its own bar and state (GetApps). */
+function InstallAppsPanel({ apps, send, busy, headingRef }: { apps: AppProgress[]; send: (e: SetupEvent) => Promise<boolean>; busy: boolean; headingRef: HeadingRef }) {
+  const shown = apps.filter((a) => a.state !== 'skipped')
+  const done = shown.filter((a) => a.state === 'installed' || a.state === 'already').length
+  const pct = shown.length ? Math.round(shown.reduce((n, a) => n + appPct(a), 0) / shown.length) : null
   return (
-    <section aria-label={t('sw.apps.title')} className="mt-4 w-full max-w-[460px] rounded-2xl border border-[rgba(127,178,255,0.14)] bg-[rgba(10,24,56,0.45)] p-2 text-left">
-      <ul className="m-0 flex list-none flex-col p-0">
-        {apps.map((a) => {
-          const icon = (APP_ICON as Record<string, string>)[a.id]
-          const third = (THIRD_LOOK as Record<string, [string, string]>)[a.id]
-          return (
-            <li key={a.id} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${a.state === 'installing' ? 'bg-[rgba(31,107,255,0.12)]' : ''}`}>
-              {icon ? <img src={icon} alt="" className="size-8 rounded-lg" draggable={false} />
-                : <span className="flex size-8 items-center justify-center rounded-lg text-white" style={{ background: third?.[1] ?? '#5E739C' }}><Icon d={[third?.[0] ?? 'M4 4h16v16H4z']} size={16} /></span>}
-              <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{nameOf(a)}</span>
-              <span className={`flex items-center gap-1.5 text-[12px] font-medium ${APP_STATE_LOOK[a.state]}`} title={a.error ?? undefined}>
-                {a.state === 'installing' && <Spinner size={13} />}
-                {(a.state === 'installed' || a.state === 'already') && <Icon d={[CHECK]} size={13} width={3} />}
-                {t(`sw.appState.${a.state}` as MessageKey)}
-              </span>
-            </li>
-          )
-        })}
-      </ul>
+    <section className="mx-auto flex w-full max-w-[640px] flex-col gap-6 py-2">
+      <header className="flex items-center gap-4">
+        <span className="relative flex size-14 shrink-0 items-center justify-center">
+          <span aria-hidden className="absolute inset-0 rounded-2xl bg-[radial-gradient(circle,rgba(31,107,255,0.4),transparent_70%)] blur-md" />
+          <span className="relative"><Mark size={48} /></span>
+        </span>
+        <div className="flex min-w-0 flex-col gap-1">
+          <h1 ref={headingRef} tabIndex={-1} className="m-0 text-[30px] leading-tight font-bold tracking-[-0.025em] outline-none">{stepName('INSTALLING_APPLICATIONS')}</h1>
+          <p className="m-0 text-[15px] text-[#AFC0DD]">{t('sw.work.body')}</p>
+        </div>
+      </header>
+      <div className="flex flex-col gap-3 rounded-2xl border border-[rgba(127,178,255,0.16)] bg-[rgba(10,24,56,0.55)] p-5 shadow-[0_12px_40px_rgba(0,0,0,0.2)] backdrop-blur-sm">
+        <div role="status" aria-live="polite" className="flex items-baseline justify-between gap-3">
+          <span className="text-[15px] font-semibold">{shown.length ? t('sw.apps.overall', { done, total: shown.length }) : t('sw.busy')}</span>
+          {pct !== null && <span className="text-[22px] font-bold text-[#9CC2FF] tabular-nums"><CountUp value={pct} /></span>}
+        </div>
+        <AnimatedProgress value={pct} height={10} label={stepName('INSTALLING_APPLICATIONS')} tone={pct === 100 ? 'success' : 'default'} />
+      </div>
+      {shown.length > 0 && (
+        <ul aria-label={t('sw.apps.title')} className="m-0 flex list-none flex-col gap-2 p-0">
+          {shown.map((a) => <AppProgressRow key={a.id} a={a} />)}
+        </ul>
+      )}
+      <div className="flex justify-center">
+        <Button variant="secondary" size="md" disabled={busy} onClick={() => void send({ type: 'PAUSE' })}><Icon d={['M8 5v14M16 5v14']} size={15} />{t('sw.pause')}</Button>
+      </div>
+    </section>
+  )
+}
+
+function AppProgressRow({ a }: { a: AppProgress }) {
+  const active = a.state === 'installing'
+  const pct = a.state === 'installing' ? a.progress ?? null : appPct(a)
+  return (
+    <li data-state={a.state} className={`flex items-center gap-4 rounded-2xl border px-4 py-3 transition-colors ${active ? 'border-[rgba(31,107,255,0.55)] bg-[rgba(31,107,255,0.12)]' : 'border-[rgba(127,178,255,0.12)] bg-[rgba(10,24,56,0.45)]'} ${a.state === 'pending' ? 'opacity-70' : ''}`}>
+      <span className={`shrink-0 ${a.state === 'pending' ? 'grayscale' : ''}`}><AppIcon id={a.id} size={40} /></span>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{appName(a)}</span>
+          <span className={`flex shrink-0 items-center gap-1.5 text-[12px] font-medium ${APP_STATE_LOOK[a.state]}`} title={a.error ?? undefined}>
+            {active && <Spinner size={13} />}
+            {(a.state === 'installed' || a.state === 'already') && <Icon d={[CHECK]} size={13} width={3} />}
+            {t(`sw.appState.${a.state}` as MessageKey)}{active && a.progress != null ? ` · ${a.progress}%` : ''}
+          </span>
+        </div>
+        <AnimatedProgress value={pct} height={6} tone={appTone(a)} decorative shimmer={active} />
+        {a.state === 'failed' && a.error && <span className="truncate text-[12px] text-[#FFB4A6]">{a.error}</span>}
+      </div>
+    </li>
+  )
+}
+
+/** The apps' results when setup stopped during app installation (recovery screen). */
+function AppSummary({ api }: { api: SetupApi }) {
+  const apps = useAppProgress(api, true).filter((a) => a.state !== 'skipped')
+  if (!apps.length) return null
+  return (
+    <section aria-label={t('sw.apps.recovery')} className="w-full">
+      <h2 className="m-0 mb-2 text-[13px] font-semibold tracking-[0.06em] text-[#8FA3C8] uppercase">{t('sw.apps.recovery')}</h2>
+      <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 sm:grid-cols-2">{apps.map((a) => <AppProgressRow key={a.id} a={a} />)}</ul>
     </section>
   )
 }

@@ -22,7 +22,10 @@ export interface SetupView {
 export interface SendResult { ok: boolean; state: SetupState; fieldErrors?: Record<string, string>; error?: string }
 export type RecoveryView = ReturnType<typeof recoveryOptions>
 /** Per-app progress of the app installation step (services/setup/src/apps/engine.ts AppStatus). */
-export interface AppProgress { id: string; name: string; required: boolean; state: 'pending' | 'installing' | 'installed' | 'already' | 'queued' | 'failed' | 'skipped'; attempts: number; error: string | null }
+export interface AppProgress { id: string; name: string; required: boolean; state: 'pending' | 'installing' | 'installed' | 'already' | 'queued' | 'failed' | 'skipped'; attempts: number; error: string | null; progress?: number | null }
+
+/** Preview: how long installing apps takes, so its progress can be watched. */
+const APPS_MS = 9000
 
 export interface SetupApi {
   state(): Promise<Reply<SetupView>>
@@ -70,13 +73,16 @@ export function previewApi(o: { mode?: SetupMode; scenario?: 'fresh' | 'recovery
     } else autoWork()
   })())
   let timer: ReturnType<typeof setTimeout> | null = null
+  let appsSince = 0
   const autoWork = () => {
     if (timer) clearTimeout(timer)
     const s = m.state
     if (s === 'ROLLING_BACK') { timer = setTimeout(async () => { log('rollback INSTALLING_APPLICATIONS: removed 3 package(s)'); await m.send({ type: 'ROLLBACK_DONE' }); autoWork() }, o.workMs ?? 1200); return }
     if (!isMain(s) || !WORK_STATES.includes(s)) return
     log(`running ${s}`)
-    timer = setTimeout(async () => { if (m.state === s) { await m.send({ type: 'WORK_DONE' }); log(`${s} done`); autoWork() } }, o.workMs ?? 1200)
+    if (s === 'INSTALLING_APPLICATIONS') appsSince = Date.now()
+    const ms = s === 'INSTALLING_APPLICATIONS' ? (o.workMs ?? APPS_MS) + 300 : (o.workMs ?? 1200)
+    timer = setTimeout(async () => { if (m.state === s) { await m.send({ type: 'WORK_DONE' }); log(`${s} done`); autoWork() } }, ms)
   }
   const view = (): SetupView => {
     const s = m.snapshot as SetupSnapshot
@@ -90,8 +96,18 @@ export function previewApi(o: { mode?: SetupMode; scenario?: 'fresh' | 'recovery
       // Preview: the selected apps move through the install step one after another.
       await ready()
       const sel = ['worksuite-desktop', ...((m.snapshot.answers.worksuiteApps as string[] | undefined) ?? []).filter((x) => x !== 'worksuite-desktop'), ...((m.snapshot.answers.thirdPartyApps as string[] | undefined) ?? [])]
-      const i = m.state === 'INSTALLING_APPLICATIONS' ? Math.floor((Date.now() / 400) % (sel.length + 1)) : sel.length
-      return { ok: true, value: sel.map((id, n) => ({ id, name: id, required: n === 0, state: n < i ? 'installed' : n === i ? 'installing' : 'pending', attempts: n <= i ? 1 : 0, error: null })) as AppProgress[] }
+      if (o.scenario === 'recovery') return { ok: true, value: [
+        { id: 'worksuite-desktop', name: 'worksuite-desktop', required: true, state: 'installed', attempts: 1, error: null, progress: 100 },
+        { id: 'worksuite-office', name: 'worksuite-office', required: false, state: 'failed', attempts: 3, error: 'download interrupted (connection reset)', progress: 37 },
+      ] }
+      // Each app takes an equal share of the step; the running one reports a percentage like apt's Status-Fd.
+      const share = (o.workMs ?? APPS_MS) / Math.max(1, sel.length)
+      const t = m.state === 'INSTALLING_APPLICATIONS' ? Date.now() - appsSince : Infinity
+      return { ok: true, value: sel.map((id, n) => {
+        const p = Math.max(0, Math.min(100, ((t - n * share) / share) * 100))
+        const state = p >= 100 ? 'installed' : p > 0 ? 'installing' : 'pending'
+        return { id, name: id, required: n === 0, state, attempts: p > 0 ? 1 : 0, error: null, progress: state === 'pending' ? 0 : Math.round(p) }
+      }) as AppProgress[] }
     },
     async log(n = 400) { await ready(); return { ok: true, value: lines.slice(-n).join('\n') } },
     async send(e) {

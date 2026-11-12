@@ -2,6 +2,8 @@
 // text, waiting and retry panels, the recovery screen and the installation log. Sinhala and Tamil are machine drafts
 // like the rest of their catalogs (docs/i18n/README.md). Spread into en.ts, si.ts and ta.ts.
 export const setupWizardEn = {
+  'sw.apps.overall': '{done} of {total} apps ready',
+  'sw.apps.recovery': 'Your apps when setup stopped',
   'sw.appState.pending': 'Waiting',
   'sw.appState.installing': 'Installing…',
   'sw.appState.installed': 'Installed',
@@ -174,6 +176,8 @@ export const setupWizardEn = {
 } as const
 
 export const setupWizardSi: Partial<Record<keyof typeof setupWizardEn, string>> = {
+  'sw.apps.overall': 'යෙදුම් {total} න් {done} ක් සූදානම්',
+  'sw.apps.recovery': 'පිහිටුවීම නතර වූ විට ඔබේ යෙදුම්',
   'sw.appState.pending': 'රැඳී සිටිමින්',
   'sw.appState.installing': 'ස්ථාපනය කරමින්…',
   'sw.appState.installed': 'ස්ථාපනය කළා',
@@ -346,6 +350,8 @@ export const setupWizardSi: Partial<Record<keyof typeof setupWizardEn, string>> 
 }
 
 export const setupWizardTa: Partial<Record<keyof typeof setupWizardEn, string>> = {
+  'sw.apps.overall': '{total} இல் {done} பயன்பாடுகள் தயார்',
+  'sw.apps.recovery': 'அமைவு நின்றபோது உங்கள் பயன்பாடுகள்',
   'sw.appState.pending': 'காத்திருக்கிறது',
   'sw.appState.installing': 'நிறுவப்படுகிறது…',
   'sw.appState.installed': 'நிறுவப்பட்டது',

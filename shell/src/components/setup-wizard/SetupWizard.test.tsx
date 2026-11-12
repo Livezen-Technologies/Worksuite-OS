@@ -111,16 +111,23 @@ describe('app installation progress', () => {
       state: async () => ({ ok: true, value: { state: 'INSTALLING_APPLICATIONS', mode: 'firstRun', resumeTo: null, answers: {}, lastError: null, attempts: 1, checkpoints: [], startReason: '', uiActions: [] } }),
       apps: async () => ({ ok: true, value: [
         { id: 'worksuite-desktop', name: 'WorkSuite Desktop', required: true, state: 'installed', attempts: 1, error: null },
-        { id: 'worksuite-pos', name: 'WorkSuite POS', required: false, state: 'installing', attempts: 2, error: null },
+        { id: 'worksuite-pos', name: 'WorkSuite POS', required: false, state: 'installing', attempts: 2, error: null, progress: 40 },
         { id: 'vlc', name: 'VLC', required: false, state: 'queued', attempts: 0, error: null },
         { id: 'gimp', name: 'GIMP', required: false, state: 'skipped', attempts: 0, error: null },
         { id: 'worksuite-desk', name: 'WorkSuite Desk', required: false, state: 'failed', attempts: 3, error: 'E: Connection reset' },
       ] }),
     }
     act(() => root.render(<SetupWizard api={api} onDone={() => {}} />))
-    await until(() => !!host.querySelector('section[aria-label="Your apps"] li'))
-    const rows = [...host.querySelectorAll('section[aria-label="Your apps"] li')].map((li) => li.textContent)
-    expect(rows).toEqual(['WorkSuite DesktopInstalled', 'POSInstalling…', 'VLCInstalls when you’re online', 'GIMPNot allowed by your organization', 'DeskCouldn’t install'])
+    await until(() => !!host.querySelector('ul[aria-label="Your apps"] li'))
+    const rows = [...host.querySelectorAll('ul[aria-label="Your apps"] li')].map((li) => [li.getAttribute('data-state'), li.textContent])
+    // Skipped apps are not shown; each row has the app's name and state, the running one its percentage.
+    expect(rows).toEqual([
+      ['installed', 'WorkSuite DesktopInstalled'], ['installing', 'POSInstalling… · 40%'],
+      ['queued', 'VLCInstalls when you’re online'], ['failed', 'DeskCouldn’t installE: Connection reset'],
+    ])
+    expect(host.textContent).toContain('1 of 4 apps ready')
+    // Overall: settled apps count in full, the running one by its progress: (100 + 40 + 100 + 100) / 4.
+    expect(host.querySelector('[role="progressbar"]')!.getAttribute('aria-valuenow')).toBe('85')
     expect(host.querySelector('[title="E: Connection reset"]')).not.toBeNull()
   })
 })

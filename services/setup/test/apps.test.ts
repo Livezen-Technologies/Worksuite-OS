@@ -140,3 +140,23 @@ test('deployment sync: the report carries states, never answers; defaults apply 
   assert.deepEqual(defaultsToApply(null, {}), [])
   assert.deepEqual(defaultsToApply(['si_LK'], {}), [])
 })
+
+test('engine: apt Status-Fd progress becomes each app\'s 0–100 figure, download then install', async () => {
+  const { aptProgress } = await import('../src/apps/engine.ts')
+  assert.equal(aptProgress('dlstatus:1:40.0000:Retrieving file 2 of 5'), 20)
+  assert.equal(aptProgress('pmstatus:worksuite-pos:60:Unpacking worksuite-pos'), 80)
+  assert.equal(aptProgress('Reading package lists...'), null)
+  const h = harness({ installed: ['worksuite'] })
+  const seen: number[] = []
+  ;(h.env.runner as { stream?: unknown }).stream = async (cmd: string, args: string[], onLine: (l: string) => void) => {
+    assert.ok(args.includes('APT::Status-Fd=1'))
+    for (const l of ['dlstatus:1:0:start', 'dlstatus:1:100:done', 'pmstatus:p:10:Preparing', 'pmstatus:p:10:again', 'pmstatus:p:100:Installed']) {
+      onLine(l)
+      seen.push(readStatus(h.env.statusFile).find((s) => s.id === 'worksuite-pos')!.progress!)
+    }
+    return h.env.runner.run(cmd, args)
+  }
+  const st = await h.engine.run(plan(['worksuite-pos'], null))
+  assert.deepEqual(seen, [0, 50, 55, 55, 100])
+  assert.deepEqual(st.map((s) => [s.id, s.state, s.progress]), [['worksuite-desktop', 'already', 100], ['worksuite-pos', 'installed', 100]])
+})

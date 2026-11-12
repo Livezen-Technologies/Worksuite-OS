@@ -23,7 +23,7 @@ const ACTION: Record<RecoveryActionId, { label: MessageKey; keeps: MessageKey; c
   exit: { label: 'swr.act.exit', keeps: 'swr.keep.resumable', changes: 'swr.chg.exit', icon: 'M4 5h16v14H4zM7 9l3 3-3 3M12 15h5' },
 }
 
-export default function RecoveryScreen({ api, view, send, busy, onExit }: { api: SetupApi; view: SetupView; send: (e: SetupEvent) => Promise<boolean>; busy?: boolean; onExit?: () => void }) {
+export default function RecoveryScreen({ api, view, send, busy, onExit, extra }: { api: SetupApi; view: SetupView; send: (e: SetupEvent) => Promise<boolean>; busy?: boolean; onExit?: () => void; /** Shown under the explanation (the apps' results). */ extra?: React.ReactNode }) {
   const [opts, setOpts] = useState<RecoveryView | null>(null)
   const [dialog, setDialog] = useState<'log' | 'rollback' | 'restore' | null>(null)
 
@@ -74,6 +74,7 @@ export default function RecoveryScreen({ api, view, send, busy, onExit }: { api:
           {view.lastError && !rolledBack && <p className="m-0 text-sm break-words text-[#FFB4A6]">{t('swr.error', { error: view.lastError })}</p>}
         </div>
       </div>
+      {extra}
       <p className="m-0 text-sm text-[#8FA3C8]">{t('swr.choose')}</p>
       <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 md:grid-cols-2">
         {(opts?.actions ?? []).filter((a) => a.id !== 'exit' || onExit).map((a) => {

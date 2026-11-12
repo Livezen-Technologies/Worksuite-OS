@@ -1,6 +1,6 @@
 // worksuite-setup: root daemon owning lk.worksuite.Setup1 on the system bus.
 //   worksuite-setup [--mode install|firstRun]   (default: install on the live ISO, firstRun otherwise)
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statfsSync } from 'node:fs'
 import { arch } from 'node:os'
@@ -29,7 +29,21 @@ const REPORT = '/run/worksuite-setup/report.json'
 const RUN_ENV = { PATH: '/usr/sbin:/usr/bin:/sbin:/bin', LC_ALL: 'C.UTF-8', DEBIAN_FRONTEND: 'noninteractive' }
 
 /** Fixed executables, argument vectors, no shell. */
-const runner: Runner = {
+const runner: Runner & { stream: NonNullable<import('./apps/engine.ts').StreamRunner['stream']> } = {
+  // Same fixed argv and environment as run(), with stdout handed over line by line (apt's Status-Fd progress).
+  stream: (cmd, args, onLine) => new Promise((resolve) => {
+    const c = spawn(cmd, args, { env: RUN_ENV, stdio: ['ignore', 'pipe', 'pipe'] })
+    let out = '', err = '', buf = ''
+    const timer = setTimeout(() => c.kill('SIGKILL'), 3_600_000)
+    c.stdout.setEncoding('utf8').on('data', (d: string) => {
+      out += d; buf += d
+      let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); try { onLine(line) } catch { /* progress only */ } }
+      if (out.length > 32 << 20) out = out.slice(-(16 << 20))
+    })
+    c.stderr.setEncoding('utf8').on('data', (d: string) => { err = (err + d).slice(-(1 << 20)) })
+    c.on('error', (e) => { clearTimeout(timer); resolve({ code: 1, stdout: out, stderr: String(e) }) })
+    c.on('close', (code) => { clearTimeout(timer); resolve({ code: code ?? 1, stdout: out, stderr: err }) })
+  }),
   run: (cmd, args) => new Promise((resolve) => execFile(cmd, args, { env: RUN_ENV, timeout: 3_600_000, maxBuffer: 32 << 20 },
     (err, stdout, stderr) => resolve({ code: err ? (typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : 1) : 0, stdout, stderr }))),
 }

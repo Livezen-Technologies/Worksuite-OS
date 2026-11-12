@@ -17,12 +17,29 @@ export type AppState = 'pending' | 'installing' | 'installed' | 'already' | 'que
 export interface AppStatus {
   id: string; name: string; required: boolean; state: AppState
   source: Source['type'] | null; attempts: number; error: string | null
+  /** 0–100 while installing from APT (download is the first half, unpacking and setup the second); null when the
+   *  source reports none (flatpak) or nothing has started. */
+  progress?: number | null
   /** For skipped apps: why policy kept them out. */
   why?: string
 }
 
+/** A runner that also hands over stdout line by line while the command runs (apt's progress). */
+export interface StreamRunner extends Runner {
+  stream?(cmd: string, args: string[], onLine: (line: string) => void): Promise<{ code: number; stdout: string; stderr: string }>
+}
+
+/** apt's machine-readable progress (APT::Status-Fd): "dlstatus:PKG:PCT:MSG" while downloading, "pmstatus:PKG:PCT:MSG"
+ *  while unpacking and configuring. Mapped to one 0–100 figure: download first half, install second. */
+export function aptProgress(line: string): number | null {
+  const m = /^(dlstatus|pmstatus):[^:]*:([0-9.]+):/.exec(line)
+  if (!m) return null
+  const pct = Math.max(0, Math.min(100, Number(m[2])))
+  return Math.round(m[1] === 'dlstatus' ? pct / 2 : 50 + pct / 2)
+}
+
 export interface EngineEnv {
-  runner: Runner
+  runner: StreamRunner
   bundledDir: string
   online(): boolean
   /** Durable per-app status (GetApps) and the offline queue. */
@@ -76,6 +93,8 @@ export class AppEngine {
   private set(id: string, patch: Partial<AppStatus>) {
     this.status = this.status.map((s) => (s.id === id ? { ...s, ...patch } : s)); this.save()
   }
+  /** The app being installed right now (apt progress lines belong to it). */
+  private get current(): AppStatus | undefined { return this.status.find((s) => s.state === 'installing') }
 
   private async installed(src: Source): Promise<boolean> {
     if (src.type === 'flatpak') return (await this.env.runner.run('flatpak', ['info', '--system', src.ref])).code === 0
@@ -119,25 +138,31 @@ export class AppEngine {
     // Dependency resolution first: a simulation that fails will not succeed on retry.
     const sim = await run('apt-get', ['-s', '-q', 'install', '--', target])
     if (sim.code !== 0) throw Object.assign(new Error(`its dependencies cannot be resolved: ${firstLine(sim.stdout + '\n' + sim.stderr)}`), { retryable: false })
-    const r = await run('apt-get', [...APT, 'install', '--', target])
+    const stream = this.env.runner.stream
+    const r = stream
+      ? await stream('apt-get', [...APT, '-o', 'APT::Status-Fd=1', 'install', '--', target], (line) => {
+          const p = aptProgress(line)
+          if (p !== null && p > (this.current?.progress ?? -1)) this.set(this.current!.id, { progress: p })
+        })
+      : await run('apt-get', [...APT, 'install', '--', target])
     if (r.code !== 0) throw Object.assign(new Error(firstLine(r.stderr) || 'apt-get install failed'), { retryable: true })
   }
 
   private async one(app: AppDef, required: boolean): Promise<AppState> {
     const { max, backoffMs } = this.env.retry ?? { max: 3, backoffMs: 5_000 }
     for (const src of app.sources) {
-      if (src.type !== 'bundled' && await this.installed(src).catch(() => false)) { this.set(app.id, { state: 'already', source: null }); this.env.log(`${app.name}: already installed`); return 'already' }
+      if (src.type !== 'bundled' && await this.installed(src).catch(() => false)) { this.set(app.id, { state: 'already', source: null, progress: 100 }); this.env.log(`${app.name}: already installed`); return 'already' }
     }
     let chosen
     try { chosen = await this.pick(app) } catch (e) { this.set(app.id, { state: 'failed', error: (e as Error).message }); this.env.log(`${app.name}: ${(e as Error).message}`); return 'failed' }
     if (chosen === 'queue') { this.set(app.id, { state: 'queued' }); this.env.log(`${app.name}: offline, queued for when the network is back`); return 'queued' }
     if (!chosen) { this.set(app.id, { state: 'failed', error: 'no trusted source has this app for this computer' }); return 'failed' }
     for (let n = 1; n <= max; n++) {
-      this.set(app.id, { state: 'installing', source: chosen.src.type, attempts: n, error: null })
+      this.set(app.id, { state: 'installing', source: chosen.src.type, attempts: n, error: null, progress: chosen.src.type === 'flatpak' ? null : 0 })
       this.env.log(`${app.name}: installing from ${chosen.src.type} (attempt ${n}/${max})`)
       try {
         await this.attempt(chosen.src, chosen.deb)
-        this.set(app.id, { state: 'installed', error: null }); this.env.log(`${app.name}: installed`)
+        this.set(app.id, { state: 'installed', error: null, progress: 100 }); this.env.log(`${app.name}: installed`)
         return 'installed'
       } catch (e) {
         const err = e as Error & { retryable?: boolean }
