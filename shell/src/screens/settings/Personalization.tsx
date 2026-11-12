@@ -9,6 +9,10 @@ import { os, type DesktopLook, type DesktopLookChange, type LookAnimations } fro
 import { t, type MessageKey } from '../../i18n'
 import { H1, Note, Unavail } from './ui'
 
+const Row = ({ label, children }: { label: string; children: ReactNode }) => (
+  <div className="flex items-center justify-between gap-4"><span className="text-[14px] text-[#E8EEFA]">{label}</span>{children}</div>
+)
+
 function Segmented<T extends string | number>({ label, value, options, onChange, disabled }: { label: string; value: T; options: { v: T; label: string }[]; onChange: (v: T) => void; disabled?: boolean }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -50,9 +54,9 @@ export function PersonalizationPanel() {
     {title}
     {error && <p role="alert" className="m-0 text-[13px] text-[#FFB4A6]">{error}</p>}
     <Section title={t('settings.look.effects')}>
-      <Switch label={t('settings.look.glass')} checked={l.glass} disabled={busy} onChange={(v) => change({ glass: v })} />
+      <Row label={t('settings.look.glass')}><Switch label={t('settings.look.glass')} checked={l.glass} disabled={busy} onChange={(v) => change({ glass: v })} /></Row>
       <Note>{t('settings.look.glassNote')}</Note>
-      <Switch label={t('settings.look.transparency')} checked={l.glass || l.transparency} disabled={busy || l.glass} onChange={(v) => change({ transparency: v })} />
+      <Row label={t('settings.look.transparency')}><Switch label={t('settings.look.transparency')} checked={l.glass || l.transparency} disabled={busy || l.glass} onChange={(v) => change({ transparency: v })} /></Row>
       <Segmented label={t('settings.look.animations')} value={l.animations} options={anim} disabled={busy} onChange={(v) => void change({ animations: v })} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-[13px] text-[#8FA3C8]">{t('settings.look.lightestNote')}</span>
@@ -67,7 +71,7 @@ export function PersonalizationPanel() {
         options={[{ v: 40, label: t('settings.look.small') }, { v: 48, label: t('settings.look.medium') }, { v: 56, label: t('settings.look.large') }]} onChange={(v) => void change({ taskbar: { size: v } })} />
       <Segmented label={t('settings.look.position')} value={l.taskbar.position} disabled={busy}
         options={[{ v: 'BOTTOM', label: t('settings.look.bottom') }, { v: 'TOP', label: t('settings.look.top') }]} onChange={(v) => void change({ taskbar: { position: v } })} />
-      <Switch label={t('settings.look.autohide')} checked={l.taskbar.autohide} disabled={busy} onChange={(v) => change({ taskbar: { autohide: v } })} />
+      <Row label={t('settings.look.autohide')}><Switch label={t('settings.look.autohide')} checked={l.taskbar.autohide} disabled={busy} onChange={(v) => change({ taskbar: { autohide: v } })} /></Row>
     </Section>
     <Note>{t('settings.look.note')}</Note>
   </>

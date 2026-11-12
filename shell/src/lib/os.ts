@@ -1,5 +1,7 @@
 // Typed renderer API. In Electron the preload exposes `window.worksuite` with named functions only
 // (WSOS-SEC-001, §10.3); in a plain browser (dev/design review) a local stub answers instead.
+export interface A11ySettings { textSize: number; highContrast: boolean; reduceMotion: boolean; screenReader: boolean; screenKeyboard: boolean; stickyKeys: boolean; slowKeys: boolean; cursorSize: number }
+export type A11yResult = { available: true; value: A11ySettings } | { available: false; reason: string }
 export type LookAnimations = 'off' | 'reduced' | 'standard'
 export interface DesktopLook { glass: boolean; transparency: boolean; animations: LookAnimations; taskbar: { align: 'center' | 'left'; size: number; position: 'BOTTOM' | 'TOP'; autohide: boolean } }
 export type DesktopLookChange = Partial<Omit<DesktopLook, 'taskbar'>> & { taskbar?: Partial<DesktopLook['taskbar']>; lightest?: boolean }
@@ -140,6 +142,9 @@ export interface WorkSuiteApi {
   openGnomeSettings(panel: string): Promise<{ ok: true } | { ok: false; error: string }>
   /** Settings › Personalization: glass, transparency, animations and the taskbar (electron/desktopLook.ts). */
   desktopLook(): Promise<DesktopLookResult>
+  /** Settings › Accessibility: GNOME's accessibility keys (electron/a11y.ts). */
+  a11y(): Promise<A11yResult>
+  setA11y(change: Partial<A11ySettings>): Promise<A11yResult>
   setDesktopLook(change: DesktopLookChange): Promise<DesktopLookResult>
   onOpenArchive(cb: (at: { root: string; rel: string }) => void): () => void
   filesEject(id: string): Promise<CloudResult<true>>
@@ -802,6 +807,8 @@ const stub: WorkSuiteApi = {
   },
   onSettingsSection() { return () => {} },
   async openGnomeSettings() { return { ok: false as const, error: 'unavailable' } },
+  async a11y() { return { available: true as const, value: { ...stubA11y } } },
+  async setA11y(c) { Object.assign(stubA11y, c); return { available: true as const, value: { ...stubA11y } } },
   async desktopLook() { return { available: true as const, value: { ...stubLook, taskbar: { ...stubLook.taskbar } } } },
   async setDesktopLook(c) {
     if (c.lightest) Object.assign(stubLook, { glass: false, transparency: false, animations: 'off' })
@@ -1081,6 +1088,7 @@ if (typeof window !== 'undefined') {
 const stubJobs = new Map<string, { job: FileJob; paused: boolean; step: number }>()
 let stubJobSeq = 0
 const stubEmit = (e: FileJob) => stubFileJobs.forEach((l) => l(e))
+const stubA11y: A11ySettings = { textSize: 1, highContrast: false, reduceMotion: false, screenReader: false, screenKeyboard: false, stickyKeys: false, slowKeys: false, cursorSize: 24 }
 const stubLook: DesktopLook = { glass: true, transparency: true, animations: 'standard', taskbar: { align: 'center', size: 48, position: 'BOTTOM', autohide: false } }
 const stubVolumes: DiskVolume[] = [
   { device: '/dev/nvme0n1p2', disk: '/dev/nvme0n1', label: '', model: 'Samsung SSD 980', fstype: 'ext4', kind: 'system', size: 475e9, mountpoint: '/', total: 468e9, free: 301e9, encrypted: true, locked: false, readOnly: false, root: 'home' },
