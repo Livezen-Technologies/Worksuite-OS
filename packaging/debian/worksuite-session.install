@@ -78,6 +78,7 @@ services/session/gtk/gtk-4.0 etc/xdg/worksuite/
 services/session/firefox/worksuite.js etc/firefox-esr/
 services/session/gnome/worksuite-gnome-session usr/bin/
 services/session/gnome/worksuite.session usr/share/gnome-session/sessions/
+services/session/gnome/gnome-session@worksuite.target.d/worksuite.session.conf usr/lib/systemd/user/gnome-session@worksuite.target.d/
 services/session/gnome/worksuite-gnome.desktop usr/share/wayland-sessions/
 services/session/gnome/95_worksuite-gnome.gschema.override usr/share/glib-2.0/schemas/
 services/session/gnome/96_worksuite-desktop.gschema.override usr/share/glib-2.0/schemas/

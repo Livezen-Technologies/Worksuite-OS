@@ -51,4 +51,12 @@ D=$ROOT/packaging/debian
 grep -q 'divert /usr/share/wayland-sessions/labwc.desktop.distrib /usr/share/wayland-sessions/labwc.desktop' "$D/worksuite-session.preinst" \
   && grep -q 'remove --rename --divert /usr/share/wayland-sessions/labwc.desktop.distrib' "$D/worksuite-session.postrm" \
   && ok "Labwc's session entry is diverted away (and restored on removal)" || bad "Labwc's session entry is diverted away"
+# GNOME's systemd session: gnome-session@worksuite.target must pull in GNOME Shell and every required component.
+G=$ROOT/services/session/gnome
+want=$(sed -n 's/^Wants=\(.*\)\.target$/\1/p; s/^Requires=\(.*\)\.target$/\1/p' "$G/gnome-session@worksuite.target.d/worksuite.session.conf" | sort | tr '\n' ' ')
+req=$(sed -n 's/^RequiredComponents=//p' "$G/worksuite.session" | tr ';' '\n' | grep . | sort | tr '\n' ' ')
+grep -qx 'Requires=org.gnome.Shell.target' "$G/gnome-session@worksuite.target.d/worksuite.session.conf" && [ "$want" = "$req" ] \
+  && ok "gnome-session@worksuite.target pulls in GNOME Shell and the session's required components" || bad "session drop-in out of sync: [$want] vs [$req]"
+grep -q 'gnome-session@worksuite.target.d/worksuite.session.conf usr/lib/systemd/user/gnome-session@worksuite.target.d/' "$ROOT/packaging/debian/worksuite-session.install" \
+  && ok "the drop-in is installed" || bad "the drop-in is installed"
 echo "1..$n"; exit $fail
