@@ -8,7 +8,7 @@
 set -eu
 CONF=${WORKSUITE_GREETD_CONF:-/etc/greetd/config.toml}
 AGENT_STATE=${WORKSUITE_AGENT_STATE:-/var/lib/worksuite-device-agent/state.json}
-SESSION=/usr/bin/worksuite-session
+SESSION=/usr/bin/worksuite-gnome-session   # the GNOME-based WorkSuite session (1.1)
 
 die() { echo "worksuite-autologin: $*" >&2; exit 2; }
 

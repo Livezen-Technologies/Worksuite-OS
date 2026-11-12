@@ -20,7 +20,7 @@ HOOK=$ROOT/live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot
 sed -n "/^cat > \/etc\/greetd\/config.toml <<'CONF'$/,/^CONF$/p" "$HOOK" | sed '1d;$d' > "$T/config.toml"
 grep -q '^\[default_session\]' "$T/config.toml" && ok "shipped config has the greeter session" || bad "shipped config has the greeter session"
 grep -q 'initial_session' "$T/config.toml" && bad "no autologin by default" || ok "no autologin by default"
-grep -q 'worksuite-session' "$T/config.toml" && ok "WorkSuite session is the default session" || bad "WorkSuite session is the default session"
+grep -q 'worksuite-gnome-session' "$T/config.toml" && ok "WorkSuite session is the default session" || bad "WorkSuite session is the default session"
 
 export WORKSUITE_GREETD_CONF="$T/config.toml" WORKSUITE_AGENT_STATE="$T/state.json"
 A="sh $BIN/worksuite-autologin"

@@ -227,7 +227,7 @@ grep 'import-environment' "$LOG" | grep -qw DISPLAY && ok "DISPLAY imported when
 # ---- every session component is a user unit bound to worksuite-session.target (WSOS-SES-002) ----
 for f in "$U"/*.service "$U"/*.path; do
     u=$(basename "$f")
-    grep -q '^PartOf=worksuite-session.target$' "$f" && ok "$u is PartOf worksuite-session.target" || bad "$u is PartOf worksuite-session.target"
+    grep -qE '^PartOf=(.* )?worksuite-session.target( |$)' "$f" && ok "$u is PartOf worksuite-session.target" || bad "$u is PartOf worksuite-session.target"
     case "$u" in worksuite-recovery-launcher.service|worksuite-idle-restart.service) continue ;; esac
     grep -q "^Wants=.*$u" "$U/worksuite-session.target" && ok "worksuite-session.target wants $u" || bad "worksuite-session.target wants $u"
 done
@@ -335,7 +335,7 @@ PS=$ROOT/services/package-service/systemd
   && ok "package service starts from a timer after boot, not at boot" || bad "package service starts from a timer after boot, not at boot"
 
 # ---- GTK icons: the SVG pixbuf loader (gtklock, greeter and polkit icons are SVG; without it: missing-image) ----
-awk '/^Package: worksuite-session$/{p=1} p&&/^Depends:/{print; exit}' "$ROOT/packaging/debian/control" | grep -q 'librsvg2-common' \
+awk '/^Package: worksuite-session$/{p=1} p&&/^Depends:/{d=1} d&&p{if(/^[A-Z][A-Za-z-]*:/&&!/^Depends:/)exit; print}' "$ROOT/packaging/debian/control" | grep -q 'librsvg2-common' \
   && ok "worksuite-session depends on the SVG icon loader" || bad "worksuite-session depends on the SVG icon loader"
 
 # ---- AI service sandbox: its read-write directories exist (else 226/NAMESPACE restart loop) ----

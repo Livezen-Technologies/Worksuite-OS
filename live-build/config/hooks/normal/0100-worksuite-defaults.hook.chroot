@@ -11,7 +11,7 @@ cat > /etc/greetd/config.toml <<'CONF'
 # The splash's VT: the greeter takes the screen from Plymouth with no VT switch (no text console in between).
 vt = 1
 [default_session]
-command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-session"
+command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-gnome-session"
 user = "_greetd"
 CONF
 systemctl enable greetd.service worksuite-device-agent.service worksuite-power-events.service worksuite-package-service.service worksuite-boot-marker.service
