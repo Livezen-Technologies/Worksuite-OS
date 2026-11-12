@@ -44,4 +44,7 @@ if dconf compile "$W/worksuite.db" "$W/db.d" 2>"$W/dconf.err" && [ -s "$W/worksu
 else cat "$W/dconf.err"; echo "not ok 3 - dconf compiles the WorkSuite system database"; exit 1; fi
 grep -qx 'system-db:worksuite' "$SRC/services/session/gnome/dconf/profile-user" && grep -qx 'user-db:user' "$SRC/services/session/gnome/dconf/profile-user" \
   && echo "ok 4 - the user profile reads the person's settings, then the WorkSuite defaults" || { echo "not ok 4 - dconf user profile"; exit 1; }
-echo 1..4
+# No "updated" notice on first start: the value must be the packaged dash-to-panel's metadata version.
+mv=$(sed -n 's/.*"version": *\([0-9]*\).*/\1/p' root/usr/share/gnome-shell/extensions/dash-to-panel@jderose9.github.com/metadata.json)
+grep -qx "extension-version=$mv" "$SRC/services/session/gnome/dconf/00-worksuite-desktop" && echo "ok 5 - dash-to-panel's update notice is pre-acknowledged (version $mv)" || { echo "not ok 5 - extension-version is not the packaged $mv"; exit 1; }
+echo 1..5
