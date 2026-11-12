@@ -22,6 +22,7 @@ trap 'cd /; rm -rf --one-file-system "$work"' EXIT
 cp -a "$here/." "$work/"
 cd "$work"
 mkdir -p config/packages.chroot
+# live-build indexes only packages.chroot files named *_<arch>.deb or *_all.deb, so local copies keep that suffix.
 cp "$debs"/*_all.deb "$debs"/*_"$ARCH".deb config/packages.chroot/
 find config/packages.chroot -name '*-dbgsym_*' -delete
 # Boot menu artwork, row images, selection pill and fonts (IBM Plex, bundled) for the live GRUB theme.
@@ -33,7 +34,7 @@ find config/packages.chroot -name '*-dbgsym_*' -delete
 # package's architecture must match ARCH.
 : "${WORKSUITE_RELEASE:=0}"
 office_found=0
-[ -z "${WORKSUITE_OFFICE_DEB:-}" ] || cp "$WORKSUITE_OFFICE_DEB" config/packages.chroot/worksuite-office_local.deb
+[ -z "${WORKSUITE_OFFICE_DEB:-}" ] || cp "$WORKSUITE_OFFICE_DEB" "config/packages.chroot/worksuite-office_local_$(dpkg-deb -f "$WORKSUITE_OFFICE_DEB" Architecture).deb"
 for office in config/packages.chroot/worksuite-office*.deb; do
   [ -f "$office" ] || continue
   office_found=1
@@ -60,7 +61,7 @@ fi
 # WORKSUITE_DESKTOP_OPTIONAL=1 (CI sets that when no desktop source is configured); without it the start menu's
 # WorkSuite tiles open the worksuite-app web windows. On WorkSuite OS the app runs in its OS mode (the marker below).
 desktop_found=0
-[ -z "${WORKSUITE_DESKTOP_DEB:-}" ] || cp "$WORKSUITE_DESKTOP_DEB" config/packages.chroot/worksuite-app_local.deb
+[ -z "${WORKSUITE_DESKTOP_DEB:-}" ] || cp "$WORKSUITE_DESKTOP_DEB" "config/packages.chroot/worksuite-app_local_$(dpkg-deb -f "$WORKSUITE_DESKTOP_DEB" Architecture).deb"
 for desktop in config/packages.chroot/worksuite-app_*.deb; do
   [ -f "$desktop" ] || continue
   if [ -n "${WORKSUITE_DESKTOP_SHA256:-}" ]; then
@@ -90,7 +91,7 @@ fi
 # the image); hook 0200-worksuite-apps checks every bundled app's libraries in the chroot.
 bundle_app() {  # bundle_app LABEL PACKAGE FETCH-SCRIPT LOCAL-DEB SHA256 OPTIONAL
   label=$1 want=$2 local_deb=$4 pin=$5 optional=$6 found=0
-  [ -z "$local_deb" ] || cp "$local_deb" "config/packages.chroot/${want}_local.deb"
+  [ -z "$local_deb" ] || cp "$local_deb" "config/packages.chroot/${want}_local_$(dpkg-deb -f "$local_deb" Architecture).deb"
   for deb in config/packages.chroot/"$want"_*.deb; do
     [ -f "$deb" ] || continue
     if [ -n "$pin" ]; then
