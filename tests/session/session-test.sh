@@ -484,7 +484,7 @@ while read -r src dst; do case "$src" in services/session/bin/worksuite-toasts|s
   && ok "toasts: the packaged helper is installed executable and its module runs" || bad "toasts: the packaged helper is installed executable and its module runs"
 grep -q 'Gio.ApplicationFlags.NON_UNIQUE' "$ROOT/services/session/toasts/worksuite_toasts/ui.py" \
   && ok "toasts: one helper per shell (NON_UNIQUE)" || bad "toasts: one helper per shell (NON_UNIQUE)"
-for p in libnotify-bin foot; do grep -qx "$p" "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && ok "image ships $p" || bad "image ships $p"; done
+for p in libnotify-bin gnome-console; do grep -qx "$p" "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && ok "image ships $p" || bad "image ships $p"; done
 
 # ---- "Restart anyway": one root helper behind one polkit action; WorkSuite's polkit agent on the image ----
 stub systemctl 'echo "systemctl $*" >> "$LOG"'
