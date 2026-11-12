@@ -15,15 +15,12 @@ for k in 1 2; do
   rsvg-convert -w $((96*k)) -h $((4*k)) "$here/plymouth/progress-shimmer.svg" -o "$out/plymouth/progress-shimmer$sfx.png"   # light sweep over the fill
   rsvg-convert -w $((420*k)) -h $((44*k)) "$here/plymouth/field.svg" -o "$out/plymouth/field$sfx.png"   # disk-unlock passphrase field
 done
-# Vendor logos (Debian's vendor-logos alternative: GDM's sign-in logo and the places Debian shows its own): the mark
-# and the white wordmark, with the bundled IBM Plex, at the sizes Debian ships (height 64, 128, 256).
-mkdir -p "$out/vendor-logos"; vt=$(mktemp -d)
-printf '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig><dir>%s</dir><cachedir>%s</cachedir></fontconfig>' "$here/fonts/ibm-plex" "$vt" > "$vt/fonts.conf"
-for f in logo logo-text logo-text-version; do
-  sed "s/@VERSION@/${WORKSUITE_VERSION:-1.0}/" "$here/vendor-logos/$f.svg" > "$out/vendor-logos/$f.svg"
-  for h in 64 128 256; do FONTCONFIG_FILE="$vt/fonts.conf" rsvg-convert -h $h "$out/vendor-logos/$f.svg" -o "$out/vendor-logos/$f-$h.png"; done
-done
-rm -rf "$vt"
+# Vendor logos (Debian's vendor-logos alternative: GDM's sign-in logo and the places Debian shows its own): the
+# worksuite wordmark with its "OS" tag, pre-made from the supplied artwork (vendor-logos/source/README.md) at the
+# sizes Debian ships, and the mark as a vector rendered at the same sizes.
+mkdir -p "$out/vendor-logos"
+cp "$here"/vendor-logos/logo-text*.png "$here"/vendor-logos/logo-text*.svg "$here/vendor-logos/logo.svg" "$out/vendor-logos/"
+for h in 64 128 256; do rsvg-convert -w $h -h $h "$here/vendor-logos/logo.svg" -o "$out/vendor-logos/logo-$h.png"; done
 sh "$here/grub/render.sh" "$out/grub"                  # G13 boot menu: artwork, row icons, selection pill, IBM Plex fonts
 for s in 16 24 32 48 64 128 256 512; do
   rsvg-convert -w $s -h $s "$here/icons/worksuite.svg" -o "$out/icons/worksuite-$s.png"
