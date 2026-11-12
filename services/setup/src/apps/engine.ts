@@ -13,6 +13,9 @@ import { FLATPAK_REF_RE, PACKAGE_RE, type AppDef, type Source } from './catalog.
 import type { Plan } from './plan.ts'
 import type { Runner } from '../rollback.ts'
 
+/** apt/flatpak errors that mean the download did not happen, not that the package is wrong. */
+export const NETWORK_ERROR = /Unable to fetch|Failed to fetch|Temporary failure resolving|Could not resolve|Could not connect|Connection (timed out|refused|reset)|Network is unreachable|Unable to connect|Can't connect|While pulling .* Could not|Server returned error/i
+
 export type AppState = 'pending' | 'installing' | 'installed' | 'already' | 'queued' | 'failed' | 'skipped'
 export interface AppStatus {
   id: string; name: string; required: boolean; state: AppState
@@ -126,7 +129,7 @@ export class AppEngine {
     const run = this.env.runner.run
     if (src.type === 'flatpak') {
       const r = await run('flatpak', ['install', '-y', '--noninteractive', '--system', 'flathub', src.ref])
-      if (r.code !== 0) throw Object.assign(new Error(firstLine(r.stderr) || 'flatpak install failed'), { retryable: true })
+      if (r.code !== 0) throw Object.assign(new Error(firstLine(r.stderr) || 'flatpak install failed'), { retryable: true, network: NETWORK_ERROR.test(r.stderr) })
       return
     }
     if (src.type === 'apt' && !this.aptUpdated) {
@@ -145,7 +148,7 @@ export class AppEngine {
           if (p !== null && p > (this.current?.progress ?? -1)) this.set(this.current!.id, { progress: p })
         })
       : await run('apt-get', [...APT, 'install', '--', target])
-    if (r.code !== 0) throw Object.assign(new Error(firstLine(r.stderr) || 'apt-get install failed'), { retryable: true })
+    if (r.code !== 0) throw Object.assign(new Error(firstLine(r.stderr) || 'apt-get install failed'), { retryable: true, network: NETWORK_ERROR.test(r.stderr) })
   }
 
   private async one(app: AppDef, required: boolean): Promise<AppState> {
@@ -165,13 +168,15 @@ export class AppEngine {
         this.set(app.id, { state: 'installed', error: null, progress: 100 }); this.env.log(`${app.name}: installed`)
         return 'installed'
       } catch (e) {
-        const err = e as Error & { retryable?: boolean }
+        const err = e as Error & { retryable?: boolean; network?: boolean }
         this.env.log(`${app.name}: attempt ${n} failed: ${err.message}`)
+        // The network says it is up but downloads fail (captive portal, DNS, mirror down): an optional app waits in
+        // the offline queue for the timer instead of being given up on.
+        if (n === max && err.network && !required) { this.set(app.id, { state: 'queued', error: err.message, progress: null }); this.env.log(`${app.name}: download failed, queued to try again later`); return 'queued' }
         if (err.retryable === false || n === max) { this.set(app.id, { state: 'failed', error: err.message }); return 'failed' }
         await this.env.sleep(backoffMs * 2 ** (n - 1))
       }
     }
-    void required
     return 'failed'
   }
 

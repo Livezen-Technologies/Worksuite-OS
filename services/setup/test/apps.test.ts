@@ -121,6 +121,24 @@ test('engine: per-app retry with backoff; unresolvable dependencies are not retr
   assert.equal(h.cmds.filter((c) => c.join(' ') === 'apt-get -q update').length, 1, 'package lists refreshed once per run')
 })
 
+test('engine: downloads that keep failing while "online" queue an optional app for later, never a non-network error', async () => {
+  const h = harness({
+    installed: ['worksuite'],
+    fail: (c) => {
+      if (c[0] !== 'apt-get' || !c.includes('install') || c.includes('-s')) return null
+      if (c.at(-1) === 'vlc') return { code: 100, stderr: 'E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?' }
+      if (c.at(-1) === 'gimp') return { code: 100, stderr: 'E: Sub-process /usr/bin/dpkg returned an error code (1)' }
+      return null
+    },
+  })
+  const st = await h.engine.run(plan(['vlc', 'gimp'], null))
+  const by = Object.fromEntries(st.map((s) => [s.id, s]))
+  assert.equal(by.vlc.state, 'queued'); assert.equal(by.vlc.attempts, 3)
+  assert.match(by.vlc.error!, /Unable to fetch/)
+  assert.equal(by.gimp.state, 'failed')
+  assert.deepEqual(readQueue(h.env.queueFile), ['vlc'])
+})
+
 test('engine: restricted and not-allowed apps are reported as skipped, never installed', async () => {
   const h = harness({ installed: ['worksuite'] })
   const st = await h.engine.run(plan(['worksuite-pos', 'vlc'], { setup_restricted_apps: ['worksuite-pos'], software_install: 'block' }))

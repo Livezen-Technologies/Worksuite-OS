@@ -83,7 +83,7 @@ export default function SetupWizard({ api, onDone, onExitToRecovery, userName }:
   let body: ReactNode
   if (RECOVERY.has(v.state)) body = <RecoveryScreen api={api} view={v} send={send} busy={s.busy} onExit={onExitToRecovery} extra={v.resumeTo === 'INSTALLING_APPLICATIONS' ? <AppSummary api={api} /> : undefined} />
   else if (!isMain(v.state)) body = <SidePanel state={v.state} attempts={v.attempts} lastError={v.lastError} busy={s.busy} send={send} headingRef={heading} />
-  else if (complete) body = <DonePanel answers={v.answers} onDone={onDone} headingRef={heading} />
+  else if (complete) body = <DonePanel api={api} answers={v.answers} onDone={onDone} headingRef={heading} />
   else if (!asks(v.state)) body = <WorkPanel api={api} state={v.state} flow={flow} send={send} busy={s.busy} headingRef={heading} />
   else body = <Ask state={v.state} answers={v.answers} answer={s.answer} fieldErrors={s.fieldErrors} headingRef={heading} send={send} busy={s.busy} userName={userName} first={idx <= 0} flow={flow} />
 
@@ -504,8 +504,13 @@ function WorkPanel({ api, state, flow, send, busy, headingRef }: { api: SetupApi
   )
 }
 
-function DonePanel({ answers, onDone, headingRef }: { answers: Record<string, unknown>; onDone: () => void; headingRef: HeadingRef }) {
-  const apps = WORKSUITE_APPS.filter((id) => id === 'worksuite-desktop' || (Array.isArray(answers.worksuiteApps) && answers.worksuiteApps.includes(id)))
+function DonePanel({ api, answers, onDone, headingRef }: { api: SetupApi; answers: Record<string, unknown>; onDone: () => void; headingRef: HeadingRef }) {
+  // What really happened to each app (GetApps); the selection only until that has loaded.
+  const status = useAppProgress(api, true).filter((a) => a.state !== 'skipped')
+  const chosen = WORKSUITE_APPS.filter((id) => id === 'worksuite-desktop' || (Array.isArray(answers.worksuiteApps) && answers.worksuiteApps.includes(id)))
+  const ready = status.length ? status.filter((a) => a.state === 'installed' || a.state === 'already') : null
+  const apps = ready ? ready.map((a) => a.id).filter((id) => (APP_ICON as Record<string, string>)[id] || (THIRD_LOOK as Record<string, unknown>)[id]) : chosen
+  const missing = status.filter((a) => a.state === 'queued' || a.state === 'failed')
   return (
     <Center>
       <div className="relative mb-2 flex size-24 items-center justify-center">
@@ -513,10 +518,23 @@ function DonePanel({ answers, onDone, headingRef }: { answers: Record<string, un
         <span className="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-[#2E9E6A] to-[#18D4F0] text-white shadow-[0_12px_40px_rgba(46,158,106,0.45)]"><Icon d={[CHECK]} size={40} width={2.5} /></span>
       </div>
       <h1 ref={headingRef} tabIndex={-1} className="m-0 text-[44px] leading-tight font-bold tracking-[-0.03em] outline-none">{t('sw.done.title')}</h1>
-      <p className="m-0 text-[17px] text-[#AFC0DD]">{t('sw.done.body')}</p>
-      <ul className="m-0 mt-3 flex list-none flex-wrap justify-center gap-3 p-0">
-        {apps.map((id) => <li key={id}><img src={APP_ICON[id]} alt={split(t(`sw.app.${id}` as MessageKey))[0]} className="size-14 rounded-2xl drop-shadow-[0_6px_14px_rgba(0,0,0,0.35)]" draggable={false} /></li>)}
+      <p className="m-0 text-[17px] text-[#AFC0DD]">{t(missing.length ? 'sw.done.bodySome' : 'sw.done.body')}</p>
+      <ul aria-label={t('sw.apps.title')} className="m-0 mt-3 flex list-none flex-wrap justify-center gap-3 p-0">
+        {apps.map((id) => <li key={id} title={appName({ id, name: id } as AppProgress)} className="drop-shadow-[0_6px_14px_rgba(0,0,0,0.35)]"><AppIcon id={id} size={56} /><span className="sr-only">{appName({ id, name: id } as AppProgress)}</span></li>)}
       </ul>
+      {missing.length > 0 && (
+        <ul aria-label={t('sw.done.missing')} className="m-0 mt-2 flex w-full max-w-[460px] list-none flex-col gap-2 p-0 text-left">
+          {missing.map((a) => (
+            <li key={a.id} data-state={a.state} className="flex items-center gap-3 rounded-xl border border-[rgba(127,178,255,0.16)] bg-[rgba(10,24,56,0.5)] px-4 py-3">
+              <AppIcon id={a.id} size={32} />
+              <span className="flex min-w-0 flex-col">
+                <span className="text-[15px] font-semibold text-[#E8EEFA]">{appName(a)}</span>
+                <span className={`text-[13px] ${a.state === 'failed' ? 'text-[#FFB4A6]' : 'text-[#AFC0DD]'}`}>{a.state === 'queued' ? t('sw.appState.queued') : t('sw.done.failedHint')}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       <Button variant="primary" size="xl" className="mt-6" onClick={onDone}>{t('sw.finish')}<Icon d={['M9 6l6 6-6 6']} size={18} /></Button>
     </Center>
   )

@@ -143,6 +143,28 @@ describe('app installation progress', () => {
   })
 })
 
+describe('done screen', () => {
+  it('says which apps are not installed instead of claiming all are (queued and failed)', async () => {
+    const base = previewApi()
+    const api: SetupApi = {
+      ...base,
+      state: async () => ({ ok: true, value: { state: 'SETUP_COMPLETED', mode: 'firstRun', resumeTo: null, answers: { worksuiteApps: ['worksuite-desktop', 'worksuite-pos'] }, lastError: null, attempts: 0, checkpoints: [], startReason: '', uiActions: [] } }),
+      apps: async () => ({ ok: true, value: [
+        { id: 'worksuite-desktop', name: 'WorkSuite Desktop', required: true, state: 'already', attempts: 0, error: null },
+        { id: 'worksuite-pos', name: 'WorkSuite POS', required: false, state: 'installed', attempts: 1, error: null },
+        { id: 'vlc', name: 'VLC', required: false, state: 'queued', attempts: 3, error: 'E: Unable to fetch some archives' },
+        { id: 'gimp', name: 'GIMP', required: false, state: 'failed', attempts: 3, error: 'E: dpkg error' },
+      ] }),
+    }
+    act(() => root.render(<SetupWizard api={api} onDone={() => {}} />))
+    await until(() => !!host.querySelector('ul[aria-label="Not installed yet"] li'))
+    expect(host.textContent).toContain('Some apps aren’t installed yet.')
+    const missing = [...host.querySelectorAll('ul[aria-label="Not installed yet"] li')].map((li) => [li.getAttribute('data-state'), li.textContent])
+    expect(missing).toEqual([['queued', 'VLCInstalls when you’re online'], ['failed', 'GIMPCouldn’t install. You can try again in App Center.']])
+    expect(host.querySelector('ul[aria-label="Your apps"]')!.textContent).toBe('WorkSuite DesktopPOS')
+  })
+})
+
 describe('SetupGate', () => {
   const fallback = <p>first-run-screens</p>
   it('keeps the first-run screens without a setup service, when it errors, and once setup has finished', async () => {
