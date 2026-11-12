@@ -27,7 +27,9 @@ const interrupted = (st: OsUpdateStatus) => st.state === 'waiting' && st.reason 
 
 /** Whether Settings › Updates shows the G14 layout instead of the regular one. */
 export function showsOffline(st: OsUpdateStatus, bundles: FoundBundle[]) {
-  if (st.state === 'ready_to_restart' || st.state === 'restart_pending' || st.state === 'failed') return false
+  if (st.state === 'ready_to_restart' || st.state === 'restart_pending') return false
+  // A failed online check is exactly when a USB update is wanted (no internet): bundles on a drive still show.
+  if (st.state === 'failed') return bundles.length > 0
   return emergency(st) || (st.state === 'installing' && !!st.resumed) || interrupted(st) || bundles.length > 0
 }
 

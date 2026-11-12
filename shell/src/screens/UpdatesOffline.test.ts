@@ -21,5 +21,7 @@ describe('G14 offline / resume / emergency', () => {
   it('steps aside for restart and failure screens', () => {
     expect(showsOffline(S({ state: 'ready_to_restart', critical: true }), [{ handle: 'h', name: 'a.wsupdate', drive: 'USB' }])).toBe(false)
     expect(showsOffline(S({ state: 'failed', critical: true }), [])).toBe(false)
+    // No internet: the online check failed, and a bundle on a USB drive is the way to update (found in a VM).
+    expect(showsOffline(S({ state: 'failed', error: 'Can’t reach the update server.' } as never), [{ handle: 'h', name: 'a.wsupdate', drive: 'WSUPDATE' }])).toBe(true)
   })
 })
