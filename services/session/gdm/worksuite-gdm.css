@@ -5,7 +5,7 @@
  * up to three classes, and an id outranks them all, so these win without editing GNOME's file. St has no radial
  * gradients or backdrop blur, so the wallpaper carries the light. High contrast keeps the stock theme. */
 
-#lockDialogGroup { background: #06123A url("file:///usr/share/backgrounds/worksuite/default.png"); background-size: cover; background-position: center; }
+#lockDialogGroup { background: #06123A url("file:///usr/share/backgrounds/worksuite/lock.png"); background-size: cover; background-position: center; }
 #lockDialogGroup .login-dialog, #lockDialogGroup .unlock-dialog { font-family: "IBM Plex Sans", sans-serif; color: #ffffff; background-color: transparent; }
 #lockDialogGroup .login-dialog { background-color: rgba(3, 9, 24, 0.30); }
 

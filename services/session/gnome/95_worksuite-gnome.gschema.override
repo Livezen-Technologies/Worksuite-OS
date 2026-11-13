@@ -25,7 +25,10 @@ picture-options='zoom'
 primary-color='#061029'
 
 [org.gnome.desktop.screensaver]
-picture-uri='file:///usr/share/backgrounds/worksuite/default.png'
+# The lock screen: the default wallpaper with its centred logo replaced by the sky around it (worksuite-1-lock.png), so
+# the clock and the password field do not sit on the wordmark. 'zoom' crops to fill and keeps the aspect ratio.
+picture-uri='file:///usr/share/backgrounds/worksuite/lock.png'
+picture-options='zoom'
 
 [org.gnome.shell]
 favorite-apps=['worksuite-app.desktop', 'worksuite-office.desktop', 'firefox-esr.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Settings.desktop']
