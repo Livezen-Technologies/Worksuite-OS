@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE wallpapers SYSTEM "gnome-wp-list.dtd">
-<!-- The WorkSuite wallpapers in Settings › Appearance › Background: the clean versions (no centred logo) first; the
-     default, sign-in and lock screens use WorkSuite Aqua (worksuite-1-lock.png, installed as default.png and lock.png).
-     The original artwork with the wordmark follows. -->
+<!-- The WorkSuite wallpapers in Settings › Appearance › Background: Indigo Night, Daylight and Tiles first (rendered at
+     3840x2160 from the design canvas; Indigo Night is default.png and lock.png for the desktop, sign-in and lock
+     screens), then the earlier Aqua/Ocean/Aurora/Violet set, clean and with the wordmark. -->
 <wallpapers>
+  <wallpaper deleted="false"><name>WorkSuite Indigo Night</name><filename>/usr/share/backgrounds/worksuite/worksuite-night.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#001237</pcolor><scolor>#001237</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Daylight</name><filename>/usr/share/backgrounds/worksuite/worksuite-daylight.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#001237</pcolor><scolor>#001237</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Tiles</name><filename>/usr/share/backgrounds/worksuite/worksuite-tiles.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#001237</pcolor><scolor>#001237</scolor></wallpaper>
   <wallpaper deleted="false"><name>WorkSuite Aqua</name><filename>/usr/share/backgrounds/worksuite/lock/worksuite-1-lock.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
   <wallpaper deleted="false"><name>WorkSuite Ocean</name><filename>/usr/share/backgrounds/worksuite/lock/worksuite-2-lock.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
   <wallpaper deleted="false"><name>WorkSuite Aurora</name><filename>/usr/share/backgrounds/worksuite/lock/worksuite-3-lock.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>

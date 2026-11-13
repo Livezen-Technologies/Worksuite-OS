@@ -22,5 +22,5 @@ grep -q '^NAME="WorkSuite OS"' "$ROOT/branding/os-release" && grep -q '^LOGO=wor
 # The wallpaper picker: Debian's backgrounds are diverted out (and back on removal), WorkSuite's four are listed.
 grep -q 'debian-backgrounds/debian-$n.xml' "$D/worksuite-branding.preinst" && grep -q -- '--remove --rename --divert /usr/share/worksuite/debian-backgrounds' "$D/worksuite-branding.postrm" \
   && ok "Debian wallpapers hidden from the picker, restored on uninstall" || bad "Debian wallpapers in the picker"
-[ "$(grep -c '<wallpaper ' "$ROOT/branding/wallpapers/worksuite-wallpapers.xml")" = 8 ] && grep -q 'worksuite-1-lock.png $$d/usr/share/backgrounds/worksuite/default.png' "$D/rules" && ok "four clean WorkSuite wallpapers (default) and their logo versions in the picker" || bad "WorkSuite wallpaper list"
+[ "$(grep -c '<wallpaper ' "$ROOT/branding/wallpapers/worksuite-wallpapers.xml")" = 11 ] && grep -q 'worksuite-night.png $$d/usr/share/backgrounds/worksuite/default.png' "$D/rules" && ok "Indigo Night is the default; eleven WorkSuite wallpapers in the picker" || bad "WorkSuite wallpaper list"
 echo "1..$n"; exit $fail

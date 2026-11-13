@@ -53,7 +53,7 @@ menu-button-icon='Custom_Icon'
 # The Start button: the WorkSuite mark alone (branding/icons/worksuite-start.svg), not the app tile icon, so it reads
 # as the system button rather than another pinned app.
 custom-menu-button-icon='/usr/share/worksuite/start-button.svg'
-custom-menu-button-icon-size=26.0
+custom-menu-button-icon-size=22.0
 arcmenu-hotkey=['Super_L']
 multi-monitor=true
 default-menu-view='Pinned_Apps'
