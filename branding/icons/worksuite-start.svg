@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 960" width="960" height="960">
+  <!-- The taskbar's Start button: the WorkSuite mark on its own (no app-icon tile), so it reads as the system button
+       rather than another pinned app. Same geometry as branding/vendor-logos/logo.svg and the wallpaper mark. -->
+  <defs>
+    <linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3D8BFF"/><stop offset="1" stop-color="#0A5BFF"/></linearGradient>
+    <linearGradient id="c" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5BEAFF"/><stop offset="1" stop-color="#00CFEF"/></linearGradient>
+  </defs>
+  <rect x="320" y="0" width="640" height="640" rx="120" fill="url(#b)"/>
+  <rect x="0" y="320" width="320" height="320" rx="72" fill="url(#c)"/>
+  <rect x="320" y="640" width="320" height="320" rx="72" fill="url(#c)"/>
+  <rect x="320" y="320" width="320" height="320" rx="56" fill="#0B2A66"/>
+</svg>
