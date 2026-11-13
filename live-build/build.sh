@@ -125,6 +125,18 @@ bundle_app "Worksuite FrameFlow" worksuite-frameflow tools/fetch-frameflow.sh "$
   "${WORKSUITE_FRAMEFLOW_SHA256:-}" "${WORKSUITE_FRAMEFLOW_OPTIONAL:-0}"
 bundle_app "WorkSuite POS" worksuite-pos tools/fetch-pos.sh "${WORKSUITE_POS_DEB:-}" "${WORKSUITE_POS_SHA256:-}" \
   "${WORKSUITE_POS_OPTIONAL:-0}"
+# Apps offered in first-run setup but not preinstalled (WorkSuite Desk: WORKSUITE_DESK_DEB=path, WORKSUITE_DESK_SHA256
+# pins it) go to /usr/share/worksuite/bundled with a SHA256SUMS line: setup installs them from there offline (it checks
+# the hash before apt-get sees the file), and from the signed APT sources when the image has none.
+if [ -n "${WORKSUITE_DESK_DEB:-}" ]; then
+  [ -z "${WORKSUITE_DESK_SHA256:-}" ] || echo "$WORKSUITE_DESK_SHA256  $WORKSUITE_DESK_DEB" | sha256sum -c - >/dev/null || { echo "WorkSuite Desk: checksum mismatch" >&2; exit 1; }
+  [ "$(dpkg-deb -f "$WORKSUITE_DESK_DEB" Package)" = worksuite-desk ] || { echo "WorkSuite Desk: $WORKSUITE_DESK_DEB is not worksuite-desk" >&2; exit 1; }
+  bdir=config/includes.chroot/usr/share/worksuite/bundled; mkdir -p "$bdir"
+  bname="worksuite-desk_$(dpkg-deb -f "$WORKSUITE_DESK_DEB" Version)_$(dpkg-deb -f "$WORKSUITE_DESK_DEB" Architecture).deb"
+  cp "$WORKSUITE_DESK_DEB" "$bdir/$bname"
+  (cd "$bdir" && sha256sum -- *.deb > SHA256SUMS)
+  echo "WorkSuite Desk: bundled for setup as $bname"
+fi
 if [ -n "${BUILD_HTTPS_PROXY:-}" ]; then
   export https_proxy="$BUILD_HTTPS_PROXY" HTTPS_PROXY="$BUILD_HTTPS_PROXY"
   mkdir -p config/includes.chroot_before_packages/etc/apt/apt.conf.d

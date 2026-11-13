@@ -16,6 +16,7 @@ import type { Runner } from '../rollback.ts'
 /** apt/flatpak errors that mean the download did not happen, not that the package is wrong. */
 export const NETWORK_ERROR = /Unable to fetch|Failed to fetch|Temporary failure resolving|Could not resolve|Could not connect|Connection (timed out|refused|reset)|Network is unreachable|Unable to connect|Can't connect|While pulling .* Could not|Server returned error/i
 
+export type AppPhase = 'refreshing' | 'downloading' | 'verifying' | 'installing' | 'configuring'
 export type AppState = 'pending' | 'installing' | 'installed' | 'already' | 'queued' | 'failed' | 'skipped'
 export interface AppStatus {
   id: string; name: string; required: boolean; state: AppState
@@ -23,6 +24,13 @@ export interface AppStatus {
   /** 0–100 while installing from APT (download is the first half, unpacking and setup the second); null when the
    *  source reports none (flatpak) or nothing has started. */
   progress?: number | null
+  /** What the running install is doing, from the package manager's own reports: refreshing the package lists,
+   *  downloading, verifying (bundled SHA-256 or the signed lists), unpacking, configuring. */
+  phase?: AppPhase | null
+  /** Bytes apt has to download for this app (from --print-uris; 0 when everything is cached) and how many of them are
+   *  done (apt's own download percentage of that total). Absent for bundled and flatpak installs. */
+  bytesTotal?: number | null
+  bytesDone?: number | null
   /** For skipped apps: why policy kept them out. */
   why?: string
 }
@@ -39,6 +47,30 @@ export function aptProgress(line: string): number | null {
   if (!m) return null
   const pct = Math.max(0, Math.min(100, Number(m[2])))
   return Math.round(m[1] === 'dlstatus' ? pct / 2 : 50 + pct / 2)
+}
+
+/** The phase an APT Status-Fd line reports: dlstatus is downloading; pmstatus is unpacking ("Preparing"/"Unpacking"/
+ *  "Installing") or configuring ("Configuring"/"Setting up"/"Running dpkg"/triggers). */
+export function aptPhase(line: string): AppPhase | null {
+  const m = /^(dlstatus|pmstatus):[^:]*:[0-9.]+:(.*)$/.exec(line)
+  if (!m) return null
+  if (m[1] === 'dlstatus') return 'downloading'
+  return /configur|setting up|trigger|running dpkg/i.test(m[2]) ? 'configuring' : 'installing'
+}
+
+/** The total download of an `apt-get --print-uris` listing: "'URI' FILE SIZE HASH" per archive still to fetch. */
+export function downloadBytes(out: string): number {
+  let n = 0
+  for (const line of out.split('\n')) { const m = /^'[^']+'\s+\S+\s+([0-9]+)\s/.exec(line); if (m) n += Number(m[1]) }
+  return n
+}
+
+/** apt errors with a known cause the user can act on, as short reasons. */
+export function aptReason(stderr: string): string | null {
+  if (/You don't have enough free space|No space left on device/i.test(stderr)) return 'not enough free disk space; free some space and try again'
+  if (/Unmet dependencies|held broken packages/i.test(stderr)) return 'its dependencies conflict with installed software'
+  if (/could not get lock|Unable to acquire the dpkg frontend lock/i.test(stderr)) return 'another installation is running; try again when it finishes'
+  return null
 }
 
 export interface EngineEnv {
@@ -133,22 +165,44 @@ export class AppEngine {
       return
     }
     if (src.type === 'apt' && !this.aptUpdated) {
+      if (this.current) this.set(this.current.id, { phase: 'refreshing' })
       const u = await run('apt-get', ['-q', 'update'])
       if (u.code !== 0) throw Object.assign(new Error(`could not refresh the package lists: ${firstLine(u.stderr)}`), { retryable: true })
       this.aptUpdated = true
     }
+    if (deb && this.current) this.set(this.current.id, { phase: 'verifying' })
     const target = deb ?? (src as { package: string }).package
     // Dependency resolution first: a simulation that fails will not succeed on retry.
     const sim = await run('apt-get', ['-s', '-q', 'install', '--', target])
     if (sim.code !== 0) throw Object.assign(new Error(`its dependencies cannot be resolved: ${firstLine(sim.stdout + '\n' + sim.stderr)}`), { retryable: false })
+    // What apt still has to download (nothing for a bundled .deb whose dependencies are installed).
+    let total: number | null = null
+    if (!deb) { const u = await run('apt-get', ['-qq', '--print-uris', 'install', '--', target]); if (u.code === 0) total = downloadBytes(u.stdout) }
+    if (this.current) this.set(this.current.id, { bytesTotal: total, bytesDone: total === null ? null : 0 })
     const stream = this.env.runner.stream
+    let lastSave = 0
     const r = stream
       ? await stream('apt-get', [...APT, '-o', 'APT::Status-Fd=1', 'install', '--', target], (line) => {
-          const p = aptProgress(line)
-          if (p !== null && p > (this.current?.progress ?? -1)) this.set(this.current!.id, { progress: p })
+          const cur = this.current
+          if (!cur) return
+          const p = aptProgress(line), ph = aptPhase(line)
+          if (p === null || ph === null) return
+          const patch: Partial<AppStatus> = {}
+          if (ph !== cur.phase) patch.phase = ph
+          if (p > (cur.progress ?? -1)) patch.progress = p
+          if (ph === 'downloading' && total) patch.bytesDone = Math.min(total, Math.round(total * Math.min(100, p * 2) / 100))
+          // apt reports whole-percent steps; a byte count alone (no new percent) is written at most every 250 ms.
+          const now = Date.now()
+          if (patch.phase || patch.progress !== undefined || (patch.bytesDone !== undefined && now - lastSave >= 250)) { lastSave = now; this.set(cur.id, patch) }
         })
       : await run('apt-get', [...APT, 'install', '--', target])
-    if (r.code !== 0) throw Object.assign(new Error(firstLine(r.stderr) || 'apt-get install failed'), { retryable: true, network: NETWORK_ERROR.test(r.stderr) })
+    if (r.code !== 0) {
+      const network = NETWORK_ERROR.test(r.stderr)
+      // A failed fetch may be stale package lists: the next attempt refreshes them first.
+      if (network) this.aptUpdated = false
+      const known = aptReason(r.stderr)
+      throw Object.assign(new Error(known ?? (firstLine(r.stderr) || 'apt-get install failed')), { retryable: !/free disk space|conflict/.test(known ?? ''), network })
+    }
   }
 
   private async one(app: AppDef, required: boolean): Promise<AppState> {
@@ -161,19 +215,19 @@ export class AppEngine {
     if (chosen === 'queue') { this.set(app.id, { state: 'queued' }); this.env.log(`${app.name}: offline, queued for when the network is back`); return 'queued' }
     if (!chosen) { this.set(app.id, { state: 'failed', error: 'no trusted source has this app for this computer' }); return 'failed' }
     for (let n = 1; n <= max; n++) {
-      this.set(app.id, { state: 'installing', source: chosen.src.type, attempts: n, error: null, progress: chosen.src.type === 'flatpak' ? null : 0 })
+      this.set(app.id, { state: 'installing', source: chosen.src.type, attempts: n, error: null, progress: chosen.src.type === 'flatpak' ? null : 0, phase: chosen.src.type === 'flatpak' ? 'downloading' : null, bytesTotal: null, bytesDone: null })
       this.env.log(`${app.name}: installing from ${chosen.src.type} (attempt ${n}/${max})`)
       try {
         await this.attempt(chosen.src, chosen.deb)
-        this.set(app.id, { state: 'installed', error: null, progress: 100 }); this.env.log(`${app.name}: installed`)
+        this.set(app.id, { state: 'installed', error: null, progress: 100, phase: null }); this.env.log(`${app.name}: installed`)
         return 'installed'
       } catch (e) {
         const err = e as Error & { retryable?: boolean; network?: boolean }
         this.env.log(`${app.name}: attempt ${n} failed: ${err.message}`)
         // The network says it is up but downloads fail (captive portal, DNS, mirror down): an optional app waits in
         // the offline queue for the timer instead of being given up on.
-        if (n === max && err.network && !required) { this.set(app.id, { state: 'queued', error: err.message, progress: null }); this.env.log(`${app.name}: download failed, queued to try again later`); return 'queued' }
-        if (err.retryable === false || n === max) { this.set(app.id, { state: 'failed', error: err.message }); return 'failed' }
+        if (n === max && err.network && !required) { this.set(app.id, { state: 'queued', error: err.message, progress: null, phase: null }); this.env.log(`${app.name}: download failed, queued to try again later`); return 'queued' }
+        if (err.retryable === false || n === max) { this.set(app.id, { state: 'failed', error: err.message, phase: null }); return 'failed' }
         await this.env.sleep(backoffMs * 2 ** (n - 1))
       }
     }
@@ -181,7 +235,9 @@ export class AppEngine {
   }
 
   /** Runs the plan. Resolves with the status list; throws when a required app failed (after trying every app). */
-  async run(p: Plan): Promise<AppStatus[]> {
+  /** `stop()` is checked between apps (never mid-transaction: dpkg is left consistent); the rest stay pending and run
+   *  when the step runs again, where finished ones show as already installed. */
+  async run(p: Plan, stop: () => boolean = () => false): Promise<AppStatus[]> {
     this.status = [
       ...p.install.map((x) => ({ id: x.app.id, name: x.app.name, required: x.required, state: 'pending' as AppState, source: null, attempts: 0, error: null })),
       ...p.skipped.filter((s) => s.why !== 'unknown').map((s) => ({ id: s.id, name: s.id, required: false, state: 'skipped' as AppState, source: null, attempts: 0, error: null, why: s.why })),
@@ -190,6 +246,7 @@ export class AppEngine {
     const queue = new Set(readQueue(this.env.queueFile))
     const failedRequired: string[] = []
     for (const x of p.install) {
+      if (stop()) { this.env.log('paused: the remaining apps install when setup continues'); writeJson(this.env.queueFile, [...queue]); return this.status }
       // Something it needs failed: do not try it (it would fail on the missing dependency anyway).
       const blocker = (x.app.requires ?? []).find((d) => ['failed', 'queued'].includes(this.status.find((s) => s.id === d)?.state ?? ''))
       let st: AppState

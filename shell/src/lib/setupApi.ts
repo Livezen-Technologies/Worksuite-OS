@@ -22,7 +22,9 @@ export interface SetupView {
 export interface SendResult { ok: boolean; state: SetupState; fieldErrors?: Record<string, string>; error?: string }
 export type RecoveryView = ReturnType<typeof recoveryOptions>
 /** Per-app progress of the app installation step (services/setup/src/apps/engine.ts AppStatus). */
-export interface AppProgress { id: string; name: string; required: boolean; state: 'pending' | 'installing' | 'installed' | 'already' | 'queued' | 'failed' | 'skipped'; attempts: number; error: string | null; progress?: number | null }
+export interface AppProgress { id: string; name: string; required: boolean; state: 'pending' | 'installing' | 'installed' | 'already' | 'queued' | 'failed' | 'skipped'; attempts: number; error: string | null; progress?: number | null
+  /** From the package manager's own reports while installing (setup engine): see services/setup/src/apps/engine.ts. */
+  phase?: 'refreshing' | 'downloading' | 'verifying' | 'installing' | 'configuring' | null; bytesTotal?: number | null; bytesDone?: number | null }
 
 /** Preview: how long installing apps takes, so its progress can be watched. */
 const APPS_MS = 9000

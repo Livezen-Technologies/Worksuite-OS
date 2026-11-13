@@ -193,6 +193,18 @@ function Ask({ state, answers, answer, fieldErrors, headingRef, send, busy, user
     }
     await send({ type: 'NEXT' })
   }
+  // A refused Continue must show why: the first field error can be below the fold (the Review confirmation at
+  // 1280×800 and 1366×768), so scroll it into view and move focus to its control.
+  const formRef = useRef<HTMLFormElement>(null)
+  const errKeys = Object.keys(fieldErrors).filter((k) => fieldErrors[k]).join(',')
+  useEffect(() => {
+    if (!errKeys) return
+    const alert = formRef.current?.querySelector<HTMLElement>('[role="alert"]')
+    if (!alert) return
+    alert.scrollIntoView?.({ block: 'center', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === false ? 'smooth' : 'auto' })
+    const box = alert.closest('label, section, div')?.querySelector<HTMLElement>('input, button[role="checkbox"], select, textarea')
+    box?.focus({ preventScroll: true })
+  }, [errKeys])
   const errOf = (k: string) => fieldErrors[k] ? <span role="alert" className="flex items-center gap-1.5 text-[12.5px] font-normal text-[#FFB4A6]"><Icon d={['M12 8v5M12 16.5v.5']} size={14} />{t('sw.err.field')}</span> : null
   const toggle = (key: string, id: string, list: string[]) => void answer(key, list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
 
@@ -360,7 +372,7 @@ function Ask({ state, answers, answer, fieldErrors, headingRef, send, busy, user
 
   const welcome = state === 'WELCOME'
   return (
-    <form className="flex flex-1 flex-col" onSubmit={(e) => { e.preventDefault(); if (!busy) void next() }}>
+    <form ref={formRef} className="flex flex-1 flex-col" onSubmit={(e) => { e.preventDefault(); if (!busy) void next() }}>
       <div className="flex flex-1 flex-col gap-6">
         {welcome && <div className="relative w-fit"><div aria-hidden className="absolute -inset-6 rounded-full bg-[radial-gradient(circle,rgba(31,107,255,0.35),transparent_70%)] blur-md" /><div className="relative"><Mark size={84} /></div></div>}
         <header className="flex flex-col gap-2">
@@ -600,11 +612,40 @@ const SETTLED: readonly AppProgress['state'][] = ['installed', 'already', 'faile
 const appPct = (a: AppProgress) => (SETTLED.includes(a.state) ? 100 : a.state === 'installing' ? a.progress ?? 0 : 0)
 const appTone = (a: AppProgress) => (a.state === 'failed' ? 'error' : a.state === 'queued' ? 'paused' : a.state === 'installed' || a.state === 'already' ? 'success' : 'default') as 'error' | 'paused' | 'success' | 'default'
 
-/** Installing apps: overall progress across the apps, and each app with its own bar and state (GetApps). */
-function InstallAppsPanel({ apps, send, busy, headingRef }: { apps: AppProgress[]; send: (e: SetupEvent) => Promise<boolean>; busy: boolean; headingRef: HeadingRef }) {
+/** "12.4 MB": decimal units, as download sizes are usually shown. */
+export const fmtBytes = (n: number) => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} kB`
+const fmtTime = (s: number) => s < 60 ? `${Math.max(5, Math.round(s / 5) * 5)} s` : `${Math.round(s / 60)} min`
+
+/**
+ * Time left for the running download, only from measurement: at least 5 s of byte samples with steady progress.
+ * Install and configure phases have no reliable estimate, so none is shown there.
+ */
+export function useDownloadEta(a: AppProgress | undefined, now: () => number = Date.now): number | null {
+  const samples = useRef<{ id: string; pts: [number, number][] }>({ id: '', pts: [] })
+  if (!a || a.phase !== 'downloading' || !a.bytesTotal || a.bytesDone == null) { samples.current = { id: '', pts: [] }; return null }
+  if (samples.current.id !== a.id) samples.current = { id: a.id, pts: [] }
+  const pts = samples.current.pts
+  if (!pts.length || pts[pts.length - 1][1] !== a.bytesDone) pts.push([now(), a.bytesDone])
+  while (pts.length > 20) pts.shift()
+  const [t0, b0] = pts[0], [t1, b1] = pts[pts.length - 1]
+  const secs = (t1 - t0) / 1000
+  if (secs < 5 || b1 <= b0) return null
+  return (a.bytesTotal - b1) / ((b1 - b0) / secs)
+}
+
+/** Installing apps: the app being installed now with its phase, overall progress across the apps, and each app with
+ *  its own bar and state. Everything shown comes from the setup engine's per-app status (GetApps), which follows apt's
+ *  own progress reports; nothing is timed or simulated here. */
+export function InstallAppsPanel({ apps, send, busy, headingRef }: { apps: AppProgress[]; send: (e: SetupEvent) => Promise<boolean>; busy: boolean; headingRef: HeadingRef }) {
   const shown = apps.filter((a) => a.state !== 'skipped')
   const done = shown.filter((a) => a.state === 'installed' || a.state === 'already').length
-  const pct = shown.length ? Math.round(shown.reduce((n, a) => n + appPct(a), 0) / shown.length) : null
+  const failed = shown.filter((a) => a.state === 'failed').length
+  const settled = shown.length > 0 && shown.every((a) => SETTLED.includes(a.state))
+  // 100% only once every app has settled; while one is still running the figure stops at 99.
+  const raw = shown.length ? Math.round(shown.reduce((n, a) => n + appPct(a), 0) / shown.length) : null
+  const pct = raw === null ? null : settled ? raw : Math.min(99, raw)
+  const cur = shown.find((a) => a.state === 'installing')
+  const eta = useDownloadEta(cur)
   return (
     <section className="mx-auto flex w-full max-w-[640px] flex-col gap-6 py-2">
       <header className="flex items-center gap-4">
@@ -619,18 +660,35 @@ function InstallAppsPanel({ apps, send, busy, headingRef }: { apps: AppProgress[
       </header>
       <div className="flex flex-col gap-3 rounded-2xl border border-[rgba(127,178,255,0.16)] bg-[rgba(10,24,56,0.55)] p-5 shadow-[0_12px_40px_rgba(0,0,0,0.2)] backdrop-blur-sm">
         <div role="status" aria-live="polite" className="flex items-baseline justify-between gap-3">
-          <span className="text-[15px] font-semibold">{shown.length ? t('sw.apps.overall', { done, total: shown.length }) : t('sw.busy')}</span>
+          <span className="text-[15px] font-semibold">
+            {shown.length ? t('sw.apps.overall', { done, total: shown.length }) : t('sw.busy')}
+            {failed > 0 && <span className="ml-2 font-medium text-[#FFB4A6]">· {t('sw.apps.failedCount', { n: failed })}</span>}
+          </span>
           {pct !== null && <span className="text-[22px] font-bold text-[#9CC2FF] tabular-nums"><CountUp value={pct} /></span>}
         </div>
-        <AnimatedProgress value={pct} height={10} label={stepName('INSTALLING_APPLICATIONS')} tone={pct === 100 ? 'success' : 'default'} />
+        <AnimatedProgress value={pct} height={10} label={stepName('INSTALLING_APPLICATIONS')} tone={settled ? (failed ? 'paused' : 'success') : 'default'} />
+        {cur && (
+          <div className="mt-1 flex items-center gap-3 border-t border-[rgba(127,178,255,0.12)] pt-3">
+            <AppIcon id={cur.id} size={32} />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[12px] font-medium tracking-[0.04em] text-[#8FA3C8] uppercase">{t('sw.apps.now')}</span>
+              <span className="truncate text-[15px] font-semibold">{appName(cur)}</span>
+            </div>
+            <div className="flex shrink-0 flex-col items-end text-[13px] tabular-nums">
+              <span className="font-medium text-[#9CC2FF]">{cur.phase ? t(`sw.appPhase.${cur.phase}` as MessageKey) : t('sw.appState.installing')}</span>
+              {cur.phase === 'downloading' && cur.bytesTotal ? <span className="text-[#AFC0DD]">{t('sw.apps.bytes', { done: fmtBytes(cur.bytesDone ?? 0), total: fmtBytes(cur.bytesTotal) })}{eta !== null ? ` · ${t('sw.apps.left', { time: fmtTime(eta) })}` : ''}</span> : null}
+            </div>
+          </div>
+        )}
       </div>
       {shown.length > 0 && (
         <ul aria-label={t('sw.apps.title')} className="m-0 flex list-none flex-col gap-2 p-0">
           {shown.map((a) => <AppProgressRow key={a.id} a={a} />)}
         </ul>
       )}
-      <div className="flex justify-center">
+      <div className="flex flex-col items-center gap-2">
         <Button variant="secondary" size="md" disabled={busy} onClick={() => void send({ type: 'PAUSE' })}><Icon d={['M8 5v14M16 5v14']} size={15} />{t('sw.pause')}</Button>
+        <p className="m-0 text-[12px] text-[#8FA3C8]">{t('sw.apps.cancelNote')}</p>
       </div>
     </section>
   )
@@ -648,7 +706,7 @@ function AppProgressRow({ a }: { a: AppProgress }) {
           <span className={`flex shrink-0 items-center gap-1.5 text-[12px] font-medium ${APP_STATE_LOOK[a.state]}`} title={a.error ?? undefined}>
             {active && <Spinner size={13} />}
             {(a.state === 'installed' || a.state === 'already') && <Icon d={[CHECK]} size={13} width={3} />}
-            {t(`sw.appState.${a.state}` as MessageKey)}{active && a.progress != null ? ` · ${a.progress}%` : ''}
+            {active && a.phase ? t(`sw.appPhase.${a.phase}` as MessageKey) : t(`sw.appState.${a.state}` as MessageKey)}{active && a.progress != null ? ` · ${a.progress}%` : ''}
           </span>
         </div>
         <AnimatedProgress value={pct} height={6} tone={appTone(a)} decorative shimmer={active} />

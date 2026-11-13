@@ -28,7 +28,8 @@ export class ActionError extends Error {
   readonly retryable: boolean
   constructor(message: string, retryable = true) { super(message); this.retryable = retryable }
 }
-export type ActionHandler = (ctx: { answers: Readonly<Record<string, unknown>>; log: (line: string) => void }) => Promise<void>
+/** `stopped()` turns true once this run is superseded (Pause, Cancel, recovery): long actions stop at a safe point. */
+export type ActionHandler = (ctx: { answers: Readonly<Record<string, unknown>>; log: (line: string) => void; stopped: () => boolean }) => Promise<void>
 
 export interface SetupServiceOptions {
   mode: SetupMode
@@ -158,11 +159,11 @@ export class SetupService extends EventEmitter {
     this.timer = set(() => { if (run === this.run) void this.serial(() => this.dispatch(e, true)) }, ms)
   }
 
-  private async runAction(name: string) {
+  private async runAction(name: string, run?: number) {
     const h = this.o.handlers[name]
     if (!h) throw new ActionError(`${name} is not available on this system`, false)
     this.log(`run ${name}`)
-    await h({ answers: this.machine.snapshot.answers, log: (l) => this.log(`  ${name}: ${l}`) })
+    await h({ answers: this.machine.snapshot.answers, log: (l) => this.log(`  ${name}: ${l}`), stopped: () => run !== undefined && run !== this.run })
   }
 
   /** Run a work state's actions in order; the outcome goes back into the machine (unless a newer run started). */
@@ -170,7 +171,7 @@ export class SetupService extends EventEmitter {
     let failure: ActionError | null = null
     for (const a of actions) {
       if (EXTERNAL_ACTIONS.has(a)) { this.log(`waiting for ${a} (reported by the installer)`); return }
-      try { await this.runAction(a) } catch (e) { failure = e instanceof ActionError ? e : new ActionError((e as Error).message); this.log(`${a} failed: ${failure.message}`); break }
+      try { await this.runAction(a, run) } catch (e) { failure = e instanceof ActionError ? e : new ActionError((e as Error).message); this.log(`${a} failed: ${failure.message}`); break }
       if (run !== this.run) return
     }
     await this.serial(async () => {

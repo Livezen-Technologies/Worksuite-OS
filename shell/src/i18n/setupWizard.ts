@@ -3,6 +3,16 @@
 // like the rest of their catalogs (docs/i18n/README.md). Spread into en.ts, si.ts and ta.ts.
 export const setupWizardEn = {
   'sw.apps.overall': '{done} of {total} apps ready',
+  'sw.apps.failedCount': '{n} couldn’t install',
+  'sw.apps.now': 'Now installing',
+  'sw.apps.bytes': '{done} of {total}',
+  'sw.apps.left': 'about {time} left',
+  'sw.appPhase.refreshing': 'Checking for the latest version',
+  'sw.appPhase.downloading': 'Downloading',
+  'sw.appPhase.verifying': 'Verifying',
+  'sw.appPhase.installing': 'Installing',
+  'sw.appPhase.configuring': 'Configuring',
+  'sw.apps.cancelNote': 'Pause stops after the current app; nothing already installed is undone.',
   'sw.apps.recovery': 'Your apps when setup stopped',
   'sw.appState.pending': 'Waiting',
   'sw.appState.installing': 'Installing…',

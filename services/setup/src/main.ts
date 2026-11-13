@@ -116,8 +116,8 @@ const handlers: Record<string, ActionHandler> = {
     if (info.managed?.value !== true) throw new ActionError('this device is not enrolled yet; enter the enrollment code and try again', true)
     log(`enrolled with ${String(info.org_name?.value ?? 'the organization')}`)
   },
-  async queueInstalls({ answers, log }) {
-    try { await engine(log).run(appPlan(answers)) } catch (e) { throw new ActionError((e as Error).message, (e as { retryable?: boolean }).retryable !== false) }
+  async queueInstalls({ answers, log, stopped }) {
+    try { await engine(log).run(appPlan(answers), stopped) } catch (e) { throw new ActionError((e as Error).message, (e as { retryable?: boolean }).retryable !== false) }
   },
   async verifyPackages({ log }) {
     const r = await runner.run('dpkg', ['--audit'])

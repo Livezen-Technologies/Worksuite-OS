@@ -107,7 +107,7 @@ test('engine: per-app retry with backoff; unresolvable dependencies are not retr
   const h = harness({
     installed: ['worksuite'],
     fail: (c) => {
-      if (c[0] === 'apt-get' && c.includes('install') && !c.includes('-s') && c.at(-1) === 'worksuite-office' && ++n < 3) return { code: 100, stderr: 'E: Connection reset' }
+      if (c[0] === 'apt-get' && c.includes('install') && !c.includes('-s') && !c.includes('--print-uris') && c.at(-1) === 'worksuite-office' && ++n < 3) return { code: 100, stderr: 'E: Connection reset' }
       if (c[0] === 'apt-get' && c.includes('-s') && c.at(-1) === 'gimp') return { code: 100, stdout: 'gimp : Depends: libgimp3 but it is not installable' }
       return null
     },
@@ -118,7 +118,8 @@ test('engine: per-app retry with backoff; unresolvable dependencies are not retr
   assert.equal(by['worksuite-office'].state, 'installed'); assert.equal(by['worksuite-office'].attempts, 3)
   assert.equal(by.gimp.state, 'failed'); assert.equal(by.gimp.attempts, 1)
   assert.match(by.gimp.error!, /dependencies cannot be resolved: gimp : Depends: libgimp3/)
-  assert.equal(h.cmds.filter((c) => c.join(' ') === 'apt-get -q update').length, 1, 'package lists refreshed once per run')
+  // Once at the start, and again before each retry that follows a failed download (stale lists are a common cause).
+  assert.equal(h.cmds.filter((c) => c.join(' ') === 'apt-get -q update').length, 3, 'lists refreshed first and after each network failure')
 })
 
 test('engine: downloads that keep failing while "online" queue an optional app for later, never a non-network error', async () => {
@@ -177,4 +178,30 @@ test('engine: apt Status-Fd progress becomes each app\'s 0–100 figure, downloa
   const st = await h.engine.run(plan(['worksuite-pos'], null))
   assert.deepEqual(seen, [0, 50, 55, 55, 100])
   assert.deepEqual(st.map((s) => [s.id, s.state, s.progress]), [['worksuite-desktop', 'already', 100], ['worksuite-pos', 'installed', 100]])
+})
+
+test('apt phases, download size and actionable reasons come from apt\'s own output', async () => {
+  const { aptPhase, downloadBytes, aptReason } = await import('../src/apps/engine.ts')
+  assert.equal(aptPhase('dlstatus:1:12.5:Retrieving file 1 of 3'), 'downloading')
+  assert.equal(aptPhase('pmstatus:vlc:40:Unpacking vlc (amd64)'), 'installing')
+  assert.equal(aptPhase('pmstatus:vlc:80:Configuring vlc (amd64)'), 'configuring')
+  assert.equal(aptPhase('pmstatus:dpkg-exec:95:Running dpkg'), 'configuring')
+  assert.equal(aptPhase('Reading package lists...'), null)
+  assert.equal(downloadBytes("'http://deb.debian.org/debian/pool/main/v/vlc/vlc_3.0.21_amd64.deb' vlc_3.0.21_amd64.deb 1048576 SHA256:ab\n'http://x/y.deb' y.deb 2048 SHA256:cd\n"), 1050624)
+  assert.equal(downloadBytes(''), 0)
+  assert.match(aptReason("E: You don't have enough free space in /var/cache/apt/archives/.") ?? '', /free disk space/)
+  assert.match(aptReason('E: Unmet dependencies. Try apt --fix-broken') ?? '', /conflict/)
+  assert.equal(aptReason('E: Failed to fetch http://x'), null)
+})
+
+test('engine: a stop request takes effect between apps; the rest stay pending for the next run', async () => {
+  const h = harness({ installed: ['worksuite'] })
+  let installs = 0
+  const orig = h.env.runner.run
+  h.env.runner.run = async (cmd, args) => { if (cmd === 'apt-get' && args.includes('install') && !args.includes('-s') && !args.includes('--print-uris')) installs++; return orig(cmd, args) }
+  const st = await h.engine.run(plan(['worksuite-office', 'worksuite-pos'], null), () => installs >= 1)
+  const by = Object.fromEntries(st.map((s) => [s.id, s.state]))
+  assert.equal(by['worksuite-office'], 'installed')
+  assert.equal(by['worksuite-pos'], 'pending', 'not started after the stop')
+  assert.equal(installs, 1)
 })
