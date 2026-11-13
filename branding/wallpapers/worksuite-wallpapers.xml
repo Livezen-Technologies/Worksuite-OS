@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE wallpapers SYSTEM "gnome-wp-list.dtd">
-<!-- The WorkSuite wallpapers, listed in Settings › Appearance › Background. worksuite-1 is also default.png: the desktop,
-     lock screen and sign-in screen background. -->
+<!-- The WorkSuite wallpapers in Settings › Appearance › Background: the clean versions (no centred logo) first; the
+     default, sign-in and lock screens use WorkSuite Aqua (worksuite-1-lock.png, installed as default.png and lock.png).
+     The original artwork with the wordmark follows. -->
 <wallpapers>
-  <wallpaper deleted="false"><name>WorkSuite Aqua</name><filename>/usr/share/backgrounds/worksuite/worksuite-1.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
-  <wallpaper deleted="false"><name>WorkSuite Ocean</name><filename>/usr/share/backgrounds/worksuite/worksuite-2.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
-  <wallpaper deleted="false"><name>WorkSuite Aurora</name><filename>/usr/share/backgrounds/worksuite/worksuite-3.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
-  <wallpaper deleted="false"><name>WorkSuite Violet</name><filename>/usr/share/backgrounds/worksuite/worksuite-4.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Aqua</name><filename>/usr/share/backgrounds/worksuite/lock/worksuite-1-lock.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Ocean</name><filename>/usr/share/backgrounds/worksuite/lock/worksuite-2-lock.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Aurora</name><filename>/usr/share/backgrounds/worksuite/lock/worksuite-3-lock.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Violet</name><filename>/usr/share/backgrounds/worksuite/lock/worksuite-4-lock.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Aqua with logo</name><filename>/usr/share/backgrounds/worksuite/worksuite-1.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Ocean with logo</name><filename>/usr/share/backgrounds/worksuite/worksuite-2.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Aurora with logo</name><filename>/usr/share/backgrounds/worksuite/worksuite-3.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Violet with logo</name><filename>/usr/share/backgrounds/worksuite/worksuite-4.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
 </wallpapers>
