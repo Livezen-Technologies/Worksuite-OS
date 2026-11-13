@@ -922,7 +922,7 @@ function UnsentDialog({ account, unsent, onCancel, onChoose }: { account: CloudA
 
 function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (s: Section) => void; badges: Partial<Record<Section, string>>; user: { name: string; role: string } | null }) {
   const [q, setQ] = useState('')
-  const items = NAV.filter((n) => !isGnomeSession() || WORKSUITE_ONLY.has(n.id)).filter((n) => navLabel(n.id).toLowerCase().includes(q.trim().toLowerCase()) || n.id.toLowerCase().includes(q.trim().toLowerCase()))
+  const items = NAV.filter((n) => navLabel(n.id).toLowerCase().includes(q.trim().toLowerCase()) || n.id.toLowerCase().includes(q.trim().toLowerCase()))
   return (
     <nav aria-label={t('launcher.settings')} className="box-border flex w-[260px] shrink-0 flex-col gap-3.5 overflow-auto border-r border-[rgba(127,178,255,0.12)] bg-[#071330] px-3.5 pt-5 pb-[72px]">
       <div className="flex items-center gap-3 px-2 pt-2 pb-1">

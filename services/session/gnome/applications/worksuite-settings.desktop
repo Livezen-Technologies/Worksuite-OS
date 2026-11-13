@@ -1,13 +1,14 @@
 [Desktop Entry]
 Type=Application
-Name=WorkSuite Settings
-Name[si]=WorkSuite සැකසීම්
-Name[ta]=WorkSuite அமைப்புகள்
-Comment=WorkSuite account, updates, drivers, security, taskbar and glass effects (system settings: GNOME Settings)
+Name=Settings
+Name[si]=සැකසීම්
+Name[ta]=அமைப்புகள்
+GenericName=WorkSuite Settings
+Comment=Network, Bluetooth, displays, sound, personalization, accounts, updates, drivers and security
 Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center
 Icon=worksuite-os
 Categories=Settings;System;
-Keywords=update;usb;driver;firmware;enroll;organization;taskbar;glass;blur;personalization;security;account;
+Keywords=update;usb;driver;firmware;enroll;organization;taskbar;glass;blur;personalization;security;account;network;wifi;bluetooth;display;sound;power;printer;keyboard;mouse;accessibility;wallpaper;background;
 StartupWMClass=worksuite-shell
 Actions=Updates;Drivers;Personalization;
 

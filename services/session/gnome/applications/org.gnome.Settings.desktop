@@ -1,0 +1,14 @@
+[Desktop Entry]
+# WorkSuite: replaces GNOME Settings' launcher (gnome-control-center's file is diverted to .distrib by worksuite-session's
+# preinst). There is one Settings app, WorkSuite Settings: anything that starts "GNOME Settings" by this id (the Quick
+# Settings gear, the Start menu's settings button, old pins) opens it. Hidden from the app list. gnome-control-center
+# stays installed: WorkSuite Settings opens its system panels (`gnome-control-center network`, ...) and those windows
+# keep this id, so the taskbar names them "System panel".
+Type=Application
+Name=System panel
+Comment=A system panel opened from Settings
+Exec=/usr/lib/worksuite/shell/worksuite-shell --control-center
+Icon=worksuite-os
+NoDisplay=true
+StartupNotify=true
+Categories=Settings;

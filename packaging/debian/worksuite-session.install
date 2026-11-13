@@ -89,4 +89,5 @@ services/session/gdm/90-worksuite usr/share/worksuite/gdm/dconf/
 services/session/gdm/worksuite-use-gdm usr/libexec/worksuite/
 services/session/pam/gdm-password etc/pam.d/
 services/session/gnome/applications/worksuite-settings.desktop usr/share/applications/
+services/session/gnome/applications/org.gnome.Settings.desktop usr/share/applications/
 services/session/gnome/autostart/worksuite-setup.desktop etc/xdg/autostart/
