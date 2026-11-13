@@ -6,11 +6,11 @@
 // Layout: a rail with the four phases of setup and overall progress (a slim bar on narrow screens), one column of
 // content per step with its own subtitle, and a sticky action bar (Enter continues).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { LOCALES, getLocale, localeTag, setLocale, t, type Locale, type MessageKey } from '../../i18n'
+import { LOCALES, formatNumber, getLocale, localeTag, setLocale, t, type Locale, type MessageKey } from '../../i18n'
 import { Button } from '../ui/button'
 import { BG, Icon, Mark } from '../Ws'
 import FirstRunNetwork from '../../screens/FirstRunNetwork'
-import { cloudErrorText, os, serverUrlFor } from '../../lib/os'
+import { cloudErrorText, formatBytes, os, serverUrlFor } from '../../lib/os'
 import type { AppProgress, SetupApi } from '../../lib/setupApi'
 import { flowFor, isMain, WORK_STATES, type MainState, type SetupEvent } from './core/states.ts'
 import { asks, useSetup } from './useSetup'
@@ -612,9 +612,9 @@ const SETTLED: readonly AppProgress['state'][] = ['installed', 'already', 'faile
 const appPct = (a: AppProgress) => (SETTLED.includes(a.state) ? 100 : a.state === 'installing' ? a.progress ?? 0 : 0)
 const appTone = (a: AppProgress) => (a.state === 'failed' ? 'error' : a.state === 'queued' ? 'paused' : a.state === 'installed' || a.state === 'already' ? 'success' : 'default') as 'error' | 'paused' | 'success' | 'default'
 
-/** "12.4 MB": decimal units, as download sizes are usually shown. */
-export const fmtBytes = (n: number) => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} kB`
-const fmtTime = (s: number) => s < 60 ? `${Math.max(5, Math.round(s / 5) * 5)} s` : `${Math.round(s / 60)} min`
+/** Download sizes in the person's locale (lib/os formatBytes: decimal units). */
+export const fmtBytes = (n: number) => formatBytes(n)
+const fmtTime = (s: number) => s < 60 ? t('sw.apps.secs', { n: formatNumber(Math.max(5, Math.round(s / 5) * 5)) }) : t('sw.apps.mins', { n: formatNumber(Math.round(s / 60)) })
 
 /**
  * Time left for the running download, only from measurement: at least 5 s of byte samples with steady progress.

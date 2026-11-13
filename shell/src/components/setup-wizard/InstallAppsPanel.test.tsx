@@ -28,7 +28,7 @@ describe('InstallAppsPanel', () => {
     expect(r.text).toContain('Now installing')
     expect(r.text).toContain('VLC')
     expect(r.text).toContain('Downloading')
-    expect(r.text).toContain('24.0 MB of 40.0 MB')
+    expect(r.text).toContain('24 MB of 40 MB')
     expect(r.text).not.toContain('left')  // no estimate without measured samples
     r.unmount()
   })
@@ -45,6 +45,6 @@ describe('InstallAppsPanel', () => {
     r.unmount()
   })
   it('formats sizes in decimal units', () => {
-    expect(fmtBytes(1_500)).toBe('2 kB'); expect(fmtBytes(12_400_000)).toBe('12.4 MB'); expect(fmtBytes(2_100_000_000)).toBe('2.1 GB')
+    expect(fmtBytes(1_500)).toBe('2 kB'); expect(fmtBytes(12_400_000)).toBe('12 MB'); expect(fmtBytes(2_100_000_000)).toBe('2.1 GB')
   })
 })
