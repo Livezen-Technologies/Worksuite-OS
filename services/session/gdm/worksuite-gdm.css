@@ -74,8 +74,10 @@
 #lockDialogGroup .unlock-dialog-clock .unlock-dialog-clock-date { font-size: 18pt; font-weight: 500; color: rgba(255, 255, 255, 0.92); text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35); }
 #lockDialogGroup .unlock-dialog-clock-hint { color: rgba(255, 255, 255, 0.70); }
 
-/* The WorkSuite logo under the sign-in, with room to breathe. */
-#lockDialogGroup .login-dialog-logo-bin { padding: 28px 0 40px; }
+/* No logo under the sign-in (Debian's GDM defaults set the vendor wordmark there): the wallpaper and the centred
+ * avatar carry the look. Collapsed to nothing rather than restyled, so it takes no space either. */
+#lockDialogGroup .login-dialog-logo-bin { padding: 0; margin: 0; width: 0; height: 0; }
+#lockDialogGroup .login-dialog-logo-bin > * { width: 0; height: 0; }
 
 /* Top bar over the wallpaper. */
 #panel.login-screen, #panel.unlock-screen, #panel.lock-screen { background-color: transparent; }
