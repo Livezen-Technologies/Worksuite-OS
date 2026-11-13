@@ -148,6 +148,8 @@ contextBridge.exposeInMainWorld('worksuite', {
   // JSON, as every structured argument: main's handle() passes strings only (an object arrived as "[object Object]"
   // and every change was refused as invalid on the installed system).
   setA11y: (change: unknown) => ipcRenderer.invoke('ws:setA11y', JSON.stringify(change ?? null)),
+  gnomePrivacy: () => ipcRenderer.invoke('ws:gnomePrivacy'),
+  setGnomePrivacy: (change: unknown) => ipcRenderer.invoke('ws:setGnomePrivacy', JSON.stringify(change ?? null)),
   setDesktopLook: (change: unknown) => ipcRenderer.invoke('ws:setDesktopLook', JSON.stringify(change ?? null)),
   /** WorkSuite Settings window (GNOME): a second launch asked for a section. */
   onSettingsSection: (cb: (section: string) => void) => {

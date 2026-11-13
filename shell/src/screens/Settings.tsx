@@ -6,7 +6,7 @@ import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { localTaskbarAlign, saveTaskbarAlign, shellPrefsFrom, type TaskbarAlign } from '../lib/shellPrefs'
 import { reconcileJoin, wifiPhase, type Join } from '../lib/wifiState'
-import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SecurityStatus, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, type GnomePrivacySettings, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SecurityStatus, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
 import type { WindowProps } from './types'
 import { ACCENTS, DEFAULT_PRIVACY, KEYS, THEMES, accentColor, applyAppearance, loadAppearance, readJson, writeJson, type Appearance, type Privacy } from '../lib/setup'
@@ -36,7 +36,7 @@ import { CloudSignIn } from './settings/CloudSignIn'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
 import { UpdatesPanel } from './Updates'
-import { PersonalizationPanel } from './settings/Personalization'
+import { PersonalizationPanel, Segmented } from './settings/Personalization'
 import { AccessibilityPanel } from './settings/Accessibility'
 import { DeviceProblemDialog, DevicesPanel, DriversPanel, Empty } from './Hardware'
 import { formatDate, formatNumber, t, type MessageKey } from '../i18n'
@@ -440,6 +440,12 @@ function PrivacyPanel() {
   useEffect(() => { void os.lockSettings().then(setLock).catch(() => {}) }, [])
   const [sec, setSec] = useState<SecurityStatus | null>(null)
   useEffect(() => { void os.securityStatus().then(setSec).catch(() => {}); return os.onSecurityChanged(setSec) }, [])
+  // Under GNOME the lock and device permissions are GNOME's own keys (electron/gnomePrivacy.ts), not the Labwc session's.
+  const gnome = isGnomeSession()
+  const [gp, setGp] = useState<GnomePrivacySettings | null>(null)
+  const [gpErr, setGpErr] = useState(false)
+  useEffect(() => { if (gnome) void os.gnomePrivacy().then((r) => r.available ? setGp(r.value) : setGpErr(true)).catch(() => setGpErr(true)) }, [gnome])
+  const setGnome = async (c: Partial<GnomePrivacySettings>) => { setGpErr(false); const r = await os.setGnomePrivacy(c); if (r.available) setGp(r.value); else { setGpErr(true); void os.gnomePrivacy().then((x) => x.available && setGp(x.value)) } }
   const enc = info?.device?.encrypted
   type Tile = { t: string; d: string; ok: boolean | null; icon: string }
   const tiles: Tile[] = [
@@ -448,7 +454,9 @@ function PrivacyPanel() {
     status?.state === 'up_to_date'
       ? { t: t('settings.priv.upToDate'), d: t('settings.priv.checked', { when: status.last_check ? fmtWhen(status.last_check) : '—' }), ok: true, icon: 'M5 12.5l4.5 4.5L19 7.5' }
       : { t: needsAttention(status) ? t('settings.priv.updateWaiting') : t('settings.nav.Updates'), d: needsAttention(status) ? t('settings.priv.openUpdates') : status ? t('settings.priv.seeUpdates') : t('settings.priv.statusUnavailable'), ok: needsAttention(status) ? false : null, icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
-    { t: t('settings.priv.screenLock'), d: !lock ? t('settings.priv.statusUnavailable') : lock.timeout_s ? t('settings.priv.lockAfter', { time: lockChoiceLabel(lock.timeout_s) }) : t('settings.priv.lockOff'), ok: lock ? lock.timeout_s > 0 : null, icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' },
+    gnome
+      ? { t: t('settings.priv.screenLock'), d: !gp ? t('settings.priv.statusUnavailable') : gp.lock && gp.idleDelay ? t('settings.priv.lockAfter', { time: lockChoiceLabel(gp.idleDelay + gp.lockDelay) }) : t('settings.priv.lockOff'), ok: gp ? gp.lock && gp.idleDelay > 0 : null, icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' }
+      : { t: t('settings.priv.screenLock'), d: !lock ? t('settings.priv.statusUnavailable') : lock.timeout_s ? t('settings.priv.lockAfter', { time: lockChoiceLabel(lock.timeout_s) }) : t('settings.priv.lockOff'), ok: lock ? lock.timeout_s > 0 : null, icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' },
   ]
   const known = tiles.filter((x) => x.ok !== null)
   const passed = known.filter((x) => x.ok).length
@@ -490,7 +498,7 @@ function PrivacyPanel() {
     <div className="grid min-h-0 gap-3" style={{ gridTemplateColumns: 'minmax(0,1.25fr) minmax(0,1fr)' }}>
       <section aria-labelledby="priv-choices" className="flex flex-col gap-2">
         <h2 id="priv-choices" className="m-0 text-sm font-semibold">{t('settings.priv.choices')}</h2>
-        <div className={`${card} overflow-hidden`}>
+        {gnome ? <GnomePrivacyRows gp={gp} err={gpErr} onChange={(c) => void setGnome(c)} /> : <div className={`${card} overflow-hidden`}>
           {perms.map((x) => (
             <div key={x.k} className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
               <Svg d={x.icon} size={18} stroke="#7FB2FF" />
@@ -498,7 +506,7 @@ function PrivacyPanel() {
               <Switch small label={x.t} checked={p[x.k]} onChange={set(x.k)} />
             </div>
           ))}
-        </div>
+        </div>}
       </section>
       <section aria-labelledby="priv-it" className="flex flex-col gap-2">
         <h2 id="priv-it" className="m-0 text-sm font-semibold">{t('settings.priv.itSees')}</h2>
@@ -511,6 +519,31 @@ function PrivacyPanel() {
     <ClipboardSection />
   </>
 }
+
+/** Under GNOME: automatic screen lock and the device permissions GNOME enforces (camera, microphone, location), all read
+ *  back from gsettings after each change (electron/gnomePrivacy.ts). */
+function GnomePrivacyRows({ gp, err, onChange }: { gp: GnomePrivacySettings | null; err: boolean; onChange: (c: Partial<GnomePrivacySettings>) => void }) {
+  if (!gp) return <div className={`${card} px-4 py-3 text-xs text-[#C9D6EE]`}>{err ? t('settings.priv.statusUnavailable') : t('settings.look.reading')}</div>
+  const idle = IDLE_OPTIONS.map((v) => ({ v, label: v ? lockChoiceLabel(v) : t('settings.gpriv.never') }))
+  const row = (icon: string, title: string, hint: string, control: ReactNode) => (
+    <div className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
+      <Svg d={icon} size={18} stroke="#7FB2FF" />
+      <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">{title}</span><span className="text-[11px] text-[#8FA3C8]">{hint}</span></span>
+      {control}
+    </div>
+  )
+  return <>
+    {err && <p role="alert" className="m-0 text-[13px] text-[#FFB4A6]">{t('settings.look.failed')}</p>}
+    <div className={`${card} overflow-hidden`}>
+      {row('M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z', t('settings.gpriv.lock'), t('settings.gpriv.lockHint'), <Switch small label={t('settings.gpriv.lock')} checked={gp.lock} onChange={(v) => onChange({ lock: v })} />)}
+      <div className={`px-4 py-[11px] ${rowLine}`}><Segmented label={t('settings.gpriv.idle')} value={gp.idleDelay} options={idle} onChange={(v) => onChange({ idleDelay: v })} /></div>
+      {row('M15 10l5-3v10l-5-3M3 7h12v10H3z', t('settings.gpriv.camera'), t('settings.gpriv.cameraHint'), <Switch small label={t('settings.gpriv.camera')} checked={gp.camera} onChange={(v) => onChange({ camera: v })} />)}
+      {row('M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3', t('settings.gpriv.mic'), t('settings.gpriv.micHint'), <Switch small label={t('settings.gpriv.mic')} checked={gp.microphone} onChange={(v) => onChange({ microphone: v })} />)}
+      {row('M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z', t('settings.priv.location'), t('settings.gpriv.locationHint'), <Switch small label={t('settings.priv.location')} checked={gp.location} onChange={(v) => onChange({ location: v })} />)}
+    </div>
+  </>
+}
+const IDLE_OPTIONS = [60, 300, 600, 900, 0] as const
 
 /** WSOS-LOCK-003: idle lock timeout chosen by the user, within the organization's maximum (worksuite-idle applies it). */
 function LockAfterRow() {

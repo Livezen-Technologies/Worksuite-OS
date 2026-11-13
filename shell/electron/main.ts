@@ -52,6 +52,7 @@ import type { Layout } from './displays'
 import { outputWindows, screensMatch, type Rect } from './outputWindows'
 import { realExec } from './system'
 import { cleanLookChange, makeDesktopLook } from './desktopLook'
+import { cleanGnomePrivacy, makeGnomePrivacy } from './gnomePrivacy'
 import { cleanA11y, makeA11y } from './a11y'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
@@ -330,6 +331,9 @@ app.whenReady().then(() => {
   })
   const a11y = makeA11y(realExec)
   handle('ws:a11y', () => a11y.read())
+  const gp = makeGnomePrivacy(realExec)
+  handle('ws:gnomePrivacy', () => gp.read())
+  handle('ws:setGnomePrivacy', (raw) => { const c = cleanGnomePrivacy(jsonArg(raw)); return c ? gp.apply(c) : { available: false, reason: 'invalid_argument' } })
   handle('ws:setA11y', (raw) => { const c = cleanA11y(jsonArg(raw)); return c ? a11y.apply(c) : { available: false, reason: 'invalid_argument' } })
   handle('ws:launchApp', (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined })
   // Settings: idle lock timeout within the policy maximum (WSOS-LOCK-003).

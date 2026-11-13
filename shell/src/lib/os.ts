@@ -2,6 +2,9 @@
 // (WSOS-SEC-001, §10.3); in a plain browser (dev/design review) a local stub answers instead.
 export interface A11ySettings { textSize: number; highContrast: boolean; reduceMotion: boolean; screenReader: boolean; screenKeyboard: boolean; stickyKeys: boolean; slowKeys: boolean; cursorSize: number }
 export type A11yResult = { available: true; value: A11ySettings } | { available: false; reason: string }
+/** GNOME's screen lock and device permissions (electron/gnomePrivacy.ts). */
+export interface GnomePrivacySettings { idleDelay: number; lock: boolean; lockDelay: number; camera: boolean; microphone: boolean; location: boolean }
+export type GnomePrivacyResult = { available: true; value: GnomePrivacySettings } | { available: false; reason: string }
 export type LookAnimations = 'off' | 'reduced' | 'standard'
 export interface DesktopLook { glass: boolean; transparency: boolean; animations: LookAnimations; taskbar: { align: 'center' | 'left'; size: number; position: 'BOTTOM' | 'TOP'; autohide: boolean } }
 export type DesktopLookChange = Partial<Omit<DesktopLook, 'taskbar'>> & { taskbar?: Partial<DesktopLook['taskbar']>; lightest?: boolean }
@@ -145,6 +148,8 @@ export interface WorkSuiteApi {
   /** Settings › Accessibility: GNOME's accessibility keys (electron/a11y.ts). */
   a11y(): Promise<A11yResult>
   setA11y(change: Partial<A11ySettings>): Promise<A11yResult>
+  gnomePrivacy(): Promise<GnomePrivacyResult>
+  setGnomePrivacy(change: Partial<GnomePrivacySettings>): Promise<GnomePrivacyResult>
   setDesktopLook(change: DesktopLookChange): Promise<DesktopLookResult>
   onOpenArchive(cb: (at: { root: string; rel: string }) => void): () => void
   filesEject(id: string): Promise<CloudResult<true>>
@@ -809,6 +814,8 @@ const stub: WorkSuiteApi = {
   async openGnomeSettings() { return { ok: false as const, error: 'unavailable' } },
   async a11y() { return { available: true as const, value: { ...stubA11y } } },
   async setA11y(c) { Object.assign(stubA11y, c); return { available: true as const, value: { ...stubA11y } } },
+  async gnomePrivacy() { return { available: true as const, value: { ...stubGnomePrivacy } } },
+  async setGnomePrivacy(c) { Object.assign(stubGnomePrivacy, c); return { available: true as const, value: { ...stubGnomePrivacy } } },
   async desktopLook() { return { available: true as const, value: { ...stubLook, taskbar: { ...stubLook.taskbar } } } },
   async setDesktopLook(c) {
     if (c.lightest) Object.assign(stubLook, { glass: false, transparency: false, animations: 'off' })
@@ -1089,6 +1096,7 @@ const stubJobs = new Map<string, { job: FileJob; paused: boolean; step: number }
 let stubJobSeq = 0
 const stubEmit = (e: FileJob) => stubFileJobs.forEach((l) => l(e))
 const stubA11y: A11ySettings = { textSize: 1, highContrast: false, reduceMotion: false, screenReader: false, screenKeyboard: false, stickyKeys: false, slowKeys: false, cursorSize: 24 }
+const stubGnomePrivacy: GnomePrivacySettings = { idleDelay: 600, lock: true, lockDelay: 0, camera: true, microphone: true, location: false }
 const stubLook: DesktopLook = { glass: true, transparency: true, animations: 'standard', taskbar: { align: 'center', size: 48, position: 'BOTTOM', autohide: false } }
 const stubVolumes: DiskVolume[] = [
   { device: '/dev/nvme0n1p2', disk: '/dev/nvme0n1', label: '', model: 'Samsung SSD 980', fstype: 'ext4', kind: 'system', size: 475e9, mountpoint: '/', total: 468e9, free: 301e9, encrypted: true, locked: false, readOnly: false, root: 'home' },

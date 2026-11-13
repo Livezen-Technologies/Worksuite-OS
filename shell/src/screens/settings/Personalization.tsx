@@ -13,7 +13,7 @@ const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   <div className="flex items-center justify-between gap-4"><span className="text-[14px] text-[#E8EEFA]">{label}</span>{children}</div>
 )
 
-function Segmented<T extends string | number>({ label, value, options, onChange, disabled }: { label: string; value: T; options: { v: T; label: string }[]; onChange: (v: T) => void; disabled?: boolean }) {
+export function Segmented<T extends string | number>({ label, value, options, onChange, disabled }: { label: string; value: T; options: { v: T; label: string }[]; onChange: (v: T) => void; disabled?: boolean }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <span className="text-[14px] text-[#E8EEFA]">{label}</span>
