@@ -145,8 +145,10 @@ contextBridge.exposeInMainWorld('worksuite', {
   openGnomeSettings: (panel: string) => ipcRenderer.invoke('ws:openGnomeSettings', String(panel)),
   desktopLook: () => ipcRenderer.invoke('ws:desktopLook'),
   a11y: () => ipcRenderer.invoke('ws:a11y'),
-  setA11y: (change: unknown) => ipcRenderer.invoke('ws:setA11y', change),
-  setDesktopLook: (change: unknown) => ipcRenderer.invoke('ws:setDesktopLook', change),
+  // JSON, as every structured argument: main's handle() passes strings only (an object arrived as "[object Object]"
+  // and every change was refused as invalid on the installed system).
+  setA11y: (change: unknown) => ipcRenderer.invoke('ws:setA11y', JSON.stringify(change ?? null)),
+  setDesktopLook: (change: unknown) => ipcRenderer.invoke('ws:setDesktopLook', JSON.stringify(change ?? null)),
   /** WorkSuite Settings window (GNOME): a second launch asked for a section. */
   onSettingsSection: (cb: (section: string) => void) => {
     const listener = (_e: unknown, s: unknown) => { if (typeof s === 'string') cb(s) }

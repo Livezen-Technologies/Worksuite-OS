@@ -127,6 +127,12 @@ const parseJson = (s: string): unknown => { try { return JSON.parse(s) } catch {
 
 /** The checked sender of the IPC call being handled (read synchronously in a handler, e.g. ws:edit). */
 let ipcSender: Electron.WebContents | null = null
+/** A structured IPC argument: the preload sends JSON (handle() stringifies everything); anything else is null and the
+ *  channel's own validator refuses it. */
+export function jsonArg(raw: string): unknown {
+  try { return JSON.parse(raw) } catch { return null }
+}
+
 function handle(channel: string, fn: (...args: string[]) => unknown) {
   ipcMain.handle(channel, (e, ...args) => {
     if (!validSender(e)) throw new Error('Rejected IPC sender')
@@ -314,12 +320,12 @@ app.whenReady().then(() => {
   const look = makeDesktopLook(realExec)
   handle('ws:desktopLook', () => look.read())
   handle('ws:setDesktopLook', (raw) => {
-    const c = cleanLookChange(raw)
+    const c = cleanLookChange(jsonArg(raw))
     return c ? look.apply(c) : { available: false, reason: 'invalid_argument' }
   })
   const a11y = makeA11y(realExec)
   handle('ws:a11y', () => a11y.read())
-  handle('ws:setA11y', (raw) => { const c = cleanA11y(raw); return c ? a11y.apply(c) : { available: false, reason: 'invalid_argument' } })
+  handle('ws:setA11y', (raw) => { const c = cleanA11y(jsonArg(raw)); return c ? a11y.apply(c) : { available: false, reason: 'invalid_argument' } })
   handle('ws:launchApp', (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined })
   // Settings: idle lock timeout within the policy maximum (WSOS-LOCK-003).
   const lock = lockPaths(app.getPath('home'))
