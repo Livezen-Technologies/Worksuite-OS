@@ -10,6 +10,7 @@ import { NAME, serve, type Authority } from './dbus.ts'
 import { ActionError, SetupService, type ActionHandler } from './service.ts'
 import { MirroredFileStore } from './store.ts'
 import { btrfsSnapshot, configBackup, packageTransaction, type Runner } from './rollback.ts'
+import { hostRoot } from './hostroot.ts'
 import type { SetupMode } from './machine/core/states.ts'
 import { CATALOG } from './apps/catalog.ts'
 import { plan, type AppPolicy } from './apps/plan.ts'
@@ -28,11 +29,19 @@ const APP_QUEUE = path.join(STATE_DIR, 'app-queue.json')
 const REPORT = '/run/worksuite-setup/report.json'
 const RUN_ENV = { PATH: '/usr/sbin:/usr/bin:/sbin:/bin', LC_ALL: 'C.UTF-8', DEBIAN_FRONTEND: 'noninteractive' }
 
-/** Fixed executables, argument vectors, no shell. */
+/** Fixed executables, argument vectors, no shell. Package-changing commands run in their own transient unit
+ *  (hostRoot): this service keeps ProtectSystem=full, which makes /usr and /etc read-only here and which systemd 257
+ *  does not let ReadWritePaths= reopen. Without this, dpkg failed to unpack every app in a VM ("Read-only file
+ *  system" under /usr/share/icons). The same split as the package service: the service confined, apt/dpkg not. */
+const viaHost = (cmd: string, args: string[]): [string, string[]] => hostRoot(cmd, args)
+  ? ['systemd-run', ['--quiet', '--wait', '--pipe', '--collect', '--service-type=exec', '-p', 'KillMode=mixed',
+      ...Object.entries(RUN_ENV).map(([k, v]) => `--setenv=${k}=${v}`), '--', cmd, ...args]]
+  : [cmd, args]
 const runner: Runner & { stream: NonNullable<import('./apps/engine.ts').StreamRunner['stream']> } = {
   // Same fixed argv and environment as run(), with stdout handed over line by line (apt's Status-Fd progress).
   stream: (cmd, args, onLine) => new Promise((resolve) => {
-    const c = spawn(cmd, args, { env: RUN_ENV, stdio: ['ignore', 'pipe', 'pipe'] })
+    const [c0, a0] = viaHost(cmd, args)
+    const c = spawn(c0, a0, { env: RUN_ENV, stdio: ['ignore', 'pipe', 'pipe'] })
     let out = '', err = '', buf = ''
     const timer = setTimeout(() => c.kill('SIGKILL'), 3_600_000)
     c.stdout.setEncoding('utf8').on('data', (d: string) => {
@@ -44,7 +53,7 @@ const runner: Runner & { stream: NonNullable<import('./apps/engine.ts').StreamRu
     c.on('error', (e) => { clearTimeout(timer); resolve({ code: 1, stdout: out, stderr: String(e) }) })
     c.on('close', (code) => { clearTimeout(timer); resolve({ code: code ?? 1, stdout: out, stderr: err }) })
   }),
-  run: (cmd, args) => new Promise((resolve) => execFile(cmd, args, { env: RUN_ENV, timeout: 3_600_000, maxBuffer: 32 << 20 },
+  run: (cmd, args) => new Promise((resolve) => execFile(...viaHost(cmd, args), { env: RUN_ENV, timeout: 3_600_000, maxBuffer: 32 << 20 },
     (err, stdout, stderr) => resolve({ code: err ? (typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : 1) : 0, stdout, stderr }))),
 }
 
