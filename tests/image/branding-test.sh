@@ -19,4 +19,8 @@ done
 grep -q "WorkSuite OS %s" "$ROOT/live-build/config/hooks/normal/0100-worksuite-defaults.hook.chroot" && ok "console banner names WorkSuite" || bad "console banner"
 grep -qx 'GRUB_DISTRIBUTOR="WorkSuite OS"' "$ROOT/branding/grub/worksuite.cfg" && ok "GRUB entries name WorkSuite" || bad "GRUB entries"
 grep -q '^NAME="WorkSuite OS"' "$ROOT/branding/os-release" && grep -q '^LOGO=worksuite-os' "$ROOT/branding/os-release" && ok "os-release: name and logo (GNOME Settings › About)" || bad "os-release"
+# The wallpaper picker: Debian's backgrounds are diverted out (and back on removal), WorkSuite's four are listed.
+grep -q 'debian-backgrounds/debian-$n.xml' "$D/worksuite-branding.preinst" && grep -q -- '--remove --rename --divert /usr/share/worksuite/debian-backgrounds' "$D/worksuite-branding.postrm" \
+  && ok "Debian wallpapers hidden from the picker, restored on uninstall" || bad "Debian wallpapers in the picker"
+[ "$(grep -c '<wallpaper ' "$ROOT/branding/wallpapers/worksuite-wallpapers.xml")" = 4 ] && ok "four WorkSuite wallpapers in the picker" || bad "WorkSuite wallpaper list"
 echo "1..$n"; exit $fail

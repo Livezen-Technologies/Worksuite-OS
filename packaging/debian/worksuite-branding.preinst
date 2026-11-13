@@ -10,5 +10,14 @@ fi
 if [ "$1" = install ] || [ "$1" = upgrade ]; then
   dpkg-divert --package worksuite-branding --add --rename --divert /etc/skel/.face.distrib /etc/skel/.face
 fi
+# Settings › Appearance lists only the WorkSuite wallpapers: desktop-base's Debian ones (Debian logo artwork) are moved
+# out of gnome-background-properties. Diverted, not deleted: removing worksuite-branding puts them back.
+if [ "$1" = install ] || [ "$1" = upgrade ]; then
+  mkdir -p /usr/share/worksuite/debian-backgrounds
+  for n in ceratopsian emerald futureprototype homeworld joy-inksplat joy lines moonlight softwaves spacefun; do
+    dpkg-divert --package worksuite-branding --add --rename --divert /usr/share/worksuite/debian-backgrounds/debian-$n.xml \
+      /usr/share/gnome-background-properties/debian-$n.xml
+  done
+fi
 #DEBHELPER#
 exit 0
