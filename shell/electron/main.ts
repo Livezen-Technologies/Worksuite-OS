@@ -165,7 +165,9 @@ function createWindow() {
   const appMode = bootMode(process.argv, cmdlineEarly)
   if (appMode === 'setup' && !process.env.WORKSUITE_SETUP_CHECKED) {
     void setupNeeded(setupClient()).then((needed) => {
-      if (!needed) { app.quit(); return }
+      // Nothing to do: exit at once. app.quit() could be held up and left an invisible process holding the
+      // single-instance lock for the whole session (fresh VM).
+      if (!needed) { app.exit(0); return }
       process.env.WORKSUITE_SETUP_CHECKED = '1'
       createWindow()
     })

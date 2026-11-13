@@ -78,11 +78,21 @@ export function registerSetup(handle: (channel: string, fn: (...a: string[]) => 
  * Does the Setup window have anything to do? Only when the setup service answers and setup is not finished. It
  * autostarts at every sign-in, so a finished (or absent) setup must quit before any window or renderer starts.
  */
-export async function setupNeeded(client: { state(): Promise<Reply<unknown>> }): Promise<boolean> {
-  try {
-    const r = await client.state()
-    if (!r.ok) return false
-    const v = r.value as { state?: unknown } | null
-    return !!v && typeof v.state === 'string' && v.state !== 'SETUP_COMPLETED'
-  } catch { return false }
+export async function setupNeeded(client: { state(): Promise<Reply<unknown>> }, opts: { tries?: number; waitMs?: number; sleep?: (ms: number) => Promise<void> } = {}): Promise<boolean> {
+  // At sign-in the setup service may still be starting (D-Bus activation on a busy or encrypted first boot): an
+  // unanswered call is retried for about a minute before it counts as "no setup service". Seen on a fresh VM: one failed
+  // call left setup without a window for the whole session.
+  const tries = opts.tries ?? 12, waitMs = opts.waitMs ?? 5_000
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+  for (let n = 0; n < tries; n++) {
+    try {
+      const r = await client.state()
+      if (r.ok) {
+        const v = r.value as { state?: unknown } | null
+        return !!v && typeof v.state === 'string' && v.state !== 'SETUP_COMPLETED'
+      }
+    } catch { /* retried */ }
+    if (n < tries - 1) await sleep(waitMs)
+  }
+  return false
 }
