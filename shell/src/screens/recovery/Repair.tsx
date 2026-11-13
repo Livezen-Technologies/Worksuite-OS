@@ -6,6 +6,7 @@ import { os, packageErrorText, type PackageJobEvent } from '../../lib/os'
 import { initialChecks, repairPercent, repairSummary, type CheckId, type CheckRow, type CheckState, type DoneInfo } from '../../lib/recovery'
 import { Footer, Header, Page, link, small } from './Frame'
 import { formatDate, messages, t } from '../../i18n'
+import { WorkSuiteLoader } from '../../components/WorkSuiteLoader'
 
 /** Start a package job and wait for its JobFinished event (events that arrive before the job id are kept). */
 async function runJob(start: () => Promise<{ ok: true; value: string } | { ok: false; error: string }>): Promise<{ ok: boolean; error?: string }> {
@@ -26,7 +27,7 @@ async function runJob(start: () => Promise<{ ok: true; value: string } | { ok: f
 function StateIcon({ s }: { s: CheckState }) {
   if (s === 'ok') return <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#5FD39A" /><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#061029" strokeWidth="2.4" strokeLinecap="round" /></svg>
   if (s === 'fixed' || s === 'problem') return <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill={s === 'fixed' ? '#FFB98A' : '#FF8A7A'} /><path d="M12 7v6M12 16.5h.01" stroke="#061029" strokeWidth="2.4" strokeLinecap="round" /></svg>
-  if (s === 'active') return <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#18D4F0" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9" /></svg>
+  if (s === 'active') return <WorkSuiteLoader size={20} decorative />
   if (s === 'unavailable') return <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-[rgba(127,178,255,0.3)] text-[11px] leading-none text-[#8FA3C8]">–</span>
   return <span aria-hidden="true" className="box-border h-5 w-5 rounded-full border-2 border-[rgba(127,178,255,0.3)]" />
 }

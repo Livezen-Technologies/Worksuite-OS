@@ -25,14 +25,14 @@ describe('archives', () => {
   afterEach(() => rmSync(home, { recursive: true, force: true }))
 
   /** Run a job to its end, answering prompts with `answer`. */
-  const runJob = (start: (j: ReturnType<typeof archiveJobs>) => { ok: boolean; value?: string }, answer: (e: ArchiveJobEvent, j: ReturnType<typeof archiveJobs>) => void = () => undefined, limits = {}) =>
+  const runJob = (start: (j: ReturnType<typeof archiveJobs>) => { ok: boolean; value?: string }, answer: (e: ArchiveJobEvent, j: ReturnType<typeof archiveJobs>) => void = () => undefined, limits = {}, pollMs = 20) =>
     new Promise<ArchiveJobEvent[]>((resolve) => {
       const seen: ArchiveJobEvent[] = []
       const j = archiveJobs(env(), (e) => {
         seen.push(e)
         if (['done', 'failed', 'cancelled'].includes(e.state)) resolve(seen)
         else if (['conflict', 'password', 'confirm'].includes(e.state)) setTimeout(() => answer(e, j), 0)
-      }, { spawn, limits, pollMs: 20 })
+      }, { spawn, limits, pollMs })
       const r = start(j)
       expect(r.ok).toBe(true)
     })
@@ -144,6 +144,20 @@ describe('archives', () => {
     expect(s.some((e) => e.state === 'confirm' && e.ask?.bytes === null)).toBe(true)
     expect(last(s).state).toBe('cancelled')
     expect(existsSync(path.join(home, 'Documents', 'big'))).toBe(false)
+  })
+
+  it('still asks when a stream finishes past the limit before the first size check', async (ctx) => {
+    if (!has('gzip')) return ctx.skip()
+    spawnSync('sh', ['-c', `head -c 8388608 /dev/zero | gzip -c > "${path.join(home, 'Documents', 'fast.gz')}"`])
+    const limits = { bytes: 1024 * 1024, ratio: 100, ratioFrom: 1024 }
+    // A one-minute poll never fires: only the check after the tool exits can catch it.
+    const no = await runJob((j) => j.extract('home', 'Documents/fast.gz', 'here', [], null), (e, j) => j.resolve(e.id, 'cancel', false), limits, 60_000)
+    expect(no.some((e) => e.state === 'confirm' && e.ask?.bytes === null)).toBe(true)
+    expect(last(no).state).toBe('cancelled')
+    expect(existsSync(path.join(home, 'Documents', 'fast'))).toBe(false)
+    const yes = await runJob((j) => j.extract('home', 'Documents/fast.gz', 'here', [], null), (e, j) => j.resolve(e.id, 'continue', false), limits, 60_000)
+    expect(last(yes).state).toBe('done')
+    expect(existsSync(path.join(home, 'Documents', 'fast'))).toBe(true)
   })
 
   for (const format of ['zip', '7z'] as const) {

@@ -1,0 +1,83 @@
+/* WorkSuite sign-in and lock screen on GDM / GNOME Shell 48 (appended to the stock theme by worksuite-gdm-theme).
+ * A modern desktop sign-in: no boxed card; the avatar, the name and a slim translucent password field float centred
+ * over a gently dimmed wallpaper, with the WorkSuite logo underneath. WorkSuite's own colours and IBM Plex Sans.
+ * Every rule is prefixed with #lockDialogGroup (the sign-in and lock dialogs live in it): GNOME's own selectors chain
+ * up to three classes, and an id outranks them all, so these win without editing GNOME's file. St has no backdrop
+ * blur, so the dimming carries the depth. High contrast keeps the stock theme. */
+
+#lockDialogGroup { background: #001237 url("file:///usr/share/backgrounds/worksuite/lock.png"); background-size: cover; background-position: center; }
+#lockDialogGroup .login-dialog, #lockDialogGroup .unlock-dialog { font-family: "IBM Plex Sans", sans-serif; color: #ffffff; background-color: transparent; }
+/* A soft dim over the whole wallpaper so the centred text reads on any of the WorkSuite backgrounds. */
+#lockDialogGroup .login-dialog, #lockDialogGroup .unlock-dialog { background-color: rgba(0, 8, 28, 0.38); }
+
+/* No card: the content floats. */
+#lockDialogGroup .login-dialog-user-selection-box,
+#lockDialogGroup .login-dialog-prompt-layout {
+  background-color: transparent; border: none; box-shadow: none; padding: 0; spacing: 18px;
+}
+
+/* People to choose from: quiet rows that light up on hover, as on a modern desktop sign-in. */
+#lockDialogGroup .login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item {
+  background-color: transparent; border: 1px solid transparent; border-radius: 10px; padding: 10px 14px; color: #ffffff; }
+#lockDialogGroup .login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:hover {
+  background-color: rgba(255, 255, 255, 0.10); }
+#lockDialogGroup .login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:focus,
+#lockDialogGroup .login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:selected {
+  background-color: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.28); }
+
+/* The person: a large round avatar with a thin light ring, the name in large light type. */
+#lockDialogGroup .user-icon {
+  border-radius: 999px; background-color: #1f6bff; color: #ffffff;
+  background-gradient-direction: diagonal; background-gradient-start: #1f6bff; background-gradient-end: #18d4f0;
+  border: 2px solid rgba(255, 255, 255, 0.70); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.40); }
+#lockDialogGroup .user-icon StIcon { background-color: transparent; color: #ffffff; }
+#lockDialogGroup .login-dialog .user-widget.horizontal .user-widget-label,
+#lockDialogGroup .unlock-dialog .user-widget.horizontal .user-widget-label { color: #ffffff; font-weight: 600; }
+#lockDialogGroup .user-widget-label { color: #ffffff; font-weight: 600; font-size: 24pt; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45); }
+
+/* Password field: slim, translucent, gently rounded, a blue line when focused. */
+#lockDialogGroup .login-dialog .login-dialog-prompt-entry,
+#lockDialogGroup .unlock-dialog .login-dialog-prompt-entry {
+  background-color: rgba(255, 255, 255, 0.10); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px; padding: 9px 14px; min-width: 300px; caret-color: #ffffff; selection-background-color: #1f6bff; box-shadow: none; }
+#lockDialogGroup .login-dialog .login-dialog-prompt-entry:hover,
+#lockDialogGroup .unlock-dialog .login-dialog-prompt-entry:hover { background-color: rgba(255, 255, 255, 0.14); }
+#lockDialogGroup .login-dialog .login-dialog-prompt-entry:focus,
+#lockDialogGroup .unlock-dialog .login-dialog-prompt-entry:focus {
+  background-color: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.30); border-bottom: 2px solid #4C9BFF; box-shadow: none; }
+#lockDialogGroup .login-dialog .login-dialog-prompt-entry StLabel.hint-text,
+#lockDialogGroup .unlock-dialog .login-dialog-prompt-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.62); }
+#lockDialogGroup .login-dialog-prompt-label { color: rgba(255, 255, 255, 0.82); font-size: 11pt; }
+#lockDialogGroup .login-dialog-message { color: rgba(255, 255, 255, 0.86); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5); }
+#lockDialogGroup .login-dialog-message-warning { color: #ffd58a; }
+
+/* Buttons: small translucent rounded squares; the primary one WorkSuite blue. */
+#lockDialogGroup .login-dialog-button.cancel-button,
+#lockDialogGroup .login-dialog-button.switch-user-button,
+#lockDialogGroup .login-dialog-button.login-dialog-session-list-button,
+#lockDialogGroup .unlock-dialog .button {
+  background-color: rgba(255, 255, 255, 0.10); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px; }
+#lockDialogGroup .login-dialog-button.cancel-button:hover,
+#lockDialogGroup .login-dialog-button.switch-user-button:hover,
+#lockDialogGroup .login-dialog-button.login-dialog-session-list-button:hover,
+#lockDialogGroup .unlock-dialog .button:hover { background-color: rgba(255, 255, 255, 0.18); }
+#lockDialogGroup .login-dialog .button.default, #lockDialogGroup .unlock-dialog .button.default {
+  background-color: #1f6bff; color: #ffffff; border-color: #1f6bff; }
+
+/* "Not listed?": a light text link. */
+#lockDialogGroup .login-dialog-not-listed-button { background-color: transparent; border: none; box-shadow: none; padding: 8px 12px; border-radius: 8px; }
+#lockDialogGroup .login-dialog-not-listed-button:hover, #lockDialogGroup .login-dialog-not-listed-button:focus { background-color: rgba(255, 255, 255, 0.10); }
+#lockDialogGroup .login-dialog-not-listed-label { color: rgba(255, 255, 255, 0.86); font-weight: 600; }
+
+/* Lock screen clock: large, light and centred, with a soft shadow for legibility on bright wallpapers. */
+#lockDialogGroup .unlock-dialog-clock .unlock-dialog-clock-time { font-size: 88pt; font-weight: 600; color: #ffffff; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.35); }
+#lockDialogGroup .unlock-dialog-clock .unlock-dialog-clock-date { font-size: 18pt; font-weight: 500; color: rgba(255, 255, 255, 0.92); text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35); }
+#lockDialogGroup .unlock-dialog-clock-hint { color: rgba(255, 255, 255, 0.70); }
+
+/* No logo under the sign-in (Debian's GDM defaults set the vendor wordmark there): the wallpaper and the centred
+ * avatar carry the look. Collapsed to nothing rather than restyled, so it takes no space either. */
+#lockDialogGroup .login-dialog-logo-bin { padding: 0; margin: 0; width: 0; height: 0; }
+#lockDialogGroup .login-dialog-logo-bin > * { width: 0; height: 0; }
+
+/* Top bar over the wallpaper. */
+#panel.login-screen, #panel.unlock-screen, #panel.lock-screen { background-color: transparent; }

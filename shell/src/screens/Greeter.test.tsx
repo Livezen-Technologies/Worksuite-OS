@@ -33,3 +33,18 @@ describe('greeter users', () => {
     expect(document.body.textContent).not.toContain('Hasarinda')
   })
 })
+
+describe('greeter network button', () => {
+  it('opens the network flyout and Escape closes it (QA: the button did nothing)', async () => {
+    vi.spyOn(os, 'sysUsers').mockResolvedValue({ available: false, reason: 'service_unavailable' })
+    vi.spyOn(os, 'sysNetwork').mockResolvedValue({ available: false, reason: 'service_unavailable' })
+    await render()
+    const btn = document.querySelector<HTMLButtonElement>('button[aria-label="Network"]')!
+    expect(btn.getAttribute('aria-expanded')).toBe('false')
+    await act(async () => { btn.click() })
+    expect(btn.getAttribute('aria-expanded')).toBe('true')
+    expect(document.querySelector('[role="dialog"][aria-label="Network"]')).not.toBeNull()
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    expect(document.querySelector('[role="dialog"][aria-label="Network"]')).toBeNull()
+  })
+})

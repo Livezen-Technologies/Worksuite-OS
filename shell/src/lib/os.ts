@@ -1,5 +1,15 @@
 // Typed renderer API. In Electron the preload exposes `window.worksuite` with named functions only
 // (WSOS-SEC-001, §10.3); in a plain browser (dev/design review) a local stub answers instead.
+export interface A11ySettings { textSize: number; highContrast: boolean; reduceMotion: boolean; screenReader: boolean; screenKeyboard: boolean; stickyKeys: boolean; slowKeys: boolean; cursorSize: number }
+export type A11yResult = { available: true; value: A11ySettings } | { available: false; reason: string }
+/** GNOME's screen lock and device permissions (electron/gnomePrivacy.ts). */
+export interface GnomePrivacySettings { idleDelay: number; lock: boolean; lockDelay: number; camera: boolean; microphone: boolean; location: boolean }
+export type GnomePrivacyResult = { available: true; value: GnomePrivacySettings } | { available: false; reason: string }
+export type LookAnimations = 'off' | 'reduced' | 'standard'
+export interface DesktopLook { glass: boolean; transparency: boolean; animations: LookAnimations; taskbar: { align: 'center' | 'left'; size: number; position: 'BOTTOM' | 'TOP'; autohide: boolean } }
+export type DesktopLookChange = Partial<Omit<DesktopLook, 'taskbar'>> & { taskbar?: Partial<DesktopLook['taskbar']>; lightest?: boolean }
+export type DesktopLookResult = { available: true; value: DesktopLook } | { available: false; reason: string }
+
 export interface WorkSuiteApi {
   /** method 'pin' sends the PIN where the password goes; 'key' sends no secret (pam_u2f asks for a touch). */
   /** reason (PIN): 'pin_locked' after too many wrong PINs, 'unavailable' when the PIN service can't be reached. */
@@ -130,6 +140,17 @@ export interface WorkSuiteApi {
   /** An archive's entries, read-only. Errors: password, wrong_password, tool_missing, password_unsupported, failed. */
   filesArchiveList(root: string, rel: string, password: string | null): Promise<CloudResult<ArchiveListing>>
   /** An archive opened with Files from elsewhere (default handler for archive types). */
+  onSettingsSection(cb: (section: string) => void): () => void
+  /** GNOME session: open a GNOME Settings panel (allow-listed names only). */
+  openGnomeSettings(panel: string): Promise<{ ok: true } | { ok: false; error: string }>
+  /** Settings › Personalization: glass, transparency, animations and the taskbar (electron/desktopLook.ts). */
+  desktopLook(): Promise<DesktopLookResult>
+  /** Settings › Accessibility: GNOME's accessibility keys (electron/a11y.ts). */
+  a11y(): Promise<A11yResult>
+  setA11y(change: Partial<A11ySettings>): Promise<A11yResult>
+  gnomePrivacy(): Promise<GnomePrivacyResult>
+  setGnomePrivacy(change: Partial<GnomePrivacySettings>): Promise<GnomePrivacyResult>
+  setDesktopLook(change: DesktopLookChange): Promise<DesktopLookResult>
   onOpenArchive(cb: (at: { root: string; rel: string }) => void): () => void
   filesEject(id: string): Promise<CloudResult<true>>
   /** This Computer (#63): disk partitions and volumes (udisks2). Errors: unavailable, failed. */
@@ -421,6 +442,18 @@ export function packageErrorText(code: string): string {
     // Anything else is PackageKit's/dpkg's own text: a sentence from lib/errors.ts instead (details for administrators).
     default: return errorMessage(code, 'package')
   }
+}
+
+/** Offline update files (.wsupdate): the service's refusals as sentences; anything else as for packages. */
+export function bundleErrorText(code: string): string {
+  if (/not signed|not in the signed manifest|does not match the signed manifest|failed its checksum|missing packages listed/i.test(code)) return t('upd.usb.err.signature')
+  if (/downgrade/i.test(code)) return t('upd.usb.err.older')
+  if (/is already installed/i.test(code)) return t('upd.usb.err.same')
+  if (/bundle is for/i.test(code)) return t('upd.usb.err.arch')
+  if (/pulled/i.test(code)) return t('upd.usb.err.pulled')
+  if (code === 'inbox_failed' || /not found|is a link|truncated|not a \.wsupdate|no manifest|bad tar/i.test(code)) return t('upd.usb.err.unreadable')
+  if (/does not install cleanly|Unmet dependencies|Depends:/i.test(code)) return t('upd.usb.err.deps')
+  return packageErrorText(code)
 }
 
 import type { SyncStatus } from './syncNotices'
@@ -777,6 +810,18 @@ const stub: WorkSuiteApi = {
       e('worksuite-agent/config', 0, 'dir'), e('worksuite-agent/config/agent.toml', 4_100), e('worksuite-agent/config/policies.json', 12_800), e('worksuite-agent/README.md', 9_600), e('worksuite-agent/LICENSE', 11_300), e('worksuite-agent/CHANGELOG.md', 38_000)]
     return rel.endsWith('.zip') ? { ok: true, value: { kind: 'zip', entries, encrypted: false, total: 69_676_800, packed: 38_200_000 } } : { ok: false, error: 'failed' }
   },
+  onSettingsSection() { return () => {} },
+  async openGnomeSettings() { return { ok: false as const, error: 'unavailable' } },
+  async a11y() { return { available: true as const, value: { ...stubA11y } } },
+  async setA11y(c) { Object.assign(stubA11y, c); return { available: true as const, value: { ...stubA11y } } },
+  async gnomePrivacy() { return { available: true as const, value: { ...stubGnomePrivacy } } },
+  async setGnomePrivacy(c) { Object.assign(stubGnomePrivacy, c); return { available: true as const, value: { ...stubGnomePrivacy } } },
+  async desktopLook() { return { available: true as const, value: { ...stubLook, taskbar: { ...stubLook.taskbar } } } },
+  async setDesktopLook(c) {
+    if (c.lightest) Object.assign(stubLook, { glass: false, transparency: false, animations: 'off' })
+    else { const { taskbar, lightest: _l, ...rest } = c; Object.assign(stubLook, rest); Object.assign(stubLook.taskbar, taskbar ?? {}) }
+    return { available: true as const, value: { ...stubLook, taskbar: { ...stubLook.taskbar } } }
+  },
   onOpenArchive() { return () => {} },
   async filesEject() { return { ok: false, error: 'unavailable' } },
   async filesVolumes() { return { ok: true, value: stubVolumes.map((v) => ({ ...v })) } },
@@ -1050,6 +1095,9 @@ if (typeof window !== 'undefined') {
 const stubJobs = new Map<string, { job: FileJob; paused: boolean; step: number }>()
 let stubJobSeq = 0
 const stubEmit = (e: FileJob) => stubFileJobs.forEach((l) => l(e))
+const stubA11y: A11ySettings = { textSize: 1, highContrast: false, reduceMotion: false, screenReader: false, screenKeyboard: false, stickyKeys: false, slowKeys: false, cursorSize: 24 }
+const stubGnomePrivacy: GnomePrivacySettings = { idleDelay: 600, lock: true, lockDelay: 0, camera: true, microphone: true, location: false }
+const stubLook: DesktopLook = { glass: true, transparency: true, animations: 'standard', taskbar: { align: 'center', size: 48, position: 'BOTTOM', autohide: false } }
 const stubVolumes: DiskVolume[] = [
   { device: '/dev/nvme0n1p2', disk: '/dev/nvme0n1', label: '', model: 'Samsung SSD 980', fstype: 'ext4', kind: 'system', size: 475e9, mountpoint: '/', total: 468e9, free: 301e9, encrypted: true, locked: false, readOnly: false, root: 'home' },
   { device: '/dev/sda1', disk: '/dev/sda', label: 'Data', model: 'WDC WD10EZEX', fstype: 'ntfs', kind: 'internal', size: 1e12, mountpoint: null, total: null, free: null, encrypted: false, locked: false, readOnly: false, root: null },

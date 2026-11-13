@@ -90,9 +90,11 @@ Rectangle {
                             Rectangle {
                                 width: 24; height: 24; radius: 12
                                 color: step.done ? "#5FD39A" : step.active ? "#1F6BFF" : "#1F7FB2FF"
+                                WsCheck { anchors.centerIn: parent; visible: step.done; size: 14 }
                                 Text {
                                     anchors.centerIn: parent
-                                    text: step.done ? "✓" : String(step.stepNo + 1)
+                                    visible: !step.done
+                                    text: String(step.stepNo + 1)
                                     color: step.done || step.active ? "#FFFFFF" : "#8FA3C8"
                                     font.family: "IBM Plex Mono"; font.pixelSize: 12; font.weight: Font.DemiBold
                                 }

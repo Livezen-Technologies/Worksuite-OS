@@ -69,8 +69,18 @@ export function sha256File(path: string, start = 0, end?: number): string {
   } finally { closeSync(fd); }
 }
 
-/** Offline bundles come from removable media or the caller's home (WSOS-AUP-010). */
-export const BUNDLE_ROOTS = ['/media/', '/run/media/', '/mnt/', '/home/'];
+/** The only place the service reads files a person picked (local .deb, offline .wsupdate): a root-owned 1733 drop
+ *  directory (tmpfiles.d). The shell copies the picked file in as the person; the service never reads home folders
+ *  or removable media itself, so its AppArmor profile only needs this one directory (WSOS-SEC-009, WSOS-AUP-010). */
+export const INBOX = '/var/spool/worksuite-incoming';
+export const BUNDLE_ROOTS = [`${INBOX}/`];
+
+/** realpath of `src` lies under one of `roots`; the message names the inbox, never a guessable path. */
+export function underRoots(src: string, roots: string[]): boolean {
+  let real: string;
+  try { real = realpathSync(src); } catch { return false; }
+  return roots.some((r) => real.startsWith(r));
+}
 
 export const MAX_BUNDLE_BYTES = 16 * 1024 ** 3;
 
@@ -80,7 +90,7 @@ export function stageBundle(src: string, owner: number, spool: string, roots = B
   if (typeof src !== 'string' || !src.startsWith('/') || src.includes('\0') || !src.endsWith('.wsupdate')) throw new ServiceError('InvalidArgs', 'choose a .wsupdate file');
   let real: string;
   try { real = realpathSync(src); } catch { throw new ServiceError('InvalidArgs', 'file not found'); }
-  if (!roots.some((r) => real.startsWith(r))) throw new ServiceError('InvalidArgs', 'bundles are read from removable media or your home folder');
+  if (!roots.some((r) => real.startsWith(r))) throw new ServiceError('InvalidArgs', 'files are read from the WorkSuite inbox only');
   // stageFile opens the path the caller named with O_NOFOLLOW (a symlink is refused) and checks ownership on the fd.
   return stageFile(src, owner, spool, '.wsupdate', maxBytes);
 }

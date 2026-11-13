@@ -634,6 +634,22 @@
       <translation>සකසන්න</translation>
     </message>
     <message>
+      <source>ENCRYPT</source>
+      <translation>සංකේතනය</translation>
+    </message>
+    <message>
+      <source>Encrypt the WorkSuite partition (LUKS2). You type your passphrase each time the computer starts; keep the recovery key shown at the end of the installation.</source>
+      <translation>WorkSuite කොටස සංකේතනය කරන්න (LUKS2). පරිගණකය ආරම්භ වන සෑම විටම ඔබ මුරවාක්‍යය ටයිප් කරයි; ස්ථාපනය අවසානයේ පෙන්වන ප්‍රතිසාධන යතුර තබා ගන්න.</translation>
+    </message>
+    <message>
+      <source>PLAIN</source>
+      <translation>සරල</translation>
+    </message>
+    <message>
+      <source>No encryption: anyone who has this disk can read its files.</source>
+      <translation>සංකේතනයක් නැත: මෙම තැටිය ඇති ඕනෑම අයෙකුට එහි ගොනු කියවිය හැක.</translation>
+    </message>
+    <message>
       <source>Type %1 to confirm that all data on it will be permanently deleted</source>
       <translation>එහි ඇති සියලු දත්ත ස්ථිරවම මැකී යන බව තහවුරු කිරීමට %1 ටයිප් කරන්න</translation>
     </message>

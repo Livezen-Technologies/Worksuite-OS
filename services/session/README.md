@@ -4,7 +4,6 @@ Session file, launcher and systemd user units (SRS §4, WSOS-SES-001…006).
 
 | File | Installed to |
 |---|---|
-| `wayland-sessions/worksuite.desktop` | `/usr/share/wayland-sessions/` (greetd default session) |
 | `bin/worksuite-session` | `/usr/bin/` |
 | `labwc/{rc.xml,autostart,environment}` | `/etc/xdg/worksuite/labwc/` |
 | `portals/worksuite-portals.conf` | `/usr/share/xdg-desktop-portal/` |

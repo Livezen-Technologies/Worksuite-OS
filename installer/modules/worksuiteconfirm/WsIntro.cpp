@@ -34,7 +34,55 @@ tr( const char* s )
 constexpr double BREATH_S = 2.4;
 constexpr double SHIMMER_S = 1.6;
 constexpr double SHIMMER_W = 140;
-constexpr double SPIN_S = 1.4;
+constexpr double LOADER_S = 2.4;   // the WorkSuite loader ("assemble"), as the splash and veil play it
+
+// The loader's keyframes: worksuite_greeter/loader.py and branding/plymouth/worksuite.script (test_veil.py compares).
+struct Key { double t, v; };
+constexpr Key LEFT[] = { { 0, 1 }, { 0.14, 0 }, { 0.70, 0 }, { 0.86, 1 }, { 1, 1 } };
+constexpr Key BOTTOM[] = { { 0, 1 }, { 0.08, 1 }, { 0.22, 0 }, { 0.74, 0 }, { 0.90, 1 }, { 1, 1 } };
+constexpr Key BLUE_SCALE[] = { { 0, 0 }, { 0.16, 0 }, { 0.32, 1.06 }, { 0.38, 1 }, { 0.66, 1 }, { 0.82, 0 }, { 1, 0 } };
+constexpr Key NAVY_SCALE[] = { { 0, 0 }, { 0.34, 0 }, { 0.44, 1 }, { 0.62, 1 }, { 0.72, 0 }, { 1, 0 } };
+
+template < size_t N >
+double
+keyframe( double t, const Key ( &k )[ N ] )
+{
+    if ( t <= k[ 0 ].t )
+        return k[ 0 ].v;
+    for ( size_t i = 1; i < N; ++i )
+    {
+        if ( t <= k[ i ].t )
+        {
+            if ( k[ i ].t == k[ i - 1 ].t )
+                return k[ i ].v;
+            const double x = ( t - k[ i - 1 ].t ) / ( k[ i ].t - k[ i - 1 ].t );
+            return k[ i - 1 ].v + ( k[ i ].v - k[ i - 1 ].v ) * x * x * x * ( x * ( x * 6 - 15 ) + 10 );
+        }
+    }
+    return k[ N - 1 ].v;
+}
+
+/** The loader in a `size` box at (x, y), `seconds` into its loop; reduced motion shows the assembled mark. */
+void
+paintLoader( QPainter& p, double x, double y, double size, double seconds, bool reduced )
+{
+    const double t = reduced ? 0.5 : std::fmod( seconds, LOADER_S ) / LOADER_S, k = size / 128;
+    const QColor cyan( 0x00, 0xda, 0xf2 ), blue( 0x0a, 0x6c, 0xff ), navy( 0x00, 0x18, 0x42 );
+    auto cell = [ & ]( double cx, double cy, double s, QColor c, double a ) {
+        c.setAlphaF( qBound( 0.0, a, 1.0 ) * p.opacity() );
+        p.fillRect( QRectF( x + cx * k, y + cy * k, s * k, s * k ), c );
+    };
+    double off = keyframe( t, LEFT );
+    cell( 16 - 28 * off, 48, 32, cyan, 1 - off );
+    off = keyframe( t, BOTTOM );
+    cell( 48, 80 + 28 * off, 32, cyan, 1 - off );
+    double sc = keyframe( t, BLUE_SCALE );
+    if ( sc > 0.001 )
+        cell( 112 - 64 * sc, 16, 64 * sc, blue, qMin( 1.0, sc ) );
+    sc = keyframe( t, NAVY_SCALE );
+    if ( sc > 0.001 )
+        cell( 64 - 16 * sc, 64 - 16 * sc, 32 * sc, navy, sc );
+}
 constexpr int HOLD_MS = 900;    // the window's first page settles under the curtain
 constexpr int FADE_MS = 700;    // the cross-fade into it
 constexpr int CONTENT_MS = 350; // then a QML page in a window of its own fades in over its background
@@ -130,12 +178,7 @@ protected:
         if ( column > 0 )
         {
             p.setOpacity( column );
-            const QPointF rc( cx, ringY + 60 );
-            p.setPen( QPen( QColor( 127, 178, 255, 31 ), 4 ) );
-            p.drawEllipse( rc, 54, 54 );
-            p.setPen( QPen( CYAN, 4, Qt::SolidLine, Qt::RoundCap ) );
-            const double turn = t / SPIN_S * 360;   // the veil's arc: from 12 o'clock + angle, a quarter
-            p.drawArc( QRectF( rc.x() - 54, rc.y() - 54, 108, 108 ), int( ( 90 - turn ) * 16 ), -90 * 16 );
+            paintLoader( p, cx - 60, ringY, 120, t, m_o.reducedMotion );   // where the veil plays it
             QFont title( QStringLiteral( "IBM Plex Sans" ) );
             title.setPixelSize( 28 );
             title.setWeight( QFont::Medium );
@@ -171,24 +214,20 @@ protected:
             p.drawText( QRectF( tx, ty + 14, 420, 20 ), Qt::AlignRight | Qt::AlignTop, m_o.version );
             p.setOpacity( 1 );
         }
-        // The mark: breathing at the middle; in the fade it glides into the sidebar's logo (calamares-sidebar.qml:
-        // 28 px at 20, 32). Reduced motion: it fades with the rest.
-        const double s = 0.5 - 0.5 * std::cos( 2 * M_PI * t / BREATH_S );
-        double alpha = 1 - 0.22 * s, size = 48 * ( 1 + 0.04 * s );
+        // The mark appears as the loader goes and glides into the sidebar's logo (calamares-sidebar.qml: 28 px at
+        // 20, 32). Before the fade only the loader shows, as on the veil. Reduced motion: no glide.
+        if ( !m_fading || m_o.reducedMotion )
+        {
+            return;
+        }
+        double alpha = 0, size = 48;
         QPointF centre( cx, ringY + 60 );
         if ( m_fading )
         {
-            if ( m_o.reducedMotion )
-            {
-                alpha = 1 - f;
-            }
-            else
-            {
-                const QPointF to( 20 + 14, 32 + 14 );
-                centre = centre + ( to - centre ) * f;
-                size = size + ( 28 - size ) * f;
-                alpha = alpha + ( 1 - alpha ) * f;
-            }
+            const QPointF to( 20 + 14, 32 + 14 );
+            centre = centre + ( to - centre ) * f;
+            size = size + ( 28 - size ) * f;
+            alpha = qMin( 1.0, f * 2 );
         }
         // The art is branding/plymouth/mark.svg: units 54..458 of the 512 icon, so `size` is the light tile.
         const double k = size / 404;

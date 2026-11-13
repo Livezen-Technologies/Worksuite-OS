@@ -3,5 +3,15 @@ set -e
 if [ "$1" = remove ] || [ "$1" = abort-install ] || [ "$1" = disappear ]; then
   dpkg-divert --package worksuite-branding --remove --rename --divert /usr/lib/os-release.debian /usr/lib/os-release
 fi
+if [ "$1" = remove ] || [ "$1" = purge ] || [ "$1" = abort-install ]; then
+  dpkg-divert --package worksuite-branding --remove --rename --divert /etc/skel/.face.distrib /etc/skel/.face
+fi
+if [ "$1" = remove ] || [ "$1" = purge ] || [ "$1" = abort-install ]; then
+  for n in ceratopsian emerald futureprototype homeworld joy-inksplat joy lines moonlight softwaves spacefun; do
+    dpkg-divert --package worksuite-branding --remove --rename --divert /usr/share/worksuite/debian-backgrounds/debian-$n.xml \
+      /usr/share/gnome-background-properties/debian-$n.xml
+  done
+  rmdir /usr/share/worksuite/debian-backgrounds 2>/dev/null || true
+fi
 #DEBHELPER#
 exit 0

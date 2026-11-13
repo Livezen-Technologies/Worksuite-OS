@@ -92,3 +92,15 @@ describe('first-boot network step (WSOS-INS-009)', () => {
     expect(document.querySelectorAll('li').length).toBe(0)
   })
 })
+
+describe('first run in the light theme (QA: dark text on the dark backdrop)', () => {
+  it('paints its backdrop through .ws-setup-bg, which the light theme replaces', async () => {
+    await render()
+    const main = document.querySelector('main')!
+    expect(main.classList.contains('ws-setup-bg')).toBe(true)
+    expect(main.style.background).toBe('')   // an inline background would beat the light-theme rule
+    expect(main.style.getPropertyValue('--ws-setup-bg')).toContain('gradient')
+    const css = (await import('node:fs')).readFileSync('src/index.css', 'utf8')   // vitest runs from the package root
+    expect(css).toMatch(/:root\[data-theme="light"\] \.ws-setup-bg \{ background:/)
+  })
+})

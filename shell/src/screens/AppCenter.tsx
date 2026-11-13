@@ -235,7 +235,7 @@ export default function AppCenter({ onClose, active }: WindowProps) {
   const navBtn = (label: string, on: boolean, go: () => void, count?: number) => (
     <button key={label} type="button" aria-current={on ? 'page' : undefined} onClick={go}
       className="flex cursor-pointer items-center rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-white/[0.05]"
-      style={{ background: on ? 'rgba(31,107,255,0.2)' : undefined, color: on ? '#FFFFFF' : C.soft, fontWeight: on ? 600 : 400 }}>
+      style={{ background: on ? 'rgba(31,107,255,0.2)' : undefined, color: on ? C.ink : C.soft, fontWeight: on ? 600 : 400 }}>
       {label}{count ? <span className="ml-auto text-[11px]" style={{ color: C.dim }}>{formatNumber(count)}</span> : null}
     </button>
   )
@@ -266,7 +266,7 @@ export default function AppCenter({ onClose, active }: WindowProps) {
 
   return (
     <div role="dialog" aria-modal="false" aria-label={t('launcher.appCenter')} className="relative flex h-full w-full font-sans" style={{ background: '#0A1A3D', color: C.ink }}>
-      <nav aria-label={t('appc.sections')} className="box-border flex w-[220px] shrink-0 flex-col gap-0.5 overflow-auto border-r px-3 py-[18px]" style={{ background: '#071330', borderColor: 'rgba(127,178,255,0.12)' }}>
+      <nav aria-label={t('appc.sections')} className="box-border flex w-[220px] shrink-0 flex-col gap-0.5 overflow-auto border-r border-[rgba(127,178,255,0.12)] bg-[#071330] px-3 py-[18px]">
         <div className="flex items-center gap-2.5 px-2 pt-1 pb-4"><span aria-hidden="true" className="flex size-[26px] items-center justify-center rounded-[7px] text-[13px] font-bold" style={{ background: C.blue }}>A</span><span className="text-[15px] font-semibold">{t('launcher.appCenter')}</span></div>
         {navBtn(t('appc.discover'), isSec('discover'), () => setView({ kind: 'section', section: 'discover', category: 'All' }))}
         {cats.map((c) => navBtn(c, isSec('discover', c), () => setView({ kind: 'section', section: 'discover', category: c }), apps.filter((a) => a.category === c).length))}

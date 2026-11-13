@@ -1,0 +1,111 @@
+# WorkSuite defaults for the taskbar (dash-to-panel), Start menu (ArcMenu) and glass (blur-my-shell), in the
+# "worksuite" dconf system database (/etc/dconf/profile/user: user-db:user, then system-db:worksuite).
+# Why not a gschema override like the rest: GNOME 48 extensions read their settings through their own
+# schemas/gschemas.compiled, which knows nothing of system overrides. On first start dash-to-panel then saw its
+# stock defaults and wrote them into the user's settings (taskbar left-aligned, GNOME's Start icon; seen on an
+# installed VM). dconf values are seen by every reader, whatever schema file it uses. Not locked: people change
+# them in Settings > Personalization. Checked against the real schemas by tests/session/desktop-schema-test.sh.
+
+[org/gnome/shell/extensions/dash-to-panel]
+extension-version=9999
+panel-position='BOTTOM'
+panel-sizes='{"0":48,"1":48,"2":48,"3":48}'
+panel-element-positions='{"0":[{"element":"showAppsButton","visible":false,"position":"stackedTL"},{"element":"activitiesButton","visible":false,"position":"stackedTL"},{"element":"leftBox","visible":true,"position":"stackedTL"},{"element":"centerBox","visible":true,"position":"centerMonitor"},{"element":"taskbar","visible":true,"position":"centerMonitor"},{"element":"rightBox","visible":true,"position":"stackedBR"},{"element":"systemMenu","visible":true,"position":"stackedBR"},{"element":"dateMenu","visible":true,"position":"stackedBR"},{"element":"desktopButton","visible":true,"position":"stackedBR"}],"1":[{"element":"showAppsButton","visible":false,"position":"stackedTL"},{"element":"activitiesButton","visible":false,"position":"stackedTL"},{"element":"leftBox","visible":true,"position":"stackedTL"},{"element":"centerBox","visible":true,"position":"centerMonitor"},{"element":"taskbar","visible":true,"position":"centerMonitor"},{"element":"rightBox","visible":true,"position":"stackedBR"},{"element":"systemMenu","visible":true,"position":"stackedBR"},{"element":"dateMenu","visible":true,"position":"stackedBR"},{"element":"desktopButton","visible":true,"position":"stackedBR"}],"2":[{"element":"showAppsButton","visible":false,"position":"stackedTL"},{"element":"activitiesButton","visible":false,"position":"stackedTL"},{"element":"leftBox","visible":true,"position":"stackedTL"},{"element":"centerBox","visible":true,"position":"centerMonitor"},{"element":"taskbar","visible":true,"position":"centerMonitor"},{"element":"rightBox","visible":true,"position":"stackedBR"},{"element":"systemMenu","visible":true,"position":"stackedBR"},{"element":"dateMenu","visible":true,"position":"stackedBR"},{"element":"desktopButton","visible":true,"position":"stackedBR"}],"3":[{"element":"showAppsButton","visible":false,"position":"stackedTL"},{"element":"activitiesButton","visible":false,"position":"stackedTL"},{"element":"leftBox","visible":true,"position":"stackedTL"},{"element":"centerBox","visible":true,"position":"centerMonitor"},{"element":"taskbar","visible":true,"position":"centerMonitor"},{"element":"rightBox","visible":true,"position":"stackedBR"},{"element":"systemMenu","visible":true,"position":"stackedBR"},{"element":"dateMenu","visible":true,"position":"stackedBR"},{"element":"desktopButton","visible":true,"position":"stackedBR"}]}'
+panel-element-positions-monitors-sync=true
+multi-monitors=true
+stockgs-keep-top-panel=false
+appicon-margin=4
+appicon-padding=6
+dot-position='BOTTOM'
+dot-style-focused='DASHES'
+dot-style-unfocused='DOTS'
+focus-highlight=true
+focus-highlight-opacity=18
+show-window-previews=true
+show-favorites=true
+group-apps=true
+isolate-workspaces=false
+intellihide=false
+trans-use-custom-bg=true
+trans-bg-color='#061029'
+trans-use-custom-opacity=true
+trans-panel-opacity=0.62
+trans-use-dynamic-opacity=false
+hot-keys=false
+show-showdesktop-hover=false
+# Files and Settings as on Ubuntu: GNOME Files (Nautilus) and GNOME Settings; WorkSuite Settings keeps what GNOME
+# Settings has no panel for (WorkSuite account, updates, drivers, security, personalization).
+# Start menu: WorkSuite button in the taskbar centre, pinned apps, all apps, search (local .desktop files only:
+# no file indexer, no web results), user, Settings, Files and the power actions (lock, log out, restart, shut down).
+
+[org/gnome/shell/extensions/arcmenu]
+# Sign-in lands on the desktop, not GNOME's overview.
+hide-overview-on-startup=true
+# Room for the six-column pinned grid (its first column was clipped at the default width) and a Recommended
+# row of recent files under it, as a modern Start menu has.
+menu-width-adjustment=70
+menu-height=640
+eleven-disable-frequent-apps=false
+update-notifier-enabled=false
+menu-layout='Eleven'
+position-in-panel='Center'
+menu-button-icon='Custom_Icon'
+# The Start button: the WorkSuite mark alone (branding/icons/worksuite-start.svg), not the app tile icon, so it reads
+# as the system button rather than another pinned app.
+custom-menu-button-icon='/usr/share/worksuite/start-button.svg'
+custom-menu-button-icon-size=22.0
+arcmenu-hotkey=['Super_L']
+multi-monitor=true
+default-menu-view='Pinned_Apps'
+search-provider-open-windows=false
+search-provider-recent-files=true
+max-search-results=8
+power-options=[(0, true), (1, true), (2, true), (3, true), (4, false), (5, false), (6, false), (7, false)]
+pinned-apps=[{'id': 'worksuite-app.desktop'}, {'id': 'worksuite-office.desktop'}, {'id': 'firefox-esr.desktop'}, {'id': 'org.gnome.Nautilus.desktop'}, {'id': 'worksuite-settings.desktop'}, {'id': 'org.gnome.TextEditor.desktop'}, {'id': 'org.gnome.Calculator.desktop'}, {'id': 'org.gnome.Console.desktop'}, {'id': 'org.gnome.SystemMonitor.desktop'}]
+eleven-layout-extra-shortcuts=[{'id': 'org.gnome.Nautilus.desktop'}, {'id': 'worksuite-settings.desktop'}]
+override-menu-theme=true
+menu-background-color='rgba(10,22,52,0.86)'
+menu-foreground-color='rgb(232,238,250)'
+menu-border-color='rgba(127,178,255,0.22)'
+menu-border-width=1
+menu-border-radius=14
+menu-separator-color='rgba(127,178,255,0.14)'
+menu-item-hover-bg-color='rgba(31,107,255,0.28)'
+menu-item-hover-fg-color='rgb(255,255,255)'
+menu-item-active-bg-color='rgb(31,107,255)'
+menu-item-active-fg-color='rgb(255,255,255)'
+# Tray: StatusNotifierItem/AppIndicator icons next to the clock.
+
+[org/gnome/shell/extensions/blur-my-shell]
+hacks-level=0
+sigma=24
+brightness=0.7
+
+[org/gnome/shell/extensions/blur-my-shell/panel]
+blur=true
+static-blur=true
+override-background=false
+
+[org/gnome/shell/extensions/blur-my-shell/overview]
+blur=true
+
+[org/gnome/shell/extensions/blur-my-shell/appfolder]
+blur=true
+
+[org/gnome/shell/extensions/blur-my-shell/lockscreen]
+blur=true
+
+[org/gnome/shell/extensions/blur-my-shell/applications]
+blur=false
+
+[org/gnome/shell/extensions/blur-my-shell/dash-to-dock]
+blur=false
+
+[org/gnome/shell/extensions/blur-my-shell/screenshot]
+blur=false
+
+[org/gnome/shell/extensions/blur-my-shell/window-list]
+blur=false
+
+[org/gnome/shell/extensions/blur-my-shell/dash-to-panel]
+blur-original-panel=true

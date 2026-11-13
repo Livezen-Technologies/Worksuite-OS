@@ -4,6 +4,8 @@ import { existsSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const UPDATE_STATUS_FILE = '/run/worksuite-package-service/update-status.json';
+/** The setup service's deployment report (services/setup/src/apps/report.ts): setup state and each app's result. */
+export const SETUP_REPORT_FILE = '/run/worksuite-setup/report.json';
 
 const read = (p: string) => { try { return readFileSync(p, 'utf8').trim(); } catch { return ''; } };
 const list = (p: string) => { try { return readdirSync(p).sort(); } catch { return []; } };
@@ -78,5 +80,24 @@ export function readUpdateStatus(path = UPDATE_STATUS_FILE): { state: string; in
     const s = JSON.parse(readFileSync(path, 'utf8'));
     if (typeof s?.state !== 'string') return null;
     return { state: s.state, installed: s.installed ?? null, version: s.version ?? null, last_check: s.last_check ?? null, reason: s.reason ?? null };
+  } catch { return null; }
+}
+
+const APP_STATES = new Set(['pending', 'installing', 'installed', 'already', 'queued', 'failed', 'skipped']);
+const short = (v: unknown, n: number) => (typeof v === 'string' ? v.slice(0, n) : null);
+/** Setup progress for the organization (enterprise deployment sync), reshaped from the file: only known fields,
+ *  bounded strings, at most 100 apps. Null when setup never ran on this device or the file is unreadable. */
+export function readSetupReport(path = SETUP_REPORT_FILE): { state: string; mode: string; updated_at: number | null; completed_at: number | null; last_error: string | null; apps: { id: string; state: string; required: boolean; attempts: number; error: string | null }[] } | null {
+  try {
+    const r = JSON.parse(readFileSync(path, 'utf8'));
+    if (typeof r?.state !== 'string' || !/^[A-Z_]{2,40}$/.test(r.state)) return null;
+    const apps = (Array.isArray(r.apps) ? r.apps : []).slice(0, 100)
+      .filter((a: Record<string, unknown>) => typeof a?.id === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(a.id as string) && APP_STATES.has(a.state as string))
+      .map((a: Record<string, unknown>) => ({ id: a.id as string, state: a.state as string, required: a.required === true, attempts: Number.isInteger(a.attempts) ? a.attempts as number : 0, error: short(a.error, 300) }));
+    return {
+      state: r.state, mode: r.mode === 'install' ? 'install' : 'firstRun',
+      updated_at: Number.isFinite(r.updated_at) ? r.updated_at : null, completed_at: Number.isFinite(r.completed_at) ? r.completed_at : null,
+      last_error: short(r.last_error, 300), apps,
+    };
   } catch { return null; }
 }

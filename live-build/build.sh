@@ -22,6 +22,7 @@ trap 'cd /; rm -rf --one-file-system "$work"' EXIT
 cp -a "$here/." "$work/"
 cd "$work"
 mkdir -p config/packages.chroot
+# live-build indexes only packages.chroot files named *_<arch>.deb or *_all.deb, so local copies keep that suffix.
 cp "$debs"/*_all.deb "$debs"/*_"$ARCH".deb config/packages.chroot/
 find config/packages.chroot -name '*-dbgsym_*' -delete
 # Boot menu artwork, row images, selection pill and fonts (IBM Plex, bundled) for the live GRUB theme.
@@ -32,8 +33,16 @@ find config/packages.chroot -name '*-dbgsym_*' -delete
 # without it leave Office out. Nothing is downloaded here. WORKSUITE_OFFICE_SHA256 (optional) pins the file; the
 # package's architecture must match ARCH.
 : "${WORKSUITE_RELEASE:=0}"
+# The installer's Terms page (installer/branding/worksuite/terms/LICENSE-*.txt) ships as a marked draft until the
+# approved legal text replaces it. A release image never shows a draft as the agreement people accept.
+# The legal-text gate is for published releases only (CI sets WORKSUITE_PUBLISH=1 on v* tags). WORKSUITE_RELEASE also
+# covers pull-request images built with the bundled apps, which must still build while the text is being approved.
+if [ "${WORKSUITE_PUBLISH:-0}" = 1 ] && grep -ql 'DRAFT — REPLACE WITH THE FINAL LEGAL TEXT' "$here"/../installer/branding/worksuite/terms/LICENSE-*.txt; then
+  echo "Installer terms are still the draft placeholder; add the approved legal text before a release build" >&2
+  exit 1
+fi
 office_found=0
-[ -z "${WORKSUITE_OFFICE_DEB:-}" ] || cp "$WORKSUITE_OFFICE_DEB" config/packages.chroot/worksuite-office_local.deb
+[ -z "${WORKSUITE_OFFICE_DEB:-}" ] || cp "$WORKSUITE_OFFICE_DEB" "config/packages.chroot/worksuite-office_local_$(dpkg-deb -f "$WORKSUITE_OFFICE_DEB" Architecture).deb"
 for office in config/packages.chroot/worksuite-office*.deb; do
   [ -f "$office" ] || continue
   office_found=1
@@ -60,7 +69,7 @@ fi
 # WORKSUITE_DESKTOP_OPTIONAL=1 (CI sets that when no desktop source is configured); without it the start menu's
 # WorkSuite tiles open the worksuite-app web windows. On WorkSuite OS the app runs in its OS mode (the marker below).
 desktop_found=0
-[ -z "${WORKSUITE_DESKTOP_DEB:-}" ] || cp "$WORKSUITE_DESKTOP_DEB" config/packages.chroot/worksuite-app_local.deb
+[ -z "${WORKSUITE_DESKTOP_DEB:-}" ] || cp "$WORKSUITE_DESKTOP_DEB" "config/packages.chroot/worksuite-app_local_$(dpkg-deb -f "$WORKSUITE_DESKTOP_DEB" Architecture).deb"
 for desktop in config/packages.chroot/worksuite-app_*.deb; do
   [ -f "$desktop" ] || continue
   if [ -n "${WORKSUITE_DESKTOP_SHA256:-}" ]; then
@@ -90,7 +99,7 @@ fi
 # the image); hook 0200-worksuite-apps checks every bundled app's libraries in the chroot.
 bundle_app() {  # bundle_app LABEL PACKAGE FETCH-SCRIPT LOCAL-DEB SHA256 OPTIONAL
   label=$1 want=$2 local_deb=$4 pin=$5 optional=$6 found=0
-  [ -z "$local_deb" ] || cp "$local_deb" "config/packages.chroot/${want}_local.deb"
+  [ -z "$local_deb" ] || cp "$local_deb" "config/packages.chroot/${want}_local_$(dpkg-deb -f "$local_deb" Architecture).deb"
   for deb in config/packages.chroot/"$want"_*.deb; do
     [ -f "$deb" ] || continue
     if [ -n "$pin" ]; then
@@ -116,6 +125,18 @@ bundle_app "Worksuite FrameFlow" worksuite-frameflow tools/fetch-frameflow.sh "$
   "${WORKSUITE_FRAMEFLOW_SHA256:-}" "${WORKSUITE_FRAMEFLOW_OPTIONAL:-0}"
 bundle_app "WorkSuite POS" worksuite-pos tools/fetch-pos.sh "${WORKSUITE_POS_DEB:-}" "${WORKSUITE_POS_SHA256:-}" \
   "${WORKSUITE_POS_OPTIONAL:-0}"
+# Apps offered in first-run setup but not preinstalled (WorkSuite Desk: WORKSUITE_DESK_DEB=path, WORKSUITE_DESK_SHA256
+# pins it) go to /usr/share/worksuite/bundled with a SHA256SUMS line: setup installs them from there offline (it checks
+# the hash before apt-get sees the file), and from the signed APT sources when the image has none.
+if [ -n "${WORKSUITE_DESK_DEB:-}" ]; then
+  [ -z "${WORKSUITE_DESK_SHA256:-}" ] || echo "$WORKSUITE_DESK_SHA256  $WORKSUITE_DESK_DEB" | sha256sum -c - >/dev/null || { echo "WorkSuite Desk: checksum mismatch" >&2; exit 1; }
+  [ "$(dpkg-deb -f "$WORKSUITE_DESK_DEB" Package)" = worksuite-desk ] || { echo "WorkSuite Desk: $WORKSUITE_DESK_DEB is not worksuite-desk" >&2; exit 1; }
+  bdir=config/includes.chroot/usr/share/worksuite/bundled; mkdir -p "$bdir"
+  bname="worksuite-desk_$(dpkg-deb -f "$WORKSUITE_DESK_DEB" Version)_$(dpkg-deb -f "$WORKSUITE_DESK_DEB" Architecture).deb"
+  cp "$WORKSUITE_DESK_DEB" "$bdir/$bname"
+  (cd "$bdir" && sha256sum -- *.deb > SHA256SUMS)
+  echo "WorkSuite Desk: bundled for setup as $bname"
+fi
 if [ -n "${BUILD_HTTPS_PROXY:-}" ]; then
   export https_proxy="$BUILD_HTTPS_PROXY" HTTPS_PROXY="$BUILD_HTTPS_PROXY"
   mkdir -p config/includes.chroot_before_packages/etc/apt/apt.conf.d
@@ -175,6 +196,20 @@ if [ "$WORKSUITE_REPO" = 1 ]; then
   fi
 else
   rm -f config/archives/worksuite.list.* config/includes.chroot/etc/apt/sources.list.d/worksuite.sources
+fi
+# Boot menu › Update WorkSuite OS: with WORKSUITE_RELEASE_KEY=release.key.pem and WORKSUITE_RELEASE_KEY_ID (the id of
+# the public key devices ship in /usr/share/worksuite/keys/release/), the drive also carries a signed .wsupdate of this
+# image's WorkSuite packages at /worksuite/, so booting it can update an installed system with no other drive.
+# Without a key the updater still finds .wsupdate files on other drives.
+if [ -n "${WORKSUITE_RELEASE_KEY:-}" ]; then
+  : "${WORKSUITE_RELEASE_KEY_ID:?WORKSUITE_RELEASE_KEY needs WORKSUITE_RELEASE_KEY_ID}"
+  osv=$(dpkg-deb -f config/packages.chroot/worksuite-desktop_*.deb Version)
+  mkdir -p config/includes.binary/worksuite
+  # shellcheck disable=SC2046 # one argument per package
+  node "$here/../tools/release/make-wsupdate.mjs" --key "$WORKSUITE_RELEASE_KEY" --key-id "$WORKSUITE_RELEASE_KEY_ID" \
+    --version "$osv" --min-version "${WORKSUITE_UPDATE_MIN_VERSION:-1.0.0~rc1}" --arch "$ARCH" \
+    --out "config/includes.binary/worksuite/worksuite-os-$osv-$ARCH.wsupdate" \
+    $(ls config/packages.chroot/worksuite-*_*.deb | grep -v -e '_local_' -e '/worksuite-app_' -e '/worksuite-office')
 fi
 ARCH="$ARCH" SNAPSHOT="$SNAPSHOT" lb config
 # Snapshot Release files are past Valid-Until by design; auto/config disables that check for apt.

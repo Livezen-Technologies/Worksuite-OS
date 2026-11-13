@@ -29,6 +29,8 @@ const ARCHES = new Set(['amd64', 'arm64']);
 const RINGS = new Set(['development', 'pilot', 'stable']);
 
 const json = <T>(s: string): T => JSON.parse(s) as T;
+/** locks.file_id holds `<org_id>:<file id>` so two organizations' files with the same id never share a lock. */
+const lockKey = (orgId: number, fileId: string) => `${orgId}:${fileId}`;
 
 function deviceFromHeader(db: DatabaseSync, ctx: Ctx, required: true): Device;
 function deviceFromHeader(db: DatabaseSync, ctx: Ctx, required: false): Device | undefined;
@@ -309,13 +311,15 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     const { user } = userCtx(db, ctx);
     const id = ctx.params.id;
     if (!OBJECT_ID.test(id)) throw invalid('id');
+    // File ids come from each organization's own Drive: the lock is per (org, file), never shared across tenants.
+    const key = lockKey(user.org_id, id);
     const out = tx(db, () => {
-      const cur = db.prepare('SELECT user_id, lock_id, expires FROM locks WHERE file_id = ?').get(id) as { user_id: number; lock_id: string; expires: number } | undefined;
+      const cur = db.prepare('SELECT user_id, lock_id, expires FROM locks WHERE file_id = ?').get(key) as { user_id: number; lock_id: string; expires: number } | undefined;
       if (cur && cur.expires > Date.now() && cur.user_id !== user.id) return undefined;
       const lock_id = cur && cur.user_id === user.id && cur.expires > Date.now() ? cur.lock_id : randomUUID();
       const expires = Date.now() + LOCK_TTL;
       db.prepare('INSERT INTO locks (file_id, user_id, lock_id, expires) VALUES (?, ?, ?, ?) ON CONFLICT(file_id) DO UPDATE SET user_id = excluded.user_id, lock_id = excluded.lock_id, expires = excluded.expires')
-        .run(id, user.id, lock_id, expires);
+        .run(key, user.id, lock_id, expires);
       return { lock_id, expires_at: new Date(expires).toISOString() };
     });
     if (!out) throw new HttpError(409, 'LOCKED', 'locked by another user');
@@ -324,7 +328,8 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
 
   r.on('DELETE', '/desktop/v1/files/{id}/lock', (ctx) => {
     const { user } = userCtx(db, ctx);
-    db.prepare('DELETE FROM locks WHERE file_id = ? AND user_id = ?').run(ctx.params.id, user.id);
+    if (!OBJECT_ID.test(ctx.params.id)) throw invalid('id');
+    db.prepare('DELETE FROM locks WHERE file_id = ? AND user_id = ?').run(lockKey(user.org_id, ctx.params.id), user.id);
     send(ctx, 204);
   });
 
@@ -454,7 +459,7 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
     // Software Management: an app assigned to particular devices, users or departments is listed only where it is
     // assigned. The assignment itself (other people's addresses) never leaves the server.
     const dev = db.prepare('SELECT id, org_id, arch, department FROM devices WHERE id = ?').get(d.id) as { id: string; org_id: number; arch: string; department: string | null };
-    const rows = (db.prepare('SELECT id, item FROM catalog WHERE id > ? ORDER BY id').all(ctx.url.searchParams.get('cursor') ?? '') as { id: string; item: string }[])
+    const rows = (db.prepare('SELECT id, item FROM catalog WHERE id > ? AND (org_id IS NULL OR org_id = ?) ORDER BY id').all(ctx.url.searchParams.get('cursor') ?? '', dev.org_id) as { id: string; item: string }[])
       .filter((r) => (json<{ arches: string[] }>(r.item).arches ?? []).includes(arch) && assignedTo(db, json<CatalogItem>(r.item), dev))
       .map((r) => { const { assign: _a, ...item } = json<CatalogItem>(r.item); return { id: r.id, item: JSON.stringify(item) }; })
       .slice(0, limit + 1);
@@ -504,6 +509,11 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
         const b = obj(await ctx.body());
         for (const k of required) if (b[k] === undefined) throw invalid(k, 'required');
         if (table === 'inventory') {
+          // Shape check before anything is stored: a bad report must not poison later reconciles and sign-ins.
+          for (const k of ['software', 'packages', 'flatpaks']) if (b[k] !== undefined && !Array.isArray(b[k])) throw invalid(k, 'must be an array');
+          if (!b.hardware || typeof b.hardware !== 'object' || Array.isArray(b.hardware)) throw invalid('hardware', 'must be an object');
+          // Enterprise deployment sync: the setup report (services/device-agent/src/inventory.ts readSetupReport).
+          if (b.setup != null && (typeof b.setup !== 'object' || Array.isArray(b.setup) || !Array.isArray((b.setup as { apps?: unknown }).apps))) throw invalid('setup', 'must be an object with apps');
           db.prepare('INSERT INTO inventory (device_id, body, at) VALUES (?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET body = excluded.body, at = excluded.at').run(d.id, JSON.stringify(b), Date.now());
           reconcileRequired(db, d.org_id, Date.now(), d.id);   // required apps the device doesn't have yet
         }
@@ -601,8 +611,13 @@ export function apiRoutes(r: Router, db: DatabaseSync, o: ApiOptions) {
         if (text.length > 70_000 || total > 400_000) throw invalid('sections[].text', 'too large');
         return { id: sid, text };
       });
-      db.prepare('INSERT OR IGNORE INTO problem_reports (id, org_id, user_id, device_id, body, at) VALUES (?, ?, ?, ?, ?, ?)')
+      const ins = db.prepare('INSERT OR IGNORE INTO problem_reports (id, org_id, user_id, device_id, body, at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(id, user.org_id, user.id, device?.id ?? null, JSON.stringify({ description, sections }), Date.now());
+      // A resend of the person's own report is a no-op; an id someone else already used is never silently dropped.
+      if (!ins.changes) {
+        const owner = db.prepare('SELECT user_id FROM problem_reports WHERE id = ?').get(id) as { user_id: number } | undefined;
+        if (owner && owner.user_id !== user.id) throw new HttpError(409, 'CONFLICT', 'this report id is already in use; send the report again with a new id');
+      }
       return { status: 202 };
     });
   });

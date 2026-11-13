@@ -16,7 +16,8 @@ import socket
 import time
 
 RUN_DIR = os.environ.get("WORKSUITE_DIRECTORY_RUN", "/run/worksuite-directory")
-DEFAULT_SESSION = ["/usr/bin/worksuite-session"]
+# Since 1.1 the WorkSuite session is GNOME Shell with the WorkSuite theme (services/session/gnome).
+DEFAULT_SESSION = ["/usr/bin/worksuite-gnome-session"]
 # Must match CHANGE_PREFIX in services/directory/src/directory.ts.
 CHANGE_PREFIX = "\x1bWSCHG\x1f"
 SEP = "\x1f"

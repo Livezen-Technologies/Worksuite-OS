@@ -74,7 +74,8 @@ WsPage {
             Layout.alignment: Qt.AlignHCenter
             width: 96; height: 96; radius: 48; color: config.failed ? "#24FF9F5A" : "#245FD39A"
             Rectangle { anchors.centerIn: parent; width: 116; height: 116; radius: 58; color: config.failed ? "#0FFF9F5A" : "#0F5FD39A"; z: -1 }
-            Text { anchors.centerIn: parent; text: config.failed ? "!" : "✓"; color: config.failed ? "#FF9F5A" : "#5FD39A"; font.pixelSize: 48; font.weight: Font.Bold }
+            Text { anchors.centerIn: parent; visible: config.failed; text: "!"; color: "#FF9F5A"; font.pixelSize: 48; font.weight: Font.Bold }
+            WsCheck { anchors.centerIn: parent; visible: !config.failed; color: "#5FD39A"; size: 44; lineWidth: 1.8 }
         }
         Text {
             Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 8

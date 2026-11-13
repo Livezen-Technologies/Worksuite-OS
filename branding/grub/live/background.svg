@@ -11,12 +11,12 @@
   <svg x="604" y="96" width="72" height="72" viewBox="54 54 404 404"><defs><linearGradient id="wsmark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9eef7"/></linearGradient></defs><rect x="56" y="56" width="400" height="400" rx="92" fill="url(#wsmark)" stroke="#d9e2f2" stroke-width="3"/><rect x="136" y="136" width="108" height="108" rx="16" fill="#0a6cff"/><rect x="268" y="136" width="108" height="108" rx="16" fill="#00daf2"/><rect x="136" y="268" width="108" height="108" rx="16" fill="#00daf2"/><rect x="268" y="268" width="108" height="108" rx="16" fill="#001842"/><circle cx="322" cy="322" r="22" fill="none" stroke="#00daf2" stroke-width="10"/></svg>
   <text x="640" y="232" text-anchor="middle" font-family="IBM Plex Sans" font-weight="700" font-size="44" letter-spacing="-0.88" fill="#E8EEFA">WorkSuite OS</text>
   <text x="640" y="262" text-anchor="middle" font-family="IBM Plex Mono" font-size="13" fill="#8FA3C8">1.0 <tspan fill="#3D5280">/</tspan> amd64 <tspan fill="#3D5280">/</tspan> built @DATE@</text>
-  <rect x="380" y="284" width="520" height="220" rx="16" fill="#0E2048" fill-opacity="0.72" stroke="#7FB2FF" stroke-opacity="0.16" filter="url(#shadow)"/>
-  <rect x="402" y="427.5" width="476" height="1" fill="#7FB2FF" fill-opacity="0.12"/>
-  <g transform="translate(461 527)" fill="none" stroke="#5FD39A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="380" y="284" width="520" height="288" rx="16" fill="#0E2048" fill-opacity="0.72" stroke="#7FB2FF" stroke-opacity="0.16" filter="url(#shadow)"/>
+  <rect x="402" y="495.5" width="476" height="1" fill="#7FB2FF" fill-opacity="0.12"/>
+  <g transform="translate(461 595)" fill="none" stroke="#5FD39A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M8 1l5.3 2v4c0 3.3-2.3 5.3-5.3 6-3-.7-5.3-2.7-5.3-6V3z" transform="scale(1.2)"/><path d="M6 8l1.4 1.4 2.7-2.7" transform="scale(1.2)"/>
   </g>
-  <text x="485" y="543" font-family="IBM Plex Sans" font-size="13" fill="#8FA3C8">Nothing on your disk changes until you confirm in the installer.</text>
+  <text x="485" y="611" font-family="IBM Plex Sans" font-size="13" fill="#8FA3C8">Nothing on your disk changes until you confirm.</text>
   <rect y="736" width="1280" height="64" fill="#040A1A" fill-opacity="0.5"/>
   <rect y="736" width="1280" height="1" fill="#7FB2FF" fill-opacity="0.1"/>
   <g font-family="IBM Plex Sans" font-size="13" fill="#8FA3C8">

@@ -1,0 +1,46 @@
+// Rollback boundaries: what can be undone, and how. Rollback is offered only when a checkpoint with a VERIFIED
+// rollback handle exists at or before every change made since. Destructive disk work is never "undone" without
+// an A/B slot or snapshot taken before it; deleted partitions and overwritten data are never promised back.
+import type { Checkpoint } from '../core/SetupPersistence.ts'
+import { flowFor, SPECS, type MainState, type SetupMode } from '../core/states.ts'
+
+/** How each reversible/destructive state is undone by the setup service (never by the UI). */
+export const ROLLBACK_METHOD: Partial<Record<MainState, { handle: NonNullable<Checkpoint['rollback']>['kind']; undo: string }>> = {
+  DEVICE_ENROLLMENT: { handle: 'enrollment', undo: 'Revoke the device credential on the server and remove it from this device' },
+  INSTALLING_OS: { handle: 'snapshot', undo: 'Boot the previous system from its A/B slot or filesystem snapshot (only if one was taken and verified before installing)' },
+  INSTALLING_APPLICATIONS: { handle: 'package-transaction', undo: 'Remove the packages this setup installed, in reverse dependency order' },
+  FINAL_CONFIGURATION: { handle: 'config-backup', undo: 'Put back the configuration files saved before they were changed' },
+}
+
+export interface RollbackPlan {
+  possible: boolean
+  reason: string
+  checkpoint?: Checkpoint
+  /** Steps undone, newest first, with how. */
+  steps: { state: MainState; undo: string }[]
+  /** Changes rollback cannot undo, said plainly before the person confirms. */
+  notUndone: string[]
+}
+
+export function planRollback(mode: SetupMode, failedAt: MainState | null, checkpoints: readonly Checkpoint[]): RollbackPlan {
+  const flow = flowFor(mode)
+  if (!failedAt) return { possible: false, reason: 'There is no interrupted step to roll back.', steps: [], notUndone: [] }
+  const cp = [...checkpoints].reverse().find((c) => c.rollback?.verified && flow.indexOf(c.state) < flow.indexOf(failedAt))
+  // States whose changes would be undone: after the checkpoint, up to and including the failed one.
+  const from = cp ? flow.indexOf(cp.state) + 1 : 0
+  const touched = flow.slice(from, flow.indexOf(failedAt) + 1).filter((s) => SPECS[s].effect !== 'none')
+  if (!touched.length) return { possible: false, reason: 'Nothing on this computer was changed yet, so there is nothing to roll back. Use Restore checkpoint to go back to an earlier answer.', steps: [], notUndone: [] }
+  if (!cp) return { possible: false, reason: 'No verified rollback point was taken before these changes, so they cannot be undone safely.', steps: [], notUndone: touched.map((s) => s) }
+  const notUndone: string[] = []
+  const steps: RollbackPlan['steps'] = []
+  for (const s of [...touched].reverse()) {
+    const m = ROLLBACK_METHOD[s]
+    if (SPECS[s].effect === 'destructive' && cp.rollback?.kind !== 'snapshot' && cp.rollback?.kind !== 'ab-slot') {
+      notUndone.push('The disk was erased and repartitioned. Files that were on it are not restored; restore them from your backup.')
+      continue
+    }
+    if (m) steps.push({ state: s, undo: m.undo })
+  }
+  if (!steps.length) return { possible: false, reason: 'None of the changes made can be undone automatically.', steps, notUndone, checkpoint: cp }
+  return { possible: true, reason: `Rolls back to the checkpoint after "${cp.state}".`, checkpoint: cp, steps, notUndone }
+}

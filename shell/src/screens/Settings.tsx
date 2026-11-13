@@ -1,11 +1,12 @@
 // Settings app (boards SetNav, SetNetwork, SetBluetooth, SetDisplay, SetAppearance, SetSound, SetPrivacy, SetUsers,
 // UpdSettings, HwSettings). Every value comes from the OS bridge or the shell's own saved settings; where the bridge
 // can't tell, the section says so instead of showing sample values.
+import { useActionError } from '../lib/useActionError'
 import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { localTaskbarAlign, saveTaskbarAlign, shellPrefsFrom, type TaskbarAlign } from '../lib/shellPrefs'
 import { reconcileJoin, wifiPhase, type Join } from '../lib/wifiState'
-import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SecurityStatus, type SignOutChoice } from '../lib/os'
+import { cloudErrorText, formatBytes, formatDuration, lockChoiceLabel, os, policyLines, type GnomePrivacySettings, serverUrlFor, type Avail, type BatteryState, type CloudAccount, type DeviceInfo, type HwDevice, type LocalUser, type LockSettings, type SecurityStatus, type SignOutChoice } from '../lib/os'
 import { unavailableText, useSystem } from '../lib/useSystem'
 import type { WindowProps } from './types'
 import { ACCENTS, DEFAULT_PRIVACY, KEYS, THEMES, accentColor, applyAppearance, loadAppearance, readJson, writeJson, type Appearance, type Privacy } from '../lib/setup'
@@ -22,6 +23,8 @@ import { Diagnostics } from './settings/Diagnostics'
 import { RadioProblems, useRadio } from './settings/Radio'
 import { GraphicsPanel } from './settings/Graphics'
 import { KeyboardPanel, TouchPanel } from './settings/Touch'
+import { DateTimePanel } from './settings/DateTime'
+import { GNOME_PANELS, GnomeHandoff, WORKSUITE_ONLY, isGnomeSession } from './settings/GnomeHandoff'
 import { KioskPanel } from './settings/Kiosk'
 import { AIPanel } from './settings/AI'
 import { MultitaskingPanel } from './settings/Multitasking'
@@ -33,41 +36,48 @@ import { CloudSignIn } from './settings/CloudSignIn'
 import { C, Dialog, Svg, Switch, btnGhost, btnPrimary, card, chip, dialogFooter, field, heroCard, linkBtn, rowLine, sectionLabel } from '../components/Dk'
 import { AVATAR_GRADIENTS, Avatar, Mark } from '../components/Ws'
 import { UpdatesPanel } from './Updates'
+import { PersonalizationPanel, Segmented } from './settings/Personalization'
+import { AccessibilityPanel } from './settings/Accessibility'
 import { DeviceProblemDialog, DevicesPanel, DriversPanel, Empty } from './Hardware'
 import { formatDate, formatNumber, t, type MessageKey } from '../i18n'
 
+// Windows-class grouping (System, Bluetooth & devices, Network & internet, Personalization, Apps, Accounts,
+// Time & language, Accessibility, Privacy & security, Updates & drivers) with the WorkSuite look.
 const NAV = [
-  { id: 'Network', tint: '#1F6BFF', icon: 'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' },
-  { id: 'VPN', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4' },
-  { id: 'Bluetooth', tint: '#1F6BFF', icon: 'M7 7l10 10-5 5V2l5 5L7 17' },
-  { id: 'Display', tint: '#0E8FA8', icon: 'M3 4h18v12H3zM8 20h8M12 16v4', sep: true },
-  { id: 'Graphics', tint: '#0E8FA8', icon: 'M6 6h12v12H6zM9 9h6v6H9zM9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4' },
-  { id: 'Touchscreen & pen', tint: '#0E8FA8', icon: 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15' },
-  { id: 'Mouse & touchpad', tint: '#0E8FA8', icon: 'M12 3a6 6 0 0 0-6 6v6a6 6 0 0 0 12 0V9a6 6 0 0 0-6-6zM12 3v7M6 10h12' },
-  { id: 'Multitasking', tint: '#0E8FA8', icon: 'M3 5h8v6H3zM13 5h8v6h-8zM3 15h18v4H3z' },
-  { id: 'Keyboard', tint: '#7A4FE0', icon: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10' },
-  { id: 'Appearance', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
-  { id: 'Sound', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
-  { id: 'Notifications', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
-  { id: 'Clipboard', tint: '#0E8FA8', icon: 'M9 4h6v3H9zM7 5H5v16h14V5h-2' },
-  { id: 'Power', tint: '#B7791F', icon: 'M13 2L4 14h7l-1 8 9-12h-7z' },
-  { id: 'Printers', tint: '#5E739C', icon: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z' },
-  { id: 'Default apps', tint: '#0E8FA8', icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 16.5h7M16.5 13v7' },
-  { id: 'AI', tint: '#7A4FE0', icon: 'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z' },
-  { id: 'Privacy & security', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', sep: true },
-  { id: 'Lock screen', tint: '#2E9E6A', icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' },
-  { id: 'Users', tint: '#5E739C', icon: 'M9 8a3.5 3.5 0 1 0 0 .01M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7' },
-  { id: 'Devices', tint: '#5E739C', icon: 'M4 6h16v10H4zM2 20h20', sep: true },
-  { id: 'Drivers', tint: '#5E739C', icon: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z' },
-  { id: 'Updates', tint: '#1F6BFF', icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
-  { id: 'Managed', tint: '#7A4FE0', icon: 'M3 21h18M5 21V7l7-4 7 4v14M9 10h.01M15 10h.01M9 14h.01M15 14h.01' },
-  { id: 'About', tint: '#5E739C', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01' },
+  { id: 'Display', group: 'System', tint: '#0E8FA8', icon: 'M3 4h18v12H3zM8 20h8M12 16v4' },
+  { id: 'Graphics', group: 'System', tint: '#0E8FA8', icon: 'M6 6h12v12H6zM9 9h6v6H9zM9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4' },
+  { id: 'Sound', group: 'System', tint: '#D9572B', icon: 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7' },
+  { id: 'Notifications', group: 'System', tint: '#D9452B', icon: 'M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0' },
+  { id: 'Power', group: 'System', tint: '#B7791F', icon: 'M13 2L4 14h7l-1 8 9-12h-7z' },
+  { id: 'Multitasking', group: 'System', tint: '#0E8FA8', icon: 'M3 5h8v6H3zM13 5h8v6h-8zM3 15h18v4H3z' },
+  { id: 'Clipboard', group: 'System', tint: '#0E8FA8', icon: 'M9 4h6v3H9zM7 5H5v16h14V5h-2' },
+  { id: 'About', group: 'System', tint: '#5E739C', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h.01' },
+  { id: 'Bluetooth', group: 'Bluetooth & devices', tint: '#1F6BFF', icon: 'M7 7l10 10-5 5V2l5 5L7 17' },
+  { id: 'Devices', group: 'Bluetooth & devices', tint: '#5E739C', icon: 'M4 6h16v10H4zM2 20h20' },
+  { id: 'Printers', group: 'Bluetooth & devices', tint: '#5E739C', icon: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z' },
+  { id: 'Mouse & touchpad', group: 'Bluetooth & devices', tint: '#0E8FA8', icon: 'M12 3a6 6 0 0 0-6 6v6a6 6 0 0 0 12 0V9a6 6 0 0 0-6-6zM12 3v7M6 10h12' },
+  { id: 'Touchscreen & pen', group: 'Bluetooth & devices', tint: '#0E8FA8', icon: 'M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4.5a1.5 1.5 0 0 1 2.6-1.5L8 15' },
+  { id: 'Keyboard', group: 'Bluetooth & devices', tint: '#7A4FE0', icon: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10' },
+  { id: 'Network', group: 'Network & internet', tint: '#1F6BFF', icon: 'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0' },
+  { id: 'VPN', group: 'Network & internet', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4' },
+  { id: 'Personalization', group: 'Personalization', tint: '#7A4FE0', icon: 'M4 18h16M4 18V6h16v12M8 14h8M9 22h6M12 18v4' },
+  { id: 'Appearance', group: 'Personalization', tint: '#7A4FE0', icon: 'M12 3a9 9 0 1 0 9 9c0-1.5-1.3-2-2.5-2H16a2 2 0 0 1 0-4h.5A9 9 0 0 0 12 3z' },
+  { id: 'Lock screen', group: 'Personalization', tint: '#2E9E6A', icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' },
+  { id: 'Default apps', group: 'Apps', tint: '#0E8FA8', icon: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 16.5h7M16.5 13v7' },
+  { id: 'AI', group: 'Apps', tint: '#7A4FE0', icon: 'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z' },
+  { id: 'Users', group: 'Accounts', tint: '#5E739C', icon: 'M9 8a3.5 3.5 0 1 0 0 .01M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7' },
+  { id: 'Date & time', group: 'Time & language', tint: '#1F6BFF', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2' },
+  { id: 'Accessibility', group: 'Accessibility', tint: '#2E9E6A', icon: 'M12 4.5a1.5 1.5 0 1 0 0 .01M5 8l7 1.5L19 8M12 9.5V14l-3 6M12 14l3 6' },
+  { id: 'Privacy & security', group: 'Privacy & security', tint: '#2E9E6A', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z' },
+  { id: 'Managed', group: 'Privacy & security', tint: '#7A4FE0', icon: 'M3 21h18M5 21V7l7-4 7 4v14M9 10h.01M15 10h.01M9 14h.01M15 14h.01' },
+  { id: 'Updates', group: 'Updates & drivers', tint: '#1F6BFF', icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
+  { id: 'Drivers', group: 'Updates & drivers', tint: '#5E739C', icon: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z' },
 ] as const
 export type Section = (typeof NAV)[number]['id']
 const isSection = (s: string | null): s is Section => NAV.some((n) => n.id === s)
 const navLabel = (id: Section) => t(`settings.nav.${id}` as MessageKey)
 // Older names (launcher search, earlier builds) still land somewhere sensible.
-const ALIAS: Record<string, Section> = { 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Mouse: 'Mouse & touchpad', Touchpad: 'Mouse & touchpad', Pointer: 'Mouse & touchpad', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard', GPU: 'Graphics', 'Hardware acceleration': 'Graphics' }
+const ALIAS: Record<string, Section> = { 'Ease of access': 'Accessibility', 'Text size': 'Accessibility', 'High contrast': 'Accessibility', 'Screen reader': 'Accessibility', 'Reduce motion': 'Accessibility', Taskbar: 'Personalization', 'Visual effects': 'Personalization', Glass: 'Personalization', 'Glass effects': 'Personalization', Time: 'Date & time', Clock: 'Date & time', 'Time zone': 'Date & time', Date: 'Date & time', 'About this device': 'About', Accounts: 'Users', Privacy: 'Privacy & security', Displays: 'Display', Mouse: 'Mouse & touchpad', Touchpad: 'Mouse & touchpad', Pointer: 'Mouse & touchpad', Lock: 'Lock screen', Management: 'Managed', Battery: 'Power', Touch: 'Touchscreen & pen', Pen: 'Touchscreen & pen', 'On-screen keyboard': 'Keyboard', 'AI assistant': 'AI', Assistant: 'AI', Desktops: 'Multitasking', 'Task View': 'Multitasking', Shortcuts: 'Keyboard', 'Keyboard shortcuts': 'Keyboard', 'Clipboard history': 'Clipboard', GPU: 'Graphics', 'Hardware acceleration': 'Graphics' }
 
 type Res<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'unavailable'; reason: string }
 /** Bridge answer (Avail) → loading / ok / unavailable, with optional polling (same hook as lib/useSystem). */
@@ -110,6 +120,7 @@ function NetworkPanel() {
   const { r, reload: reloadNet } = useAvail(os.sysNetwork, 15_000, 'network')
   const radio = useRadio('wifi')
   const reload = async () => { await Promise.all([reloadNet(), radio.reload()]) }
+  const action = useActionError()
   const [join, setJoin] = useState<Join | null>(null)
   const [scanning, setScanning] = useState(false)
   // #42: the form closes, and its error goes, once NetworkManager reports that network in use — also when nmcli had
@@ -119,7 +130,7 @@ function NetworkPanel() {
   const problems = <RadioProblems kind="wifi" d={radio.d} onFixed={() => void reload()} always />
   if (r.state !== 'ok') return <><H1>{t('settings.nav.Network')}</H1>{r.state === 'loading' ? <Empty title={t('settings.net.reading')} /> : <><Unavail what={t('settings.net.info')} reason={r.reason} />{problems}</>}</>
   const n = r.value
-  const rescan = async () => { setScanning(true); await os.sysWifiRescan(); setTimeout(() => { setScanning(false); void reload() }, 4000) }
+  const rescan = async () => { setScanning(true); await action.run(os.sysWifiRescan()); setTimeout(() => { setScanning(false); void reload() }, 4000) }
   const wifi = n.devices.find((d) => d.type === 'wifi')
   const eth = n.devices.filter((d) => d.type === 'ethernet')
   const active = n.networks.find((w) => w.in_use)
@@ -136,6 +147,7 @@ function NetworkPanel() {
   }
   return <>
     <H1>{t('settings.nav.Network')}</H1>
+    {action.error && <p role="alert" className="m-0 rounded-lg bg-[rgba(217,69,43,0.14)] px-3 py-2 text-[13px] text-[#FFB4A6]">{t('common.actionFailed', { reason: action.error })}</p>}
     <div className={`${heroCard} flex items-center gap-4 px-5 py-[18px]`}>
       <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#1F6BFF]"><Svg d={WIFI_BARS(100)} size={24} stroke="#FFFFFF" /></span>
       <span className="flex flex-1 flex-col gap-0.5">
@@ -164,7 +176,7 @@ function NetworkPanel() {
                   <span className="text-xs text-[#8FA3C8]">{w.in_use ? t('common.connected') : w.saved ? t('settings.net.saved') : w.security ? '' : t('settings.net.open')}</span>
                   {w.security && <Svg d={LOCK} size={14} stroke={C.muted} />}
                   <span className="sr-only">{t('settings.net.signal', { security: w.security || t('settings.net.open'), signal: w.signal })}</span>
-                  {w.in_use && <button type="button" onClick={() => void os.sysWifiDisconnect().then(reload)} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{t('common.disconnect')}</button>}
+                  {w.in_use && <button type="button" onClick={() => void action.run(os.sysWifiDisconnect()).then(reload)} className={`${btnGhost} px-3 py-1.5 text-[13px]`}>{t('common.disconnect')}</button>}
                   {!w.in_use && join?.ssid !== w.ssid && <button type="button" onClick={() => {
                     // Saved networks join with their stored password, without asking again (#42).
                     const j = { ssid: w.ssid, secure: !!w.security && !w.saved, password: '', error: null, busy: false }
@@ -199,6 +211,7 @@ function BluetoothPanel() {
   const { r, reload: reloadBt } = useAvail(os.sysBluetooth, 15_000)
   const radio = useRadio('bluetooth')
   const reload = async () => { await Promise.all([reloadBt(), radio.reload()]) }
+  const action = useActionError()
   const [err, setErr] = useState<string | null>(null)
   const problems = <RadioProblems kind="bluetooth" d={radio.d} onFixed={() => void reload()} always />
   if (r.state !== 'ok') return <><H1>{t('settings.nav.Bluetooth')}</H1>{r.state === 'loading' ? <Empty title={t('settings.bt.reading')} /> : <><Unavail what={t('settings.nav.Bluetooth')} reason={r.reason} />{problems}</>}</>
@@ -211,6 +224,7 @@ function BluetoothPanel() {
   }
   return <>
     <H1>{t('settings.nav.Bluetooth')}</H1>
+    {action.error && <p role="alert" className="m-0 rounded-lg bg-[rgba(217,69,43,0.14)] px-3 py-2 text-[13px] text-[#FFB4A6]">{t('common.actionFailed', { reason: action.error })}</p>}
     <div className={`${heroCard} flex items-center gap-4 px-5 py-[18px]`}>
       <span className="flex flex-1 flex-col gap-0.5">
         <span className="text-base font-semibold">{t('settings.nav.Bluetooth')}</span>
@@ -228,7 +242,7 @@ function BluetoothPanel() {
             <li key={d.address} className={`flex items-center gap-3.5 px-[18px] py-[13px] ${rowLine}`}>
               <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[rgba(31,107,255,0.16)]"><Svg d="M7 7l10 10-5 5V2l5 5L7 17" size={18} stroke="#7FB2FF" /></span>
               <span className="flex flex-1 flex-col gap-0.5"><span className="text-sm font-medium">{d.name}</span><span className="text-xs" style={{ color: d.connected ? C.green : C.muted }}>{d.connected ? t('common.connected') : t('common.notConnected')}</span></span>
-              <button type="button" disabled={!b.powered} onClick={() => void os.sysBtConnect(d.address, !d.connected).then(reload)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{d.connected ? t('common.disconnect') : t('common.connect')}</button>
+              <button type="button" disabled={!b.powered} onClick={() => void action.run(os.sysBtConnect(d.address, !d.connected)).then(reload)} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{d.connected ? t('common.disconnect') : t('common.connect')}</button>
             </li>
           ))}
         </ul>
@@ -323,6 +337,7 @@ function TaskbarAlignChoice({ accent }: { accent: string }) {
 
 function SoundPanel() {
   const { r, reload } = useAvail(os.sysSound)
+  const action = useActionError()
   const [vol, setVol] = useState<number | null>(null)
   if (r.state !== 'ok') return <><H1>{t('settings.nav.Sound')}</H1>{r.state === 'loading' ? <Empty title={t('settings.snd.reading')} /> : <Unavail what={t('settings.nav.Sound')} reason={r.reason} />}</>
   const s = r.value
@@ -332,17 +347,18 @@ function SoundPanel() {
   const v = vol ?? s.volume
   return <>
     <H1>{t('settings.nav.Sound')}</H1>
+    {action.error && <p role="alert" className="m-0 rounded-lg bg-[rgba(217,69,43,0.14)] px-3 py-2 text-[13px] text-[#FFB4A6]">{t('common.actionFailed', { reason: action.error })}</p>}
     <section aria-label={t('settings.snd.output')} className={`${card} flex flex-col gap-2.5 px-5 py-[18px]`}>
       <div className="flex items-center justify-between gap-3"><h2 className="m-0 text-[15px] font-semibold">{t('settings.snd.output')}</h2>
         {s.outputs.length > 1
-          ? <select aria-label={t('settings.snd.outputDevice')} value={out?.id ?? ''} onChange={(e) => void os.sysSetDefaultAudio(+e.target.value).then(reload)} className={select}>{s.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
+          ? <select aria-label={t('settings.snd.outputDevice')} value={out?.id ?? ''} onChange={(e) => void action.run(os.sysSetDefaultAudio(+e.target.value)).then(reload)} className={select}>{s.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
           : <Value min={260}>{out?.name ?? null}</Value>}
       </div>
       <div className="flex items-center gap-3.5">
-        <button type="button" aria-pressed={s.muted} aria-label={t('settings.snd.mute')} onClick={() => void os.sysSetMute(!s.muted).then(reload)} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg hover:bg-white/10">
+        <button type="button" aria-pressed={s.muted} aria-label={t('settings.snd.mute')} onClick={() => void action.run(os.sysSetMute(!s.muted)).then(reload)} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg hover:bg-white/10">
           <Svg d={s.muted ? 'M4 9v6h4l5 4V5L8 9zM17 9l4 6M21 9l-4 6' : 'M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7'} size={20} stroke={C.soft} />
         </button>
-        <input type="range" aria-label={t('settings.snd.volume')} min={0} max={100} value={v} onChange={(e) => { setVol(+e.target.value); void os.sysSetVolume(+e.target.value) }} onPointerUp={() => void reload().then(() => setVol(null))} onKeyUp={() => void reload().then(() => setVol(null))} className="flex-1 accent-[#1F6BFF]" />
+        <input type="range" aria-label={t('settings.snd.volume')} min={0} max={100} value={v} onChange={(e) => { setVol(+e.target.value); void action.run(os.sysSetVolume(+e.target.value)) }} onPointerUp={() => void reload().then(() => setVol(null))} onKeyUp={() => void reload().then(() => setVol(null))} className="flex-1 accent-[#1F6BFF]" />
         <span className="w-[56px] text-right font-mono text-[13px]">{s.muted ? t('settings.snd.muted') : `${formatNumber(v)}%`}</span>
       </div>
     </section>
@@ -424,6 +440,12 @@ function PrivacyPanel() {
   useEffect(() => { void os.lockSettings().then(setLock).catch(() => {}) }, [])
   const [sec, setSec] = useState<SecurityStatus | null>(null)
   useEffect(() => { void os.securityStatus().then(setSec).catch(() => {}); return os.onSecurityChanged(setSec) }, [])
+  // Under GNOME the lock and device permissions are GNOME's own keys (electron/gnomePrivacy.ts), not the Labwc session's.
+  const gnome = isGnomeSession()
+  const [gp, setGp] = useState<GnomePrivacySettings | null>(null)
+  const [gpErr, setGpErr] = useState(false)
+  useEffect(() => { if (gnome) void os.gnomePrivacy().then((r) => r.available ? setGp(r.value) : setGpErr(true)).catch(() => setGpErr(true)) }, [gnome])
+  const setGnome = async (c: Partial<GnomePrivacySettings>) => { setGpErr(false); const r = await os.setGnomePrivacy(c); if (r.available) setGp(r.value); else { setGpErr(true); void os.gnomePrivacy().then((x) => x.available && setGp(x.value)) } }
   const enc = info?.device?.encrypted
   type Tile = { t: string; d: string; ok: boolean | null; icon: string }
   const tiles: Tile[] = [
@@ -432,7 +454,9 @@ function PrivacyPanel() {
     status?.state === 'up_to_date'
       ? { t: t('settings.priv.upToDate'), d: t('settings.priv.checked', { when: status.last_check ? fmtWhen(status.last_check) : '—' }), ok: true, icon: 'M5 12.5l4.5 4.5L19 7.5' }
       : { t: needsAttention(status) ? t('settings.priv.updateWaiting') : t('settings.nav.Updates'), d: needsAttention(status) ? t('settings.priv.openUpdates') : status ? t('settings.priv.seeUpdates') : t('settings.priv.statusUnavailable'), ok: needsAttention(status) ? false : null, icon: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4' },
-    { t: t('settings.priv.screenLock'), d: !lock ? t('settings.priv.statusUnavailable') : lock.timeout_s ? t('settings.priv.lockAfter', { time: lockChoiceLabel(lock.timeout_s) }) : t('settings.priv.lockOff'), ok: lock ? lock.timeout_s > 0 : null, icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' },
+    gnome
+      ? { t: t('settings.priv.screenLock'), d: !gp ? t('settings.priv.statusUnavailable') : gp.lock && gp.idleDelay ? t('settings.priv.lockAfter', { time: lockChoiceLabel(gp.idleDelay + gp.lockDelay) }) : t('settings.priv.lockOff'), ok: gp ? gp.lock && gp.idleDelay > 0 : null, icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' }
+      : { t: t('settings.priv.screenLock'), d: !lock ? t('settings.priv.statusUnavailable') : lock.timeout_s ? t('settings.priv.lockAfter', { time: lockChoiceLabel(lock.timeout_s) }) : t('settings.priv.lockOff'), ok: lock ? lock.timeout_s > 0 : null, icon: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z' },
   ]
   const known = tiles.filter((x) => x.ok !== null)
   const passed = known.filter((x) => x.ok).length
@@ -474,7 +498,7 @@ function PrivacyPanel() {
     <div className="grid min-h-0 gap-3" style={{ gridTemplateColumns: 'minmax(0,1.25fr) minmax(0,1fr)' }}>
       <section aria-labelledby="priv-choices" className="flex flex-col gap-2">
         <h2 id="priv-choices" className="m-0 text-sm font-semibold">{t('settings.priv.choices')}</h2>
-        <div className={`${card} overflow-hidden`}>
+        {gnome ? <GnomePrivacyRows gp={gp} err={gpErr} onChange={(c) => void setGnome(c)} /> : <div className={`${card} overflow-hidden`}>
           {perms.map((x) => (
             <div key={x.k} className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
               <Svg d={x.icon} size={18} stroke="#7FB2FF" />
@@ -482,7 +506,7 @@ function PrivacyPanel() {
               <Switch small label={x.t} checked={p[x.k]} onChange={set(x.k)} />
             </div>
           ))}
-        </div>
+        </div>}
       </section>
       <section aria-labelledby="priv-it" className="flex flex-col gap-2">
         <h2 id="priv-it" className="m-0 text-sm font-semibold">{t('settings.priv.itSees')}</h2>
@@ -495,6 +519,31 @@ function PrivacyPanel() {
     <ClipboardSection />
   </>
 }
+
+/** Under GNOME: automatic screen lock and the device permissions GNOME enforces (camera, microphone, location), all read
+ *  back from gsettings after each change (electron/gnomePrivacy.ts). */
+function GnomePrivacyRows({ gp, err, onChange }: { gp: GnomePrivacySettings | null; err: boolean; onChange: (c: Partial<GnomePrivacySettings>) => void }) {
+  if (!gp) return <div className={`${card} px-4 py-3 text-xs text-[#C9D6EE]`}>{err ? t('settings.priv.statusUnavailable') : t('settings.look.reading')}</div>
+  const idle = IDLE_OPTIONS.map((v) => ({ v, label: v ? lockChoiceLabel(v) : t('settings.gpriv.never') }))
+  const row = (icon: string, title: string, hint: string, control: ReactNode) => (
+    <div className={`flex items-center gap-3 px-4 py-[11px] ${rowLine}`}>
+      <Svg d={icon} size={18} stroke="#7FB2FF" />
+      <span className="flex flex-1 flex-col gap-0.5"><span className="text-[13px] font-medium">{title}</span><span className="text-[11px] text-[#8FA3C8]">{hint}</span></span>
+      {control}
+    </div>
+  )
+  return <>
+    {err && <p role="alert" className="m-0 text-[13px] text-[#FFB4A6]">{t('settings.look.failed')}</p>}
+    <div className={`${card} overflow-hidden`}>
+      {row('M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z', t('settings.gpriv.lock'), t('settings.gpriv.lockHint'), <Switch small label={t('settings.gpriv.lock')} checked={gp.lock} onChange={(v) => onChange({ lock: v })} />)}
+      <div className={`px-4 py-[11px] ${rowLine}`}><Segmented label={t('settings.gpriv.idle')} value={gp.idleDelay} options={idle} onChange={(v) => onChange({ idleDelay: v })} /></div>
+      {row('M15 10l5-3v10l-5-3M3 7h12v10H3z', t('settings.gpriv.camera'), t('settings.gpriv.cameraHint'), <Switch small label={t('settings.gpriv.camera')} checked={gp.camera} onChange={(v) => onChange({ camera: v })} />)}
+      {row('M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3', t('settings.gpriv.mic'), t('settings.gpriv.micHint'), <Switch small label={t('settings.gpriv.mic')} checked={gp.microphone} onChange={(v) => onChange({ microphone: v })} />)}
+      {row('M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z', t('settings.priv.location'), t('settings.gpriv.locationHint'), <Switch small label={t('settings.priv.location')} checked={gp.location} onChange={(v) => onChange({ location: v })} />)}
+    </div>
+  </>
+}
+const IDLE_OPTIONS = [60, 300, 600, 900, 0] as const
 
 /** WSOS-LOCK-003: idle lock timeout chosen by the user, within the organization's maximum (worksuite-idle applies it). */
 function LockAfterRow() {
@@ -633,13 +682,13 @@ function AboutPanel() {
   const drives = disks.state === 'ok' ? disks.value : []
   return <>
     <h1 className="sr-only">{t('settings.nav.About')}</h1>
-    <div className="flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.2)] px-6 py-[22px]" style={{ background: 'radial-gradient(circle at 88% 15%, rgba(24,212,240,0.32), transparent 45%), linear-gradient(120deg, #173F94, #0D2353)' }}>
+    <div className="ws-dark-zone flex items-center gap-[22px] rounded-[18px] border border-[rgba(127,178,255,0.2)] px-6 py-[22px] text-[#E8EEFA]" style={{ background: 'radial-gradient(circle at 88% 15%, rgba(24,212,240,0.32), transparent 45%), linear-gradient(120deg, #173F94, #0D2353)' }}>
       <Mark size={76} />
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="text-[28px] font-bold tracking-[-0.02em]">{d?.os_version ?? 'WorkSuite OS'}</span>
         <span className="font-mono text-xs text-[#C9D6EE]">{[info.policies?.update_ring, d?.hostname, d?.arch].filter(Boolean).join(' · ') || t('settings.about.versionUnknown')}</span>
-        {status && <span className="flex items-center gap-1.5 text-[13px]" style={{ color: upToDate ? C.green : needsAttention(status) ? C.amber : '#C9D6EE' }}>
-          {upToDate && <Svg d="M5 12.5l4.5 4.5L19 7.5" size={14} stroke={C.green} width={2.6} />}
+        {status && <span className="flex items-center gap-1.5 text-[13px]" style={{ color: upToDate ? '#5FD39A' : needsAttention(status) ? '#FFB98A' : '#C9D6EE' /* the hero is always dark */ }}>
+          {upToDate && <Svg d="M5 12.5l4.5 4.5L19 7.5" size={14} stroke="#5FD39A" width={2.6} />}
           {upToDate ? t('settings.priv.checked', { when: status.last_check ? fmtWhen(status.last_check) : '—' }) : needsAttention(status) ? t('settings.priv.updateWaiting') : t('settings.priv.seeUpdates')}
         </span>}
       </span>
@@ -919,12 +968,12 @@ function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('settings.search')} className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-[#E8EEFA] outline-none placeholder:text-[#8FA3C8]" />
       </label>
       <ul className="m-0 flex list-none flex-col gap-px p-0">
-        {items.map((n) => {
+        {items.map((n, i) => {
           const on = n.id === section
           const badge = badges[n.id]
           return (
             <li key={n.id}>
-              {'sep' in n && n.sep && !q && <div className="mx-2 my-1.5 h-px bg-[rgba(127,178,255,0.1)]" aria-hidden="true" />}
+              {!q && (i === 0 || items[i - 1].group !== n.group) && <div className={`px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#8FA3C8] ${i === 0 ? 'pt-0.5' : 'pt-3'}`}>{t(`settings.group.${n.group}` as MessageKey)}</div>}
               <button type="button" aria-current={on ? 'page' : undefined} onClick={() => onPick(n.id)}
                 className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-[5px] text-left text-sm ${on ? 'bg-[rgba(31,107,255,0.2)] font-semibold text-white' : 'text-[#C9D6EE] hover:bg-white/[0.05]'}`}>
                 <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px]" style={{ background: n.tint }}><Svg d={n.icon} size={15} stroke="#FFFFFF" width={2.2} /></span>
@@ -941,17 +990,18 @@ function SetNav({ section, onPick, badges, user }: { section: Section; onPick: (
 }
 
 export default function Settings({ onClose, active }: WindowProps) {
+  const gnome = isGnomeSession()
   const activeRef = useRef(active)
   activeRef.current = active
   const first = useMemo(() => takeSettingsSection(), [])
-  const [section, setSection] = useState<Section>(() => (isSection(first) ? first : (first && ALIAS[first]) || 'Network'))
+  const [section, setSection] = useState<Section>(() => (isSection(first) ? first : (first && ALIAS[first]) || (isGnomeSession() ? 'Personalization' : 'Network')))
   // Settings › Keyboard opens on Shortcuts, or on the on-screen keyboard when that was asked for.
   const [kbTab, setKbTab] = useState<'osk' | 'shortcuts'>(first === 'On-screen keyboard' ? 'osk' : 'shortcuts')
   const [problem, setProblem] = useState<HwDevice | null>(null)
   const [driverCount, setDriverCount] = useState(0)
   const [user, setUser] = useState<{ name: string; role: string } | null>(null)
   const { status } = useOsUpdate()
-  useEffect(() => onSettingsSection((s) => { setSection(isSection(s) ? s : ALIAS[s] ?? 'Network'); setKbTab(s === 'On-screen keyboard' ? 'osk' : 'shortcuts') }), [])
+  useEffect(() => onSettingsSection((s) => { setSection(isSection(s) ? s : ALIAS[s] ?? (isGnomeSession() ? 'Personalization' : 'Network')); setKbTab(s === 'On-screen keyboard' ? 'osk' : 'shortcuts') }), [])
   useEffect(() => {
     void os.hwDriverReport(false).then((r) => setDriverCount(r.ok ? r.value.offers.length : 0)).catch(() => {})
     void os.sysUsers().then((r) => {
@@ -970,31 +1020,36 @@ export default function Settings({ onClose, active }: WindowProps) {
       <SetNav section={section} onPick={setSection} badges={badges} user={user} />
       {/* Page frame from the Set* boards: 26/36 px padding, 14 px gap; Privacy & security has its own green tint. */}
       <main className="relative flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-9 pt-[26px] pb-[82px] [&>*]:shrink-0" style={{ background: `radial-gradient(ellipse 80% 50% at 80% 0%, ${section === 'Privacy & security' ? 'var(--ws-g-glow-green)' : 'var(--ws-g-glow)'} 0%, var(--ws-g-page) 60%)` }}>
+        {gnome && !WORKSUITE_ONLY.has(section) && GNOME_PANELS[section] ? <GnomeHandoff section={section} /> : <>
         {section === 'Network' && <NetworkPanel />}
         {section === 'VPN' && <VpnPanel />}
         {section === 'Bluetooth' && <BluetoothPanel />}
-        {section === 'Display' && <DisplayPanel />}
+        {section === 'Display' && (gnome ? <GnomeHandoff section="Display" /> : <DisplayPanel />)}
         {section === 'Graphics' && <GraphicsPanel onOpen={setSection} />}
-        {section === 'Touchscreen & pen' && <TouchPanel />}
-        {section === 'Mouse & touchpad' && <PointerPanel />}
-        {section === 'Keyboard' && <KeyboardPanel tab={kbTab} />}
-        {section === 'Clipboard' && <ClipboardPanel />}
-        {section === 'Appearance' && <AppearancePanel />}
-        {section === 'Multitasking' && <MultitaskingPanel />}
+        {section === 'Touchscreen & pen' && (gnome ? <GnomeHandoff section="Touchscreen & pen" /> : <TouchPanel />)}
+        {section === 'Mouse & touchpad' && (gnome ? <GnomeHandoff section="Mouse & touchpad" /> : <PointerPanel />)}
+        {section === 'Keyboard' && (gnome ? <GnomeHandoff section="Keyboard" /> : <KeyboardPanel tab={kbTab} />)}
+        {section === 'Clipboard' && (gnome ? <GnomeHandoff section="Clipboard" /> : <ClipboardPanel />)}
+        {section === 'Appearance' && (gnome ? <GnomeHandoff section="Appearance" /> : <AppearancePanel />)}
+        {section === 'Multitasking' && (gnome ? <GnomeHandoff section="Multitasking" /> : <MultitaskingPanel />)}
+        {section === 'Personalization' && <PersonalizationPanel />}
+        {section === 'Accessibility' && <AccessibilityPanel />}
         {section === 'Sound' && <SoundPanel />}
-        {section === 'Notifications' && <NotificationsPanel />}
+        {section === 'Notifications' && (gnome ? <GnomeHandoff section="Notifications" /> : <NotificationsPanel />)}
+        {section === 'Date & time' && <DateTimePanel />}
         {section === 'Power' && <PowerPanel />}
         {section === 'Printers' && <PrintersPanel />}
         {section === 'Default apps' && <DefaultAppsPanel />}
         {section === 'AI' && <AIPanel />}
         {section === 'Privacy & security' && <PrivacyPanel />}
-        {section === 'Lock screen' && <LockScreenPanel onLock={() => void os.lock()} />}
+        {section === 'Lock screen' && (gnome ? <GnomeHandoff section="Lock screen" /> : <LockScreenPanel onLock={() => void os.lock()} />)}
         {section === 'Users' && <UsersPanel />}
         {section === 'Devices' && <><DevicesPanel onProblem={setProblem} /><DeviceExtras /></>}
         {section === 'Drivers' && <DriversPanel onOpenUpdates={() => setSection('Updates')} />}
         {section === 'Updates' && <><H1>{t('settings.nav.Updates')}</H1><UpdatesPanel /></>}
         {section === 'Managed' && <ManagedPanel />}
         {section === 'About' && <AboutPanel />}
+        </>}
       </main>
       {problem && <DeviceProblemDialog device={problem} onClose={() => setProblem(null)} onOpenUpdates={() => setSection('Updates')} onOpenDrivers={() => setSection('Drivers')} />}
     </div>

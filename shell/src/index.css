@@ -79,6 +79,10 @@
   --ws-g-dialog: #0F2350; --ws-g-menu: rgba(12,28,66,0.98); --ws-g-field: rgba(4,10,26,0.5); --ws-g-strong: #FFFFFF;
   --ws-g-glow: #12306B; --ws-g-glow-green: #0F3A3A;
 }
+/* First run (and other setup screens using .ws-setup-bg): the dark gradient by default, a light one in the light theme. */
+.ws-setup-bg { background: var(--ws-setup-bg); }
+:root[data-theme="light"] .ws-setup-bg { background: radial-gradient(ellipse 70% 60% at 50% 20%, #DCE6FA 0%, #EEF2F9 60%, #F3F6FB 100%); }
+
 :root[data-theme="light"] {
   --ws-g-ink: #0F172A; --ws-g-soft: #24324F; --ws-g-muted: #3F5175; --ws-g-dim: #4A5B80; --ws-g-link: #1D4FC4;
   --ws-g-green: #13653F; --ws-g-amber: #8A4B0F; --ws-g-red: #B42318; --ws-g-cyan: #0B6577;
@@ -182,6 +186,13 @@ select option:checked { background-color: #1F4FB0; color: #FFFFFF; }
 [data-high-contrast] :disabled { color: #d4d4d4 !important; border-style: dashed !important; }
 @keyframes ws-rise { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
 .ws-rise { animation: ws-rise 0.2s ease-out; }
+/* Setup install graphic (components/setup-wizard/InstallGraphic.tsx): bound to real app states; off under reduced motion. */
+@keyframes ws-install-bob { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
+@keyframes ws-install-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(31,107,255,0.55) } 60% { box-shadow: 0 0 0 12px rgba(31,107,255,0) } }
+@keyframes ws-install-pop { 0% { transform: scale(0.7); opacity: 0.4 } 70% { transform: scale(1.12); opacity: 1 } 100% { transform: scale(1) } }
+.ws-install-active { animation: ws-install-bob 1.4s ease-in-out infinite, ws-install-glow 1.4s ease-out infinite; }
+.ws-install-done { animation: ws-install-pop 0.45s cubic-bezier(.2,.9,.3,1.3); }
+@media (prefers-reduced-motion: reduce) { .ws-install-active, .ws-install-done { animation: none; } }
 
 /* Text size 150 % / 200 % (WSOS-ACC-001…006): text grows and the layout reflows around it, instead of zooming the
    whole page. Tailwind's named sizes are rescaled through their theme variables; px sizes used in the shell get a rule

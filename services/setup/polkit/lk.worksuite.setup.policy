@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>WorkSuite</vendor>
+  <vendor_url>https://download.worksuitecloud.com</vendor_url>
+  <!-- The person at the computer drives setup (answers, next, recovery). The live session's user is allowed without
+       a password (there is no other account yet); on an installed system first run asks an administrator once. -->
+  <action id="lk.worksuite.setup.manage">
+    <description>Set up WorkSuite OS</description>
+    <message>Authentication is required to change the setup of this computer</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

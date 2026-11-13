@@ -3,7 +3,8 @@
 // resume, discard, test, check, use and remove — plus what the OS adds: the on/off switch, performance (threads, GPU),
 // privacy (history on/off, clear) and the organization's policy, which can turn the assistant off or limit the models.
 import { useState } from 'react'
-import { C, Spinner, Svg, btnGhost, card, rowLine, sectionLabel } from '../../components/Dk'
+import { buttonClass } from '../../components/ui/button'
+import { C, Spinner, Svg, card, rowLine, sectionLabel } from '../../components/Dk'
 import { formatBytes } from '../../lib/os'
 import { ai, aiErrorText, downloadSize, secondsLeft, timeLeftLabel, useAI, type LocalAITier, type LocalModelView, type LocalRuntimeState } from '../../lib/aiApi'
 import { clearHistory, loadPrefs, savePrefs } from '../../lib/assistant'
@@ -15,8 +16,8 @@ const TIER: Record<LocalAITier, MessageKey> = { minimal: 'ai.tier.minimal', basi
 const RUNTIME: Record<LocalRuntimeState, MessageKey> = { off: 'ai.rt.off', starting: 'ai.rt.starting', ready: 'ai.rt.ready', loading: 'ai.rt.loading', busy: 'ai.rt.busy', error: 'ai.rt.error' }
 const SHIELD = 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4'
 const BUILDING = 'M3 21h18M5 21V7l7-4 7 4v14M9 10h.01M15 10h.01M9 14h.01M15 14h.01'
-const small = `${btnGhost} px-3 py-1.5 text-[13px]`
-const smallPrimary = 'inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-[10px] bg-[#1F6BFF] px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-[#3A7DFF] disabled:cursor-default disabled:opacity-50'
+const small = buttonClass({ variant: 'secondary', size: 'sm' })
+const smallPrimary = buttonClass({ variant: 'primary', size: 'sm' })
 
 function Chip({ tone, children }: { tone: 'ok' | 'info' | 'warn' | 'bad' | 'muted'; children: string }) {
   const s = { ok: ['rgba(95,211,154,0.16)', '#5FD39A'], info: ['rgba(31,107,255,0.2)', '#9CC2FF'], warn: ['rgba(240,180,41,0.16)', '#F5C451'], bad: ['rgba(217,69,43,0.18)', '#FF8A7A'], muted: ['rgba(255,255,255,0.08)', '#C9D6EE'] }[tone]

@@ -1,4 +1,5 @@
-import { findBundles } from './bundles'
+import { findBundles, mountRemovable } from './bundles'
+import { viaInbox } from './inbox'
 import { app, BrowserWindow, clipboard, screen, dialog, ipcMain, nativeImage, Notification, powerMonitor, session, shell, type IpcMainInvokeEvent } from 'electron'
 
 // Drag image for files dragged out of Files (startDrag needs one): a small document glyph.
@@ -9,11 +10,13 @@ import { createHash } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { appWebPreferences, appWindows } from './appwindows'
-import { bootMode } from './bootmode'
+import { bootMode, controlSection } from './bootmode'
 import { appLaunchCommand, scopeCommand, lockPaths, logoutCommand, readLockSettings, writeLockTimeout } from './session'
 import { brokerCall, followSessionLock, publicAccounts, syncCall } from './broker'
 import { deviceCredential, deviceInfo, enrollDevice, STATUS_PATH } from './device'
 import { appimageClient, flatpakUserClient, followJobs, packageClient } from './packages'
+import { SHELL_ENTRIES } from './shellEntries'
+import { registerSetup, setupClient, setupNeeded } from './setup'
 import { listDevices } from './hardware'
 import { checkOwnPassword, localUsers } from './users'
 import { ask, signinHost, type SignInMethod } from './signin'
@@ -22,7 +25,7 @@ import { prepareAppMode, runAppMode } from './appwindow'
 import { prepareWhatsApp, runWhatsApp } from './whatsappwindow'
 import { WHATSAPP_ID } from './whatsapp'
 import { shellPrefsFrom } from '../src/lib/shellPrefs'
-import { launcherApps, loadSession, parseAppArgs, resolveLink } from './webapps'
+import { launcherApps, loadSession, parseAppArgs, AUTH_CALLBACK_ID, resolveLink } from './webapps'
 import { createSearch, localRecentHits, parseXbel } from './search'
 import { createWidgets } from './widgets'
 import { DESKTOP_MODULES, execProgram, findFrameFlow, findOffice, findPos, findWorkSuiteDesktop, installedApps, OFFICE_NEW } from './xdg'
@@ -48,6 +51,9 @@ import { arrange, displayManager, outputRects, type DisplayState } from './displ
 import type { Layout } from './displays'
 import { outputWindows, screensMatch, type Rect } from './outputWindows'
 import { realExec } from './system'
+import { cleanLookChange, makeDesktopLook } from './desktopLook'
+import { cleanGnomePrivacy, makeGnomePrivacy } from './gnomePrivacy'
+import { cleanA11y, makeA11y } from './a11y'
 import { collectReport, finalReport, reportText, sendReport, type ProblemReport } from './problemReport'
 import { startDesktopHost } from './desktopHost'
 import { powerArgs, startSessionHost } from './sessionHost'
@@ -122,6 +128,12 @@ const parseJson = (s: string): unknown => { try { return JSON.parse(s) } catch {
 
 /** The checked sender of the IPC call being handled (read synchronously in a handler, e.g. ws:edit). */
 let ipcSender: Electron.WebContents | null = null
+/** A structured IPC argument: the preload sends JSON (handle() stringifies everything); anything else is null and the
+ *  channel's own validator refuses it. */
+export function jsonArg(raw: string): unknown {
+  try { return JSON.parse(raw) } catch { return null }
+}
+
 function handle(channel: string, fn: (...args: string[]) => unknown) {
   ipcMain.handle(channel, (e, ...args) => {
     if (!validSender(e)) throw new Error('Rejected IPC sender')
@@ -142,7 +154,47 @@ function markSessionVeil() {
   try { mkdirSync(path.join(run, 'worksuite'), { recursive: true, mode: 0o700 }); writeFileSync(path.join(run, 'worksuite', 'shell-ready'), `${process.pid}\n`) } catch { /* no veil to tell */ }
 }
 
+/** How long Settings/Setup wait for ready-to-show before showing their window anyway. */
+export const WINDOW_SHOW_FALLBACK_MS = 4000
+/** Native window buttons on the WorkSuite bar: navy like the bar, light glyphs; the height matches WindowBar. */
+export const WINDOW_BAR_OVERLAY = { color: '#061029', symbolColor: '#DCE6F8', height: 40 }
+
 function createWindow() {
+  let cmdlineEarly: string | null = null
+  try { cmdlineEarly = readFileSync('/proc/cmdline', 'utf8') } catch { /* not Linux */ }
+  const appMode = bootMode(process.argv, cmdlineEarly)
+  if (appMode === 'setup' && !process.env.WORKSUITE_SETUP_CHECKED) {
+    void setupNeeded(setupClient()).then((needed) => {
+      // Nothing to do: exit at once. app.quit() could be held up and left an invisible process holding the
+      // single-instance lock for the whole session (fresh VM).
+      if (!needed) { app.exit(0); return }
+      process.env.WORKSUITE_SETUP_CHECKED = '1'
+      createWindow()
+    })
+    return
+  }
+  if (appMode === 'control' || appMode === 'setup') {
+    // An ordinary GNOME window (decorated, resizable), not the old full-screen desktop layer.
+    win = new BrowserWindow({
+      width: 1180, height: 780, minWidth: 720, minHeight: 520, show: false, backgroundColor: '#061029',
+      title: appMode === 'setup' ? 'WorkSuite Setup' : 'WorkSuite Settings', icon: '/usr/share/icons/hicolor/256x256/apps/worksuite.png',
+      autoHideMenuBar: true, webPreferences: shellPrefs(),
+      // WorkSuite title bar (components/WindowBar.tsx): Electron draws the real window buttons over the page's dark
+      // drag strip instead of the generic light frame. Move, resize and focus stay native.
+      titleBarStyle: 'hidden', titleBarOverlay: WINDOW_BAR_OVERLAY,
+    })
+    shellContents.add(win.webContents)
+    win.once('ready-to-show', () => win?.show())
+    // A window must appear even if Chromium never reports the first paint (its GPU helper aborted on a VM without a
+    // GPU, and the window stayed hidden for the whole session).
+    const shown = win
+    setTimeout(() => { if (!shown.isDestroyed() && !shown.isVisible()) shown.show() }, WINDOW_SHOW_FALLBACK_MS)
+    win.webContents.on('will-navigate', (e) => e.preventDefault())
+    win.webContents.setWindowOpenHandler(({ url }) => { if (externalAllowed(url)) void shell.openExternal(url); return { action: 'deny' } })
+    const section = controlSection(process.argv)
+    void win.loadFile(path.join(__dirname, '../dist/index.html'), { query: { mode: appMode, ...(section ? { section } : {}) } })
+    return
+  }
   win = new BrowserWindow({
     fullscreen: true,
     // Frameless: re-asserting fullscreen after a scale or mode change must never leave a decorated window (#60).
@@ -191,7 +243,12 @@ app.on('child-process-gone', (_e, d) => {
 })
 // `worksuite-app <module>` starts the same binary as a WorkSuite app window instead of the shell.
 const appRequest = parseAppArgs(process.argv)
-if (appRequest?.id === WHATSAPP_ID) {
+if (appRequest?.id === AUTH_CALLBACK_ID) {
+  // worksuite://auth/callback: the server's sign-in page hands the browser back to the desktop. The credentials
+  // broker already collects the session by polling with its PKCE verifier, so the code in this link is not needed
+  // (and not trusted); nothing opens.
+  app.quit()
+} else if (appRequest?.id === WHATSAPP_ID) {
   // WhatsApp Web: its own window, partition and app_id; no WorkSuite account involved (whatsappwindow.ts).
   if (prepareWhatsApp()) runWhatsApp()
   else app.quit()
@@ -203,7 +260,26 @@ if (appRequest?.id === WHATSAPP_ID) {
 /** The shell's Wayland app_id is Electron's default, "worksuite-shell" (package.json name): Labwc's window rule
  *  (services/session/labwc/rc.xml) keeps it always on bottom by that id: below every app, and on every desktop. */
 export const SHELL_APP_ID = 'worksuite-shell'
+const GNOME_SETTINGS_PANELS = new Set(['display', 'mouse', 'keyboard', 'multitasking', 'wacom', 'privacy', 'background', 'notifications', 'network', 'bluetooth', 'sound', 'power', 'printers', 'system', 'applications'])
 function startShell() {
+// WorkSuite Settings / Setup under GNOME: one window. A second launch (the app grid, a notification's "Details",
+// gnome-control-center's "WorkSuite" panel link) focuses it and opens the section it asked for.
+{
+  const m = bootMode(process.argv, null)
+  if (m === 'control' || m === 'setup') {
+    // Settings and Setup are separate windows with separate locks: they shared one, so while Setup ran (even hidden)
+    // every Settings launch handed its section to Setup and quit (installed VM: Settings never opened).
+    if (m === 'setup') app.setPath('userData', `${app.getPath('userData')}-setup`)
+    if (!app.requestSingleInstanceLock({ mode: m })) { app.quit(); return }
+    app.on('second-instance', (_e, argv) => {
+      if (!win) return
+      if (win.isMinimized()) win.restore()
+      win.focus()
+      const sec = controlSection(argv)
+      if (sec) win.webContents.send('ws:settingsSection', sec)
+    })
+  }
+}
 app.whenReady().then(() => {
   // Web permissions denied by default; the shell's own session never gets any (WSOS-SEC-003).
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
@@ -239,6 +315,28 @@ app.whenReady().then(() => {
     permission: (perm, url) => permissionAllowed(webGrants, url, perm),
   })
   handle('ws:openWorkSuiteApp', (id, url) => apps.open(id, url))
+  // GNOME session: hand a section to GNOME Settings (GnomeHandoff.tsx); only these panel names, no arguments beyond it.
+  handle('ws:openGnomeSettings', (panel) => {
+    if (!GNOME_SETTINGS_PANELS.has(panel)) return { ok: false, error: 'invalid_argument' }
+    return new Promise((resolve) => {
+      const c = spawn('gnome-control-center', [panel], { detached: true, stdio: 'ignore' })
+      c.once('error', () => resolve({ ok: false, error: 'unavailable' }))
+      c.once('spawn', () => { c.unref(); resolve({ ok: true }) })
+    })
+  })
+  // Settings › Personalization (desktopLook.ts): only the known fields with known values reach gsettings.
+  const look = makeDesktopLook(realExec)
+  handle('ws:desktopLook', () => look.read())
+  handle('ws:setDesktopLook', (raw) => {
+    const c = cleanLookChange(jsonArg(raw))
+    return c ? look.apply(c) : { available: false, reason: 'invalid_argument' }
+  })
+  const a11y = makeA11y(realExec)
+  handle('ws:a11y', () => a11y.read())
+  const gp = makeGnomePrivacy(realExec)
+  handle('ws:gnomePrivacy', () => gp.read())
+  handle('ws:setGnomePrivacy', (raw) => { const c = cleanGnomePrivacy(jsonArg(raw)); return c ? gp.apply(c) : { available: false, reason: 'invalid_argument' } })
+  handle('ws:setA11y', (raw) => { const c = cleanA11y(jsonArg(raw)); return c ? a11y.apply(c) : { available: false, reason: 'invalid_argument' } })
   handle('ws:launchApp', (id) => { const c = appLaunchCommand(id); return c ? run(...c) : undefined })
   // Settings: idle lock timeout within the policy maximum (WSOS-LOCK-003).
   const lock = lockPaths(app.getPath('home'))
@@ -261,11 +359,10 @@ app.whenReady().then(() => {
     const desktop = findWorkSuiteDesktop(all)
     const frameflow = findFrameFlow(all)
     const pos = findPos(all)
-    // worksuite-* entries are the web app windows, listed from the org's data instead; the bundled native apps
-    // (Office, FrameFlow, POS) stay and get their own WorkSuite tiles.
-    const native = new Set([office, frameflow, pos].filter(Boolean))
+    // The shell's own worksuite-* entries are its web app windows, listed from the org's data instead; any other app
+    // (WorkSuite POS, Desk, FrameFlow …) is listed like every installed app.
     return {
-      apps: all.filter((e) => !e.id.startsWith('worksuite-') || native.has(e)).map(({ exec: _e, ...e }) => e),
+      apps: all.filter((e) => !SHELL_ENTRIES.has(e.id)).map(({ exec: _e, ...e }) => e),
       office: office?.id ?? null, desktop: desktop?.id ?? null, frameflow: frameflow?.id ?? null, pos: pos?.id ?? null,
     }
   })
@@ -433,6 +530,8 @@ app.whenReady().then(() => {
   handle('ws:enrollDevice', (serverUrl, code) => enrollDevice(serverUrl, code))
   // App Center (WSOS-APP-001/002): preview before confirmation, then a job whose result arrives as an event.
   const pkg = packageClient()
+  // Setup wizard (services/setup, lk.worksuite.Setup1).
+  registerSetup(handle)
   handle('ws:pkgPreview', (catalogId, op) => pkg.preview(catalogId, op === 'remove' ? 'remove' : 'install'))
   handle('ws:pkgInstall', (catalogId) => pkg.start('Install', catalogId))
   handle('ws:pkgRemove', (catalogId) => pkg.start('Remove', catalogId))
@@ -505,7 +604,8 @@ app.whenReady().then(() => {
   const pickedPath = (h: string, kind: string) => (h.startsWith(`${kind}:`) ? picked.get(h) ?? null : null)
   const noFile = { ok: false, error: 'invalid_argument' }
   // G14: .wsupdate bundles on mounted USB drives, behind the same opaque handles as a picked file.
-  handle('ws:findBundles', () => {
+  handle('ws:findBundles', async () => {
+    await mountRemovable(vols)
     const found = findBundles(roots(files).filter((r) => r.id.startsWith('media:')))
     return { ok: true, value: found.map((f) => {
       const h = [...picked].find(([, p]) => p === f.path)?.[0] ?? `wsupdate:${picked.size + 1}:${Date.now()}`
@@ -544,7 +644,7 @@ app.whenReady().then(() => {
     } catch { return { ok: false, error: 'invalid_file' } }
   })
   startPortalWatch(sys)
-  handle('ws:localDebPreview', (h) => { const p = pickedPath(h, 'deb'); return p ? pkg.localDebPreview(p) : noFile })
+  handle('ws:localDebPreview', (h) => { const p = pickedPath(h, 'deb'); return p ? viaInbox(p, '.deb', (q) => pkg.localDebPreview(q)) : noFile })
   handle('ws:localDebInstall', (token) => pkg.localDebInstall(token))
   const fpUser = flatpakUserClient()
   handle('ws:appPermissions', (id) => pkg.appPermissions(id))
@@ -564,8 +664,8 @@ app.whenReady().then(() => {
     return fpPerms.set(id, perm, on === 'on', (d.value as { permissions?: string[] }).permissions ?? [])
   })
   handle('ws:pruneRuntimes', () => pkg.pruneRuntimes())
-  handle('ws:bundleInspect', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInspect(p) : noFile })
-  handle('ws:bundleInstall', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? pkg.bundleInstall(p) : noFile })
+  handle('ws:bundleInspect', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? viaInbox(p, '.wsupdate', (q) => pkg.bundleInspect(q)) : noFile })
+  handle('ws:bundleInstall', (h) => { const p = pickedPath(h, 'wsupdate'); return p ? viaInbox(p, '.wsupdate', (q) => pkg.bundleInstall(q)) : noFile })
   const appimages = appimageClient()
   handle('ws:appimageList', () => appimages.list())
   handle('ws:appimageImport', (h) => { const p = pickedPath(h, 'appimage'); return p ? appimages.import(p, `file://${p}`) : noFile })

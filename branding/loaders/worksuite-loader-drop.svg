@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="96" height="96" role="img" aria-label="Loading WorkSuite">
+  <title>Loading WorkSuite</title>
+  <style>
+.p { animation: 2.6s cubic-bezier(.5,0,.3,1.2) infinite; }
+    .pq { animation-name: p-q } .pl { animation-name: p-l } .pb { animation-name: p-b }
+    .pn { transform-box: fill-box; transform-origin: center; animation-name: p-n; }
+    @keyframes p-q { 0% { transform: translateY(-70px); opacity: 0 } 16%,72% { transform: translateY(0); opacity: 1 } 90%,100% { transform: translateY(40px); opacity: 0 } }
+    @keyframes p-l { 0%,10% { transform: translateY(-90px); opacity: 0 } 26%,74% { transform: translateY(0); opacity: 1 } 92%,100% { transform: translateY(40px); opacity: 0 } }
+    @keyframes p-b { 0%,20% { transform: translateY(-110px); opacity: 0 } 36%,76% { transform: translateY(0); opacity: 1 } 94%,100% { transform: translateY(40px); opacity: 0 } }
+    @keyframes p-n { 0%,38% { transform: scale(0) } 46%,70% { transform: scale(1) } 80%,100% { transform: scale(0) } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  </style>
+  <rect class="p pq" x="48" y="16" width="64" height="64" fill="#0a6cff"/>
+  <rect class="p pl" x="16" y="48" width="32" height="32" fill="#00daf2"/>
+  <rect class="p pb" x="48" y="80" width="32" height="32" fill="#00daf2"/>
+  <rect class="p pn" x="48" y="48" width="32" height="32" fill="#001842"/>
+</svg>

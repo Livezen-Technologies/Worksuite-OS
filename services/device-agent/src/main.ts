@@ -90,6 +90,7 @@ async function daemon() {
     effectivePolicy: () => (state.state.enrolled && state.state.policy ? publicPolicy(state.state.policy) : null),
     enroll: (url, token) => serial(() => agent.enroll(url, token)),
     refresh: async () => { await safe('refresh', async () => { await agent.refreshPolicy(); await agent.checkIn(); }); },
+    reportInventory: async () => { await safe('inventory', async () => { if (state.state.enrolled) await httpApi(() => state.state).inventory(await host.inventory()); }); },
     scan: (kind) => security.startScan(kind, 'user'),
     cancelScan: () => security.cancelScan(),
     updateDefinitions: () => security.updateDefinitions(),

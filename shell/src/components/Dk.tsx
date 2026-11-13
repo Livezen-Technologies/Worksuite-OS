@@ -1,8 +1,10 @@
 // Dark navy pieces shared by Settings, update and device screens (boot-install boards: Set*, Upd*, Hw*, U*, H*).
+import { WorkSuiteLoader } from './WorkSuiteLoader'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { t } from '../i18n'
 import { createPortal } from 'react-dom'
 import { AnimatedProgress, type ProgressTone } from './AnimatedProgress'
+import { buttonClass } from './ui/button'
 
 export const C = {
   // Theme variables (index.css --ws-g-*): dark values by default, light ones under Settings › Appearance › Light.
@@ -12,9 +14,10 @@ export const C = {
 export const card = 'rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(14,32,72,0.6)]'
 export const heroCard = 'rounded-[14px] border border-[rgba(127,178,255,0.14)] bg-[rgba(14,32,72,0.7)]'
 export const rowLine = 'border-t border-[rgba(127,178,255,0.1)] first:border-t-0'
-export const btnGhost = 'inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-[10px] border border-[rgba(127,178,255,0.25)] px-[18px] py-[10px] text-sm font-medium text-[#E8EEFA] hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-50'
-export const btnPrimary = 'inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-[10px] bg-[#1F6BFF] px-5 py-[10px] text-sm font-semibold text-white hover:bg-[#3A7DFF] disabled:cursor-default disabled:bg-[rgba(31,107,255,0.3)] disabled:text-white/50'
-export const linkBtn = 'cursor-pointer rounded text-[13px] text-[#7FB2FF] hover:text-[#B8D4FF]'
+// Buttons: the shared system (components/ui/button.tsx); Settings and device boards use the md size.
+export const btnGhost = buttonClass({ variant: 'secondary', size: 'md' })
+export const btnPrimary = buttonClass({ variant: 'primary', size: 'md' })
+export const linkBtn = buttonClass({ variant: 'link' })
 export const chip = 'rounded-full bg-[rgba(127,178,255,0.12)] px-2 py-0.5 text-[11px] text-[#C9D6EE]'
 export const sectionLabel = 'text-xs uppercase tracking-[0.08em] text-[#8FA3C8]'
 export const field = 'h-10 rounded-[9px] border border-[rgba(127,178,255,0.25)] bg-[rgba(4,10,26,0.5)] px-3 text-sm text-[#E8EEFA] outline-none focus:border-[#1F6BFF]'
@@ -27,8 +30,10 @@ export function Svg({ d, size = 20, stroke = 'currentColor', width = 2, classNam
   )
 }
 
-export function Spinner({ size = 14, stroke = C.cyan }: { size?: number; stroke?: string }) {
-  return <svg className="ws-spin" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9" /></svg>
+/** Busy indicator: the WorkSuite loader ("assemble"), decorative (the busy control carries the text). `stroke` is kept
+ *  for callers from the ring era and no longer changes the colours: the mark is always in brand colours. */
+export function Spinner({ size = 14 }: { size?: number; stroke?: string }) {
+  return <WorkSuiteLoader size={Math.max(size, 12)} decorative />
 }
 
 /** What a switch's change handler may answer: a failed bridge reply (`ok: false` / `available: false`) or a thrown

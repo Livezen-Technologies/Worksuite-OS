@@ -1,0 +1,39 @@
+#!/bin/sh
+# Builds GNOME Shell's theme with the WorkSuite sign-in look: the stock theme (diverted to .distrib by
+# worksuite-session's preinst) with /usr/share/worksuite/gdm/worksuite-gdm.css appended to each style variant.
+# GNOME Shell 48 offers no other way to style GDM: the gdm session mode is built in and resource:// stylesheets win
+# over data-dir ones. Run by worksuite-session's postinst and its dpkg trigger whenever gnome-shell-common updates the
+# stock file, so a Debian security update to the theme is picked up. Any failure leaves the stock theme in place:
+# the sign-in screen must never depend on this succeeding.
+set -u
+STOCK=/usr/share/gnome-shell/gnome-shell-theme.gresource.distrib
+OUT=/usr/share/gnome-shell/gnome-shell-theme.gresource
+CSS=/usr/share/worksuite/gdm/worksuite-gdm.css
+PREFIX=/org/gnome/shell/theme
+log() { echo "worksuite-gdm-theme: $*" >&2; }
+stock() { [ -f "$STOCK" ] && cp -f "$STOCK" "$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"; }
+[ -f "$STOCK" ] || { log "no stock theme at $STOCK"; exit 0; }
+if ! command -v gresource >/dev/null || ! command -v glib-compile-resources >/dev/null || [ ! -f "$CSS" ]; then
+  log "tools or $CSS missing; keeping the stock theme"; stock; exit 0
+fi
+W=$(mktemp -d) || { stock; exit 0; }
+trap 'rm -rf "$W"' EXIT
+ok=1
+{ echo '<?xml version="1.0" encoding="UTF-8"?>'; echo "<gresources><gresource prefix=\"$PREFIX\">"; } > "$W/theme.xml"
+for r in $(gresource list "$STOCK"); do
+  rel=${r#$PREFIX/}
+  mkdir -p "$W/files/$(dirname "$rel")"
+  gresource extract "$STOCK" "$r" > "$W/files/$rel" || ok=0
+  echo "<file>$rel</file>" >> "$W/theme.xml"
+done
+echo '</gresource></gresources>' >> "$W/theme.xml"
+n=0
+for v in gnome-shell-dark.css gnome-shell-light.css gnome-shell-high-contrast.css gnome-shell.css; do
+  [ -f "$W/files/$v" ] || continue
+  case $v in *high-contrast*) continue ;; esac   # high contrast stays stock: legibility first
+  { printf '\n/* WorkSuite (worksuite-gdm-theme) */\n'; cat "$CSS"; } >> "$W/files/$v"; n=$((n + 1))
+done
+[ "$ok" = 1 ] && [ "$n" -gt 0 ] && glib-compile-resources --sourcedir="$W/files" --target="$W/out.gresource" "$W/theme.xml" \
+  && [ -s "$W/out.gresource" ] && gresource list "$W/out.gresource" | grep -q "$PREFIX/gnome-shell-dark.css" \
+  && cp -f "$W/out.gresource" "$OUT.tmp" && mv -f "$OUT.tmp" "$OUT" && { log "WorkSuite sign-in theme built ($n variants)"; exit 0; }
+log "could not build the WorkSuite theme; keeping the stock theme"; stock; exit 0

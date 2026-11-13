@@ -1,0 +1,11 @@
+// WorkSuite setup wizard (services/setup, lk.worksuite.Setup1): an administrator at the computer (an active, local
+// session of a member of sudo, which the installer's first account is) drives setup without a password prompt for
+// every answer. The wizard saves each answer as it is typed through a short-lived busctl call, so polkit's
+// auth_admin_keep never matched a remembered authorization and asked again and again; that taught people to type
+// their password into any dialog. Administrators can already run sudo, so this grants nothing new; everyone else
+// (standard users, remote or inactive sessions) still authenticates as an administrator.
+polkit.addRule(function (action, subject) {
+    if (action.id === "lk.worksuite.setup.manage" && subject.local && subject.active && subject.isInGroup("sudo")) {
+        return polkit.Result.YES;
+    }
+});

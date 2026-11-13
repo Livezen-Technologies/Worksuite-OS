@@ -15,6 +15,6 @@ mkdir -p "$out/icons"
 sed "s/@DATE@/$date/" "$here/background.svg" > "$tmp/bg.svg"
 rsvg-convert -w 1280 -h 800 "$tmp/bg.svg" -o "$out/../splash.png"
 python3 "$here/../make-pixmaps.py" "$out" live                 # blue selection pill
-for r in ws-install ws-safe ws-utils; do rsvg-convert -w 400 -h 44 "$here/$r.svg" -o "$out/icons/$r.png"; done
+for r in ws-install ws-safe ws-update ws-utils; do rsvg-convert -w 400 -h 44 "$here/$r.svg" -o "$out/icons/$r.png"; done
 grub-mkfont -s 13 -o "$out/ibmplexmono-13.pf2" "$fonts/IBMPlexMono-Regular.ttf"
 grub-mkfont -s 16 -o "$out/ibmplexsans-16.pf2" "$fonts/IBMPlexSans-Regular.ttf"

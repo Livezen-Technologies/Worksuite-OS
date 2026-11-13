@@ -30,7 +30,7 @@ WsPage {
             radius: 12; color: "#145FD39A"; border.width: 1; border.color: "#595FD39A"
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
-                Text { text: "✓"; color: "#5FD39A"; font.pixelSize: 16; font.weight: Font.Bold }
+                WsCheck { color: "#5FD39A"; size: 16; lineWidth: 2.2 }
                 Text {
                     Layout.fillWidth: true
                     text: "<b>" + qsTr("Time zone") + "</b> · " + config.currentTimezoneName

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { focusRing } from '../components/ui/button'
 import type { LockProps } from './types'
 import { os, type SignInMethod } from '../lib/os'
 import { METHOD_LABEL } from './settings/SignIn'
@@ -35,7 +36,6 @@ export default function Lock({ user, name: realName, onUnlock, notices = [], unr
   const pick = (m: SignInMethod) => { setMethod(m); setPassword(''); setError(null); if (m !== 'key') setTimeout(() => ref.current?.focus(), 0) }
   const display = user ? user.replace(/^.*\\/, '').replace(/@.*$/, '') : t('lock.user')
   const name = realName || display.charAt(0).toUpperCase() + display.slice(1)
-  const focusRing = 'outline-none focus-visible:ring-2 focus-visible:ring-[#7FB2FF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A1A3A]'
   const day = formatDate(now, { weekday: 'long', day: 'numeric', month: 'long' }).replace(',', '')
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function Lock({ user, name: realName, onUnlock, notices = [], unr
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (busy) return
-    if (method !== 'key' && !password) { setError(t('greeter.enterPassword')); ref.current?.focus(); return }
+    if (method !== 'key' && !password) { setError(t(method === 'pin' ? 'signin.enterPin' : 'greeter.enterPassword')); ref.current?.focus(); return }
     setBusy(true); setError(null)
     try {
       const res = await os.authenticate(user, method === 'key' ? '' : password, method)
@@ -74,7 +74,7 @@ export default function Lock({ user, name: realName, onUnlock, notices = [], unr
   const counts = unreadCounts(notices, unread ?? notices.length)
 
   return (
-    <main aria-labelledby="ws-lock-h1" className="relative flex h-full w-full flex-col overflow-hidden font-sans text-white" style={{ background: BG.lock }}
+    <main aria-labelledby="ws-lock-h1" className="ws-dark-zone relative flex h-full w-full flex-col overflow-hidden font-sans text-white" style={{ background: BG.lock }}
       onMouseDown={(e) => { if (!asking && e.button === 0 && !(e.target as HTMLElement).closest('button,input,a')) { e.preventDefault(); setAsking(true) } }}>
       {/* Orca announces the screen as "Locked" on arrival (WSOS-ACC-003). */}
       <h1 id="ws-lock-h1" className="sr-only">{t('lock.locked')}</h1>
