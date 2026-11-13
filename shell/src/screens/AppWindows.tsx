@@ -6,14 +6,17 @@ import SetupGate from '../components/setup-wizard/SetupGate'
 import { setupApi } from '../lib/setupApi'
 import { os } from '../lib/os'
 import { requestSettingsSection } from '../lib/settingsNav'
+import { WindowBar } from '../components/WindowBar'
+import { t } from '../i18n'
 
 export function ControlCenter({ section }: { section: string | null }) {
   // The section asked for on the command line, then whatever a later launch asks for.
   useState(() => { if (section) requestSettingsSection(section); return null })
   useEffect(() => os.onSettingsSection((s) => requestSettingsSection(s)), [])
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#061029] text-white">
-      <Settings onClose={() => window.close()} active />
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#061029] text-white">
+      <WindowBar title={t('launcher.settings')} />
+      <div className="min-h-0 flex-1"><Settings onClose={() => window.close()} active /></div>
     </div>
   )
 }
@@ -22,8 +25,9 @@ export function ControlCenter({ section }: { section: string | null }) {
 export function SetupWindow({ userName }: { userName: string }) {
   const [api] = useState(() => setupApi())
   return (
-    <div className="h-screen w-screen overflow-hidden">
-      <SetupGate api={api} userName={userName} onDone={() => window.close()} fallback={<CloseNow />} />
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#061029]">
+      <WindowBar title={t('window.setup')} />
+      <div className="min-h-0 flex-1"><SetupGate api={api} userName={userName} onDone={() => window.close()} fallback={<CloseNow />} /></div>
     </div>
   )
 }

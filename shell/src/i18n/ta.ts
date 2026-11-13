@@ -70,6 +70,7 @@ const ta: Partial<Record<MessageKey, string>> = {
   'launcher.cachedList': 'இணைப்பில்லை — கடைசியாகச் சேமித்த பட்டியல்',
   'launcher.apps': 'பயன்பாடுகள்',
   'launcher.settings': 'அமைப்புகள்',
+  'window.setup': 'WorkSuite அமைவு',
   'launcher.recent': 'சமீபத்தியவை',
   'launcher.noApps': 'பொருந்தும் பயன்பாடுகள் இல்லை.',
   'launcher.appCenter': 'பயன்பாட்டு மையம்',

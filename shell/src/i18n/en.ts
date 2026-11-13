@@ -71,6 +71,7 @@ const en = {
   'launcher.cachedList': 'Offline — last saved list',
   'launcher.apps': 'Apps',
   'launcher.settings': 'Settings',
+  'window.setup': 'WorkSuite Setup',
   'launcher.recent': 'Recent',
   'launcher.noApps': 'No apps match.',
   'launcher.appCenter': 'App Center',

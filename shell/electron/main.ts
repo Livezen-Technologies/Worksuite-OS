@@ -155,6 +155,8 @@ function markSessionVeil() {
 
 /** How long Settings/Setup wait for ready-to-show before showing their window anyway. */
 export const WINDOW_SHOW_FALLBACK_MS = 4000
+/** Native window buttons on the WorkSuite bar: navy like the bar, light glyphs; the height matches WindowBar. */
+export const WINDOW_BAR_OVERLAY = { color: '#061029', symbolColor: '#DCE6F8', height: 40 }
 
 function createWindow() {
   let cmdlineEarly: string | null = null
@@ -174,6 +176,9 @@ function createWindow() {
       width: 1180, height: 780, minWidth: 720, minHeight: 520, show: false, backgroundColor: '#061029',
       title: appMode === 'setup' ? 'WorkSuite Setup' : 'WorkSuite Settings', icon: '/usr/share/icons/hicolor/256x256/apps/worksuite.png',
       autoHideMenuBar: true, webPreferences: shellPrefs(),
+      // WorkSuite title bar (components/WindowBar.tsx): Electron draws the real window buttons over the page's dark
+      // drag strip instead of the generic light frame. Move, resize and focus stay native.
+      titleBarStyle: 'hidden', titleBarOverlay: WINDOW_BAR_OVERLAY,
     })
     shellContents.add(win.webContents)
     win.once('ready-to-show', () => win?.show())

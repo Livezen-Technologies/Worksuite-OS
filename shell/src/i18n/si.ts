@@ -70,6 +70,7 @@ const si: Partial<Record<MessageKey, string>> = {
   'launcher.cachedList': 'නොබැඳි — අවසන් වරට සුරැකි ලැයිස්තුව',
   'launcher.apps': 'යෙදුම්',
   'launcher.settings': 'සැකසුම්',
+  'window.setup': 'WorkSuite සැකසුම',
   'launcher.recent': 'මෑත',
   'launcher.noApps': 'ගැළපෙන යෙදුම් නැත.',
   'launcher.appCenter': 'යෙදුම් මධ්‍යස්ථානය',
