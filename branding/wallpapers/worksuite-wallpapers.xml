@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE wallpapers SYSTEM "gnome-wp-list.dtd">
+<!-- The WorkSuite wallpapers, listed in Settings › Appearance › Background. worksuite-1 is also default.png: the desktop,
+     lock screen and sign-in screen background. -->
+<wallpapers>
+  <wallpaper deleted="false"><name>WorkSuite Aqua</name><filename>/usr/share/backgrounds/worksuite/worksuite-1.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Ocean</name><filename>/usr/share/backgrounds/worksuite/worksuite-2.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Aurora</name><filename>/usr/share/backgrounds/worksuite/worksuite-3.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+  <wallpaper deleted="false"><name>WorkSuite Violet</name><filename>/usr/share/backgrounds/worksuite/worksuite-4.png</filename><options>zoom</options><shade_type>solid</shade_type><pcolor>#06123a</pcolor><scolor>#06123a</scolor></wallpaper>
+</wallpapers>
