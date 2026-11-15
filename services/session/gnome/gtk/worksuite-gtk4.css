@@ -1,0 +1,26 @@
+/* WorkSuite colours for GNOME's own apps (Files, Console, Text Editor, Settings panels...): libadwaita 1.7 reads these
+ * CSS variables, so header bars, sidebars and window backgrounds match the WorkSuite navy of the taskbar, Start menu,
+ * WorkSuite windows and sign-in. Only colours; sizes, layout and controls stay stock. Installed for new accounts as
+ * ~/.config/gtk-4.0/gtk.css (from /etc/skel); deleting that file restores plain Adwaita. Light style keeps Adwaita. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --window-bg-color: #0A1A3D;
+    --window-fg-color: #E8EEFA;
+    --view-bg-color: #0C1F47;
+    --view-fg-color: #E8EEFA;
+    --headerbar-bg-color: #061029;
+    --headerbar-fg-color: #DCE6F8;
+    --headerbar-backdrop-color: #061029;
+    --headerbar-shade-color: rgba(0, 0, 0, 0.36);
+    --sidebar-bg-color: #081536;
+    --sidebar-fg-color: #DCE6F8;
+    --sidebar-backdrop-color: #081536;
+    --secondary-sidebar-bg-color: #0A1A3D;
+    --card-bg-color: rgba(127, 178, 255, 0.07);
+    --dialog-bg-color: #0C1F47;
+    --popover-bg-color: #0E2350;
+    --thumbnail-bg-color: #0E2350;
+  }
+}
+/* The WorkSuite blue for selections, focus and suggested buttons (accent-color 'blue' is close; this is exact). */
+:root { --accent-bg-color: #1F6BFF; --accent-color: #4C9BFF; }

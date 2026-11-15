@@ -109,3 +109,12 @@ blur=false
 
 [org/gnome/shell/extensions/blur-my-shell/dash-to-panel]
 blur-original-panel=true
+
+# Ctrl+Shift+Esc opens Task Manager (GNOME System Monitor), as on Windows.
+[org/gnome/settings-daemon/plugins/media-keys]
+custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/worksuite-taskmanager/']
+
+[org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/worksuite-taskmanager]
+name='Task Manager'
+command='gnome-system-monitor'
+binding='<Control><Shift>Escape'

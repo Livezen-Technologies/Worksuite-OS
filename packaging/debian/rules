@@ -115,7 +115,9 @@ override_dh_auto_install:
 	install -D -m 0644 branding/wallpaper.svg $$d/usr/share/backgrounds/worksuite/default.svg && \
 	install -D -m 0644 -t $$d/usr/share/worksuite/vendor-logos build-branding/vendor-logos/*.svg build-branding/vendor-logos/*.png && \
 	install -D -m 0644 branding/faces/worksuite-default.png $$d/usr/share/worksuite/faces/worksuite-default.png && \
-	install -D -m 0644 branding/faces/worksuite-default.png $$d/etc/skel/.face
+	install -D -m 0644 branding/faces/worksuite-default.png $$d/etc/skel/.face && \
+	install -D -m 0644 services/session/gnome/gtk/worksuite-gtk4.css $$d/etc/skel/.config/gtk-4.0/gtk.css && \
+	install -D -m 0644 services/session/gnome/gtk/worksuite-gtk4.css $$d/usr/share/worksuite/gtk/worksuite-gtk4.css
 
 override_dh_auto_test:
 	cd build-installer && QT_QPA_PLATFORM=offscreen ctest --output-on-failure
