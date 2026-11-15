@@ -4,7 +4,7 @@
 # errors the package service maps to SignatureInvalid (services/package-service/src/service.ts).
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
-t=$(mktemp -d); trap 'kill $srv 2>/dev/null || true; rm -rf "$t"' EXIT
+srv=; t=$(mktemp -d); trap '[ -z "$srv" ] || kill $srv 2>/dev/null || true; rm -rf "$t"' EXIT
 export no_proxy='*' NO_PROXY='*'
 ok() { echo "ok - $1"; }
 fail() { echo "FAIL - $1"; [ -f "$t/apt.log" ] && tail -5 "$t/apt.log"; exit 1; }
@@ -67,7 +67,7 @@ apt apt-get update > "$t/apt.log" 2>&1 || fail "update after restoring the good 
 # the last verified index (still 1.1).
 GNUPGHOME="$t/other/gnupg" "$root/tools/repo/publish.sh" "$t/repo" trixie-stable "$(probe 1.2)" >/dev/null
 apt apt-get update > "$t/apt.log" 2>&1 || true
-grep -Eq 'NO_PUBKEY|not signed|InRelease.*(invalid|is not valid)|EXPKEYSIG|BADSIG' "$t/apt.log" || fail "foreign key: expected a signature error the package service recognises"
+grep -Eq 'NO_PUBKEY|not signed|InRelease.*(invalid|is not valid)|EXPKEYSIG|BADSIG|OpenPGP signature verification failed|Missing key' "$t/apt.log" || fail "foreign key: expected a signature error the package service recognises"
 apt apt-cache policy worksuite-repo-probe > "$t/policy.txt"; cat "$t/policy.txt" >> "$t/apt.log"; grep -q "Candidate: 1.1" "$t/policy.txt" || fail "1.2 from a foreign key must not become installable"
 ok "a repository re-signed with another key is refused; 1.2 is not offered"
 

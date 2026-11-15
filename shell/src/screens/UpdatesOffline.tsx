@@ -5,7 +5,8 @@
 // by apt's progress, so the download line says how far it got in percent.
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
-import { formatBytes, os, packageErrorText, type BundleInfo, type DeviceInfo, type FoundBundle, type OsUpdateStatus } from '../lib/os'
+import { compareVersions } from '../lib/updates'
+import { formatBytes, os, bundleErrorText, packageErrorText, type BundleInfo, type DeviceInfo, type FoundBundle, type OsUpdateStatus } from '../lib/os'
 import { updates } from '../lib/useOsUpdate'
 import { fmtWhen, type JobProgress } from '../lib/updates'
 import { Progress, Svg } from '../components/Dk'
@@ -15,11 +16,8 @@ const RING: Record<string, string> = messages({ development: 'upd.ring.developme
 const panel = 'rounded-[14px] border border-[rgba(127,178,255,0.12)] bg-[rgba(14,32,72,0.6)]'
 
 /** Numeric dotted-version compare: >0 when a is newer. */
-export function cmpVersion(a: string, b: string): number {
-  const pa = a.split(/[.+~-]/).map((x) => parseInt(x, 10) || 0), pb = b.split(/[.+~-]/).map((x) => parseInt(x, 10) || 0)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) { const d = (pa[i] ?? 0) - (pb[i] ?? 0); if (d) return d }
-  return 0
-}
+/** Same order as the package service (Debian: 1.0.0~rc3 > 1.0.0~rc1, 1.0.0 > 1.0.0~rc3, 1.1.0 > 1.1), which decides. */
+export const cmpVersion = (a: string, b: string): number => compareVersions(a, b)
 
 const offered = (st: OsUpdateStatus) => (st.version && st.version !== st.installed ? st.version : null)
 const emergency = (st: OsUpdateStatus) => !!st.critical && !!offered(st) && ['available', 'waiting', 'installing', 'checking'].includes(st.state)
@@ -27,7 +25,9 @@ const interrupted = (st: OsUpdateStatus) => st.state === 'waiting' && st.reason 
 
 /** Whether Settings › Updates shows the G14 layout instead of the regular one. */
 export function showsOffline(st: OsUpdateStatus, bundles: FoundBundle[]) {
-  if (st.state === 'ready_to_restart' || st.state === 'restart_pending' || st.state === 'failed') return false
+  if (st.state === 'ready_to_restart' || st.state === 'restart_pending') return false
+  // A failed online check is exactly when a USB update is wanted (no internet): bundles on a drive still show.
+  if (st.state === 'failed') return bundles.length > 0
   return emergency(st) || (st.state === 'installing' && !!st.resumed) || interrupted(st) || bundles.length > 0
 }
 
@@ -109,19 +109,23 @@ function UsbCard({ st, bundles }: { st: OsUpdateStatus; bundles: FoundBundle[] }
   const [info, setInfo] = useState<BundleInfo | null>(null)
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null)
   const [job, setJob] = useState<string | null>(null)
+  // The version a finished bundle install put in place: the coordinator's status is not re-read after it, so without
+  // this the card kept offering the bundle it had just installed (seen in a VM).
+  const [justInstalled, setJustInstalled] = useState<string | null>(null)
   const found = chosen ?? (bundles[0] ? { ...bundles[0] } : null)
   useEffect(() => {
     setInfo(null)
     if (!found) return
     let live = true
-    void os.bundleInspect(found.handle).then((r) => { if (!live) return; if (r.ok) setInfo(r.value); else setMsg({ text: packageErrorText(r.error), error: true }) })
+    void os.bundleInspect(found.handle).then((r) => { if (!live) return; if (r.ok) setInfo(r.value); else setMsg({ text: bundleErrorText(r.error), error: true }) })
     return () => { live = false }
   }, [found?.handle]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => os.onPkgJob((e) => {
     if (e.kind !== 'finished' || e.job !== job) return
     setJob(null)
-    setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: packageErrorText(e.error ?? 'failed'), error: true })
-  }), [job])
+    if (e.result === 'success' && info) setJustInstalled(info.version)
+    setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: bundleErrorText(e.error ?? 'failed'), error: true })
+  }), [job, info])
   const choose = async () => {
     setMsg(null)
     const f = await os.pickFile('wsupdate')
@@ -131,9 +135,10 @@ function UsbCard({ st, bundles }: { st: OsUpdateStatus; bundles: FoundBundle[] }
   const install = async () => {
     if (!found) return
     const r = await os.bundleInstall(found.handle)
-    if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: packageErrorText(r.error), error: true })
+    if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: bundleErrorText(r.error), error: true })
   }
-  const newer = info ? cmpVersion(info.version, st.installed) > 0 : false
+  const installed = justInstalled && cmpVersion(justInstalled, st.installed) > 0 ? justInstalled : st.installed
+  const newer = info ? cmpVersion(info.version, installed) > 0 : false
   return (
     <section aria-labelledby="g14-usb" className={`${panel} flex items-center gap-4 px-5 py-[18px]`}>
       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[rgba(31,107,255,0.18)]"><Svg d="M9 3h6v6H9zM6 9h12v12H6zM10 13v4M14 13v4" size={24} stroke="#7FB2FF" /></span>
@@ -147,7 +152,7 @@ function UsbCard({ st, bundles }: { st: OsUpdateStatus; bundles: FoundBundle[] }
         {info && (
           <span className="flex items-center gap-1.5 text-xs" style={{ color: newer ? '#5FD39A' : '#FFB98A' }}>
             <Svg d={newer ? 'M5 12.5l4.5 4.5L19 7.5' : 'M12 8v5M12 16.5v.5'} size={14} stroke={newer ? '#5FD39A' : '#FFB98A'} />
-            {t('upd.g14.verified')} · {t(newer ? 'upd.g14.newer' : 'upd.g14.notNewer', { installed: st.installed })} · {formatBytes(info.bytes)}
+            {t('upd.g14.verified')} · {t(newer ? 'upd.g14.newer' : 'upd.g14.notNewer', { installed })} · {formatBytes(info.bytes)}
           </span>
         )}
         {msg && <span role={msg.error ? 'alert' : 'status'} className={`text-xs ${msg.error ? 'text-[#FF8A7A]' : 'text-[#C9D6EE]'}`}>{msg.text}</span>}

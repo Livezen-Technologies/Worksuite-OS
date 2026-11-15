@@ -4,15 +4,16 @@
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { formatBytes, os, packageErrorText, type AppUpdate, type BundleInfo, type DeviceInfo, type OsUpdateStatus, type UpdateHistory, type UpdateHistoryEntry } from '../lib/os'
+import { formatBytes, os, bundleErrorText, packageErrorText, type AppUpdate, type BundleInfo, type DeviceInfo, type OsUpdateStatus, type UpdateHistory, type UpdateHistoryEntry } from '../lib/os'
 import { useOsUpdate, updates } from '../lib/useOsUpdate'
 import { REMIND_KEY, SEEN_KEY, UPDATE_PHASES, fmtWhen, heroView, needsAttention, canDefer, restartOptions, whatsNew, type Action, type RestartChoice, type Tone } from '../lib/updates'
 import { C, Dialog, OptionCard, Progress, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, heroCard, linkBtn, rowLine } from '../components/Dk'
-import { Mark } from '../components/Ws'
 import { ErrorDetails } from '../components/ErrorDetails'
 import { errorMessage, friendlyError } from '../lib/errors'
 import { OfflineUpdates, showsOffline, useUsbBundles } from './UpdatesOffline'
 import { formatNumber, messages, t } from '../i18n'
+import { Button } from '../components/ui/button'
+import { WorkSuiteLoader } from '../components/WorkSuiteLoader'
 
 export const ICON = {
   download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
@@ -91,7 +92,7 @@ export function UpdatesPanel() {
       {/* SetUpdates board hero: tinted by state */}
       <div className="flex items-center gap-5 rounded-[18px] border px-6 py-[22px]" style={{ background: hero.bg, borderColor: hero.border }} aria-live="polite">
         <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-2xl" style={{ background: hero.icon }}>
-          <span className={v.tone === 'busy' && !pct ? 'ws-spin inline-flex' : 'inline-flex'}><Svg d={v.tone === 'busy' && st.state === 'checking' ? ICON.restart : tone.icon} size={30} stroke="#FFFFFF" /></span>
+          {v.tone === 'busy' && !pct ? <WorkSuiteLoader size={34} decorative /> : <span className="inline-flex"><Svg d={tone.icon} size={30} stroke="#FFFFFF" /></span>}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
           <span className="text-xl font-bold">{v.title}</span>
@@ -273,7 +274,7 @@ function OfflineBundle() {
   useEffect(() => os.onPkgJob((e) => {
     if (e.kind !== 'finished' || e.job !== job) return
     setJob(null)
-    setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: packageErrorText(e.error ?? 'failed'), error: true })
+    setMsg(e.result === 'success' ? { text: t('upd.usb.installed') } : { text: bundleErrorText(e.error ?? 'failed'), error: true })
   }), [job])
   const choose = async () => {
     setMsg(null); setInfo(null)
@@ -281,12 +282,12 @@ function OfflineBundle() {
     if (!f.ok) { if (f.error !== 'cancelled') setMsg({ text: packageErrorText(f.error), error: true }); return }
     setPicked(f.value)
     const r = await os.bundleInspect(f.value.handle)
-    if (r.ok) setInfo(r.value); else setMsg({ text: packageErrorText(r.error), error: true })
+    if (r.ok) setInfo(r.value); else setMsg({ text: bundleErrorText(r.error), error: true })
   }
   const install = async () => {
     if (!picked) return
     const r = await os.bundleInstall(picked.handle)
-    if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: packageErrorText(r.error), error: true })
+    if (r.ok) { setJob(r.value); setMsg({ text: t('upd.usb.installing') }) } else setMsg({ text: bundleErrorText(r.error), error: true })
   }
   return (
     <section aria-labelledby="upd-usb" className={`${card} flex flex-col gap-2 px-[18px] py-4 text-[13px]`}>
@@ -333,10 +334,7 @@ export function RestartDialog({ onClose }: { onClose: () => void }) {
 export function UpdatingScreen({ from, to, percent, phase }: { from: string; to: string | null; percent: number | null; phase: string | null }) {
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="updating-t" className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-7 bg-[#040A1A] font-sans text-[#E8EEFA]">
-      <div className="relative h-[120px] w-[120px]">
-        <svg className="ws-spin absolute inset-0" width="120" height="120" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" fill="none" stroke="rgba(127,178,255,0.12)" strokeWidth="4" /><path d="M60 6a54 54 0 0 1 54 54" fill="none" stroke="#18D4F0" strokeWidth="4" strokeLinecap="round" /></svg>
-        <span className="absolute top-9 left-9"><Mark size={48} /></span>
-      </div>
+      <WorkSuiteLoader size={120} decorative />
       <div className="flex flex-col items-center gap-2.5">
         <h1 id="updating-t" className="m-0 text-[28px] font-medium">{t('upd.updating')}{percent != null ? <> · <CountUp value={percent} /></> : ''}</h1>
         <p className="m-0 text-[15px] text-[#8FA3C8]">{t('upd.dontTurnOff')}</p>
@@ -429,11 +427,11 @@ export function UpdateToast({ onDetails, onSchedule, onDismiss }: { onDetails: (
       </div>
       <div className="flex gap-2 pr-[18px] pb-[18px] pl-[76px]">
         {ready || st.state === 'restart_pending' ? <>
-          <button type="button" onClick={() => void os.power('restart')} className="cursor-pointer rounded-[9px] bg-[#1F6BFF] px-3.5 py-[9px] text-[13px] font-semibold text-white hover:bg-[#3A7DFF]">{t('upd.action.restart')}</button>
-          {ready && <button type="button" onClick={onSchedule} className="cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-3.5 py-[9px] text-[13px] font-medium hover:bg-white/[0.06]">{t('upd.action.schedule')}</button>}
+          <Button variant="primary" size="sm" onClick={() => void os.power('restart')}>{t('upd.action.restart')}</Button>
+          {ready && <Button size="sm" onClick={onSchedule}>{t('upd.action.schedule')}</Button>}
         </> : <>
-          <button type="button" disabled={busy} onClick={() => void act(updates.installNow)} className="cursor-pointer rounded-[9px] bg-[#1F6BFF] px-3.5 py-[9px] text-[13px] font-semibold text-white hover:bg-[#3A7DFF] disabled:opacity-60">{t('upd.installNow')}</button>
-          {canDefer(st) && <button type="button" disabled={busy} onClick={() => void act(async () => { await updates.defer(); onDismiss() })} className="cursor-pointer rounded-[9px] border border-[rgba(127,178,255,0.25)] px-3.5 py-[9px] text-[13px] font-medium hover:bg-white/[0.06] disabled:opacity-60">{t('upd.action.later')}</button>}
+          <Button variant="primary" size="sm" disabled={busy} onClick={() => void act(updates.installNow)}>{t('upd.installNow')}</Button>
+          {canDefer(st) && <Button size="sm" disabled={busy} onClick={() => void act(async () => { await updates.defer(); onDismiss() })}>{t('upd.action.later')}</Button>}
         </>}
         <button type="button" onClick={onDetails} className={`${linkBtn} px-2.5 py-[9px]`}>{t('common.details')}</button>
       </div>

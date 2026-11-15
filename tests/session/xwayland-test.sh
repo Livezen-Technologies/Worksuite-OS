@@ -33,7 +33,7 @@ if [ ! -s "$T/before" ]; then ok "XWayland is not running before an X11 client c
 if [ "$(cat "$T/rc" 2>/dev/null)" = 0 ] && grep -q 'vendor string:.*X.Org' "$T/xdpyinfo"; then ok "an X11 client connects through XWayland"; else bad "X11 client could not connect"; sed 's/^/#   /' "$T/xdpyinfo" 2>/dev/null | head; fi
 
 # Packaging: XWayland is a hard dependency (the image is built without Recommends).
-if grep -A3 '^Package: worksuite-session' "$ROOT/packaging/debian/control" | grep -q 'xwayland'; then ok "worksuite-session depends on xwayland"; else bad "worksuite-session does not depend on xwayland"; fi
+if sed -n '/^Package: worksuite-session$/,/^Description:/p' "$ROOT/packaging/debian/control" | grep -q '\bxwayland\b'; then ok "worksuite-session depends on xwayland"; else bad "worksuite-session does not depend on xwayland"; fi
 if grep -q 'DISPLAY' "$ROOT/services/session/bin/worksuite-session"; then ok "worksuite-session imports DISPLAY into the user manager"; else bad "DISPLAY not imported"; fi
 
 echo "1..$n"

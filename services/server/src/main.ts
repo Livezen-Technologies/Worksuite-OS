@@ -30,7 +30,7 @@ import * as identity from './identity.ts';
 import { setValidatedPolicy } from './policy.ts';
 import { apiRoutes, purgeTombstones } from './api.ts';
 import { purgeActivity } from './monitoring.ts';
-import { runHrWebhooks, type WebhookFetch } from './attendance.ts';
+import { publicWebhookFetch, runHrWebhooks, type WebhookFetch } from './attendance.ts';
 import { openDb } from './db.ts';
 import { HttpError, makeCtx, Router, sendError } from './http.ts';
 import { log } from './log.ts';
@@ -122,7 +122,7 @@ async function main(argv: string[]) {
       purgeTombstones(db);
       purgeActivity(db);
       // #39: yesterday's attendance to the organization's HR webhook, once it is over.
-      const hr = () => void runHrWebhooks(db, (url, init) => fetch(url, init)).catch((e) => log('error', 'hr_webhook_failed', { error: String(e) }));
+      const hr = () => void runHrWebhooks(db, publicWebhookFetch).catch((e) => log('error', 'hr_webhook_failed', { error: String(e) }));
       hr();
       setInterval(() => { purgeTombstones(db); purgeActivity(db); hr(); }, 3_600_000).unref();
       server.listen(port, host, () => log('info', 'listening', { listen: v.listen, public_url: v['public-url'] }));

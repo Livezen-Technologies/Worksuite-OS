@@ -2,6 +2,10 @@
 set -e
 if [ "$1" = remove ] || [ "$1" = deconfigure ]; then
   update-alternatives --remove default.plymouth /usr/share/plymouth/themes/worksuite/worksuite.plymouth
+  update-alternatives --remove vendor-logos /usr/share/worksuite/vendor-logos
+  update-alternatives --remove desktop-background /usr/share/backgrounds/worksuite/default.png
+  update-alternatives --remove desktop-login-background /usr/share/backgrounds/worksuite/default.svg
+  update-alternatives --remove desktop-grub /usr/share/backgrounds/worksuite/default.png
 fi
 #DEBHELPER#
 exit 0

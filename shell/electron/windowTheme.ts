@@ -19,7 +19,14 @@ export function rcWithTheme(rc: string, name: string): string | null {
   return rc.slice(0, theme.index) + `<theme>${body}</theme>` + rc.slice(theme.index + theme[0].length)
 }
 
+/** GTK and portal-aware apps (org.freedesktop.appearance color-scheme, read by xdg-desktop-portal-gtk) follow the
+ *  shell's Light/Dark choice too, not only the title bars. Best effort: a missing gsettings never fails the theme. */
+export async function applyColorScheme(dark: boolean, exec: Exec): Promise<void> {
+  await exec('gsettings', ['set', 'org.gnome.desktop.interface', 'color-scheme', dark ? 'prefer-dark' : 'default'])
+}
+
 export async function applyWindowTheme(dark: boolean, f: ShortcutFiles, exec: Exec): Promise<Avail<true>> {
+  await applyColorScheme(dark, exec).catch(() => undefined)
   let linked = false
   try { linked = lstatSync(f.userRc).isSymbolicLink() } catch { /* absent */ }
   let current = ''

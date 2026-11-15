@@ -11,9 +11,15 @@ cat > /etc/greetd/config.toml <<'CONF'
 # The splash's VT: the greeter takes the screen from Plymouth with no VT switch (no text console in between).
 vt = 1
 [default_session]
-command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-session"
+command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- /usr/lib/worksuite/worksuite-greeter -c /usr/bin/worksuite-gnome-session"
 user = "_greetd"
 CONF
+# gdm3 is installed for the installed system (installer: worksuite-use-gdm); its postinst claimed display-manager.service.
+# The live ISO keeps greetd (installer and offline-update windows run in greetd's session).
+systemctl disable gdm3.service >/dev/null 2>&1 || true
+rm -f /etc/systemd/system/display-manager.service
+echo /usr/sbin/greetd > /etc/X11/default-display-manager
+[ -x /usr/libexec/worksuite/worksuite-use-gdm ] || { echo "worksuite-use-gdm missing: installed systems would have no lock screen" >&2; exit 1; }
 systemctl enable greetd.service worksuite-device-agent.service worksuite-power-events.service worksuite-package-service.service worksuite-boot-marker.service
 # WorkSuite Security (#64): virus definitions. clamav-freshclam's postinst only enables its daemon through debconf and
 # update-rc.d, which left it disabled in the image: /var/lib/clamav stayed empty, clamscan exited 2 at once and Quick
@@ -29,6 +35,17 @@ done
 systemctl enable nftables.service
 grep -q "table inet worksuite_filter" /etc/nftables.conf || { echo "WorkSuite nftables.conf missing" >&2; exit 1; }
 systemctl set-default graphical.target
+# WorkSuite, not Debian, on the text consoles too (the sign-in prompt and the message after signing in). The licence
+# notice keeps its meaning: WorkSuite OS is built from Debian and other free software (/usr/share/doc/*/copyright).
+printf 'WorkSuite OS %s \\n \\l\n\n' "$(sed -n 's/^VERSION_ID="\(.*\)"$/\1/p' /usr/lib/os-release)" > /etc/issue
+printf 'WorkSuite OS\n' > /etc/issue.net
+cat > /etc/motd <<'MOTD'
+
+WorkSuite OS is built from Debian GNU/Linux and other free software; the licence of
+each program is in /usr/share/doc/*/copyright. It comes with ABSOLUTELY NO WARRANTY,
+to the extent permitted by applicable law.
+MOTD
+grep -qi debian /etc/issue && { echo "/etc/issue still names Debian" >&2; exit 1; }
 # Wi-Fi and Bluetooth (#31): NetworkManager (wpa_supplicant is D-Bus activated by it) and bluetoothd start at boot, and
 # systemd-rfkill restores each radio's last state. A missing piece meant no Wi-Fi networks or no Bluetooth at all.
 systemctl enable NetworkManager.service bluetooth.service

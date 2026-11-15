@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+  # Installs apps queued while setup ran offline, once the network is back (services/setup/src/apps/engine.ts).
+  systemctl enable worksuite-setup-queue.timer >/dev/null 2>&1 || true
+fi
+#DEBHELPER#
+exit 0

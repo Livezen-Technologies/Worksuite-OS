@@ -1,5 +1,5 @@
 import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react'
 import type { FirstRunProps } from './types'
 import { cloudErrorText, os, serverUrlFor, type CloudAccount } from '../lib/os'
 import {
@@ -9,6 +9,7 @@ import {
 import { BG, Icon, Mark, P, StepDots, ghostBtn, mono, primaryBtn } from '../components/Ws'
 import FirstRunNetwork from './FirstRunNetwork'
 import { getLocale, setLocale, t as tr, type Locale, type MessageKey } from '../i18n'
+import { Button } from '../components/ui/button'
 
 // First boot: Welcome → Appearance → Privacy → WorkSuite apps (+ network and workspace sign-in) → Ready.
 type Mode = 'personal' | 'enterprise'
@@ -116,9 +117,9 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
       <div className="mt-5 text-lg text-[#8FA3C8]">{greeting}</div>
       <h1 ref={headingRef} tabIndex={-1} className="m-0 text-center text-[52px] leading-tight font-bold tracking-[-0.03em] outline-none">{tr('setup.welcome')}</h1>
       <p className="m-0 max-w-[560px] text-center text-[17px] leading-normal text-[#8FA3C8]">{tr('setup.welcomeSub')}</p>
-      <button type="button" onClick={() => setStep(1)} className="mt-7 flex cursor-pointer items-center gap-2.5 rounded-xl bg-[#1F6BFF] px-10 py-[15px] text-base font-semibold text-white shadow-[0_10px_30px_rgba(31,107,255,0.4)] hover:bg-[#3A7DFF]">
+      <Button variant="primary" size="xl" onClick={() => setStep(1)} className="mt-7">
         {tr('setup.getStarted')}<Icon d={P.arrow} size={18} width={2.5} />
-      </button>
+      </Button>
       {!required && <button type="button" onClick={finish} className="cursor-pointer rounded-lg p-2.5 text-sm text-[#8FA3C8] hover:text-[#E8EEFA]">{tr('setup.skip')}</button>}
       <div className="mt-10"><StepDots step={0} /></div>
     </Screen>
@@ -148,7 +149,7 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
           </ul>
         )}
         {!signedIn && <p className="m-0 text-[13px] text-[#8FA3C8]">{tr('setup.notSignedIn')}</p>}
-        <button type="button" onClick={finish} className="mt-6 cursor-pointer rounded-xl bg-[#1F6BFF] px-10 py-[15px] text-base font-semibold text-white shadow-[0_10px_30px_rgba(31,107,255,0.4)] hover:bg-[#3A7DFF]">{tr('setup.goDesktop')}</button>
+        <Button variant="primary" size="xl" onClick={finish} className="mt-6">{tr('setup.goDesktop')}</Button>
       </Screen>
     )
   }
@@ -318,7 +319,9 @@ export default function FirstRun({ onDone, userName }: FirstRunProps) {
 
 function Screen({ bg, center, children }: { bg: string; center?: boolean; children: ReactNode }) {
   return (
-    <main className={`relative flex h-full w-full flex-col items-center overflow-auto font-sans text-[#E8EEFA] ${center ? 'justify-center gap-[18px] p-4' : 'gap-8 px-4 pt-16 pb-12'}`} style={{ background: bg }}>
+    // The backdrop goes through --ws-setup-bg so the light theme can swap it (index.css .ws-setup-bg): its text classes
+    // turn dark there, and on the dark gradient they were unreadable (QA, first run after picking Light).
+    <main className={`ws-setup-bg relative flex h-full w-full flex-col items-center overflow-auto font-sans text-[#E8EEFA] ${center ? 'justify-center gap-[18px] p-4' : 'gap-8 px-4 pt-16 pb-12'}`} style={{ '--ws-setup-bg': bg } as CSSProperties}>
       {children}
     </main>
   )

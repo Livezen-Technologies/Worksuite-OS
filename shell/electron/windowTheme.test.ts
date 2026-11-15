@@ -35,7 +35,14 @@ describe('window theme', () => {
     expect(nameOf(readFileSync(files.userRc, 'utf8'))).toBe('WorkSuite-Light')
     expect(nameOf(readFileSync(files.systemRc, 'utf8'))).toBe('WorkSuite')
     expect(await applyWindowTheme(false, files, exec as never)).toEqual({ available: true, value: true })
-    expect(calls).toEqual([['labwc', '--reconfigure']])
+    expect(calls.filter((c) => c[0] === 'labwc')).toEqual([['labwc', '--reconfigure']])
+    // GTK and portal-aware apps follow too (org.freedesktop.appearance color-scheme).
+    expect(calls.filter((c) => c[0] === 'gsettings')).toEqual([
+      ['gsettings', 'set', 'org.gnome.desktop.interface', 'color-scheme', 'default'],
+      ['gsettings', 'set', 'org.gnome.desktop.interface', 'color-scheme', 'default'],
+    ])
+    await applyWindowTheme(true, files, exec as never)
+    expect(calls.at(-2)).toEqual(['gsettings', 'set', 'org.gnome.desktop.interface', 'color-scheme', 'prefer-dark'])
   })
 
   it('survives the touchscreen writer rebuilding rc.xml from the system file', () => {

@@ -36,6 +36,9 @@ from . import login  # noqa: E402
 from . import osk  # noqa: E402
 from . import pam_errors  # noqa: E402
 from . import veil  # noqa: E402
+from . import loader  # noqa: E402
+
+Loader = loader.build(Gtk)   # the WorkSuite loader where GTK would show a spinner
 from .greetd import Greetd, GreetdError  # noqa: E402
 
 _T = i18n.translation()
@@ -107,6 +110,29 @@ popover.ws button.item { background: none; border: none; box-shadow: none; borde
 popover.ws button.item:hover { background: rgba(31,107,255,0.22); }
 popover.ws .pop-title { font-size: 13px; font-weight: 600; padding: 4px 8px; }
 popover.ws .pop-sub { font-size: 12px; color: #8FA3C8; padding: 0 8px 6px; }
+/* Sign-in panel (polish): glass panel, avatar halo, username chip, live focus on the field, real hover/press/focus. */
+.signin { background: rgba(8,20,48,0.42); border: 1px solid rgba(255,255,255,0.10); border-radius: 28px;
+  padding: 40px 44px 30px; box-shadow: 0 30px 80px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.06);
+  animation: ws-rise 280ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes ws-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.signin .avatar.big { box-shadow: 0 0 0 3px rgba(24,212,240,0.55), 0 0 0 9px rgba(31,107,255,0.16), 0 24px 60px rgba(0,0,0,0.5); }
+.signin .person-name { font-size: 28px; letter-spacing: -0.2px; }
+.handle { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: rgba(232,238,250,0.78);
+  background: rgba(255,255,255,0.07); border-radius: 999px; padding: 3px 12px; }
+.signin .pwrow { min-height: 52px; border-radius: 14px; background: rgba(4,10,26,0.55); transition: border-color 150ms, box-shadow 150ms; }
+.signin .pwrow:focus-within { border-color: #7FB2FF; box-shadow: 0 0 0 4px rgba(127,178,255,0.18); }
+.signin .pwrow.bad, .signin .pwrow.bad:focus-within { border-color: #FF8A7A; box-shadow: 0 0 0 4px rgba(255,138,122,0.16); }
+.signin .hint { color: rgba(255,255,255,0.55); font-size: 12px; }
+button.go { min-width: 40px; min-height: 40px; border-radius: 11px; transition: background-color 120ms; }
+button.go:hover { background: #3A7DFF; } button.go:active { background: #1A5CE0; }
+button.go:disabled { background: rgba(31,107,255,0.4); }
+button.corner:hover, menubutton.corner > button:hover, button.pill:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.22); }
+button.corner:active, menubutton.corner > button:active, button.pill:active { background: rgba(255,255,255,0.18); }
+button.corner, menubutton.corner > button, button.pill, button.tile { transition: background-color 120ms, border-color 120ms; }
+button:focus-visible, menubutton > button:focus-visible { outline: 2px solid #7FB2FF; outline-offset: 2px; }
+window.hc .signin { background: #000000; border: 2px solid #FFFFFF; box-shadow: none; }
+window.hc .handle { background: none; color: #FFFFFF; }
+window.hc button:focus-visible { outline: 3px solid #FFFF00; }
 window.hc .screen { background-image: none; background-color: #000000; }
 window.hc .pwrow, window.hc entry, window.hc passwordentry, window.hc button.tile, window.hc button.corner { border: 2px solid #FFFFFF; }
 window.hc .hint, window.hc .sub, window.hc .tile-note { color: #FFFFFF; }
@@ -654,12 +680,13 @@ class Greeter(Gtk.ApplicationWindow):
             self.tiles.append(b)
 
     def _build_person(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, halign=Gtk.Align.CENTER)
+        # One glass panel holds the person and the field, so the eye lands on it at once.
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, css_classes=["signin"])
         self.person_avatar = Gtk.Box(halign=Gtk.Align.CENTER)
         box.append(self.person_avatar)
         self.person_name = label("", "person-name", justify=Gtk.Justification.CENTER, margin_top=6)
         box.append(self.person_name)
-        self.person_sub = label("", "sub", justify=Gtk.Justification.CENTER, max_width_chars=44)
+        self.person_sub = label("", "sub", "handle", justify=Gtk.Justification.CENTER, max_width_chars=44, halign=Gtk.Align.CENTER)
         box.append(self.person_sub)
         # The field row: password (or PIN), then the arrow; a spinner takes the arrow's place while PAM works.
         self.pwrow = Gtk.Box(spacing=4, css_classes=["pwrow"], margin_top=10, margin_start=16, margin_end=16)
@@ -672,8 +699,7 @@ class Greeter(Gtk.ApplicationWindow):
         self.go.set_child(icon("go", 18))
         self.go.update_property([Gtk.AccessibleProperty.LABEL], [_("Sign in")])
         self.go.connect("clicked", lambda *_a: self.submit())
-        self.spinner = Gtk.Spinner(spinning=False, visible=False, valign=Gtk.Align.CENTER, margin_end=8)
-        self.spinner.set_size_request(20, 20)
+        self.spinner = Loader(size=20, visible=False, valign=Gtk.Align.CENTER, margin_end=8)
         self.pwrow.append(self.go)
         self.pwrow.append(self.spinner)
         box.append(self.pwrow)

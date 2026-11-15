@@ -1,6 +1,8 @@
 // WorkSuite web apps ("WorkSuite Desktop"): which module to open, where it lives and what an app window may load.
 // Electron-free so it can be unit tested; the window itself is in appwindow.ts.
 
+/** worksuite://auth/callback, where the server's desktop sign-in page sends the browser back (never a web app). */
+export const AUTH_CALLBACK_ID = 'auth'
 export const WEB_APP_ID = /^[a-z][a-z0-9_-]{0,63}$/
 
 export interface WebApp { id: string; name: string; web_url: string; offline_level?: OfflineLevel }

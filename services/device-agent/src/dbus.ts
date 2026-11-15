@@ -14,6 +14,8 @@ export const ACTIONS: Record<string, string | null> = {
   GetEffectivePolicy: null,
   Enroll: 'lk.worksuite.device.enroll',
   RefreshNow: null,   // fetches what the server already decided; changes nothing the caller chooses
+  // Sends the inventory now (the setup service at milestones); reports only facts the device already reports daily.
+  ReportInventory: null,
   // WorkSuite Security (#20): Settings › Privacy & security › WorkSuite Security "Scan now" (active local user).
   StartSecurityScan: 'lk.worksuite.security.scan',
   // #64: cancel the running scan and fetch virus definitions now (same action: reads files, changes no setting).
@@ -35,6 +37,7 @@ export interface AgentOps {
   effectivePolicy(): unknown;
   enroll(serverUrl: string, token: string): Promise<string>;
   refresh(): Promise<void>;
+  reportInventory?(): Promise<void>;
   /**
    * Starts a malware scan (quick | full); resolves when it has started, rejects with why it cannot (NO_SIGNATURES,
    * ANTIVIRUS_MISSING, ANTIVIRUS_DISABLED). Absent = no security module.
@@ -75,6 +78,7 @@ export async function dispatch(member: string, body: unknown[], sender: string, 
     }
     case 'GetEffectivePolicy': return ['s', [JSON.stringify(ops.effectivePolicy() ?? null)]];
     case 'RefreshNow': await ops.refresh(); return ['', []];
+    case 'ReportInventory': await ops.reportInventory?.(); return ['', []];
     case 'StartSecurityScan': {
       const [kind] = body;
       if (kind !== 'quick' && kind !== 'full') throw new BusError('InvalidArgs');

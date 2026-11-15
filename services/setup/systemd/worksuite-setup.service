@@ -1,0 +1,36 @@
+[Unit]
+Description=WorkSuite setup service (install and first-run state machine, recovery, rollback)
+Documentation=file:///usr/share/doc/worksuite-setup/setup-wizard-state-machine.md
+After=dbus.service
+
+[Service]
+AppArmorProfile=-worksuite-setup
+Type=dbus
+BusName=lk.worksuite.Setup1
+ExecStart=/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/setup/src/main.ts
+# Never killed in the middle of a rollback or a state write.
+KillMode=mixed
+TimeoutStopSec=10min
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+LockPersonality=yes
+# AF_INET/AF_INET6: apt and flatpak download the selected apps (signed sources only, src/apps/engine.ts).
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0077
+# State (and its mirror on the ESP during an install), rollback handles, the log; package rollback needs dpkg.
+StateDirectory=worksuite/setup
+# /run/worksuite-setup/report.json: world-readable setup report for the device agent (enterprise sync).
+RuntimeDirectory=worksuite-setup
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+StateDirectoryMode=0700
+LogsDirectory=worksuite
+ReadWritePaths=-/boot/efi /var/lib/dpkg /var/lib/apt /var/cache/apt -/var/lib/flatpak /usr /etc /opt -/target
+
+# Started by D-Bus activation only (lk.worksuite.Setup1.service): nothing at boot until setup asks for it.

@@ -3,12 +3,16 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID, type KeyObject } from 'node:crypto';
 import { join } from 'node:path';
-import { renameSync, rmSync } from 'node:fs';
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { extractBundle, inspectBundle, type BundleManifest } from './bundle.ts';
-import { stageBundle, stageFile, stagedCopy } from './staging.ts';
+import { BUNDLE_ROOTS, stageBundle, stageFile, stagedCopy, underRoots } from './staging.ts';
 import { checkSources, isCritical, parseCatalogId, parseDiskChange, parseSimulation, parseUpgradable, ServiceError, type Plan } from './apt.ts';
 import { debFieldsUnprivileged, type Unprivileged } from './untrusted.ts';
 import type { HistoryKind, UpdateHistory } from './history.ts';
+
+/** apt's signature failures. gpgv (bookworm, Ubuntu) says NO_PUBKEY/BADSIG/EXPKEYSIG; Debian 13's apt verifies with sqv
+ *  and says "OpenPGP signature verification failed: … Missing key …" instead, so both families are recognised. */
+export const SIG_ERROR = /NO_PUBKEY|not signed|InRelease.*(invalid|is not valid)|EXPKEYSIG|BADSIG|OpenPGP signature verification failed|Missing key [0-9A-F]{16,}/
 
 export type Source = 'apt' | 'flatpak';
 export const APPIMAGE_NOT_INSTALLABLE = 'AppImages are not installed by the package service; import the AppImage file in the App Center (worksuite-appimage import)';
@@ -43,7 +47,7 @@ export interface Env {
   audit(event: string, fields: Record<string, unknown>): void;
   /** Root-owned spool for staged local .deb copies and extracted bundles (default /var/lib/worksuite-package-service/spool). */
   spool?: string;
-  /** Where .wsupdate files may be read from (default: removable media and /home). */
+  /** Where picked files (.wsupdate, local .deb) may be read from (default: the inbox, staging.ts INBOX). */
   bundleRoots?: string[];
   /** Release keys, device arch and installed OS version for offline bundles (WSOS-AUP-010). */
   release?: { keys(id: string): KeyObject | undefined; arch: string; installed(): string };
@@ -228,6 +232,7 @@ export class PackageService extends EventEmitter {
 
   /** Stage the caller's file, read its control fields, and let apt validate dependencies; nothing is installed. */
   async previewLocalDeb(caller: number, path: string): Promise<LocalDebPreview> {
+    if (typeof path !== 'string' || !path.startsWith('/') || !underRoots(path, this.env.bundleRoots ?? BUNDLE_ROOTS)) throw new ServiceError('InvalidArgs', 'files are read from the WorkSuite inbox only');
     const staged = stageFile(path, caller, this.spool('debs'), '.deb');
     return this.inspectLocalDeb(staged.path, staged.sha256);
   }
@@ -330,6 +335,16 @@ export class PackageService extends EventEmitter {
 
   // ---- offline .wsupdate bundles (WSOS-AUP-010) ----
 
+  /** apt options for an offline run: no package sources at all (an empty list), so only local files and the installed
+   *  system count. */
+  private offlineAptArgs(): string[] {
+    const dir = this.spool('apt');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const list = join(dir, 'no-sources.list');
+    writeFileSync(list, '');
+    return ['-o', `Dir::Etc::SourceList=${list}`, '-o', 'Dir::Etc::SourceParts=/nonexistent'];
+  }
+
   private bundleOptions() {
     const r = this.env.release;
     if (!r) throw new ServiceError('Failed', 'release keys are not available');
@@ -361,12 +376,16 @@ export class PackageService extends EventEmitter {
       catch (e) { this.env.audit('bundle_rejected', { caller, error: (e as Error).message }); throw e; }
       job.subject = { kind: 'os', title: 'WorkSuite OS', version: manifest.version };
       try {
-        // Offline: everything must come from the bundle (--no-download); apt still checks dependencies and conflicts.
-        const sim = await this.env.runner.run('apt-get', ['-s', '-q', '--no-download', 'install', '--', ...debs]);
+        // Offline: everything must come from the bundle or what is installed. Not --no-download: apt 3.0 then fails a
+        // real install of a local .deb whose version has a '~' ("Pathname to install is not absolute"; 1.0.1~rc1 does,
+        // seen in a VM) although its simulation passes. No package sources for these runs gives the same guarantee:
+        // a dependency the bundle lacks is unmet, never fetched. apt still checks dependencies and conflicts.
+        const offline = this.offlineAptArgs();
+        const sim = await this.env.runner.run('apt-get', ['-s', '-q', ...offline, 'install', '--', ...debs]);
         if (sim.code !== 0) throw new ServiceError('Failed', firstLine(sim.stderr) || 'the bundle does not install cleanly on this device');
         this.refuseCritical(parseSimulation(sim.stdout));
         job.phase = 'applying'; this.progress(job, 40);
-        await this.mustRun('apt-get', ['-y', '-q', '--no-download', ...APT_ENV_ARGS, 'install', '--', ...debs]);
+        await this.mustRun('apt-get', ['-y', '-q', ...offline, ...APT_ENV_ARGS, 'install', '--', ...debs]);
         job.phase = 'checking'; this.progress(job, 90);
         if (await this.detectInterrupted()) throw new ServiceError('Failed', 'packages left unconfigured; repair needed');
         this.rebootRequired = (await this.env.runner.run('test', ['-e', '/run/reboot-required'])).code === 0;
@@ -388,7 +407,7 @@ export class PackageService extends EventEmitter {
     for (let i = 1; ; i++) {
       const r = await this.env.runner.run('apt-get', ['-y', '-q', '-o', 'Acquire::Retries=3', ...this.bandwidthArgs(), '--download-only', ...verb]);
       if (r.code === 0) return;
-      if (/NO_PUBKEY|not signed|EXPKEYSIG|BADSIG|Hash Sum mismatch/.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
+      if (SIG_ERROR.test(r.stderr) || /Hash Sum mismatch/.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
       this.env.audit('download_interrupted', { attempt: i, error: firstLine(r.stderr) });
       if (i >= attempts) throw new ServiceError('Failed', `download interrupted; it resumes from where it stopped next time (${firstLine(r.stderr) || `exit ${r.code}`})`);
       await (this.env.sleep ?? ((ms) => new Promise((res) => setTimeout(res, ms))))(i * 10_000);
@@ -470,7 +489,7 @@ export class PackageService extends EventEmitter {
   private async mustRun(cmd: string, args: string[]) {
     const r = await this.env.runner.run(cmd, args);
     if (r.code !== 0) {
-      if (cmd === 'apt-get' && /NO_PUBKEY|not signed|InRelease.*(invalid|is not valid)|EXPKEYSIG|BADSIG/.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
+      if (cmd === 'apt-get' && SIG_ERROR.test(r.stderr)) throw new ServiceError('SignatureInvalid', firstLine(r.stderr));
       if (/Could not get lock|dpkg was interrupted/.test(r.stderr)) throw new ServiceError('Busy', firstLine(r.stderr));
       throw new ServiceError('Failed', `${cmd}: ${firstLine(r.stderr) || `exit ${r.code}`}`);
     }

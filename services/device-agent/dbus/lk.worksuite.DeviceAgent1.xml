@@ -20,6 +20,8 @@
     </method>
     <!-- No authorization required: triggers a policy fetch + heartbeat. -->
     <method name="RefreshNow"/>
+    <!-- Send the inventory now (setup milestones, enterprise deployment sync). Read-only facts; no polkit. -->
+    <method name="ReportInventory"/>
     <!-- polkit: lk.worksuite.security.scan. kind: quick (Downloads, Desktop, Documents, autostart, temporary folders) |
          full (local file systems). Returns once started, or fails with NO_SIGNATURES / ANTIVIRUS_MISSING /
          ANTIVIRUS_DISABLED; progress and results are in /run/worksuite-device-agent/security.json. -->

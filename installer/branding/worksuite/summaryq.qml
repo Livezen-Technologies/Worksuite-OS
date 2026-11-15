@@ -11,32 +11,42 @@ WsPage {
     title: qsTr("Check your choices")
     subtitle: qsTr("Nothing has changed on your disk yet.")
 
-    GridView {
-        id: cards
+    // Cards size to their text: the partition summary (erase, encryption, layout) is never cut off with "…".
+    Flickable {
+        id: scroller
         anchors.fill: parent
         clip: true
-        cellWidth: width / 2; cellHeight: 112
-        model: config.summaryModel
-        delegate: Item {
-            width: cards.cellWidth; height: cards.cellHeight
-            Rectangle {
-                anchors.fill: parent; anchors.rightMargin: index % 2 === 0 ? 6 : 0; anchors.leftMargin: index % 2 === 1 ? 6 : 0; anchors.bottomMargin: 12
-                radius: 12; color: "#990E2048"; border.width: 1; border.color: "#247FB2FF"
-                RowLayout {
-                    anchors.fill: parent; anchors.margins: 16; spacing: 14
-                    Rectangle {
-                        Layout.alignment: Qt.AlignTop
-                        width: 36; height: 36; radius: 9; color: "#2E1F6BFF"
-                        Text { anchors.centerIn: parent; text: String(index + 1); color: "#7FB2FF"; font.family: "IBM Plex Mono"; font.pixelSize: 14; font.weight: Font.DemiBold }
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
-                        Text { text: model.title.toUpperCase(); color: "#8FA3C8"; font.family: "IBM Plex Sans"; font.pixelSize: 12; font.letterSpacing: 0.7 }
-                        Text {
-                            Layout.fillWidth: true; Layout.fillHeight: true
-                            text: model.message; textFormat: Text.StyledText
-                            color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 14
-                            wrapMode: Text.WordWrap; elide: Text.ElideRight; clip: true
+        contentWidth: width; contentHeight: grid.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
+        GridLayout {
+            id: grid
+            width: scroller.width
+            columns: width > 720 ? 2 : 1
+            columnSpacing: 12; rowSpacing: 12
+            Repeater {
+                model: config.summaryModel
+                delegate: Rectangle {
+                    Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                    Layout.preferredWidth: (grid.width - (grid.columns - 1) * grid.columnSpacing) / grid.columns
+                    implicitHeight: row.implicitHeight + 32
+                    radius: 12; color: "#990E2048"; border.width: 1; border.color: "#247FB2FF"
+                    RowLayout {
+                        id: row
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 16; spacing: 14
+                        Rectangle {
+                            Layout.alignment: Qt.AlignTop
+                            width: 36; height: 36; radius: 9; color: "#2E1F6BFF"
+                            Text { anchors.centerIn: parent; text: String(index + 1); color: "#7FB2FF"; font.family: "IBM Plex Mono"; font.pixelSize: 14; font.weight: Font.DemiBold }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.alignment: Qt.AlignTop; spacing: 3
+                            Text { text: model.title.toUpperCase(); color: "#8FA3C8"; font.family: "IBM Plex Sans"; font.pixelSize: 12; font.letterSpacing: 0.7 }
+                            Text {
+                                Layout.fillWidth: true
+                                text: model.message; textFormat: Text.StyledText
+                                color: "#E8EEFA"; font.family: "IBM Plex Sans"; font.pixelSize: 14; lineHeight: 1.15
+                                wrapMode: Text.Wrap
+                            }
                         }
                     }
                 }

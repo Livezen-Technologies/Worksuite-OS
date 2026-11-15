@@ -142,6 +142,21 @@ contextBridge.exposeInMainWorld('worksuite', {
     ipcRenderer.on('ws:filesVolumesChanged', listener)
     return () => { ipcRenderer.removeListener('ws:filesVolumesChanged', listener) }
   },
+  openGnomeSettings: (panel: string) => ipcRenderer.invoke('ws:openGnomeSettings', String(panel)),
+  desktopLook: () => ipcRenderer.invoke('ws:desktopLook'),
+  a11y: () => ipcRenderer.invoke('ws:a11y'),
+  // JSON, as every structured argument: main's handle() passes strings only (an object arrived as "[object Object]"
+  // and every change was refused as invalid on the installed system).
+  setA11y: (change: unknown) => ipcRenderer.invoke('ws:setA11y', JSON.stringify(change ?? null)),
+  gnomePrivacy: () => ipcRenderer.invoke('ws:gnomePrivacy'),
+  setGnomePrivacy: (change: unknown) => ipcRenderer.invoke('ws:setGnomePrivacy', JSON.stringify(change ?? null)),
+  setDesktopLook: (change: unknown) => ipcRenderer.invoke('ws:setDesktopLook', JSON.stringify(change ?? null)),
+  /** WorkSuite Settings window (GNOME): a second launch asked for a section. */
+  onSettingsSection: (cb: (section: string) => void) => {
+    const listener = (_e: unknown, s: unknown) => { if (typeof s === 'string') cb(s) }
+    ipcRenderer.on('ws:settingsSection', listener)
+    return () => { ipcRenderer.removeListener('ws:settingsSection', listener) }
+  },
   onOpenArchive: (cb: (e: unknown) => void) => {
     const listener = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on('ws:openArchive', listener)
@@ -187,6 +202,13 @@ contextBridge.exposeInMainWorld('worksuite', {
   signinSetDefault: (method: string) => ipcRenderer.invoke('ws:signinSetDefault', String(method)),
   cloudAccounts: () => ipcRenderer.invoke('ws:cloudAccounts'),
   pkgRepair: () => ipcRenderer.invoke('ws:pkgRepair'),
+  // Setup wizard: events and answers travel as JSON strings; main and the setup service validate them.
+  setupState: () => ipcRenderer.invoke('ws:setupState'),
+  setupRecovery: () => ipcRenderer.invoke('ws:setupRecovery'),
+  setupApps: () => ipcRenderer.invoke('ws:setupApps'),
+  setupLog: (lines: number) => ipcRenderer.invoke('ws:setupLog', String(lines)),
+  setupSend: (event: unknown) => ipcRenderer.invoke('ws:setupSend', JSON.stringify(event)),
+  setupAnswer: (key: string, value: unknown) => ipcRenderer.invoke('ws:setupAnswer', String(key), JSON.stringify(value ?? null)),
   pkgState: () => ipcRenderer.invoke('ws:pkgState'),
   reportCollect: () => ipcRenderer.invoke('ws:reportCollect'),
   reportSave: (id: string, keep: string[], description: string) => ipcRenderer.invoke('ws:reportSave', String(id), keep.map(String).join(','), String(description)),
@@ -382,6 +404,11 @@ contextBridge.exposeInMainWorld('worksuitePeripherals', {
   volMount: (device: string) => ipcRenderer.invoke('ws:volMount', String(device)),
   volUnlock: (device: string, passphrase: string) => ipcRenderer.invoke('ws:volUnlock', String(device), String(passphrase)),
   volEject: (device: string) => ipcRenderer.invoke('ws:volEject', String(device)),
+  clock: () => ipcRenderer.invoke('ws:clock'),
+  timezones: () => ipcRenderer.invoke('ws:timezones'),
+  setTimezone: (tz: string) => ipcRenderer.invoke('ws:setTimezone', String(tz)),
+  setNtp: (on: boolean) => ipcRenderer.invoke('ws:setNtp', on ? 'true' : 'false'),
+  setTime: (local: string, tz: string) => ipcRenderer.invoke('ws:setTime', String(local), String(tz)),
   powerProfiles: () => ipcRenderer.invoke('ws:powerProfiles'),
   setPowerProfile: (name: string) => ipcRenderer.invoke('ws:setPowerProfile', String(name)),
   inhibitors: () => ipcRenderer.invoke('ws:powerInhibitors'),

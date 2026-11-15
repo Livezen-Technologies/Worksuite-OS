@@ -448,6 +448,9 @@ export function touchBridge(home: string, exec: Exec = realExec, spawnFn: Spawn 
   }
   function startOsk() {
     if (osk) return
+    // Under GNOME Shell the desktop's own on-screen keyboard serves every app (Settings › Accessibility); this
+    // layer-shell keyboard needs Labwc and only ran alongside it, using memory (seen on the installed VM).
+    if (/(^|:)GNOME(:|$)/.test(process.env.XDG_CURRENT_DESKTOP ?? '')) return
     let methods: string[] = []
     try { methods = readFileSync(path.join(xdgDirs(home).config, 'fcitx5', 'profile'), 'utf8').split('\n').map((l) => /^Name=(.+)$/.exec(l.trim())?.[1] ?? '').filter(Boolean) } catch { /* default layout */ }
     oskIsOurs = hasOsk() && !oskOursFailed

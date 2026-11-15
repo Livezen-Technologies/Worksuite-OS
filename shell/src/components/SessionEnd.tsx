@@ -9,23 +9,15 @@ import { errorMessage } from '../lib/errors'
 import { sessionApi, type EndAction, type EndState } from '../lib/sessionApi'
 import { ANYWAY, BLOCKED_TITLE, CLOSE_TIMEOUT_MS, SUB, TITLE, appWindows, blockers, closeProgress, type Blocker } from '../lib/sessionEnd'
 import { t } from '../i18n'
-import { Mark } from './Ws'
+import { WorkSuiteLoader } from './WorkSuiteLoader'
 
 const BG = '#040A1A'
 /** How long a forced restart/shutdown may wait for polkit before the dialog comes back. */
 export const FORCE_TIMEOUT_MS = 45_000
 
-/** The splash's mark (branding/plymouth/mark.svg) in its spinning ring. */
+/** The splash's loader: the WorkSuite mark assembling (branding/plymouth/worksuite.script plays the same motion). */
 function RingMark() {
-  return (
-    <div className="relative h-[120px] w-[120px]" aria-hidden="true">
-      <svg width="120" height="120" viewBox="0 0 120 120" className="absolute inset-0 animate-spin [animation-duration:1.4s]">
-        <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(127,178,255,0.12)" strokeWidth="4" />
-        <path d="M60 6a54 54 0 0 1 54 54" fill="none" stroke="#18D4F0" strokeWidth="4" strokeLinecap="round" />
-      </svg>
-      <span className="absolute top-9 left-9"><Mark size={48} /></span>
-    </div>
-  )
+  return <WorkSuiteLoader size={120} decorative />
 }
 
 /** The column itself, shared by the main window and the mirrors. */

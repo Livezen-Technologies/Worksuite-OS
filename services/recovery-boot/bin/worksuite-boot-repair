@@ -9,6 +9,17 @@ status_dir=${WORKSUITE_RUN_DIR:-/run/worksuite}
 mkdir -p "$status_dir"
 log() { echo "worksuite-boot-repair: $*"; }
 
+# A package manager that is running is not an interrupted one: during an upgrade (dpkg restarts this unit from a
+# postinst) dpkg --audit lists the packages being configured right now. Repairing would fight dpkg for its lock, fail,
+# and isolate the recovery screens in the middle of the person's session. Leave it alone.
+if pgrep -x 'dpkg|apt-get|apt|aptitude' >/dev/null 2>&1; then
+  echo busy > "$status_dir/boot-repair"; log "a package manager is running; nothing to repair"; exit 0
+fi
+# One failure per boot is enough: worksuite-recovery.target pulls this unit in again, and failing again would isolate
+# the target again, in a loop. The recovery screens already show the failure.
+if [ "$(cat "$status_dir/boot-repair" 2>/dev/null)" = failed ]; then
+  log "repair already failed this boot; recovery screens are open"; exit 0
+fi
 audit=$(dpkg --audit 2>/dev/null || true)
 if [ -z "$audit" ] && [ ! -e "$flag" ]; then
   echo clean > "$status_dir/boot-repair"; exit 0

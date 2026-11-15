@@ -1,0 +1,74 @@
+// Durable setup state. The machine never keeps state only in memory: every transition is written through a
+// SetupPersistence. Hosts pick the store:
+// - installer (live ISO): the native setup service writes under the TARGET disk once it exists
+//   (/var/lib/worksuite/setup/state.json on the installed root) and on the ESP before that, never only in the
+//   live session's tmpfs, so a reboot mid-install can resume or offer recovery;
+// - first run: the same service path on the installed root.
+// The React UI never writes these files itself; it reaches the service through a validated API (see the doc).
+import type { MainState, SetupMode, SetupState } from './states.ts'
+
+export const SCHEMA_VERSION = 1
+
+export interface Checkpoint {
+  id: string
+  /** The main state that was completed and verified when this checkpoint was taken. */
+  state: MainState
+  at: number
+  answers: Record<string, unknown>
+  /** For a checkpoint before a destructive or reversible step: the host's rollback handle (snapshot name, A/B
+   *  slot, package transaction id). Rollback is offered only when one exists and verified. */
+  rollback?: { kind: 'snapshot' | 'ab-slot' | 'package-transaction' | 'config-backup' | 'enrollment'; ref: string; verified: boolean }
+}
+
+export interface SetupSnapshot {
+  version: number
+  mode: SetupMode
+  state: SetupState
+  /** The main state to go back to from a side state (PAUSED, RETRYING, RECOVERY_MODE …). */
+  resumeTo: MainState | null
+  answers: Record<string, unknown>
+  attempts: number
+  lastError: string | null
+  checkpoints: Checkpoint[]
+  updatedAt: number
+}
+
+export interface SetupPersistence {
+  load(): Promise<string | null>
+  save(serialized: string): Promise<void>
+  clear(): Promise<void>
+}
+
+// FNV-1a over the JSON: detects truncation and bit flips (not an attacker; the file is root-owned in the service).
+function checksum(s: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 }
+  return h.toString(16).padStart(8, '0')
+}
+
+export function serialize(snap: SetupSnapshot): string {
+  const body = JSON.stringify(snap)
+  return JSON.stringify({ sum: checksum(body), body })
+}
+
+export type LoadResult = { ok: true; snapshot: SetupSnapshot } | { ok: false; reason: 'empty' | 'corrupt' | 'version' }
+
+export function deserialize(raw: string | null): LoadResult {
+  if (!raw) return { ok: false, reason: 'empty' }
+  try {
+    const env = JSON.parse(raw) as { sum?: string; body?: string }
+    if (typeof env.body !== 'string' || env.sum !== checksum(env.body)) return { ok: false, reason: 'corrupt' }
+    const snap = JSON.parse(env.body) as SetupSnapshot
+    if (snap.version !== SCHEMA_VERSION) return { ok: false, reason: 'version' }
+    return { ok: true, snapshot: snap }
+  } catch { return { ok: false, reason: 'corrupt' } }
+}
+
+/** For tests and the browser preview. Real hosts use the setup service. */
+export class MemoryPersistence implements SetupPersistence {
+  data: string | null = null
+  writes = 0
+  async load() { return this.data }
+  async save(s: string) { this.data = s; this.writes++ }
+  async clear() { this.data = null }
+}

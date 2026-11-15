@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="96" height="96" role="img" aria-label="Loading WorkSuite">
+  <title>Loading WorkSuite</title>
+  <defs>
+    <linearGradient id="wsf-shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"  stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity=".9"/>
+      <stop offset="1"  stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="wsf-mark">
+      <rect x="16" y="48" width="32" height="32"/>
+      <rect x="48" y="80" width="32" height="32"/>
+      <rect x="48" y="16" width="64" height="64"/>
+    </clipPath>
+  </defs>
+  <style>
+    .wsf-mark  { transform-box: fill-box; transform-origin: center; animation: wsf-beat 1.6s ease-in-out infinite; }
+    .wsf-flash { opacity: 0; animation: wsf-flash 1.6s ease-out infinite; }
+    .wsf-d1 { animation-delay: .12s } .wsf-d2 { animation-delay: .24s } .wsf-d3 { animation-delay: .36s }
+    .wsf-shine { animation: wsf-sweep 1.6s cubic-bezier(.4,0,.2,1) .5s infinite backwards }
+    @keyframes wsf-beat  { 0%,100% { transform: scale(1) } 18% { transform: scale(.93) } 36% { transform: scale(1.02) } 50% { transform: scale(1) } }
+    @keyframes wsf-flash { 0% { opacity: 0 } 10% { opacity: .75 } 35%,100% { opacity: 0 } }
+    @keyframes wsf-sweep { 0% { transform: translateX(-60px) skewX(-20deg) } 45%,100% { transform: translateX(150px) skewX(-20deg) } }
+    @media (prefers-reduced-motion: reduce) { .wsf-mark, .wsf-flash, .wsf-shine { animation: none } .wsf-shine { opacity: 0 } }
+  </style>
+
+  <g class="wsf-mark">
+    <!-- logo (always full colour) -->
+    <rect x="16" y="48" width="32" height="32" fill="#00daf2"/>
+    <rect x="48" y="80" width="32" height="32" fill="#00daf2"/>
+    <rect x="48" y="16" width="64" height="64" fill="#0a6cff"/>
+    <rect x="48" y="48" width="32" height="32" fill="#001842"/>
+    <!-- white flashes, cell by cell: left → centre → bottom → blue -->
+    <rect class="wsf-flash"        x="16" y="48" width="32" height="32" fill="#fff"/>
+    <rect class="wsf-flash wsf-d1" x="48" y="48" width="32" height="32" fill="#fff"/>
+    <rect class="wsf-flash wsf-d2" x="48" y="80" width="32" height="32" fill="#fff"/>
+    <rect class="wsf-flash wsf-d3" x="48" y="16" width="64" height="64" fill="#fff"/>
+    <!-- light sweep -->
+    <g clip-path="url(#wsf-mark)">
+      <rect class="wsf-shine" x="0" y="0" width="40" height="128" fill="url(#wsf-shine)"/>
+    </g>
+  </g>
+</svg>

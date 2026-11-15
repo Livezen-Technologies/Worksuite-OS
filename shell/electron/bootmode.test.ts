@@ -18,3 +18,17 @@ describe('boot mode', () => {
     expect(bootMode(['electron', '.', '--safe'], 'worksuite.recovery=1')).toBe('recovery')
   })
 })
+
+describe('GNOME app modes', () => {
+  it('opens WorkSuite Settings or Setup as a window, with a section a launcher may name', async () => {
+    const { bootMode, controlSection } = await import('./bootmode')
+    expect(bootMode(['electron', '.', '--control-center'], null)).toBe('control')
+    expect(bootMode(['electron', '.', '--setup'], null)).toBe('setup')
+    expect(bootMode(['electron', '.', '--control-center'], 'worksuite.recovery=1')).toBe('recovery')
+    expect(controlSection(['x', '--control-center', 'Updates'])).toBe('Updates')
+    expect(controlSection(['x', '--control-center', 'Date & time'])).toBe('Date & time')
+    expect(controlSection(['x', '--control-center', '--setup'])).toBeNull()
+    expect(controlSection(['x', '--control-center', '../../etc'])).toBeNull()
+    expect(controlSection(['x', '--control-center'])).toBeNull()
+  })
+})

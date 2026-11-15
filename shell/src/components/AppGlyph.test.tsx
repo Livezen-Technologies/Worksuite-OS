@@ -29,6 +29,13 @@ describe('AppGlyph', () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
     expect(container.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AA')
   })
+  it("an installed WorkSuite app shows its own icon, not the bundled one; the bundled one covers loading", async () => {
+    ;(window as unknown as { worksuite: unknown }).worksuite = { appIcons: async () => ({ worksuite: 'data:image/png;base64,REAL' }) }
+    const { container } = render(<AppGlyph app={{ ...base, id: 'worksuite-desktop', icon: 'worksuite' }} size={44} radius={12} font={16} />)
+    expect(container.querySelector('img')?.getAttribute('src')).toMatch(/worksuite\.png/)   // while loading: bundled, no letter flash
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,REAL')
+  })
   it('falls back to the letter mark when there is no icon', async () => {
     ;(window as unknown as { worksuite: unknown }).worksuite = { appIcons: async () => ({ gone: null }) }
     const { container } = render(<AppGlyph app={{ ...base, id: 'gone', icon: 'gone' }} size={28} radius={7} font={11} css />)

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="96" height="96" role="img" aria-label="Loading WorkSuite">
+  <title>Loading WorkSuite</title>
+  <style>
+.f { transform-box: fill-box; transform-origin: center; animation: f-flip 1.8s cubic-bezier(.6,0,.4,1) infinite; }
+    .f2 { animation-delay: .18s } .f3 { animation-delay: .36s }
+    @keyframes f-flip { 0%,40%,100% { transform: scale(1,1) } 20% { transform: scale(.04,1) } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  </style>
+  <g class="f"><rect x="16" y="48" width="32" height="32" fill="#00daf2"/></g>
+  <g class="f f2"><rect x="48" y="80" width="32" height="32" fill="#00daf2"/></g>
+  <g class="f f3"><rect x="48" y="16" width="64" height="64" fill="#0a6cff"/><rect x="48" y="48" width="32" height="32" fill="#001842"/></g>
+</svg>

@@ -1,4 +1,4 @@
-# WorkSuite desktop (pulls labwc, greetd, portals, PipeWire, NetworkManager, ...)
+# WorkSuite desktop (pulls GNOME Shell, greetd, portals, PipeWire, NetworkManager, ...)
 worksuite-desktop
 # On-device AI assistant (services/ai): the service and llama.cpp runtime only; models are downloaded later, never in
 # the image. Vulkan for GPUs that have it (the build installs no recommends).
@@ -101,12 +101,10 @@ printer-driver-brlaser
 printer-driver-splix
 printer-driver-pxljr
 printer-driver-c2esp
-wlr-randr
 # Touchscreen, pen and touch mode (shell/electron/touch.ts): device listing and tablet-mode switch events,
 # auto-rotate (monitor-sensor), and the on-screen keyboard (virtual-keyboard + layer-shell under Labwc)
 libinput-tools
 iio-sensor-proxy
-wvkbd
 # WorkSuite greeter (WSOS-AUTH-001; the build installs no recommends)
 python3-gi
 python3-gi-cairo
@@ -137,7 +135,6 @@ xz-utils
 bzip2
 # Terminal (the Start menu's "Terminal" in the design, docs/design/boot-install G02Start; Labwc only recommends foot and
 # the build installs no recommends) and notify-send for scripts and admins (the shell is the notification server).
-foot
 libnotify-bin
 # Screenshots, the snipping overlay and clipboard history (shell/electron/capture.ts, clipboard.ts): grim captures
 # (wlr-screencopy), wl-clipboard copies and watches the clipboard (wlr-data-control), wtype pastes from Super+V; the
@@ -145,9 +142,25 @@ libnotify-bin
 grim
 wl-clipboard
 wtype
+# Sinhala and Tamil typing under GNOME: IBus with m17n (Wijesekara, Tamil 99, phonetic); GNOME Settings › Keyboard adds them.
+ibus
+ibus-m17n
 # Web browser and media player (WorkSuite defaults: shell/apps/worksuite-mimeapps.list)
 firefox-esr
 celluloid
+# Everyday apps an ordinary desktop needs (defaults: shell/apps/worksuite-mimeapps.list): PDFs (Papers), images
+# (Loupe), plain text (Text Editor), a calculator, document scanning (Simple Scan, SANE), phones and network shares
+# in GTK apps (gvfs MTP/SMB backends), the screen reader (Orca) and power profiles (Settings › Power, Quick settings).
+papers
+loupe
+gnome-text-editor
+gnome-calculator
+simple-scan
+gvfs-backends
+orca
+power-profiles-daemon
+# Automatic time (Settings › Date & time): systemd-timedated reports CanNTP=no without an NTP unit.
+systemd-timesyncd
 # The GSettings key that gives client-drawn title bars Minimize, Maximize and Close (#49, #50:
 # services/session/gsettings, compiled by libglib2.0-bin's trigger).
 gsettings-desktop-schemas
@@ -229,3 +242,31 @@ pciutils
 usbutils
 fwupd
 mokutil
+
+# Desktop since 1.1: GNOME Shell on Mutter with the WorkSuite theme (services/session/gnome), kept lean: core apps only,
+# no Tracker indexer and no GNOME Software (WorkSuite's package service updates the system).
+gnome-shell
+gnome-session-bin
+gnome-shell-extensions
+gnome-settings-daemon
+gnome-control-center
+nautilus
+xdg-desktop-portal-gnome
+gnome-console
+
+# Desktop (1.1): GDM sign-in and lock screen, taskbar (dash-to-panel), Start menu (ArcMenu), tray (AppIndicator), corner
+# tiling, optional glass (blur-my-shell), and the everyday utilities a desktop needs. All Debian trixie packages.
+gdm3
+gnome-shell-extension-dash-to-panel
+gnome-shell-extension-arc-menu
+# The Start menu reads the freedesktop menu (gnome-applications.menu); without it ArcMenu never opens.
+gnome-menus
+gnome-shell-extension-blur-my-shell
+gnome-shell-extension-appindicator
+gnome-shell-extension-tiling-assistant
+gnome-text-editor
+gnome-calculator
+loupe
+file-roller
+gnome-disk-utility
+gnome-system-monitor

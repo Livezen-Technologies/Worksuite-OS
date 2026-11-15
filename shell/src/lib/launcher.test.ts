@@ -22,7 +22,9 @@ describe('launcher list', () => {
   it('lists Office entries only when WorkSuite Office is installed', () => {
     expect(buildLauncherApps([], [ff], null).some((a) => a.id.startsWith('office'))).toBe(false)
     const apps = buildLauncherApps([], [ff, office], 'worksuite-office')
-    expect(apps.filter((a) => a.id.startsWith('office')).map((a) => a.launch)).toEqual([{ office: 'start' }, { office: 'docs' }, { office: 'sheets' }, { office: 'slides' }])
+    // One Office tile (its start centre makes documents, spreadsheets and presentations), with the suite's own icon.
+    expect(apps.filter((a) => a.id.startsWith('office')).map((a) => a.launch)).toEqual([{ office: 'start' }])
+    expect(apps.find((a) => a.id === 'office')?.icon).toBe(office.icon)
     expect(apps.some((a) => a.id === 'worksuite-office')).toBe(false)
   })
   it('gives the bundled FrameFlow and POS pinned WorkSuite tiles launching their entries', () => {
@@ -47,7 +49,7 @@ describe('launcher list', () => {
     const apps = buildLauncherApps([{ id: 'mail', name: 'Mail' }], [ff, term], 'x')
     expect(filterApps(apps, 'all', '').some((a) => a.id === 'appcenter')).toBe(false)
     expect(filterApps(apps, 'all', 'browser').map((a) => a.id)).toEqual(['firefox-esr'])
-    expect(filterApps(apps, 'all', 'xlsx').map((a) => a.id)).toEqual(['office-sheets'])
+    expect(filterApps(apps, 'all', 'xlsx').map((a) => a.id)).toEqual(['office'])
     expect(filterApps(apps, 'all', 'app center').map((a) => a.id)).toEqual(['appcenter'])
     expect(filterApps(apps, 'linux', '').map((a) => a.id)).toEqual(['lk.worksuite.whatsapp', 'firefox-esr', 'foot'])
     expect(filterApps(apps, 'ws', 'foot')).toEqual([])
@@ -63,6 +65,33 @@ describe('launcher list', () => {
     expect(filterApps(apps, 'all', 'file')[0].id).toBe('files')   // the shell's own app before a Linux app's word match
     expect(apps.find((a) => a.id === 'files')?.launch).toEqual({ screen: 'files' })
   })
+  it('lists installed WorkSuite apps (POS, Desk, FrameFlow) with their own icons; hides only the shell\'s own entries', () => {
+    const app = (id: string, name: string) => ({ id, name, generic_name: null, comment: null, icon: `/opt/${name}/icon.png`, categories: ['Office'], keywords: [] })
+    const apps = buildLauncherApps([], [app('worksuite-pos', 'WorkSuite POS'), app('worksuite-desk', 'Worksuite Desk'), app('worksuite-frameflow', 'Worksuite FrameFlow'), app('worksuite-mail', 'WorkSuite Mail'), app('worksuite-url-handler', 'WorkSuite link handler')], null)
+    const ours = apps.filter((a) => ['worksuite-pos', 'worksuite-desk', 'worksuite-frameflow'].includes(a.id))
+    expect(ours.map((a) => [a.id, a.kind, a.icon])).toEqual([
+      ['worksuite-pos', 'WorkSuite', '/opt/WorkSuite POS/icon.png'],
+      ['worksuite-desk', 'WorkSuite', '/opt/Worksuite Desk/icon.png'],
+      ['worksuite-frameflow', 'WorkSuite', '/opt/Worksuite FrameFlow/icon.png'],
+    ])
+    expect(apps.some((a) => a.id === 'worksuite-url-handler')).toBe(false)
+    expect(apps.some((a) => a.id === 'worksuite-mail')).toBe(false)   // the shell's own web-app entry is never listed as an app
+    expect(filterApps(apps, 'all', 'pos').map((a) => a.id)).toContain('worksuite-pos')
+  })
+  it('a taskbar pin for a module inside WorkSuite Desktop becomes the WorkSuite pin, once', () => {
+    const desk = { id: 'worksuite', name: 'WorkSuite', generic_name: null, comment: null, icon: null, categories: [], keywords: [] }
+    const apps = buildLauncherApps([{ id: 'mail', name: 'Mail' }, { id: 'chat', name: 'Chat' }, { id: 'meet', name: 'Meet' }], [desk, ff], null, 'worksuite')
+    expect(taskbarApps(apps, ['worksuite-mail', 'worksuite-chat', 'worksuite-meet', 'firefox-esr']).map((a) => a.id)).toEqual(['worksuite-desktop', 'worksuite-meet', 'firefox-esr'])
+  })
+  it('Start pins WorkSuite apps before other Linux apps', () => {
+    const app = (id: string, name: string) => ({ id, name, generic_name: null, comment: null, icon: null, categories: [], keywords: [] })
+    const withIcon = (id: string, name: string) => ({ ...app(id, name), icon: id })
+    const web = [{ id: 'projects', name: 'Projects' }, { id: 'meet', name: 'Meet' }, { id: 'pdf-studio', name: 'PDF Studio' }]
+    const apps = buildLauncherApps(web, [app('celluloid', 'Celluloid'), withIcon('worksuite-pos', 'WorkSuite POS'), app('fcitx5-config', 'Fcitx 5')], null)
+    const pins = startPins(apps, 12).map((a) => a.id)
+    expect(pins.indexOf('worksuite-pos')).toBeLessThan(pins.indexOf('celluloid'))
+    expect(pins.indexOf('worksuite-pos')).toBeLessThan(pins.indexOf('worksuite-projects'))   // installed app before web shortcuts
+  })
   it('drops taskbar pins that are not available', () => {
     const apps = buildLauncherApps([{ id: 'chat', name: 'Chat' }], [ff], null)
     expect(taskbarApps(apps, ['worksuite-mail', 'worksuite-chat', 'office', 'firefox-esr']).map((a) => a.id)).toEqual(['worksuite-chat', 'firefox-esr'])
@@ -73,15 +102,19 @@ describe('WorkSuite Desktop in the start menu', () => {
   const desk = { id: 'worksuite', name: 'WorkSuite', generic_name: null, comment: null, icon: null, categories: ['Office'], keywords: [] }
   const web = [{ id: 'mail', name: 'Mail' }, { id: 'drive', name: 'Drive' }, { id: 'projects', name: 'Projects' }, { id: 'hr', name: 'HR' }]
 
-  it('opens its modules in WorkSuite Desktop with --module, the rest in web app windows', () => {
-    const apps = buildLauncherApps(web, [desk, ff], null, 'worksuite')
+  it('is one WorkSuite tile with its own icon: modules it contains are not separate tiles, the rest stay web windows', () => {
+    const icon = { ...desk, icon: '/usr/share/icons/hicolor/512x512/apps/worksuite.png', wm_class: 'WorkSuite' }
+    const apps = buildLauncherApps(web, [icon, ff], null, 'worksuite')
     expect(apps.filter((a) => a.kind === 'WorkSuite').map((a) => [a.id, a.launch])).toEqual([
       ['worksuite-desktop', { worksuite: 'home' }],
-      ['worksuite-mail', { worksuite: 'mail' }],
-      ['worksuite-drive', { worksuite: 'files' }],
-      ['worksuite-projects', { desktop: 'worksuite-projects' }],
-      ['worksuite-hr', { worksuite: 'hr' }],
+      ['worksuite-projects', { desktop: 'worksuite-projects' }],   // not inside WorkSuite Desktop: still reachable
     ])
+    const tile = apps.find((a) => a.id === 'worksuite-desktop')!
+    expect(tile.icon).toBe(icon.icon)
+    // Its window is matched to the tile (the taskbar shows its icon, not a letter placeholder).
+    expect(appForWindow(apps, 'WorkSuite')?.id).toBe('worksuite-desktop')
+    // Module names still find it.
+    expect(filterApps(apps, 'all', 'mail').map((a) => a.id)).toContain('worksuite-desktop')
     // Its own entry is the WorkSuite tile, not a Linux app.
     expect(apps.some((a) => a.kind === 'Linux app' && a.id === 'worksuite')).toBe(false)
   })
@@ -116,5 +149,15 @@ describe('WhatsApp in the launcher', () => {
   })
   it('owns its window by app_id', () => {
     expect(appForWindow(buildLauncherApps(null, null, null), 'lk.worksuite.whatsapp')?.name).toBe('WhatsApp')
+  })
+})
+
+describe('shell entries', () => {
+  it('SHELL_ENTRIES lists exactly the shell\'s own worksuite-* desktop entries (shell/apps), plus the HR web app', async () => {
+    const { readdirSync } = await import('node:fs')
+    const { SHELL_ENTRIES } = await import('../../electron/shellEntries')
+    const files = readdirSync('apps').filter((f) => /^worksuite-.*\.desktop$/.test(f)).map((f) => f.replace(/\.desktop$/, ''))
+    for (const f of files) expect(SHELL_ENTRIES.has(f), f).toBe(true)
+    expect([...SHELL_ENTRIES].filter((id) => !files.includes(id))).toEqual(['worksuite-hr'])
   })
 })

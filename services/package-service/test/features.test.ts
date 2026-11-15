@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { loadCatalog, type CatalogEnv } from '../src/catalog.ts';
 import { PackageService, type Env, type Job, type RunResult } from '../src/service.ts';
 import { makeBundle, releaseKey, sha256, tmp } from './helpers.ts';
@@ -17,7 +18,7 @@ function world(script: Script = () => undefined, over: Partial<Env> = {}) {
   const env: Env = {
     runner: { async run(cmd, args) { calls.push([cmd, ...args].join(' ')); return { code: 0, stdout: '', stderr: '', ...script(cmd, args) }; } },
     policy: () => null, sources: () => GOOD_SOURCES, power: () => ({ ac: true, battery: 90 }), freeBytes: () => 50e9,
-    audit: (e, f) => { audit.push([e, f]); }, spool: tmp('ws-spool-'), sleep: async () => {}, unprivileged: { uid: 65534, gid: 65534, chown: () => {} }, ...over,
+    audit: (e, f) => { audit.push([e, f]); }, spool: tmp('ws-spool-'), sleep: async () => {}, unprivileged: { uid: 65534, gid: 65534, chown: () => {} }, bundleRoots: [tmpdir() + '/'], ...over,
   };
   const svc = new PackageService(env);
   const done = (id: number) => new Promise<Job>((resolve) => {
@@ -152,6 +153,8 @@ test('local .deb: only regular files the caller owns, never links or other paths
   await assert.rejects(w.svc.previewLocalDeb(uid, link), { code: 'InvalidArgs' });
   await assert.rejects(w.svc.previewLocalDeb(uid, 'relative.deb'), { code: 'InvalidArgs' });
   await assert.rejects(w.svc.previewLocalDeb(uid, '/etc/shadow'), { code: 'InvalidArgs' });
+  // Only the inbox: a file in a home folder or on a USB drive is never opened by the service itself (AppArmor).
+  await assert.rejects(world(debScript(), { bundleRoots: ['/var/spool/worksuite-incoming/'] }).svc.previewLocalDeb(uid, debFile()), /inbox only/);
   await assert.rejects(w.svc.previewLocalDeb(uid + 1, f), { code: 'NotAuthorized' });
   assert.ok(!w.calls.length, 'nothing ran');
 });
@@ -211,7 +214,11 @@ test('bundle: signed manifest and package hashes verified; installs offline with
   assert.equal(job.state, 'success', job.error);
   const dir = join(b.env.spool!, 'bundle');
   const debs = [join(dir, 'worksuite-desktop_1.1.0_amd64.deb'), join(dir, 'worksuite-shell_1.1.0_amd64.deb')].join(' ');
-  assert.ok(b.calls.includes(`apt-get -y -q --no-download -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -- ${debs}`), b.calls.join('\n'));
+  // No package sources (not --no-download: apt 3.0 fails real installs of local ~-versions under it, seen in a VM).
+  const offline = `-o Dir::Etc::SourceList=${join(b.env.spool!, 'apt', 'no-sources.list')} -o Dir::Etc::SourceParts=/nonexistent`;
+  assert.ok(b.calls.includes(`apt-get -s -q ${offline} install -- ${debs}`), b.calls.join('\n'));
+  assert.ok(b.calls.includes(`apt-get -y -q ${offline} -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -- ${debs}`), b.calls.join('\n'));
+  assert.ok(!b.calls.some((c) => c.includes('--no-download')));
   assert.ok(b.audit.some(([e]) => e === 'bundle_installed'));
   assert.ok(!existsSync(dir), 'extracted packages cleaned up');
 });
@@ -236,7 +243,7 @@ test('bundle: foreign key, edited package, extra member, wrong arch, downgrade a
   rollback.svc.inspectBundle(uid, makeBundle(rollback.root, { sign: rollback.key.signFlat, manifest: { rollback_directive: { from_version: '1.2.0', reason: 'regression' } } }));
   const out = bundleWorld();
   const elsewhere = makeBundle(tmp('ws-elsewhere-'), { sign: out.key.signFlat });
-  assert.throws(() => out.svc.inspectBundle(uid, elsewhere), /removable media/);
+  assert.throws(() => out.svc.inspectBundle(uid, elsewhere), /inbox only/);
   assert.throws(() => out.svc.installBundle(uid, '/etc/passwd'), { code: 'InvalidArgs' });
 });
 

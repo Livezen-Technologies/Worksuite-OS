@@ -1,12 +1,14 @@
-// Do not disturb, shared by the notification dock and Settings › Notifications. Kept for this session in the
-// shell (it holds back toasts; notices still collect in the dock).
+// Do not disturb, shared by the notification dock and Settings › Notifications. It holds back toasts (notices still
+// collect in the dock) and is remembered across shell restarts and sign-ins.
 import { useEffect, useState } from 'react'
 
 const EVENT = 'ws:dnd'
-let on = false
+const KEY = 'ws.dnd'
+let on = (() => { try { return localStorage.getItem(KEY) === '1' } catch { return false } })()
 
 export function setDnd(v: boolean) {
   on = v
+  try { localStorage.setItem(KEY, v ? '1' : '0') } catch { /* no storage: this session only */ }
   window.dispatchEvent(new CustomEvent(EVENT, { detail: v }))
 }
 export function useDnd(): [boolean, (v: boolean) => void] {

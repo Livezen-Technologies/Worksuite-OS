@@ -11,6 +11,7 @@ import { PROBLEM_ADVICE, STAGES, ai, aiErrorText, compatibility, downloadSize, f
 import { assistantStore, cancel, reset, retry, send, sendWithContext, useAssistant, type AskEntry } from '../lib/assistant'
 import type { AssistantRequest } from '../lib/assistantNav'
 import { t, useT } from '../i18n'
+import { Button } from './ui/button'
 
 export const AI_ICON = 'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9zM5 3l.6 1.4L7 5l-1.4.6L5 7l-.6-1.4L3 5l1.4-.6z'
 const CPU = 'M7 7h10v10H7zM10 10h4v4h-4zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4'
@@ -138,8 +139,8 @@ export default function Assistant({ onClose, onOpenSettings, request, onRequestH
           {st.busy && (
             <button type="button" onClick={cancel} aria-label={tr('ai.stop')} title={tr('ai.stop')} className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-[rgba(127,178,255,0.25)] text-white hover:bg-white/10"><Svg d={D.stop} size={13} /></button>
           )}
-          <button type="button" onClick={() => void send()} disabled={st.busy || !st.text.trim() || !canAsk} aria-label={tr('ai.send')} title={tr('ai.sendHint')}
-            className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-[9px] bg-[#1F6BFF] text-white hover:bg-[#3A7DFF] disabled:cursor-default disabled:bg-white/[0.06] disabled:text-[#8FA3C8]"><Svg d={D.send} size={15} /></button>
+          <Button onClick={() => void send()} disabled={st.busy || !st.text.trim() || !canAsk} aria-label={tr('ai.send')} title={tr('ai.sendHint')}
+            variant="primary" size="icon-sm" className="disabled:bg-white/[0.06] disabled:text-[#8FA3C8] disabled:opacity-100"><Svg d={D.send} size={15} /></Button>
         </div>
         <div className="flex items-center gap-2 px-1 text-[11px] text-[#8FA3C8]">
           <span data-testid="ai-mode" className="flex min-w-0 flex-1 items-center gap-1 truncate"><Svg d={CPU} size={11} />{phase}{canAsk && !st.busy ? ` · ${tr('ai.enterToSend')}` : ''}</span>

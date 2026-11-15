@@ -80,7 +80,7 @@ export function DisplayPanel() {
         const on = draft.outputs.find((c) => c.name === o.name)?.enabled
         return (
           <button key={o.name} type="button" aria-pressed={o.name === out?.name} onClick={() => setSelected(o.name)}
-            className={`box-border flex h-[100px] w-[170px] cursor-pointer flex-col items-start justify-end rounded-[10px] p-2.5 text-left text-[13px] ${o.name === out?.name ? 'border-2 border-[#1F6BFF]' : 'border border-[rgba(127,178,255,0.3)]'} ${on ? '' : 'opacity-50'}`}
+            className={`ws-dark-zone box-border flex h-[100px] w-[170px] cursor-pointer flex-col items-start justify-end rounded-[10px] p-2.5 text-left text-[13px] ${o.name === out?.name ? 'border-2 border-[#1F6BFF]' : 'border border-[rgba(127,178,255,0.3)]'} ${on ? '' : 'opacity-50'}`}
             style={{ background: WALLPAPERS[live.wallpapers[o.name] ?? 'default']?.css }}>
             <span className="font-semibold text-white">{i + 1} · {o.description || o.name}</span>
             <span className="text-[11px] text-[#C9D6EE]">{o.name}{o.name === draft.primary ? ' · main' : ''}{on ? '' : ' · off'}</span>

@@ -1,0 +1,14 @@
+# GDM greeter defaults (installed as /etc/dconf/db/gdm.d/90-worksuite by worksuite-session; `dconf update` compiles it).
+[org/gnome/login-screen]
+logo='/usr/share/icons/hicolor/scalable/apps/worksuite-os.svg'
+enable-smartcard-authentication=false
+disable-restart-buttons=false
+
+[org/gnome/desktop/interface]
+color-scheme='prefer-dark'
+font-name='IBM Plex Sans 11'
+clock-show-weekday=true
+show-battery-percentage=true
+
+[org/gnome/desktop/a11y/applications]
+screen-keyboard-enabled=false

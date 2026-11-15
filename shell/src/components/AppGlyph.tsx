@@ -1,5 +1,5 @@
-// An app's icon wherever apps are listed (Start menu, All apps, taskbar, search, App Center): the bundled WorkSuite /
-// system icon for apps the OS knows by id, else the installed app's theme icon (Icon= of its desktop entry), else the
+// An app's icon wherever apps are listed (Start menu, All apps, taskbar, search, App Center): the installed app's own
+// icon (Icon= of its desktop entry), else the bundled WorkSuite / system icon for apps the OS knows by id, else the
 // generated letter mark. Always decorative: the control around it carries the app's name.
 import type { CSSProperties } from 'react'
 import { brandIcon } from '../lib/brandIcons'
@@ -13,8 +13,10 @@ export interface GlyphApp { id: string; name?: string; mark: string; bg: string;
  */
 export function AppGlyph({ app, size, radius, font, css = false, className = '', style }: { app: GlyphApp; size: number; radius: number; font: number; css?: boolean; className?: string; style?: CSSProperties }) {
   const brand = brandIcon(app.id)
-  const theme = useThemeIcon(brand ? null : app.icon, size)
-  const src = brand ?? theme
+  // An installed app shows its own icon (Icon= of its desktop entry). The bundled one is only the fallback: for apps
+  // that aren't installed, and while the theme icon is loading (no flash of a letter mark).
+  const theme = useThemeIcon(app.icon ?? null, size)
+  const src = theme || brand
   if (src) {
     return <img aria-hidden="true" alt="" src={src} width={size} height={size} draggable={false} data-icon={app.id} className="ws-icon shrink-0 select-none object-contain" style={{ width: size, height: size }} />
   }

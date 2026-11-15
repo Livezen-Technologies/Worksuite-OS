@@ -6,4 +6,4 @@ VERSION_CODENAME=trixie
 ID=worksuite
 ID_LIKE=debian
 HOME_URL="https://worksuitecloud.com/"
-LOGO=worksuite
+LOGO=worksuite-os

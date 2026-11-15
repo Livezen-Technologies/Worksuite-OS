@@ -129,6 +129,11 @@ test('device reports and escrow are stored; required fields are validated', asyn
   const d = await enroll();
   const report = (path: string, body: unknown) => call('POST', path, { device: d.credential, idem: randomUUID(), body });
   assert.equal((await report('/desktop/v1/os/inventory', { collected_at: new Date().toISOString(), hardware: {}, software: [] })).status, 202);
+  // Enterprise deployment sync: the setup report rides on the inventory; a malformed one is refused before storage.
+  const setup = { state: 'SETUP_COMPLETED', mode: 'install', updated_at: 1, completed_at: 2, last_error: null, apps: [{ id: 'worksuite-pos', state: 'installed', required: false, attempts: 1, error: null }] }
+  assert.equal((await report('/desktop/v1/os/inventory', { collected_at: new Date().toISOString(), hardware: {}, software: [], setup })).status, 202);
+  assert.equal((await report('/desktop/v1/os/inventory', { collected_at: new Date().toISOString(), hardware: {}, software: [], setup: 'done' })).status, 400);
+  assert.equal((await report('/desktop/v1/os/inventory', { collected_at: new Date().toISOString(), hardware: {}, software: [], setup: { state: 'X' } })).status, 400);
   assert.equal((await report('/desktop/v1/os/update-results', { release_id: 'r1' })).status, 400);
   assert.equal((await report('/desktop/v1/os/update-results', { release_id: 'r1', result: 'success', os_version: '1', shell_version: '1', kernel_version: '6' })).status, 202);
   assert.equal((await report('/desktop/v1/os/break-glass', { username: 'wsadmin', encrypted_secret: 'age1…', rotated_at: new Date().toISOString() })).status, 204);

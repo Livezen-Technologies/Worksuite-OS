@@ -1,5 +1,6 @@
 """The veil's boot text belongs to the first greeter after boot only (E2E: "Booting…" after sign-out)."""
 import os
+import re
 import tempfile
 import unittest
 
@@ -70,5 +71,12 @@ class InstallerLoadingTest(unittest.TestCase):
 
     def test_same_motion_constants_in_calamares(self):
         cpp = open(os.path.join(os.path.dirname(__file__), "../../../../installer/modules/worksuiteconfirm/WsIntro.cpp"), encoding="utf-8").read()
+        from worksuite_greeter import loader
+        # The installer's curtain plays the same loader as the veil and the boot splash.
+        for name, frames in (("LEFT", loader.LEFT), ("BOTTOM", loader.BOTTOM), ("BLUE_SCALE", loader.BLUE_SCALE), ("NAVY_SCALE", loader.NAVY_SCALE)):
+            m = re.search(r"constexpr Key %s\[\] = \{(.*?)\};" % name, cpp)
+            got = tuple((float(a), float(b)) for a, b in re.findall(r"\{ ([0-9.]+), ([0-9.]+) \}", m.group(1)))
+            self.assertEqual(got, frames, name)
+        self.assertRegex(cpp, r"LOADER_S = %s\b" % loader.PERIOD_S)
         for name, value in (("BREATH_S", veil.BREATH_S), ("SHIMMER_S", veil.SHIMMER_S), ("SHIMMER_W", veil.SHIMMER_W)):
             self.assertRegex(cpp, r"%s = %s\b" % (name, value))

@@ -8,6 +8,8 @@ import './index.css'
 import { applyAppearance, loadAppearance } from './lib/setup'
 import { applyA11y, getA11y } from './lib/a11y'
 import TextContextMenu from './components/TextContextMenu'
+import SetupWizard from './components/setup-wizard/SetupWizard'
+import { setupApi } from './lib/setupApi'
 
 applyAppearance(loadAppearance())
 applyA11y(getA11y())
@@ -22,7 +24,10 @@ const kiosk = q.get('mode') === 'kiosk-exit' ? <KioskExit /> : q.get('mode') ===
 // `?mode=taskbar&output=NAME`: the taskbar's own window above the apps (#53, electron/taskbar.ts).
 const taskbar = q.get('mode') === 'taskbar'
 
+// `?setup=1|recovery|install` (browser preview): the setup wizard on the in-memory state machine (lib/setupApi.ts).
+const setupPreview = !(window as { worksuite?: unknown }).worksuite && q.get('setup') ? setupApi() : null
+
 // Cut/Copy/Paste on every text field of the shell's own screens (not the kiosk's).
-createRoot(document.getElementById('root')!).render(<StrictMode>{kiosk ?? (taskbar ? <TaskbarWindow /> : output ? <OutputDesktop output={output} /> : <><App /><TextContextMenu /></>)}</StrictMode>)
+createRoot(document.getElementById('root')!).render(<StrictMode>{setupPreview ? <SetupWizard api={setupPreview} onDone={() => location.assign('/')} /> : kiosk ?? (taskbar ? <TaskbarWindow /> : output ? <OutputDesktop output={output} /> : <><App /><TextContextMenu /></>)}</StrictMode>)
 // The first screen is painted (two frames after the first render): the session veil over Labwc can go (electron/main.ts).
 requestAnimationFrame(() => requestAnimationFrame(() => { void (window as unknown as { worksuite?: { firstFrame?: () => Promise<unknown> } }).worksuite?.firstFrame?.()?.catch(() => undefined) }))

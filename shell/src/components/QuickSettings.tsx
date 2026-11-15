@@ -2,6 +2,7 @@
 // Everything reads and changes the real services through the Settings bridge (NetworkManager, BlueZ, PipeWire,
 // UPower), monitorApi (backlight) and peripheralsApi (power-profiles-daemon). A service that isn't there shows as unavailable.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useActionError } from '../lib/useActionError'
 import { formatDuration, os, type BatteryState, type BluetoothState, type NetworkState, type SoundState } from '../lib/os'
 import { monitorApi, type Backlight } from '../lib/monitorApi'
 import { peripheralsApi, type PowerProfiles } from '../lib/peripheralsApi'
@@ -178,7 +179,8 @@ export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, on
   const connected = wifi?.state === 'connected' ? wifi.connection : null
   const btOn = bt?.powered ?? false
   const btCount = bt?.paired.filter((d) => d.connected).length ?? 0
-  const act = (p: Promise<unknown>) => void p.finally(refresh)
+  const action = useActionError(refresh)
+  const act = (p: Promise<unknown>) => void action.run(p)
   const nextMode = (m: PowerProfiles) => m.profiles[(m.profiles.indexOf(m.active) + 1) % m.profiles.length]
 
   const tiles: { id: string; title: string; sub: string; d: string; on: boolean; disabled: boolean; click: () => void; section?: string }[] = [
@@ -205,11 +207,11 @@ export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, on
       className="absolute right-3 bottom-16 z-40 box-border flex w-[360px] max-w-[calc(100%-24px)] flex-col gap-3.5 rounded-2xl border border-[rgba(127,178,255,0.2)] bg-[rgba(10,24,56,0.97)] p-4 text-[#E8EEFA] shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
       <div className="grid grid-cols-2 gap-2">
         {tiles.map((x) => (
-          <span key={x.id} className="flex min-w-0 overflow-hidden rounded-xl" style={{ background: x.on ? '#1F6BFF' : 'rgba(255,255,255,0.07)' }}>
+          <span key={x.id} className={`flex min-w-0 overflow-hidden rounded-xl ${x.on ? 'bg-[#1F6BFF] text-white' : 'bg-white/[0.07]'}`}>
             <button type="button" aria-pressed={x.id === 'mode' ? undefined : x.on} disabled={x.disabled} onClick={x.click}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left disabled:cursor-default disabled:opacity-60">
               <Ico d={x.d} size={18} />
-              <span className="flex min-w-0 flex-col"><span className="text-[13px] font-semibold">{x.title}</span><span className="truncate text-[11px]" style={{ color: x.on ? '#DCE7FF' : '#8FA3C8' }}>{x.sub}</span></span>
+              <span className="flex min-w-0 flex-col"><span className="text-[13px] font-semibold">{x.title}</span><span className={`truncate text-[11px] ${x.on ? '' : 'text-[#8FA3C8]'}`} style={x.on ? { color: '#DCE7FF' } : undefined /* always on the blue tile */}>{x.sub}</span></span>
             </button>
             {x.section && onOpenSettings && (
               <button type="button" aria-label={t('qs.openSettings', { name: x.title })} title={t('qs.openSettings', { name: x.title })} onClick={() => onOpenSettings(x.section!)}
@@ -218,16 +220,17 @@ export function QuickPanel({ state, refresh, dnd, setDnd, onSettings, onLock, on
           </span>
         ))}
       </div>
+      {action.error && <p role="alert" className="m-0 rounded-lg bg-[rgba(217,69,43,0.14)] px-3 py-2 text-xs text-[#FFB4A6]">{t('common.actionFailed', { reason: action.error })}</p>}
       <label className="flex items-center gap-2.5" title={sound ? undefined : t('common.unavailable')}>
         <button type="button" aria-label={sound?.muted ? t('qs.unmute') : t('qs.mute')} aria-pressed={sound?.muted ?? false} disabled={!sound} onClick={() => act(os.sysSetMute(!sound!.muted))} className="cursor-pointer disabled:cursor-default"><Ico d={sound?.muted ? D.volMute : D.speaker} stroke="#C9D6EE" /></button>
         <input type="range" min={0} max={100} aria-label={t('qs.volume')} disabled={!sound} value={vol ?? sound?.volume ?? 0}
-          onChange={(e) => setVol(Number(e.target.value))} onPointerUp={() => { if (vol != null) act(os.sysSetVolume(vol).then(() => setVol(null))) }} onKeyUp={() => { if (vol != null) act(os.sysSetVolume(vol).then(() => setVol(null))) }}
+          onChange={(e) => setVol(Number(e.target.value))} onPointerUp={() => { if (vol != null) act(os.sysSetVolume(vol).finally(() => setVol(null))) }} onKeyUp={() => { if (vol != null) act(os.sysSetVolume(vol).finally(() => setVol(null))) }}
           className="flex-1 accent-[#1F6BFF] disabled:opacity-50" />
       </label>
       <label className="flex items-center gap-2.5" title={light ? undefined : t('qs.noBacklight')}>
         <Ico d={D.sun} stroke="#C9D6EE" />
         <input type="range" min={1} max={100} aria-label={light ? t('qs.brightness') : `${t('qs.brightness')}: ${t('qs.noBacklight')}`} disabled={!light} value={bri ?? light?.percent ?? 100}
-          onChange={(e) => setBri(Number(e.target.value))} onPointerUp={() => { if (bri != null) act(monitorApi.sysSetBrightness(bri).then(() => setBri(null))) }} onKeyUp={() => { if (bri != null) act(monitorApi.sysSetBrightness(bri).then(() => setBri(null))) }}
+          onChange={(e) => setBri(Number(e.target.value))} onPointerUp={() => { if (bri != null) act(monitorApi.sysSetBrightness(bri).finally(() => setBri(null))) }} onKeyUp={() => { if (bri != null) act(monitorApi.sysSetBrightness(bri).finally(() => setBri(null))) }}
           className="flex-1 accent-[#1F6BFF] disabled:opacity-40" />
       </label>
       <div className="flex items-center justify-between gap-2 border-t border-[rgba(127,178,255,0.12)] pt-3 text-xs text-[#C9D6EE]">

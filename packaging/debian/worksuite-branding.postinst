@@ -4,10 +4,20 @@ if [ "$1" = configure ]; then
   update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth \
     /usr/share/plymouth/themes/worksuite/worksuite.plymouth 150
   update-alternatives --set default.plymouth /usr/share/plymouth/themes/worksuite/worksuite.plymouth
-  # Debian's plymouth reads the theme from /etc/plymouth/plymouthd.conf; -R rebuilds the initramfs with it.
-  if command -v plymouth-set-default-theme >/dev/null 2>&1; then
-    plymouth-set-default-theme -R worksuite || true
+  # Debian's plymouth reads the theme from /etc/plymouth/plymouthd.conf. The initramfs (which carries the splash) is
+  # rebuilt once, by initramfs-tools' trigger at the end of the dpkg run: plymouth-set-default-theme -R rebuilt it here
+  # and the trigger then rebuilt it again (two full rebuilds per update, minutes each on a slow machine; seen in a VM).
+  if command -v plymouth-set-default-theme >/dev/null 2>&1; then plymouth-set-default-theme worksuite || true; fi
+  if [ -n "${DPKG_MAINTSCRIPT_PACKAGE:-}" ] && command -v dpkg-trigger >/dev/null 2>&1; then
+    dpkg-trigger --no-await update-initramfs || update-initramfs -u || true
   elif command -v update-initramfs >/dev/null 2>&1; then update-initramfs -u || true; fi
+  # WorkSuite instead of Debian's artwork wherever Debian shows it (desktop-base's alternatives, at a higher priority:
+  # nothing of Debian's is edited, and removing this package brings Debian's back): the vendor logo (GDM's sign-in
+  # screen shows logo-text-version-64.png) and the desktop, sign-in and boot-menu backgrounds.
+  update-alternatives --install /usr/share/images/vendor-logos vendor-logos /usr/share/worksuite/vendor-logos 100
+  update-alternatives --install /usr/share/images/desktop-base/desktop-background desktop-background /usr/share/backgrounds/worksuite/default.png 100
+  update-alternatives --install /usr/share/images/desktop-base/login-background.svg desktop-login-background /usr/share/backgrounds/worksuite/default.svg 100
+  update-alternatives --install /usr/share/images/desktop-base/desktop-grub.png desktop-grub /usr/share/backgrounds/worksuite/default.png 100
   # The GRUB theme where GRUB can read it on an encrypted install (/boot is not encrypted), then the menu.
   if [ -d /boot ]; then /usr/libexec/worksuite/worksuite-grub-theme || true; fi
   if command -v update-grub >/dev/null 2>&1 && [ -d /boot/grub ]; then update-grub || true; fi

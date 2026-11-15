@@ -108,7 +108,7 @@ class SignInTests(unittest.TestCase):
         g = FakeGreetd(info="Welcome")
         r = login.sign_in(g, "ana@corp.example", "pw", run_dir=self.run)
         self.assertTrue(r.ok)
-        self.assertEqual(g.started, ["/usr/bin/worksuite-session"])
+        self.assertEqual(g.started, ["/usr/bin/worksuite-gnome-session"])
         self.assertEqual(r.messages, ["Welcome"])
 
     def test_wrong_password_cancels(self):

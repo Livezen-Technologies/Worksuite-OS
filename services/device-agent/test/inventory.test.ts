@@ -71,3 +71,28 @@ test('update status comes from the package service status file', () => {
   writeFileSync(p, '{"nope":1}');
   assert.equal(readUpdateStatus(p), null);
 });
+
+test('readSetupReport: the setup service report, reshaped to known, bounded fields', async () => {
+  const { readSetupReport } = await import('../src/inventory.ts');
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'ws-setup-report-'));
+  const f = join(dir, 'report.json');
+  assert.equal(readSetupReport(f), null, 'no setup ran here');
+  writeFileSync(f, JSON.stringify({
+    state: 'SETUP_COMPLETED', mode: 'install', updated_at: 5, completed_at: 6, last_error: 'x'.repeat(900), user: 'ana', locale: 'si_LK',
+    apps: [
+      { id: 'worksuite-pos', state: 'installed', required: false, attempts: 1, error: null, extra: 'dropped' },
+      { id: 'BAD ID', state: 'installed' }, { id: 'vlc', state: 'exploded' },
+      { id: 'worksuite-desk', state: 'failed', required: true, attempts: 3, error: 'E: '.repeat(400) },
+    ],
+  }));
+  const r = readSetupReport(f)!;
+  assert.deepEqual(Object.keys(r).sort(), ['apps', 'completed_at', 'last_error', 'mode', 'state', 'updated_at']);
+  assert.equal(r.last_error!.length, 300);
+  assert.deepEqual(r.apps.map((a) => [a.id, a.state, a.required, a.attempts]), [['worksuite-pos', 'installed', false, 1], ['worksuite-desk', 'failed', true, 3]]);
+  assert.equal(r.apps[1].error!.length, 300);
+  writeFileSync(f, JSON.stringify({ state: 'not a state' }));
+  assert.equal(readSetupReport(f), null);
+});

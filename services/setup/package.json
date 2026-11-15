@@ -1,0 +1,15 @@
+{
+  "name": "@worksuite-os/setup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "lk.worksuite.Setup1: install / first-run state machine, durable checkpoints, recovery and rollback (docs/setup-wizard-state-machine.md)",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "test": "node --no-warnings --test test/*.test.ts",
+    "sync-machine": "node scripts/sync-machine.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": { "dbus-next": "0.10.2" },
+  "devDependencies": { "typescript": "^5.9.0", "@types/node": "^22.18.0" }
+}

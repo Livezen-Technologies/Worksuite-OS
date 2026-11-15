@@ -10,7 +10,7 @@ from worksuite_greeter.i18n_si import SI, SI_PLURAL
 from worksuite_greeter.i18n_ta import TA, TA_PLURAL
 
 PKG = Path(__file__).resolve().parent.parent / "worksuite_greeter"
-SOURCES = [PKG / "ui.py", PKG / "veil.py"]
+SOURCES = [PKG / "ui.py", PKG / "veil.py", PKG / "updater.py"]
 
 
 def strings():

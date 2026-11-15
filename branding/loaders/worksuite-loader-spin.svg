@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="96" height="96" role="img" aria-label="Loading WorkSuite">
+  <title>Loading WorkSuite</title>
+  <style>
+.s { transform-box: view-box; transform-origin: 64px 64px; animation: s-turn 3.2s cubic-bezier(.7,0,.3,1) infinite; }
+    @keyframes s-turn {
+      0% { transform: rotate(0) scale(1) } 10% { transform: rotate(45deg) scale(.86) } 20%,25% { transform: rotate(90deg) scale(1) }
+      35% { transform: rotate(135deg) scale(.86) } 45%,50% { transform: rotate(180deg) scale(1) }
+      60% { transform: rotate(225deg) scale(.86) } 70%,75% { transform: rotate(270deg) scale(1) }
+      85% { transform: rotate(315deg) scale(.86) } 95%,100% { transform: rotate(360deg) scale(1) } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  </style>
+  <g class="s"><rect x="16" y="48" width="32" height="32" fill="#00daf2"/><rect x="48" y="80" width="32" height="32" fill="#00daf2"/><rect x="48" y="16" width="64" height="64" fill="#0a6cff"/><rect x="48" y="48" width="32" height="32" fill="#001842"/></g>
+</svg>

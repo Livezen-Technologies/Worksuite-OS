@@ -72,6 +72,16 @@ describe('lookupIcon', () => {
     expect(lookupIcon('xterm', 48, 1, env)).toContain('/pixmaps/xterm.png')
     expect(lookupIcon('nothing-here', 48, 1, env)).toBeNull()
   })
+  it('finds hicolor/1024x1024 icons that the hicolor index does not list (electron-builder packages)', () => {
+    const { env } = tree({
+      'icons/hicolor/index.theme': HICOLOR,
+      'icons/hicolor/1024x1024/apps/worksuite-pos.png': PNG,
+      'icons/hicolor/48x48/apps/worksuite-desk.png': PNG,
+      'icons/hicolor/1024x1024/apps/worksuite-desk.png': PNG,
+    })
+    expect(lookupIcon('worksuite-pos', 48, 1, env)).toContain('/hicolor/1024x1024/apps/worksuite-pos.png')
+    expect(lookupIcon('worksuite-desk', 48, 1, env)).toContain('/hicolor/48x48/apps/worksuite-desk.png')
+  })
   it('takes the exact size, else the closest, with scalable SVG winning a tie', () => {
     const { env } = tree({
       'icons/Papirus/index.theme': index('16x16/apps,64x64/apps,scalable/apps', '[16x16/apps]\nSize=16\nType=Fixed\n\n[64x64/apps]\nSize=64\nType=Fixed\n\n[scalable/apps]\nSize=48\nMinSize=32\nMaxSize=256\nType=Scalable\n'),

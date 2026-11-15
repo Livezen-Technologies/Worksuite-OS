@@ -21,6 +21,8 @@ const feed = (f: unknown) => {
   return o.sha256 !== undefined || o.key !== undefined;
 };
 
+const setupIds = (v: unknown) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && /^[a-z0-9][a-z0-9.-]{0,63}$/.test(x))
+
 const APP_PERMISSION_RESOURCES = new Set(['camera', 'microphone', 'location', 'notifications', 'screenshot', 'background']);
 
 const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
@@ -38,6 +40,16 @@ const POLICY_FIELDS: Record<string, (v: unknown) => boolean> = {
   pin_min_length: (v) => Number.isInteger(v) && (v as number) >= 4 && (v as number) <= 12,
   app_allowlist: (v) => Array.isArray(v) && v.length <= 1000 && v.every((x) => typeof x === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(x)),
   approved_remotes: (v) => Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === 'string' && x.length <= 200),
+  // Enterprise deployment (services/setup/src/apps): setup catalog ids installed on every device, ids never installed
+  // by setup (WorkSuite Desktop is always installed whatever this says), and the defaults setup pre-fills.
+  setup_mandatory_apps: (v) => setupIds(v),
+  setup_restricted_apps: (v) => setupIds(v),
+  setup_defaults: (v) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return false
+    const o = v as Record<string, unknown>
+    const shape: Record<string, RegExp> = { locale: /^[a-z]{2,3}(_[A-Z]{2})?(\.UTF-8)?$/, timezone: /^([A-Za-z_]+(\/[A-Za-z0-9_+-]+)+|UTC)$/, keyboard: /^[a-z]{2,8}(\+[a-z0-9]{1,16})?$/ }
+    return Object.keys(o).length > 0 && Object.entries(o).every(([k, x]) => k in shape && typeof x === 'string' && shape[k].test(x))
+  },
   offline_wipe_days: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 365,
   // CoreApprovalEngine waiver (WSOS-WIPE-001): personal-owned devices may be wiped with one approval.
   wipe_personal_single_approval: (v) => typeof v === 'boolean',

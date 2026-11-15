@@ -3,7 +3,7 @@ Default: yes
 Priority: -1
 Auth-Type: Additional
 Auth-Final:
-	[success=ignore default=2]	pam_succeed_if.so quiet service in greetd:login
+	[success=ignore default=2]	pam_succeed_if.so quiet service in greetd:login:gdm-password
 	[success=ignore default=1]	pam_exec.so quiet /usr/lib/worksuite/worksuite-signin pam-password-used
 	optional	pam_gnome_keyring.so
 Session-Type: Additional

@@ -13,7 +13,7 @@ import { loadCatalog, requestApp, type CatalogEnv } from './catalog.ts';
 import { UpdateHistory } from './history.ts';
 import { gunzipSync } from 'node:zlib';
 import { DriverManager, firmwarePresent, parseModulesAlias, scanSysfs, type DriverEnv } from './driverscan.ts';
-import { parseInstalled } from './drivers.ts';
+import { parseInstalled, type DeviceReport } from './drivers.ts';
 
 const POLICY = '/run/worksuite-device-agent/policy.json';
 const AUDIT_LOG = '/var/log/worksuite/package-service-audit.log';
@@ -227,6 +227,12 @@ export function driverEnv(svc: PackageService): DriverEnv {
     run: linuxEnv.runner.run,
     runLines,
     version: (p) => { try { return execFileSync('dpkg-query', ['-W', '-f=${Version}', p], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; } },
+    installReport: () => {
+      try {
+        const r = JSON.parse(readFileSync('/var/lib/worksuite-package-service/install-hardware.json', 'utf8')) as { devices?: unknown };
+        return Array.isArray(r.devices) ? (r.devices as DeviceReport[]).map(({ id, kind, driver, status, offers }) => ({ id, kind, driver, status, offers: Array.isArray(offers) ? offers : [] })) : null;
+      } catch { return null; }
+    },
     devices: () => {
       aliases ??= parseModulesAlias(readOr(`/lib/modules/${release()}/modules.alias`));
       return scanSysfs('/', aliases);

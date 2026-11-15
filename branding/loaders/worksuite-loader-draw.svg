@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="96" height="96" role="img" aria-label="Loading WorkSuite">
+  <title>Loading WorkSuite</title>
+  <style>
+.d { fill-opacity: 0; stroke-dashoffset: 100; animation-fill-mode: both !important; stroke-width: 4; stroke-linejoin: round; stroke-dasharray: 100; animation: d-draw 2.6s ease-in-out infinite; }
+    .d2 { animation-delay: .15s } .d3 { animation-delay: .3s }
+    .dn { opacity: 0; animation-fill-mode: both !important; animation: d-navy 2.6s ease-in-out infinite; }
+    @keyframes d-draw {
+      0% { stroke-dashoffset: 100; fill-opacity: 0; opacity: 1 }
+      35% { stroke-dashoffset: 0; fill-opacity: 0 }
+      50%,78% { stroke-dashoffset: 0; fill-opacity: 1; opacity: 1 }
+      95%,100% { stroke-dashoffset: 0; fill-opacity: 1; opacity: 0 } }
+    @keyframes d-navy { 0%,50% { opacity: 0 } 58%,78% { opacity: 1 } 95%,100% { opacity: 0 } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  </style>
+  <rect class="d" x="16" y="48" width="32" height="32" fill="#00daf2" stroke="#00daf2" pathLength="100"/>
+  <rect class="d d2" x="48" y="80" width="32" height="32" fill="#00daf2" stroke="#00daf2" pathLength="100"/>
+  <rect class="d d3" x="48" y="16" width="64" height="64" fill="#0a6cff" stroke="#0a6cff" pathLength="100"/>
+  <rect class="dn" x="48" y="48" width="32" height="32" fill="#001842"/>
+</svg>

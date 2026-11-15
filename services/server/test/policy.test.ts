@@ -44,3 +44,13 @@ test('policy: app_permissions deny rules only', () => {
   assert.deepEqual(validatePolicy({ app_permissions: { deny: { camera: ['*'], location: ['org.gnome.Maps'] } } }).app_permissions, { deny: { camera: ['*'], location: ['org.gnome.Maps'] } });
   for (const bad of [{ allow: { camera: ['*'] } }, { deny: { root: ['*'] } }, { deny: { camera: ['../x'] } }, { deny: [] }, 'x']) assert.throws(() => validatePolicy({ app_permissions: bad }), JSON.stringify(bad));
 });
+
+test('enterprise deployment: setup apps and defaults are validated', () => {
+  assert.deepEqual(validatePolicy({ setup_mandatory_apps: ['worksuite-pos'], setup_restricted_apps: ['vlc'], setup_defaults: { locale: 'si_LK', timezone: 'Asia/Colombo', keyboard: 'us' } }),
+    { setup_mandatory_apps: ['worksuite-pos'], setup_restricted_apps: ['vlc'], setup_defaults: { locale: 'si_LK', timezone: 'Asia/Colombo', keyboard: 'us' } });
+  assert.deepEqual(validatePolicy({ setup_defaults: { keyboard: 'in+tam' } }), { setup_defaults: { keyboard: 'in+tam' } });
+  for (const bad of [{ setup_mandatory_apps: ['Worksuite POS'] }, { setup_mandatory_apps: 'worksuite-pos' }, { setup_restricted_apps: Array(51).fill('vlc') },
+    { setup_defaults: {} }, { setup_defaults: { locale: 'si_LK; rm -rf /' } }, { setup_defaults: { password: 'x' } }, { setup_defaults: { timezone: '../etc' } }]) {
+    assert.throws(() => validatePolicy(bad), /invalid value/, JSON.stringify(bad));
+  }
+});

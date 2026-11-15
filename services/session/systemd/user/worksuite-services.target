@@ -1,0 +1,8 @@
+[Unit]
+# WorkSuite background services in the GNOME session (since 1.1): sign-in tokens, sync and the on-device assistant.
+# GNOME's systemd user session starts graphical-session.target; worksuite-session.target (the Labwc-era desktop:
+# shell, swayidle, wlroots bridge, its own polkit agent) is not started under GNOME, which has its own of each.
+Description=WorkSuite background services (GNOME session)
+PartOf=graphical-session.target
+After=graphical-session.target
+Wants=worksuite-credentials.service worksuite-sync.service worksuite-ai.service

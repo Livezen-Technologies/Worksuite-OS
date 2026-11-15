@@ -16,7 +16,7 @@ terminal-font: "Unifont Regular 16"
         left = 50%-250
         top = 50%-106
         width = 500
-        height = 190
+        height = 258
         icon_width = 400
         icon_height = 44
         item_icon_space = 0

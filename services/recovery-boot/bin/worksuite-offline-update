@@ -1,0 +1,185 @@
+#!/bin/sh
+# Update an installed WorkSuite OS from the live USB ("Update WorkSuite OS" in the boot menu). Run as root by the
+# updater window (worksuite_greeter.updater) in the live session; installed as /usr/libexec/worksuite/.
+#
+#   worksuite-offline-update scan
+#       system DEV VERSION       an installed WorkSuite root file system (also inside an unlocked LUKS volume)
+#       locked DEV               a LUKS volume that may hold one (unlock it first)
+#       bundle PATH              a .wsupdate at the top level of the boot drive or another drive
+#   worksuite-offline-update unlock DEV          passphrase on stdin; opens DEV as /dev/mapper/ws-update-NAME
+#   worksuite-offline-update inspect --target DEV --bundle FILE
+#       one JSON line: the bundle checked against the target's own release keys and installed version
+#   worksuite-offline-update apply --target DEV --bundle FILE
+#       progress N PHASE ... then "done" (or "error MESSAGE" and exit 1)
+#
+# What apply does: verifies the signed bundle (the same code as Settings › Updates, package-service/bundle-cli.ts) with
+# the keys the installed system trusts, copies the packages into the target and installs them there with apt, offline
+# (no package sources for these runs: only the bundle and what is installed count), in a chroot. Only packages are changed: files, accounts, settings and apps stay. A bundle that is
+# older than the installed system, for another architecture, unsigned or altered is refused before anything changes.
+# Exit codes: 0 done, 1 refused or failed, 2 usage.
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+CLI=${WS_UPD_CLI:-/usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/package-service/src/bundle-cli.ts}
+CHROOT=${WS_UPD_CHROOT:-chroot}
+MEDIA=${WS_UPD_MEDIA:-/run/live/medium /run/live/medium/worksuite}
+MNT=${WS_UPD_MNT:-/run/worksuite-update}
+ARCH=${WS_UPD_ARCH:-$(dpkg --print-architecture 2>/dev/null || echo amd64)}
+
+die() { printf 'error %s\n' "$2"; exit "$1"; }
+is_worksuite() { grep -qs '^ID="\{0,1\}worksuite' "$1/etc/os-release" && [ -d "$1/var/lib/dpkg" ]; }
+version_of() { dpkg-query --admindir="$1/var/lib/dpkg" -W -f='${Version}' worksuite-desktop 2>/dev/null || echo unknown; }
+fstype() { blkid -o value -s TYPE "$1" 2>/dev/null || true; }
+
+# ---- scan ----
+scan() {
+    mkdir -p "$MNT/probe"
+    for dev in $(lsblk -nrpo PATH 2>/dev/null); do
+        case "$(fstype "$dev")" in
+            crypto_LUKS)
+                name=ws-update-$(basename "$dev")
+                [ -e "/dev/mapper/$name" ] || printf 'locked %s\n' "$dev" ;;
+            ext4|btrfs|xfs)
+                # Already mounted somewhere (the live system's own disks are not): look there.
+                where=$(findmnt -nro TARGET --source "$dev" 2>/dev/null | head -1 || true)
+                if [ -n "$where" ]; then is_worksuite "$where" && printf 'system %s %s\n' "$dev" "$(version_of "$where")"; continue; fi
+                if mount -o ro "$dev" "$MNT/probe" 2>/dev/null; then
+                    is_worksuite "$MNT/probe" && printf 'system %s %s\n' "$dev" "$(version_of "$MNT/probe")"
+                    umount "$MNT/probe"
+                fi ;;
+            vfat|exfat|ntfs|iso9660)
+                # Other drives (a USB stick with the bundle): mounted read-only so the bundle can be read.
+                where=$(findmnt -nro TARGET --source "$dev" 2>/dev/null | head -1 || true)
+                if [ -z "$where" ]; then
+                    where="$MNT/media/$(basename "$dev")"; mkdir -p "$where"
+                    mount -o ro "$dev" "$where" 2>/dev/null || { rmdir "$where" 2>/dev/null || true; continue; }
+                fi
+                MEDIA="$MEDIA $where" ;;
+        esac
+    done
+    seen=''
+    for d in $MEDIA; do
+        for f in "$d"/*.wsupdate; do
+            [ -f "$f" ] || continue
+            case " $seen " in *" $f "*) continue ;; esac
+            seen="$seen $f"; printf 'bundle %s\n' "$f"
+        done
+    done
+}
+
+# ---- target handling ----
+root=''
+mounted=''
+binds=''
+cleanup() {
+    for m in $binds; do umount "$m" 2>/dev/null || true; done
+    for m in $mounted; do umount "$m" 2>/dev/null || true; done
+}
+trap cleanup EXIT
+
+open_target() { # $1 = device, $2 = ro|rw
+    if [ -n "${WS_UPD_TARGET_DIR:-}" ]; then root=$WS_UPD_TARGET_DIR; return; fi
+    case "$1" in /dev/*) ;; *) die 2 "bad target" ;; esac
+    root="$MNT/target"; mkdir -p "$root"
+    mount -o "$2" "$1" "$root" || die 1 "the installed system could not be opened"
+    mounted="$root $mounted"
+}
+
+check_target() {
+    is_worksuite "$root" || die 1 "no WorkSuite OS on this partition"
+    running=$(findmnt -nro SOURCE / 2>/dev/null || true)
+    [ -z "${WS_UPD_TARGET_DIR:-}" ] && [ -n "$running" ] && [ "$(readlink -f "$running")" = "$(readlink -f "$target")" ] && die 1 "the target is the running system"
+    return 0
+}
+
+# /boot and /boot/efi of the target, from its own fstab: the kernel and boot menu are updated there.
+mount_boot() {
+    [ -n "${WS_UPD_TARGET_DIR:-}" ] && return 0
+    for mp in /boot /boot/efi; do
+        spec=$(awk -v m="$mp" '$1 !~ /^#/ && $2 == m {print $1; exit}' "$root/etc/fstab")
+        [ -n "$spec" ] || continue
+        dev=$(findfs "$spec" 2>/dev/null || echo "$spec")
+        mount "$dev" "$root$mp" 2>/dev/null && mounted="$root$mp $mounted" || die 1 "could not open $mp of the installed system"
+    done
+}
+
+bind_system() {
+    [ -n "${WS_UPD_TARGET_DIR:-}" ] && return 0
+    for m in dev dev/pts proc sys run; do mount --bind "/$m" "$root/$m" && binds="$root/$m $binds"; done
+}
+
+cli() { # inspect|extract FILE [DEST]
+    keys="$root/usr/share/worksuite/keys/release"
+    # shellcheck disable=SC2086 # CLI is a command line
+    $CLI "$1" --keys "$keys" --arch "$ARCH" --installed "$(version_of "$root")" "$2" ${3:+"$3"}
+}
+
+json_field() { sed -n "s/.*\"$1\":\"\\([^\"]*\\)\".*/\\1/p"; }
+
+cmd=${1:-}; [ $# -gt 0 ] && shift
+target='' bundle=''
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --target) target=${2:-}; shift 2 ;;
+        --bundle) bundle=${2:-}; shift 2 ;;
+        *) [ "$cmd" = unlock ] && [ -z "$target" ] && { target=$1; shift; continue; }; die 2 "unknown argument: $1" ;;
+    esac
+done
+
+case "$cmd" in
+    scan) scan ;;
+    unlock)
+        case "$target" in /dev/*) ;; *) die 2 "unlock needs a device" ;; esac
+        [ "$(fstype "$target")" = crypto_LUKS ] || die 1 "not an encrypted volume"
+        cryptsetup open --type luks --key-file=- "$target" "ws-update-$(basename "$target")" || die 1 "wrong passphrase"
+        command -v vgchange >/dev/null 2>&1 && vgchange -ay >/dev/null 2>&1 || true
+        echo unlocked ;;
+    inspect)
+        [ -n "$target" ] && [ -f "$bundle" ] || die 2 "inspect needs --target and --bundle"
+        open_target "$target" ro; check_target
+        cli inspect "$bundle" || exit 1 ;;
+    apply)
+        [ -n "$target" ] && [ -f "$bundle" ] || die 2 "apply needs --target and --bundle"
+        echo "progress 2 opening"
+        open_target "$target" rw; check_target; mount_boot
+        from=$(version_of "$root")
+        echo "progress 8 verifying"
+        pool="$root/var/cache/worksuite-offline-update"
+        rm -rf "$pool"
+        out=$(cli extract "$bundle" "$pool") || { printf 'error %s\n' "$(printf '%s' "$out" | json_field error)"; rm -rf "$pool"; exit 1; }
+        to=$(printf '%s' "$out" | json_field version)
+        # Paths as the chroot sees them.
+        debs=$(printf '%s' "$out" | tr ',' '\n' | sed -n 's#.*"\(/[^"]*\.deb\)".*#\1#p' | sed "s#^$root##")
+        [ -n "$debs" ] || die 1 "the bundle has no packages"
+        bind_system
+        # No package sources at all for these runs: a dependency the bundle lacks is unmet, never downloaded. Not
+        # --no-download: apt 3.0 fails a real install of a local .deb with '~' in its version under it.
+        : > "$pool/no-sources.list"
+        offline="-o Dir::Etc::SourceList=${pool#"$root"}/no-sources.list -o Dir::Etc::SourceParts=/nonexistent"
+        echo "progress 20 checking"
+        # shellcheck disable=SC2086 # one argument per package path (no spaces: checked by the bundle's name rule)
+        if ! sim=$($CHROOT "$root" apt-get -s -q $offline install -- $debs 2>&1); then
+            printf 'error %s\n' "$(printf '%s\n' "$sim" | grep -m1 '^E:' || echo 'the update does not install cleanly on this system')"; rm -rf "$pool"; exit 1
+        fi
+        echo "progress 30 installing"
+        log="$root/var/log/worksuite-offline-update.log"
+        mkdir -p "$(dirname "$log")"
+        printf '%s update %s -> %s from %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$from" "$to" "$(basename "$bundle")" >> "$log"
+        # apt's status lines (pmstatus:PKG:PERCENT:...) become 30-90 %.
+        # A pipe hides apt's exit status (no pipefail in sh): apt writes it to a file.
+        st="$MNT/apt-status"; mkdir -p "$MNT"; echo 1 > "$st"
+        # shellcheck disable=SC2086
+        { DEBIAN_FRONTEND=noninteractive $CHROOT "$root" apt-get -y -q $offline -o APT::Status-Fd=1 \
+                -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -- $debs 2>>"$log"; echo $? > "$st"; } \
+             | tee -a "$log" | awk -F: '/^pmstatus:/ { p = int(30 + $3 * 0.6); if (p > last) { print "progress " p " installing"; last = p; fflush() } }'
+        [ "$(cat "$st")" = 0 ] || die 1 "installing the packages failed (see /var/log/worksuite-offline-update.log on the installed system)"
+        if [ -n "$($CHROOT "$root" dpkg --audit 2>/dev/null)" ]; then die 1 "packages were left unconfigured; start the computer normally to repair"; fi
+        echo "progress 92 bootloader"
+        if $CHROOT "$root" sh -c 'command -v update-grub' >/dev/null 2>&1; then $CHROOT "$root" update-grub >>"$log" 2>&1 || die 1 "the boot menu could not be updated"; fi
+        rm -rf "$pool"
+        printf '%s updated to %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$to" >> "$log"
+        sync
+        echo "progress 100 done"
+        echo done ;;
+    *) die 2 "usage: worksuite-offline-update scan | unlock DEV | inspect|apply --target DEV --bundle FILE" ;;
+esac

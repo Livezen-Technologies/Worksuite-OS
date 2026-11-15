@@ -174,7 +174,7 @@ jobs:
           fi
           # Point the image's APT source at the Update Center's OS repository once its archive keyring is packaged.
           [ -f packaging/keyring/worksuite-archive-keyring.gpg ] && export WORKSUITE_REPO=1
-          WORKSUITE_RELEASE=$release live-build/build.sh
+          WORKSUITE_PUBLISH=${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }} WORKSUITE_RELEASE=$release live-build/build.sh
       - name: Name the ISO
         id: iso
         run: |

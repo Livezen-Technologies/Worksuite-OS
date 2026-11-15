@@ -10,6 +10,7 @@ import {
   aliasMatches, autoInstallable, contentsLookup, deviceStatuses, dkmsFor, driverPolicy, fingerprint, gpuOffer, needsGpuFallback, parseFirmwareFailures,
   parseFwupd, parseIsenkram, shouldCheck, stillMissing, type CheckReason, type DriverOffer, type DriverPolicyFields, type DriverReport,
   type ScannedDevice, type TriggerState,
+  type DeviceReport,
 } from './drivers.ts';
 
 export interface DriverEnv {
@@ -19,6 +20,8 @@ export interface DriverEnv {
   /** Installed version of a Debian package, null when not installed. */
   version?(pkg: string): string | null;
   devices(): ScannedDevice[];
+  /** Devices from the installer's hardware report (hwreport.ts), shown until the first check of this system. */
+  installReport?(): DeviceReport[] | null;
   /** Kernel log of this boot (journalctl -k -b). */
   kernelLog(): Promise<string>;
   firmwarePresent(file: string): boolean;
@@ -62,7 +65,7 @@ export class DriverManager extends EventEmitter {
     if (st.mok && st.mok.boot !== env.bootId()) { delete st.mok; if (st.report) delete st.report.mok; env.save(st); env.audit('mok_password_cleared', {}); }
     // A restart asked for by an install is done once the boot id changed.
     if (st.restart_boot && st.restart_boot !== env.bootId()) { delete st.restart_boot; if (st.report) st.report.restart_required = false; env.save(st); }
-    this.report = st.report ?? { state: pol.online_search ? 'idle' : 'off', checked_at: null, online_search: pol.online_search, metered: false, secure_boot: env.secureBoot(), devices: [], offers: [], auto_installed: [] };
+    this.report = st.report ?? { state: pol.online_search ? 'idle' : 'off', checked_at: null, online_search: pol.online_search, metered: false, secure_boot: env.secureBoot(), devices: env.installReport?.() ?? [], offers: [], auto_installed: [] };
   }
 
   status(): DriverReport { return this.report; }

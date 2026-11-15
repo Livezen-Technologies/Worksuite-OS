@@ -4,13 +4,16 @@
 set -e
 [ -e /var/lib/live/config/worksuite-installer ] && exit 0
 command -v calamares >/dev/null 2>&1 || exit 0
-cat > /etc/greetd/config.toml <<'CONF'
+# Boot menu › "Update WorkSuite OS" (worksuite.mode=update): the updater instead of the installer.
+start=/usr/lib/worksuite/worksuite-installer-start
+for arg in $(cat /proc/cmdline); do [ "$arg" = worksuite.mode=update ] && start=/usr/lib/worksuite/worksuite-update-start; done
+cat > /etc/greetd/config.toml <<CONF
 [terminal]
 vt = 1
 # Installer first; if it exits, the normal greeter comes back.
 [initial_session]
 # The splash's last frame (worksuite_greeter.veil) first, then Calamares in front of it: no black screen while it starts.
-command = "systemd-cat -t worksuite-installer env QT_QPA_PLATFORM=wayland XDG_SESSION_TYPE=wayland worksuite-cage -s -- /usr/lib/worksuite/worksuite-installer-start"
+command = "systemd-cat -t worksuite-installer env QT_QPA_PLATFORM=wayland XDG_SESSION_TYPE=wayland worksuite-cage -s -- $start"
 user = "root"
 [default_session]
 command = "systemd-cat -t worksuite-greeter worksuite-cage -s -- gtkgreet -c /usr/bin/worksuite-session"

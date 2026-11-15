@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [sync, device-agent, credentials, package-service, server, directory, ai]
+        package: [sync, device-agent, credentials, package-service, server, directory, ai, setup]
     defaults:
       run:
         working-directory: services/${{ matrix.package }}
@@ -46,7 +46,7 @@ jobs:
       - if: hashFiles(format('services/{0}/package-lock.json', matrix.package)) != ''
         run: npm ci --no-audit --no-fund
       # package-service tests start a private dbus-daemon.
-      - if: matrix.package == 'package-service'
+      - if: matrix.package == 'package-service' || matrix.package == 'setup'
         run: sudo apt-get install -y --no-install-recommends dbus-daemon
       # ai: real llama.cpp inference on a generated random-weight GGUF (~0.5 MB; no model is downloaded or committed).
       - if: matrix.package == 'ai'
@@ -62,6 +62,11 @@ jobs:
       - uses: actions/checkout@v4
       # GRUB recovery/previous-kernel entries, kernel retention, boot-time repair (WSOS-BOOT-003, SRS §9.2).
       - run: tests/boot/recovery-boot.test.sh
+      # Boot menu › Update WorkSuite OS: the offline updater with the real bundle tool and verifier (Node 22).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: tests/boot/offline-update.test.sh
       # Reinstall keeping /home (SRS §9.2-R6): directory run, then a loop-device disk with /home in LUKS2.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends squashfs-tools cryptsetup-bin fdisk
       - run: sudo sh tests/boot/reinstall-keep-home.test.sh
@@ -78,6 +83,16 @@ jobs:
       - run: tests/image/fetch-pos.sh
       # Session scripts with stubbed programs: lock, idle, greeter, polkit agent fallback, screen-sharing consent.
       - run: sh tests/session/session-test.sh
+      # WorkSuite GNOME overrides against the real trixie schemas (a wrong key would drop every override on the image).
+      - run: docker run --rm -e DEBIAN_FRONTEND=noninteractive -v "$PWD:/src:ro" debian:trixie sh /src/tests/session/desktop-schema-test.sh
+      - run: sh tests/session/autologin-test.sh
+      # Installed systems switch to GDM: it must end up as display-manager.service (a static unit), else greetd stays.
+      - run: sh tests/session/use-gdm-test.sh
+      - run: sh tests/session/one-settings-test.sh
+      # WorkSuite artwork instead of Debian's (vendor logo, backgrounds, banners).
+      - run: sh tests/image/branding-test.sh
+      # No path shipped by two packages (dpkg would refuse the second and the image build fails).
+      - run: sh tests/packaging/no-duplicate-files.sh
       # Window title bars: the Labwc WorkSuite themes, their button images and the rc.xml layout (issues #15, #33).
       - run: sh tests/session/window-theme.test.sh
       # Settings › Printers: the polkit-gated CUPS helper, its policy and the printing packages (issue #51).

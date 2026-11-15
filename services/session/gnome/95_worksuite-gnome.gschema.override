@@ -1,0 +1,64 @@
+# WorkSuite OS on GNOME (1.1): look, default apps, and a lean, quick desktop. Compiled by libglib2.0-bin's trigger.
+# People can change any of these in GNOME Settings; organizations lock them with dconf (worksuite-device-agent).
+
+[org.gnome.desktop.interface]
+color-scheme='prefer-dark'
+accent-color='blue'
+font-name='IBM Plex Sans 11'
+document-font-name='IBM Plex Sans 11'
+monospace-font-name='IBM Plex Mono 11'
+icon-theme='Adwaita'
+cursor-theme='Adwaita'
+gtk-theme='Adwaita-dark'
+clock-show-weekday=true
+enable-hot-corners=false
+show-battery-percentage=true
+
+[org.gnome.desktop.wm.preferences]
+button-layout='appmenu:minimize,maximize,close'
+titlebar-font='IBM Plex Sans Bold 11'
+
+[org.gnome.desktop.background]
+picture-uri='file:///usr/share/backgrounds/worksuite/default.png'
+picture-uri-dark='file:///usr/share/backgrounds/worksuite/default.png'
+picture-options='zoom'
+primary-color='#061029'
+
+[org.gnome.desktop.screensaver]
+# The lock screen: the default wallpaper with its centred logo replaced by the sky around it (worksuite-1-lock.png), so
+# the clock and the password field do not sit on the wordmark. 'zoom' crops to fill and keeps the aspect ratio.
+picture-uri='file:///usr/share/backgrounds/worksuite/lock.png'
+picture-options='zoom'
+
+[org.gnome.shell]
+favorite-apps=['worksuite-app.desktop', 'worksuite-office.desktop', 'firefox-esr.desktop', 'org.gnome.Nautilus.desktop', 'worksuite-settings.desktop']
+welcome-dialog-last-shown-version='999'
+
+[org.gnome.shell.extensions.user-theme]
+name='WorkSuite'
+
+[org.gnome.mutter]
+dynamic-workspaces=true
+edge-tiling=true
+center-new-windows=true
+
+# Optimization: no remote search providers (Tracker, the file indexer, is not installed at all) on a work machine; WorkSuite updates come from
+# the WorkSuite package service, not GNOME Software.
+[org.gnome.desktop.search-providers]
+disable-external=true
+[org.gnome.desktop.privacy]
+remember-recent-files=true
+remove-old-temp-files=true
+remove-old-trash-files=true
+old-files-age=uint32 14
+report-technical-problems=false
+send-software-usage-stats=false
+[org.gnome.settings-daemon.plugins.power]
+power-button-action='interactive'
+[org.gnome.desktop.session]
+idle-delay=uint32 600
+
+# Sinhala and Tamil typing (WSOS-INT-011) through IBus/m17n, GNOME's input method framework: Super+Space switches.
+[org.gnome.desktop.input-sources]
+sources=[('xkb', 'us'), ('ibus', 'm17n:si:wijesekera'), ('ibus', 'm17n:si:singlish'), ('ibus', 'm17n:ta:tamil99')]
+xkb-options=['compose:ralt']

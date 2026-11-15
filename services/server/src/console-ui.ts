@@ -266,6 +266,7 @@ const views = {
       kioskDevice(id, d.kiosk),
       deviceProtection(id, d.hostname, hb.security, send),
       await deviceSoftwareSection(id, d),
+      deviceSetupSection(d.setup),
       h('h2', {}, 'Erase'), h('div', { class: 'card row' }, h('p', { class: 'muted grow' }, 'Requires the desktop.devices.wipe permission. A second administrator must approve the request before the device receives it, unless policy waives this for personal devices.'),
         h('button', { class: 'danger', onclick: () => wipeDialog({ request: true, hostname: d.hostname, label: 'Erase device', meta: 'Last seen ' + ago(d.last_seen) + ' · ' + (d.ownership === 'personal' ? 'personal' : 'corporate') + ' device.', note: 'Logged to the audit trail',
           submit: (c, x) => wipeSubmit(() => api('POST', 'wipes', { device_id: id, ...x, ...c }), (r) => r.waived_second_approver ? 'Erase sent. It runs the next time the device connects.' : 'Erase requested. Another administrator must approve it.') }) }, 'Erase device…'))],
@@ -352,7 +353,9 @@ const views = {
         security_auto_patch: f.security_auto_patch.value || null,
         activity_monitoring: f.activity_monitoring.value === '' ? null : f.activity_monitoring.value === 'true', activity_retention_days: num('activity_retention_days'),
         activity_idle_threshold_s: num('activity_idle_threshold_s'), activity_web_domains: f.activity_web_domains.value === '' ? null : f.activity_web_domains.value === 'true',
-        app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes') } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
+        app_allowlist: list('app_allowlist'), approved_remotes: list('approved_remotes'),
+        setup_mandatory_apps: list('setup_mandatory_apps').length ? list('setup_mandatory_apps') : null, setup_restricted_apps: list('setup_restricted_apps').length ? list('setup_restricted_apps') : null,
+        setup_defaults: ((d) => Object.keys(d).length ? d : null)(Object.fromEntries([['locale', f.setup_locale.value.trim()], ['timezone', f.setup_timezone.value.trim()], ['keyboard', f.setup_keyboard.value.trim()]].filter(([, v]) => v))) } }).then((r) => toast('Policy version ' + r.version + ' saved and signed; ' + r.devices_notified + ' device(s) notified.')));
     } },
       h('div', { class: 'row' }, h('label', {}, 'Update ring', sel('update_ring', [['stable', 'Stable'], ['pilot', 'Pilot'], ['development', 'Development']])),
         h('label', {}, 'Update mode', sel('update_mode', [['automatic', 'Automatic'], ['notify', 'Notify'], ['manual', 'Manual']])),
@@ -414,6 +417,13 @@ const views = {
       h('label', {}, 'Update mirror (https, optional)', h('input', { name: 'update_mirror', value: p.update_mirror || '' })),
       h('label', {}, 'Allowed apps (catalog IDs, one per line)', h('textarea', { name: 'app_allowlist' }, (p.app_allowlist || []).join('\n'))),
       h('label', {}, 'Approved remote-support tools', h('textarea', { name: 'approved_remotes' }, (p.approved_remotes || []).join('\n'))),
+      h('fieldset', {}, h('legend', {}, 'Device setup'),
+        h('p', { class: 'muted' }, 'Applied by the setup wizard on new and reinstalled devices. App IDs: worksuite-office, worksuite-pos, worksuite-desk, worksuite-frameflow, firefox-esr, vlc, gimp, thunderbird. WorkSuite Desktop is always installed. Defaults are pre-filled; people can still change them.'),
+        h('div', { class: 'row' }, h('label', { class: 'grow' }, 'Install on every device (one per line)', h('textarea', { name: 'setup_mandatory_apps' }, (p.setup_mandatory_apps || []).join('\n'))),
+          h('label', { class: 'grow' }, 'Never install during setup (one per line)', h('textarea', { name: 'setup_restricted_apps' }, (p.setup_restricted_apps || []).join('\n')))),
+        h('div', { class: 'row' }, h('label', {}, 'Default language (e.g. si_LK)', h('input', { name: 'setup_locale', value: (p.setup_defaults || {}).locale || '' })),
+          h('label', {}, 'Default time zone (e.g. Asia/Colombo)', h('input', { name: 'setup_timezone', value: (p.setup_defaults || {}).timezone || '' })),
+          h('label', {}, 'Default keyboard (e.g. us)', h('input', { name: 'setup_keyboard', value: (p.setup_defaults || {}).keyboard || '' })))),
       h('div', {}, h('button', { class: 'primary' }, 'Save and sign policy')));
     if (p.bluetooth !== undefined) f.bluetooth.value = String(p.bluetooth);
     if (p.allow_pin !== undefined) f.allow_pin.value = String(p.allow_pin);
@@ -893,6 +903,18 @@ const assignText = (a) => [a.devices && a.devices.length + ' device(s)', a.users
 const STATE_CLASS = { completed: 'ok', failed: 'bad', rejected: 'bad', expired: 'bad' };
 
 /** Device page: department, installed software from the last inventory, remote install and uninstall. */
+/** Enterprise deployment sync: the device's last setup report (state and each app's result), from its inventory. */
+function deviceSetupSection(s) {
+  if (!s) return h('div', {})
+  const label = { SETUP_COMPLETED: 'Completed', FAILED: 'Failed', RECOVERY_MODE: 'Needs attention (recovery)', ROLLED_BACK: 'Rolled back', CANCELLED: 'Cancelled' }[s.state] || 'In progress (' + s.state.toLowerCase().replace(/_/g, ' ') + ')'
+  const cls = s.state === 'SETUP_COMPLETED' ? 'ok' : ['FAILED', 'RECOVERY_MODE'].includes(s.state) ? 'bad' : 'warn'
+  const appCls = (st) => st === 'installed' || st === 'already' ? 'ok' : st === 'failed' ? 'bad' : 'warn'
+  return h('div', {}, h('h2', {}, 'Setup'),
+    h('p', {}, h('span', { class: cls }, label), s.completed_at ? ' · finished ' + when(s.completed_at) : s.updated_at ? ' · updated ' + when(s.updated_at) : '', s.last_error ? h('div', { class: 'muted' }, s.last_error) : null),
+    s.apps.length ? table(['App', 'Result', 'Attempts'], s.apps.map((a) => h('tr', {}, h('td', {}, a.id + (a.required ? ' (required)' : '')),
+      h('td', { class: appCls(a.state) }, a.state + (a.error ? ': ' + a.error : '')), h('td', {}, String(a.attempts))))) : h('p', { class: 'muted' }, 'No apps reported.'))
+}
+
 async function deviceSoftwareSection(id, d) {
   const [sw, cat] = await Promise.all([api('GET', 'devices/' + encodeURIComponent(id) + '/software'), api('GET', 'catalog')]);
   const dept = h('input', { 'aria-label': 'Department', value: d.department || '', placeholder: 'e.g. Finance' });

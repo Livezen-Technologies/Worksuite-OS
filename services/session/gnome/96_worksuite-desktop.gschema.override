@@ -1,0 +1,26 @@
+# WorkSuite desktop (1.1): taskbar, Start menu, tray, tiling and the optional glass look, all from Debian's packaged
+# GNOME Shell 48 extensions, configured here. These are defaults: people change them in WorkSuite Settings ›
+# Personalization (which writes the same keys) and organizations lock them with dconf. Every key below exists in the
+# trixie package's schema (checked by tests/session/desktop-schema-test.sh against the packages' own schema files).
+# Taskbar layout per monitor index 0-3 (dash-to-panel falls back to the index when a monitor id is not stored yet).
+
+[org.gnome.shell]
+enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com', 'dash-to-panel@jderose9.github.com', 'arcmenu@arcmenu.com', 'ubuntu-appindicators@ubuntu.com', 'tiling-assistant@leleat-on-github', 'blur-my-shell@aunetx']
+
+# Taskbar: one bottom bar, 48 px, centred Start button and app icons (left-aligned is one switch away), tray, clock,
+# Quick Settings and the notification list on the right, on every monitor. Running apps are grouped with a dot.
+[org.gnome.shell.extensions.appindicator]
+tray-pos='right'
+icon-size=18
+
+# Snap: drag to an edge for halves (Mutter), to a corner for quarters, Super+arrows; no gaps.
+[org.gnome.shell.extensions.tiling-assistant]
+enable-tiling-popup=true
+window-gap=0
+single-screen-gap=0
+tile-topleft-quarter=['<Super>KP_7']
+tile-topright-quarter=['<Super>KP_9']
+tile-bottomleft-quarter=['<Super>KP_1']
+tile-bottomright-quarter=['<Super>KP_3']
+
+# Taskbar, Start menu and glass defaults: dconf/00-worksuite-desktop (system-db:worksuite, see there why).

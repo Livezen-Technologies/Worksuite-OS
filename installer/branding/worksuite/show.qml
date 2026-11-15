@@ -30,7 +30,10 @@ Presentation {
     readonly property bool copying: phase === "prepare" || phase === "copy" || phase === ""
     readonly property bool preparing: phase === "prepare" || phase === ""
     property WsState wsState: WsState {}
-    readonly property int current: { for (var i = 0; i < tasks.length; i++) if (tasks[i][0] === phase) return i; return -1 }
+    // Disk unlocking only means something on an encrypted install: an unencrypted one never lists it (its job still runs
+    // and does nothing), so the page does not claim a step that changed nothing.
+    readonly property var shownTasks: encrypted ? tasks : tasks.filter(function (t) { return t[0] !== "unlock" })
+    readonly property int current: { for (var i = 0; i < shownTasks.length; i++) if (shownTasks[i][0] === phase) return i; return phase === "unlock" ? 1 : -1 }
     // Global storage has no change signal: poll() re-reads the real state. worksuiteEncrypted is recorded from the
     // partition page's Encrypt box and the planned jobs (worksuiteconfirm); "partitions" once the partition job ran.
     property bool encrypted: false
@@ -250,7 +253,7 @@ Presentation {
                     anchors.fill: parent; anchors.margins: 8
                     spacing: 0
                     Repeater {
-                        model: presentation.tasks
+                        model: presentation.shownTasks
                         Rectangle {
                             readonly property bool done: index < presentation.current
                             readonly property bool active: index === presentation.current
@@ -261,11 +264,8 @@ Presentation {
                                 Item {
                                     width: 22; height: 22
                                     Rectangle { anchors.fill: parent; radius: 11; visible: done; color: "#2E3DDC97"
-                                        Text { anchors.centerIn: parent; text: "✓"; color: "#3DDC97"; font.pixelSize: 13; font.weight: Font.Bold } }
-                                    Rectangle { anchors.fill: parent; radius: 11; visible: active; color: "transparent"; border.width: 2; border.color: "#2E7FB2FF"
-                                        Rectangle { width: 22; height: 22; radius: 11; color: "transparent"; border.width: 2; border.color: "#18D4F0"; visible: active
-                                            Rectangle { width: 12; height: 12; x: 10; y: -1; color: "#0E2048" }
-                                            RotationAnimation on rotation { from: 0; to: 360; duration: 1000; loops: Animation.Infinite; running: active } } }
+                                        WsCheck { anchors.centerIn: parent; color: "#3DDC97"; size: 13; lineWidth: 2.2 } }
+                                    WsLoader { anchors.centerIn: parent; size: 22; visible: active; running: active }
                                     Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; visible: !done && !active; color: "#5E739C" }
                                 }
                                 Text {

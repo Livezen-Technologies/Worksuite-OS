@@ -1,0 +1,2 @@
+# Rebuild the WorkSuite sign-in theme when gnome-shell-common updates the (diverted) stock theme.
+interest-noawait /usr/share/gnome-shell/gnome-shell-theme.gresource.distrib

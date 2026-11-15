@@ -634,6 +634,22 @@
       <translation>அமை</translation>
     </message>
     <message>
+      <source>ENCRYPT</source>
+      <translation>மறையாக்கம்</translation>
+    </message>
+    <message>
+      <source>Encrypt the WorkSuite partition (LUKS2). You type your passphrase each time the computer starts; keep the recovery key shown at the end of the installation.</source>
+      <translation>WorkSuite பகிர்வை மறையாக்கு (LUKS2). கணினி தொடங்கும் ஒவ்வொரு முறையும் உங்கள் கடவுத்தொடரை உள்ளிடுவீர்கள்; நிறுவலின் முடிவில் காட்டப்படும் மீட்பு விசையை வைத்திருங்கள்.</translation>
+    </message>
+    <message>
+      <source>PLAIN</source>
+      <translation>சாதாரணம்</translation>
+    </message>
+    <message>
+      <source>No encryption: anyone who has this disk can read its files.</source>
+      <translation>மறையாக்கம் இல்லை: இந்த வட்டு உள்ள எவரும் அதன் கோப்புகளைப் படிக்கலாம்.</translation>
+    </message>
+    <message>
       <source>Type %1 to confirm that all data on it will be permanently deleted</source>
       <translation>அதிலுள்ள எல்லாத் தரவும் நிரந்தரமாக நீக்கப்படும் என உறுதிப்படுத்த %1 எனத் தட்டச்சிடுக</translation>
     </message>

@@ -1,0 +1,4 @@
+# Inbox for files a person picked to install (a local .deb, an offline .wsupdate). The shell copies the picked file in
+# as that person; the package service reads only here (staging.ts INBOX), never home folders or removable media.
+# 1733: anyone may drop a file, nobody may list the directory or remove another person's file. Left-overs go after a day.
+d /var/spool/worksuite-incoming 1733 root root 1d

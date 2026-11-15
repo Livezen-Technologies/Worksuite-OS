@@ -1,0 +1,43 @@
+/* WorkSuite theme for GNOME Shell (user-theme extension, theme "WorkSuite"): GNOME's own dark stylesheet with the
+ * WorkSuite colours and type on top. Palette as the WorkSuite shell and greeter: navy #061029 / #0B2254, panels
+ * rgba(8,20,48,.86), accent #1F6BFF, highlight #18D4F0, text #E8EEFA, IBM Plex Sans. */
+@import url("resource:///org/gnome/shell/theme/gnome-shell-dark.css");
+
+stage { font-family: "IBM Plex Sans", "Noto Sans Sinhala", "Noto Sans Tamil", sans-serif; color: #E8EEFA; }
+
+/* Top bar */
+#panel { background-color: rgba(4, 10, 26, 0.92); font-weight: 600; }
+#panel .panel-button { color: #E8EEFA; border-radius: 10px; }
+#panel .panel-button:hover, #panel .panel-button:active, #panel .panel-button:checked { background-color: rgba(31, 107, 255, 0.28); }
+
+/* Overview, dash and app grid */
+#overviewGroup { background-color: #061029; }
+.dash-background { background-color: rgba(8, 20, 48, 0.86); border-radius: 20px; border: 1px solid rgba(127, 178, 255, 0.16); }
+.app-well-app:hover .overview-icon, .show-apps:hover .overview-icon { background-color: rgba(31, 107, 255, 0.22); }
+.app-well-app:checked .overview-icon, .app-well-app.running .app-well-app-running-dot { background-color: #18D4F0; }
+.search-entry { background-color: rgba(4, 10, 26, 0.6); border: 1px solid rgba(127, 178, 255, 0.22); color: #E8EEFA; border-radius: 14px; }
+.search-entry:focus { border-color: #1F6BFF; }
+.workspace-thumbnail-indicator { border-color: #1F6BFF; }
+
+/* Popovers, quick settings, notifications, calendar */
+.popup-menu-content, .quick-settings, .message-list, .calendar, .events-button, .world-clocks-button, .weather-button {
+  background-color: rgba(8, 20, 48, 0.96); border: 1px solid rgba(127, 178, 255, 0.14); color: #E8EEFA;
+}
+.quick-toggle:checked, .quick-menu-toggle:checked .quick-toggle { background-color: #1F6BFF; color: #FFFFFF; }
+.slider { -barlevel-active-background-color: #1F6BFF; -slider-handle-border-color: #1F6BFF; }
+.notification-banner, .message { background-color: rgba(14, 32, 72, 0.96); border-radius: 14px; }
+.calendar-today, .calendar-today:selected { background-color: #1F6BFF; color: #FFFFFF; }
+
+/* Dialogs (polkit "Administrator access needed", end session) */
+.modal-dialog { background-color: rgba(8, 20, 48, 0.98); border: 1px solid rgba(127, 178, 255, 0.18); border-radius: 20px; color: #E8EEFA; }
+.modal-dialog-button-box .button.default, .button.default { background-color: #1F6BFF; color: #FFFFFF; }
+.modal-dialog-button-box .button.default:hover { background-color: #3B80FF; }
+
+/* Lock screen and unlock prompt */
+.unlock-dialog { background-color: transparent; }
+.login-dialog-prompt-entry, .unlock-dialog StEntry { background-color: rgba(4, 10, 26, 0.6); border: 1px solid rgba(127, 178, 255, 0.3); border-radius: 12px; }
+.unlock-dialog-clock-time { font-weight: 300; }
+
+/* Focus rings and selection */
+:focus { box-shadow: inset 0 0 0 2px #7FB2FF; }
+StEntry StLabel.hint-text { color: rgba(201, 214, 238, 0.6); }

@@ -227,7 +227,7 @@ grep 'import-environment' "$LOG" | grep -qw DISPLAY && ok "DISPLAY imported when
 # ---- every session component is a user unit bound to worksuite-session.target (WSOS-SES-002) ----
 for f in "$U"/*.service "$U"/*.path; do
     u=$(basename "$f")
-    grep -q '^PartOf=worksuite-session.target$' "$f" && ok "$u is PartOf worksuite-session.target" || bad "$u is PartOf worksuite-session.target"
+    grep -qE '^PartOf=(.* )?worksuite-session.target( |$)' "$f" && ok "$u is PartOf worksuite-session.target" || bad "$u is PartOf worksuite-session.target"
     case "$u" in worksuite-recovery-launcher.service|worksuite-idle-restart.service) continue ;; esac
     grep -q "^Wants=.*$u" "$U/worksuite-session.target" && ok "worksuite-session.target wants $u" || bad "worksuite-session.target wants $u"
 done
@@ -250,6 +250,11 @@ grep -q -- '--column=Screen' "$LOG" && grep -q 'eDP-1 HDMI-A-1' "$LOG" && ok "ch
 printf 'eDP-1\n' | sh "$CH" >/dev/null; check "cancel denies the request" "$?" "1"
 printf 'eDP-1\n' | ZENITY_PICK=evil sh "$CH" >/dev/null; check "unknown answer denies the request" "$?" "1"
 : > "$LOG"; printf '' | ZENITY_PICK=eDP-1 sh "$CH" >/dev/null; check "no outputs: denied without asking" "$?:$(cat "$LOG")" "1:"
+# xdg-desktop-portal-wlr 0.8: "Monitor: NAME" lines (answered back verbatim), "Window: TITLE" lines not offered.
+: > "$LOG"
+check "xdpw 0.8: answers the monitor line verbatim" "$(printf 'Monitor: eDP-1 BOE 0x0BCA (eDP-1)\nMonitor: HDMI-A-1 Dell Inc. U2720Q\nWindow: Firefox (org.mozilla.firefox)\n' | ZENITY_PICK=HDMI-A-1 sh "$CH")" "Monitor: HDMI-A-1 Dell Inc. U2720Q"
+grep -q 'eDP-1 HDMI-A-1' "$LOG" && ! grep -q 'Firefox\|Monitor:\|Dell' "$LOG" && ok "xdpw 0.8: lists screens by name, no windows" || bad "xdpw 0.8: lists screens by name, no windows"
+: > "$LOG"; printf 'Window: Firefox\n' | ZENITY_PICK=Firefox sh "$CH" >/dev/null; check "xdpw 0.8: windows only: denied without asking" "$?:$(cat "$LOG")" "1:"
 grep -q '^chooser_cmd=/usr/lib/worksuite/worksuite-screencast-chooser$' "$ROOT/services/session/xdg-desktop-portal-wlr/config" && ok "xdpw runs the consent chooser" || bad "xdpw runs the consent chooser"
 
 
@@ -270,14 +275,43 @@ check "stop reports every stream it ended" "$(sh "$ST")" "2"
 grep -q 'pw-cli destroy 52' "$LOG" && grep -q 'pw-cli destroy 57' "$LOG" && ok "stop destroys each xdpw stream node" || bad "stop destroys each xdpw stream node"
 grep -q 'pw-cli destroy 31' "$LOG" && bad "stop leaves other nodes alone" || ok "stop leaves other nodes alone"
 grep -q 'systemctl --user restart xdg-desktop-portal-wlr.service' "$LOG" && ok "stop restarts xdpw so every portal session closes" || bad "stop restarts xdpw so every portal session closes"
+# PipeWire 1.6 + xdpw 0.8: the stream keeps xdpw's hyphenated name ("xdpw-stream-XXXXXX"), as node.name and media.name.
+stub pw-cli 'echo "pw-cli $*" >> "$LOG"; [ "$1" = ls ] || exit 0; cat <<EOF
+	id 46, type PipeWire:Interface:Node/3
+ 		node.name = "xdpw-stream-Ab12Cd"
+ 		media.name = "xdpw-stream-Ab12Cd"
+	id 47, type PipeWire:Interface:Node/3
+ 		media.name = "xdpw-stream-Zz99Yy"
+EOF'
+: > "$LOG"
+check "stop finds xdpw 0.8 streams (hyphenated names) once each" "$(sh "$ST")" "2"
+grep -q 'pw-cli destroy 46' "$LOG" && grep -q 'pw-cli destroy 47' "$LOG" && ok "stop destroys xdpw 0.8 stream nodes" || bad "stop destroys xdpw 0.8 stream nodes"
+grep -q "pkill -f (^|/)xdg-desktop-portal-wlr( |\$)" "$LOG" || grep -q 'systemctl --user restart' "$LOG" && ok "stop restarts xdpw (systemd, else by command line)" || bad "stop restarts xdpw (systemd, else by command line)"
+# pw-dump (preferred): JSON with every property; only top-level object ids count, not ids inside props.
+stub pw-dump 'cat <<EOF
+[
+  {
+    "id": 31,
+    "info": { "props": { "node.name": "alsa_output.pci", "client.id": 46 } }
+  },
+  {
+    "id": 46,
+    "info": { "props": { "media.name": "xdpw-stream-Ab12Cd", "node.name": "xdpw-stream-Ab12Cd", "client.id": 31 } }
+  }
+]
+EOF'
+: > "$LOG"
+check "stop reads pw-dump and ends the xdpw stream" "$(sh "$ST")" "1"
+grep -q 'pw-cli destroy 46' "$LOG" && ! grep -q 'pw-cli destroy 31' "$LOG" && ok "stop destroys only the xdpw node found by pw-dump" || bad "stop destroys only the xdpw node found by pw-dump"
+stub pw-dump 'exit 1'
 stub pw-cli 'exit 1'
 check "stop with nothing shared still succeeds" "$(sh "$ST"; echo ":$?")" "0
 :0"
 grep -q '<keybind key="W-S-Escape" allowWhenLocked="yes"><action name="Execute" command="/usr/lib/worksuite/worksuite-screencast-stop"/>' "$ROOT/services/session/labwc/rc.xml" \
   && ok "Super+Shift+Esc stops sharing, also on the lock screen" || bad "Super+Shift+Esc stops sharing, also on the lock screen"
 P=$ROOT/services/session/portals/worksuite-portals.conf
-grep -qx 'org.freedesktop.impl.portal.ScreenCast=wlr' "$P" && grep -qx 'org.freedesktop.impl.portal.Screenshot=wlr' "$P" && grep -qx 'default=gtk' "$P" \
-  && ok "portals.conf: ScreenCast/Screenshot on wlr, the rest on gtk" || bad "portals.conf: ScreenCast/Screenshot on wlr, the rest on gtk"
+grep -qx 'org.freedesktop.impl.portal.ScreenCast=gnome' "$P" && grep -qx 'org.freedesktop.impl.portal.Screenshot=gnome' "$P" && grep -qx 'default=gnome;gtk' "$P" && ! grep -q '=wlr' "$P" \
+  && ok "portals.conf: ScreenCast/Screenshot on GNOME's portal, gtk fallback" || bad "portals.conf: ScreenCast/Screenshot on GNOME's portal, gtk fallback"
 
 # ---- sign-in speed: no Python for "was a PIN used?" when no PIN profile is on ----
 export WORKSUITE_PAM_COMMON_AUTH="$T/common-auth"
@@ -301,7 +335,7 @@ PS=$ROOT/services/package-service/systemd
   && ok "package service starts from a timer after boot, not at boot" || bad "package service starts from a timer after boot, not at boot"
 
 # ---- GTK icons: the SVG pixbuf loader (gtklock, greeter and polkit icons are SVG; without it: missing-image) ----
-awk '/^Package: worksuite-session$/{p=1} p&&/^Depends:/{print; exit}' "$ROOT/packaging/debian/control" | grep -q 'librsvg2-common' \
+awk '/^Package: worksuite-session$/{p=1} p&&/^Depends:/{d=1} d&&p{if(/^[A-Z][A-Za-z-]*:/&&!/^Depends:/)exit; print}' "$ROOT/packaging/debian/control" | grep -q 'librsvg2-common' \
   && ok "worksuite-session depends on the SVG icon loader" || bad "worksuite-session depends on the SVG icon loader"
 
 # ---- AI service sandbox: its read-write directories exist (else 226/NAMESPACE restart loop) ----
@@ -450,7 +484,7 @@ while read -r src dst; do case "$src" in services/session/bin/worksuite-toasts|s
   && ok "toasts: the packaged helper is installed executable and its module runs" || bad "toasts: the packaged helper is installed executable and its module runs"
 grep -q 'Gio.ApplicationFlags.NON_UNIQUE' "$ROOT/services/session/toasts/worksuite_toasts/ui.py" \
   && ok "toasts: one helper per shell (NON_UNIQUE)" || bad "toasts: one helper per shell (NON_UNIQUE)"
-for p in libnotify-bin foot; do grep -qx "$p" "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && ok "image ships $p" || bad "image ships $p"; done
+for p in libnotify-bin gnome-console; do grep -qx "$p" "$ROOT/live-build/config/package-lists/worksuite.list.chroot" && ok "image ships $p" || bad "image ships $p"; done
 
 # ---- "Restart anyway": one root helper behind one polkit action; WorkSuite's polkit agent on the image ----
 stub systemctl 'echo "systemctl $*" >> "$LOG"'
