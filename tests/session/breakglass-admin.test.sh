@@ -45,8 +45,17 @@ run 0.1.0
 check "upgrade from a UID-1000 wsadmin moves the UID only" 'grep -q "^usermod --uid 999 wsadmin" "$LOG" && ! grep -q "^usermod --lock\|^chpasswd" "$LOG"'
 
 # sudoers drop-in: valid, only wsadmin defaults, no rule that grants anything.
+# The OS ships classic sudo (Debian trixie); sudo-rs has no log_output. BREAKGLASS_VISUDO_IMAGE=debian:trixie runs
+# the check in that image (CI: the runner's own visudo may be sudo-rs).
 VISUDO=$(command -v visudo || ls /usr/sbin/visudo 2>/dev/null || true)
-if [ -n "$VISUDO" ]; then
+if [ -n "${BREAKGLASS_VISUDO_IMAGE:-}" ]; then
+  if out=$(docker run --rm -v "$SUDOERS:/drop-in:ro" "$BREAKGLASS_VISUDO_IMAGE" sh -c \
+      'apt-get -qq update >/dev/null && apt-get -qq install -y --no-install-recommends sudo >/dev/null && visudo -V | head -1 && install -m 0440 /drop-in /tmp/d && visudo -c -f /tmp/d' 2>&1); then
+    ok "sudoers drop-in passes classic visudo -c in $BREAKGLASS_VISUDO_IMAGE"
+  else bad "sudoers drop-in passes classic visudo -c in $BREAKGLASS_VISUDO_IMAGE"; echo "$out" | sed 's/^/# /'; fi
+elif [ -n "$VISUDO" ] && "$VISUDO" --version 2>&1 | grep -qi "sudo-rs"; then
+  bad "sudoers drop-in passes visudo -c: this visudo is sudo-rs; the OS ships classic sudo (set BREAKGLASS_VISUDO_IMAGE=debian:trixie or install classic sudo)"
+elif [ -n "$VISUDO" ]; then
   # Check a root-owned 0440 copy, as installed. CI runners are not root but have passwordless sudo.
   AS=""; [ "$(id -u)" -eq 0 ] || AS="sudo -n"
   cp "$SUDOERS" "$T/sudoers"

@@ -91,6 +91,11 @@ Why `log_output` and not more: it is scoped to `wsadmin` only (no global sudo de
 done with root rights. `log_input` is not set because it would record typed passwords. No separate `logfile` is set:
 the journal already has the command log, and a second file would only duplicate it.
 
+`log_output` needs classic sudo (Debian trixie's `sudo` package, which the OS ships). sudo-rs does not support it and
+its visudo rejects the drop-in (`unknown setting: 'log_output'`); if the OS ever moves to sudo-rs, this drop-in must
+be replaced. The test checks it with classic visudo in a `debian:trixie` container in CI and fails with a clear
+message if it only finds sudo-rs.
+
 The event transport is the directory helper's own queue, not a new one: events go to
 `/var/lib/worksuite-directory/pending-events.json` (0600) first and are sent with the device agent's enrollment
 credential to the server; failed sends stay queued. The device agent process itself does not carry these events.
