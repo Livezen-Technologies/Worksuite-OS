@@ -48,7 +48,7 @@ default for Office documents, the first account joins `lp` and `dialout` (POS re
 devices; `installer/modules/usersq.conf`), and WorkSuite Desktop opens on its Home once the first-run assistant ends
 (first sign-in only).
 
-WorkSuite services run on `worksuite-node` (the Node 22 inside the shipped Electron), so the image doesn't need
+WorkSuite services run on `worksuite-node` (the Node inside the shipped Electron, 24.x with Electron 45; the services need >= 22.18), so the image doesn't need
 Debian's nodejs (20.x in trixie). Calamares joins the image once `calamares-settings-worksuite` is packaged.
 
 Sources use deb822 with `Signed-By` (Debian keyring; WorkSuite keyring for download.worksuitecloud.com/os/apt).

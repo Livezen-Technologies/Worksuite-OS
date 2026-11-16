@@ -1,6 +1,6 @@
 #!/bin/sh
-# Node runtime for WorkSuite services: the Node built into the shipped Electron (22.x; node:sqlite and TypeScript
-# type stripping), so the image does not depend on Debian's older nodejs.
+# Node runtime for WorkSuite services: the Node built into the shipped Electron (24.x with Electron 45; services need
+# >= 22.18 for node:sqlite and TypeScript type stripping), so the image does not depend on Debian's older nodejs.
 # #55: Node trusts only its bundled CA list. Add the system store (update-ca-certificates), so WorkSuite servers
 # behind an organization's private CA work; a unit or the caller can still set its own NODE_EXTRA_CA_CERTS.
 if [ -z "${NODE_EXTRA_CA_CERTS:-}" ] && [ -r /etc/ssl/certs/ca-certificates.crt ]; then

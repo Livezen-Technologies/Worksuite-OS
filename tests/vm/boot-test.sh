@@ -27,7 +27,16 @@ while [ "$(date +%s)" -lt "$end" ]; do
     grep -ao 'WORKSUITE_[A-Z]* .*' "$log" | grep -v '^WORKSUITE_PERF' | tr -d '\r'
     fail=0
     grep -aq 'WORKSUITE_UNIT greetd active' "$log" || { echo "FAIL: greetd not active"; fail=1; }
-    grep -aqE 'WORKSUITE_NODE 22\.' "$log" || { echo "FAIL: worksuite-node did not run"; fail=1; }
+    # worksuite-node is the Node inside the shipped Electron (24.x with Electron 45). The services need >= 22.18
+    # (unflagged TypeScript type stripping, node:sqlite; the engines field in services/*/package.json).
+    node_ver=$(grep -aoE 'WORKSUITE_NODE [0-9]+\.[0-9]+\.[0-9]+' "$log" | head -n1 | cut -d' ' -f2)
+    if [ -z "$node_ver" ]; then echo "FAIL: worksuite-node did not run"; fail=1
+    else
+      node_major=${node_ver%%.*}; node_minor=${node_ver#*.}; node_minor=${node_minor%%.*}
+      if [ "$node_major" -lt 22 ] || { [ "$node_major" -eq 22 ] && [ "$node_minor" -lt 18 ]; }; then
+        echo "FAIL: worksuite-node $node_ver is older than 22.18"; fail=1
+      fi
+    fi
     grep -aq 'WORKSUITE_FAILED none' "$log" || { echo "FAIL: failed units"; fail=1; }
     [ $fail = 0 ] || exit 1
     echo "PASS boot ($ARCH, $ACCEL)"
