@@ -173,7 +173,10 @@ jobs:
       fail-fast: false
       matrix:
         package: [shell, services/sync, services/device-agent, services/credentials, services/package-service, services/server, services/directory, services/ai, tools/lint]
-    defaults:
+        include:
+          # server's tests import these services' sources, so its tsc needs their dependencies (e.g. dbus-next).
+          - package: services/server
+            extra: services/credentials services/device-agent services/package-service    defaults:
       run:
         working-directory: ${{ matrix.package }}
     env:
@@ -187,6 +190,9 @@ jobs:
           cache-dependency-path: '**/package-lock.json'
       # sync and directory have dev dependencies only and no lockfile; npm install writes one for npm audit.
       - run: if [ -f package-lock.json ]; then npm ci --ignore-scripts --no-audit --no-fund; else npm install --ignore-scripts --no-audit --no-fund; fi
+      - if: matrix.extra
+        working-directory: .
+        run: for d in ${{ matrix.extra }}; do (cd "$d" && npm ci --ignore-scripts --no-audit --no-fund) || exit 1; done
       - if: matrix.package != 'tools/lint'
         run: npm run typecheck
       - run: node "$GITHUB_WORKSPACE/tools/ci/npm-audit.mjs"
