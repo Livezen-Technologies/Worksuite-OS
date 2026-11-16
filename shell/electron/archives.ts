@@ -352,6 +352,7 @@ export function archiveJobs(env: Env, emit: (e: ArchiveJobEvent) => void, o: Arc
       else if (be.b === 'bsdtar') args = ['-x', '-f', a.full, '-C', tmp, '--no-same-owner', ...(items.length ? ['--', ...names] : [])]
       else { outFd = openSync(path.join(tmp, stem), 'wx', 0o644); args = ['-d', '-c', '--', a.full]; bin = be.bin }
       let stopped = false, failure: string | null = null
+      let pendingAsk: Promise<void> | null = null
       const poll = setInterval(() => {
         ev.bytes_done = treeBytes(tmp)
         const allowed = total != null ? total * 1.05 + 1024 * 1024 : null
@@ -359,7 +360,7 @@ export function archiveJobs(env: Env, emit: (e: ArchiveJobEvent) => void, o: Arc
         else if (!confirmed && total == null && !stopped && tooBig(ev.bytes_done) && ctl.child) {
           // A stream with no declared size grew past the limit: pause it and ask.
           stopped = true; kill(ctl.child, 'SIGSTOP')
-          void ask(ctl, ev, 'confirm', { ask: { bytes: null, ratio: Math.round(ev.bytes_done / Math.max(1, listing!.packed)) } }).then((r) => {
+          pendingAsk = ask(ctl, ev, 'confirm', { ask: { bytes: null, ratio: Math.round(ev.bytes_done / Math.max(1, listing!.packed)) } }).then((r) => {
             if (r.a === 'continue' && !ctl.cancel) { confirmed = true; emit({ ...ev, state: 'running', ask: null }); kill(ctl.child, 'SIGCONT') }
             else { ctl.cancel = true; kill(ctl.child, 'SIGCONT'); kill(ctl.child, 'SIGKILL') }
           })
@@ -369,6 +370,20 @@ export function archiveJobs(env: Env, emit: (e: ArchiveJobEvent) => void, o: Arc
       clearInterval(poll)
       if (outFd !== undefined) closeSync(outFd)
       ctl.child = null
+      // The tool may exit while the question about its size is still open: the answer decides, not the exit.
+      if (pendingAsk) await pendingAsk
+      // The tool can finish before the first poll (a small, fast stream on a fast machine): check the final size too,
+      // so a stream that ends past the limit still asks first and an archive that wrote more than it declared fails.
+      if (!confirmed && !failure && !ctl.cancel) {
+        ev.bytes_done = treeBytes(tmp)
+        const allowed = total != null ? total * 1.05 + 1024 * 1024 : null
+        if (allowed != null && ev.bytes_done > allowed) failure = 'bomb'
+        else if (total == null && !stopped && tooBig(ev.bytes_done)) {
+          const r2 = await ask(ctl, ev, 'confirm', { ask: { bytes: null, ratio: Math.round(ev.bytes_done / Math.max(1, listing.packed)) } })
+          if (r2.a !== 'continue' || ctl.cancel) ctl.cancel = true
+          else { confirmed = true; emit({ ...ev, state: 'running', ask: null }) }
+        }
+      }
       if (ctl.cancel) { await cleanup(); return finish(id, ev, 'cancelled') }
       if (failure) { await cleanup(); return finish(id, ev, 'failed', failure) }
       if (r.code !== 0 && be.b === '7z' && PW_RE.test(r.out + r.err)) {
