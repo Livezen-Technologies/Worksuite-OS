@@ -9,6 +9,9 @@
 #   Graphics tries the GPU again.
 # An explicit WLR_RENDERER from the environment wins. WORKSUITE_RENDERER (gpu|software|unknown) and
 # WORKSUITE_RENDERER_REASON tell the shell what was chosen: it renders its own windows the same way.
+# Deliberately no set -e/-u: this file is SOURCED into worksuite-cage, worksuite-session and worksuite-kiosk-session,
+# and shell options would leak into them. It must stay safe to source from a set -eu shell: ${VAR:-} expansions only,
+# and it ends with a true status (the trailing `:`), so `.` never fails a caller running with -e.
 _ws_software() {
     export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 QT_QUICK_BACKEND=software
     # GTK 4 (greeter, veils, toasts, keyboard): its GL renderer on llvmpipe made the greeter's first frame slow; the
@@ -52,9 +55,11 @@ unset _ws_choice _ws_conf _ws_fallback _ws_gsk
 # whose compositor would otherwise start with US English. An explicit XKB_DEFAULT_LAYOUT wins.
 if [ -z "${XKB_DEFAULT_LAYOUT:-}" ] && [ -r "${WORKSUITE_KEYBOARD_CONF:-/etc/default/keyboard}" ]; then
     XKBLAYOUT=; XKBVARIANT=; XKBOPTIONS=; XKBMODEL=
+    # shellcheck source=/dev/null
     . "${WORKSUITE_KEYBOARD_CONF:-/etc/default/keyboard}"
     [ -n "$XKBLAYOUT" ] && export XKB_DEFAULT_LAYOUT="$XKBLAYOUT"
     [ -n "$XKBVARIANT" ] && export XKB_DEFAULT_VARIANT="$XKBVARIANT"
     [ -n "$XKBOPTIONS" ] && export XKB_DEFAULT_OPTIONS="$XKBOPTIONS"
     [ -n "$XKBMODEL" ] && export XKB_DEFAULT_MODEL="$XKBMODEL"
 fi
+:

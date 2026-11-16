@@ -5,6 +5,9 @@
 # Fast path (sign-in speed): every password sign-in asks "was a PIN used?" for the keyring profile. With no PIN profile
 # in the PAM stack no PIN can have been used, so answer "no" without starting Python and the daemon.
 # pam-password-used is the same question with the answer inverted (exit 0 = no PIN, so pam_exec logs nothing).
+# -eu: every exit status here is explicit (exit 0/1, or the Python helper's own status through exec); a failing grep
+# is a condition (if/!), so -e can only end the script with a non-zero status, which PAM treats as a failure, never a pass.
+set -eu
 no_pin_profile() { ! grep -Eqs 'worksuite-signin pam-pin([[:space:]]|$)' "${WORKSUITE_PAM_COMMON_AUTH:-/etc/pam.d/common-auth}"; }
 if [ "${1:-}" = pam-password-used ] && no_pin_profile; then
     exit 0

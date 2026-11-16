@@ -3,13 +3,14 @@
 # WSOS-SES-006: when a WorkSuite session ended because the compositor exited, worksuite-session leaves a notice in
 # /run/worksuite/session-notice (tmpfiles: owned by _greetd, mode 1733, so users can drop a file but not read or
 # remove anyone else's). The greeter shows one notice, removes them all, then starts gtkgreet.
-set -u
+# -e: every step that may fail is guarded below; a failure there must never leave the screen without a greeter.
+set -eu
 DIR=${WORKSUITE_NOTICE_DIR:-/run/worksuite/session-notice}
 show=0
 for f in "$DIR"/uid-*; do
     [ -f "$f" ] || continue
     show=1
-    rm -f "$f"
+    rm -f "$f" || true
 done
 if [ "$show" -eq 1 ]; then
     ${WORKSUITE_ZENITY:-zenity} --warning --title "WorkSuite" --width 420 --ok-label "Continue to sign in" \
@@ -18,6 +19,7 @@ if [ "$show" -eq 1 ]; then
 fi
 # The greeter speaks the system language (Settings › Region, the installer): greetd starts it with no LANG.
 if [ -z "${LANG:-}" ] && [ -r "${WORKSUITE_LOCALE_CONF:-/etc/default/locale}" ]; then
+    # shellcheck source=/dev/null
     . "${WORKSUITE_LOCALE_CONF:-/etc/default/locale}"
     [ -n "${LANG:-}" ] && export LANG
     [ -n "${LANGUAGE:-}" ] && export LANGUAGE
@@ -30,7 +32,7 @@ if [ -z "${WORKSUITE_GREETER_LEGACY:-}" ] && { [ "${WORKSUITE_GREETER_CHECKED:-}
 fi
 # gtkgreet does not mark the splash handoff (worksuite-greeter-handoff waits for it with no timeout): mark it here.
 R=${WORKSUITE_GREETER_READY:-/run/worksuite/greeter/ready}
-mkdir -p "$(dirname "$R")" 2>/dev/null; echo $$ > "$R" 2>/dev/null
+mkdir -p "$(dirname "$R")" 2>/dev/null || true; echo $$ 2>/dev/null > "$R" || true
 # The fallback gets the WorkSuite look (dark, no light window chrome) from its GTK stylesheet.
 CSS=${WORKSUITE_GTKGREET_CSS:-/usr/share/worksuite/gtkgreet.css}
 if [ -f "$CSS" ]; then exec ${WORKSUITE_GTKGREET:-gtkgreet} -s "$CSS" "$@"; fi

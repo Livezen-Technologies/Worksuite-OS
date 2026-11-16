@@ -6,10 +6,11 @@
 # gtk4-layer-shell has to be loaded before libwayland-client. From Python (GTK through GObject introspection) that only
 # happens with LD_PRELOAD; without it GTK's window was no layer surface ("GTK4 Layer Shell may have been linked after
 # libwayland"), so the keyboard ran but showed as an ordinary window under the full-screen shell, or not at all.
+set -eu
 lib=${WORKSUITE_LAYER_SHELL_LIB:-}
 if [ -z "$lib" ]; then
     for d in /usr/lib/*-linux-gnu /usr/lib64 /usr/lib; do
-        [ -e "$d/libgtk4-layer-shell.so.0" ] && { lib="$d/libgtk4-layer-shell.so.0"; break; }
+        if [ -e "$d/libgtk4-layer-shell.so.0" ]; then lib="$d/libgtk4-layer-shell.so.0"; break; fi
     done
 fi
 if [ -z "$lib" ] || [ ! -e "$lib" ] || \

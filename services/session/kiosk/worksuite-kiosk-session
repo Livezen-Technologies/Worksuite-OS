@@ -3,7 +3,7 @@
 # kiosk account (normally through greetd autologin). Labwc runs with the agent-written locked config
 # (/etc/worksuite/kiosk/labwc: one keybinding, the admin exit gesture) and starts only the kiosk app; there is no
 # WorkSuite shell, taskbar, Start menu, notifications, Settings, terminal or file manager.
-set -u
+set -eu
 ENV=${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}
 CONF=${WORKSUITE_KIOSK_LABWC:-/etc/worksuite/kiosk/labwc}
 START=${WORKSUITE_KIOSK_START:-/usr/lib/worksuite/worksuite-kiosk-start}
@@ -23,12 +23,13 @@ fi
 # Every session starts clean: nothing the last visitor typed or opened survives (app data, caches, the web profile).
 wipe() {
     case "${HOME:-/}" in /|"") return ;; esac
-    rm -rf "$HOME/.cache" "$HOME/.config" "$HOME/.local/share" "$HOME/.local/state" "${XDG_RUNTIME_DIR:-/nonexistent}/worksuite-kiosk" 2>/dev/null
+    rm -rf "$HOME/.cache" "$HOME/.config" "$HOME/.local/share" "$HOME/.local/state" "${XDG_RUNTIME_DIR:-/nonexistent}/worksuite-kiosk" 2>/dev/null || true  # best effort; never block the session
 }
 wipe
 export KIOSK_IDLE_RESET_S KIOSK_OSK KIOSK_TRANSFORM KIOSK_SCREEN_OFF_FROM KIOSK_SCREEN_OFF_UNTIL WORKSUITE_KIOSK=1 XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=WorkSuite-Kiosk:wlroots
+# shellcheck source=/dev/null
 . "${WORKSUITE_WLR_ENV:-/usr/lib/worksuite/wlr-env}"
-labwc -C "$CONF" -s "$START"
-rc=$?
+rc=0
+labwc -C "$CONF" -s "$START" || rc=$?
 wipe
 exit "$rc"

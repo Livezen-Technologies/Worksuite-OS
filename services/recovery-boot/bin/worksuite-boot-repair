@@ -3,15 +3,18 @@
 # Repairs when dpkg reports an interrupted run, or when /var/lib/worksuite/repair-on-boot exists (set by the
 # recovery screens or the package service). Fixed commands only; result in /run/worksuite/boot-repair.
 # Exit 0 = nothing to do or repaired; 1 = repair failed (the unit then starts worksuite-recovery.target).
-set -u
+# -e: every expected failure below is handled explicitly; status writes never decide the outcome.
+set -eu
 flag=${WORKSUITE_REPAIR_FLAG:-/var/lib/worksuite/repair-on-boot}
 status_dir=${WORKSUITE_RUN_DIR:-/run/worksuite}
-mkdir -p "$status_dir"
 log() { echo "worksuite-boot-repair: $*"; }
+# A read-only or missing /run must not turn a clean boot into a recovery boot: the status file is informational.
+mkdir -p "$status_dir" 2>/dev/null || log "cannot create $status_dir"
+status() { echo "$1" 2>/dev/null > "$status_dir/boot-repair" || log "cannot write status ($1)"; }
 
 audit=$(dpkg --audit 2>/dev/null || true)
 if [ -z "$audit" ] && [ ! -e "$flag" ]; then
-  echo clean > "$status_dir/boot-repair"; exit 0
+  status clean; exit 0
 fi
 log "repair needed (${audit:+dpkg interrupted}${audit:+ }$( [ -e "$flag" ] && echo requested))"
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8
@@ -20,6 +23,6 @@ dpkg --configure -a || ok=0
 apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -f install || ok=0
 [ -z "$(dpkg --audit 2>/dev/null || true)" ] || ok=0
 if [ $ok = 1 ]; then
-  rm -f "$flag"; echo repaired > "$status_dir/boot-repair"; log "repaired"; exit 0
+  rm -f "$flag" || log "cannot remove $flag"; status repaired; log "repaired"; exit 0
 fi
-echo failed > "$status_dir/boot-repair"; log "repair failed; starting recovery"; exit 1
+status failed; log "repair failed; starting recovery"; exit 1

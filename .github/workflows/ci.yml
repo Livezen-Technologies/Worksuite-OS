@@ -86,6 +86,8 @@ jobs:
       - run: sudo apt-get install -y --no-install-recommends polkitd pkexec libpolkit-agent-1-dev gcc make pkgconf && sudo sh tests/session/polkit-agent-integration.sh
       # Kiosk mode session scripts (WSOS-AUTH-002).
       - run: sh tests/session/kiosk-test.sh
+      # Strict error handling: listed scripts run with set -e or document why not; wlr-env is safe to source under -eu.
+      - run: sh tests/repo/strict-shell.test.sh
       # Device PIN / security-key PAM profiles, daemon and packaging (runs the helper unit tests too).
       - run: sh tests/session/signin-pam-test.sh
       # pam_worksuite.so through real libpam with a stand-in helper (WSOS-DIR-009).
