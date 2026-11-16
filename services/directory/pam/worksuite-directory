@@ -6,6 +6,10 @@ Auth:
 	[success=end default=ignore]	pam_worksuite.so
 Auth-Initial:
 	[success=end default=ignore]	pam_worksuite.so
+Account-Type: Additional
+Account:
+	[success=1 default=ignore]	pam_succeed_if.so quiet user != wsadmin
+	requisite	pam_succeed_if.so quiet service notin sshd:xrdp-sesman:cockpit:vnc
 Session-Type: Additional
 Session-Interactive-Only: yes
 Session:

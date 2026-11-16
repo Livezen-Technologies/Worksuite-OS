@@ -196,6 +196,13 @@ The policy lives in `shell/electron/webSecurity.ts` and is tested by `shell/elec
 - **URL schemes** handed to the system are limited to `https:`, `mailto:`, `tel:` and `worksuite:`. URLs with
   embedded credentials are refused.
 
+## Break-glass admin (WSOS-DIR-010)
+
+The local `wsadmin` account has a one-time, escrowed password, is refused over remote PAM services (SSH, RDP,
+Cockpit, VNC) by an account rule that touches no other user, and its sudo output is recorded
+(`Defaults:wsadmin log_output`). Every use goes to the journal and, queued while offline, to the server. Design,
+escrow contract and remaining gaps: [`break-glass-admin.md`](break-glass-admin.md).
+
 ## What isolation we do and do not claim (WSOS-SEC-013)
 
 WorkSuite OS isolates **web content**: each WorkSuite web app has its own Electron session partition (SEC-004),

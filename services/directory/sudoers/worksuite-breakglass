@@ -1,0 +1,5 @@
+# WorkSuite break-glass admin (WSOS-DIR-010, docs/security/break-glass-admin.md).
+# sudo already logs every command (user, tty, cwd, command) to the journal (authpriv) for every user. For wsadmin
+# only, also record the terminal output of each sudo session under /var/log/sudo-io (replay with sudoreplay), so a
+# break-glass session can be reviewed afterwards. Input is not recorded: it could contain typed passwords.
+Defaults:wsadmin log_output
