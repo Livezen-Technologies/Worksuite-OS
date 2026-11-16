@@ -4,7 +4,8 @@
 # Signals the kiosk app (shell/electron/kioskMain.ts): SIGUSR1 shows the exit prompt, SIGUSR2 resets the app, SIGHUP
 # shows or hides the "Still there?" screen, as written to $RUN/idle (warn | active), and the night screen-off notice,
 # as written to $RUN/screen (off HH:MM | on).
-PID=$(cat "${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk/app.pid" 2>/dev/null)
+set -eu
+PID=$(cat "${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk/app.pid" 2>/dev/null) || PID=  # no pid file: reported below
 case "$PID" in ''|*[!0-9]*) echo "worksuite-kiosk-ctl: kiosk app not running" >&2; exit 1 ;; esac
 case "${1:-}" in
   exit-prompt) kill -USR1 "$PID" ;;

@@ -4,6 +4,7 @@
 # Wayland bridge (and through it the shell's desktops) knows the current desktop; `new` (Ctrl+Super+D) and `close`
 # (Ctrl+Super+F4) ask the bridge to add or close a desktop. Labwc 0.8 has no workspace protocol for clients
 # (ext-workspace-v1 came in 0.9). Fire and forget: a missing bridge must not delay the binding.
+set -eu
 case "${1:-}" in
   goto|move) case "${2:-}" in [1-9]|1[0-6]) n=$2 ;; *) exit 2 ;; esac ;;
   left|right|new|close) n=0 ;;

@@ -6,7 +6,7 @@
 # app's stream ends immediately), then xdg-desktop-portal-wlr itself is restarted, so xdg-desktop-portal closes every
 # portal Session it backed and the apps receive Session.Closed. A new share always goes through the consent chooser
 # again. Prints the number of streams it stopped; exit 0 even when nothing was being shared.
-set -u
+set -eu
 log() { printf '%s\n' "worksuite-screencast-stop: $1" | systemd-cat -t worksuite-screencast-stop -p "${2:-notice}" 2>/dev/null || true; }
 
 # PipeWire nodes of xdpw streams. pw-cli prints "id N, type PipeWire:Interface:Node/3" then the properties.
@@ -15,7 +15,7 @@ ids=$(pw-cli ls Node 2>/dev/null | awk '
     /node\.name = "xdpw_stream/ { print id }')
 count=0
 for id in $ids; do
-    pw-cli destroy "$id" >/dev/null 2>&1 && count=$((count + 1))
+    if pw-cli destroy "$id" >/dev/null 2>&1; then count=$((count + 1)); fi
 done
 
 # Restarting the backend closes every portal ScreenCast session it held (D-Bus activation starts it again on demand).

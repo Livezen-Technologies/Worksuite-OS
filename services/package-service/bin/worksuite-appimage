@@ -1,3 +1,4 @@
 #!/bin/sh
 # Per-user AppImage manager (WSOS-AIM-001…004). Runs as the calling user.
+set -eu
 exec /usr/bin/worksuite-node --no-warnings /usr/lib/worksuite/package-service/src/appimage-cli.ts "$@"

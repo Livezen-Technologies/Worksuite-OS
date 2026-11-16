@@ -2,6 +2,9 @@
 # PAM account check (pam_exec, /usr/share/pam-configs/worksuite-kiosk-signin): on a kiosk device the greeter signs in
 # only the kiosk account (autologin) and administrators (to leave kiosk mode or service the device). Other services
 # (sudo, su, cron, polkit) and devices without kiosk mode are not affected.
+# -e: an unexpected failure ends in a non-zero exit, i.e. a refusal, and only for greeter sign-ins on a kiosk device
+# (every other case exits 0 before any command that can fail); it can never turn into an accidental allow.
+set -eu
 ENV=${WORKSUITE_KIOSK_ENV:-/etc/worksuite/kiosk/session.env}
 [ -r "$ENV" ] || exit 0
 case "${PAM_SERVICE:-}" in greetd|worksuite-greeter) ;; *) exit 0 ;; esac
