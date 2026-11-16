@@ -109,7 +109,7 @@ export async function readTextFile(env: Parameters<typeof resolveIn>[0], root: s
 
 const parse = (json: string): Record<string, unknown> | null => { try { const v = JSON.parse(json); return v && typeof v === 'object' && !Array.isArray(v) ? v : null } catch { return null } }
 
-export function startAIHost(handle: Handle, broadcast: Broadcast, files: Parameters<typeof resolveIn>[0], deps: { readClipboard: () => string } ) {
+export function startAIHost(handle: Handle, broadcast: Broadcast, files: Parameters<typeof resolveIn>[0], deps: { readClipboard: () => string | Promise<string> } ) {
   const id = (s: string) => (MODEL_ID.test(s) ? s : null)
   const withId = (method: string) => (s: string) => { const m = id(s); return m ? aiCall(method, { id: m }) : { ok: false, error: 'invalid_argument' } }
   handle('ws:aiStatus', () => aiCall('Status'))
@@ -135,8 +135,8 @@ export function startAIHost(handle: Handle, broadcast: Broadcast, files: Paramet
     const t = await exec('wl-paste', ['--primary', '--no-newline', '--type', 'text/plain'])
     return t?.trim() ? { ok: true, value: t.slice(0, CONTEXT_MAX) } : { ok: false, error: 'no_selection' }
   })
-  handle('ws:aiClipboard', () => {
-    const t = deps.readClipboard()
+  handle('ws:aiClipboard', async () => {
+    const t = await deps.readClipboard()
     return t.trim() ? { ok: true, value: t.slice(0, CONTEXT_MAX) } : { ok: false, error: 'no_clipboard' }
   })
   handle('ws:aiReadFile', (root, rel) => readTextFile(files, root, rel))

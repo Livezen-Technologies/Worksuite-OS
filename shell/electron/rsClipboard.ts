@@ -3,7 +3,8 @@
 // at once: nothing is read from or written to the clipboard while it is off.
 export const CLIP_MAX = 64 * 1024
 
-export interface ClipDeps { read(): string; write(text: string): void; send(m: { t: 'clip'; text: string }): void }
+// Electron 44+ clipboard reads and writes are asynchronous (readText/writeText return promises).
+export interface ClipDeps { read(): string | Promise<string>; write(text: string): void | Promise<void>; send(m: { t: 'clip'; text: string }): void }
 
 export class ClipboardSync {
   private last: string | null = null
@@ -13,17 +14,21 @@ export class ClipboardSync {
   get enabled() { return this.on }
 
   /** Follows the user's switch; when it turns on, the current text is the baseline (not sent unasked). */
-  setEnabled(on: boolean) {
+  async setEnabled(on: boolean): Promise<void> {
     if (on === this.on) return
     this.on = on
-    this.last = on ? this.safeRead() : null
+    this.last = null
+    if (!on) return
+    const t = await this.safeRead()
+    // Turned off again while reading: keep nothing.
+    if (this.on) this.last = t
   }
 
   /** Every second while enabled: a changed local clipboard is sent to the viewer. */
-  poll(): boolean {
+  async poll(): Promise<boolean> {
     if (!this.on) return false
-    const t = this.safeRead()
-    if (t === null || t === this.last) return false
+    const t = await this.safeRead()
+    if (!this.on || t === null || t === this.last) return false
     this.last = t
     if (!t || t.length > CLIP_MAX) return false
     this.d.send({ t: 'clip', text: t })
@@ -36,9 +41,9 @@ export class ClipboardSync {
     const text = (m as { text?: unknown }).text
     if (typeof text !== 'string' || !text || text.length > CLIP_MAX) return false
     this.last = text
-    this.d.write(text)
+    try { void Promise.resolve(this.d.write(text)).catch(() => {}) } catch { /* clipboard unavailable */ }
     return true
   }
 
-  private safeRead(): string | null { try { return this.d.read() } catch { return null } }
+  private async safeRead(): Promise<string | null> { try { return await this.d.read() } catch { return null } }
 }

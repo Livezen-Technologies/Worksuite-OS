@@ -24,7 +24,10 @@ content, and navigation kept on the module's own origins. These windows grant fo
 module's own origins (`allowedOrigins` in `shell/electron/webapps.ts`): `media` (camera and microphone, for Meet and
 Chat), `notifications`, `clipboard-sanitized-write` and `fullscreen`. Every other permission, and every other origin,
 is denied. Screen sharing is separate: only the `meet` module may ask (`SCREEN_SHARE_MODULES`), it goes through the
-ScreenCast portal, whose chooser asks the user every time, and cancelling there denies.
+ScreenCast portal, whose chooser asks the user every time, and cancelling there denies. Since Electron 45 a
+`getDisplayMedia` call is also reported to the permission handler as `display-capture`, so that permission is accepted
+there for the module's own origins only; the display-media handler (`screenShareAllowed` and the portal chooser) still
+decides.
 
 ## AppArmor (WSOS-SEC-009)
 
@@ -163,6 +166,15 @@ script for each architecture and uploads the SBOM with the ISO. The generator is
 `tools/sbom/spdx.test.mjs`.
 
 ## Electron patch policy (WSOS-SEC-012)
+
+- **Current line.** `shell/package.json` pins `electron` `^45.3.2` (upstream release 2026-11-13), on the newest
+  supported major (upstream supports 43, 44 and 45). It moved from 38.8.6, which had left support. Breaking changes
+  of majors 39 to 45 that touched the shell: the main-process `clipboard` API is asynchronous since 44
+  (`readText`/`writeText` return promises; AI context and remote-support clipboard sync now await them), and
+  screen capture reaches `setPermissionRequestHandler` as `display-capture` since 45. The preloads use only
+  `contextBridge`/`ipcRenderer`/`webUtils`, so the removal of `Buffer`, `events`, `timers` and `url` from sandboxed
+  preloads in 45 does not affect them. All `webPreferences` hardening (sandbox, context isolation, no Node
+  integration), the CSP and the scheme allow-list are unchanged.
 
 - **Supported line only.** The shell pins an Electron major that upstream still supports. Upstream supports the
   latest three stable majors. When a major leaves support, the shell moves to a supported major within that

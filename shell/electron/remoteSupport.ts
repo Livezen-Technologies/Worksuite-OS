@@ -139,14 +139,14 @@ type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 export function startRemoteSupportHost(handle: Handle, b = remoteSupportBridge(), o: { exec?: Exec; credential: () => string | null; serverBase: () => string | null }) {
   let wc: Electron.WebContents | null = null
   let sources: { id: string; display: string }[] = []
-  // Loaded once below; the clipboard and screen calls are synchronous.
+  // Loaded once below; the screen calls are synchronous, the clipboard ones (Electron 44+) return promises.
   let el: typeof import('electron') | null = null
   const ctl = new RemoteSessionController({
     state: () => b.state(), end: () => b.end(), credential: o.credential, serverBase: o.serverBase, fetch,
     downloadsDir: () => join(process.env.HOME ?? '/tmp', 'Downloads'),
     clipboard: {
-      read: () => el?.clipboard.readText() ?? '',
-      write: (t) => { el?.clipboard.writeText(t) },
+      read: async () => (el ? await el.clipboard.readText() : ''),
+      write: async (t) => { await el?.clipboard.writeText(t) },
     },
     monitors: async () => {
       const { desktopCapturer } = await import('electron')
