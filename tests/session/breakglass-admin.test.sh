@@ -45,8 +45,15 @@ run 0.1.0
 check "upgrade from a UID-1000 wsadmin moves the UID only" 'grep -q "^usermod --uid 999 wsadmin" "$LOG" && ! grep -q "^usermod --lock\|^chpasswd" "$LOG"'
 
 # sudoers drop-in: valid, only wsadmin defaults, no rule that grants anything.
-if command -v visudo >/dev/null 2>&1; then
-  check "sudoers drop-in passes visudo -c" 'visudo -c -q -f "$SUDOERS" >/dev/null 2>&1'
+VISUDO=$(command -v visudo || ls /usr/sbin/visudo 2>/dev/null || true)
+if [ -n "$VISUDO" ]; then
+  # Check a root-owned 0440 copy, as installed. CI runners are not root but have passwordless sudo.
+  AS=""; [ "$(id -u)" -eq 0 ] || AS="sudo -n"
+  cp "$SUDOERS" "$T/sudoers"
+  $AS chown 0:0 "$T/sudoers" 2>/dev/null; $AS chmod 0440 "$T/sudoers" 2>/dev/null
+  if out=$($AS "$VISUDO" -c -f "$T/sudoers" 2>&1); then ok "sudoers drop-in passes visudo -c"
+  else bad "sudoers drop-in passes visudo -c"; echo "$out" | sed 's/^/# /'; fi
+  $AS rm -f "$T/sudoers" 2>/dev/null
 else
   check "sudoers drop-in syntax (no visudo)" '! grep -v "^#" "$SUDOERS" | grep -v "^$" | grep -qv "^Defaults:wsadmin [a-z_]*$"'
 fi
