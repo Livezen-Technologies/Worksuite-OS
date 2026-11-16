@@ -68,7 +68,7 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             qemu: qemu-system-x86 ovmf
             boot_timeout: 2400
           - arch: arm64
@@ -90,9 +90,11 @@ jobs:
       HAS_DESKTOP_SOURCE: ${{ secrets.WORKSUITE_DESKTOP_TOKEN != '' || secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_DESKTOP_URL != '' }}
       HAS_POS_SOURCE: ${{ secrets.WORKSUITE_POS_TOKEN != '' || secrets.WORKSUITE_OFFICE_TOKEN != '' || vars.WORKSUITE_POS_URL != '' }}
     steps:
+      # Retry flaky mirror/DNS fetches instead of failing the build (also used by apt-get satisfy below).
+      - run: echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
       - run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gh live-build debootstrap debhelper dpkg-dev fakeroot build-essential dbus-daemon ${{ matrix.qemu }} xorriso squashfs-tools mtools dosfstools
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -189,7 +191,7 @@ jobs:
       - if: inputs.perf != false
         run: PERF_PROFILE=ci-$ARCH-tcg BOOT_LOG=live-build/out/perf-serial.log tests/vm/boot-test.sh "$(ls live-build/out/*-$ARCH-perf.iso | head -n1)" ${{ matrix.boot_timeout }}
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: worksuite-os-${{ matrix.arch }}
           path: |
@@ -203,11 +205,11 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: worksuite-os-*
           path: dist
@@ -233,7 +235,7 @@ jobs:
   update-center:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
       image: debian:trixie
     env:
@@ -243,11 +245,11 @@ jobs:
       - if: env.HAS_TOKEN != 'true'
         run: echo "::notice::UPDATE_CENTER_TOKEN not set; not publishing to the Update Center"
       - if: env.HAS_TOKEN == 'true'
-        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates git gnupg apt-utils dpkg-dev xz-utils nodejs
+        run: echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries && apt-get update && apt-get install -y --no-install-recommends ca-certificates git gnupg apt-utils dpkg-dev xz-utils nodejs
       - if: env.HAS_TOKEN == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - if: env.HAS_TOKEN == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: worksuite-os-*
           path: dist

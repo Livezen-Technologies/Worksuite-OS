@@ -10,6 +10,7 @@
 set -eu
 iso=${1:?iso}; timeout=${2:-900}
 here=$(cd "$(dirname "$0")" && pwd)
+# shellcheck disable=SC2240 # dash ignores the argument; qemu-arch.sh then uses ARCH or the caller's $1
 . "$here/qemu-arch.sh" "$iso"
 log=${BOOT_LOG:-$(mktemp)}; vars=$(mktemp)
 cp "$FW_VARS_TEMPLATE" "$vars"

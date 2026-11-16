@@ -2,7 +2,7 @@
 // service (WSOS-APP-001/002), the user's AppImages (WSOS-AIM-001…004), local .deb files (WSOS-APT-005) and Flatpak
 // permissions (WSOS-FLP-002…004). Nothing here is sample data: what the services don't report is left out or says so.
 import { AppGlyph } from '../components/AppGlyph'
-import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
+import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { C, card, Dialog, dialogFooter, btnGhost, btnPrimary, Svg, Switch } from '../components/Dk'

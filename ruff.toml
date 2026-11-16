@@ -1,0 +1,16 @@
+# ruff (CI job "lint": ruff check .): ruff's default rule set (pyflakes F, pycodestyle E4/E7/E9), no formatter.
+target-version = "py313"  # Debian 13 ships Python 3.13
+line-length = 120
+extend-exclude = ["**/node_modules"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+# The code is written compactly on purpose (several imports or statements per line, small lambdas bound to names,
+# short loop names like `l`); these are style rules, not bugs.
+ignore = ["E401", "E701", "E702", "E731", "E741"]
+
+[lint.per-file-ignores]
+# dbus-next method signatures are D-Bus type strings in annotations ('as', 'a{sv}'), not Python forward references
+# (`-> "s"` reads as an undefined name `s`).
+"tests/portals/notify_stub.py" = ["F722"]
+"native/wayland-bridge/tests/test_dbus.py" = ["F821"]

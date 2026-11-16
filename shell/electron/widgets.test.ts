@@ -26,7 +26,7 @@ function world(o: { status?: number | ((path: string) => number); throws?: boole
     return { ok: status < 400, status, json: async () => BODIES[path] }
   }
   let accounts: unknown = o.accounts ?? [{ id: 'acc-1', server_url: 'https://work.example.com', state: 'signed_in' }]
-  const broker = async (m: string) => (m === 'Status' ? { ok: true as const, value: accounts as {} } : (o.token as { ok: true; value: unknown }) ?? { ok: true as const, value: 'tok-secret' })
+  const broker = async (m: string) => (m === 'Status' ? { ok: true as const, value: accounts as object } : (o.token as { ok: true; value: unknown }) ?? { ok: true as const, value: 'tok-secret' })
   const w = createWidgets({ broker, fetch, cache, device: () => 'dev-cred', enabled: () => o.enabled ?? true, now: () => NOW })
   return { w, calls, store, cleared: () => cleared, setAccounts: (a: unknown) => { accounts = a } }
 }

@@ -36,7 +36,7 @@ async function deleteNotes() {
 it('Ctrl+Z restores what Delete moved to the Trash, once', async () => {
   const trash = vi.spyOn(os, 'filesTrash')
   const restore = vi.spyOn(os, 'filesTrashRestore')
-  const row = await deleteNotes()
+  await deleteNotes()
   expect(trash).toHaveBeenCalledWith('home', ['Documents/Meeting notes.md'])
   expect(host!.contains(document.activeElement)).toBe(true)   // focus is back in Files after the dialog
   await key(document.activeElement!, 'z', true)

@@ -1,4 +1,4 @@
-import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
+import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { FirstRunProps } from './types'
 import { cloudErrorText, os, serverUrlFor, type CloudAccount } from '../lib/os'

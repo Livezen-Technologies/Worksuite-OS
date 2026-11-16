@@ -3,6 +3,7 @@
 # (a crash), with a back-off when it keeps failing. KIOSK_IDLE_RESET_S and KIOSK_OSK come from the session.
 set -u
 RUN=${XDG_RUNTIME_DIR:-/tmp}/worksuite-kiosk
+# shellcheck disable=SC2174 # the parent already exists; only the deepest directory needs 0700
 mkdir -p -m 0700 "$RUN"
 LIB=${WORKSUITE_LIB:-/usr/lib/worksuite}
 APP=${WORKSUITE_KIOSK_APP:-/usr/lib/worksuite/shell/electron/electron --ozone-platform=wayland /usr/lib/worksuite/shell/dist-electron/kiosk.cjs}

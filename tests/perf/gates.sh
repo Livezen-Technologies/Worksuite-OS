@@ -5,7 +5,7 @@
 set -eu
 log=${1:?log}; profile=${2:?profile}
 gates=${GATES:-$(dirname "$0")/gates.tsv}
-grep -q "^$profile[[:space:]]" "$gates" || { echo "unknown profile $profile" >&2; exit 2; }
+grep -q "^${profile}[[:space:]]" "$gates" || { echo "unknown profile $profile" >&2; exit 2; }
 tr -d '\r' < "$log" | grep -ao 'WORKSUITE_PERF [a-z0-9_]* [0-9.]*' | awk -v profile="$profile" '
   FILENAME == "-" { v[$2] = $3; next }
   /^#/ || NF < 5 || $1 != profile { next }

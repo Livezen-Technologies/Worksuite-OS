@@ -3,7 +3,7 @@
 // update coordinator status (critical, resumed, deadline, paused/pulled reason), the update job's progress, the
 // device policy and the bundles the main process found on mounted drives. Byte counts and speed are not reported
 // by apt's progress, so the download line says how far it got in percent.
-import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
+import { CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
 import { formatBytes, os, packageErrorText, type BundleInfo, type DeviceInfo, type FoundBundle, type OsUpdateStatus } from '../lib/os'
 import { updates } from '../lib/useOsUpdate'

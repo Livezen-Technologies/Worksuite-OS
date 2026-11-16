@@ -1,7 +1,7 @@
 // OS update screens (boards U1–U7, UpdSettings) on the package service's update coordinator (WSOS-AUP-011).
 // Everything shown comes from the coordinator status, the update job's progress events and the package service's
 // update history; release notes and sizes appear when the signed manifest carries them, and say so when it doesn't.
-import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
+import { CountUp } from '../components/AnimatedProgress'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { formatBytes, os, packageErrorText, type AppUpdate, type BundleInfo, type DeviceInfo, type OsUpdateStatus, type UpdateHistory, type UpdateHistoryEntry } from '../lib/os'

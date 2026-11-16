@@ -52,8 +52,10 @@ if ls /dev/dri/renderD* >/dev/null 2>&1; then export WLR_RENDERER=${WLR_RENDERER
 export XDG_CURRENT_DESKTOP=WorkSuite:wlroots XDG_SESSION_TYPE=wayland WLR_BACKENDS=headless WLR_HEADLESS_OUTPUTS=1 WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=${WLR_RENDERER:-pixman}
 mkdir -p "$XDG_CONFIG_HOME/labwc"; echo "<labwc_config/>" > "$XDG_CONFIG_HOME/labwc/rc.xml"
 labwc >"$T/labwc.log" 2>&1 & pids="$pids $!"
+i=0
 # shellcheck disable=SC2010 # socket names are wayland-N
-i=0; while [ -z "$(ls "$XDG_RUNTIME_DIR" | grep '^wayland-[0-9]*$' | head -1)" ]; do i=$((i + 1)); [ $i -lt 100 ] || { cat "$T/labwc.log"; exit 1; }; sleep 0.1; done
+while [ -z "$(ls "$XDG_RUNTIME_DIR" | grep '^wayland-[0-9]*$' | head -1)" ]; do i=$((i + 1)); [ $i -lt 100 ] || { cat "$T/labwc.log"; exit 1; }; sleep 0.1; done
+# shellcheck disable=SC2010 # socket names are wayland-N
 WAYLAND_DISPLAY=$(ls "$XDG_RUNTIME_DIR" | grep '^wayland-[0-9]*$' | head -1); export WAYLAND_DISPLAY
 dbus-update-activation-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_RUNTIME_DIR XDG_CONFIG_HOME XDG_DATA_HOME HOME PATH LANG 2>/dev/null \
     || dbus-update-activation-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_CONFIG_HOME XDG_DATA_HOME PATH

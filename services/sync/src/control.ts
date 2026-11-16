@@ -107,7 +107,7 @@ export function brokerTokens(path: string, accountId: string): TokenProvider {
       sock.end();
       try {
         const res = JSON.parse(buf.slice(0, buf.indexOf('\n')));
-        typeof res.result === 'string' ? resolve(res.result) : reject(new Error(res.error ?? 'no token'));
+        if (typeof res.result === 'string') resolve(res.result); else reject(new Error(res.error ?? 'no token'));
       } catch (e) { reject(e); }
     });
     sock.on('error', reject);

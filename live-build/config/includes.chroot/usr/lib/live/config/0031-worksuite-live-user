@@ -7,6 +7,7 @@
 [ -e /var/lib/live/config/worksuite-live-user ] && exit 0
 name="${LIVE_USERNAME:-user}"
 if ! getent passwd "$name" >/dev/null; then
+    # shellcheck disable=SC3037 # live-config components print their name with echo -n; dash supports -n
     echo -n " worksuite-live-user"
     adduser --disabled-password --comment "${LIVE_USER_FULLNAME:-Live user}" "$name" >/dev/null
     # live-config's default password, "live" (same crypt string as 0030-user-setup).

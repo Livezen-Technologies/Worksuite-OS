@@ -4,7 +4,7 @@
 import { AnimatedProgress } from '../components/AnimatedProgress'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
-import { C, card, Svg } from '../components/Dk'
+import { C, card } from '../components/Dk'
 import { formatBytes } from '../lib/os'
 import { monitorApi, niceTop, pushHistory, sparkPoints, type HealthItem, type MonitorGroup, type MonitorSnapshot, type StartupEntry } from '../lib/monitorApi'
 import { formatDecimal, formatNumber, t, useT, type MessageKey } from '../i18n'

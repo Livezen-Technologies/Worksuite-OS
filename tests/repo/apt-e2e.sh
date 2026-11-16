@@ -38,6 +38,7 @@ apt() {
 source() {   # source KEYRING
   printf 'Types: deb\nURIs: http://127.0.0.1:%s/os/apt\nSuites: trixie-stable\nComponents: main\nSigned-By: %s\n' "$port" "$1" > "$a/etc/sources.list.d/worksuite.sources"
 }
+# shellcheck disable=SC3046 # calls the source() function defined above, not the bash builtin
 source "$t/keys/archive.gpg"
 
 apt apt-get update > "$t/apt.log" 2>&1 || fail "apt-get update against the signed repository"

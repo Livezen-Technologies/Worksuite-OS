@@ -4,7 +4,7 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import { Coordinator, DEFAULT_HOST, manifestUrl, updateHost, type CoordinatorEnv } from '../src/coordinator.ts';
 import { rewriteSources } from '../src/main.ts';
 import { PackageService } from '../src/service.ts';
-import { canonical, type Manifest } from '../src/updates.ts';
+import { canonical } from '../src/updates.ts';
 
 const keys = generateKeyPairSync('ed25519');
 const signed = (m: Record<string, unknown>, key = keys.privateKey) => ({ ...m, signature: `r1:${sign(null, Buffer.from(canonical(m)), key).toString('base64')}` });

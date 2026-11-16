@@ -28,8 +28,10 @@ fi
 
 sleep "$IDLE_SETTLE"
 cpu() { awk '/^cpu / { idle = $5 + $6; tot = 0; for (i = 2; i <= NF; i++) tot += $i; print tot, idle }' /proc/stat; }
+# shellcheck disable=SC2046 # split on purpose: cpu() prints two numbers
 set -- $(cpu); t0=$1; i0=$2
 sleep "$IDLE_WINDOW"
+# shellcheck disable=SC2046 # split on purpose: cpu() prints two numbers
 set -- $(cpu); t1=$1; i1=$2
 out idle_cpu_pct "$(awk -v dt=$((t1 - t0)) -v di=$((i1 - i0)) 'BEGIN { printf "%.2f", (dt > 0 ? 100 * (dt - di) / dt : 0) }')"
 out idle_mem_mib "$(awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } END { printf "%d", (t - a) / 1024 }' /proc/meminfo)"

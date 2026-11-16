@@ -52,6 +52,7 @@ i=0; until grep -q '"event":"burst_suspended"' "$work/log"; do i=$((i+1)); [ $i 
 sleep 0.3
 state=$(awk '{print $3}' "/proc/$(sed -n 's/.*"burst_suspended","pid":\([0-9]*\).*/\1/p' "$work/log" | head -1)/stat" 2>/dev/null || echo gone)
 [ "$state" = T ] || fail "offending process not stopped (state $state)"
+# shellcheck disable=SC2010 # the test creates the files itself (plain ASCII names)
 [ "$(ls "$work/prot" | grep -c locked)" -lt 60 ] || fail "every file was renamed"
 kill -KILL "$victim" 2>/dev/null || true
 echo "worksuite-guard live test: ok"

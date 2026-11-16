@@ -53,7 +53,7 @@ const purlDeb = (p) => `pkg:deb/${p.ns}/${encodeURIComponent(p.name)}@${encodeUR
 const purlNpm = (p) => `pkg:npm/${p.name.startsWith('@') ? '%40' + p.name.slice(1) : p.name}@${encodeURIComponent(p.version)}`;
 const lic = (l) => (typeof l === 'string' && /^[A-Za-z0-9.+ ()-]+$/.test(l) ? l : 'NOASSERTION');
 
-export function buildSbom({ name, arch, debian = [], worksuite = [], npm = [], created = new Date().toISOString(), namespaceId = randomUUID() }) {
+export function buildSbom({ name, debian = [], worksuite = [], npm = [], created = new Date().toISOString(), namespaceId = randomUUID() }) {
   const packages = [];
   const rels = [];
   const seen = new Set();
