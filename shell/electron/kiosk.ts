@@ -1,6 +1,7 @@
 // Kiosk mode (WSOS-AUTH-002), pure parts: the kiosk config the device agent writes (/etc/worksuite/kiosk.json), the
 // web kiosk's URL allowlist, its webPreferences, and which keys may reach the page. No Electron imports, so it is
 // unit-tested; kioskMain.ts wires it to Electron.
+import type { AdminResult } from './adminBus'
 
 export const KIOSK_CONFIG = '/etc/worksuite/kiosk.json'
 export const KIOSK_MODULES = ['home', 'mail', 'chat', 'calendar', 'tasks', 'files', 'crm', 'hr'] as const
@@ -99,15 +100,19 @@ export function blockedKey(i: KeyInput): boolean {
   return false
 }
 
-/** Exit codes of worksuite-kiosk-exit → what the exit prompt shows. */
-export type ExitResult = 'ok' | 'wrong_pin' | 'locked_out' | 'pin_disabled' | 'cancelled' | 'failed'
-export function exitResult(code: number | null): ExitResult {
-  switch (code) {
+/** lk.worksuite.Admin1.KioskExit's answer (the exit codes of worksuite-kiosk-exit) → what the exit prompt shows. */
+export type ExitResult = 'ok' | 'wrong_pin' | 'locked_out' | 'pin_disabled' | 'cancelled' | 'denied' | 'failed'
+export function exitResult(r: AdminResult): ExitResult {
+  if (!r.ok) {
+    if (r.error === 'auth_cancelled') return 'cancelled'   // the administrator prompt was dismissed
+    if (r.error === 'not_authorized') return 'denied'      // polkit said no (not an administrator, or not the active session)
+    return 'failed'
+  }
+  switch (r.code) {
     case 0: return 'ok'
     case 3: return 'wrong_pin'
     case 4: return 'locked_out'
     case 5: return 'pin_disabled'
-    case 126: case 127: return 'cancelled'   // pkexec: authentication dismissed / not authorised
     default: return 'failed'
   }
 }

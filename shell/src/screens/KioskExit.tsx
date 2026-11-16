@@ -44,7 +44,7 @@ export default function KioskExit({ api = kioskApi() }: { api?: KioskApi | null 
   const locked = result === 'locked_out'
   const msg: Partial<Record<KioskExitResult, string>> = {
     ok: t('kiosk.leaving'), wrong_pin: t('kiosk.wrongPin'), locked_out: t('kiosk.lockedOut'), pin_disabled: t('kiosk.pinDisabled'),
-    cancelled: t('kiosk.cancelled'), failed: t('kiosk.failed'),
+    cancelled: t('kiosk.cancelled'), denied: t('kiosk.denied'), failed: t('kiosk.failed'),
   }
   const bad = result !== null && result !== 'ok'
   const btn = 'cursor-pointer rounded-[10px] px-[18px] py-2.5 text-sm font-medium disabled:cursor-default disabled:opacity-50'

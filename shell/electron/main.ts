@@ -448,7 +448,7 @@ app.whenReady().then(() => {
   handle('ws:hwMokPassword', () => pkg.mokPassword())
   handle('ws:hwInstallDrivers', (...ids) => pkg.installDrivers(ids.map(String)))
   handle('ws:sysUsers', () => localUsers())
-  // Settings › Users › Sign-in options. Every change runs worksuite-signin through pkexec; the PIN goes on stdin.
+  // Settings › Users › Sign-in options. Every change is an lk.worksuite.SignIn1 method behind polkit; the PIN is a D-Bus argument.
   const signin = signinHost()
   handle('ws:signinMethods', () => signin.methods())
   handle('ws:signinPinSet', (pin) => signin.pinSet(pin))

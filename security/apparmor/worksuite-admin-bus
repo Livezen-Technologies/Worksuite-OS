@@ -1,0 +1,38 @@
+# AppArmor profile for lk.worksuite.Admin1 (services/session/admin, WSOS-ARC-002/WSOS-SEC-009). D-Bus activated as
+# root, so it is attached by the program's path. It owns its bus name, asks the bus for the caller's UID and polkit
+# for each action, and may start only the five fixed helpers. The helpers run outside this profile as root, as they
+# did before (they reimage disks, administer CUPS, restart the machine); each checks its arguments again.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile worksuite-admin-bus /usr/lib/worksuite/worksuite-admin-bus flags=(attach_disconnected) {
+  include <abstractions/base>
+  include <abstractions/nameservice>
+  include <abstractions/python>
+
+  network unix stream,
+  dbus (send, receive) bus=system peer=(name=org.freedesktop.DBus),
+  dbus (send) bus=system interface=org.freedesktop.PolicyKit1.Authority peer=(name=org.freedesktop.PolicyKit1),
+  dbus (bind) bus=system name=lk.worksuite.Admin1,
+  dbus (receive) bus=system path=/lk/worksuite/Admin1 interface=lk.worksuite.Admin1,
+  dbus (receive) bus=system interface=org.freedesktop.DBus.Introspectable,
+
+  /usr/lib/worksuite/worksuite-admin-bus r,
+  /usr/bin/python3* ix,
+  /usr/lib/worksuite/admin/** r,
+  # Reinstall: only a whole disk the kernel lists.
+  /sys/block/ r,
+  /sys/devices/** r,
+  @{PROC}/@{pid}/** r,
+
+  # The only programs it may start.
+  /usr/lib/worksuite/worksuite-kiosk-exit Ux,
+  /usr/libexec/worksuite/worksuite-reinstall Ux,
+  /usr/lib/worksuite/worksuite-printer-admin Ux,
+  /usr/lib/worksuite/worksuite-power-force Ux,
+  /usr/lib/worksuite/worksuite-diagnostics Ux,
+
+  deny /etc/shadow r,
+  deny /home/** rwx,
+  deny /root/** rwx,
+}

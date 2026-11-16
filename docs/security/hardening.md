@@ -35,9 +35,11 @@ ScreenCast portal, whose chooser asks the user every time, and cancelling there 
 | `worksuite-directory` | `worksuite-breakglass-rotate.service` | enforce |
 | `worksuite-ai` | `worksuite-ai.service` (user unit) | enforce. The AI assistant's control service: network for model downloads (HTTPS to catalog hosts only, enforced in `services/ai/src/fetch.ts`), its own data under `~/.local/share/worksuite/ai`, reads the AI policy and catalog in `/etc/worksuite` and administrator models in `/var/lib/worksuite/ai`, starts the engine unit through the user manager. |
 | `worksuite-ai-engine` | `worksuite-ai-engine.service` (user unit) | enforce. llama.cpp with no network (`deny network inet/inet6`; the unit also has `RestrictAddressFamilies=AF_UNIX`): maps model files read-only and writes only its own socket. |
-| `worksuite-shell` | `worksuite-shell.service`, `worksuite-recovery-launcher.service`, `worksuite-recovery-shell.service` | complain |
+| `worksuite-admin-bus` | attached by path: `/usr/lib/worksuite/worksuite-admin-bus` (`lk.worksuite.Admin1`, D-Bus activated as root, no unit) | enforce. Owns its bus name, asks the bus for the caller's UID and polkit for each action, and may start exactly five helpers (`worksuite-kiosk-exit`, `worksuite-reinstall`, `worksuite-printer-admin`, `worksuite-power-force`, `worksuite-diagnostics`), unconfined (`Ux`) as they ran before; nothing else. |
+| `worksuite-shell` | `worksuite-shell.service`, `worksuite-recovery-launcher.service`, `worksuite-recovery-shell.service` | complain. No setuid helper: root work is a D-Bus method behind polkit (WSOS-ARC-002), so the profile has no `pkexec` rule. |
 
-Profiles are attached by name through `AppArmorProfile=-<name>` in each unit, not by path. All services run on
+Profiles are attached by name through `AppArmorProfile=-<name>` in each unit, not by path (except `worksuite-admin-bus`,
+which D-Bus starts without a unit and which is a Python script of its own). All services run on
 `/usr/bin/worksuite-node`, so a path-attached profile would confine all of them, including the PAM helper. The `-`
 prefix keeps a unit working on a kernel booted without AppArmor.
 

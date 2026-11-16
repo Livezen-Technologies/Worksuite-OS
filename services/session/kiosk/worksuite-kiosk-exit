@@ -1,11 +1,13 @@
 #!/usr/bin/python3 -I
-"""worksuite-kiosk-exit --pin | --admin   (root, through pkexec from the kiosk app)
+"""worksuite-kiosk-exit --pin | --admin   (root, run by lk.worksuite.Admin1.KioskExit for the kiosk app)
 
 Leaves kiosk mode for this boot: ends the kiosk account's session so greetd shows the greeter, where (in kiosk mode)
 only administrators can sign in. The next boot starts the kiosk again.
   --pin    polkit allows the active session without a password (lk.worksuite.kiosk.exit-pin); the PIN is read from
            stdin and checked against the policy's verifier, rate limited.
   --admin  polkit asks for an administrator's password first (lk.worksuite.kiosk.exit-admin, auth_admin, not kept).
+The service checks the polkit action for the calling bus name and passes the caller's UID, taken from the bus, in
+WORKSUITE_CALLER_UID (its environment is otherwise empty).
 Exit codes: 0 done, 2 usage/not a kiosk session, 3 wrong PIN, 4 too many attempts, 5 PIN not allowed by policy.
 """
 import os
@@ -32,7 +34,7 @@ def main(argv):
         return 2
     env = k.read_env(ENV)
     try:
-        caller = pwd.getpwuid(int(os.environ["PKEXEC_UID"]))
+        caller = pwd.getpwuid(int(os.environ["WORKSUITE_CALLER_UID"]))
     except (KeyError, ValueError):
         return 2
     if not env.get("KIOSK_USER") or caller.pw_name != env["KIOSK_USER"]:

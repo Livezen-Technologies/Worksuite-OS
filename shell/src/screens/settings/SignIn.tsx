@@ -1,7 +1,7 @@
 // Settings › Users › Sign-in options (boards AuthMethods, AuthPin, AuthPasskey). The PIN and FIDO2 security keys
 // belong to this device: worksuite-signin (services/session/signin) keeps an scrypt verifier for the PIN and the
-// pam_u2f mappings for keys. Every change runs that helper through pkexec, so the person types their password; the PIN
-// goes to it on stdin. The renderer never stores the PIN: it lives in component state until the dialog closes.
+// pam_u2f mappings for keys. Every change is an lk.worksuite.SignIn1 method behind polkit, so the person types their password;
+// the PIN is a D-Bus argument and reaches the helper on stdin. The renderer never stores the PIN: it lives in component state until the dialog closes.
 import { useEffect, useState } from 'react'
 import { os, type Avail, type SecurityKey, type SignInMethod, type SignInMethods, type SigninResult } from '../../lib/os'
 import { Dialog, Spinner, Svg, btnGhost, btnPrimary, card, chip, dialogFooter, field, rowLine } from '../../components/Dk'

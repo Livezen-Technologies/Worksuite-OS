@@ -1,5 +1,5 @@
 #!/bin/sh
-# Settings › Printers administration (issue #51): worksuite-printer-admin runs as root through pkexec, so it must
+# Settings › Printers administration (issue #51): worksuite-printer-admin runs as root (lk.worksuite.Admin1.Printers), so it must
 # pass only checked values to the CUPS tools; its polkit action and rule exist and are installed; the image ships the
 # CUPS stack, Avahi discovery, ipp-usb and drivers (the build installs no recommends), and the live user is in lpadmin.
 set -u
@@ -46,12 +46,12 @@ check "refuses unknown commands" "$(run 'devices;id')" "rc=2;"
 check "refuses extra arguments" "$(run devices -v)" "rc=2;"
 
 P=$ROOT/services/session/polkit
-python3 -I - "$P/lk.worksuite.printers.policy" <<'PY' && ok "policy: auth_admin_keep, exec.path is the helper" || bad "policy: auth_admin_keep, exec.path is the helper"
+python3 -I - "$P/lk.worksuite.printers.policy" <<'PY' && ok "policy: auth_admin_keep, no pkexec path (lk.worksuite.Admin1 checks it)" || bad "policy: auth_admin_keep, no pkexec path (lk.worksuite.Admin1 checks it)"
 import sys, xml.etree.ElementTree as ET
 a = ET.parse(sys.argv[1]).getroot().find("action[@id='lk.worksuite.printers']")
 assert a.find("defaults/allow_active").text == "auth_admin_keep"
 assert a.find("defaults/allow_any").text == "no"
-assert a.find("annotate[@key='org.freedesktop.policykit.exec.path']").text == "/usr/lib/worksuite/worksuite-printer-admin"
+assert a.find("annotate[@key='org.freedesktop.policykit.exec.path']") is None
 PY
 grep -q 'action.id == "lk.worksuite.printers"' "$P/rules/50-worksuite-printers.rules" && grep -q 'isInGroup("lpadmin")' "$P/rules/50-worksuite-printers.rules" \
   && grep -q 'subject.local && subject.active' "$P/rules/50-worksuite-printers.rules" && ok "rule: local active lpadmin/sudo" || bad "rule: local active lpadmin/sudo"

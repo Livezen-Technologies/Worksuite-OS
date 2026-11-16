@@ -10,7 +10,7 @@ polkit.addRule(function (action, subject) {
     }
 });
 
-// worksuite-power-force runs as root (pkexec) inside the person's session, after it has decided: past the caller's own
+// worksuite-power-force runs as root (lk.worksuite.Admin1.ForcePower) for the person at the desk, after it has decided: past the caller's own
 // inhibitors without asking, or past anyone's once an administrator said yes (lk.worksuite.power-force-admin). Logind
 // (systemd 257) still asks polkit whether root may ignore inhibitors and other sessions, and polkitd sends that to the
 // session's agent: logind's own administrator prompt ("…while an application is inhibiting this", program systemctl),

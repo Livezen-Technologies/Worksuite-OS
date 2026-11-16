@@ -167,7 +167,7 @@ const realFs: FsDeps = {
 
 export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin: WithStdin = realWithStdin, fs: FsDeps = realFs, wait: (ms: number) => Promise<unknown> = pause) {
   const userProfile = join(xdgDirs(home).config, 'fcitx5', 'profile')
-  // pkexec's exit status matters for printing, which realExec flattens to 1.
+  // The CUPS tools' exit status matters for printing, which realExec flattens to 1.
   const printers = printersBridge(exec === realExec ? printerExec : exec)
   const enabledIms = async () => {
     const text = (await fs.read(userProfile)) ?? (await fs.read('/etc/xdg/fcitx5/profile'))

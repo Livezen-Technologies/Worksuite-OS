@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- System bus: lk.worksuite.Admin1 at /lk/worksuite/Admin1 (services/session/admin/worksuite_admin/bus.py).
+     The shell's root helpers as named methods (WSOS-ARC-002), each behind its own polkit action, acting for the bus
+     caller's UID only. Each returns the helper's exit status and its output (empty where the shell shows none).
+     Errors: lk.worksuite.Error.NotAuthorized (polkit said no), lk.worksuite.Error.Cancelled (prompt dismissed),
+     lk.worksuite.Error.InvalidArgs (outside the allow-list), lk.worksuite.Error.Failed.
+       KioskExit("pin", PIN) → lk.worksuite.kiosk.exit-pin      KioskExit("admin", "") → lk.worksuite.kiosk.exit-admin
+       Reinstall({mode: keep|erase, disk, [confirm]})          → lk.worksuite.recovery.reinstall (auth_admin)
+       Printers([op, …])                                       → lk.worksuite.printers
+       ForcePower(reboot|poweroff)                             → lk.worksuite.power-force (+ power-force-admin)
+       Journal(boot|previous|greeter, 1..5000), BootDetails(on|off) → lk.worksuite.diagnostics -->
+<node name="/lk/worksuite/Admin1">
+  <interface name="lk.worksuite.Admin1">
+    <method name="KioskExit"><arg name="mode" type="s" direction="in"/><arg name="pin" type="s" direction="in"/><arg name="code" type="i" direction="out"/><arg name="output" type="s" direction="out"/></method>
+    <method name="Reinstall"><arg name="options" type="a{ss}" direction="in"/><arg name="code" type="i" direction="out"/><arg name="output" type="s" direction="out"/></method>
+    <method name="Printers"><arg name="args" type="as" direction="in"/><arg name="code" type="i" direction="out"/><arg name="output" type="s" direction="out"/></method>
+    <method name="ForcePower"><arg name="action" type="s" direction="in"/><arg name="code" type="i" direction="out"/><arg name="output" type="s" direction="out"/></method>
+    <method name="Journal"><arg name="kind" type="s" direction="in"/><arg name="lines" type="u" direction="in"/><arg name="code" type="i" direction="out"/><arg name="output" type="s" direction="out"/></method>
+    <method name="BootDetails"><arg name="op" type="s" direction="in"/><arg name="code" type="i" direction="out"/><arg name="output" type="s" direction="out"/></method>
+  </interface>
+</node>

@@ -751,7 +751,7 @@ function LockScreenPanel({ onLock }: { onLock: () => void }) {
   </>
 }
 
-/** Enroll an unmanaged device with an organization (§9.3); same path as first-run: device agent via pkexec. */
+/** Enroll an unmanaged device with an organization (§9.3); same path as first-run: lk.worksuite.DeviceAgent1.Enroll behind polkit. */
 function EnrollCard({ onEnrolled }: { onEnrolled: () => void }) {
   const [open, setOpen] = useState(false)
   const [server, setServer] = useState('')

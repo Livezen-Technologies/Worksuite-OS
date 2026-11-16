@@ -5,10 +5,11 @@
 // - "X quit unexpectedly": systemd-coredump's journal entries for this user's apps (MESSAGE_ID below), turned into
 //   the app's name and desktop id; technical fields go to the dialog's administrator details only;
 // - Settings › About › Diagnostics (administrators): this session's journal directly, the system journal and the
-//   "show boot details" boot entry through pkexec worksuite-diagnostics (polkit lk.worksuite.diagnostics).
+//   "show boot details" boot entry through lk.worksuite.Admin1.Journal/BootDetails (polkit lk.worksuite.diagnostics).
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import dbus from 'dbus-next'
+import { adminCall, type AdminCall, type AdminResult } from './adminBus'
 import type { DesktopEntry } from './xdg'
 
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
@@ -36,12 +37,13 @@ export const POWER_FORCE = '/usr/lib/worksuite/worksuite-power-force'
 
 /** "Restart anyway" / "Shut down anyway": at most ONE question, and none when logind allows it.
  *  1. logind without interaction (systemctl --no-ask-password), for when it allows it as it stands.
- *  2. Otherwise the root helper (polkit lk.worksuite.power-force, no password for the person at the desk). systemd 257's
+ *  2. Otherwise lk.worksuite.Admin1.ForcePower, which runs the root helper (polkit lk.worksuite.power-force, no password
+ *     for the person at the desk). systemd 257's
  *     logind obeys the caller's own "block" inhibitors too, so an ordinary user's "Restart anyway" past their own app
- *     needs it. The helper asks for an administrator once (lk.worksuite.power-force-admin, through our agent) only when
+ *     needs it. The service asks for an administrator once (lk.worksuite.power-force-admin, through our agent) only when
  *     other people are signed in or someone else's inhibitor blocks. systemctl itself asks polkit once per reason,
  *     which showed two administrator prompts in a row. */
-export async function forcePower(exec: Exec, action: string): Promise<{ ok: true; value: true } | { ok: false; error: string }> {
+export async function forcePower(admin: AdminCall, action: string): Promise<{ ok: true; value: true } | { ok: false; error: string }> {
   const a = powerArgs(action, true)
   if (!a || action === 'suspend') return { ok: false, error: 'invalid_argument' }
   // Straight to the helper (lk.worksuite.power-force, no password for the active local user): it restarts past the
@@ -49,8 +51,9 @@ export async function forcePower(exec: Exec, action: string): Promise<{ ok: true
   // `systemctl --check-inhibitors=no` as the user first could never succeed (systemd 257's logind obeys the caller's
   // own block inhibitors too). Logind's reboot-ignore-inhibit prompt came from the helper's root systemctl; root has
   // those logind actions in 50-worksuite-power.rules.
-  const r = await exec('pkexec', ['/usr/lib/worksuite/worksuite-power-force', a[0]])   // POWER_FORCE; a[0] is reboot|poweroff
-  return r.code === 0 ? { ok: true, value: true } : { ok: false, error: pkexecError(r.code) === 'failed' ? 'not_authorized' : pkexecError(r.code) }
+  const r = await admin('ForcePower', [a[0]])   // POWER_FORCE; a[0] is reboot|poweroff
+  if (!r.ok) return { ok: false, error: r.error === 'auth_cancelled' || r.error === 'unavailable' ? r.error : 'not_authorized' }
+  return r.code === 0 ? { ok: true, value: true } : { ok: false, error: 'not_authorized' }
 }
 
 export async function listInhibitors(bus: { getProxyObject: (n: string, p: string) => Promise<{ getInterface: (i: string) => { ListInhibitors(): Promise<unknown[][]> } }>; disconnect?: () => void } = dbus.systemBus()): Promise<Inhibitor[]> {
@@ -154,20 +157,21 @@ type Exec = (cmd: string, args: string[]) => Promise<{ code: number; stdout: str
 const realExec: Exec = (cmd, args) => new Promise((resolve) => execFile(cmd, args, { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 120_000 }, (err, stdout, stderr) =>
   resolve({ code: err ? (typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : 1) : 0, stdout: stdout ?? '', stderr: stderr ?? '' })))
 
-/** pkexec exit 126/127: the administrator prompt was dismissed or refused. */
-export function pkexecError(code: number): string {
-  return code === 126 ? 'auth_cancelled' : code === 127 ? 'not_authorized' : 'failed'
+/** An lk.worksuite.Admin1 answer → an error code: refused, dismissed, no service, or the helper failed. */
+export function adminFailure(r: AdminResult): string {
+  return r.ok ? 'failed' : r.error === 'invalid_argument' ? 'invalid_argument' : r.error
 }
 
-export function startSessionHost(handle: Handle, broadcast: Broadcast, o: { apps: () => DesktopEntry[]; user: string; readGroup: () => string; exec?: Exec; launch: (id: string) => unknown; watch?: boolean }) {
+export function startSessionHost(handle: Handle, broadcast: Broadcast, o: { apps: () => DesktopEntry[]; user: string; readGroup: () => string; exec?: Exec; admin?: AdminCall; launch: (id: string) => unknown; watch?: boolean }) {
   const exec = o.exec ?? realExec
+  const admin = o.admin ?? adminCall
   handle('ws:inhibitors', async (action) => {
     try {
       const all = await listInhibitors()
       return { ok: true, value: blockingInhibitors(all, (['shutdown', 'restart', 'logout'].includes(action) ? action : 'shutdown') as EndAction) }
     } catch { return { ok: false, error: 'service_unavailable' } }
   })
-  handle('ws:powerForce', (action) => forcePower(exec, action))
+  handle('ws:powerForce', (action) => forcePower(admin, action))
   // The main window runs the overlay; every display mirrors it.
   handle('ws:sessionEndState', (json) => {
     let s: unknown = null
@@ -184,14 +188,14 @@ export function startSessionHost(handle: Handle, broadcast: Broadcast, o: { apps
   })
   handle('ws:systemJournal', async (kind, lines) => {
     if (!['boot', 'previous', 'greeter'].includes(kind)) return { ok: false, error: 'invalid_argument' }
-    const r = await exec('pkexec', ['/usr/lib/worksuite/worksuite-diagnostics', 'journal', kind, String(clampLines(lines))])
-    return r.code === 0 ? { ok: true, value: r.stdout } : { ok: false, error: pkexecError(r.code) }
+    const r = await admin('Journal', [kind, clampLines(lines)])
+    return r.ok && r.code === 0 ? { ok: true, value: r.stdout } : { ok: false, error: adminFailure(r) }
   })
   handle('ws:bootDetails', async (op) => {
     if (!['status', 'on', 'off'].includes(op)) return { ok: false, error: 'invalid_argument' }
     // Reading the flag needs no administrator; changing it does.
     if (op === 'status') return { ok: true, value: existsSync(BOOT_DETAILS_FLAG) }
-    const r = await exec('pkexec', ['/usr/lib/worksuite/worksuite-diagnostics', 'boot-details', op])
-    return r.code === 0 ? { ok: true, value: r.stdout.trim() === 'on' } : { ok: false, error: pkexecError(r.code) }
+    const r = await admin('BootDetails', [op])
+    return r.ok && r.code === 0 ? { ok: true, value: r.stdout.trim() === 'on' } : { ok: false, error: adminFailure(r) }
   })
 }

@@ -32,6 +32,8 @@ check "shell profile allows the Wayland bridge" 'grep -q "peer=(name=lk.worksuit
 check "shell profile may own lk.worksuite.Shell1" 'grep -q "dbus (bind) bus=session name=lk.worksuite.Shell1" "$aa/worksuite-shell"'
 check "shell profile may run the pointer detection tools (#44)" 'grep -q "^  /usr/bin/{libinput,udevadm,labwc} ix," "$aa/worksuite-shell" && grep -q "^  /run/udev/data/\* r," "$aa/worksuite-shell"'
 check "shell profile may browse volumes under /mnt and run udisksctl (#63)" 'grep -q "^  owner /mnt/\*\* rwlk," "$aa/worksuite-shell" && grep -q "udisksctl" "$aa/worksuite-shell"'
+check "shell profile cannot run pkexec (WSOS-ARC-002: root work is lk.worksuite.Admin1)" '! grep -q "pkexec" "$aa/worksuite-shell"'
+check "admin bus runs only its five helpers" '[ "$(grep -cE "^  /usr/lib(exec)?/worksuite/[a-z-]+ Ux,\$" "$aa/worksuite-admin-bus")" = 5 ] && [ "$(grep -cE " [UPC]x," "$aa/worksuite-admin-bus")" = 5 ]'
 check "shell profile may run wlr-randr and wl-mirror (#60)" 'grep -q "^  /usr/bin/{wlr-randr,wl-mirror} ix," "$aa/worksuite-shell"'
 for p in "$aa"/*; do
   n=$(basename "$p")

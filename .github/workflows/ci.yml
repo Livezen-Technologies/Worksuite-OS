@@ -124,6 +124,7 @@ jobs:
       - run: cd services/session/kiosk && python3 -m unittest discover -s tests -t .
       - run: cd services/session/toasts && python3 -m unittest discover -s tests -t .
       - run: cd services/session/signin && python3 -m unittest discover -s tests -t .
+      - run: cd services/session/admin && python3 -m unittest discover -s tests -t .
       - run: cd services/session/polkit && python3 -m unittest discover -s tests -t .
       - run: cd services/session/osk && python3 -m unittest discover -s tests -t .
       - run: cd services/session/gestures && python3 -m unittest discover -s tests -t .

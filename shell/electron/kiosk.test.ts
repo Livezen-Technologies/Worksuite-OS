@@ -79,7 +79,12 @@ describe('web kiosk lockdown', () => {
 
 describe('kiosk app supervision and exit', () => {
   it('exit helper codes', () => {
-    expect([0, 3, 4, 5, 126, 127, 1, null].map(exitResult)).toEqual(['ok', 'wrong_pin', 'locked_out', 'pin_disabled', 'cancelled', 'cancelled', 'failed', 'failed'])
+    expect([0, 3, 4, 5, 1, 127].map((code) => exitResult({ ok: true, code, stdout: '' }))).toEqual(['ok', 'wrong_pin', 'locked_out', 'pin_disabled', 'failed', 'failed'])
+    // lk.worksuite.Admin1 errors: a dismissed administrator prompt, a polkit refusal, no service.
+    expect(exitResult({ ok: false, error: 'auth_cancelled' })).toBe('cancelled')
+    expect(exitResult({ ok: false, error: 'not_authorized' })).toBe('denied')
+    expect(exitResult({ ok: false, error: 'unavailable' })).toBe('failed')
+    expect(exitResult({ ok: false, error: 'invalid_argument' })).toBe('failed')
   })
   it('restart back-off', () => {
     expect([1, 2, 3, 6, 20].map(restartDelay)).toEqual([1000, 2000, 4000, 30_000, 30_000])

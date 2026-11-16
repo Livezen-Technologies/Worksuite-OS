@@ -1,6 +1,7 @@
 #!/bin/sh
 # Reinstall WorkSuite OS from the recovery image (SRS §9.2-R6). Installed as /usr/libexec/worksuite/worksuite-reinstall,
-# run as root (pkexec) from the recovery Reset screen.
+# run as root by lk.worksuite.Admin1.Reinstall (polkit lk.worksuite.recovery.reinstall, auth_admin) from the recovery
+# Reset screen.
 #
 #   worksuite-reinstall --mode keep  --disk NAME [--target DEV | --target-dir DIR] [--source SQUASHFS] [--no-bootloader]
 #   worksuite-reinstall --mode erase --disk NAME --confirm NAME

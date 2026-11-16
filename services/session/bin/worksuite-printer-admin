@@ -1,7 +1,7 @@
 #!/bin/sh
 # Settings › Printers administration (shell/electron/printers.ts) for people cupsd does not trust itself. cupsd only
 # lets its SystemGroup (lpadmin) list devices and add, remove, pause or resume printers; the live user and directory
-# accounts are not members, so the shell runs this helper as root through pkexec, polkit action lk.worksuite.printers
+# accounts are not members, so the shell asks lk.worksuite.Admin1.Printers to run this helper as root, polkit action lk.worksuite.printers
 # (members of lpadmin or sudo without a password, anyone else after an administrator's password).
 #   worksuite-printer-admin devices
 #   worksuite-printer-admin drivers id|mm VALUE

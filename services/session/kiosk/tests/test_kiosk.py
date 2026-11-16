@@ -62,7 +62,7 @@ class ExitHelper(unittest.TestCase):
             f.write(env_text if env_text is not None else "KIOSK_USER=%s\nKIOSK_EXIT_PIN=1\n" % user)
         with open(os.path.join(d, "verifier"), "w") as f:
             f.write(verifier)
-        env = {"PATH": d + "/stub:" + os.environ["PATH"], "PKEXEC_UID": str(os.getuid()), "WORKSUITE_KIOSK_ENV": d + "/session.env",
+        env = {"PATH": d + "/stub:" + os.environ["PATH"], "WORKSUITE_CALLER_UID": str(os.getuid()), "WORKSUITE_KIOSK_ENV": d + "/session.env",
                "WORKSUITE_KIOSK_VERIFIER": d + "/verifier", "WORKSUITE_KIOSK_THROTTLE": d + "/throttle.json", "LOG": d + "/log"}
         # The installed helper imports from /usr/lib/worksuite/kiosk; point it at the source tree.
         src = open(os.path.join(os.path.dirname(HERE), "worksuite-kiosk-exit")).read().replace('"/usr/lib/worksuite/kiosk"', repr(os.path.dirname(HERE)))
