@@ -28,7 +28,7 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-INT-012 portal backends | `services/session/portals/worksuite-portals.conf`, checked by `shell/electron/sessionConfig.test.ts` | Cfg + test |
 | WSOS-INT-003…006 Bluetooth pairing, drives, power profiles, printers | `shell/electron/peripherals.ts`, `shell/src/screens/PeripheralSettings.tsx` | Impl + tests |
 | WSOS-INT-007 notification server | `shell/electron/notifications.ts`, `shell/src/lib/appNotifications.ts` | Impl + D-Bus tests |
-| WSOS-INT-009 keyring unlock on sign-in | `libpam-gnome-keyring` (control), image hook check | Cfg + test |
+| WSOS-INT-009 keyring unlock on sign-in | `libpam-gnome-keyring` (control), image hook check, `worksuite-keyring` PAM profile, `gnome-keyring-daemon.service.d/worksuite-session-end.conf`, `worksuite-session` cleanup; `tests/session/keyring-resignin-test.sh` (implemented; VM/hardware sign-out/sign-in check outstanding) | Cfg + test |
 | WSOS-INT-011 input methods | `services/session/fcitx5/profile`, `worksuite-input-method.service`, `labwc/environment`, Settings input methods | Cfg + tests |
 | WSOS-INT-013 screen-sharing consent, indicator | `services/session/bin/worksuite-screencast-chooser`, `xdg-desktop-portal-wlr/config`, `shell/src/components/CaptureBadge.tsx` | Impl + tests |
 | WSOS-SYN-009 offline level | `services/server/src/db.ts` DEFAULT_WEB_APPS, `shell/src/lib/launcher.ts` | Impl + tests |
