@@ -1,0 +1,12 @@
+#!/usr/bin/python3 -I
+"""lk.worksuite.Admin1 (services/session/admin/worksuite_admin/bus.py), D-Bus activated as root.
+
+Installed as /usr/lib/worksuite/worksuite-admin-bus and confined by the AppArmor profile worksuite-admin-bus (attached
+by this path): it may run only the five fixed helpers. -I: no PYTHONPATH or user site.
+"""
+import sys
+
+sys.path.insert(0, "/usr/lib/worksuite/admin")
+from worksuite_admin.bus import serve_bus  # noqa: E402
+
+serve_bus()

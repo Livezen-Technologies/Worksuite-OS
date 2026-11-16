@@ -393,7 +393,7 @@ grep -qx 'DefaultTimeoutStopSec=10s' "$ROOT/services/session/systemd/user.conf.d
   && grep -q 'systemd.show_status=false' "$ROOT/branding/grub/worksuite.cfg" \
   && ok "user session stop timeout 10 s, no systemd status on the console" || bad "user session stop timeout 10 s, no systemd status on the console"
 
-# ---- administrators' diagnostics helper (pkexec, polkit auth_admin_keep) ----
+# ---- administrators' diagnostics helper (lk.worksuite.Admin1, polkit auth_admin_keep) ----
 D=$BIN/worksuite-diagnostics
 stub journalctl 'echo "journalctl $*"'
 stub update-grub 'echo update-grub >> "$LOG"'
@@ -410,7 +410,7 @@ check "boot details off" "$(sh "$D" boot-details off)/$(sh "$D" boot-details sta
 unset WORKSUITE_BOOT_DETAILS_FLAG
 P=$ROOT/services/session/polkit/lk.worksuite.diagnostics.policy
 grep -q '<allow_active>auth_admin_keep</allow_active>' "$P" && grep -q '<allow_any>no</allow_any>' "$P" \
-  && grep -q 'exec.path">/usr/lib/worksuite/worksuite-diagnostics<' "$P" \
+  && ! grep -q 'policykit.exec' "$P" \
   && grep -q '^services/session/polkit/lk.worksuite.diagnostics.policy usr/share/polkit-1/actions/$' "$ROOT/packaging/debian/worksuite-session.install" \
   && ok "diagnostics need an administrator (polkit)" || bad "diagnostics need an administrator (polkit)"
 
@@ -459,24 +459,24 @@ check "worksuite-power-force skips inhibitors as root" "$(cat "$LOG" | tr '\n' '
 : > "$LOG"; sh "$BIN/worksuite-power-force" 'reboot;id' 2>/dev/null; rc=$?
 check "worksuite-power-force refuses anything else" "$rc:$(cat "$LOG")" "2:"
 # systemd 257 logind obeys the caller's own "block" inhibitors: past those the helper needs no administrator; with
-# someone else's inhibitor or another person signed in it asks once (pkcheck, lk.worksuite.power-force-admin).
+# someone else's inhibitor or another person signed in it exits 10 and lk.worksuite.Admin1 asks once
+# (lk.worksuite.power-force-admin), then runs it again with WORKSUITE_ADMIN_AUTHORIZED=1.
 OWN='{"type":"a(ssssuu)","data":[[["shutdown:sleep","Backup","Copying","block",1001,42],["sleep","NM","x","delay",0,1]]]}'
 OTHER='{"type":"a(ssssuu)","data":[[["shutdown","Backup","Copying","block",1002,42]]]}'
 ME='[{"session":"8","uid":1001,"user":"bob","class":"user"},{"session":"9","uid":1001,"user":"bob","class":"manager"},{"session":"c1","uid":991,"user":"_greetd","class":"greeter"}]'
 ANA='[{"session":"8","uid":1001,"user":"bob","class":"user"},{"session":"3","uid":1000,"user":"ana","class":"user"}]'
 PY3=$(PATH=$(echo "$PATH" | sed "s|$T/stub:||") command -v python3)
-pf() {  # inhibitors sessions pkcheck-exit
-    stub python3 "exec $PY3 \"\$@\""; stub busctl "echo '$1'"; stub loginctl "echo '$2'"; stub pkcheck "echo \"pkcheck \$*\" | sed 's/--process [0-9]*/--process P/' >> \"\$LOG\"; exit $3"
-    : > "$LOG"; PKEXEC_UID=1001 sh "$BIN/worksuite-power-force" reboot; echo "rc=$?" >> "$LOG"
+pf() {  # inhibitors sessions [WORKSUITE_ADMIN_AUTHORIZED]
+    stub python3 "exec $PY3 \"\$@\""; stub busctl "echo '$1'"; stub loginctl "echo '$2'"
+    : > "$LOG"; WORKSUITE_CALLER_UID=1001 WORKSUITE_ADMIN_AUTHORIZED=${3:-} sh "$BIN/worksuite-power-force" reboot; echo "rc=$?" >> "$LOG"
     tr '\n' ';' < "$LOG"
 }
-PKC="pkcheck --action-id lk.worksuite.power-force-admin --process P --allow-user-interaction"
-check "power-force: own inhibitors only, no administrator" "$(pf "$OWN" "$ME" 1)" "systemctl reboot --no-wall --check-inhibitors=no --no-ask-password;rc=0;"
-check "power-force: another user's inhibitor asks an administrator" "$(pf "$OTHER" "$ME" 0)" "$PKC;systemctl reboot --no-wall --check-inhibitors=no --no-ask-password;rc=0;"
-check "power-force: another person signed in asks an administrator" "$(pf "$OWN" "$ANA" 0)" "$PKC;systemctl reboot --no-wall --check-inhibitors=no --no-ask-password;rc=0;"
-check "power-force: administrator prompt dismissed" "$(pf "$OTHER" "$ME" 3)" "$PKC;rc=126;"
-check "power-force: administrator refused" "$(pf "$OTHER" "$ME" 1)" "$PKC;rc=127;"
-check "power-force: logind unreadable counts as someone else" "$(pf "garbage" "$ME" 1)" "$PKC;rc=127;"
+check "power-force: own inhibitors only, no administrator" "$(pf "$OWN" "$ME")" "systemctl reboot --no-wall --check-inhibitors=no --no-ask-password;rc=0;"
+check "power-force: another user's inhibitor needs an administrator" "$(pf "$OTHER" "$ME")" "rc=10;"
+check "power-force: another person signed in needs an administrator" "$(pf "$OWN" "$ANA")" "rc=10;"
+check "power-force: logind unreadable counts as someone else" "$(pf "garbage" "$ME")" "rc=10;"
+check "power-force: after the administrator said yes" "$(pf "$OTHER" "$ME" 1)" "systemctl reboot --no-wall --check-inhibitors=no --no-ask-password;rc=0;"
+! grep -q 'pkcheck\|PKEXEC' "$BIN/worksuite-power-force" && ok "power-force: no pkexec/pkcheck left" || bad "power-force: no pkexec/pkcheck left"
 stub loginctl 'echo "loginctl $*" >> "$LOG"'
 stub python3 'case "$*" in *require_version*) exit 0;; esac; echo "python3 $* LD_PRELOAD=$LD_PRELOAD" >> "$LOG"'
 grep -q '<allow_active>yes</allow_active>' "$ROOT/services/session/polkit/lk.worksuite.power-force.policy" \

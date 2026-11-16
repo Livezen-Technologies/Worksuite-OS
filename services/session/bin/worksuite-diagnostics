@@ -1,5 +1,5 @@
 #!/bin/sh
-# Settings › About › Diagnostics (administrators only), run as root through pkexec, polkit action
+# Settings › About › Diagnostics (administrators only), run as root by lk.worksuite.Admin1.Journal/BootDetails, polkit action
 # lk.worksuite.diagnostics (auth_admin_keep: one administrator password covers a few minutes of use).
 #   worksuite-diagnostics journal boot|previous|greeter [LINES]   recent system journal, short-iso, no pager
 #   worksuite-diagnostics boot-details status|on|off               the "show boot details" GRUB entry

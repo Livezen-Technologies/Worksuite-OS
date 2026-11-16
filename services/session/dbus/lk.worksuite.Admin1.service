@@ -1,0 +1,5 @@
+# D-Bus system activation for lk.worksuite.Admin1 (exits after a minute idle with nothing running).
+[D-BUS Service]
+Name=lk.worksuite.Admin1
+Exec=/usr/lib/worksuite/worksuite-admin-bus
+User=root

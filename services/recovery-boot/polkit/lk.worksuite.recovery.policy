@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>WorkSuite</vendor>
+  <vendor_url>https://download.worksuitecloud.com</vendor_url>
+  <!-- Recovery › Reset (SRS §9.2-R6): lk.worksuite.Admin1.Reinstall runs worksuite-reinstall as root. An
+       administrator's password every time (not kept), as pkexec's own default asked before. -->
+  <action id="lk.worksuite.recovery.reinstall">
+    <description>Reinstall WorkSuite OS</description>
+    <message>An administrator's password is required to reinstall WorkSuite OS</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

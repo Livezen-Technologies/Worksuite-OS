@@ -1,5 +1,5 @@
 // Bridge of the kiosk exit prompt (electron/kioskExitPreload.ts). Absent outside the kiosk session.
-export type KioskExitResult = 'ok' | 'wrong_pin' | 'locked_out' | 'pin_disabled' | 'cancelled' | 'failed'
+export type KioskExitResult = 'ok' | 'wrong_pin' | 'locked_out' | 'pin_disabled' | 'cancelled' | 'denied' | 'failed'
 export interface KioskApi {
   info(): Promise<{ exitPin: boolean }>
   exitWithPin(pin: string): Promise<KioskExitResult>

@@ -1,9 +1,11 @@
 // Recovery screens → host. Read-only probes with fixed arguments (lsblk, findmnt, systemctl), the package
 // service for package repair and update state, and udisks for unlocking a LUKS volume (polkit asks for rights).
-// Reinstall runs worksuite-reinstall through pkexec (SRS §9.2-R6). Snapshots, copy-to-USB, a root terminal and saving reports have no service yet: they answer
+// Reinstall is lk.worksuite.Admin1.Reinstall (polkit lk.worksuite.recovery.reinstall, auth_admin; SRS §9.2-R6), which runs
+// worksuite-reinstall as root. Snapshots, copy-to-USB, a root terminal and saving reports have no service yet: they answer
 // `unavailable` so the screens can say so. The recovery key/passphrase is only ever written to udisksctl's stdin.
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
+import { adminCall, type AdminCall } from './adminBus'
 
 type Reply<T> = { ok: true; value: T } | { ok: false; error: string }
 export type Exec = (cmd: string, args: string[], timeoutMs?: number) => Promise<{ code: number; stdout: string; stderr: string }>
@@ -87,14 +89,14 @@ const UDISKSCTL = '/usr/bin/udisksctl'
 export const REINSTALL = '/usr/libexec/worksuite/worksuite-reinstall'
 /** Recovery images worksuite-reinstall reads; reinstalling is offered only when booted from one (live ISO or recovery). */
 export const RECOVERY_IMAGES = ['/run/live/medium/live/filesystem.squashfs', '/usr/share/worksuite/recovery/filesystem.squashfs']
-const REINSTALL_ERRORS: Record<number, string> = { 2: 'invalid_argument', 3: 'confirm_mismatch', 4: 'no_image', 5: 'no_system', 7: 'running_system', 126: 'not_authorized', 127: 'not_authorized' }
+const REINSTALL_ERRORS: Record<number, string> = { 2: 'invalid_argument', 3: 'confirm_mismatch', 4: 'no_image', 5: 'no_system', 7: 'running_system', 127: 'unavailable' }
 
 export interface PackageProbe {
   checkUpdates(): Promise<Reply<{ state: string }>>
   updateStatus(check?: boolean): Promise<Reply<unknown>>
 }
 
-export function recoveryHost(pkg: PackageProbe, host: Host = realHost) {
+export function recoveryHost(pkg: PackageProbe, host: Host = realHost, admin: AdminCall = adminCall) {
   const blk = async () => { const r = await host.exec('lsblk', LSBLK); return r.code === 0 ? parseLsblk(r.stdout) : [] }
 
   return {
@@ -169,8 +171,11 @@ export function recoveryHost(pkg: PackageProbe, host: Host = realHost) {
       const disk = rootDisk(await blk()) ?? installedDisk(await blk())
       if (!disk) return { ok: false, error: 'not_found' }
       if (mode === 'erase' && confirm.trim() !== disk) return { ok: false, error: 'confirm_mismatch' }
-      const args = [REINSTALL, '--mode', mode, '--disk', disk, ...(mode === 'erase' ? ['--confirm', confirm.trim()] : [])]
-      const r = await host.exec('pkexec', args, 2 * 60 * 60_000)   // reimaging takes minutes
+      // Only these options: the service rejects anything else (and checks the disk and the confirmation again).
+      const options: Record<string, string> = { mode, disk, ...(mode === 'erase' ? { confirm: confirm.trim() } : {}) }
+      const r = await admin('Reinstall', [options])
+      // Denied → not_authorized, prompt dismissed → auth_cancelled; nothing ran in either case.
+      if (!r.ok) return { ok: false, error: r.error }
       if (r.code === 0) return { ok: true, value: true }
       return { ok: false, error: REINSTALL_ERRORS[r.code] ?? 'failed' }
     },

@@ -62,7 +62,7 @@ verifier, then runs `worksuite-kiosk-apply enable USER` through systemd-run: loc
 kiosk account to `worksuite-kiosk-session` (Labwc with only the exit binding, Ctrl+Alt+Shift+K; XKB `srvrkeys:none`;
 app data wiped at start and end) → `worksuite-kiosk-start` (polkit agent, on-screen keyboard hook `worksuite-osk`,
 swayidle idle reset, the kiosk app `shell/dist-electron/kiosk.cjs` restarted when it exits). Exit: Ctrl+Alt+Shift+K
-or five taps top-left → exit prompt → `pkexec worksuite-kiosk-exit --pin` (PIN on stdin, verifier, 5 tries per
-15 min) or `--admin` (polkit auth_admin) → the kiosk session ends and the greeter shows; `worksuite-kiosk-signin`
+or five taps top-left → exit prompt → `lk.worksuite.Admin1.KioskExit` (`services/session/admin`), which runs
+`worksuite-kiosk-exit --pin` (PIN on stdin, verifier, 5 tries per 15 min) or `--admin` (polkit auth_admin) → the kiosk session ends and the greeter shows; `worksuite-kiosk-signin`
 (PAM, greetd only) lets just the kiosk account and administrators sign in there. Tests: `tests/session/kiosk-test.sh`,
 `python3 -m unittest discover -s services/session/kiosk -t services/session/kiosk`.

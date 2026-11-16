@@ -161,7 +161,7 @@ export interface WorkSuiteApi {
   /** Settings › Users: accounts on this computer (electron/users.ts). */
   sysUsers(): Promise<Avail<{ current: string; users: LocalUser[] }>>
   /** Settings › Users › Sign-in options: this device's PIN and security keys (electron/signin.ts). Changes go
-   *  through pkexec (the person types their password); the PIN travels on stdin only. */
+   *  through lk.worksuite.SignIn1 (polkit: the person types their password); the PIN is never on a command line. */
   signinMethods(): Promise<Avail<SignInMethods>>
   signinPinSet(pin: string): Promise<SigninResult>
   signinPinRemove(): Promise<SigninResult>

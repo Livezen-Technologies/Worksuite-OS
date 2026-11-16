@@ -143,6 +143,7 @@ export function recoveryErrorText(code: string): string {
     case 'unavailable': return t('rec.err.unavailable')
     case 'wrong_key': return t('rec.err.wrongKey')
     case 'not_authorized': return t('rec.err.notAuthorized')
+    case 'auth_cancelled': return t('rec.err.cancelled')
     case 'not_found': return t('rec.err.notFound')
     case 'already_unlocked': return t('rec.err.alreadyUnlocked')
     case 'service_unavailable': return t('rec.err.service')

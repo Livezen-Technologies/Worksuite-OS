@@ -124,7 +124,7 @@ Description: WorkSuite directory sign-in and break-glass admin
 
 Package: worksuite-recovery-boot
 Architecture: all
-Depends: worksuite-shell, worksuite-session, cage, grub-common, dpkg, apt, systemd, passwd, squashfs-tools, util-linux, pkexec, ${misc:Depends}
+Depends: worksuite-shell, worksuite-session, cage, grub-common, dpkg, apt, systemd, passwd, squashfs-tools, util-linux, polkitd, ${misc:Depends}
 Description: WorkSuite Recovery boot entry, previous-kernel retention and boot-time repair
  Adds the "WorkSuite Recovery" and "previous kernel" GRUB entries, keeps the
  previous kernel from apt autoremove, boots worksuite-recovery.target into

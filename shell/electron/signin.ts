@@ -99,7 +99,7 @@ export function busMessage(c: NonNullable<ReturnType<typeof busCall>>) {
   })
 }
 
-/** Status like the old pkexec runner: 0 with the JSON result, 126 when polkit refused, -1 when the service is missing. */
+/** Status as the old elevated runner reported it: 0 with the JSON result, 126 when polkit refused, -1 when the service is missing. */
 const busRunner: Runner = async (args, stdin) => {
   const c = busCall(args, stdin)
   if (!c) return { status: 1, out: '{"ok":false,"error":"bad_request"}' }

@@ -1,6 +1,7 @@
 // Settings › Printers (WSOS-INT-006, issue #51) against recorded CUPS output. The regression this guards: on the
 // tester's laptop cupsd answered "lpinfo: Forbidden" / "lpadmin: Forbidden" because the signed-in person was not in
 // its lpadmin group, so nothing could be found or added; the bridge now goes through the polkit-gated helper.
+import type { AdminCall, AdminResult } from './adminBus'
 import { describe, expect, it } from 'vitest'
 import {
   PRINTER_ADMIN, TEST_PAGE, cupsError, driverId, parseDrivers, parseJobs, parseLpinfo, parseLpoptions, parseOptions, parsePrinters,
@@ -119,21 +120,32 @@ describe('printers bridge', () => {
     expect(r.available && r.value).toHaveLength(2)
     expect(calls).toEqual(['lpinfo --timeout 10 -l -v'])
   })
-  it('falls back to pkexec worksuite-printer-admin when cupsd says Forbidden (issue #51)', async () => {
-    const { exec, calls } = fakeExec({ 'lpadmin': { code: 1, stderr: 'lpadmin: Forbidden\n' }, 'pkexec': { code: 0 }, 'lpstat -p': { code: 1 } })
-    const b = printersBridge(exec)
+  const bus = (r: AdminResult) => {
+    const calls: [string, unknown[]][] = []
+    const admin: AdminCall = async (m, body) => { calls.push([m, body]); return r }
+    return { admin, calls }
+  }
+  it('falls back to lk.worksuite.Admin1.Printers when cupsd says Forbidden (issue #51)', async () => {
+    const { exec, calls } = fakeExec({ 'lpadmin': { code: 1, stderr: 'lpadmin: Forbidden\n' }, 'lpstat -p': { code: 1 } })
+    const a = bus({ ok: true, code: 0, stdout: '' })
+    const b = printersBridge(exec, a.admin)
     expect(await b.addPrinter('usb://Brother/HL?serial=1', 'Brother HL', 'drv:///brlaser.drv/br2350.ppd')).toEqual({ available: true, value: 'Brother_HL' })
     expect(calls).toEqual([
       'lpstat -p Brother_HL',
       'lpadmin -p Brother_HL -E -v usb://Brother/HL?serial=1 -m drv:///brlaser.drv/br2350.ppd -D Brother HL',
-      `pkexec ${PRINTER_ADMIN} add Brother_HL usb://Brother/HL?serial=1 drv:///brlaser.drv/br2350.ppd Brother HL`,
     ])
+    expect(a.calls).toEqual([['Printers', [['add', 'Brother_HL', 'usb://Brother/HL?serial=1', 'drv:///brlaser.drv/br2350.ppd', 'Brother HL']]]])
+    expect(calls.some((c) => c.includes(PRINTER_ADMIN))).toBe(false)
   })
-  it('reports a dismissed or refused administrator prompt', async () => {
-    const dismissed = fakeExec({ 'lpinfo': { code: 1, stderr: 'lpinfo: Forbidden' }, 'pkexec': { code: 126 } })
-    expect(await printersBridge(dismissed.exec).findPrinters()).toEqual({ available: false, reason: 'auth_cancelled' })
-    const refused = fakeExec({ 'cupsdisable': { code: 1, stderr: 'cupsdisable: Forbidden' }, 'pkexec': { code: 127 } })
-    expect(await printersBridge(refused.exec).pausePrinter('Office', true)).toEqual({ available: false, reason: 'not_authorized' })
+  it('reports a dismissed or refused administrator prompt, and CUPS\'s reason when the helper fails', async () => {
+    const dismissed = fakeExec({ 'lpinfo': { code: 1, stderr: 'lpinfo: Forbidden' } })
+    expect(await printersBridge(dismissed.exec, bus({ ok: false, error: 'auth_cancelled' }).admin).findPrinters()).toEqual({ available: false, reason: 'auth_cancelled' })
+    const refused = fakeExec({ 'cupsdisable': { code: 1, stderr: 'cupsdisable: Forbidden' } })
+    expect(await printersBridge(refused.exec, bus({ ok: false, error: 'not_authorized' }).admin).pausePrinter('Office', true)).toEqual({ available: false, reason: 'not_authorized' })
+    const gone = fakeExec({ 'lpinfo': { code: 1, stderr: 'lpinfo: Forbidden' } })
+    expect(await printersBridge(gone.exec, bus({ ok: true, code: 1, stdout: 'lpinfo: scheduler is not running\n' }).admin).findPrinters()).toEqual({ available: false, reason: 'service_unavailable' })
+    // No service: the direct call's own answer stands.
+    expect(await printersBridge(gone.exec, bus({ ok: false, error: 'unavailable' }).admin).findPrinters()).toEqual({ available: false, reason: 'not_authorized' })
   })
   it('needs a driver for JetDirect/LPD/USB; IPP printers are driverless', async () => {
     const { exec, calls } = fakeExec({ 'lpstat -p': { code: 1 } })

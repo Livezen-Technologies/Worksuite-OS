@@ -14,6 +14,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { adminCall } from './adminBus'
 import { blockedKey, desktopExecArgv, exitResult, isExitGesture, KIOSK_CONFIG, kioskWebPreferences, parseKioskConfig, restartDelay, screenState, urlAllowlist, type ExitResult, type KioskConfig } from './kiosk'
 import { shellWebPreferences } from './webSecurity'
 import { execProgram, findWorkSuiteDesktop, installedApps } from './xdg'
@@ -216,14 +217,11 @@ function showExitPrompt() {
   void exitWin.loadFile(INDEX, { query: { mode: 'kiosk-exit' } })
 }
 
-/** Runs the root helper through pkexec; the PIN goes on stdin, never on a command line. */
-function runExit(mode: '--pin' | '--admin', pin?: string): Promise<ExitResult> {
-  return new Promise((resolve) => {
-    const p = spawn('pkexec', ['/usr/lib/worksuite/worksuite-kiosk-exit', mode], { stdio: ['pipe', 'ignore', 'ignore'] })
-    p.on('error', () => resolve('failed'))
-    p.on('exit', (code) => resolve(exitResult(code)))
-    p.stdin!.end(pin ? pin + '\n' : '')
-  })
+/** lk.worksuite.Admin1.KioskExit (polkit lk.worksuite.kiosk.exit-pin / exit-admin): the service runs the root helper
+ *  for this session's user, taken from the bus; the PIN is a D-Bus argument that reaches the helper on stdin only. */
+async function runExit(mode: 'pin' | 'admin', pin = ''): Promise<ExitResult> {
+  if (mode === 'pin' && !/^[0-9]{4,12}$/.test(pin)) return 'wrong_pin'
+  return exitResult(await adminCall('KioskExit', [mode, mode === 'pin' ? pin : '']))
 }
 
 const fromPrompt = (e: IpcMainInvokeEvent) => !!exitWin && !exitWin.isDestroyed() && e.sender === exitWin.webContents
@@ -258,9 +256,9 @@ app.whenReady().then(() => {
   ipcMain.handle('kiosk:exitPin', async (e, pin: unknown) => {
     if (!fromPrompt(e)) return 'failed'
     if (typeof pin !== 'string' || !/^\d{6,12}$/.test(pin)) return 'wrong_pin'
-    return leave(await runExit('--pin', pin))
+    return leave(await runExit('pin', pin))
   })
-  ipcMain.handle('kiosk:exitAdmin', async (e) => (fromPrompt(e) ? leave(await runExit('--admin')) : 'failed'))
+  ipcMain.handle('kiosk:exitAdmin', async (e) => (fromPrompt(e) ? leave(await runExit('admin')) : 'failed'))
   ipcMain.handle('kiosk:cancel', (e) => { if (fromPrompt(e)) exitWin?.destroy() })
 
   if (!cfg) { main = statusWindow('unavailable'); return }

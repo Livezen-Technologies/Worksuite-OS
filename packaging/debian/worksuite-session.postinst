@@ -17,6 +17,11 @@ if [ "$1" = configure ]; then
   systemctl enable worksuite-signin.socket >/dev/null 2>&1 || true
   if [ -d /run/systemd/system ]; then systemctl start worksuite-signin.socket >/dev/null 2>&1 || true; fi
   if command -v systemd-tmpfiles >/dev/null 2>&1; then systemd-tmpfiles --create /usr/lib/tmpfiles.d/worksuite-session.conf || true; fi
+  # lk.worksuite.Admin1 (WSOS-ARC-002, WSOS-SEC-009): (re)load its AppArmor profile now; apparmor.service loads it on
+  # every boot. D-Bus activation starts it on the first call, so there is nothing to enable.
+  if command -v apparmor_parser >/dev/null && aa-enabled --quiet 2>/dev/null; then
+    apparmor_parser -r -T -W /etc/apparmor.d/worksuite-admin-bus || true
+  fi
 fi
 #DEBHELPER#
 exit 0

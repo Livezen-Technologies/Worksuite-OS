@@ -5,16 +5,18 @@
 // On a real machine the administrative calls (lpinfo -v, lpadmin, cupsenable/cupsdisable) are CUPS-Get-Devices /
 // CUPS-Add-Modify-Printer requests that cupsd only allows the SystemGroup (lpadmin) to make. The live user and
 // directory accounts are not in that group, so they got "Forbidden" and nothing could be added. These calls now run
-// directly first (no prompt for members of lpadmin), and on "Forbidden" through pkexec worksuite-printer-admin
-// (polkit lk.worksuite.printers: lpadmin/sudo members without a password, anyone else after an administrator says yes).
+// directly first (no prompt for members of lpadmin), and on "Forbidden" through lk.worksuite.Admin1.Printers, which runs
+// worksuite-printer-admin as root (polkit lk.worksuite.printers: lpadmin/sudo members without a password, anyone else
+// after an administrator says yes).
 // Per-user settings (default printer, preferences) are lpoptions in ~/.cups and need no administrator.
 import { execFile } from 'node:child_process'
+import { adminCall, type AdminCall } from './adminBus'
 import type { Avail, Exec } from './system'
 
 export const PRINTER_ADMIN = '/usr/lib/worksuite/worksuite-printer-admin'
 export const TEST_PAGE = '/usr/share/cups/data/testprint'
 
-/** Exec with the real exit status (pkexec reports a dismissed prompt as 126, refused as 127) and time for lpinfo. */
+/** Exec with the real exit status and time for lpinfo. */
 export const printerExec: Exec = (cmd, args) => new Promise((resolve) => {
   execFile(cmd, args, { timeout: 60_000, env: { ...process.env, LC_ALL: 'C' } }, (err, stdout, stderr) => {
     const e = err as (NodeJS.ErrnoException & { code?: unknown }) | null
@@ -207,17 +209,20 @@ export function cupsDetail(text: string): string | undefined {
 /** A queue IPP Everywhere could not set up properly: CUPS leaves a raw queue that prints unrendered data (#51). */
 export const isRawQueue = (lpoptions: string) => /printer-make-and-model='?Local Raw Printer/i.test(lpoptions)
 
-export function printersBridge(exec: Exec = printerExec) {
-  /** An administrative CUPS call: directly (lpadmin group), then through the polkit-gated helper on "Forbidden". */
+export function printersBridge(exec: Exec = printerExec, adminBus: AdminCall = adminCall) {
+  /** An administrative CUPS call: directly (lpadmin group), then lk.worksuite.Admin1.Printers on "Forbidden". */
   async function admin(cmd: string, args: string[], helper: string[]): Promise<Run> {
     const r = await exec(cmd, args)
     if (r.code === 0 || r.missing || cupsError(r.stderr + r.stdout) !== 'not_authorized') return r
-    const p = await exec('pkexec', ['/usr/lib/worksuite/worksuite-printer-admin', ...helper])   // PRINTER_ADMIN
-    if (p.missing) return r
-    // pkexec: 126 = the administrator prompt was dismissed, 127 = not authorised.
-    if (p.code === 126) return { ...p, stderr: 'auth_cancelled' }
-    if (p.code === 127) return { ...p, stderr: 'Forbidden' }
-    return p
+    const p = await adminBus('Printers', [helper])
+    if (!p.ok) {
+      if (p.error === 'unavailable') return r
+      // A dismissed administrator prompt, or polkit said no ("Forbidden" reads as not_authorized).
+      return { code: 1, stdout: '', stderr: p.error === 'auth_cancelled' ? 'auth_cancelled' : 'Forbidden' }
+    }
+    if (p.code === 127) return r   // the helper is not installed
+    // On failure the service answers with CUPS's own message, for cupsError()/cupsDetail().
+    return p.code === 0 ? { code: 0, stdout: p.stdout, stderr: '' } : { code: p.code, stdout: '', stderr: p.stdout }
   }
   const adminFail = (r: Run, tool: string) => (r.stderr === 'auth_cancelled' ? fail('auth_cancelled') : failRun(r, tool))
 

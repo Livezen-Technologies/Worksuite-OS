@@ -60,7 +60,7 @@ describe('sign-in methods (electron/signin.ts)', () => {
     expect(await h.keyRemove('../etc')).toEqual({ ok: false, error: 'bad_request' })
     expect(ran).toBe(0)
   })
-  it('maps pkexec dismissal and helper errors', async () => {
+  it('maps polkit dismissal and helper errors', async () => {
     expect(await signinHost(async () => ({ status: 126, out: '' }), paths({})).pinRemove()).toEqual({ ok: false, error: 'auth_cancelled' })
     expect(await signinHost(async () => ({ status: 1, out: '{"ok":false,"error":"too_simple"}' }), paths({})).pinSet('123456')).toEqual({ ok: false, error: 'too_simple' })
     expect(await signinHost(async () => ({ status: 1, out: '{"ok":false,"error":"<script>"}' }), paths({})).pinRemove()).toEqual({ ok: false, error: 'failed' })

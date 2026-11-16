@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { AdminCall, AdminResult } from './adminBus'
 import { installedDisk, luksDevices, osVersion, parseLsblk, RECOVERY_IMAGES, recoveryHost, REINSTALL, rootDisk, type Host } from './recovery'
 
 const tree = (unlocked: boolean) => JSON.stringify({ blockdevices: [
@@ -80,23 +81,35 @@ describe('recovery host', () => {
 
 describe('reinstall (SRS §9.2-R6)', () => {
   const lsblk = { lsblk: { stdout: tree(true) } }
-  it('keep runs worksuite-reinstall through pkexec without any erase confirmation', async () => {
+  const fakeAdmin = (r: AdminResult = { ok: true, code: 0, stdout: '' }) => {
+    const calls: [string, unknown[]][] = []
+    const admin: AdminCall = async (m, body) => { calls.push([m, body]); return r }
+    return { admin, calls }
+  }
+  it('keep calls lk.worksuite.Admin1.Reinstall without any erase confirmation', async () => {
     const h = fakeHost(lsblk)
-    expect(await recoveryHost(pkg, h.host).reinstall('keep', '')).toEqual({ ok: true, value: true })
-    expect(h.calls.at(-1)).toEqual(['pkexec', REINSTALL, '--mode', 'keep', '--disk', 'vda'])
+    const a = fakeAdmin()
+    expect(await recoveryHost(pkg, h.host, a.admin).reinstall('keep', '')).toEqual({ ok: true, value: true })
+    expect(a.calls).toEqual([['Reinstall', [{ mode: 'keep', disk: 'vda' }]]])
+    expect(h.calls.some((c) => c[0] === REINSTALL)).toBe(false)
   })
-  it('erase needs the disk name typed, and passes it on for the script to check again', async () => {
+  it('erase needs the disk name typed, and passes it on for the service and the script to check again', async () => {
     const h = fakeHost(lsblk)
-    expect(await recoveryHost(pkg, h.host).reinstall('erase', 'vdb')).toEqual({ ok: false, error: 'confirm_mismatch' })
-    expect(h.calls.some((c) => c[0] === 'pkexec')).toBe(false)
-    expect(await recoveryHost(pkg, h.host).reinstall('erase', ' vda ')).toEqual({ ok: true, value: true })
-    expect(h.calls.at(-1)).toEqual(['pkexec', REINSTALL, '--mode', 'erase', '--disk', 'vda', '--confirm', 'vda'])
+    const a = fakeAdmin()
+    expect(await recoveryHost(pkg, h.host, a.admin).reinstall('erase', 'vdb')).toEqual({ ok: false, error: 'confirm_mismatch' })
+    expect(a.calls).toEqual([])
+    expect(await recoveryHost(pkg, h.host, a.admin).reinstall('erase', ' vda ')).toEqual({ ok: true, value: true })
+    expect(a.calls).toEqual([['Reinstall', [{ mode: 'erase', disk: 'vda', confirm: 'vda' }]]])
   })
-  it('maps script exit codes and refuses unknown modes', async () => {
-    const h = fakeHost({ ...lsblk, pkexec: { code: 4 } })
-    expect(await recoveryHost(pkg, h.host).reinstall('keep', '')).toEqual({ ok: false, error: 'no_image' })
-    expect(await recoveryHost(pkg, fakeHost({ ...lsblk, pkexec: { code: 126 } }).host).reinstall('keep', '')).toEqual({ ok: false, error: 'not_authorized' })
-    expect(await recoveryHost(pkg, h.host).reinstall('wipe', '')).toEqual({ ok: false, error: 'invalid_argument' })
+  it('maps script exit codes, denied and dismissed prompts, and refuses unknown modes', async () => {
+    const h = fakeHost(lsblk)
+    expect(await recoveryHost(pkg, h.host, fakeAdmin({ ok: true, code: 4, stdout: '' }).admin).reinstall('keep', '')).toEqual({ ok: false, error: 'no_image' })
+    expect(await recoveryHost(pkg, h.host, fakeAdmin({ ok: false, error: 'not_authorized' }).admin).reinstall('keep', '')).toEqual({ ok: false, error: 'not_authorized' })
+    expect(await recoveryHost(pkg, h.host, fakeAdmin({ ok: false, error: 'auth_cancelled' }).admin).reinstall('keep', '')).toEqual({ ok: false, error: 'auth_cancelled' })
+    expect(await recoveryHost(pkg, h.host, fakeAdmin({ ok: false, error: 'unavailable' }).admin).reinstall('keep', '')).toEqual({ ok: false, error: 'unavailable' })
+    const a = fakeAdmin()
+    expect(await recoveryHost(pkg, h.host, a.admin).reinstall('wipe', '')).toEqual({ ok: false, error: 'invalid_argument' })
+    expect(a.calls).toEqual([])
   })
   it('is offered only with the script and a recovery image present', async () => {
     const none = fakeHost(lsblk, { exists: (p) => p !== REINSTALL })

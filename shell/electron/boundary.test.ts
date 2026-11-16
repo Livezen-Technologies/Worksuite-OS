@@ -26,26 +26,31 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
     }
   })
 
-  it('elevates only through the kiosk-exit helper; enrollment and sign-in methods are D-Bus methods behind polkit', () => {
-    const elevations: string[] = []
-    for (const [f, s] of all) {
-      expect(s, f).not.toMatch(/['"`](sudo|doas|su|runuser|setpriv)['"`]\s*,/)
-      for (const m of s.matchAll(/['"`]pkexec['"`]\s*,\s*\[\s*'([^']+)'/g)) elevations.push(`${f}:${m[1]}`)
-      // pkexec with a computed program would make it a general runner
-      expect(s, f).not.toMatch(/['"`]pkexec['"`]\s*,\s*\[\s*[^'\s]/)
-    }
-    // kioskMain.ts: leaving kiosk mode (PIN or administrator password, polkit lk.worksuite.kiosk.exit-*).
-    // Enrollment is lk.worksuite.DeviceAgent1.Enroll (polkit lk.worksuite.device.enroll, WSOS-ARC-002), not pkexec.
+  it('never elevates itself: every root operation is a named D-Bus method behind polkit (WSOS-ARC-002)', () => {
+    for (const [f, s] of all) expect(s, f).not.toMatch(/['"`](sudo|doas|su|runuser|setpriv)['"`]\s*,/)
+    // No p-k-e-x-e-c anywhere in the shell (spelled apart below so this file passes its own check): not in the main process,
+    // its tests, or the renderer, not even in a comment.
+    const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(path.join(d, e.name)) : /\.(ts|tsx|js|cjs|mjs)$/.test(e.name) ? [path.join(d, e.name)] : [])
+    const files = [...walk(dir), ...walk(path.join(repo, 'shell/src'))]
+    expect(files.length).toBeGreaterThan(50)
+    const banned = new RegExp('pk' + 'exec', 'i')
+    for (const f of files) expect(readFileSync(f, 'utf8'), f).not.toMatch(banned)
+    // Kiosk exit, Recovery › Reinstall, printer administration, "Restart anyway" and Diagnostics: lk.worksuite.Admin1,
+    // one polkit action per method (services/session/admin/worksuite_admin/bus.py).
+    expect(read('adminBus.ts')).toMatch(/destination: 'lk\.worksuite\.Admin1', path: '\/lk\/worksuite\/Admin1', interface: 'lk\.worksuite\.Admin1'/)
+    expect(read('kioskMain.ts')).toMatch(/adminCall\('KioskExit', /)
+    expect(read('recovery.ts')).toMatch(/admin\('Reinstall', \[options\]\)/)
+    expect(read('printers.ts')).toMatch(/adminBus\('Printers', \[helper\]\)/)
+    expect(read('sessionHost.ts')).toMatch(/admin\('ForcePower', /)
+    expect(read('sessionHost.ts')).toMatch(/admin\('Journal', /)
+    expect(read('sessionHost.ts')).toMatch(/admin\('BootDetails', /)
+    // Enrollment is lk.worksuite.DeviceAgent1.Enroll (polkit lk.worksuite.device.enroll).
     expect(all.find(([f]) => f === 'device.ts')?.[1]).toMatch(/getInterface\('lk\.worksuite\.DeviceAgent1'\)\.Enroll\(/)
     // Sign-in methods are lk.worksuite.SignIn1 methods (polkit lk.worksuite.signin.manage).
     expect(all.find(([f]) => f === 'signin.ts')?.[1]).toMatch(/interface: 'lk\.worksuite\.SignIn1'/)
-    // sessionHost.ts: Settings › About › Diagnostics, the system journal and the boot-details entry, through the fixed
-    // helper behind polkit lk.worksuite.diagnostics (auth_admin_keep); its arguments are checked there and here.
-    // "Restart anyway": always the fixed helper behind lk.worksuite.power-force, which
-    // accepts only reboot|poweroff (tests/session/session-test.sh).
-    // printers.ts: Settings › Printers when cupsd refuses the person, the fixed helper behind lk.worksuite.printers;
-    // it re-checks every argument (tests/session/printer-admin.test.sh).
-    expect(elevations.sort()).toEqual(['kioskMain.ts:/usr/lib/worksuite/worksuite-kiosk-exit', 'printers.ts:/usr/lib/worksuite/worksuite-printer-admin', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics', 'sessionHost.ts:/usr/lib/worksuite/worksuite-diagnostics', 'sessionHost.ts:/usr/lib/worksuite/worksuite-power-force'])
+    // No main-process source names a root helper to run itself: the service owns those paths.
+    for (const [f, s] of all) expect(s, f).not.toMatch(/['"`]\/usr\/(lib|libexec)\/worksuite\/worksuite-(kiosk-exit|reinstall|printer-admin|power-force|diagnostics)['"`]\s*,\s*\[/)
   })
 
   it('every IPC handler goes through the sender check', () => {

@@ -1,6 +1,7 @@
 // electron/sessionHost.ts: inhibitors, forced power, crashed apps, administrator check, diagnostics IPC.
 import { describe, expect, it, vi } from 'vitest'
-import { COREDUMP_MESSAGE_ID, CRASH_JOURNAL_ARGS, appIdFromScope, blockingInhibitors, clampLines, crashDeduper, crashFromJournal, forcePower, isAdminUser, listInhibitors, pkexecError, powerArgs, startSessionHost } from './sessionHost'
+import type { AdminCall, AdminResult } from './adminBus'
+import { COREDUMP_MESSAGE_ID, CRASH_JOURNAL_ARGS, appIdFromScope, blockingInhibitors, clampLines, crashDeduper, crashFromJournal, forcePower, isAdminUser, listInhibitors, adminFailure, powerArgs, startSessionHost } from './sessionHost'
 import type { DesktopEntry } from './xdg'
 
 const app = (id: string, name: string, exec: string): DesktopEntry => ({ id, name, exec, generic_name: null, comment: null, icon: null, categories: [], keywords: [], mime_types: [] })
@@ -70,44 +71,50 @@ describe('administrators and diagnostics', () => {
     expect(isAdminUser('ayesha', group)).toBe(false)
     expect(isAdminUser('syslog', group)).toBe(false)
   })
-  it('line counts are bounded numbers; pkexec refusals are named', () => {
+  it('line counts are bounded numbers; polkit refusals are named', () => {
     expect(clampLines('50')).toBe(50)
     expect(clampLines('999999')).toBe(5000)
     expect(clampLines('0')).toBe(1)
     expect(clampLines('5; rm -rf /')).toBe(500)
-    expect(pkexecError(126)).toBe('auth_cancelled')
-    expect(pkexecError(127)).toBe('not_authorized')
+    expect(adminFailure({ ok: false, error: 'auth_cancelled' })).toBe('auth_cancelled')
+    expect(adminFailure({ ok: false, error: 'not_authorized' })).toBe('not_authorized')
+    expect(adminFailure({ ok: true, code: 2, stdout: '' })).toBe('failed')
   })
-  it('system logs and boot details go through pkexec and the helper, with fixed arguments', async () => {
+  it('system logs and boot details go through lk.worksuite.Admin1, with fixed arguments', async () => {
     const handlers = new Map<string, (...a: string[]) => unknown>()
-    const exec = vi.fn(async (cmd: string, args: string[]) => ({ code: cmd === 'pkexec' && args.includes('previous') ? 126 : 0, stdout: 'log line\n', stderr: '' }))
-    startSessionHost((c, fn) => handlers.set(c, fn), () => {}, { apps: () => [], user: 'nimali', readGroup: () => group, exec, launch: () => {}, watch: false })
+    const exec = vi.fn(async (_cmd: string, _args: string[]) => ({ code: 0, stdout: 'log line\n', stderr: '' }))
+    const admin = vi.fn<AdminCall>(async (_m, body) => (body.includes('previous') ? { ok: false, error: 'auth_cancelled' } : { ok: true, code: 0, stdout: 'log line\n' }))
+    startSessionHost((c, fn) => handlers.set(c, fn), () => {}, { apps: () => [], user: 'nimali', readGroup: () => group, exec, admin, launch: () => {}, watch: false })
     expect(await handlers.get('ws:isAdmin')!()).toBe(true)
     expect(await handlers.get('ws:systemJournal')!('boot', '100')).toEqual({ ok: true, value: 'log line\n' })
-    expect(exec).toHaveBeenLastCalledWith('pkexec', ['/usr/lib/worksuite/worksuite-diagnostics', 'journal', 'boot', '100'])
+    expect(admin).toHaveBeenLastCalledWith('Journal', ['boot', 100])
     expect(await handlers.get('ws:systemJournal')!('previous', '100')).toEqual({ ok: false, error: 'auth_cancelled' })
     expect(await handlers.get('ws:systemJournal')!('/etc/shadow', '1')).toEqual({ ok: false, error: 'invalid_argument' })
     expect(await handlers.get('ws:sessionJournal')!('20')).toEqual({ ok: true, value: 'log line\n' })
     expect(exec).toHaveBeenLastCalledWith('journalctl', ['--user', '-b', '0', '-o', 'short-iso', '-n', '20', '--no-pager', '-q'])
     expect(await handlers.get('ws:bootDetails')!('on')).toEqual({ ok: true, value: false })
-    expect(exec).toHaveBeenLastCalledWith('pkexec', ['/usr/lib/worksuite/worksuite-diagnostics', 'boot-details', 'on'])
+    expect(admin).toHaveBeenLastCalledWith('BootDetails', ['on'])
     expect(await handlers.get('ws:bootDetails')!('rm')).toEqual({ ok: false, error: 'invalid_argument' })
     expect(await handlers.get('ws:powerForce')!('shutdown')).toEqual({ ok: true, value: true })
-    expect(exec).toHaveBeenLastCalledWith('pkexec', ['/usr/lib/worksuite/worksuite-power-force', 'poweroff'])
+    expect(admin).toHaveBeenLastCalledWith('ForcePower', ['poweroff'])
+    expect(exec).not.toHaveBeenCalledWith(expect.stringMatching(/^\/usr\/lib\/worksuite\//), expect.anything())
   })
   it('"Restart anyway" goes straight to the helper: no logind prompt; at most one administrator prompt', async () => {
-    const calls: string[][] = []
-    const run = (codes: number[]) => { let i = 0; return async (cmd: string, args: string[]) => { calls.push([cmd, ...args]); return { code: codes[i++] ?? 0, stdout: '', stderr: '' } } }
-    // Straight to the helper: never systemctl first, whose logind polkit prompt showed past the caller's own inhibitor.
-    expect(await forcePower(run([0]), 'restart')).toEqual({ ok: true, value: true })
-    expect(calls).toEqual([['pkexec', '/usr/lib/worksuite/worksuite-power-force', 'reboot']])
+    const calls: [string, unknown[]][] = []
+    const run = (r: AdminResult): AdminCall => async (m, body) => { calls.push([m, body]); return r }
+    const done: AdminResult = { ok: true, code: 0, stdout: '' }
+    // Straight to the service: never systemctl first, whose logind polkit prompt showed past the caller's own inhibitor.
+    expect(await forcePower(run(done), 'restart')).toEqual({ ok: true, value: true })
+    expect(calls).toEqual([['ForcePower', ['reboot']]])
     calls.length = 0
-    expect(await forcePower(run([0]), 'shutdown')).toEqual({ ok: true, value: true })
-    expect(calls).toEqual([['pkexec', '/usr/lib/worksuite/worksuite-power-force', 'poweroff']])
-    expect(calls.some((c) => c[0] === 'systemctl')).toBe(false)
-    expect(await forcePower(run([126]), 'restart')).toEqual({ ok: false, error: 'auth_cancelled' })
-    expect(await forcePower(run([1]), 'restart')).toEqual({ ok: false, error: 'not_authorized' })
-    expect(await forcePower(run([]), 'suspend')).toEqual({ ok: false, error: 'invalid_argument' })
+    expect(await forcePower(run(done), 'shutdown')).toEqual({ ok: true, value: true })
+    expect(calls).toEqual([['ForcePower', ['poweroff']]])
+    expect(await forcePower(run({ ok: false, error: 'auth_cancelled' }), 'restart')).toEqual({ ok: false, error: 'auth_cancelled' })
+    expect(await forcePower(run({ ok: false, error: 'not_authorized' }), 'restart')).toEqual({ ok: false, error: 'not_authorized' })
+    expect(await forcePower(run({ ok: true, code: 1, stdout: '' }), 'restart')).toEqual({ ok: false, error: 'not_authorized' })
+    calls.length = 0
+    expect(await forcePower(run(done), 'suspend')).toEqual({ ok: false, error: 'invalid_argument' })
+    expect(calls).toEqual([])
   })
   it('the overlay state goes to every display', async () => {
     const handlers = new Map<string, (...a: string[]) => unknown>()
