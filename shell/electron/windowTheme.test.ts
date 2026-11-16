@@ -9,6 +9,8 @@ import { carryDesktops } from './touch'
 import { APP_WINDOW } from './windowDefaults'
 import { isDarkTheme } from '../src/lib/setup'
 
+// The shell's main process: main.ts and the modules it was split into.
+const SHELL_MAIN = ['main.ts', 'shellCore.ts', 'ipcSession.ts', 'ipcSystem.ts', 'ipcFiles.ts', 'desktopShell.ts', 'portal.ts']
 const RC = readFileSync(path.join(__dirname, '../../services/session/labwc/rc.xml'), 'utf8')
 const nameOf = (rc: string) => /<theme>[\s\S]*?<name>([^<]*)<\/name>/.exec(rc)?.[1]
 
@@ -58,10 +60,10 @@ describe('app windows', () => {
     expect(APP_WINDOW.minHeight).toBeGreaterThan(0)
     // Every ordinary app window the shell opens uses them (not frameless, not fixed-size).
     for (const f of ['appwindow.ts', 'whatsappwindow.ts']) expect(readFileSync(path.join(__dirname, f), 'utf8')).toContain('...APP_WINDOW')
-    expect(readFileSync(path.join(__dirname, 'main.ts'), 'utf8').match(/\.\.\.APP_WINDOW/g)).toHaveLength(2)
+    expect(SHELL_MAIN.map((f) => readFileSync(path.join(__dirname, f), 'utf8')).join('\n').match(/\.\.\.APP_WINDOW/g)).toHaveLength(2)
   })
 
   it('leave title bars to Labwc (no client-side decorations forced on Wayland)', () => {
-    for (const f of ['main.ts', 'appwindow.ts', 'whatsappwindow.ts']) expect(readFileSync(path.join(__dirname, f), 'utf8')).not.toContain('WaylandWindowDecorations')
+    for (const f of [...SHELL_MAIN, 'appwindow.ts', 'whatsappwindow.ts']) expect(readFileSync(path.join(__dirname, f), 'utf8')).not.toContain('WaylandWindowDecorations')
   })
 })

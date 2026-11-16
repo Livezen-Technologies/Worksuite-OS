@@ -48,7 +48,7 @@ test('every other ring list matches rings.mjs', () => {
   assert.match(read('tools/repo/publish.sh'), new RegExp(`case "\\$suite" in ${Object.values(suites).join('\\|')}\\)`));
   // API contract and the shell.
   assert.ok(read('api-contracts/openapi.yaml').includes(`Ring: { type: string, enum: [${RING_NAMES.join(', ')}] }`));
-  assert.ok(read('shell/src/lib/os.ts').includes("ring?: 'development' | 'pilot' | 'stable'"));
+  assert.ok(read('shell/src/lib/osTypes.ts').includes("ring?: 'development' | 'pilot' | 'stable'"));
   for (const f of ['shell/src/screens/Updates.tsx', 'shell/src/screens/UpdatesOffline.tsx'])
     assert.ok(read(f).includes("messages({ development: 'upd.ring.development', pilot: 'upd.ring.pilot', stable: 'upd.ring.stable' })"), f);
   // The console's ring picker.

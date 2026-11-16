@@ -9,8 +9,9 @@ describe('WSOS-SEC-001 shell renderer', () => {
   it('is sandboxed and isolated without Node', () => {
     expect(shellWebPreferences('/p.cjs')).toMatchObject({ sandbox: true, contextIsolation: true, nodeIntegration: false, nodeIntegrationInSubFrames: false, webviewTag: false, webSecurity: true, allowRunningInsecureContent: false })
   })
-  it('main.ts uses the guard on every shell window', () => {
-    const main = readFileSync(path.join(here, 'main.ts'), 'utf8')
+  it('the shell main process uses the guard on every shell window', () => {
+    // main.ts and the modules it was split into (window creation, IPC per area, desktop, captive portal).
+    const main = ['main.ts', 'shellCore.ts', 'ipcSession.ts', 'ipcSystem.ts', 'ipcFiles.ts', 'desktopShell.ts', 'portal.ts'].map((f) => readFileSync(path.join(here, f), 'utf8')).join('\n')
     expect(main).not.toMatch(/nodeIntegration:\s*true/)
     expect(main).not.toMatch(/contextIsolation:\s*false/)
     expect(main).not.toMatch(/sandbox:\s*false/)
