@@ -130,7 +130,7 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 | WSOS-DIR-003 stable UID, home | UID 200000 + user id, `useradd` with locked password, `pam_mkhomedir` | `directory.test.ts` (uid, conflicts) |
 | WSOS-DIR-004/005 offline cache with policy expiry; disabled refused | `src/directory.ts` (`authenticate`): scrypt verifier, `offline_login_days`, cache purge + lock on `ACCOUNT_DISABLED` | `directory.test.ts` |
 | WSOS-DIR-006 group → role | `localGroups()` with `group_role_map` | `directory.test.ts` |
-| WSOS-DIR-010 break-glass admin | `rotate()`/`session()`, `worksuite-breakglass-rotate.{service,timer}`, `wsadmin` (postinst), server `POST desktop/v1/os/break-glass` + `/events` | `directory.test.ts` (escrow decrypts to the set password, one-time lock, audit queue), `api.test.ts` |
+| WSOS-DIR-010 break-glass admin | `rotate()`/`session()`, `worksuite-breakglass-rotate.{service,timer}`, `wsadmin` (postinst), `sudoers/worksuite-breakglass`, PAM account rule, server `POST desktop/v1/os/break-glass` + `/events` | `directory.test.ts` (escrow decrypts to the set password, one-time lock, audit queue, offline use delivered by the next rotation), `tests/session/breakglass-admin.test.sh` (postinst idempotence/upgrade, sudoers drop-in, PAM account rule), `api.test.ts`; design and gaps in `docs/security/break-glass-admin.md` |
 | Passwords never logged | stdin/HTTPS body only | `directory.test.ts` checks logs, cache and request URL |
 
 ## Recovery boot (`worksuite-recovery-boot`)

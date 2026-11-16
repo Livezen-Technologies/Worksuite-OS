@@ -88,6 +88,8 @@ jobs:
       - run: sh tests/session/kiosk-test.sh
       # Device PIN / security-key PAM profiles, daemon and packaging (runs the helper unit tests too).
       - run: sh tests/session/signin-pam-test.sh
+      # Break-glass admin: postinst idempotence/upgrade, sudoers drop-in (visudo), PAM account rule (WSOS-DIR-010).
+      - run: sh tests/session/breakglass-uid.test.sh && sh tests/session/breakglass-admin.test.sh
       # pam_worksuite.so through real libpam with a stand-in helper (WSOS-DIR-009).
       - run: sudo apt-get install -y --no-install-recommends libpam0g-dev gcc make && sh native/pam-worksuite/test.sh
       # worksuite-guard (#38): selftest, then live fanotify checks as root (protected folder, burst, deny list).

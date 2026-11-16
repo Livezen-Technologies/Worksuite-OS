@@ -166,6 +166,25 @@ test('break-glass: without escrow the account stays locked; offline audit events
   assert.equal(f.events.length, 2);
 });
 
+test('break-glass: a use while offline is queued and the next rotation delivers it before its own event', async () => {
+  const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const f = fakes({ escrowKey: publicKey.export({ type: 'spki', format: 'pem' }) as string });
+  await f.deps.accounts.create(BREAK_GLASS_USER, 999, '');
+  assert.equal(await rotate(f.deps), 'rotated');
+  f.state.online = false;
+  await session(f.deps, BREAK_GLASS_USER);
+  assert.equal(f.accounts.get(BREAK_GLASS_USER)!.locked, true);
+  assert.deepEqual(f.getPending().map((e) => e.type), ['used']);
+  // The rotation the session started runs while still offline: stays locked, keeps the queue.
+  assert.equal(await rotate(f.deps), 'locked');
+  assert.equal(f.getPending().length, 1);
+  f.state.online = true;
+  assert.equal(await rotate(f.deps), 'rotated');
+  assert.equal(f.getPending().length, 0);
+  assert.deepEqual(f.events.map((e) => e.type), ['rotated', 'used', 'rotated']);
+  assert.equal(f.events[1].username, BREAK_GLASS_USER);
+});
+
 test('HTTP client: password only in the request body, device credential header, https only', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ws-dir-'));
   try {

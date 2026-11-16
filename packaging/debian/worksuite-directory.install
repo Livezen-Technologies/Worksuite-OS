@@ -11,3 +11,4 @@ security/apparmor/worksuite-directory etc/apparmor.d/
 services/directory/smartcard/worksuite-smartcard usr/share/pam-configs/
 services/directory/smartcard/pam_pkcs11.conf usr/share/worksuite/smartcard/
 services/directory/smartcard/worksuite-smartcard-setup usr/sbin/
+services/directory/sudoers/worksuite-breakglass etc/sudoers.d/
