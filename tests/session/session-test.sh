@@ -373,7 +373,7 @@ check "cage: no GTK 4, the installer starts without the loading screen" \
 grep -q 'WORKSUITE_INSTALLER_CHECKED:-}" = 1' "$ROOT/live-build/config/includes.chroot/usr/lib/worksuite/worksuite-installer-start" \
   && ok "installer start: no second GTK check inside cage" || bad "installer start: no second GTK check inside cage"
 grep -q 'worksuite-session-veil' "$ROOT/services/session/labwc/autostart" && grep -q '^services/session/bin/worksuite-session-veil usr/lib/worksuite/$' "$ROOT/packaging/debian/worksuite-session.install" \
-  && grep -q "shell-ready" "$ROOT/shell/electron/main.ts" \
+  && grep -q "shell-ready" "$ROOT/shell/electron/shellCore.ts" \
   && ok "session veil from Labwc's start until the shell's first frame" || bad "session veil from Labwc's start until the shell's first frame"
 check "software GPU: GTK draws with cairo" "$(env -u GSK_RENDERER sh -c ". '$BIN/wlr-env'; echo \${GSK_RENDERER:-gl}")" "$( [ -n "$(env -u WLR_RENDERER sh -c ". '$BIN/wlr-env'; echo \$WLR_RENDERER")" ] && echo cairo || echo gl)"
 IS=$ROOT/live-build/config/includes.chroot/usr/lib/worksuite/worksuite-installer-start

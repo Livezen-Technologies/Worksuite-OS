@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const src = readFileSync(new URL('./Settings.tsx', import.meta.url), 'utf8')
+const src = readFileSync(new URL('./settings/Notifications.tsx', import.meta.url), 'utf8')
 
 describe('notification sources layout (#52)', () => {
   it('shares one grid between header and rows, sized to content', () => {

@@ -10,10 +10,13 @@ const sources = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith(
 const read = (f: string) => readFileSync(path.join(dir, f), 'utf8')
 const all = sources.map((f) => [f, read(f)] as const)
 const repo = path.resolve(dir, '../..')
+// The shell's main process, split by area (main.ts starts it; shellCore.ts owns its windows and the IPC entry point).
+const SHELL_MAIN = ['main.ts', 'shellCore.ts', 'ipcSession.ts', 'ipcSystem.ts', 'ipcFiles.ts', 'desktopShell.ts', 'portal.ts']
+const shellMain = () => SHELL_MAIN.map(read).join('\n')
 
 describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
   it('has main-process sources to check', () => {
-    expect(sources).toContain('main.ts')
+    for (const f of SHELL_MAIN) expect(sources).toContain(f)
     expect(sources.length).toBeGreaterThan(10)
   })
 
@@ -51,7 +54,7 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
   it('every IPC handler goes through the sender check', () => {
     for (const [f, s] of all) {
       const raw = [...s.matchAll(/ipcMain\.(handle|on|once|handleOnce)\(/g)]
-      if (f === 'main.ts') {
+      if (f === 'shellCore.ts') {
         expect(raw.length, f).toBe(1)
         expect(s).toMatch(/ipcMain\.handle\(channel, \(e, \.\.\.args\) => \{\s*if \(!validSender\(e\)\) throw new Error\('Rejected IPC sender'\)/)
         expect(s).toMatch(/shellContents\.has\(e\.sender\) && e\.senderFrame\?\.url\.startsWith\('file:\/\/'\) === true/)
@@ -75,7 +78,7 @@ describe('WSOS-ARC-001: Electron main is not a root command runner', () => {
   })
 
   it('every window is sandboxed with context isolation and no node integration', () => {
-    const main = read('main.ts')
+    const main = shellMain()
     expect(main).toMatch(/const shellPrefs = \(\) => shellWebPreferences\(/)
     expect(read('webSecurity.ts')).toMatch(/sandbox: true, contextIsolation: true, nodeIntegration: false/)
     for (const [f, s] of all) {
@@ -100,7 +103,7 @@ describe('WSOS-ARC-003: native apps stay independent compositor windows', () => 
   it('native .desktop apps are handed to the compositor through gtk-launch in their own scope', () => {
     const launch = all.filter(([, s]) => /'gtk-launch'/.test(s)).map(([f]) => f)
     expect(launch.length).toBeGreaterThan(0)
-    const main = read('main.ts')
+    const main = shellMain()
     expect(main).toMatch(/handle\('ws:launchApp', \(id\) => \{ const c = appLaunchCommand\(id\); return c \? run\(\.\.\.c\) : undefined \}\)/)
   })
 
@@ -112,7 +115,7 @@ describe('WSOS-ARC-003: native apps stay independent compositor windows', () => 
 
 describe('WSOS-ARC-004: the desktop needs no remote service to start', () => {
   it('shell windows load the bundled UI from disk, never from a URL', () => {
-    const main = read('main.ts')
+    const main = shellMain()
     const shellLoads = [...main.matchAll(/void (?:w|win)\.load(File|URL)\(([^)]*)/g)].filter((m) => /index\.html/.test(m[2]))
     expect(shellLoads.length).toBeGreaterThanOrEqual(2)
     for (const m of shellLoads) expect(m[1]).toBe('File')
