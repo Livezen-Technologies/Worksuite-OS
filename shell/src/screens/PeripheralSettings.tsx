@@ -5,7 +5,7 @@
 import { ErrorDetails } from '../components/ErrorDetails'
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Dialog, Switch, btnGhost, btnPrimary, card, dialogFooter, field, rowLine, sectionLabel } from '../components/Dk'
-import { failureKind, knownReason, peripheralsApi, type Avail, type FailedChange, type Inhibitor, type InputState, type PeripheralsApi, type PowerProfiles, type Volume, type BtFound } from '../lib/peripheralsApi'
+import { failureKind, knownReason, passkeyText, peripheralsApi, validPasskeyText, validPinText, type Avail, type BtPrompt, type FailedChange, type Inhibitor, type InputState, type PeripheralsApi, type PowerProfiles, type Volume, type BtFound } from '../lib/peripheralsApi'
 import { os } from '../lib/os'
 import { IM_KEYS } from '../lib/inputMethods'
 import { t, type MessageKey } from '../i18n'
@@ -52,7 +52,14 @@ export function BluetoothPairSection({ powered, paired, onChange }: { powered: b
   const [found, setFound] = useState<BtFound[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [prompt, setPrompt] = useState<BtPrompt | null>(null)
   const api = peripheralsApi()
+  useEffect(() => {
+    const a = peripheralsApi()
+    if (!a?.onBtAgent) return
+    void a.btAgentState?.().then((p) => setPrompt(p ?? null)).catch(() => undefined)
+    return a.onBtAgent((p) => setPrompt(p ?? null))
+  }, [])
   const scan = async () => {
     if (!api) return
     setBusy('scan'); setErr(null)
@@ -64,7 +71,7 @@ export function BluetoothPairSection({ powered, paired, onChange }: { powered: b
     if (!api) return
     setBusy(d.address); setErr(null)
     const r = await api.btPair(d.address)
-    setBusy(null)
+    setBusy(null); setPrompt(null)
     if (r.available) { setFound((f) => f?.filter((x) => x.address !== d.address) ?? null); onChange() } else setErr(reasonText(r.reason))
   }
   const remove = async (address: string) => {
@@ -73,6 +80,7 @@ export function BluetoothPairSection({ powered, paired, onChange }: { powered: b
     if (r.available) onChange(); else setErr(reasonText(r.reason))
   }
   return <>
+    {api && prompt && <BtPairDialog key={prompt.id} prompt={prompt} api={api} onClose={() => setPrompt(null)} />}
     <Section title={t('per.bt.add')} action={<button type="button" disabled={!api || !powered || busy !== null} onClick={() => void scan()} className={`${btnGhost} px-3.5 py-2 text-[13px]`}>{busy === 'scan' ? t('per.bt.searching') : t('per.bt.search')}</button>}>
       <Err text={err} />
       {!api ? <Muted>{t('per.unavailable')}</Muted> : !powered ? <Muted>{t('per.bt.turnOn')}</Muted> : found === null ? <Muted>{t('per.bt.hint')}</Muted> : found.length === 0 ? <Muted>{t('per.bt.noneFound')}</Muted> : (
@@ -98,6 +106,53 @@ export function BluetoothPairSection({ powered, paired, onChange }: { powered: b
       </Section>
     )}
   </>
+}
+
+/** About as long as the host waits (electron/btAgent.ts AGENT_TIMEOUT_MS) before it rejects the request. */
+export const BT_PROMPT_TIMEOUT_MS = 30_000
+
+/** A request from the pairing agent: show a passkey or PIN, confirm one, or type one. Cancel and the timeout reject it. */
+export function BtPairDialog({ prompt, api, onClose, timeoutMs = BT_PROMPT_TIMEOUT_MS }: { prompt: BtPrompt; api: PeripheralsApi; onClose: () => void; timeoutMs?: number }) {
+  const [value, setValue] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+  const cancel = useCallback(() => { void api.btAgentCancel?.(prompt.id); onClose() }, [api, prompt.id, onClose])
+  useEffect(() => { const timer = setTimeout(cancel, timeoutMs); return () => clearTimeout(timer) }, [cancel, timeoutMs])
+  const typed = prompt.kind === 'requestPasskey' || prompt.kind === 'requestPinCode'
+  const valid = prompt.kind === 'requestPasskey' ? validPasskeyText(value) : prompt.kind === 'requestPinCode' ? validPinText(value) : true
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!valid) { setErr(t(prompt.kind === 'requestPasskey' ? 'per.bt.agent.badPasskey' : 'per.bt.agent.badPin')); return }
+    const ok = await api.btAgentRespond?.(prompt.id, typed ? value : 'yes').catch(() => false)
+    if (ok) onClose(); else setErr(t('per.bt.agent.expired'))
+  }
+  const code = prompt.kind === 'displayPinCode' ? prompt.pin : prompt.passkey !== undefined ? passkeyText(prompt.passkey) : null
+  const text = {
+    requestPasskey: t('per.bt.agent.typePasskey', { address: prompt.address }),
+    requestPinCode: t('per.bt.agent.typePin', { address: prompt.address }),
+    requestConfirmation: t('per.bt.agent.confirm', { address: prompt.address }),
+    displayPasskey: t('per.bt.agent.showPasskey', { address: prompt.address }),
+    displayPinCode: t('per.bt.agent.showPin', { address: prompt.address }),
+  }[prompt.kind]
+  return (
+    <Dialog onClose={cancel}>
+      {(tid) => <form onSubmit={(e) => void submit(e)}>
+        <div className="flex flex-col gap-3 px-5 py-4">
+          <h2 id={tid} className="m-0 text-base font-semibold">{t('per.bt.agent.title')}</h2>
+          <p className="m-0 text-[13px] text-[#C9D5EC]">{text}</p>
+          {code !== null && code !== undefined && <p data-testid="bt-code" className="m-0 text-center font-mono text-[28px] tracking-[0.2em]">{code}</p>}
+          {prompt.kind === 'displayPasskey' && (prompt.entered ?? 0) > 0 && <p className="m-0 text-center text-xs text-[#8FA3C8]">{t('per.bt.agent.entered', { count: prompt.entered ?? 0 })}</p>}
+          {typed && <label className="flex flex-col gap-1.5 text-[13px]">{prompt.kind === 'requestPasskey' ? t('per.bt.agent.passkey') : t('per.bt.agent.pin')}
+            <input autoComplete="off" autoFocus inputMode={prompt.kind === 'requestPasskey' ? 'numeric' : 'text'} maxLength={prompt.kind === 'requestPasskey' ? 6 : 16} value={value} onChange={(e) => { setValue(e.target.value.trim()); setErr(null) }} className={field} />
+          </label>}
+          <Err text={err} />
+        </div>
+        <div className={dialogFooter}>
+          <button type="button" onClick={cancel} className={`${btnGhost} px-4 py-2 text-[13px]`}>{t('common.cancel')}</button>
+          {(typed || prompt.kind === 'requestConfirmation') && <button type="submit" disabled={!value && typed} className={`${btnPrimary} px-4 py-2 text-[13px]`}>{typed ? t('per.bt.pair') : t('per.bt.agent.match')}</button>}
+        </div>
+      </form>}
+    </Dialog>
+  )
 }
 
 // ---------- removable storage ----------

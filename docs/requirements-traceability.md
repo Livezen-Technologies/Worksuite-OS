@@ -26,7 +26,8 @@ Status: **Impl** = implemented and unit-tested here · **Cfg** = configuration/c
 | WSOS-INT-010 polkit authentication agent | `services/session/polkit` (PolkitAgent listener) relaying to `shell/electron/polkit.ts` and `src/components/AuthPrompt.tsx`; lxpolkit/mate-polkit fallback in `services/session/bin/worksuite-polkit-agent` | Impl + tests (not run against real polkitd) |
 | WSOS-SHL-001…004 bridge operations, errors, caller check | `native/wayland-bridge/worksuite_bridge/`, `native/wayland-bridge/lk.worksuite.WaylandBridge1.xml` | `native/wayland-bridge/tests/` |
 | WSOS-INT-012 portal backends | `services/session/portals/worksuite-portals.conf`, checked by `shell/electron/sessionConfig.test.ts` | Cfg + test |
-| WSOS-INT-003…006 Bluetooth pairing, drives, power profiles, printers | `shell/electron/peripherals.ts`, `shell/src/screens/PeripheralSettings.tsx` | Impl + tests |
+| WSOS-INT-003 Bluetooth pairing incl. passkey / PIN / confirmation (BlueZ Agent1, KeyboardDisplay) | `shell/electron/peripherals.ts`, `shell/electron/btAgent.ts`, `shell/src/screens/PeripheralSettings.tsx` | Impl + tests (mocked BlueZ); needs hardware test |
+| WSOS-INT-004…006 Drives, power profiles, printers | `shell/electron/peripherals.ts`, `shell/src/screens/PeripheralSettings.tsx` | Impl + tests |
 | WSOS-INT-007 notification server | `shell/electron/notifications.ts`, `shell/src/lib/appNotifications.ts` | Impl + D-Bus tests |
 | WSOS-INT-009 keyring unlock on sign-in | `libpam-gnome-keyring` (control), image hook check | Cfg + test |
 | WSOS-INT-011 input methods | `services/session/fcitx5/profile`, `worksuite-input-method.service`, `labwc/environment`, Settings input methods | Cfg + tests |

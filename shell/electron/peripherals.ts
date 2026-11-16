@@ -8,6 +8,7 @@ import { realExec, realWithStdin, type Avail, type Exec, type WithStdin } from '
 import { parseBtDevices } from './system'
 import { xdgDirs } from './xdgDirs'
 import { printerExec, printersBridge } from './printers'
+import { startBtAgentIpc, type BtAgentBroker, type PairResult } from './btAgent'
 
 // ---------- Bluetooth ----------
 export interface BtFound { address: string; name: string }
@@ -24,6 +25,7 @@ export function btError(text: string): string {
   if (/AuthenticationFailed|AuthenticationRejected|AuthenticationCanceled/i.test(text)) return 'bt_auth_failed'
   if (/ConnectionAttemptFailed|page-timeout|not available/i.test(text)) return 'bt_unreachable'
   if (/AlreadyExists/i.test(text)) return 'bt_already_paired'
+  if (/AuthenticationTimeout|DoesNotExist/i.test(text)) return 'bt_unreachable'
   if (/not ready|NotReady/i.test(text)) return 'bt_off'
   return 'bt_failed'
 }
@@ -165,7 +167,8 @@ const realFs: FsDeps = {
   async write(p, s) { await mkdir(dirname(p), { recursive: true }); await writeFile(p, s, { mode: 0o644 }) },
 }
 
-export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin: WithStdin = realWithStdin, fs: FsDeps = realFs, wait: (ms: number) => Promise<unknown> = pause) {
+/** `pair`: Device1.Pair through the shell's KeyboardDisplay agent (btAgent.ts); without it, bluetoothctl's NoInputNoOutput agent. */
+export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin: WithStdin = realWithStdin, fs: FsDeps = realFs, wait: (ms: number) => Promise<unknown> = pause, pair: () => ((address: string) => Promise<PairResult>) | null = () => null) {
   const userProfile = join(xdgDirs(home).config, 'fcitx5', 'profile')
   // pkexec's exit status matters for printing, which realExec flattens to 1.
   const printers = printersBridge(exec === realExec ? printerExec : exec)
@@ -187,11 +190,17 @@ export function peripheralsBridge(home: string, exec: Exec = realExec, withStdin
       const [all, paired] = await Promise.all([exec('bluetoothctl', ['devices']), exec('bluetoothctl', ['devices', 'Paired'])])
       return all.code === 0 ? ok(newDevices(all.stdout, paired.stdout)) : tool(all, 'bluetoothctl', 'service_unavailable')
     },
-    /** Pair (just-works / confirmation handled by a NoInputNoOutput agent), then trust and connect. */
+    /** Pair (passkey, PIN and confirmation asked through the shell's agent when it is registered), then trust and connect. */
     async btPair(address: string): Promise<Avail<true>> {
       if (!BT_ADDR.test(address)) return fail('invalid_argument')
-      const p = await exec('bluetoothctl', ['--agent', 'NoInputNoOutput', '--timeout', '30', 'pair', address])
-      if (p.code !== 0 || /Failed to pair|org\.bluez\.Error/i.test(p.stdout + p.stderr)) return tool(p, 'bluetoothctl', btError(p.stdout + p.stderr))
+      const viaAgent = pair()
+      if (viaAgent) {
+        const r = await viaAgent(address.toUpperCase())
+        if (!r.ok) return fail(btError(r.error))
+      } else {
+        const p = await exec('bluetoothctl', ['--agent', 'NoInputNoOutput', '--timeout', '30', 'pair', address])
+        if (p.code !== 0 || /Failed to pair|org\.bluez\.Error/i.test(p.stdout + p.stderr)) return tool(p, 'bluetoothctl', btError(p.stdout + p.stderr))
+      }
       const t = await exec('bluetoothctl', ['trust', address])
       if (t.code !== 0) return fail(btError(t.stdout + t.stderr))
       await exec('bluetoothctl', ['connect', address])
@@ -327,7 +336,8 @@ export type PeripheralsBridge = ReturnType<typeof peripheralsBridge>
 
 type Handle = (channel: string, fn: (...args: string[]) => unknown) => void
 /** IPC for the bridge above, registered from main.ts through its sender-checked `handle`. */
-export function startPeripheralsHost(handle: Handle, home: string, b: PeripheralsBridge = peripheralsBridge(home)) {
+export function startPeripheralsHost(handle: Handle, home: string, b: PeripheralsBridge = peripheralsBridge(home), agent: () => BtAgentBroker | null = () => null) {
+  startBtAgentIpc(handle, agent)
   handle('ws:btScan', () => b.btScan())
   handle('ws:btPair', (a) => b.btPair(a))
   handle('ws:btRemove', (a) => b.btRemove(a))
