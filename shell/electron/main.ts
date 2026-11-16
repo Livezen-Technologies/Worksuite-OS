@@ -54,7 +54,8 @@ import { powerArgs, startSessionHost } from './sessionHost'
 import { bannerAllowed, toastHost, type ToastMsg } from './toastHost'
 import { markShellReady, startMonitorHost } from './monitorHost'
 import { flatpakPermsClient } from './flatpakPerms'
-import { startPeripheralsHost } from './peripherals'
+import { peripheralsBridge, startPeripheralsHost } from './peripherals'
+import { startBtAgent, type BtAgentHost } from './btAgent'
 import { startPrintersHost } from './printers'
 import { startRemoteSupportHost } from './remoteSupport'
 import { appPermissionsBridge, startAppPermissionsHost } from './appPermissions'
@@ -854,7 +855,11 @@ app.whenReady().then(() => {
   // System monitor (G11) and quick settings brightness / power mode (G01).
   startMonitorHost(handle)
   // Bluetooth pairing, removable storage, power profiles, printers, input methods (WSOS-INT-003…006, 011).
-  startPeripheralsHost(handle, app.getPath('home'))
+  // Passkey / PIN / confirmation prompts come from the shell's BlueZ agent (btAgent.ts); without bluetoothd pairing
+  // falls back to bluetoothctl's NoInputNoOutput agent.
+  let btAgent: BtAgentHost | null = null
+  void startBtAgent(broadcast).then((a) => { btAgent = a }).catch(() => undefined)
+  startPeripheralsHost(handle, home, peripheralsBridge(home, undefined, undefined, undefined, undefined, () => btAgent?.pair ?? null), () => btAgent?.broker ?? null)
   // Settings › Printers: state, default, preferences, pause, test page, held jobs (issue #51).
   startPrintersHost(handle)
   startRemoteSupportHost(handle, undefined, {

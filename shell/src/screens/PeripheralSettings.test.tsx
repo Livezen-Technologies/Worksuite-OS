@@ -4,7 +4,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
-import type { PeripheralsApi, Volume } from '../lib/peripheralsApi'
+import type { BtPrompt, PeripheralsApi, Volume } from '../lib/peripheralsApi'
 import { failureKind } from '../lib/peripheralsApi'
 
 const g = globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }
@@ -91,6 +91,87 @@ describe('Bluetooth pairing (WSOS-INT-003)', () => {
     const h = await render(<Mod.BluetoothPairSection powered={false} paired={[]} onChange={() => {}} />)
     expect(h.textContent).toContain('Turn Bluetooth on')
     expect(button('Search').disabled).toBe(true)
+  })
+})
+
+describe('Bluetooth pairing dialog (WSOS-INT-003)', () => {
+  const agentApi = (answers: string[]) => ({
+    ...fake,
+    async btAgentRespond(id: string, v: string) { answers.push(`respond ${id} ${v}`); return true },
+    async btAgentCancel(id: string) { answers.push(`cancel ${id}`); return true },
+  })
+  const dialog = async (prompt: BtPrompt, answers: string[], timeoutMs?: number) => {
+    const closed: string[] = []
+    await render(<Mod.BtPairDialog prompt={prompt} api={agentApi(answers)} onClose={() => closed.push('x')} timeoutMs={timeoutMs} />)
+    return closed
+  }
+  const input = () => document.querySelector('[role="dialog"] input, form input') as HTMLInputElement
+  const submit = async () => { await act(async () => { document.querySelector('form')!.requestSubmit(); await new Promise((r) => setTimeout(r, 0)) }) }
+
+  it('asks for a passkey, refuses one out of range, sends a valid one', async () => {
+    const a: string[] = []
+    const closed = await dialog({ id: 'bt1', kind: 'requestPasskey', address: 'AA:BB:CC:DD:EE:01' }, a)
+    expect(document.body.textContent).toContain('Type the passkey shown on AA:BB:CC:DD:EE:01')
+    type(input(), '12a')
+    await submit()
+    expect(document.body.textContent).toContain('up to 6 digits')
+    type(input(), '012345')
+    await submit()
+    expect(a).toEqual(['respond bt1 012345'])
+    expect(closed).toHaveLength(1)
+  })
+  it('asks for a PIN and refuses a malformed one', async () => {
+    const a: string[] = []
+    await dialog({ id: 'bt2', kind: 'requestPinCode', address: 'AA:BB:CC:DD:EE:01' }, a)
+    type(input(), 'ab cd')
+    await submit()
+    expect(a).toEqual([])
+    type(input(), '0000')
+    await submit()
+    expect(a).toEqual(['respond bt2 0000'])
+  })
+  it('shows a passkey to confirm, and Cancel rejects it', async () => {
+    const a: string[] = []
+    await dialog({ id: 'bt3', kind: 'requestConfirmation', address: 'AA:BB:CC:DD:EE:01', passkey: 4321 }, a)
+    expect(document.querySelector('[data-testid="bt-code"]')!.textContent).toBe('004321')
+    await click(button('Cancel'))
+    expect(a).toEqual(['cancel bt3'])
+  })
+  it('confirms matching codes', async () => {
+    const a: string[] = []
+    await dialog({ id: 'bt4', kind: 'requestConfirmation', address: 'AA:BB:CC:DD:EE:01', passkey: 1 }, a)
+    await click(button('Codes match'))
+    expect(a).toEqual(['respond bt4 yes'])
+  })
+  it('shows a passkey or PIN to type on the device, with only Cancel', async () => {
+    const a: string[] = []
+    await dialog({ id: 'bt5', kind: 'displayPasskey', address: 'AA:BB:CC:DD:EE:01', passkey: 123456, entered: 2 }, a)
+    expect(document.querySelector('[data-testid="bt-code"]')!.textContent).toBe('123456')
+    expect(document.body.textContent).toContain('2 keys typed')
+    expect(button('Pair')).toBeUndefined()
+    act(() => root?.unmount()); root = null
+    await dialog({ id: 'bt6', kind: 'displayPinCode', address: 'AA:BB:CC:DD:EE:01', pin: '9876' }, a)
+    expect(document.querySelector('[data-testid="bt-code"]')!.textContent).toBe('9876')
+  })
+  it('times out and rejects so pairing never hangs', async () => {
+    expect(Mod.BT_PROMPT_TIMEOUT_MS).toBe(30_000)
+    const a: string[] = []
+    const closed = await dialog({ id: 'bt7', kind: 'requestPasskey', address: 'AA:BB:CC:DD:EE:01' }, a, 30)
+    expect(a).toEqual([])
+    await act(async () => { await new Promise((r) => setTimeout(r, 60)) })
+    expect(a).toEqual(['cancel bt7'])
+    expect(closed).toHaveLength(1)
+  })
+  it('opens from the agent while a device pairs', async () => {
+    let push: ((p: BtPrompt | null) => void) | null = null
+    ;(window as unknown as { worksuitePeripherals: PeripheralsApi }).worksuitePeripherals = { ...fake, onBtAgent: (cb) => { push = cb; return () => { push = null } } }
+    try {
+      await render(<Mod.BluetoothPairSection powered paired={[]} onChange={() => {}} />)
+      await act(async () => { push!({ id: 'bt8', kind: 'displayPinCode', address: 'AA:BB:CC:DD:EE:01', pin: '1111' }) })
+      expect(document.body.textContent).toContain('Pair a Bluetooth device')
+      await act(async () => { push!(null) })
+      expect(document.body.textContent).not.toContain('Pair a Bluetooth device')
+    } finally { (window as unknown as { worksuitePeripherals: PeripheralsApi }).worksuitePeripherals = fake }
   })
 })
 

@@ -3,6 +3,9 @@
 /** detail: the tool's own error text, shown under the reason when it says more (e.g. lpadmin / CUPS, #51). */
 export type Avail<T> = { available: true; value: T } | { available: false; reason: string; detail?: string }
 export interface BtFound { address: string; name: string }
+/** A request from the shell's Bluetooth pairing agent (electron/btAgent.ts). */
+export type BtPromptKind = 'requestPasskey' | 'displayPasskey' | 'requestConfirmation' | 'displayPinCode' | 'requestPinCode'
+export interface BtPrompt { id: string; kind: BtPromptKind; address: string; passkey?: number; pin?: string; entered?: number }
 export interface Volume { device: string; disk: string; label: string; size: string; fstype: string; mountpoint: string | null; encrypted: boolean; unlocked: string | null }
 export interface PowerProfiles { active: string; profiles: string[]; degraded: string | null }
 export interface Inhibitor { what: string; who: string; why: string; mode: string }
@@ -26,6 +29,11 @@ export interface PeripheralsApi {
   btScan(): Promise<Avail<BtFound[]>>
   btPair(address: string): Promise<Avail<true>>
   btRemove(address: string): Promise<Avail<true>>
+  btAgentState?(): Promise<BtPrompt | null>
+  /** value: the typed passkey (digits) or PIN, or 'yes' for a confirmation. false when the host refused it. */
+  btAgentRespond?(id: string, value: string): Promise<boolean>
+  btAgentCancel?(id: string): Promise<boolean>
+  onBtAgent?(cb: (p: BtPrompt | null) => void): () => void
   volumes(): Promise<Avail<Volume[]>>
   volMount(device: string): Promise<Avail<string>>
   volUnlock(device: string, passphrase: string): Promise<Avail<string>>
@@ -72,6 +80,12 @@ export const KNOWN_REASONS = ['bt_auth_failed', 'bt_unreachable', 'bt_already_pa
   'storage_unreadable', 'storage_gone', 'printer_unreachable', 'printer_not_driverless', 'printer_bad_address', 'printer_no_driver', 'printer_gone', 'auth_cancelled', 'service_unavailable', 'invalid_argument',
   'fcitx5_missing', 'im_not_running', 'im_not_applied', 'im_not_enabled', 'im_failed'] as const
 export type KnownReason = (typeof KNOWN_REASONS)[number]
+/** Passkey: up to six digits (0-999999). PIN: 1-16 letters or digits. Same checks as the host. */
+export const validPasskeyText = (s: string) => /^\d{1,6}$/.test(s)
+export const validPinText = (s: string) => /^[0-9A-Za-z]{1,16}$/.test(s)
+/** 6-digit display form, e.g. 1234 -> "001234". */
+export const passkeyText = (n: number) => String(n).padStart(6, '0')
+
 export const knownReason = (r: string): KnownReason | null =>
   (KNOWN_REASONS as readonly string[]).includes(r) ? (r as KnownReason) : r.endsWith('_missing') ? 'service_unavailable' : null
 
