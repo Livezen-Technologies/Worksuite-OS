@@ -176,7 +176,8 @@ jobs:
         include:
           # server's tests import these services' sources, so its tsc needs their dependencies (e.g. dbus-next).
           - package: services/server
-            extra: services/credentials services/device-agent services/package-service    defaults:
+            extra: services/credentials services/device-agent services/package-service
+    defaults:
       run:
         working-directory: ${{ matrix.package }}
     env:
