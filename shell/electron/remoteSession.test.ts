@@ -221,27 +221,40 @@ describe('remote session follow-ups (issue #37)', () => {
     expect(audit.map((a) => [a.direction, a.action])).toEqual([['to_admin', 'offered'], ['to_admin', 'completed']])
   })
 
-  it('clipboard: nothing read or written until the user turns it on; text only, size-limited, no echo', () => {
+  it('clipboard: nothing read or written until the user turns it on; text only, size-limited, no echo', async () => {
     const c = { text: 'before', reads: 0 }
     const out: string[] = []
     const s = new ClipboardSync({ read: () => { c.reads++; return c.text }, write: (t) => { c.text = t }, send: (m) => out.push(m.text) })
-    expect(s.poll()).toBe(false)
+    expect(await s.poll()).toBe(false)
     expect(s.incoming({ t: 'clip', text: 'from admin' })).toBe(false)
     expect(c.reads).toBe(0)
     expect(c.text).toBe('before')
-    s.setEnabled(true)
-    expect(s.poll()).toBe(false)                       // the text already there is not sent unasked
+    await s.setEnabled(true)
+    expect(await s.poll()).toBe(false)                       // the text already there is not sent unasked
     c.text = 'copied on device'
-    expect(s.poll()).toBe(true)
+    expect(await s.poll()).toBe(true)
     expect(s.incoming({ t: 'clip', text: 'from admin' })).toBe(true)
     expect(c.text).toBe('from admin')
-    expect(s.poll()).toBe(false)                       // no echo back
+    expect(await s.poll()).toBe(false)                       // no echo back
     expect(s.incoming({ t: 'clip', text: 'x'.repeat(CLIP_MAX + 1) })).toBe(false)
     expect(s.incoming({ t: 'clip', text: 42 })).toBe(false)
-    s.setEnabled(false)
+    await s.setEnabled(false)
     c.text = 'secret'
-    expect(s.poll()).toBe(false)
+    expect(await s.poll()).toBe(false)
     expect(out).toEqual(['copied on device'])
+  })
+
+  it('clipboard: async reads (Electron 44+) work, and a switch-off during a read keeps nothing', async () => {
+    let release: (t: string) => void = () => {}
+    const out: string[] = []
+    const s = new ClipboardSync({ read: () => new Promise<string>((r) => { release = r }), write: () => {}, send: (m) => out.push(m.text) })
+    const on = s.setEnabled(true)
+    await s.setEnabled(false)
+    release('secret')
+    await on
+    expect(s.enabled).toBe(false)
+    expect(await s.poll()).toBe(false)
+    expect(out).toEqual([])
   })
 
   it('controller: clipboard follows the session switch; chat audited as metadata; quality and monitor from the viewer', async () => {

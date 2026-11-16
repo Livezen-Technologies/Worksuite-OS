@@ -155,7 +155,9 @@ ${action ? `<button id="b">${esc(action)}</button><script>document.getElementByI
       void freshToken().then((t) => cb({ requestHeaders: { ...details.requestHeaders, ...appAuthHeaders(details.url, allowed, t, () => deviceCredential()) } }))
     })
     // Camera/microphone/notifications/clipboard for the module's own origin only (Meet, Chat); nothing else.
-    const OK = new Set(['media', 'notifications', 'clipboard-sanitized-write', 'fullscreen'])
+    // Since Electron 45 getDisplayMedia is also reported here as 'display-capture'; the display-media handler below still
+    // decides (screenShareAllowed + the portal chooser), so this only keeps Meet screen sharing from being denied early.
+    const OK = new Set(['media', 'notifications', 'clipboard-sanitized-write', 'fullscreen', 'display-capture'])
     ses.setPermissionRequestHandler((wc, perm, cb) => cb(OK.has(perm) && navDecision(wc.getURL(), allowedOrigins(target)) === 'allow'))
     ses.setPermissionCheckHandler((_wc, perm, origin) => OK.has(perm) && allowedOrigins(target).has(origin))
     // Meet screen sharing (SRS §7.1): getSources goes to the ScreenCast portal, whose chooser asks the user every time;

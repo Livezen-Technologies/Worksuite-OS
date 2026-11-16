@@ -147,7 +147,7 @@ Command replay is covered by `services/device-agent/test/commands.test.ts`.
 |---|---|---|
 | WSOS-SEC-004 per-app session partitions | `shell/electron/appwindows.ts` (`persist:ws-app-<id>`), `ws:openWorkSuiteApp` in `main.ts`/`preload.ts` | `shell/electron/appwindows.test.ts` |
 | WSOS-SEC-009 AppArmor | `security/apparmor/*`, `AppArmorProfile=-…` in units, postinst reload | `tests/security/apparmor.test.sh` (CI) |
-| WSOS-SEC-012 Electron patch policy | `docs/security/hardening.md`, `.github/dependabot.yml` | Process |
+| WSOS-SEC-012 Electron patch policy | `docs/security/hardening.md`, `.github/dependabot.yml`, `shell/package.json` (Electron ^45.3.2) | Process |
 | WSOS-SEC-001 renderer prefs, no navigation | `shell/electron/webSecurity.ts` `shellWebPreferences`, `main.ts`, `appwindows.ts` `navigationDecision` | `shell/electron/webSecurity.test.ts`, `appwindows.test.ts`, `boundary.test.ts` |
 | WSOS-SEC-002 strict CSP in the shipped bundle | `SHELL_CSP` (`webSecurity.ts`), build-only plugin in `shell/vite.config.ts` | `webSecurity.test.ts` |
 | WSOS-SEC-003 default-deny web permissions, per-origin admin grants | `webSecurity.ts` `parseGrants`/`permissionAllowed`, `/etc/worksuite/web-permissions.json`, `appwindows.ts` | `webSecurity.test.ts`, `appwindows.test.ts` |

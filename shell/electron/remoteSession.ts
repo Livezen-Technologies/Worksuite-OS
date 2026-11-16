@@ -30,7 +30,7 @@ export interface RemoteSessionDeps {
   now?: () => number
   /** ~/Downloads of the signed-in user (incoming files). */
   downloadsDir(): string
-  clipboard?: { read(): string; write(text: string): void }
+  clipboard?: { read(): string | Promise<string>; write(text: string): void | Promise<void> }
   /** Screens the capture can switch to, and where one sits in the layout (for absolute pointer motion). */
   monitors?(): Promise<{ id: string; name: string }[]>
   selectMonitor?(id: string): Region | null
@@ -82,8 +82,8 @@ export class RemoteSessionController {
       if (this.cur && (!s || s.state !== 'active' || s.session_id !== this.cur.id)) await this.stop()
       if (!this.cur && s?.state === 'active') this.cur = { id: s.session_id, win: this.d.openWindow(), after: 0, started: false, iceAt: 0, quality: DEFAULT_QUALITY, monitor: null }
       // Clipboard sync follows the user's switch for this session, and is off whenever there is no session.
-      this.clip?.setEnabled(!!this.cur && s?.state === 'active' && s.clipboard === true)
-      this.clip?.poll()
+      await this.clip?.setEnabled(!!this.cur && s?.state === 'active' && s.clipboard === true)
+      await this.clip?.poll()
       if (this.cur) await this.pull()
       if (this.cur?.started && (this.d.now ?? Date.now)() - this.cur.iceAt > ICE_REFRESH_MS) await this.refreshIce()
     } finally { this.busy = false }
@@ -217,7 +217,7 @@ export class RemoteSessionController {
     await this.files.clear().catch(() => {})
     this.cur = null
     await this.closeInput()
-    this.clip?.setEnabled(false)
+    await this.clip?.setEnabled(false)
     this.region = null
     this.inflight = 0
     for (const r of this.drained.splice(0)) r()

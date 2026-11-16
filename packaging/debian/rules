@@ -28,8 +28,9 @@ override_dh_auto_build:
 	# npm installs optional prebuilds regardless of libc: drop every musl build (dpkg-shlibdeps can't resolve them).
 	find services/ai/node_modules -depth -type d -name "*-musl*" -exec rm -rf {} +
 	find services/ai/node_modules \( -name .npmignore -o -name .travis.yml -o -name "*.orig" -o -name .gitignore -o -name "*.gguf" \) -delete
-	# Shell: renderer + Electron main, and the Electron runtime for this architecture.
-	cd shell && npm ci --no-audit --no-fund && npm run build
+	# Shell: renderer + Electron main, and the Electron runtime for this architecture. Since Electron 42 the package no
+	# longer downloads its binary in postinstall, so fetch it explicitly into node_modules/electron/dist and fail if absent.
+	cd shell && npm ci --no-audit --no-fund && node node_modules/electron/install.js && test -x node_modules/electron/dist/electron && npm run build
 	# Calamares view module (installer/modules/worksuiteconfirm).
 	cmake -S installer/modules/worksuiteconfirm -B build-installer -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWORKSUITE_TESTS=ON
 	cmake --build build-installer
