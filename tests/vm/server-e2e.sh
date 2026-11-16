@@ -35,6 +35,7 @@ run)
   node --no-warnings "$server_js" serve --db "$dir/server.db" --public-url https://ws.test:8443 --listen 127.0.0.1:8443 \
     --tls-cert "$dir/tls.crt" --tls-key "$dir/tls.key" > "$dir/server.log" 2>&1 &
   server=$!
+  # shellcheck disable=SC2240 # dash ignores the argument; qemu-arch.sh then uses ARCH or the caller's $1
   . "$(dirname "$0")/qemu-arch.sh" "$iso"
   vars=$(mktemp); cp "$FW_VARS_TEMPLATE" "$vars"
   # shellcheck disable=SC2046,SC2086
@@ -61,7 +62,7 @@ run)
   [ -n "$(q "SELECT heartbeat FROM devices WHERE heartbeat IS NOT NULL")" ] || { echo "FAIL: no heartbeat"; fail=1; }
   grep -aq 'WORKSUITE_E2E_POLICY 1 notify' "$log" || { echo "FAIL: signed policy not applied"; fail=1; }
   grep -aEq 'WORKSUITE_E2E_UPDATE (available|waiting) 1.0.1' "$log" || { echo "FAIL: update not offered from the signed manifest"; fail=1; }   # notify mode: waiting_for_user
-  [ $fail = 0 ] && echo "PASS ($accel)"
+  [ $fail = 0 ] && echo "PASS ($ACCEL)"
   [ $fail = 0 ] || { echo "--- server log"; tail -20 "$dir/server.log"; echo "--- last console lines"; tail -30 "$log" | tr -d '\r'; }
   exit $fail
   ;;

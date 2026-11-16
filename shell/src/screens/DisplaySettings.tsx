@@ -2,7 +2,7 @@
 // primary, wallpaper, and mirror/extend. Applying starts a 15-second "Keep these settings?" countdown; without an
 // answer the previous layout comes back (electron/displays.ts). Kept layouts are saved per monitor set and
 // re-applied at login and when monitors are plugged in.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   REVERT_SECONDS, SCALES, WALLPAPERS, displays, modeLabel, refreshRates, resolutions, secondsLeft, useDisplayState,
   type Arrangement, type DisplayLayout, type DisplayResult, type DisplayOutputConfig, type DisplayState, type Side,

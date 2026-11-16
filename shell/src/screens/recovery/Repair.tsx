@@ -1,6 +1,6 @@
 // R3 Startup repair. Each row is a real check through the bridge; interrupted package changes are repaired by
 // the package service (polkit-authorized job). Progress is the share of checks finished.
-import { AnimatedProgress, CountUp } from '../../components/AnimatedProgress'
+import { AnimatedProgress } from '../../components/AnimatedProgress'
 import { useEffect, useRef, useState } from 'react'
 import { os, packageErrorText, type PackageJobEvent } from '../../lib/os'
 import { initialChecks, repairPercent, repairSummary, type CheckId, type CheckRow, type CheckState, type DoneInfo } from '../../lib/recovery'

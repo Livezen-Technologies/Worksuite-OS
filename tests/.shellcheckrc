@@ -1,0 +1,4 @@
+# Same as the repository's .shellcheckrc (shellcheck uses only the nearest one), plus:
+# SC2034: the tests' check() helpers eval single-quoted assertions ('[ "$pre" -gt "$u2f" ]'), so variables used only
+# inside them look unused; tests/vm/qemu-arch.sh sets variables for the scripts that source it.
+disable=SC1090,SC1091,SC2034

@@ -2,7 +2,6 @@
 import asyncio
 import os
 import subprocess
-import sys
 import unittest
 from pathlib import Path
 

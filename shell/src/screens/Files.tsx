@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WindowProps } from './types'
 import { ComputerView } from './files/computer'
-import { formatBytes, os, type FileEntry, type FileHit, type FileJob, type FilePlaces, type TrashItem } from '../lib/os'
+import { formatBytes, os, type FileEntry, type FileHit, type FilePlaces, type TrashItem } from '../lib/os'
 import { formatDate, formatDecimal, formatNumber, messages, t } from '../i18n'
 import { C, FilesSide, Modal, P, Svg, day, folderColor, folderLabel, kindOf, sizeOf, thumbBg, type Place, START_PLACE, startFallback } from './files/parts'
 import { requestAssistant } from '../lib/assistantNav'

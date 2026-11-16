@@ -1,5 +1,5 @@
 // Shared pieces of the Files window (boards FMSide, FM1–FM6): icons, kinds, dates and the sidebar.
-import { AnimatedProgress, CountUp } from '../../components/AnimatedProgress'
+import { AnimatedProgress } from '../../components/AnimatedProgress'
 import { formatBytes, type FileEntry, type FilePlaces } from '../../lib/os'
 import { formatDate, t, type MessageKey } from '../../i18n'
 

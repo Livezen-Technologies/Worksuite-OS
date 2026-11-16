@@ -8,17 +8,20 @@ on:
 permissions:
   contents: read
 
+# Runners are pinned (ubuntu-24.04) so a new ubuntu-latest image cannot change the toolchain or package set under the
+# tests; the image build (image.yml) runs in debian:trixie. Third-party actions are pinned to commit SHAs. Every job
+# that uses apt first sets Acquire::Retries so a mirror or DNS hiccup is retried instead of failing the job.
 jobs:
   shell:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: shell
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -30,7 +33,7 @@ jobs:
       - run: node scripts/build-electron.mjs
 
   services:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         package: [sync, device-agent, credentials, package-service, server, directory, ai]
@@ -38,10 +41,13 @@ jobs:
       run:
         working-directory: services/${{ matrix.package }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: services/*/package-lock.json
+      - run: echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
       # Node 22 runs the TypeScript tests directly; node:sqlite is built in.
       - if: hashFiles(format('services/{0}/package-lock.json', matrix.package)) != ''
         run: npm ci --no-audit --no-fund
@@ -57,9 +63,10 @@ jobs:
       - run: npm test
 
   os-scripts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
       # GRUB recovery/previous-kernel entries, kernel retention, boot-time repair (WSOS-BOOT-003, SRS §9.2).
       - run: tests/boot/recovery-boot.test.sh
       # Reinstall keeping /home (SRS §9.2-R6): directory run, then a loop-device disk with /home in LUKS2.
@@ -94,7 +101,7 @@ jobs:
       - run: sudo sh native/guard/test.sh
       # File-system layout (SRS §11.6-b): packaged paths, XDG base directories for user state.
       - run: sh tests/session/fs-layout-test.sh
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - run: node --test tools/sbom/spdx.test.mjs
@@ -105,12 +112,15 @@ jobs:
       - run: "! git grep -I -l -e 'BEGIN [A-Z ]*PRIVATE KEY' -- . ':!docs/**'"
 
   wayland-bridge:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: shell/package-lock.json
+      - run: echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
       # labwc + foot run the headless end-to-end tests (grim + wtype: the shell stays below the apps on every desktop);
       # the shell's node_modules run the panel-client test.
       - run: sudo apt-get install -y --no-install-recommends dbus-daemon libwayland-dev labwc foot grim wtype python3-pip && pip install --break-system-packages pywayland dbus-next pyyaml
@@ -133,21 +143,76 @@ jobs:
   portals:
     # Portal acceptance (SRS §7.1): each portal interface WorkSuite uses, against xdg-desktop-portal with the -wlr and
     # -gtk backends in a headless Labwc, with WorkSuite's portals.conf, xdpw config and screen-sharing consent chooser.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends dbus-daemon dbus-x11 labwc xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk grim pipewire wireplumber python3-dbus-next gsettings-desktop-schemas dconf-service libglib2.0-bin xwayland x11-utils procps
       - run: timeout 300 sh tests/portals/run.sh
       # X11 apps through on-demand XWayland in headless Labwc with WorkSuite's rc.xml (WSOS-LCH-002).
       - run: timeout 120 sh tests/session/xwayland-test.sh
 
   apt-repo:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+      - run: echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
       - run: sudo apt-get install -y --no-install-recommends apt-utils gnupg
       # Signed APT repository with real apt (no root): publish, verify, upgrade; tampered and foreign-signed refused.
       - run: tests/repo/apt-e2e.sh
+
+  # Static checks per Node package: tsc --noEmit (the package's typecheck script) and npm audit (fails on high or
+  # critical advisories; tools/ci/npm-audit.mjs lists the few accepted ones and why). Install scripts are skipped:
+  # neither check needs them.
+  node-static:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [shell, services/sync, services/device-agent, services/credentials, services/package-service, services/server, services/directory, services/ai, tools/lint]
+        include:
+          # server's tests import these services' sources, so its tsc needs their dependencies (e.g. dbus-next).
+          - package: services/server
+            extra: services/credentials services/device-agent services/package-service
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: '**/package-lock.json'
+      # sync and directory have dev dependencies only and no lockfile; npm install writes one for npm audit.
+      - run: if [ -f package-lock.json ]; then npm ci --ignore-scripts --no-audit --no-fund; else npm install --ignore-scripts --no-audit --no-fund; fi
+      - if: matrix.extra
+        working-directory: .
+        run: for d in ${{ matrix.extra }}; do (cd "$d" && npm ci --ignore-scripts --no-audit --no-fund) || exit 1; done
+      - if: matrix.package != 'tools/lint'
+        run: npm run typecheck
+      - run: node "$GITHUB_WORKSPACE/tools/ci/npm-audit.mjs"
+
+  # ESLint (tools/lint/eslint.config.mjs), shellcheck on every shell script (found by shebang, tools/ci/shell-scripts.sh;
+  # config in .shellcheckrc) and ruff for Python (ruff.toml).
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/lint/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: tools/lint
+      - run: tools/lint/node_modules/.bin/eslint --config tools/lint/eslint.config.mjs .
+      # Pinned versions from PyPI (the same shellcheck on every runner image).
+      - run: pip install --quiet --retries 5 shellcheck-py==0.11.0.1 ruff==0.17.5
+      - run: tools/ci/shell-scripts.sh | xargs -0 shellcheck -S warning
+      - run: ruff check --output-format github .

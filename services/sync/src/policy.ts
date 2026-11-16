@@ -37,7 +37,7 @@ export function conflictCopyName(fileName: string, device: string, date: Date): 
   const hasExt = dot > 0 && dot < fileName.length - 1;
   const stem = hasExt ? fileName.slice(0, dot) : fileName;
   const ext = hasExt ? fileName.slice(dot) : '';
-  const dev = device.replace(/[\/\\:\0]/g, '-').trim() || 'device';
+  const dev = device.replace(/[/\\:\0]/g, '-').trim() || 'device';
   const day = date.toISOString().slice(0, 10);
   return `${stem} (conflict ${dev} ${day})${ext}`;
 }

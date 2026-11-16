@@ -1,0 +1,6 @@
+# shellcheck configuration (CI job "lint" runs: tools/ci/shell-scripts.sh | xargs -0 shellcheck -S warning).
+# Only warnings and errors are gated; info/style findings (e.g. SC2015 `a && b || c`, SC2016 single-quoted `$`)
+# are reported locally but not enforced, since those idioms are used on purpose across the scripts.
+# SC1090/SC1091: sourced files are runtime paths (/etc/default/..., /usr/lib/worksuite/..., $XDG_*) that do not exist
+# in the source tree, so shellcheck cannot follow them.
+disable=SC1090,SC1091

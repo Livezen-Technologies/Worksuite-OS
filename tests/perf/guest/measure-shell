@@ -27,6 +27,7 @@ grep -ao 'WORKSUITE_PERF launcher_first_frame_ms [0-9]*' "$log" | head -n1 || tr
 
 if command -v lswt >/dev/null && command -v gtk-launch >/dev/null; then
   rt=/run/user/$uid
+  # shellcheck disable=SC2010 # socket names are wayland-N
   wl=$(ls "$rt" 2>/dev/null | grep -m1 '^wayland-[0-9]*$' || true)
   if [ -n "$wl" ]; then
     t0=$(ms)

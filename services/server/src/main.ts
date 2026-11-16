@@ -45,7 +45,7 @@ const APT_TYPES: Record<string, string> = { '.deb': 'application/vnd.debian.bina
 /** Static APT repository (tools/repo/publish.sh output) at /os/apt/. Integrity comes from the signed InRelease. */
 function serveApt(root: string, path: string, res: ServerResponse): boolean {
   const rel = decodeURIComponent(path.slice('/os/apt/'.length));
-  if (!/^(dists|pool)\/[A-Za-z0-9._+~\/-]+$/.test(rel) || rel.split('/').some((p) => p === '..' || p === '.' || p === '')) return false;
+  if (!/^(dists|pool)\/[A-Za-z0-9._+~/-]+$/.test(rel) || rel.split('/').some((p) => p === '..' || p === '.' || p === '')) return false;
   let file: string;
   try { file = realpathSync(join(root, rel)); } catch { return false; }
   if (!file.startsWith(realpathSync(root) + sep)) return false;

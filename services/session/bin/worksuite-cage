@@ -6,6 +6,7 @@
 # frame, stays up meanwhile) check GTK 4 for the greeter and load its Python modules and libraries once, so its first
 # frame comes as soon as possible after cage starts. WORKSUITE_GREETER_CHECKED tells the greeter wrapper not to check
 # again inside cage.
+# shellcheck disable=SC2195 # the second alternative of each pattern can never match (the word ends in a space); harmless, left as is
 case " $* " in
     *" /usr/lib/worksuite/worksuite-greeter "*|*" /usr/lib/worksuite/worksuite-greeter")
         if [ -z "${WORKSUITE_GREETER_LEGACY:-}" ] && PYTHONPATH=/usr/lib/worksuite/greeter${PYTHONPATH:+:$PYTHONPATH} \

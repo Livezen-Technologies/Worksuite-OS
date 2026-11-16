@@ -44,7 +44,7 @@ export class SyncEngine {
 
   /** 401 → exactly one refresh, then one retry. Returns null if refresh fails. */
   private async authed<T>(call: (token: string) => Promise<TransportResponse<T>>): Promise<TransportResponse<T> | null> {
-    let res = await call(await this.o.tokens.current());
+    const res = await call(await this.o.tokens.current());
     if (res.status !== 401) return res;
     let fresh: string;
     try { fresh = await this.o.tokens.refresh(); } catch { return null; }

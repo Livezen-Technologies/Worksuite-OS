@@ -7,7 +7,7 @@ import { WALLPAPERS } from './displays'
 import { t } from '../i18n'
 
 export * from './desktopPrefs'
-import { MAX_DESKTOPS, DEFAULT_DESKTOP_PREFS, type DesktopPrefs, type Scope, type SavedDesktop } from './desktopPrefs'
+import { DEFAULT_DESKTOP_PREFS, type DesktopPrefs, type Scope, type SavedDesktop } from './desktopPrefs'
 
 /** A desktop's name to show: its own, else "Desktop N" in the user's language. */
 export function desktopName(ws: Pick<Workspaces, 'names'>, n: number): string {

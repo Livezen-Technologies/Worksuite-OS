@@ -29,7 +29,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("PangoCairo", "1.0")
 gi.require_foreign("cairo")  # cairo drawing (veil, icons): python3-gi-cairo
-from gi.repository import Gdk, GLib, Gtk, Pango, PangoCairo  # noqa: E402
+from gi.repository import GLib, Gtk, Pango, PangoCairo  # noqa: E402
 
 from . import i18n  # noqa: E402
 from . import login  # noqa: E402

@@ -1,7 +1,7 @@
 // Devices and drivers (boards H1–H6, HwSettings). Devices are read from sysfs by the bridge; driver statuses, drivers
 // found online and installs come from the package service (services/package-service/src/driverscan.ts).
-import { AnimatedProgress, CountUp } from '../components/AnimatedProgress'
-import { useEffect, useRef, useState } from 'react'
+import { CountUp } from '../components/AnimatedProgress'
+import { useEffect, useState } from 'react'
 import { formatBytes, os, type Avail, type DriverOffer, type DriverReport, type HwDevice, type PackageJobEvent, type Printer } from '../lib/os'
 import { friendlyError, type FriendlyError } from '../lib/errors'
 import { ErrorDetails } from '../components/ErrorDetails'

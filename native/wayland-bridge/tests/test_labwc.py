@@ -92,11 +92,11 @@ def _probe_usable(display):
 
     def glob(reg, name, iface, ver):
         if iface == "wl_compositor":
-            g["comp"] = reg.bind(name, wl.WlCompositor, 4)
+            g["comp"] = reg.bind(name, wl.WlCompositor, 4)  # noqa: F821 -- g is a closure variable; pyflakes is misled by the later `del g`
         elif iface == "zwlr_layer_shell_v1":
-            g["ls"] = reg.bind(name, ls.ZwlrLayerShellV1, 3)
+            g["ls"] = reg.bind(name, ls.ZwlrLayerShellV1, 3)  # noqa: F821 -- see above
         elif iface == "wl_output":
-            g["out"].append(reg.bind(name, wl.WlOutput, 1))
+            g["out"].append(reg.bind(name, wl.WlOutput, 1))  # noqa: F821 -- see above
     reg = d.get_registry()
     reg.dispatcher["global"] = glob
     d.roundtrip()

@@ -8,6 +8,7 @@
 #                                        (/etc/worksuite/boot-details, written by worksuite-diagnostics)
 # Test hooks: WORKSUITE_BOOT_DIR (default /boot), and the grub-mkconfig_lib helpers are stubbed when absent.
 set -e
+# shellcheck disable=SC2034 # read by the sourced grub-mkconfig_lib
 prefix=/usr
 datarootdir=/usr/share
 if [ -r "${datarootdir}/grub/grub-mkconfig_lib" ] && [ -z "${WORKSUITE_BOOT_DIR:-}" ]; then

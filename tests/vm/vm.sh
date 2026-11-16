@@ -16,6 +16,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 # amd64 or arm64 (WSOS-ARM-008): from ARCH, else the ISO name, else what this VM was started as, else the host.
 run() {
   [ -z "${ARCH:-}" ] && [ -f "$dir/arch" ] && ARCH=$(cat "$dir/arch")
+  # shellcheck disable=SC2240 # dash ignores the argument; qemu-arch.sh then uses ARCH or the caller's $1
   . "$here/qemu-arch.sh" "${iso:-}"
   echo "$ARCH" > "$dir/arch"
   [ -f "$dir/vars.fd" ] || cp "$FW_VARS_TEMPLATE" "$dir/vars.fd"
@@ -54,6 +55,7 @@ click) # Absolute position on the virtio tablet through QMP. The monitor's mouse
 keys) shift 2; for k in "$@"; do mon "sendkey $k"; sleep 0.3; done ;;
 type) t=${3:?text}; i=0
       while [ $i -lt ${#t} ]; do c=$(printf %s "$t" | cut -c$((i+1))); i=$((i+1))
+        # shellcheck disable=SC2209 # k=<QEMU key name> assigns a string
         case "$c" in
           [a-z0-9]) k=$c ;; [A-Z]) k="shift-$(printf %s "$c" | tr A-Z a-z)" ;; ' ') k=spc ;; .) k=dot ;; @) k=shift-2 ;; _) k=shift-minus ;; -) k=minus ;; =) k=equal ;; /) k=slash ;; ,) k=comma ;; ';') k=semicolon ;; '|') k=shift-backslash ;; '>') k=shift-dot ;; '<') k=shift-comma ;; :) k=shift-semicolon ;; '(') k=shift-9 ;; ')') k=shift-0 ;; '"') k=shift-apostrophe ;; "'") k=apostrophe ;;
           '&') k=shift-7 ;; '!') k=shift-1 ;; '$') k=shift-4 ;; '*') k=shift-8 ;; '#') k=shift-3 ;; '+') k=shift-equal ;; '%') k=shift-5 ;; '^') k=shift-6 ;;
