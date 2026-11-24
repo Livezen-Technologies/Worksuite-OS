@@ -1,5 +1,7 @@
 # WorkSuite OS
 
+**Website:** [WorkSuite OS on worksuitecloud.com](https://worksuitecloud.com/products/os/)
+
 Debian 13 "trixie" desktop distribution that boots into the WorkSuite desktop (React 19 / Electron on Labwc)
 and stays usable when the WorkSuite backend is unreachable. Requirements: SRS-WSOS-001 (release 1.0).
 
